@@ -186,6 +186,48 @@ class PreservationTest(unittest.TestCase):
                     self.assertNotEqual(after,before)
 
 if __name__=='__main__':unittest.main()
+class ColdReleaseAuthorityTests(unittest.TestCase):
+    def fixture(self):
+        now=preserve.dt.datetime.now(preserve.dt.timezone.utc)
+        nonce='a'*64;cut={'manifest':{'archive_sha256':'b'*64}}
+        state={'operation':'123456abcdef','authorization':{'purpose':'actual-admission'},
+            'closed_preservation_attempt_nonce':nonce,'events':[]}
+        state['closed_preservation_attempts']={nonce:{'nonce':nonce,
+            'authorization_sha256':preserve.canonical(state['authorization']),
+            'admitted_cut_sha256':preserve.canonical(cut)}}
+        stage=Mock();authority=Mock()
+        gate=preserve.ColdRelease(Path('/private/rollout-'+state['operation']),state,stage,
+            authority,cut,nonce,now+preserve.dt.timedelta(seconds=60))
+        return gate,state,stage,authority
+
+    def test_real_constructor_and_guard_reject_changed_admission_or_expired_deadline(self):
+        for drift in ('nonce','attempt','authorization','deadline'):
+            gate,state,stage,authority=self.fixture();gate.guard()
+            authority.assert_called()
+            if drift=='nonce':state['closed_preservation_attempt_nonce']='c'*64
+            elif drift=='attempt':state['closed_preservation_attempts'][gate.nonce]['admitted_cut_sha256']='c'*64
+            elif drift=='authorization':state['authorization']['purpose']='substituted'
+            else:gate.startup_deadline=preserve.dt.datetime.now(preserve.dt.timezone.utc)-preserve.dt.timedelta(seconds=1)
+            with self.subTest(drift=drift),self.assertRaisesRegex(preserve.Blocked,'authority_expired_or_changed'):
+                gate.guard()
+
+    def test_real_arm_requires_committed_intent_and_hub_before_any_client_scale(self):
+        from stage_runtime import HUB
+        gate,state,stage,authority=self.fixture()
+        intent={'kind':'cold_preservation_verified_release_intent','operation':state['operation'],
+            'cut_sha256':preserve.canonical(gate.cut)}
+        gate.intent=copy.deepcopy(intent)
+        with self.assertRaisesRegex(preserve.Blocked,'intent_uncommitted'):
+            gate.arm_release(stage,intent)
+        state['events'].append(copy.deepcopy(intent));gate.arm_release(stage,intent)
+        with self.assertRaisesRegex(preserve.Blocked,'hub_first_required'):
+            stage.closed_preservation_release(stage,'scale-intent','voice-story')
+        stage.closed_preservation_release(stage,'scale-intent',HUB)
+        state['events'].clear()
+        with self.assertRaisesRegex(preserve.Blocked,'intent_changed'):
+            stage.closed_preservation_release(stage,'scale-intent',HUB)
+
+
 class NativeStateAdmissionTest(unittest.TestCase):
     def test_stream_native_directory_without_metadata_cannot_disappear(self):
         runtime=Mock();runtime.account_id.return_value='ACCOUNT'
