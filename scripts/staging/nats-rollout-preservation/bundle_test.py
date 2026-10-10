@@ -15,9 +15,10 @@ class BundleCaptureTest(unittest.TestCase):
         self.assertEqual(os.getuid(),0)
         if not Path('/usr/bin/python3').exists():Path('/usr/bin/python3').symlink_to(sys.executable)
         self.root=Path('/var/lib/voice-nats-preservation');self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
-        self.source=Path('/home/pmd/voice-nats-rollout-v15/rollout-bundle.tar');self.source.parent.mkdir(parents=True,exist_ok=True)
+        self.source=Path('/home/pmd/voice-nats-rollout-idle/rollout-bundle.tar');self.source.parent.mkdir(parents=True,exist_ok=True)
         self.source.unlink(missing_ok=True)
-        contents={'nats-rollout-preservation/root_cli.py':b"print('CAPTURED_ROOT_ENTRY')\n",
+        contents={'nats-rollout-preservation/operator_retirement.py':b"import sys\nprint('RETIRE_ARGS=' + ','.join(sys.argv[1:]))\n",
+            'nats-rollout-preservation/root_cli.py':b"print('CAPTURED_ROOT_ENTRY')\n",
             'nats-rollout-preservation/installer.py':b"import sys\nprint('INSTALLER_ARGS=' + ','.join(sys.argv[1:]))\n"}
         contents['capture-manifest.json']=json.dumps({n:hashlib.sha256(v).hexdigest() for n,v in contents.items()}).encode()
         output=io.BytesIO()
@@ -30,10 +31,14 @@ class BundleCaptureTest(unittest.TestCase):
         self.launcher.write_text(template.replace('__BUNDLE_SHA256__',hashlib.sha256(self.raw).hexdigest()).replace('__BUNDLE_BYTES__',str(len(self.raw))).replace('__BUNDLE_FILES__',repr(sorted(contents))))
     def run_launcher(self,*arguments):
         return subprocess.run(['/bin/bash',str(self.launcher),*(arguments or ('--status','unused'))],capture_output=True,text=True,timeout=3)
-    def test_exact_v15_upgrade_argument_reaches_captured_installer(self):
-        result=self.run_launcher('--install','--upgrade-v15')
+    def test_exact_idle_upgrade_argument_reaches_captured_installer(self):
+        result=self.run_launcher('--install','--upgrade-idle')
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(result.stdout.strip(),'INSTALLER_ARGS=--upgrade-v15')
+        self.assertEqual(result.stdout.strip(),'INSTALLER_ARGS=--upgrade-idle')
+    def test_exact_retirement_arguments_reach_root_only_captured_entry(self):
+        result=self.run_launcher('--retire','/root/reviewed-plan.json','a'*64)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),'RETIRE_ARGS=/root/reviewed-plan.json,'+'a'*64)
     def test_exact_captured_bytes_execute_root_private_copy(self):
         result=self.run_launcher();self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(result.stdout.strip(),'CAPTURED_ROOT_ENTRY')

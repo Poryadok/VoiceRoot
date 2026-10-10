@@ -174,6 +174,52 @@ def upgrade(code,version='v4'):
         finally:inbox.chmod(0o1730)
     print('NATS_ROLLOUT_BRIDGE=UPGRADED_'+version.upper()+'_KEYS_POLICY_PRESERVED')
 
+
+def upgrade_idle(code):
+    # The retired operation is historical evidence, never repaired or adopted.
+    import operator_retirement as retirement
+    import story_witness
+    if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('bridge_install_human_root_required')
+    code=Path(code);root_cli.code_binding(code);installed=guard.ROOT/'installed';kube=Kube()
+    with operation_lock():
+        marker=kube.get('configmap','voice-nats-generation')
+        if marker['data'].get('phase')!='active' or any(k in marker['data'] for k in ('knownRolloutOperation','knownBaselineOperation')):
+            raise Blocked('bridge_upgrade_live_operation_present')
+        closure=None;checkpoints={}
+        for base in guard.ROOT.glob('rollout-*'):
+            if root_cli.rollout_directory_kind(base)=='capture':continue
+            state=private_json(base/'checkpoint.json')
+            retirement.idle_state(base,state)
+            checkpoints[str(base/'checkpoint.json')]=hashlib.sha256(retirement.private_bytes(base/'checkpoint.json')).hexdigest()
+            if state.get('operator_retirement') is not None:closure=retirement.verify_terminal(base,state)
+        if closure is None:raise Blocked('bridge_upgrade_retirement_required')
+        for path in (installed,installed/'inbox',installed/'processing',installed/'journal',installed/'responses',installed/'recovery'):
+            row=path.lstat()
+            if not path.is_dir() or path.is_symlink() or row.st_uid!=0 or row.st_mode&0o002 or path.name!='inbox' and row.st_mode&0o020:
+                raise Blocked('bridge_upgrade_directory_untrusted')
+        inbox=installed/'inbox'
+        if __import__('stat').S_IMODE(inbox.lstat().st_mode)!=0o1730:raise Blocked('bridge_upgrade_directory_untrusted')
+        inbox.chmod(0o700)
+        try:
+            if any(inbox.iterdir()) or any((installed/'processing').iterdir()):raise Blocked('bridge_upgrade_pending_request')
+            journals={str(path):hashlib.sha256(retirement.private_bytes(path,2<<20,group_read=directory=='responses')).hexdigest()
+                for directory in ('journal','responses') for path in (installed/directory).iterdir()}
+            for path in (installed/'journal').iterdir():retirement.pending_request_accepted(installed,path,closure)
+            protected={str(installed/'policy.json'):hashlib.sha256(retirement.private_bytes(installed/'policy.json',2<<20)).hexdigest()}
+            for name in ('recovery-key.pem','recovery-cert.pem'):
+                path=installed/'recovery'/name
+                fd,_=encrypted_cut.regular(path,private=name=='recovery-key.pem');os.close(fd)
+                protected[str(path)]=retirement.file_sha(path)
+            witnesses=story_witness.registry_snapshot()
+            if kube.get('configmap','voice-nats-generation')!=marker:raise Blocked('bridge_upgrade_marker_changed')
+            _upgrade_code(code,installed,grp.getgrnam('pmd').gr_gid,retirement.V15_BINDING,'idle','v15')
+            if story_witness.registry_snapshot()!=witnesses or kube.get('configmap','voice-nats-generation')!=marker:
+                raise Blocked('bridge_upgrade_marker_changed')
+            for name,wanted in {**checkpoints,**journals,**protected}.items():
+                if retirement.file_sha(Path(name))!=wanted:raise Blocked('bridge_upgrade_history_changed')
+        finally:inbox.chmod(0o1730)
+    print('NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_KEYS_POLICY_HISTORY_PRESERVED')
+
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
 After=docker.service k3s.service
@@ -248,7 +294,8 @@ def install(code,policy_path):
 
 if __name__=='__main__':
     if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8')
-    if sys.argv[1]=='--upgrade-v4':upgrade(Path(__file__).resolve().parents[1])
+    if sys.argv[1]=='--upgrade-idle':upgrade_idle(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-v4':upgrade(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-v5':upgrade(Path(__file__).resolve().parents[1],version='v5')
     elif sys.argv[1]=='--upgrade-v6':upgrade(Path(__file__).resolve().parents[1],version='v6')
     elif sys.argv[1]=='--upgrade-v7':upgrade(Path(__file__).resolve().parents[1],version='v7')

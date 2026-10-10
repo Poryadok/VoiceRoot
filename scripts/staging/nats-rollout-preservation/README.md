@@ -618,3 +618,29 @@ Installation preserves the installed V12 code and all earlier upgrade receipts,
 adoption, checkpoint and request history. A separate V13 receipt binds the new
 helper, and an immutable disposition records the exact failed pre-source
 transport request without replay or recovery authority.
+
+## Explicit retirement of the prepared historical operation
+
+The root-only reviewed retirement action applies only to operation3340764a7d24
+and the exact frozen prepared/unapplied checkpoint. The user's current-data
+waiver permits loss of all current messages and consumers while retaining the
+staging setup. Retirement restores the original twenty workloads with their
+existing UIDs and templates, verifies configuration and selected storage, and
+releases the prepared marker only after readiness. It preserves the complete
+historical checkpoint as an immutable snapshot and appends truthful retirement
+events. The terminal state is ABORTED/OPERATOR_RETIRED/RELEASED, never a
+deployment PASS or rollback source.
+
+Normal idle admission requires the separately bound immutable plan, closure
+receipt, exact historical event prefix, setup proof and named journal bytes.
+An ABORTED status alone grants nothing. A root-only idle helper update accepts
+the fixed installed V15 predecessor after that closure and preserves all old
+operation code, keys, policy, receipts and request history. Unknown pending
+requests still block. Neither action is exposed through the bridge or workflow.
+
+Captured public code is hashed through an ordinary protected read-only file
+descriptor so the unprivileged workflow can verify root-owned group-readable
+source. Its complete manifest, ownership, mode, single-link, size, hash and
+identity checks remain. Private state and native data retain their existing
+O_NOATIME readers. Future deployments and new rollbacks use the normal protected
+cold transaction and require fresh preservation and release evidence.
