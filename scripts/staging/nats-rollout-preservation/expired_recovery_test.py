@@ -1,5 +1,6 @@
 """Exact expired recovery authority: old permissions never become fresh proof."""
 import copy
+import hashlib
 from datetime import datetime,timezone,timedelta
 import unittest
 import json
@@ -219,6 +220,9 @@ class ComposedStateReaderTests(unittest.TestCase):
     def test_v14_state_reader_preserves_complete_v13_lineage(self):
         self.exercise_reader('v14')
 
+    def test_v15_reader_preserves_complete_installed_v14_lineage(self):
+        self.exercise_reader('v15')
+
     def exercise_reader(self,version):
         import bridge_root,paused_recovery,root_cli
         fixture=RecoveryAuthorityTests();fixture.setUp()
@@ -230,6 +234,7 @@ class ComposedStateReaderTests(unittest.TestCase):
         middle=json.loads((data/'expired-recovery-v11-manifest.json').read_text())
         latest=json.loads((data/'expired-recovery-v12-manifest.json').read_text())
         v13=json.loads((data/'expired-recovery-v13-manifest.json').read_text())
+        v14=json.loads((data/'expired-recovery-v14-manifest.json').read_text())
         current=middle if version=='v11' else {'corrected-reader':'3'*64}
         adopted['code_capture']=copy.deepcopy(old)
         raw=json.dumps(adopted).encode()
@@ -241,19 +246,22 @@ class ComposedStateReaderTests(unittest.TestCase):
         receipt=original_receipt if version=='v11' else {
             'schema':'voice-nats-code-upgrade-v12','from':digest(middle),'to':digest(current)}
         prior_receipt={'schema':'voice-nats-code-upgrade-v12','from':digest(middle),'to':digest(latest)}
-        if version in ('v13','v14'):receipt={'schema':'voice-nats-code-upgrade-v13','from':digest(latest),'to':digest(current)}
+        if version in ('v13','v14','v15'):receipt={'schema':'voice-nats-code-upgrade-v13','from':digest(latest),'to':digest(current)}
         v13_receipt={'schema':'voice-nats-code-upgrade-v13','from':digest(latest),'to':digest(v13)}
-        if version=='v14':receipt={'schema':'voice-nats-code-upgrade-v14','from':digest(v13),'to':digest(current)}
+        if version in ('v14','v15'):receipt={'schema':'voice-nats-code-upgrade-v14','from':digest(v13),'to':digest(current)}
+        v14_receipt={'schema':'voice-nats-code-upgrade-v14','from':digest(v13),'to':digest(v14)}
+        if version=='v15':receipt={'schema':'voice-nats-code-upgrade-v15','from':digest(v14),'to':digest(current)}
         def binding(path):
-            return {'installed-code':current,'code-v9-preserved':old,'code-v10-preserved':prior,'code-v11-preserved':middle,'code-v12-preserved':latest,'code-v13-preserved':v13}[path.name]
+            return {'installed-code':current,'code-v9-preserved':old,'code-v10-preserved':prior,'code-v11-preserved':middle,'code-v12-preserved':latest,'code-v13-preserved':v13,'code-v14-preserved':v14}[path.name]
         def read(path,limit=0):
             return {'expired-recovery-adoption.json':record,'upgrade-v11.json':original_receipt,
-                'upgrade-v12.json':prior_receipt if version in ('v13','v14') else receipt,
-                'upgrade-v13.json':v13_receipt if version=='v14' else receipt,'upgrade-v14.json':receipt}[path.name]
+                'upgrade-v12.json':prior_receipt if version in ('v13','v14','v15') else receipt,
+                'upgrade-v13.json':v13_receipt if version in ('v14','v15') else receipt,
+                'upgrade-v14.json':v14_receipt if version=='v15' else receipt,'upgrade-v15.json':receipt}[path.name]
         def continuity(path,state,bound):
             if bound!=old:raise recovery.upload.UploadError('preserved_upload_helper_revision_changed')
         def private(path,limit=0):return json.dumps(read(path)).encode()
-        def exists(path):return path.name in ('expired-recovery-adoption.json','upgrade-v11.json','recovery-v9-revision.json') or version in ('v12','v13','v14') and path.name=='upgrade-v12.json' or version in ('v13','v14') and path.name=='upgrade-v13.json' or version=='v14' and path.name=='upgrade-v14.json'
+        def exists(path):return path.name in ('expired-recovery-adoption.json','upgrade-v11.json','recovery-v9-revision.json') or version in ('v12','v13','v14','v15') and path.name=='upgrade-v12.json' or version in ('v13','v14','v15') and path.name=='upgrade-v13.json' or version in ('v14','v15') and path.name=='upgrade-v14.json' or version=='v15' and path.name=='upgrade-v15.json'
         before=copy.deepcopy(adopted)
         with patch('guard.ROOT',base.parent),patch.object(root_cli,'code_binding',side_effect=binding),\
             patch.object(root_cli,'operation_path',return_value=base),patch.object(bridge_root,'private_json',return_value=adopted),\
@@ -273,8 +281,8 @@ class ComposedStateReaderTests(unittest.TestCase):
                 with self.subTest(key=key),self.assertRaises((ValueError,root_cli.Blocked)):
                     actions.state(adopted['operation'])
                 receipt[key]=saved
-            if version in ('v12','v13','v14'):
-                for earlier in ((original_receipt,prior_receipt,v13_receipt) if version=='v14' else (original_receipt,prior_receipt) if version=='v13' else (original_receipt,)):
+            if version in ('v12','v13','v14','v15'):
+                for earlier in ((original_receipt,prior_receipt,v13_receipt,v14_receipt) if version=='v15' else (original_receipt,prior_receipt,v13_receipt) if version=='v14' else (original_receipt,prior_receipt) if version=='v13' else (original_receipt,)):
                     for key in ('schema','from','to'):
                         saved=earlier[key];earlier[key]='changed'
                         with self.subTest(prior_receipt=key),self.assertRaises(ValueError):
@@ -380,3 +388,49 @@ class InstallHistoryTests(unittest.TestCase):
             elif drift=='proof':changed['events'][1]['proof']['census_verified']=False
             else:changed['events'][-1]['finished_at']='2026-10-09T09:59:00Z'
             with self.subTest(drift=drift),self.assertRaises(ValueError):recovery.install_history(changed,awaiting)
+
+class FailedAuthorizationDispositionTests(unittest.TestCase):
+    def test_exact_failed_authorization_is_frozen_without_replay(self):
+        request={'action':'authorize-expired-native','operation':'3340764a7d24',
+            'original_artifact_id':11682139567,'observation_artifact_id':11681713934,
+            'upload_nonce':'799ed6b0d90add3db29a03703db4cd255154c78976b8639077dd744918828c17',
+            'run_id':38086368179,'nonce':'7b8a560f7efbe175f64a5cdfeb04cd68a094bed1143fa19989937db8c73a832a'}
+        journal={'schema':'voice-nats-bridge-request-v1','request':request,
+            'request_sha256':digest(request),'phase':'STARTED','prepare_error':'unexpected'}
+        response={'status':'BLOCKED','error':'blocked_unclassified'}
+        encode=lambda v:json.dumps(v,sort_keys=True,separators=(',',':')).encode()
+        raw=encode(journal);reply=encode(response)
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),'3aab85a545908c64d4f73ae2056cf888b0ccb7a85c3ce092d68c699302d94bdf')
+        self.assertEqual(recovery.failed_authorization_execution(raw,reply)['disposition'],
+            'FROZEN_EXPIRED_AUTHORIZATION_NO_REPLAY_NO_AUTHORITY')
+        for field in ('phase','prepare_error','request','response'):
+            changed=copy.deepcopy(journal);answer=copy.deepcopy(response)
+            if field=='request':changed['request']['original_artifact_id']+=1
+            elif field=='response':answer['status']='PASS'
+            else:changed[field]='changed'
+            with self.subTest(field=field),self.assertRaises(ValueError):
+                recovery.failed_authorization_execution(encode(changed),encode(answer))
+
+    def test_frozen_completed_readbacks_are_evidence_not_authority(self):
+        import root_cli
+        base=Path('/private/rollout-3340764a7d24')
+        files={name:json.dumps({'fixture':name}).encode() for name in (
+            'admission.json','rollout-before-manifest.json','observation-readback.json',
+            'original-readback.json','producer.json','source.json','upload.json')}
+        hashes={n:hashlib.sha256(raw).hexdigest() for n,raw in files.items()}
+        def read(path,limit=0):return files[path.name]
+        prior={'prior':'v14'}
+        with patch.object(recovery,'FAILED_AUTHORIZATION_FILES',hashes), \
+             patch.object(recovery,'V14_BINDING',digest(prior)), \
+             patch.object(root_cli,'code_binding',return_value=prior), \
+             patch.object(recovery.upload,'private_read',side_effect=read), \
+             patch.object(Path,'exists',return_value=False):
+            recovery.verify_failed_authorization_slot(base)
+            for name in files:
+                saved=files[name];files[name]=saved+b' '
+                with self.subTest(name=name),self.assertRaises(ValueError):
+                    recovery.verify_failed_authorization_slot(base)
+                files[name]=saved
+            with patch.object(Path,'exists',new=lambda x:x.name=='authority.json'), \
+                 self.assertRaises(ValueError):
+                recovery.verify_failed_authorization_slot(base)

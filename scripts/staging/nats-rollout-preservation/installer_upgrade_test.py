@@ -93,6 +93,9 @@ class ActualUpgradeDispatchTests(unittest.TestCase):
     def test_actual_v14_upgrade_reaches_expired_helper_and_restores_ingress(self):
         self.exercise_upgrade('v14')
 
+    def test_actual_v15_upgrade_reaches_expired_helper_and_restores_ingress(self):
+        self.exercise_upgrade('v15')
+
     def exercise_upgrade(self,version):
         import contextlib,expired_recovery
         with tempfile.TemporaryDirectory() as td:
