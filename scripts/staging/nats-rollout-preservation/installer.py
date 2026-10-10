@@ -117,10 +117,10 @@ def _upgrade_code(code,installed,gid,predecessor,version,previous_version):
 
 def upgrade(code,version='v4'):
     if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('bridge_install_human_root_required')
-    if version not in ('v4','v5','v6','v7','v8','v9','v10','v11','v12','v13','v14'):raise Blocked('bridge_upgrade_version_unapproved')
+    if version not in ('v4','v5','v6','v7','v8','v9','v10','v11','v12','v13','v14','v15'):raise Blocked('bridge_upgrade_version_unapproved')
     root_cli.code_binding(Path(code));installed=guard.ROOT/'installed'
     with operation_lock():
-        if version in ('v7','v8','v9','v10','v11','v12','v13','v14'):
+        if version in ('v7','v8','v9','v10','v11','v12','v13','v14','v15'):
             import paused_recovery
             paused_recovery.install_repair(code,installed,Kube(),version=version)
             print('NATS_ROLLOUT_BRIDGE=UPGRADED_'+version.upper()+'_KEYS_POLICY_PRESERVED')
@@ -259,4 +259,5 @@ if __name__=='__main__':
     elif sys.argv[1]=='--upgrade-v12':upgrade(Path(__file__).resolve().parents[1],version='v12')
     elif sys.argv[1]=='--upgrade-v13':upgrade(Path(__file__).resolve().parents[1],version='v13')
     elif sys.argv[1]=='--upgrade-v14':upgrade(Path(__file__).resolve().parents[1],version='v14')
+    elif sys.argv[1]=='--upgrade-v15':upgrade(Path(__file__).resolve().parents[1],version='v15')
     else:install(Path(__file__).resolve().parents[1],sys.argv[1])

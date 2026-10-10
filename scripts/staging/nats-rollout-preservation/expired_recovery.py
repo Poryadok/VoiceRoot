@@ -104,6 +104,19 @@ V10_BINDING='317486fa04b6ed2c39dbad7708431537f1ec8bc24050fe5a6217f6ca6e56182b'
 V11_BINDING='57058302ff72ed8880ff04e86c5db744bdc41b608261d47c19fc46572ea9b7ba'
 V12_BINDING='731ac6444f604ee26ce7ab4e3fe193144f9d803e97864527585ee6121ad35f31'
 V13_BINDING='d81ddbb34b13da1a94fea99d675091109984c6cbf708031d3c9c2483660350d4'
+V14_BINDING='4afcfe8e422cb25da8a372a0d0efc2fb134a2e97e0a94b340abcb5dfa20f7e48'
+FAILED_AUTHORIZATION_REQUEST={'action':'authorize-expired-native','operation':upload.OPERATION,
+    'original_artifact_id':11682139567,'observation_artifact_id':11681713934,
+    'upload_nonce':'799ed6b0d90add3db29a03703db4cd255154c78976b8639077dd744918828c17',
+    'run_id':38086368179,'nonce':'7b8a560f7efbe175f64a5cdfeb04cd68a094bed1143fa19989937db8c73a832a'}
+FAILED_AUTHORIZATION_FILES={
+    'admission.json':'f344496ccdef48eb33c3eb350b9c0f38e97a0dc6fad4f5da1127092391b8f9e9',
+    'rollout-before-manifest.json':'e7d4ea91c4efa8b2964577a7901693f5ae98832ee40c699cd89c5c4c558f4d4b',
+    'observation-readback.json':'a732a7482133764e5a32b68d7de0914b9864874efba9668df71e8cd678772eb9',
+    'original-readback.json':'58bd792e7d2248623491d8a28c4c27495463781ca677927e1e74f9b9cdc39bd4',
+    'producer.json':'0f99f14e1b1ae844ee06f8ccbfcc4e8ae953a9940009a3b947059f192601ad8a',
+    'source.json':'1c7aba677400fb21995e97415e2de8661d77c504bd002870fe0788b025b30c9a',
+    'upload.json':'b86a64b107952bfc8103d1bd98f3d14280dfb01b8f1acf5af4f29d6a1e5831a2'}
 FAILED_DECODER_REQUEST={'action':'prepare-expired-native','operation':upload.OPERATION,
     'run_id':38081665757,'nonce':'7aab66b7075868b65da687ffb4711f0745fee64a46fbc73a7b1d4431f396d486'}
 FAILED_DECODER_FILES={
@@ -255,6 +268,39 @@ def failed_decoder_execution(journal_raw,response_raw):
         'disposition':'FROZEN_PARTIAL_PRE_PROOF_NO_REPLAY_NO_AUTHORITY'}
 
 
+
+def failed_authorization_execution(journal_raw,response_raw):
+    """Freeze the diagnosed expired attempt; never renew or replay its proof."""
+    journal=json.loads(journal_raw,object_pairs_hook=upload.pairs)
+    response=json.loads(response_raw,object_pairs_hook=upload.pairs)
+    expected={'schema':'voice-nats-bridge-request-v1','request':FAILED_AUTHORIZATION_REQUEST,
+        'request_sha256':upload.digest(FAILED_AUTHORIZATION_REQUEST),'phase':'STARTED','prepare_error':'unexpected'}
+    if (journal!=expected or response!={'status':'BLOCKED','error':'blocked_unclassified'}
+        or hashlib.sha256(journal_raw).hexdigest()!='3aab85a545908c64d4f73ae2056cf888b0ccb7a85c3ce092d68c699302d94bdf'
+        or hashlib.sha256(response_raw).hexdigest()!='83fb20c9621d18d737818eb030b72008076d2afff606a37dac0c37ee8daa7a28'):
+        reject('failed_authorization_execution_changed')
+    return {'schema':'voice-expired-native-authorization-failure-disposition-v1','operation':upload.OPERATION,
+        'request_sha256':upload.digest(FAILED_AUTHORIZATION_REQUEST),
+        'journal_sha256':hashlib.sha256(journal_raw).hexdigest(),
+        'response_sha256':hashlib.sha256(response_raw).hexdigest(),
+        'files':copy.deepcopy(FAILED_AUTHORIZATION_FILES),
+        'disposition':'FROZEN_EXPIRED_AUTHORIZATION_NO_REPLAY_NO_AUTHORITY'}
+
+
+def verify_failed_authorization_slot(base):
+    """Authenticate retained readback evidence without accepting expired authority."""
+    import root_cli
+    base=Path(base)
+    code=base/('code-v14-preserved' if (base/'code-v14-preserved').exists() else 'code')
+    if upload.digest(root_cli.code_binding(code))!=V14_BINDING:
+        reject('authorization_predecessor_changed')
+    slot=base/'expired-recovery-proofs'/FAILED_AUTHORIZATION_REQUEST['upload_nonce']
+    for name,wanted in FAILED_AUTHORIZATION_FILES.items():
+        if hashlib.sha256(upload.private_read(slot/name,128<<20)).hexdigest()!=wanted:
+            reject('authorization_failed_slot_changed')
+    if any((slot/name).exists() for name in ('proof.json','authority.json')):
+        reject('authorization_failed_outputs_present')
+
 def verify_adopted_binding(base,state,binding):
     """Both existing state readers enter through paused_recovery, then here.
 
@@ -293,10 +339,16 @@ def verify_adopted_binding(base,state,binding):
                 if final_upgrade!={'schema':'voice-nats-code-upgrade-v13','from':V12_BINDING,'to':upload.digest(binding)}:
                     final=root_cli.code_binding(base/'code-v13-preserved')
                     if (upload.digest(final)!=V13_BINDING
-                        or final_upgrade!={'schema':'voice-nats-code-upgrade-v13','from':V12_BINDING,'to':V13_BINDING}
-                        or upload.private_json(base/'upgrade-v14.json',65536)!=
-                            {'schema':'voice-nats-code-upgrade-v14','from':V13_BINDING,'to':upload.digest(binding)}):
+                        or final_upgrade!={'schema':'voice-nats-code-upgrade-v13','from':V12_BINDING,'to':V13_BINDING}):
                         reject('adoption_upgrade_changed')
+                    upgrade14=upload.private_json(base/'upgrade-v14.json',65536)
+                    if upgrade14!={'schema':'voice-nats-code-upgrade-v14','from':V13_BINDING,'to':upload.digest(binding)}:
+                        prior14=root_cli.code_binding(base/'code-v14-preserved')
+                        if (upload.digest(prior14)!=V14_BINDING
+                            or upgrade14!={'schema':'voice-nats-code-upgrade-v14','from':V13_BINDING,'to':V14_BINDING}
+                            or upload.private_json(base/'upgrade-v15.json',65536)!=
+                                {'schema':'voice-nats-code-upgrade-v15','from':V14_BINDING,'to':upload.digest(binding)}):
+                            reject('adoption_upgrade_changed')
     if record!=adoption_record(raw,V9_BINDING,adopted_binding):reject('adoption_record_changed')
     for key in ('operation','code_capture','cipher_binding','cut','execution_authority',
                 'source_authority','nats_contract_expires_at','repair_adoption','repair_revision'):
@@ -328,7 +380,7 @@ def install_helper(code,installed,kube,version):
     import paused_recovery
     import story_witness
     from docker_runtime import DockerRuntime
-    if version not in ('v10','v11','v12','v13','v14'):
+    if version not in ('v10','v11','v12','v13','v14','v15'):
         reject('helper_version_invalid')
     installed=Path(installed);base=root_cli.operation_path(str(guard.ROOT/('rollout-'+upload.OPERATION)))
     checkpoint=base/'checkpoint.json';snapshot=base/'expired-recovery-adopted-checkpoint.json'
@@ -344,14 +396,14 @@ def install_helper(code,installed,kube,version):
     awaiting=upload.private_json(base/'recovery-v8-awaiting-checkpoint.json',128<<20)
     install_history(state,awaiting)
     new_binding=root_cli.code_binding(Path(code));record=adoption_record(raw,V9_BINDING,new_binding)
-    if version in ('v11','v12','v13','v14'):
+    if version in ('v11','v12','v13','v14','v15'):
         prior=root_cli.code_binding(base/('code-v10-preserved' if (base/'code-v10-preserved').exists() else 'code'))
         if upload.digest(prior)!=V10_BINDING:reject('helper_v10_predecessor_changed')
         if upload.private_json(record_path,65536)!=adoption_record(raw,V9_BINDING,prior):reject('helper_revision_conflict')
-        if version in ('v12','v13','v14'):
-            previous={'v12':'v11','v13':'v12','v14':'v13'}[version]
+        if version in ('v12','v13','v14','v15'):
+            previous={'v12':'v11','v13':'v12','v14':'v13','v15':'v14'}[version]
             installed_prior=root_cli.code_binding(base/('code-'+previous+'-preserved' if (base/('code-'+previous+'-preserved')).exists() else 'code'))
-            if upload.digest(installed_prior)!={'v12':V11_BINDING,'v13':V12_BINDING,'v14':V13_BINDING}[version]:reject('helper_installed_predecessor_changed')
+            if upload.digest(installed_prior)!={'v12':V11_BINDING,'v13':V12_BINDING,'v14':V13_BINDING,'v15':V14_BINDING}[version]:reject('helper_installed_predecessor_changed')
             verify_adopted_binding(base,state,installed_prior)
     elif record_path.exists() and upload.private_json(record_path,65536)!=record:reject('helper_revision_conflict')
     stage=transaction.reconstruct(kube,state,lambda event:None);stage.verify_final_storage()
@@ -374,25 +426,26 @@ def install_helper(code,installed,kube,version):
     disposition=failed_execution(journals[failed_name],responses[failed_name])
     native_name=FAILED_NATIVE_REQUEST['nonce']+'.json'
     native_disposition=None
-    if version in ('v11','v12','v13','v14'):
+    if version in ('v11','v12','v13','v14','v15'):
         native_disposition=failed_native_execution(journals[native_name],responses[native_name])
         if (base/'expired-recovery-proofs'/FAILED_NATIVE_REQUEST['nonce']).exists():reject('helper_failed_native_proof_present')
     reader_name=FAILED_READER_REQUEST['nonce']+'.json';reader_disposition=None
-    if version in ('v12','v13','v14'):
+    if version in ('v12','v13','v14','v15'):
         reader_disposition=failed_reader_execution(journals[reader_name],responses[reader_name])
         if (base/'expired-recovery-proofs'/FAILED_READER_REQUEST['nonce']).exists():reject('helper_failed_reader_proof_present')
     transport_name=FAILED_TRANSPORT_REQUEST['nonce']+'.json';transport_disposition=None
-    if version in ('v13','v14'):
+    if version in ('v13','v14','v15'):
         transport_disposition=failed_transport_execution(journals[transport_name],responses[transport_name])
         if ((base/'expired-recovery-proofs'/FAILED_TRANSPORT_REQUEST['nonce']).exists()
             or (installed/'sources'/('expired-'+FAILED_TRANSPORT_REQUEST['nonce'])).exists()):
             reject('helper_failed_transport_outputs_present')
     decoder_name=FAILED_DECODER_REQUEST['nonce']+'.json';decoder_disposition=None
-    if version=='v14':
+    if version in ('v14','v15'):
         decoder_disposition=failed_decoder_execution(journals[decoder_name],responses[decoder_name])
         # Before the swap, authenticate the installed predecessor directly.
-        if upload.digest(installed_prior)!=V13_BINDING:
+        if version=='v14' and upload.digest(installed_prior)!=V13_BINDING:
             reject('helper_decoder_predecessor_changed')
+        if version=='v15':verify_failed_decoder_slot(base)
         slot=base/'expired-recovery-proofs'/FAILED_DECODER_REQUEST['nonce']
         if {p.name for p in slot.iterdir()}!=set(FAILED_DECODER_FILES):reject('helper_decoder_slot_inventory_changed')
         raw_slot={name:upload.private_read(slot/name,2<<20) for name in FAILED_DECODER_FILES}
@@ -400,12 +453,17 @@ def install_helper(code,installed,kube,version):
             reject('helper_decoder_slot_changed')
         if upload.private_read(base/'expired-recovery-input-repair.json',65536)!=raw_slot['repair.json']:
             reject('helper_decoder_repair_changed')
+    authorization_name=FAILED_AUTHORIZATION_REQUEST['nonce']+'.json';authorization_disposition=None
+    if version=='v15':
+        authorization_disposition=failed_authorization_execution(journals[authorization_name],responses[authorization_name])
+        verify_failed_authorization_slot(base)
     for name,value in journals.items():
         if name==failed_name:continue
-        if version in ('v11','v12','v13','v14') and name==native_name:continue
-        if version in ('v12','v13','v14') and name==reader_name:continue
-        if version in ('v13','v14') and name==transport_name:continue
-        if version=='v14' and name==decoder_name:continue
+        if version=='v15' and name==authorization_name:continue
+        if version in ('v11','v12','v13','v14','v15') and name==native_name:continue
+        if version in ('v12','v13','v14','v15') and name==reader_name:continue
+        if version in ('v13','v14','v15') and name==transport_name:continue
+        if version in ('v14','v15') and name==decoder_name:continue
         if name==paused_recovery.NONCE+'.json':continue
         if name==__import__('v8_upgrade').FAILED_NONCE+'.json':
             __import__('v8_upgrade').failed_execution(value,responses[name]);continue
@@ -448,7 +506,12 @@ def install_helper(code,installed,kube,version):
         if decoder_path.exists():
             if upload.private_json(decoder_path,65536)!=decoder_disposition:reject('helper_failed_decoder_disposition_changed')
         else:upload.exclusive(decoder_path,json.dumps(decoder_disposition,sort_keys=True,separators=(',',':')).encode())
-    predecessor,previous={'v10':(V9_BINDING,'v9'),'v11':(V10_BINDING,'v10'),'v12':(V11_BINDING,'v11'),'v13':(V12_BINDING,'v12'),'v14':(V13_BINDING,'v13')}[version]
+    if authorization_disposition is not None:
+        authorization_path=base/'expired-recovery-authorization-failed-execution.json'
+        if authorization_path.exists():
+            if upload.private_json(authorization_path,65536)!=authorization_disposition:reject('helper_failed_authorization_disposition_changed')
+        else:upload.exclusive(authorization_path,json.dumps(authorization_disposition,sort_keys=True,separators=(',',':')).encode())
+    predecessor,previous={'v10':(V9_BINDING,'v9'),'v11':(V10_BINDING,'v10'),'v12':(V11_BINDING,'v11'),'v13':(V12_BINDING,'v12'),'v14':(V13_BINDING,'v13'),'v15':(V14_BINDING,'v14')}[version]
     installer._upgrade_code(code,installed,1000,predecessor,version,previous)
     installer._upgrade_code(code,base,1000,predecessor,version,previous)
     if (upload.private_read(checkpoint)!=current_raw or upload.private_read(snapshot)!=raw

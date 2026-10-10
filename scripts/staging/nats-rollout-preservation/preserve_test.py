@@ -264,3 +264,43 @@ class NativeStateAdmissionTest(unittest.TestCase):
             with self.subTest(files=files),self.assertRaisesRegex(preserve.Blocked,'native_consumer_inventory'):
                 preserve.closed_native_states(runtime,Path('/private/cut.tar'),{'files':files},
                     {'account':'ACCOUNT','consumers':consumers},lambda:None)
+
+
+class NativeDecodeBoundaryTests(unittest.TestCase):
+    def decode_archive(self,count,refuse_final=False):
+        from native_store import archive_closed_store
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);base.chmod(0o700)
+            source=base/'store';source.mkdir(mode=0o700)
+            consumers=[]
+            for number in range(count):
+                name='durable_'+str(number)
+                folder=source/'jetstream/ACCOUNT/streams/BASE/obs'/name
+                folder.mkdir(parents=True)
+                for leaf in ('meta.inf','meta.sum','o.dat'):
+                    (folder/leaf).write_bytes(b'closed native bytes')
+                consumers.append({'stream':'BASE','name':name})
+            archive=base/'cut.tar';manifest=archive_closed_store(source,archive)
+            calls=[];decoded=[]
+            def authority():
+                calls.append(len(decoded))
+                if refuse_final and len(decoded)==count:
+                    raise preserve.Blocked('test_final_fence_lost')
+            def decode(raw):
+                self.assertEqual(raw,b'closed native bytes');decoded.append(raw)
+                return json.dumps({'schema':'nats-closed-durable-consumer-v1','version':2,
+                    'ack_floor':{'consumer':0,'stream':0},'delivered':{'consumer':0,'stream':0},
+                    'pending':{},'redelivered':{}}).encode()
+            with patch.object(preserve,'decode_current_consumer',side_effect=decode):
+                result=preserve.closed_native_states(type('Runtime',(),{'base':base})(),
+                    archive,manifest,{'account':'ACCOUNT','consumers':consumers},authority)
+            self.assertEqual(len(result),count);self.assertEqual(len(decoded),count)
+            self.assertEqual(calls[-1],count)
+            return len(calls)
+
+    def test_immutable_archive_fence_calls_do_not_grow_with_consumers(self):
+        self.assertEqual(self.decode_archive(2),self.decode_archive(42))
+
+    def test_final_fence_loss_never_returns_complete_proof(self):
+        with self.assertRaisesRegex(preserve.Blocked,'test_final_fence_lost'):
+            self.decode_archive(42,refuse_final=True)

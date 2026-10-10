@@ -584,6 +584,13 @@ bootstrap role to publish message GET requests and do not claim API-decoded
 message semantics. Authenticated CMS decryption verifies every promised member
 and repeats the isolated native restore/readback before release authority.
 
+Complete consumer decoding uses authenticated private archive bytes. Archive
+custody, manifest and hashes are checked before and after the read; live fence
+checks remain at those phase boundaries and after all consumers are decoded.
+Losing authority at the final boundary rejects the entire proof. Consumer count
+does not multiply live cluster checks during this immutable-byte phase; every
+consumer still receives complete native-state and admitted-decoder validation.
+
 V11 preserves the V10 helper and original adoption, checkpoint, request journal,
 response and recovery keys. Its separate upgrade record binds the replacement
 code. The exact failed pre-proof recovery request is recorded without replay;
