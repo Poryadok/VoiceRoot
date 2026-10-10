@@ -8,7 +8,7 @@ from controller import Blocked
 from nats_contract_plan import digest
 
 ANNOTATION='voice-nats-preservation/contract-operation'
-def advance(kube,state,stage,journal):
+def advance(kube,state,stage,journal,*,mutation_guard=None):
     migration=state.get('nats_migration',{})
     if migration.get('verified') is not True or migration.get('old_record_files_verified') is not True:raise Blocked('nats_contract_custody_before_proof')
     contract=state['contract'];wanted=state['nats_target_scripts']
@@ -25,6 +25,7 @@ def advance(kube,state,stage,journal):
             journal({'kind':'nats_contract_cm_intent','part':part,'uid':row['metadata']['uid'],'resourceVersion':row['metadata']['resourceVersion'],'target_sha256':target['sha256']})
             stage.verify_final_storage()
             annotations=copy.deepcopy(row['metadata'].get('annotations',{}));annotations[ANNOTATION]=state['operation']
+            if mutation_guard is not None:mutation_guard()
             row=kube.cas('configmap',row,[{'op':'replace','path':'/data/bootstrap.sh','value':target['script']},{'op':'add','path':'/metadata/annotations','value':annotations}])
         if row['data']['bootstrap.sh']!=target['script']:raise Blocked('nats_contract_cm_target_changed')
         expected.update({'configMapResourceVersion':row['metadata']['resourceVersion'],'sha256':target['sha256'],'bytes':len(target['script'].encode())})

@@ -56,6 +56,7 @@ class ActionsTests(unittest.TestCase):
             self.assertTrue(state['custody']['verified'])
             for name in ('apply-authorization.json','apply-manifests.json'):(base/name).write_text('{}')
         with patch.object(actions,'state',return_value=(base,state)),patch.object(preserved_upload,'verify_helper_continuity',return_value=({},{})),\
+             patch.object(actions,'_verify_decrypted_restore') as decrypt,\
              patch.object(bridge_root.source_authority,'_get',side_effect=api),patch.object(bridge_root.source_authority,'_head'),\
              patch.object(preserved_upload,'verify_artifact',side_effect=readback),patch.object(preserved_upload,'load',side_effect=load),\
              patch.object(preserved_upload,'verify_deadline',side_effect=deadline),patch.object(actor_root,'revalidate',side_effect=actor),\

@@ -16,7 +16,7 @@ def request(args,environment):
     action=args[0] if args else ''
     if action=='prepare' and len(args)==5:
         row={'action':action,'mode':args[1],'changed_services':[s for s in args[2].split(',') if s],'source_sha':args[3],'run_id':int(args[4]),'token':environment['GITHUB_TOKEN']}
-    elif action in ('prepare-rollback','resume-cold-backup','resume-cipher-upload') and len(args)==3:
+    elif action in ('prepare-rollback','resume-cold-backup','resume-cipher-upload','prepare-expired-native','prepare-expired-finish') and len(args)==3:
         row={'action':action,'operation':args[1],'run_id':int(args[2]),'token':environment['GITHUB_TOKEN']}
     elif action=='authorize' and len(args)==3:
         row={'action':action,'operation':args[1],'artifact_id':int(args[2]),'token':environment['GITHUB_TOKEN']}
@@ -24,6 +24,11 @@ def request(args,environment):
         row={'action':action,'operation':args[1],'artifact_id':int(args[2]),'upload_nonce':args[3],
             'run_id':int(args[4]),'token':environment['GITHUB_TOKEN']}
     elif action=='finish' and len(args)==3:row={'action':action,'operation':args[1],'claim_rv':args[2]}
+    elif action in ('authorize-expired-native','authorize-expired-finish') and len(args)==6:
+        row={'action':action,'operation':args[1],'original_artifact_id':int(args[2]),
+            'observation_artifact_id':int(args[3]),'upload_nonce':args[4],'run_id':int(args[5]),'token':environment['GITHUB_TOKEN']}
+    elif action=='finish-expired-native' and len(args)==4:
+        row={'action':action,'operation':args[1],'claim_rv':args[2],'run_id':int(args[3]),'token':environment['GITHUB_TOKEN']}
     elif action=='status' and len(args)==2:row={'action':action,'operation':args[1]}
     else:raise bridge.BridgeError('bridge_client_arguments_invalid')
     # Same job/attempt/action payload always resumes the same request. Status
@@ -69,7 +74,8 @@ if __name__=='__main__':
         result=submit(request(sys.argv[1:],os.environ))
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as output:
-                for key in ('operation','cipher_path','artifact_name','challenge','authorization','changed_services','deploy_mode','source_sha','upload_nonce'):
+                for key in ('operation','cipher_path','artifact_name','challenge','authorization','changed_services','deploy_mode','source_sha','upload_nonce',
+                    'original_cipher_path','observation_cipher_path','original_artifact_name','observation_artifact_name'):
                     if key in result:
                         value=result[key]
                         if not isinstance(value,str) or '\n' in value or '\r' in value:raise bridge.BridgeError('bridge_output_invalid')

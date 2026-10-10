@@ -43,9 +43,9 @@ def source_root():
     # Its immutable target file hashes are checked regardless of workspace name.
     return Path(os.environ.get('VOICE_NATS_TARGET_SOURCE',str(Path(__file__).resolve().parents[3]))).resolve(strict=True)
 
-def protected_receipt(path, root=ROOT):
+def protected_receipt(path, root=ROOT, *, name="apply-authorization.json"):
     path=Path(path)
-    if path.parent.parent!=root or not re.fullmatch(r'rollout-[a-f0-9]{12}',path.parent.name) or path.name!='apply-authorization.json':
+    if path.parent.parent!=root or not re.fullmatch(r'rollout-[a-f0-9]{12}',path.parent.name) or path.name!=name:
         raise Blocked('rollout_receipt_path_invalid')
     for directory in (*root.parents[::-1],root,path.parent):
         s=directory.lstat()
@@ -61,8 +61,59 @@ def protected_receipt(path, root=ROOT):
         return json.loads(raw,object_pairs_hook=object_pairs)
     finally:os.close(fd)
 
+def recovery_at_use(receipt):
+    """Consume a fixed root attestation of independently verified private proof.
+
+    The runner cannot read the private proof tree or issue this attestation.
+    No request path, filename, token or caller-provided authority is accepted.
+    """
+    if 'expired_recovery_authority_sha256' not in receipt:return
+    import expired_recovery as recovery
+    import root_cli
+    from preserved_upload import digest,EXECUTION_FIELDS,OPERATION,ORIGINAL_TARGET
+    try:
+        row=protected_receipt(ROOT/('rollout-'+receipt['operation'])/'apply-recovery-authority.json',
+            root=ROOT,name='apply-recovery-authority.json')
+        if (set(row)!={'schema','receipt_sha256','helper_binding_sha256','authority','proof'}
+            or row['schema']!='voice-expired-native-apply-authority-v1'
+            or row['receipt_sha256']!=digest(receipt)
+            or row['helper_binding_sha256']!=digest(root_cli.code_binding(Path(__file__).resolve().parents[1]))):
+            raise Blocked('rollout_recovery_attestation_changed')
+        authority=row['authority'];proof=row['proof'];execution=authority['execution']
+        if (set(authority)!={'schema','operation','purpose','proof_sha256','adopted_state_sha256','execution','original_expires_at','issued_at','expires_at'}
+            or authority['schema']!='voice-expired-native-authority-v1' or authority['purpose']!='native-recovery'
+            or receipt['operation']!=OPERATION or authority['operation']!=OPERATION
+            or receipt['target']['tag']!=ORIGINAL_TARGET or receipt['target']['mode']!='images-only'
+            or receipt['target']['changed_services']!=['story']
+            or not isinstance(receipt['expired_recovery_authority_sha256'],str)
+            or receipt['expired_recovery_authority_sha256']!=digest(authority)
+            or set(proof)!=recovery.PROOF_FIELDS or proof['schema']!='voice-expired-native-proof-v1'
+            or proof['operation']!=OPERATION or any(not isinstance(proof[k],str) or not SHA.fullmatch(proof[k]) for k in recovery.HASH_FIELDS)
+            or authority['proof_sha256']!=digest(proof) or authority['adopted_state_sha256']!=proof['checkpoint_sha256']
+            or proof['original_target_sha256']!=digest(receipt['target'])
+            or set(execution)!=EXECUTION_FIELDS or execution['repository']!='Poryadok/VoiceRoot'
+            or execution['workflow_id']!=263689731 or execution['event']!='workflow_dispatch'
+            or execution['path']!='.github/workflows/staging-deploy.yml'
+            or type(execution['dispatcher_run_id']) is not int or execution['dispatcher_run_id']<=37917461677
+            or type(execution['run_attempt']) is not int or execution['run_attempt']<=0
+            or not re.fullmatch('[a-f0-9]{40}',execution['head_sha']) or not SHA.fullmatch(execution['nonce'])):
+            raise Blocked('rollout_recovery_authority_invalid')
+        times={key:dt.datetime.fromisoformat(value) for key,value in {
+            'old':authority['original_expires_at'],'start':proof['started_at'],'complete':proof['completed_at'],
+            'issued':authority['issued_at'],'expires':authority['expires_at'],'receipt':receipt['expires_at']}.items()}
+        now=dt.datetime.now(dt.timezone.utc)
+        if (any(value.tzinfo is None for value in times.values())
+            or not times['old']<=times['start']<=times['complete']<=times['issued']<=now<times['expires']
+            or times['expires']!=times['start']+dt.timedelta(seconds=600)
+            or times['receipt']!=times['expires']):raise Blocked('rollout_recovery_authority_expired')
+    except (KeyError,TypeError,ValueError,AttributeError):
+        raise Blocked('rollout_recovery_authority_shape_invalid') from None
+
+
 def validate(receipt, registry, tag, mode, changed, source_root):
-    if set(receipt)!={'schema','operation','namespace_uid','marker','pvc','pv','target','backup','expires_at'} or receipt['schema']!='nats-rollout-preservation-v1':
+    fields={'schema','operation','namespace_uid','marker','pvc','pv','target','backup','expires_at'}
+    dedicated='expired_recovery_authority_sha256' in receipt
+    if set(receipt)!=(fields|{'expired_recovery_authority_sha256'} if dedicated else fields) or receipt['schema']!='nats-rollout-preservation-v1':
         raise Blocked('rollout_receipt_schema_invalid')
     if not re.fullmatch(r'[a-f0-9]{12}',receipt['operation']) or not UUID.fullmatch(receipt['namespace_uid']):
         raise Blocked('rollout_receipt_identity_invalid')
@@ -95,6 +146,7 @@ def validate(receipt, registry, tag, mode, changed, source_root):
     expires=dt.datetime.fromisoformat(receipt['expires_at'])
     now=dt.datetime.now(dt.timezone.utc)
     if expires.tzinfo is None or not now<expires<=now+dt.timedelta(hours=4):raise Blocked('rollout_receipt_expired')
+    recovery_at_use(receipt)
     return receipt
 
 def kubectl(args, body=None):
@@ -128,6 +180,7 @@ def claim(receipt):
            {'op':'test','path':'/data/knownRolloutOperation','value':receipt['operation']},
            {'op':'test','path':'/data/dataPVC','value':expected['dataPVC']},
            {'op':'replace','path':'/data/phase','value':'rollout-applying'}]
+    recovery_at_use(receipt)
     result=json.loads(kubectl(['patch','configmap',MARKER,'-n',NS,'--type=json','--patch-file=/dev/stdin','-o','json'],patch),object_pairs_hook=object_pairs)
     rv=result['metadata']['resourceVersion']
     if result['metadata']['uid']!=expected['uid'] or result.get('data',{}).get('phase')!='rollout-applying' or result['data'].get('knownRolloutOperation')!=receipt['operation'] or not re.fullmatch(r'[0-9]{1,20}',rv) or rv==expected['resourceVersion']:

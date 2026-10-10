@@ -309,6 +309,14 @@ written after the previous release. It never replays the prior archive or
 undoes database migrations. Full/app-only rollback needs a separate explicit
 database compatibility plan and is rejected by this images-only endpoint.
 
+Recovery of an interrupted images-only apply before business restart uses the
+same ROOT CLOSED-seal producer after restoring its captured templates. The
+original receipt deadline remains in force at every template, resume and release
+effect. Completion checks the owned release marker, running selected storage,
+and the UID, exact restored template, replica count and readiness of every
+captured workload. A late failure re-fences only the owned objects; replacement
+identities remain BLOCKED with unknown fence state rather than being taken over.
+
 Nonce replay returns the persisted result; interrupted finish with an already
 persisted PASS does not repeat restart or turn the operation into BLOCKED.
 Unresolved interrupted mutations remain fail-closed and require exact owned
@@ -513,3 +521,56 @@ deadline rejection. The captured V8-to-V9 installer fixture verifies preservatio
 partial rename retry, unknown journal and original execution/cipher drift vetoes.
 Synthetic data, mocked Kubernetes/API boundaries and fixture capabilities do not
 establish live backup, apply, rollback or full staging acceptance.
+
+## Exact expired native recovery (implementation in progress)
+
+The dedicated334076 recovery binds a fresh complete private-copy full native/records/config/consumer ACK-pending proof and actual full off-node readback to separate short authority. Original cipher/cut/target/execution/expiry and BLOCKED history remain immutable. Closed selected bytes must equal the proved current observation immediately before first selected broker mount; unknown drift rejects. Durable prospective transaction entry precedes broker startup and intent/issued records; later failure retains truthful progress and refence rather than restoring the adopted checkpoint. Finish-only proof permits missing resume/release obligations without migration/application replay. A safety pause records a new resume obligation. Ordinary routes are unchanged. No live consumer accepts the new authority until the whole adoption/readers/proof/workflow/apply/finish outcome has final independent review and exact CI. Typed startup-rewrite disposition requires real populated pinned-image evidence, not semantic equality alone.
+
+The V10 package includes the complete cold-route dependency closure and fixed
+installer unit restrictions. The new ELF and rebuilt archive require independent
+validation. Installation admits only the exact V9 BLOCKED/pre-intent adoption;
+it preserves checkpoint bytes and does not repair inputs, start a broker, issue
+authority, or replay a request. The fixed transferred archive path is
+`/home/pmd/voice-nats-rollout-v10/rollout-bundle.tar`. Activation follows combined
+implementation/operator review, normal CI/merge and complete remote readback.
+
+
+The expired-recovery consumer checks its fresh independent capability after durable intent/issued journal work immediately before every NATS API, custody CAS and active-release publication. Finish observation accepts an exactly owned already-verified marker without replaying its CAS. Dedicated apply receipts use a closed authority-bound schema through the public guard/runner/apply consumers; ordinary receipts remain strict. Successful finish-proof request status is separate from the truthful blocked operation.
+
+Ordinary full/app/images rollout and every new rollback keep HUB stopped from
+the original cold cut through paused apply and release verification. Clients
+stop first. ROOT captures the original complete live census and exact running
+container, retains the Pod with one operation finalizer, scales HUB to zero,
+and records its current matching container termination with exit0 and no OOM
+before removing only its finalizer. Kubernetes1.27 or later and a Ready node are
+required; absent or replaced termination evidence blocks capture.
+
+Before any copied broker starts, the closed archive enumerates every stream
+metadata pair and consumer metadata/state triple, rejecting memory storage and
+unknown layouts. Complete offline durable decoding includes ACK floor,
+delivered sequences, pending timestamps and redelivery maps. The restored
+broker census must enumerate the same native resources. Actual authenticated
+CMS decryption verifies every promised member, native archive and isolated
+payload/durable readback; complete remote ciphertext equality binds that proof
+to the off-node artifact. Release records durable verified intent before normal
+HUB startup and client resume. It requires no selected-HUB live seal or custom
+namespace/firewall support. Natural timer/retention changes that cannot be
+classified exactly block release; unavailable live callback telemetry is not
+claimed.
+
+Only the already-stopped historical operation3340764a7d24 uses separate fresh
+current observation and authority without inventing original termination proof.
+Its input repair creates an exact private runtime copy and verifies both copies
+at every mount; original input directory custody and historical bytes remain
+unchanged. A new rollback always captures current state and retains additive
+contracts and migrations instead of replaying an earlier cut.
+
+Interrupted cold finish obtains a fresh full current CLOSED-copy proof, both
+complete ciphertext readbacks and a separate short finish-only capability.
+Unknown loss, natural retention or ACK progress that cannot be exactly classified
+blocks admission; the package does not claim universal resume after application
+traffic has changed the store. Historical live-seal/postseal states explicitly
+reject as unsupported before pause, copied broker startup or release. Their
+source/evidence remains preserved outside the qualified package. Each admitted
+finish checks resumed workloads and its deadline before release/publication;
+failure retains truthful progress and fresh safety-pause obligations.

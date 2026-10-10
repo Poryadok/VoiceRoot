@@ -1,8 +1,9 @@
 import copy
+import json
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch,Mock
+from unittest.mock import Mock, patch
 import preserve
 import rollout_census
 from rollout_census_test import ACCOUNT, Runtime, fixture
@@ -10,6 +11,13 @@ from rollout_census_test import ACCOUNT, Runtime, fixture
 
 class PreservationTest(unittest.TestCase):
     def setUp(self):
+        # These tests isolate archive/census composition; the synthetic block
+        # is not a native JetStream layout. Native admission has separate tests.
+        native=patch.object(preserve,'native_catalog',return_value={})
+        catalog=patch.object(preserve,'verify_catalog')
+        states=patch.object(preserve,'closed_native_states',return_value={})
+        native.start();states.start();catalog.start()
+        self.addCleanup(native.stop);self.addCleanup(states.stop);self.addCleanup(catalog.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.base=Path(self.temp.name);self.source=self.base/'source';self.source.mkdir()
         (self.source/'records.blk').write_bytes(b'known synthetic record bytes')
@@ -178,3 +186,81 @@ class PreservationTest(unittest.TestCase):
                     self.assertNotEqual(after,before)
 
 if __name__=='__main__':unittest.main()
+class ColdReleaseAuthorityTests(unittest.TestCase):
+    def fixture(self):
+        now=preserve.dt.datetime.now(preserve.dt.timezone.utc)
+        nonce='a'*64;cut={'manifest':{'archive_sha256':'b'*64}}
+        state={'operation':'123456abcdef','authorization':{'purpose':'actual-admission'},
+            'closed_preservation_attempt_nonce':nonce,'events':[]}
+        state['closed_preservation_attempts']={nonce:{'nonce':nonce,
+            'authorization_sha256':preserve.canonical(state['authorization']),
+            'admitted_cut_sha256':preserve.canonical(cut)}}
+        stage=Mock();authority=Mock()
+        gate=preserve.ColdRelease(Path('/private/rollout-'+state['operation']),state,stage,
+            authority,cut,nonce,now+preserve.dt.timedelta(seconds=60))
+        return gate,state,stage,authority
+
+    def test_real_constructor_and_guard_reject_changed_admission_or_expired_deadline(self):
+        for drift in ('nonce','attempt','authorization','deadline'):
+            gate,state,stage,authority=self.fixture();gate.guard()
+            authority.assert_called()
+            if drift=='nonce':state['closed_preservation_attempt_nonce']='c'*64
+            elif drift=='attempt':state['closed_preservation_attempts'][gate.nonce]['admitted_cut_sha256']='c'*64
+            elif drift=='authorization':state['authorization']['purpose']='substituted'
+            else:gate.startup_deadline=preserve.dt.datetime.now(preserve.dt.timezone.utc)-preserve.dt.timedelta(seconds=1)
+            with self.subTest(drift=drift),self.assertRaisesRegex(preserve.Blocked,'authority_expired_or_changed'):
+                gate.guard()
+
+    def test_real_arm_requires_committed_intent_and_hub_before_any_client_scale(self):
+        from stage_runtime import HUB
+        gate,state,stage,authority=self.fixture()
+        intent={'kind':'cold_preservation_verified_release_intent','operation':state['operation'],
+            'cut_sha256':preserve.canonical(gate.cut)}
+        gate.intent=copy.deepcopy(intent)
+        with self.assertRaisesRegex(preserve.Blocked,'intent_uncommitted'):
+            gate.arm_release(stage,intent)
+        state['events'].append(copy.deepcopy(intent));gate.arm_release(stage,intent)
+        with self.assertRaisesRegex(preserve.Blocked,'hub_first_required'):
+            stage.closed_preservation_release(stage,'scale-intent','voice-story')
+        stage.closed_preservation_release(stage,'scale-intent',HUB)
+        state['events'].clear()
+        with self.assertRaisesRegex(preserve.Blocked,'intent_changed'):
+            stage.closed_preservation_release(stage,'scale-intent',HUB)
+
+
+class NativeStateAdmissionTest(unittest.TestCase):
+    def test_stream_native_directory_without_metadata_cannot_disappear(self):
+        runtime=Mock();runtime.account_id.return_value='ACCOUNT'
+        for paths in (['jetstream/ACCOUNT/streams/LOST'],['jetstream/ACCOUNT/streams/LOST/msgs/1.blk']):
+            with self.subTest(paths=paths),self.assertRaisesRegex(preserve.Blocked,'stream_metadata_missing'):
+                preserve.native_catalog(runtime,Path('/private/cut.tar'),
+                    {'files':[{'path':p} for p in paths],'dirs':[]},lambda:None)
+
+    def test_restored_broker_cannot_omit_native_stream(self):
+        with self.assertRaisesRegex(preserve.Blocked,'restored_native_inventory_changed'):
+            preserve.verify_catalog({'account':'ACCOUNT','streams':['LOST'],'consumers':[]},
+                {'account':'ACCOUNT','streams':[],'consumers':[]})
+
+    def test_every_native_consumer_is_decoded_with_complete_pending_state(self):
+        path='jetstream/'+('A'+'B'*55)+'/streams/BASE/obs/durable/o.dat'
+        row={'account':'A'+'B'*55,'consumers':[{'stream':'BASE','name':'durable'}]}
+        root=path.rsplit('/',1)[0]
+        manifest={'files':[{'path':root+'/'+name} for name in ('o.dat','meta.inf','meta.sum')],'dirs':[root]}
+        decoded={'schema':'nats-closed-durable-consumer-v1','version':2,
+            'ack_floor':{'consumer':0,'stream':0},'delivered':{'consumer':2,'stream':3},
+            'pending':{'3':{'consumer_sequence':2,'timestamp_ns':1700000000000000000}},
+            'redelivered':{'3':1}}
+        reader=Mock();reader.member.return_value=b'full native state'
+        runtime=Mock();runtime.base=Path('/private');runtime.operation='123456abcdef'
+        with patch.object(preserve,'_native_members',return_value={path:b'full native state'}),patch('commands.capture',return_value=json.dumps(decoded).encode()):
+            proof=preserve.closed_native_states(runtime,Path('/private/cut.tar'),manifest,row,lambda:None)
+        self.assertEqual(proof[path],decoded)
+
+    def test_native_consumer_missing_from_census_or_missing_state_is_rejected(self):
+        path='jetstream/ACCOUNT/streams/BASE/obs/durable/o.dat'
+        runtime=Mock();runtime.base=Path('/private')
+        for files,consumers in (([{'path':path}],[]),([],[{'stream':'BASE','name':'durable'}]),
+            ([{'path':'jetstream/ACCOUNT/streams/BASE/obs/omitted/meta.inf'}],[])):
+            with self.subTest(files=files),self.assertRaisesRegex(preserve.Blocked,'native_consumer_inventory'):
+                preserve.closed_native_states(runtime,Path('/private/cut.tar'),{'files':files},
+                    {'account':'ACCOUNT','consumers':consumers},lambda:None)

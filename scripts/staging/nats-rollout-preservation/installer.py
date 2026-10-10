@@ -12,6 +12,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 import encrypted_cut
 import guard
 import root_cli
+import hub_bridge_identity
+import hub_bridge_unit
 from root_main import operation_lock,private_json,save
 from controller import Blocked
 from stage_runtime import Kube
@@ -115,10 +117,10 @@ def _upgrade_code(code,installed,gid,predecessor,version,previous_version):
 
 def upgrade(code,version='v4'):
     if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('bridge_install_human_root_required')
-    if version not in ('v4','v5','v6','v7','v8','v9'):raise Blocked('bridge_upgrade_version_unapproved')
+    if version not in ('v4','v5','v6','v7','v8','v9','v10'):raise Blocked('bridge_upgrade_version_unapproved')
     root_cli.code_binding(Path(code));installed=guard.ROOT/'installed'
     with operation_lock():
-        if version in ('v7','v8','v9'):
+        if version in ('v7','v8','v9','v10'):
             import paused_recovery
             paused_recovery.install_repair(code,installed,Kube(),version=version)
             print('NATS_ROLLOUT_BRIDGE=UPGRADED_'+version.upper()+'_KEYS_POLICY_PRESERVED')
@@ -188,7 +190,7 @@ NoNewPrivileges=true
 MemoryMax=2G
 PrivateTmp=true
 ProtectHome=read-only
-'''
+''' + hub_bridge_identity.UNIT_DIRECTIVES
 PATH_UNIT='''[Unit]
 Description=Watch Voice fixed rollout requests
 [Path]
@@ -239,6 +241,7 @@ def install(code,policy_path):
             path=Path('/etc/systemd/system')/('voice-nats-preservation.'+suffix)
             fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o644)
             with os.fdopen(fd,'w') as stream:stream.write(text);stream.flush();os.fsync(stream.fileno())
+            hub_bridge_unit.verify(suffix,text)
         subprocess.run(['/usr/bin/systemctl','daemon-reload'],check=True,timeout=30)
         subprocess.run(['/usr/bin/systemctl','enable','--now','voice-nats-preservation.path','voice-nats-preservation.timer'],check=True,timeout=30)
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
@@ -251,4 +254,5 @@ if __name__=='__main__':
     elif sys.argv[1]=='--upgrade-v7':upgrade(Path(__file__).resolve().parents[1],version='v7')
     elif sys.argv[1]=='--upgrade-v8':upgrade(Path(__file__).resolve().parents[1],version='v8')
     elif sys.argv[1]=='--upgrade-v9':upgrade(Path(__file__).resolve().parents[1],version='v9')
+    elif sys.argv[1]=='--upgrade-v10':upgrade(Path(__file__).resolve().parents[1],version='v10')
     else:install(Path(__file__).resolve().parents[1],sys.argv[1])

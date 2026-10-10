@@ -66,6 +66,7 @@ def _consumer(row, stream):
     if not isinstance(config, dict) or not config: _fail()
     durable = config.get('durable_name', '')
     if durable not in ('', name) or config.get('name', name) not in ('', name): _fail()
+    if config.get('mem_storage', False) is not False: _fail()
     threshold = _uint(config.get('inactive_threshold', 0))
     if not durable and threshold == 0: _fail()
     delivered, delivered_active = _sequence(row['delivered'])
@@ -122,7 +123,8 @@ def census(runtime, broker, account_id):
             for row in details:
                 name, config, state = row['name'], row['config'], row['state']
                 if (not isinstance(name, str) or not name or name in stream_names or not isinstance(config, dict)
-                        or config.get('name') != name or not isinstance(state, dict) or row.get('direct_consumer_detail')): _fail()
+                        or config.get('name') != name or config.get('storage') != 'file'
+                        or not isinstance(state, dict) or row.get('direct_consumer_detail')): _fail()
                 stream_names.add(name)
                 _state(state)
                 for key in ('messages', 'bytes', 'first_seq', 'last_seq', 'consumer_count'): _uint(state[key])

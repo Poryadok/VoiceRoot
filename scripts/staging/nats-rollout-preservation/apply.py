@@ -52,6 +52,7 @@ def main():
     if not isinstance(rows,list) or not 1<=len(rows)<=128:raise Blocked('rollout_manifest_shape_invalid')
     paused=paused_documents(rows,receipt)
     guard.anchor(receipt,'rollout-applying',rv)
+    guard.recovery_at_use(receipt)
     guard.kubectl(['apply','-f','/dev/stdin','-o','name'],{'apiVersion':'v1','kind':'List','items':paused})
     guard.anchor(receipt,'rollout-applying',rv)
     print('NATS_ROLLOUT_APPLY=PAUSED_COMPLETE')

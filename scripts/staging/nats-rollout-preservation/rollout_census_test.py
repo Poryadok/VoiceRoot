@@ -38,6 +38,13 @@ class Runtime:
 class CensusTests(unittest.TestCase):
     def census(self, tree=None): return module.census(Runtime(tree or fixture()), 'owned-copy', ACCOUNT)
 
+    def test_memory_stream_or_durable_state_cannot_enter_cold_preservation(self):
+        for kind in ('stream','durable'):
+            tree=fixture();stream=tree['account_details'][0]['stream_detail'][0]
+            if kind=='stream':stream['config']['storage']='memory'
+            else:stream['consumer_detail'][0]['config']['mem_storage']=True
+            with self.subTest(kind=kind),self.assertRaises(module.CensusError):self.census(tree)
+
     def test_dynamic_extra_durable_ephemeral_full_delivery_state(self):
         result = self.census()
         self.assertEqual(result['account'], ACCOUNT)

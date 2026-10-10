@@ -3,6 +3,16 @@ name: Staging deploy
 on:
   workflow_call:
     inputs:
+      expired_native_operation:
+        description: Exact reviewed expired native recovery operation, new closed proof and dual custody
+        required: false
+        type: string
+        default: ""
+      expired_finish_operation:
+        description: Exact applied operation, new finish-only proof without apply or migration replay
+        required: false
+        type: string
+        default: ""
       cipher_upload_operation:
         description: Exact reviewed awaiting-off-node operation; mutually exclusive with cold backup and rollback
         required: false
@@ -57,6 +67,16 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      expired_native_operation:
+        description: Exact reviewed expired native recovery operation, new closed proof and dual custody
+        required: false
+        type: string
+        default: ""
+      expired_finish_operation:
+        description: Exact applied operation, new finish-only proof without apply or migration replay
+        required: false
+        type: string
+        default: ""
       cipher_upload_operation:
         description: Exact reviewed awaiting-off-node operation; mutually exclusive with cold backup and rollback
         required: false
@@ -139,6 +159,9 @@ jobs:
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
     runs-on: [self-hosted, Linux, X64, voice-staging]
     environment: staging
+    env:
+      ROLLOUT_EXPIRED_NATIVE_OPERATION: ${{ inputs.expired_native_operation }}
+      ROLLOUT_EXPIRED_FINISH_OPERATION: ${{ inputs.expired_finish_operation }}
     steps:
       - name: Download exact staging source archive
         env:
@@ -265,7 +288,7 @@ jobs:
       - uses: azure/setup-kubectl@v5
 
       - name: Acquire preserved historical target as data before opening the upload window
-        if: inputs.cipher_upload_operation != '' || inputs.cold_backup_operation != ''
+        if: inputs.cipher_upload_operation != '' || inputs.cold_backup_operation != '' || inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
         env:
           STAGING_SOURCE_SHA: 73ca52699ddf6a9182e3407d5bbdedbc29c06dee
         shell: bash
@@ -323,7 +346,7 @@ jobs:
                   return raw
               finally:os.close(fd)
           manifest=json.loads(read(code/'capture-manifest.json',65536))
-          if not isinstance(manifest,dict) or not 1<=len(manifest)<=64:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          if not isinstance(manifest,dict) or not 1<=len(manifest)<=69:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
           for relative,wanted in manifest.items():
               part=pathlib.Path(relative)
               if part.is_absolute() or '..' in part.parts or not isinstance(wanted,str) or not re.fullmatch(r'[a-f0-9]{64}',wanted):raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
@@ -339,22 +362,35 @@ jobs:
               prior=os.environ.get('ROLLOUT_ROLLBACK_OPERATION','')
               cold=os.environ.get('ROLLOUT_COLD_BACKUP_OPERATION','')
               upload=os.environ.get('ROLLOUT_CIPHER_UPLOAD_OPERATION','')
+              expired_native=os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION','')
+              expired_finish=os.environ.get('ROLLOUT_EXPIRED_FINISH_OPERATION','')
               mode=os.environ['DEPLOY_MODE']
               changed=set(filter(None,os.environ['CHANGED_SERVICES'].split(',')))
-              if cold or upload:
-                  if ((cold or upload)!='3340764a7d24' or prior or (cold and upload) or mode!='images-only' or changed!={'story'}
+              recoveries=[value for value in (prior,cold,upload,expired_native,expired_finish) if value]
+              if len(recoveries)>1:raise SystemExit('NATS_ROLLOUT=RECOVERY_INPUT_INVALID')
+              if cold or upload or expired_native or expired_finish:
+                  if ((cold or upload or expired_native or expired_finish)!='3340764a7d24' or prior or mode!='images-only' or changed!={'story'}
                       or os.environ['VOICE_IMAGE_TAG']!=os.environ.get('GITHUB_SHA')):
                       raise SystemExit('NATS_ROLLOUT=RECOVERY_INPUT_INVALID')
               if mode=='app-only' and os.environ.get('ROLLOUT_NEEDS_FULL_ROLLOUT')=='false' and changed and changed<={'web','admin','developer-portal'}:mode='images-only'
-              arguments=(['resume-cipher-upload',upload,os.environ['GITHUB_RUN_ID']] if upload else
+              arguments=(['prepare-expired-native',expired_native,os.environ['GITHUB_RUN_ID']] if expired_native else
+                  ['prepare-expired-finish',expired_finish,os.environ['GITHUB_RUN_ID']] if expired_finish else
+                  ['resume-cipher-upload',upload,os.environ['GITHUB_RUN_ID']] if upload else
                   ['resume-cold-backup',cold,os.environ['GITHUB_RUN_ID']] if cold else
                   ['prepare-rollback',prior,os.environ['GITHUB_RUN_ID']] if prior else
                   ['prepare',mode,os.environ['CHANGED_SERVICES'],os.environ['VOICE_IMAGE_TAG'],os.environ['GITHUB_RUN_ID']])
           elif action=='--bridge-authorize':
               upload_nonce=os.environ.get('ROLLOUT_UPLOAD_NONCE','')
-              arguments=(['authorize-preserved-upload',op,os.environ['ROLLOUT_ARTIFACT_ID'],upload_nonce,os.environ['GITHUB_RUN_ID']]
+              expired_native=os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION','')
+              expired_finish=os.environ.get('ROLLOUT_EXPIRED_FINISH_OPERATION','')
+              if expired_native or expired_finish:
+                  arguments=['authorize-expired-finish' if expired_finish else 'authorize-expired-native',op,
+                      os.environ['ROLLOUT_ORIGINAL_ARTIFACT_ID'],os.environ['ROLLOUT_OBSERVATION_ARTIFACT_ID'],upload_nonce,os.environ['GITHUB_RUN_ID']]
+              else:arguments=(['authorize-preserved-upload',op,os.environ['ROLLOUT_ARTIFACT_ID'],upload_nonce,os.environ['GITHUB_RUN_ID']]
                   if upload_nonce else ['authorize',op,os.environ['ROLLOUT_ARTIFACT_ID']])
-          elif action=='--bridge-finish':arguments=['finish',op,os.environ['ROLLOUT_CLAIM_RV']]
+          elif action=='--bridge-finish':
+              arguments=(['finish-expired-native',op,os.environ['ROLLOUT_CLAIM_RV'],os.environ['GITHUB_RUN_ID']]
+                  if os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION') else ['finish',op,os.environ['ROLLOUT_CLAIM_RV']])
           elif action=='--bridge-status':arguments=['status',op]
           elif bridge_action:raise SystemExit('NATS_ROLLOUT=ACTION_INVALID')
           else:arguments=[action]
@@ -364,6 +400,7 @@ jobs:
 
       - name: Upload encrypted backup to off-node GitHub custody
         id: encrypted_backup
+        if: inputs.expired_native_operation == '' && inputs.expired_finish_operation == ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.preservation.outputs.artifact_name }}
@@ -372,9 +409,33 @@ jobs:
           compression-level: 0
           retention-days: 30
 
+      - name: Upload unchanged original encrypted recovery cut
+        id: expired_original
+        if: inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.preservation.outputs.original_artifact_name }}
+          path: ${{ steps.preservation.outputs.original_cipher_path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload distinct fresh closed observation ciphertext
+        id: expired_observation
+        if: inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.preservation.outputs.observation_artifact_name }}
+          path: ${{ steps.preservation.outputs.observation_cipher_path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
       - name: Verify complete off-node ciphertext readback and authorize paused apply
         env:
           ROLLOUT_UPLOAD_NONCE: ${{ steps.preservation.outputs.upload_nonce }}
+          ROLLOUT_ORIGINAL_ARTIFACT_ID: ${{ steps.expired_original.outputs.artifact-id }}
+          ROLLOUT_OBSERVATION_ARTIFACT_ID: ${{ steps.expired_observation.outputs.artifact-id }}
           VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
           VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
@@ -398,6 +459,7 @@ jobs:
         run: *protected_rollout_runner
 
       - name: Configure kubectl using protected captured code
+        if: inputs.expired_finish_operation == ''
         env:
           VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
@@ -422,6 +484,7 @@ jobs:
         run: *protected_rollout_runner
 
       - name: Verify root-established preservation authorization
+        if: inputs.expired_finish_operation == ''
         env:
           VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
@@ -446,6 +509,7 @@ jobs:
         run: *protected_rollout_runner
 
       - name: Apply exact frozen target while all consumers remain paused
+        if: inputs.expired_finish_operation == ''
         id: paused_apply
         env:
           VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
@@ -471,6 +535,7 @@ jobs:
         run: *protected_rollout_runner
 
       - name: Prove unchanged store and resume through installed root bridge
+        if: inputs.expired_finish_operation == ''
         env:
           VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}

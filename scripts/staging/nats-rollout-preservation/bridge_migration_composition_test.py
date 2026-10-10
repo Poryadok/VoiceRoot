@@ -69,7 +69,7 @@ class Tests(unittest.TestCase):
             # separate real-capture and pinned-binary tests, never caller flags.
             actor={'roles':['story'],'proofs':{'story':{'fixture-external-auth':True}},'mounts':{'story':{'fixture-exact-mount':True}},'binding':{'fixture-same-account':True},'story_schema':{'clean_version':4}}
             actor['compatible_story_candidate']={'schema':'voice-reviewed-story-compatible-pair-v1','image':old_image,'child_sha256':child,'config_sha256':config,'component_source_sha':component,'schema_sha256':transaction.canonical(actor['story_schema']),'actor_sha256':transaction.canonical({'binding':actor['binding'],'mount':actor['mounts']['story'],'proof':actor['proofs']['story']})}
-            def cold(runtime,source,fence):
+            def cold(runtime,source,fence,*,live_catalog=None):
                 fence();manifest=archive_closed_store(source,runtime.base/'rollout-before.tar')
                 order.append('original-cold-cut')
                 return {'manifest':manifest,'census':{'streams':[{'state':{'messages':messages[0]}}]},'census_sha256':'3'*64}
@@ -81,6 +81,7 @@ class Tests(unittest.TestCase):
             def proof(runtime,source,cut,fence):
                 self.assertEqual(cut,{'post-config-baseline':messages[0]});order.append('post-config-store-proof');return {'messages':messages[0],'native_files_verified':True}
             actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding=binding
+            decrypt_patch=patch.object(actions,'_verify_decrypted_restore');decrypt_patch.start();self.addCleanup(decrypt_patch.stop)
             protected_receipt=guard.protected_receipt
             with patch.object(root_cli,'ROOT',workspace),patch.object(guard,'ROOT',workspace),patch.object(bridge_root,'INSTALLED',installed),\
                 patch.object(root_cli,'Kube',return_value=kube),patch.object(bridge_root,'Kube',return_value=kube),\
