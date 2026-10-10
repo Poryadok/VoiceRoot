@@ -252,7 +252,7 @@ class NativeStateAdmissionTest(unittest.TestCase):
             'redelivered':{'3':1}}
         reader=Mock();reader.member.return_value=b'full native state'
         runtime=Mock();runtime.base=Path('/private');runtime.operation='123456abcdef'
-        with patch.object(preserve,'_native_members',return_value={path:b'full native state'}),patch('commands.capture',return_value=json.dumps(decoded).encode()):
+        with patch.object(preserve,'_native_members',return_value={path:b'full native state'}),patch.object(preserve,'decode_current_consumer',return_value=json.dumps(decoded).encode()):
             proof=preserve.closed_native_states(runtime,Path('/private/cut.tar'),manifest,row,lambda:None)
         self.assertEqual(proof[path],decoded)
 

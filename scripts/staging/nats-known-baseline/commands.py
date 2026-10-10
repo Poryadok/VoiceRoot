@@ -8,10 +8,10 @@ import time
 from controller import Blocked
 
 
-def capture(argv, *, body=b'', timeout=30, limit=2<<20, env=None):
+def capture(argv, *, body=b'', timeout=30, limit=2<<20, env=None, pass_fds=()):
     if len(body)>2<<20: raise Blocked('command_input_limit')
     child=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,env=env,start_new_session=True)
+        stderr=subprocess.DEVNULL,env=env,start_new_session=True,pass_fds=pass_fds)
     output=bytearray(); pending=memoryview(body); deadline=time.monotonic()+timeout
     selector=selectors.DefaultSelector()
     try:

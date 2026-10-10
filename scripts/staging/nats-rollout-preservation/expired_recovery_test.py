@@ -216,6 +216,9 @@ class ComposedStateReaderTests(unittest.TestCase):
     def test_v13_state_and_common_reader_preserve_all_installed_upgrade_receipts(self):
         self.exercise_reader('v13')
 
+    def test_v14_state_reader_preserves_complete_v13_lineage(self):
+        self.exercise_reader('v14')
+
     def exercise_reader(self,version):
         import bridge_root,paused_recovery,root_cli
         fixture=RecoveryAuthorityTests();fixture.setUp()
@@ -226,6 +229,7 @@ class ComposedStateReaderTests(unittest.TestCase):
         prior=json.loads((data/'expired-recovery-v10-manifest.json').read_text())
         middle=json.loads((data/'expired-recovery-v11-manifest.json').read_text())
         latest=json.loads((data/'expired-recovery-v12-manifest.json').read_text())
+        v13=json.loads((data/'expired-recovery-v13-manifest.json').read_text())
         current=middle if version=='v11' else {'corrected-reader':'3'*64}
         adopted['code_capture']=copy.deepcopy(old)
         raw=json.dumps(adopted).encode()
@@ -237,16 +241,19 @@ class ComposedStateReaderTests(unittest.TestCase):
         receipt=original_receipt if version=='v11' else {
             'schema':'voice-nats-code-upgrade-v12','from':digest(middle),'to':digest(current)}
         prior_receipt={'schema':'voice-nats-code-upgrade-v12','from':digest(middle),'to':digest(latest)}
-        if version=='v13':receipt={'schema':'voice-nats-code-upgrade-v13','from':digest(latest),'to':digest(current)}
+        if version in ('v13','v14'):receipt={'schema':'voice-nats-code-upgrade-v13','from':digest(latest),'to':digest(current)}
+        v13_receipt={'schema':'voice-nats-code-upgrade-v13','from':digest(latest),'to':digest(v13)}
+        if version=='v14':receipt={'schema':'voice-nats-code-upgrade-v14','from':digest(v13),'to':digest(current)}
         def binding(path):
-            return {'installed-code':current,'code-v9-preserved':old,'code-v10-preserved':prior,'code-v11-preserved':middle,'code-v12-preserved':latest}[path.name]
+            return {'installed-code':current,'code-v9-preserved':old,'code-v10-preserved':prior,'code-v11-preserved':middle,'code-v12-preserved':latest,'code-v13-preserved':v13}[path.name]
         def read(path,limit=0):
             return {'expired-recovery-adoption.json':record,'upgrade-v11.json':original_receipt,
-                'upgrade-v12.json':prior_receipt if version=='v13' else receipt,'upgrade-v13.json':receipt}[path.name]
+                'upgrade-v12.json':prior_receipt if version in ('v13','v14') else receipt,
+                'upgrade-v13.json':v13_receipt if version=='v14' else receipt,'upgrade-v14.json':receipt}[path.name]
         def continuity(path,state,bound):
             if bound!=old:raise recovery.upload.UploadError('preserved_upload_helper_revision_changed')
         def private(path,limit=0):return json.dumps(read(path)).encode()
-        def exists(path):return path.name in ('expired-recovery-adoption.json','upgrade-v11.json','recovery-v9-revision.json') or version in ('v12','v13') and path.name=='upgrade-v12.json' or version=='v13' and path.name=='upgrade-v13.json'
+        def exists(path):return path.name in ('expired-recovery-adoption.json','upgrade-v11.json','recovery-v9-revision.json') or version in ('v12','v13','v14') and path.name=='upgrade-v12.json' or version in ('v13','v14') and path.name=='upgrade-v13.json' or version=='v14' and path.name=='upgrade-v14.json'
         before=copy.deepcopy(adopted)
         with patch('guard.ROOT',base.parent),patch.object(root_cli,'code_binding',side_effect=binding),\
             patch.object(root_cli,'operation_path',return_value=base),patch.object(bridge_root,'private_json',return_value=adopted),\
@@ -266,8 +273,8 @@ class ComposedStateReaderTests(unittest.TestCase):
                 with self.subTest(key=key),self.assertRaises((ValueError,root_cli.Blocked)):
                     actions.state(adopted['operation'])
                 receipt[key]=saved
-            if version in ('v12','v13'):
-                for earlier in (original_receipt,prior_receipt) if version=='v13' else (original_receipt,):
+            if version in ('v12','v13','v14'):
+                for earlier in ((original_receipt,prior_receipt,v13_receipt) if version=='v14' else (original_receipt,prior_receipt) if version=='v13' else (original_receipt,)):
                     for key in ('schema','from','to'):
                         saved=earlier[key];earlier[key]='changed'
                         with self.subTest(prior_receipt=key),self.assertRaises(ValueError):
