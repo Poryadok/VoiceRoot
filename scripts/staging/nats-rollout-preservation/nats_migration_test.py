@@ -51,6 +51,16 @@ class SelectedStoreTests(unittest.TestCase):
                 self.assertEqual(runtime.new_stores,set());runtime.run.assert_not_called()
 
 class Tests(unittest.TestCase):
+    def test_fresh_selected_guard_rejection_precedes_mount_enrollment_and_start(self):
+        state,runtime,stage,actor,manifest,census=self.fixture()
+        def reject():raise Blocked('fixture_selected_inventory_or_deadline_drift')
+        with tempfile.TemporaryDirectory() as td,patch.object(module,'DockerRuntime',return_value=runtime),\
+             patch.object(module,'verify_post_apply',return_value={'verified':True}):
+            with self.assertRaisesRegex(Blocked,'selected_inventory_or_deadline_drift'):
+                module.apply_contract(Path(td),state,stage,state['events'].append,before_selected_start=reject)
+        runtime.allow_bound_store.assert_not_called();runtime.start_broker.assert_not_called()
+        self.assertEqual(actor.calls,[])
+
     def test_issued_update_without_post_info_retains_exact_prior_attempt_evidence(self):
         state,*_=self.fixture();action=state['nats_contract']['actions'][0];obj=action['object']
         attempt={'container_id':'prior-owned-broker','server_image':module.NATS_IMAGE,'started_at':'2026-10-06T12:00:00+00:00'}

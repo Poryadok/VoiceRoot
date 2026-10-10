@@ -185,11 +185,13 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
     try:
         nonnats_plan.revalidate(kube,state['nonnats_binding'])
         if before_fence is not None:before_fence()
+        stage.runtime_base=base
         stage.fence();state['context']=context(stage);state['fence_status']='VERIFIED'
         save(base/'checkpoint.json',state)
         runtime=DockerRuntime(base,operation)
         state['phase']='COLD_BACKUP';save(base/'checkpoint.json',state)
-        state['cut']=capture_cut(runtime,stage.final_path,stage.verify_final_storage)
+        state['cut']=capture_cut(runtime,stage.final_path,stage.verify_final_storage,
+            live_catalog=stage.original_live_census)
         save(base/'rollout-before-manifest.json',state['cut']['manifest'])
         state['cut']['manifest_sha256']=file_sha(base/'rollout-before-manifest.json')
         if state['space_preflight'] is not None:
@@ -209,8 +211,14 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         save(base/'checkpoint.json',state);raise
 
 
-def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None):
+def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
     def current_deadline():
+        if expired_authority is not None:
+            import expired_recovery
+            actual,_=expired_recovery.runtime_authority(base,state,expired_authority,now=dt.datetime.now(dt.timezone.utc))
+            if authorization_deadline!=dt.datetime.fromisoformat(actual['expires_at']):
+                raise Blocked('expired_recovery_deadline_changed')
+            return
         if authorization_deadline is None:return
         now=dt.datetime.now(dt.timezone.utc)
         if (not isinstance(authorization_deadline,dt.datetime) or authorization_deadline.tzinfo is None
@@ -230,7 +238,7 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
     recovery=migration_recovery or renderer_recovery
     if not recovery and (state['phase']!='AWAITING_OFF_NODE' or state['status']!='WAITING'):
         raise Blocked('rollout_offnode_phase_invalid')
-    if 'nats_contract' in state:
+    if 'nats_contract' in state and expired_authority is None:
         expires=dt.datetime.fromisoformat(state['nats_contract_expires_at'])
         if expires.tzinfo is None or dt.datetime.now(dt.timezone.utc)>=expires:raise Blocked('nats_migration_authority_expired')
     cut=state['cut'];manifest=cut['manifest']
@@ -261,6 +269,17 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         if expected is None or migrations.preflight(kube,state['migrations'],state['target']['mode'])!=expected:
             raise Blocked('rollout_database_secret_changed')
     current_deadline()
+    if expired_authority is not None:
+        import expired_recovery,expired_proof
+        actual,proof=expired_recovery.runtime_authority(base,state,expired_authority,now=dt.datetime.now(dt.timezone.utc))
+        adopted=copy.deepcopy(state)
+        def save_entry(event):
+            state['expired_recovery_authority']=copy.deepcopy(actual)
+            journal(event)
+        expired_recovery.enter(actual,adopted,proof,actual['execution'],
+            lambda:expired_proof.current_inventory(DockerRuntime(base,state['operation']),stage),
+            save_entry,lambda:None,now=dt.datetime.now(dt.timezone.utc),
+            clock=lambda:dt.datetime.now(dt.timezone.utc))
     state['phase']='DATABASE_MIGRATIONS';save(Path(base)/'checkpoint.json',state)
     try:
         if renderer_recovery:
@@ -272,10 +291,21 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             verify_post_apply(DockerRuntime(base,state['operation']),stage.final_path,baseline,stage.verify_final_storage)
         elif 'nats_contract' in state:
             state['phase']='NATS_CONTRACT_MIGRATION';save(Path(base)/'checkpoint.json',state)
-            state['nats_migration']=apply_contract(base,state,stage,journal)
+            if expired_authority is None:
+                state['nats_migration']=apply_contract(base,state,stage,journal)
+            else:
+                def before_selected_start():
+                    current_deadline()
+                    _,proof=expired_recovery.runtime_authority(base,state,expired_authority,now=dt.datetime.now(dt.timezone.utc))
+                    if expired_proof.current_inventory(DockerRuntime(base,state['operation']),stage)!=proof['selected_inventory_sha256']:
+                        raise Blocked('expired_recovery_selected_store_changed_before_start')
+                    current_deadline()
+                state['nats_migration']=apply_contract(base,state,stage,journal,before_selected_start=before_selected_start,mutation_guard=current_deadline)
             save(Path(base)/'checkpoint.json',state)
             from nats_contract_custody import advance
-            active=advance(kube,state,stage,journal)
+            active=(advance(kube,state,stage,journal,mutation_guard=current_deadline) if expired_authority is not None
+                else advance(kube,state,stage,journal))
+            current_deadline()
             save(guard.ROOT/'installed'/'active-contract.json',active)
             state['active_contract']=active;save(Path(base)/'checkpoint.json',state)
         if not renderer_recovery:
@@ -312,7 +342,12 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()}
         if authorization_deadline is not None:
             current_deadline()
-            receipt['expires_at']=min(authorization_deadline,dt.datetime.fromisoformat(state['nats_contract_expires_at'])).isoformat()
+            receipt['expires_at']=(authorization_deadline if expired_authority is not None else
+                min(authorization_deadline,dt.datetime.fromisoformat(state['nats_contract_expires_at']))).isoformat()
+        if expired_authority is not None:
+            receipt['expired_recovery_authority_sha256']=canonical(expired_authority)
+            expired_recovery.publish_apply_authority(base,state,expired_authority,receipt,now=dt.datetime.now(dt.timezone.utc))
+            current_deadline()
         save(Path(base)/'apply-authorization.json',receipt)
         state['authorization']=copy.deepcopy(receipt)
         state['context']=context(stage);state['phase']='PAUSED_APPLY';state['status']='WAITING'
@@ -327,7 +362,9 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         state['context']=context(stage);save(Path(base)/'checkpoint.json',state);raise
 
 
-def finish(kube,base,state,receipt,claim_rv,contract):
+def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None):
+    if finish_authority is not None:
+        return finish_only(kube,base,state,receipt,contract,finish_authority,publication=publication)
     if state['phase']!='PAUSED_APPLY' or state['status']!='WAITING':
         raise Blocked('rollout_finish_phase_invalid')
     if receipt!=state.get('authorization') or receipt.get('operation')!=state['operation'] or receipt.get('target')!=state['target']:
@@ -338,6 +375,20 @@ def finish(kube,base,state,receipt,claim_rv,contract):
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
     stage=reconstruct(kube,state,journal)
+    active_recovery=state.get('expired_recovery_authority')
+    def resume_authority():
+        if dt.datetime.now(dt.timezone.utc)>=expires:raise Blocked('rollout_finish_authorization_expired')
+        if active_recovery is None:return
+        import expired_recovery
+        authority,_=expired_recovery.runtime_authority(base,state,active_recovery,now=dt.datetime.now(dt.timezone.utc))
+        if (receipt.get('expired_recovery_authority_sha256')!=canonical(active_recovery)
+            or dt.datetime.fromisoformat(authority['expires_at'])!=expires):
+            raise Blocked('rollout_finish_recovery_authority_changed')
+        if dt.datetime.now(dt.timezone.utc)>=expires:raise Blocked('rollout_finish_authorization_expired')
+    if active_recovery is not None:
+        resume_authority()
+        stage.finish_guard=lambda action,name=None,replicas=None:resume_authority()
+        stage.finish_authority_guard=resume_authority
     # No replica can restart until exact target templates and unchanged data
     # are proved. Original templates remain separately bound for rollback.
     revalidate_inputs(kube,contract,state['provenance'])
@@ -350,7 +401,12 @@ def finish(kube,base,state,receipt,claim_rv,contract):
         state['preservation']=verify_post_apply(runtime,stage.final_path,baseline,stage.verify_final_storage)
         stage.verified();state['context']=context(stage);save(Path(base)/'checkpoint.json',state)
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
+        attach_closed_preservation(base,state,stage,resume_authority)
         state['restart']=stage.restart()
+        resume_authority()
+        state['context']=context(stage)
+        if publication is not None:publication(state,authority_guard=resume_authority)
+        resume_authority()
         state['context']=context(stage);state['phase']='POST_RESTART';state['status']='PASS';state['fence_status']='RELEASED'
         save(Path(base)/'checkpoint.json',state)
         return state
@@ -367,6 +423,90 @@ def finish(kube,base,state,receipt,claim_rv,contract):
         raise
 
 
+def attach_closed_preservation(base,state,stage,authority,*,nonce=None,admitted_cut=None,finish_authority_sha256=None,startup_deadline=None):
+    """ROOT-owned attempt identity shared by ordinary/native finish consumers.
+
+    This is a seal attempt, not an upload/application attempt or a replacement
+    authority. Its identity is saved before any isolated HUB start. Retry must
+    retain the private journal head and cannot adopt an unknown partial effect.
+    """
+    import secrets
+    from preserve import ColdRelease
+    authority()
+    attempts=state.setdefault('closed_preservation_attempts',{})
+    if type(attempts) is not dict or len(attempts)>64:
+        raise Blocked('closed_preservation_attempt_changed')
+    chosen=nonce if nonce is not None else state.get('closed_preservation_attempt_nonce')
+    if chosen is None:chosen=secrets.token_hex(32)
+    if type(chosen) is not str or not guard.SHA.fullmatch(chosen):
+        raise Blocked('closed_preservation_attempt_changed')
+    saved=attempts.get(chosen)
+    if saved is None:
+        if len(attempts)==64:raise Blocked('closed_preservation_attempt_changed')
+        saved={'nonce':chosen,'authorization_sha256':canonical(state['authorization'])}
+        if admitted_cut is not None:
+            if not guard.SHA.fullmatch(finish_authority_sha256 or ''):
+                raise Blocked('closed_preservation_current_authority_missing')
+            saved.update(admitted_cut_sha256=canonical(admitted_cut),finish_authority_sha256=finish_authority_sha256)
+        attempts[chosen]=saved
+        state['closed_preservation_attempt_nonce']=chosen
+        save(Path(base)/'checkpoint.json',state)
+    fields={'nonce','authorization_sha256'}
+    if admitted_cut is not None:fields|={'admitted_cut_sha256','finish_authority_sha256'}
+    if (type(saved) is not dict or set(saved)!=fields
+        or not guard.SHA.fullmatch(saved['nonce'])
+        or saved['authorization_sha256']!=canonical(state['authorization'])
+        or nonce is not None and saved['nonce']!=nonce
+        or admitted_cut is not None and (saved['admitted_cut_sha256']!=canonical(admitted_cut)
+            or saved['finish_authority_sha256']!=finish_authority_sha256)):
+        raise Blocked('closed_preservation_attempt_changed')
+    if startup_deadline is None:
+        startup_deadline=dt.datetime.fromisoformat(state['authorization']['expires_at'])
+    if startup_deadline.tzinfo is None:raise Blocked('closed_preservation_deadline_invalid')
+    authority()
+    baseline=admitted_cut if admitted_cut is not None else state.get('nats_migration',{}).get('cut',state['cut'])
+    # ColdRelease retains the exact saved nonce/authorization/current-cut
+    # registry and source-derived short startup deadline at every release use.
+    runtime=ColdRelease(base,state,stage,authority,baseline,saved['nonce'],startup_deadline)
+    stage.closed_preservation_producer=runtime
+    stage.closed_preservation_runtime=runtime
+    authority()
+    return runtime
+
+
+def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
+    # Expired application permission is preserved history. A separately loaded
+    # root proof permits missing resumes only; never authorize/apply/migrate.
+    if receipt!=state.get('authorization') or receipt.get('target')!=state['target']:
+        raise Blocked('rollout_finish_authorization_changed')
+    stage=None
+    journal=checkpoint_journal(base,state,lambda:stage)
+    stage=reconstruct(kube,state,journal)
+    import expired_finish
+    engine=expired_finish.bind(base,state,reference,stage,journal)
+    revalidate_inputs(kube,contract,state['provenance'])
+    try:
+        state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
+        state['restart']=engine.restart()
+        engine.final()
+        state['context']=context(stage)
+        if publication is not None:publication(state,authority_guard=engine.verify)
+        engine.verify()
+        state['context']=context(stage);state['phase']='POST_RESTART'
+        state['status']='PASS';state['fence_status']='RELEASED'
+        save(Path(base)/'checkpoint.json',state)
+        return state
+    except Exception as error:
+        state['status']='BLOCKED';state['fence_status']='UNKNOWN';state['error']=safe_error(error)
+        try:
+            if stage.refence().get('verified') is True:
+                state['fence_status']='VERIFIED'
+                engine.safety_paused()
+        except Exception:pass
+        state['context']=context(stage);save(Path(base)/'checkpoint.json',state)
+        raise
+
+
 def rollback(kube,base,state,receipt,claim_rv,contract):
     # An application which has resumed may have newer NATS/DB state. It needs
     # a fresh preservation transaction; this recovery never replays a backup.
@@ -378,7 +518,23 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
     journal=checkpoint_journal(base,state,lambda:stage)
     stage=reconstruct(kube,state,journal)
     revalidate_inputs(kube,contract,state['provenance'])
+    def rollback_resume_authority():
+        if receipt!=state.get('authorization') or receipt.get('target')!=state['target']:
+            raise Blocked('rollout_rollback_authorization_changed')
+        try:expires=dt.datetime.fromisoformat(receipt['expires_at'])
+        except (KeyError,TypeError,ValueError):raise Blocked('rollout_rollback_authorization_invalid') from None
+        if expires.tzinfo is None or dt.datetime.now(dt.timezone.utc)>=expires:
+            raise Blocked('rollout_rollback_authorization_expired')
+        revalidate_inputs(kube,contract,state['provenance'])
+        released=getattr(stage,'finish_released_marker',None)
+        if released is None:stage.owned_marker()
+        elif stage.kube.get('configmap','voice-nats-generation')!=released:
+            raise Blocked('rollout_rollback_released_marker_changed')
+        stage.verify_selected_storage_identity()
+    stage.finish_authority_guard=rollback_resume_authority
+    stage.finish_guard=lambda action,name=None,replicas=None:rollback_resume_authority()
     try:
+        rollback_resume_authority()
         if state['phase']!='ROLLBACK_TEMPLATES':stage.adopt_rollback_target(receipt,claim_rv)
         state['phase']='ROLLBACK_TEMPLATES';save(Path(base)/'checkpoint.json',state)
         if state.get('renderer_authority') is not None:
@@ -397,7 +553,18 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
         state['preservation']=verify_post_apply(DockerRuntime(base,state['operation']),stage.final_path,baseline,stage.verify_final_storage)
         stage.verified()
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
+        attach_closed_preservation(base,state,stage,rollback_resume_authority)
         state['restart']=stage.restart()
+        rollback_resume_authority()
+        for name,captured in stage.snapshots.items():
+            current=stage.kube.get('deployment',name);status=current.get('status',{})
+            if (current['metadata']['uid']!=captured['metadata']['uid']
+                or current['spec'].get('replicas',1)!=1
+                or current['spec']['template']!=captured['spec']['template']
+                or status.get('observedGeneration',0)<current['metadata']['generation']
+                or any(status.get(field,0)!=1 for field in ('readyReplicas','updatedReplicas','availableReplicas'))):
+                raise Blocked('rollout_rollback_final_workload_changed')
+            rollback_resume_authority()
         state['context']=context(stage);state['phase']='POST_RESTART';state['status']='ROLLED_BACK';state['fence_status']='RELEASED'
         save(Path(base)/'checkpoint.json',state)
         return state

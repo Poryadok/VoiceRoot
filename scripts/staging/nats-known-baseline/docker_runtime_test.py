@@ -27,6 +27,21 @@ class DockerSafetyTests(unittest.TestCase):
         self.runtime.owned['broker'] = {'id': 'a'*64, 'image': NATS_IMAGE,
             'image_id': 'sha256:'+'b'*64, 'network': 'none', 'mounts': set()}
 
+    def test_selected_store_requires_orderly_exit_not_only_running_false(self):
+        self.runtime.owned['broker']['selected']={'path':'selected'}
+        for code,oom in ((137,False),(1,False),(0,True)):
+            with self.subTest(exit_code=code,oom=oom):
+                self.row['State']={'Running':False,'ExitCode':code,'OOMKilled':oom}
+                with patch.object(self.runtime,'inspect',return_value=self.row):
+                    with self.assertRaisesRegex(Blocked,'broker_orderly_shutdown_failed'):
+                        self.runtime.stop('broker')
+
+    def test_selected_store_successful_shutdown_is_accepted(self):
+        self.runtime.owned['broker']['selected']={'path':'selected'}
+        self.row['State']={'Running':False,'ExitCode':0,'OOMKilled':False,'Error':''}
+        with patch.object(self.runtime,'inspect',return_value=self.row):
+            self.runtime.stop('broker')
+
     def test_foreign_container_never_stopped(self):
         self.row['Config']['Labels'][LABEL] = 'someoneelse'
         with self.assertRaises(Blocked): self.runtime.stop('broker')

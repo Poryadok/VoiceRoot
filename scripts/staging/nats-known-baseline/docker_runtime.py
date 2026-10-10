@@ -222,13 +222,27 @@ class DockerRuntime:
     def stop(self, name):
         self.inspect(name)
         self.run(['stop', '--time', '10', name], timeout=20)
-        if self.inspect(name)['State']['Running']:
+        stopped=self.inspect(name)['State']
+        if stopped['Running']:
             raise Blocked('broker_stop_failed')
+        if self.owned[name].get('selected') is not None and (
+            type(stopped.get('ExitCode')) is not int or stopped['ExitCode']!=0
+            or stopped.get('OOMKilled') is not False or stopped.get('Error','')!=''):
+            raise Blocked('broker_orderly_shutdown_failed')
 
     def restart(self, name):
         if self.inspect(name)['State']['Running']:
             raise Blocked('broker_not_closed')
         self.run(['start', name]); self.inspect(name)
+
+    def inputs_directory(self):
+        # Only the separately admitted historical recovery uses a fresh copy;
+        # every consumer rechecks both original and rematerialized custody.
+        receipt=self.base/'expired-recovery-input-repair.json'
+        if receipt.exists():
+            from expired_recovery import runtime_inputs
+            return runtime_inputs(self.base)
+        return self.base/'inputs'
 
     def kernel(self, broker, phase):
         if phase not in ('seed', 'verify-closed', 'drain', 'verify-drained', 'census'):
@@ -238,7 +252,7 @@ class DockerRuntime:
         out = Path(tempfile.mkdtemp(prefix='out-', dir=self.base))
         os.chown(out, 65532, 65532)
         name = self.create('kernel-'+str(len(self.owned)), NATS_IMAGE,
-            [(self.base/'kernel', '/kernel', False), (self.base/'inputs', '/inputs', False), (out, '/out', True)],
+            [(self.base/'kernel', '/kernel', False), (self.inputs_directory(), '/inputs', False), (out, '/out', True)],
             ['/kernel', '--phase', phase], broker)
         self.run(['start', name])
         if self.run(['wait', name], timeout=60) != '0' or self.inspect(name)['State']['Running']:
@@ -249,7 +263,7 @@ class DockerRuntime:
         for role in ('realtime', 'notification', 'analytics-chat', 'search'):
             script = self.base / ('bootstrap-'+role+'.sh')
             name = self.create('bootstrap-'+role+'-'+str(len(self.owned)), BOX_IMAGE,
-                [(script, '/bootstrap.sh', False), (self.base/'inputs', '/inputs', False)],
+                [(script, '/bootstrap.sh', False), (self.inputs_directory(), '/inputs', False)],
                 ['/bin/sh', '-c', 'NATS_URL=nats://127.0.0.1:4222 NATS_CREDS=/inputs/bootstrap.creds exec /bin/sh /bootstrap.sh'], broker)
             self.run(['start', name])
             if self.run(['wait', name], timeout=120) != '0' or self.inspect(name)['State']['Running']:

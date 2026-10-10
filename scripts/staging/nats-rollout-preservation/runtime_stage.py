@@ -8,10 +8,38 @@ import os
 import re
 from pathlib import Path
 import stat
+import datetime as dt
+import json
+import time
 import guard
-from stage_runtime import Staging, HUB, MARKER, LEAVES, pv_storage_path, selected_store_descriptor, verify_selected_store_leaf
+from stage_runtime import Staging, HUB, MARKER, LEAVES, pv_storage_path, selected_store_descriptor, verify_selected_store_leaf, fence_objects
 from controller import Blocked
 from apply import digest
+
+
+def terminated_hub(before,after):
+    """Current kubelet termination of the exact retained original container."""
+    try:
+        old=[s for s in before['status']['containerStatuses'] if s['name']=='nats']
+        new=[s for s in after['status']['containerStatuses'] if s['name']=='nats']
+        if (len(old)!=1 or len(new)!=1 or before['metadata']['uid']!=after['metadata']['uid']
+            or not after['metadata'].get('deletionTimestamp')
+            or old[0]['containerID']!=new[0]['containerID']
+            or old[0]['restartCount']!=new[0]['restartCount']
+            or set(old[0]['state'])!={'running'} or set(new[0]['state'])!={'terminated'}):
+            raise ValueError()
+        stopped=new[0]['state']['terminated'];started=old[0]['state']['running']['startedAt']
+        opening=dt.datetime.fromisoformat(started.replace('Z','+00:00'))
+        closing=dt.datetime.fromisoformat(stopped['finishedAt'].replace('Z','+00:00'))
+        if (type(stopped.get('exitCode')) is not int or stopped['exitCode']!=0
+            or stopped.get('signal',0)!=0 or stopped.get('reason')=='OOMKilled'
+            or stopped.get('startedAt')!=started or opening.tzinfo is None
+            or closing.tzinfo is None or closing<opening):raise ValueError()
+        return {'schema':'voice-original-hub-orderly-exit-v1','pod_uid':before['metadata']['uid'],
+            'container_id':old[0]['containerID'],'restart_count':old[0]['restartCount'],
+            'started_at':started,'finished_at':stopped['finishedAt'],'exit_code':0,
+            'source':'KUBELET_CURRENT_TERMINATED_RETAINED_POD'}
+    except (KeyError,TypeError,ValueError):raise Blocked('rollout_original_hub_orderly_exit_invalid') from None
 
 IMAGE_TEMPLATE=('{"items":[{{range $i,$r := .items}}{{if $i}},{{end}}'
     '{"kind":{{printf "%q" $r.kind}},"metadata":{"name":{{printf "%q" $r.metadata.name}},"uid":{{printf "%q" $r.metadata.uid}},'
@@ -101,12 +129,122 @@ class RolloutStage(Staging):
 
     def fence(self):
         self.maintenance()
-        names=tuple(n for n in self.snapshots if n!=HUB)+(HUB,)
-        for name in names:self.scale(name,0)
+        clients=tuple(n for n in self.snapshots if n!=HUB)
+        for name in clients:self.scale(name,0)
+        self.drain_client_pods(clients)
+        self.shutdown_original_hub()
+        names=clients+(HUB,)
         self.no_pods(names);self.verify_closed()
         return {'verified':True,'workloads':list(names),'hub_zero_pods':True}
 
+    def drain_client_pods(self,names,timeout=90):
+        deadline=time.monotonic()+timeout;wanted={self.snapshots[n]['metadata']['uid'] for n in names}
+        while time.monotonic()<deadline:
+            self.owned_marker()
+            for name in names:
+                row=self.kube.get('deployment',name);expected=self.snapshots[name]
+                if (row['metadata']['uid']!=expected['metadata']['uid'] or row['spec'].get('replicas',1)!=0
+                    or row['spec']['template']!=expected['spec']['template']):raise Blocked('rollout_client_fence_changed')
+            rows=fence_objects(self.kube)
+            rs={r['metadata']['uid'] for r in rows if r['kind']=='ReplicaSet'
+                and any(o['uid'] in wanted for o in r['metadata'].get('ownerReferences',[]))}
+            if not any(r['kind']=='Pod' and any(o['uid'] in rs for o in r['metadata'].get('ownerReferences',[])) for r in rows):return
+            time.sleep(.2)
+        raise Blocked('rollout_client_fence_timeout')
+
+    def shutdown_original_hub(self):
+        from commands import capture
+        from docker_runtime import DockerRuntime,NATS_IMAGE
+        from rollout_census import census
+        version=self.kube.run(['version','-o','json'])['serverVersion']
+        if int(version['major'])!=1 or int(version['minor'].rstrip('+'))<27:
+            raise Blocked('rollout_retained_pod_version_unsupported')
+        hub=self.kube.get('deployment',HUB);expected=self.snapshots[HUB]
+        if hub['metadata']['uid']!=expected['metadata']['uid'] or hub['spec']['template']!=expected['spec']['template']:
+            raise Blocked('rollout_original_hub_changed')
+        claims=self.expected['source_claim']
+        pods=self.kube.run(['get','pods','-o','json'])['items']
+        selected=[p for p in pods if any(v.get('persistentVolumeClaim',{}).get('claimName')==claims
+            for v in p['spec'].get('volumes',[]))]
+        if len(selected)!=1:raise Blocked('rollout_original_hub_inventory_invalid')
+        pod=selected[0];metadata=pod['metadata'];spec=pod['spec'];statuses=pod['status'].get('containerStatuses',[])
+        owners=metadata.get('ownerReferences',[])
+        if (metadata.get('deletionTimestamp') or pod['status'].get('phase')!='Running'
+            or len(owners)!=1 or owners[0].get('kind')!='ReplicaSet' or owners[0].get('controller') is not True
+            or len(spec['containers'])!=1 or spec['containers'][0]['name']!='nats'
+            or spec['containers'][0]['image']!=NATS_IMAGE or len(statuses)!=1):
+            raise Blocked('rollout_original_hub_inventory_invalid')
+        rs=self.kube.get('replicaset',owners[0]['name'])
+        if (rs['metadata']['uid']!=owners[0]['uid'] or not any(o.get('kind')=='Deployment'
+            and o.get('uid')==hub['metadata']['uid'] and o.get('controller') is True for o in rs['metadata'].get('ownerReferences',[]))):
+            raise Blocked('rollout_original_hub_owner_changed')
+        current=statuses[0]
+        if (current.get('name')!='nats' or current.get('ready') is not True
+            or not re.fullmatch('containerd://[a-f0-9]{64}',current.get('containerID',''))
+            or current.get('imageID','').removeprefix('docker-pullable://')!=NATS_IMAGE
+            or type(current.get('restartCount')) is not int or set(current.get('state',{}))!={'running'}):
+            raise Blocked('rollout_original_hub_container_changed')
+        node=self.kube.get('node',spec['nodeName'])
+        if not any(c.get('type')=='Ready' and c.get('status')=='True' for c in node.get('status',{}).get('conditions',[])):
+            raise Blocked('rollout_original_hub_node_not_ready')
+        def identity():
+            self.owned_marker();live=self.kube.get('pod',metadata['name'])
+            matches=[s for s in live['status'].get('containerStatuses',[]) if s['name']=='nats']
+            if (live['metadata']['uid']!=metadata['uid'] or live['metadata'].get('deletionTimestamp')
+                or matches!=statuses):raise Blocked('rollout_original_hub_changed')
+        identity()
+        raw=capture(['/usr/local/bin/k3s','kubectl','--namespace',guard.NS,'exec',metadata['name'],
+            '-c','nats','--','/bin/busybox','wget','-q','-O','-',
+            'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048'],
+            timeout=30,limit=64<<20,env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'})
+        identity();tree=json.loads(raw)
+        class Snapshot:
+            def monitor_jsz(self,name):return tree
+        runtime=DockerRuntime(self.runtime_base,self.operation)
+        self.original_live_census=census(Snapshot(),'original',runtime.account_id())
+        finalizer='voice.io/nats-preservation-'+self.operation
+        original=copy.deepcopy(pod);existing=metadata.get('finalizers',[])
+        if finalizer in existing:raise Blocked('rollout_original_hub_finalizer_already_present')
+        self.save({'kind':'original_hub_shutdown_intent','pod_uid':metadata['uid'],
+            'container_id':current['containerID'],'finalizer':finalizer,
+            'live_census_sha256':digest(self.original_live_census)})
+        retained=self.kube.cas('pod',pod,[{'op':'add','path':'/metadata/finalizers','value':existing+[finalizer]}])
+        self.scale(HUB,0);deadline=time.monotonic()+90
+        while time.monotonic()<deadline:
+            self.owned_marker();retained=self.kube.get('pod',metadata['name'])
+            if retained['metadata']['uid']!=metadata['uid'] or finalizer not in retained['metadata'].get('finalizers',[]):
+                raise Blocked('rollout_original_hub_retained_pod_changed')
+            status=[s for s in retained['status'].get('containerStatuses',[]) if s['name']=='nats']
+            if len(status)!=1 or status[0].get('containerID')!=current['containerID'] or status[0].get('restartCount')!=current['restartCount']:
+                raise Blocked('rollout_original_hub_container_changed')
+            if 'terminated' in status[0].get('state',{}):
+                proof=terminated_hub(original,retained)
+                self.save({'kind':'original_hub_orderly_exit_verified','proof':proof})
+                finals=retained['metadata']['finalizers'];index=finals.index(finalizer)
+                self.kube.cas('pod',retained,[{'op':'test','path':'/metadata/finalizers','value':finals},
+                    {'op':'remove','path':'/metadata/finalizers/'+str(index)}])
+                self.save({'kind':'original_hub_owned_finalizer_removed','pod_uid':metadata['uid']});return proof
+            time.sleep(.2)
+        raise Blocked('rollout_original_hub_shutdown_timeout')
+
     def refence(self):
+        released=getattr(self,'finish_released_marker',None)
+        if released is not None:
+            # Safety-only reacquisition of THIS call's exact released CAS.
+            # Never take over an arbitrary active marker or renew permission.
+            current=self.kube.get('configmap',MARKER)
+            if (current!=released or current['data'].get('phase')!='active'
+                or current['data'].get('knownRolloutOperation') is not None
+                or current['data'].get('dataPVC')!=self.expected['source_claim']):
+                raise Blocked('finish_released_marker_changed')
+            self.verify_selected_storage_identity()
+            self.marker=self.kube.cas('configmap',current,[
+                {'op':'test','path':'/data/phase','value':'active'},
+                {'op':'test','path':'/data/dataPVC','value':self.expected['source_claim']},
+                {'op':'replace','path':'/data/phase','value':'rollout-verified'},
+                {'op':'add','path':'/data/knownRolloutOperation','value':self.operation}])
+            del self.finish_released_marker
+            self.save({'kind':'expired_finish_release_refenced','marker':self.marker})
         self.owned_marker()
         names=tuple(n for n in self.snapshots if n!=HUB)+(HUB,)
         for name in names:self.scale(name,0)
@@ -154,6 +292,11 @@ class RolloutStage(Staging):
 
     def verified(self):
         self.verify_final_storage();row=self.owned_marker()
+        if row['data']['phase']=='rollout-verified':
+            # Observe only THIS operation's exact UID/RV/storage-bound marker.
+            # A finish-only proof must not replay the completed applying CAS.
+            self.marker=row
+            return
         if row['data']['phase']!='rollout-applying':raise Blocked('rollout_verify_phase_invalid')
         self.marker=self.kube.cas('configmap',row,[{'op':'replace','path':'/data/phase','value':'rollout-verified'}])
         self.save({'kind':'rollout_verified','marker':self.marker})
@@ -191,6 +334,8 @@ class RolloutStage(Staging):
                 key=name+'/'+container['name'];image=self.old_images.get(key,'')
                 if not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):raise Blocked('rollout_rollback_image_unpinned')
                 container['image']=image
+            authority=getattr(self,'finish_authority_guard',None)
+            if authority is not None:authority()
             self.snapshots[name]=self.kube.cas('deployment',current,[
                 {'op':'test','path':'/spec/replicas','value':0},
                 {'op':'test','path':'/spec/template','value':snapshot['spec']['template']},
@@ -203,7 +348,109 @@ class RolloutStage(Staging):
             raise Blocked('rollout_unverified_resume_forbidden')
         if getattr(self,'renderer_transition',None) is not None and not callable(getattr(self,'renderer_post_start',None)):
             raise Blocked('renderer_restart_proof_missing')
-        return super().restart()
+        authority=getattr(self,'finish_authority_guard',None)
+        self.seal_before_business_resume()
+        if authority is None:
+            from preserve import ColdRelease
+            runtime=getattr(self,'closed_preservation_runtime',None)
+            if type(runtime) is ColdRelease:authority=runtime.guard
+        if authority is None:return super().restart()
+        # The inherited User/Space bootstrap has direct template CAS calls in
+        # addition to scale calls. Every one must check the same short authority
+        # before mutation; subsequent readiness/final checks retain progress.
+        original=self.kube
+        class GuardedCAS:
+            def __getattr__(self,name):return getattr(original,name)
+            def cas(self,*args,**kwargs):
+                authority()
+                return original.cas(*args,**kwargs)
+        self.kube=GuardedCAS()
+        try:return super().restart()
+        finally:self.kube=original
+
+    def restart_missing(self,ledger):
+        """Resume only this fresh proof's recorded missing obligations.
+
+        Completed workloads are observed; their scale action is not replayed.
+        The owned User/Space temporary override remains a typed, reversible
+        startup transition, and is never accepted as a final target template.
+        """
+        if self.owned_marker()['data']['phase']!='rollout-verified':
+            raise Blocked('rollout_unverified_resume_forbidden')
+        if set(ledger.record['pending'])|set(ledger.record['completed'])!=set(self.snapshots):
+            raise Blocked('finish_resume_inventory_changed')
+        self.seal_before_business_resume()
+        def resume(name):
+            if name in ledger.record['pending']:
+                row=self.kube.get('deployment',name)
+                if row['spec'].get('replicas',1)!=0:raise Blocked('finish_resume_not_paused')
+                self.scale(name,1)
+            self.wait_ready(name)
+        resume(HUB)
+        user_name='voice-user';space_name='voice-space';original=None
+        if user_name in ledger.record['pending'] and space_name in ledger.record['pending']:
+            user=self.kube.get('deployment',user_name)
+            original=copy.deepcopy(user['spec']['template'])
+            containers=user['spec']['template']['spec']['containers']
+            indexes=[i for i,c in enumerate(containers) if c['name']=='user']
+            if len(indexes)!=1:raise Blocked('user_cycle_shape_invalid')
+            index=indexes[0];env=containers[index].get('env');annotations=original.get('metadata',{}).get('annotations')
+            if (not isinstance(env,list) or not isinstance(annotations,dict)
+                or any(e['name']=='SPACE_GRPC_ADDR' for e in env)
+                or 'voice.io/nats-user-space-bootstrap' in annotations):raise Blocked('user_cycle_already_owned')
+            if 'SPACE_GRPC_ADDR' not in self.kube.get('configmap','voice-app-config')['data']:
+                raise Blocked('user_cycle_config_missing')
+            self.finish_authority_guard()
+            self.save({'kind':'expired_finish_cycle_entered','name':user_name,'original_template_sha256':digest(original)})
+            self.finish_authority_guard()
+            self.snapshots[user_name]=self.kube.cas('deployment',user,[
+                {'op':'test','path':'/spec/replicas','value':0},
+                {'op':'test','path':'/spec/template','value':original},
+                {'op':'add','path':'/spec/template/spec/containers/'+str(index)+'/env/-','value':{'name':'SPACE_GRPC_ADDR','value':''}},
+                {'op':'add','path':'/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap','value':self.operation}])
+            self.save({'kind':'user_cycle_override','owner':self.operation})
+        for service in LEAVES:
+            name='voice-'+service
+            if name in ledger.record['pending']:
+                row=self.kube.get('deployment',name)
+                if row['spec'].get('replicas',1)!=0:raise Blocked('finish_resume_not_paused')
+                self.scale(name,1)
+        self.wait_ready(user_name);self.wait_ready(space_name)
+        if original is not None:
+            self.finish_authority_guard();user=self.kube.get('deployment',user_name)
+            self.snapshots[user_name]=self.kube.cas('deployment',user,[
+                {'op':'test','path':'/spec/template','value':self.snapshots[user_name]['spec']['template']},
+                {'op':'test','path':'/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap','value':self.operation},
+                {'op':'replace','path':'/spec/template','value':original}])
+            self.save({'kind':'user_cycle_restored','owner':self.operation});self.finish_authority_guard()
+            self.wait_ready(user_name)
+        for service in LEAVES:self.wait_ready('voice-'+service)
+        resume('voice-gateway')
+        self.release_marker()
+        return {'verified':True,'active_claim':self.final_claim['metadata']['name'],
+            'generation':self.expected['generation'],'user_cycle_restored':True,'finish_only':True}
+
+    def seal_before_business_resume(self):
+        # Ordinary and both dedicated consumers share the ROOT producer;
+        # absence cannot fall back to Kube readiness as preservation evidence.
+        producer=getattr(self,'closed_preservation_producer',None)
+        if producer is None:raise Blocked('closed_preservation_seal_required')
+        result=producer.seal_before_resume(self)
+        runtime=getattr(self,'closed_preservation_runtime',None)
+        if runtime is None:raise Blocked('closed_preservation_release_source_required')
+        runtime.arm_release(self,result)
+        authority=getattr(self,'finish_authority_guard',None)
+        if authority is not None:authority()
+        return result
+
+    def scale(self,name,replicas):
+        finish_guard=getattr(self,'finish_guard',None)
+        if finish_guard is not None and replicas!=0:finish_guard('scale',name,replicas)
+        release=getattr(self,'closed_preservation_release',None)
+        if release is not None and replicas!=0:release(self,'scale-intent',name)
+        result=super().scale(name,replicas)
+        if release is not None and replicas!=0:release(self,'scale-result',name)
+        return result
 
     def wait_ready(self,name):
         super().wait_ready(name)
@@ -212,19 +459,34 @@ class RolloutStage(Staging):
         if name==HUB and getattr(self,'renderer_transition',None) is not None:
             self.renderer_post_start(self)
             self.save({'kind':'rollout_renderer_live_verified'})
+        finish_guard=getattr(self,'finish_guard',None)
+        if finish_guard is not None:finish_guard('ready',name,None)
+        release=getattr(self,'closed_preservation_release',None)
+        if release is not None:release(self,'ready',name)
 
     def release_marker(self):
         row=self.owned_marker()
         if row['data']['phase']!='rollout-verified':raise Blocked('rollout_unverified_release_forbidden')
         core={HUB,'voice-gateway',*('voice-'+s for s in LEAVES)}
         for name in sorted(set(self.snapshots)-core):
-            self.scale(name,1);self.wait_ready(name)
+            ledger=getattr(self,'finish_ledger',None)
+            if ledger is None or name in ledger.record['pending']:self.scale(name,1)
+            self.wait_ready(name)
         row=self.owned_marker()
+        finish_guard=getattr(self,'finish_guard',None)
+        if finish_guard is not None:finish_guard('release',None,None)
+        release=getattr(self,'closed_preservation_release',None)
+        if release is not None:release(self,'release-intent')
         self.marker=self.kube.cas('configmap',row,[
             {'op':'test','path':'/data/dataPVC','value':self.expected['source_claim']},
             {'op':'replace','path':'/data/phase','value':'active'},
             {'op':'remove','path':'/data/knownRolloutOperation'}])
+        if getattr(self,'finish_authority_guard',None) is not None:
+            self.finish_released_marker=copy.deepcopy(self.marker)
         self.save({'kind':'rollout_released','marker':self.marker})
+        if release is not None:release(self,'release-result')
+        final_guard=getattr(self,'finish_authority_guard',None)
+        if final_guard is not None:final_guard()
 
     def new_claim(self,*args):raise Blocked('rollout_pvc_allocation_forbidden')
     def select_claim(self):raise Blocked('rollout_pvc_selection_forbidden')

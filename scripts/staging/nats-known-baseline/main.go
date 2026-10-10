@@ -156,6 +156,34 @@ func runKernel(args []string) error {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--retained-grants" {
+		if e := retainedGrants(os.Stdin, os.Stdout); e != nil {
+			fmt.Fprintln(os.Stderr, "retained_grants_refused")
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--owned-readonly" {
+		if e := ownedReadonly(os.Args[2:], os.Stdin, os.Stdout); e != nil {
+			fmt.Fprintln(os.Stderr, "owned_readonly_request_refused")
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--consumer-state" {
+		if e := nativeConsumerState(os.Args[2:], os.Stdin, os.Stdout); e != nil {
+			fmt.Fprintln(os.Stderr, "native_consumer_state_refused")
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--metadata-checksum" {
+		if e := nativeChecksum(os.Args[2:], os.Stdin, os.Stdout); e != nil {
+			fmt.Fprintln(os.Stderr, "metadata_checksum_refused")
+			os.Exit(1)
+		}
+		return
+	}
 	if e := runKernel(os.Args[1:]); e != nil {
 		fmt.Fprintln(os.Stderr, e.Error())
 		os.Exit(1)

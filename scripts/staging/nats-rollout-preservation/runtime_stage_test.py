@@ -7,6 +7,68 @@ from apply import digest
 
 
 class StageTest(unittest.TestCase):
+    def test_shutdown_requires_current_exact_container_termination_not_old_state(self):
+        before={'metadata':{'uid':'pod'},'status':{'containerStatuses':[{'name':'nats',
+            'containerID':'containerd://'+'a'*64,'restartCount':2,'state':{'running':{'startedAt':'2026-10-10T00:00:00Z'}}}]}}
+        after=copy.deepcopy(before);after['metadata']['deletionTimestamp']='2026-10-10T00:01:00Z'
+        after['status']['containerStatuses'][0]['state']={'terminated':{'exitCode':0,'signal':0,
+            'reason':'Completed','startedAt':'2026-10-10T00:00:00Z','finishedAt':'2026-10-10T00:00:31Z'}}
+        self.assertEqual(runtime_stage.terminated_hub(before,after)['exit_code'],0)
+        for fault in ('old-state','oom','exit137','replacement','restart','missing-deletion'):
+            current=copy.deepcopy(after);status=current['status']['containerStatuses'][0]
+            if fault=='old-state':status['lastState']=status['state'];status['state']=before['status']['containerStatuses'][0]['state']
+            elif fault=='oom':status['state']['terminated']['reason']='OOMKilled'
+            elif fault=='exit137':status['state']['terminated']['exitCode']=137
+            elif fault=='replacement':status['containerID']='containerd://'+'b'*64
+            elif fault=='restart':status['restartCount']=3
+            else:current['metadata'].pop('deletionTimestamp')
+            with self.subTest(fault=fault),self.assertRaises(Blocked):runtime_stage.terminated_hub(before,current)
+
+    def test_ordinary_restart_cannot_skip_the_same_closed_seal(self):
+        self.marker['data']['phase']='rollout-verified'
+        with patch.object(runtime_stage.Staging,'restart') as parent:
+            with self.assertRaisesRegex(Blocked,'closed_preservation_seal_required'):
+                self.stage.restart()
+        parent.assert_not_called()
+
+    def test_recovery_restart_cannot_resume_business_without_closed_seal(self):
+        self.marker['data']['phase']='rollout-verified'
+        self.stage.finish_authority_guard=lambda:None
+        calls=[]
+        def parent_restart(stage):
+            calls.append('hub-start');calls.append('business-start')
+        with patch.object(runtime_stage.Staging,'restart',parent_restart):
+            with self.assertRaisesRegex(Blocked,'closed_preservation_seal_required'):
+                self.stage.restart()
+        self.assertEqual(calls,[])
+
+    def test_cold_release_intent_precedes_normal_hub_start_without_live_seal(self):
+        self.marker['data']['phase']='rollout-verified'
+        calls=[]
+        from preserve import ColdRelease
+        cold=object.__new__(ColdRelease)
+        cold.verify_and_journal=lambda stage:calls.append('verified-release-intent')
+        cold.arm_release=unittest.mock.Mock()
+        self.stage.closed_preservation_producer=cold
+        self.stage.closed_preservation_runtime=cold
+        def restart(stage):
+            calls.extend(('hub-start','business-start'))
+        with patch.object(runtime_stage.Staging,'restart',restart):
+            self.stage.restart()
+        self.assertEqual(calls,['verified-release-intent','hub-start','business-start'])
+        cold.arm_release.assert_called_once_with(self.stage,None)
+
+    def test_failed_cold_release_proof_never_starts_hub(self):
+        self.marker['data']['phase']='rollout-verified'
+        from preserve import ColdRelease
+        cold=object.__new__(ColdRelease)
+        cold.verify_and_journal=unittest.mock.Mock(side_effect=Blocked('cold_native_changed'))
+        self.stage.closed_preservation_producer=cold
+        self.stage.closed_preservation_runtime=cold
+        with patch.object(runtime_stage.Staging,'restart') as restart:
+            with self.assertRaisesRegex(Blocked,'cold_native_changed'):self.stage.restart()
+        restart.assert_not_called()
+
     def test_hub_renderer_actual_pin_requires_explicit_opt_in(self):
         hub={'metadata':{'uid':'hub'},'spec':{'template':{'spec':{
             'initContainers':[{'name':'nats-config-renderer','image':'renderer:old'}],
@@ -28,7 +90,7 @@ class StageTest(unittest.TestCase):
         def parent_restart(stage):
             stage.scale(runtime_stage.HUB,1);stage.wait_ready(runtime_stage.HUB)
             stage.scale('voice-user',1)
-        with patch.object(runtime_stage.Staging,'restart',parent_restart),patch.object(runtime_stage.Staging,'wait_ready'),patch.object(self.stage,'scale',side_effect=lambda name,n:calls.append((name,n))):
+        with patch.object(self.stage,'seal_before_business_resume'),patch.object(runtime_stage.Staging,'restart',parent_restart),patch.object(runtime_stage.Staging,'wait_ready'),patch.object(self.stage,'scale',side_effect=lambda name,n:calls.append((name,n))):
             with self.assertRaisesRegex(Blocked,'renderer_live_output_changed'):self.stage.restart()
         self.assertEqual(calls,[(runtime_stage.HUB,1)])
         self.stage.renderer_post_start.assert_called_once_with(self.stage)
@@ -142,7 +204,8 @@ class StageTest(unittest.TestCase):
         core=(runtime_stage.HUB,'voice-gateway',*('voice-'+s for s in runtime_stage.LEAVES))
         self.stage.snapshots={name:{} for name in (*core,'voice-web')}
         with patch.object(self.stage,'maintenance'),patch.object(self.stage,'scale') as scale,\
-             patch.object(self.stage,'no_pods') as no_pods,patch.object(self.stage,'verify_closed'):
+             patch.object(self.stage,'no_pods') as no_pods,patch.object(self.stage,'verify_closed'),\
+             patch.object(self.stage,'drain_client_pods'),patch.object(self.stage,'shutdown_original_hub'):
             self.stage.fence()
         self.assertIn(unittest.mock.call('voice-web',0),scale.call_args_list)
         self.assertEqual(set(no_pods.call_args.args[0]),set(self.stage.snapshots))

@@ -36,13 +36,14 @@ def operation_path(raw):
 
 def code_binding(code):
     manifest=json.loads(public_read(code/'capture-manifest.json'))
-    if not isinstance(manifest,dict) or not 1<=len(manifest)<=64:raise Blocked('rollout_code_manifest_invalid')
+    if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not guard.SHA.fullmatch(wanted):raise Blocked('rollout_code_manifest_invalid')
         path=code/p
         for parent in (path,*path.parents):
-            s=parent.lstat()
+            try:s=parent.lstat()
+            except FileNotFoundError:raise Blocked('rollout_code_custody_invalid') from None
             if s.st_uid!=0 or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode):raise Blocked('rollout_code_custody_invalid')
             if parent==code:break
         if file_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')

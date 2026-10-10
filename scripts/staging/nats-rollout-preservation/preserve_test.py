@@ -1,8 +1,9 @@
 import copy
+import json
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch,Mock
+from unittest.mock import Mock, patch
 import preserve
 import rollout_census
 from rollout_census_test import ACCOUNT, Runtime, fixture
@@ -10,6 +11,13 @@ from rollout_census_test import ACCOUNT, Runtime, fixture
 
 class PreservationTest(unittest.TestCase):
     def setUp(self):
+        # These tests isolate archive/census composition; the synthetic block
+        # is not a native JetStream layout. Native admission has separate tests.
+        native=patch.object(preserve,'native_catalog',return_value={})
+        catalog=patch.object(preserve,'verify_catalog')
+        states=patch.object(preserve,'closed_native_states',return_value={})
+        native.start();states.start();catalog.start()
+        self.addCleanup(native.stop);self.addCleanup(states.stop);self.addCleanup(catalog.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.base=Path(self.temp.name);self.source=self.base/'source';self.source.mkdir()
         (self.source/'records.blk').write_bytes(b'known synthetic record bytes')
@@ -178,3 +186,39 @@ class PreservationTest(unittest.TestCase):
                     self.assertNotEqual(after,before)
 
 if __name__=='__main__':unittest.main()
+class NativeStateAdmissionTest(unittest.TestCase):
+    def test_stream_native_directory_without_metadata_cannot_disappear(self):
+        runtime=Mock();runtime.account_id.return_value='ACCOUNT'
+        for paths in (['jetstream/ACCOUNT/streams/LOST'],['jetstream/ACCOUNT/streams/LOST/msgs/1.blk']):
+            with self.subTest(paths=paths),self.assertRaisesRegex(preserve.Blocked,'stream_metadata_missing'):
+                preserve.native_catalog(runtime,Path('/private/cut.tar'),
+                    {'files':[{'path':p} for p in paths],'dirs':[]},lambda:None)
+
+    def test_restored_broker_cannot_omit_native_stream(self):
+        with self.assertRaisesRegex(preserve.Blocked,'restored_native_inventory_changed'):
+            preserve.verify_catalog({'account':'ACCOUNT','streams':['LOST'],'consumers':[]},
+                {'account':'ACCOUNT','streams':[],'consumers':[]})
+
+    def test_every_native_consumer_is_decoded_with_complete_pending_state(self):
+        path='jetstream/'+('A'+'B'*55)+'/streams/BASE/obs/durable/o.dat'
+        row={'account':'A'+'B'*55,'consumers':[{'stream':'BASE','name':'durable'}]}
+        root=path.rsplit('/',1)[0]
+        manifest={'files':[{'path':root+'/'+name} for name in ('o.dat','meta.inf','meta.sum')],'dirs':[root]}
+        decoded={'schema':'nats-closed-durable-consumer-v1','version':2,
+            'ack_floor':{'consumer':0,'stream':0},'delivered':{'consumer':2,'stream':3},
+            'pending':{'3':{'consumer_sequence':2,'timestamp_ns':1700000000000000000}},
+            'redelivered':{'3':1}}
+        reader=Mock();reader.member.return_value=b'full native state'
+        runtime=Mock();runtime.base=Path('/private');runtime.operation='123456abcdef'
+        with patch.object(preserve,'_native_members',return_value={path:b'full native state'}),patch('commands.capture',return_value=json.dumps(decoded).encode()):
+            proof=preserve.closed_native_states(runtime,Path('/private/cut.tar'),manifest,row,lambda:None)
+        self.assertEqual(proof[path],decoded)
+
+    def test_native_consumer_missing_from_census_or_missing_state_is_rejected(self):
+        path='jetstream/ACCOUNT/streams/BASE/obs/durable/o.dat'
+        runtime=Mock();runtime.base=Path('/private')
+        for files,consumers in (([{'path':path}],[]),([],[{'stream':'BASE','name':'durable'}]),
+            ([{'path':'jetstream/ACCOUNT/streams/BASE/obs/omitted/meta.inf'}],[])):
+            with self.subTest(files=files),self.assertRaisesRegex(preserve.Blocked,'native_consumer_inventory'):
+                preserve.closed_native_states(runtime,Path('/private/cut.tar'),{'files':files},
+                    {'account':'ACCOUNT','consumers':consumers},lambda:None)

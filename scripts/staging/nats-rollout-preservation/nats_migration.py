@@ -51,7 +51,7 @@ def stream_updates(state,archive,manifest):
     finally:os.close(fd)
     return updates
 
-def apply_contract(base,state,stage,journal):
+def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutation_guard=None):
     plan=state['nats_contract'];binding=state.get('nats_contract_binding',{})
     enrollment=state.get('bootstrap_enrollment',{})
     if (state.get('custody',{}).get('verified') is not True
@@ -96,6 +96,7 @@ def apply_contract(base,state,stage,journal):
         return {'verified':True,'applied':[],'proof':verify_census(plan,state['cut']['census'],state['cut']['census']),
             'old_record_files_verified':True,'cut':copy.deepcopy(state['cut'])}
     runtime.no_operation_containers(running_only=True);stage.verify_final_storage()
+    if before_selected_start is not None:before_selected_start()
     runtime.allow_bound_store(stage.final_path,stage.final_claim,stage.final_pv,stage.verify_final_storage,
                              descriptor=stage.selected_store_descriptor())
     broker=None;attempt=None;closed=False
@@ -104,7 +105,7 @@ def apply_contract(base,state,stage,journal):
         broker=runtime.start_broker('contract-migration',stage.final_path);ready(runtime,broker)
         attempt={'container_id':runtime.owned[broker]['id'],'server_image':NATS_IMAGE,'started_at':started}
         journal({'kind':'nats_contract_broker_opened',**attempt})
-        actor=Actor(runtime,broker,runtime.owned[broker]['id'],stage.final_path,stage.verify_final_storage)
+        actor=Actor(runtime,broker,runtime.owned[broker]['id'],stage.final_path,stage.verify_final_storage,mutation_guard=mutation_guard)
         applied=execute(plan,actor,lambda event:journal({**event,'migration_attempt':attempt['container_id']}))
         runtime.stop(broker);stage.verify_final_storage()
         journal({'kind':'nats_contract_broker_closed',**attempt,'finished_at':dt.datetime.now(dt.timezone.utc).isoformat()});closed=True

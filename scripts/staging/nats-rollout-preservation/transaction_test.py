@@ -260,17 +260,18 @@ class TransactionFailureTest(unittest.TestCase):
         self.assertNotIn(HUB,package['target']['template_hashes'])
         self.assertFalse(any(key.startswith(HUB+'/') for key in package['target']['images']))
     def test_guarded_image_rollback_proves_store_before_only_verified_restart(self):
-        receipt={'operation':'123456abcdef','target':{'mode':'images-only'}}
+        receipt={'operation':'123456abcdef','target':{'mode':'images-only'},'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat()}
         state={'phase':'PAUSED_APPLY','status':'BLOCKED','operation':'123456abcdef','target':receipt['target'],
                'authorization':receipt,'events':[],'provenance':{},'cut':{},'context':{}}
-        stage=Mock();stage.final_path=Path('/selected-store');order=[]
+        stage=Mock();stage.final_path=Path('/selected-store');stage.finish_released_marker=None;stage.snapshots={};order=[]
         for method in ('adopt_rollback_target','restore_original_templates','verified','restart'):
             getattr(stage,method).side_effect=lambda *a,m=method:order.append(m)
         with patch.object(transaction,'reconstruct',return_value=stage),patch.object(transaction,'context',return_value={}),\
              patch.object(transaction,'revalidate_inputs'),patch.object(transaction,'DockerRuntime'),patch.object(transaction,'save'),\
+             patch.object(transaction,'attach_closed_preservation',side_effect=lambda *a:order.append('seal-attachment')),\
              patch.object(transaction,'verify_post_apply',side_effect=lambda *a:order.append('proof') or {'verified':True}):
             result=transaction.rollback(None,Path('/private'),state,receipt,'101',{})
-        self.assertEqual(order,['adopt_rollback_target','restore_original_templates','proof','verified','restart'])
+        self.assertEqual(order,['adopt_rollback_target','restore_original_templates','proof','verified','seal-attachment','restart'])
         self.assertEqual(result['status'],'ROLLED_BACK')
     def test_rollback_after_restart_or_with_database_changes_has_zero_mutations(self):
         for phase,mode in (('RESTART','images-only'),('PAUSED_APPLY','full')):
@@ -282,14 +283,15 @@ class TransactionFailureTest(unittest.TestCase):
             reconstruct.assert_not_called()
 
     def test_partial_app_rollback_retains_verified_additive_contract_baseline(self):
-        receipt={'operation':'123456abcdef','target':{'mode':'images-only'}}
+        receipt={'operation':'123456abcdef','target':{'mode':'images-only'},'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat()}
         post={'manifest':{'approved_additive_config':True},'census':{'post_config':True}}
         state={'phase':'PAUSED_APPLY','status':'BLOCKED','operation':'123456abcdef','target':receipt['target'],
             'authorization':receipt,'events':[],'provenance':{},'cut':{'pre_config':True},'context':{},
             'nats_migration':{'verified':True,'cut':post}}
-        stage=Mock();stage.final_path=Path('/same-selected-store')
+        stage=Mock();stage.final_path=Path('/same-selected-store');stage.finish_released_marker=None;stage.snapshots={}
         with patch.object(transaction,'reconstruct',return_value=stage),patch.object(transaction,'context',return_value={}),\
              patch.object(transaction,'revalidate_inputs'),patch.object(transaction,'DockerRuntime'),patch.object(transaction,'save'),\
+             patch.object(transaction,'attach_closed_preservation'),\
              patch.object(transaction,'verify_post_apply',return_value={'verified':True}) as proof:
             transaction.rollback(None,Path('/private'),state,receipt,'101',{})
         self.assertEqual(proof.call_args.args[2],post)
@@ -310,6 +312,7 @@ class TransactionFailureTest(unittest.TestCase):
         with patch.object(transaction,'reconstruct',side_effect=reconstruct),\
              patch.object(transaction,'context',side_effect=lambda s:copy.deepcopy(s.current)),\
              patch.object(transaction,'revalidate_inputs'),patch.object(transaction,'DockerRuntime'),\
+             patch.object(transaction,'attach_closed_preservation'),\
              patch.object(transaction,'verify_post_apply',return_value={'verified':True}),\
              patch.object(transaction,'save',side_effect=lambda p,s:written.append(copy.deepcopy(s))):
             with self.assertRaises(KeyboardInterrupt):transaction.finish(None,Path('/private'),state,receipt,'101',{})
@@ -318,12 +321,12 @@ class TransactionFailureTest(unittest.TestCase):
         self.assertEqual(written[-1]['phase'],'RESTART')
         stage.refence.assert_not_called() # abrupt death has no exception recovery
     def test_renderer_partial_recovery_journals_inverse_before_cas_and_retries_only_that_intent(self):
-        receipt={'operation':'123456abcdef','target':{'mode':'images-only'}}
+        receipt={'operation':'123456abcdef','target':{'mode':'images-only'},'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat()}
         forward={'descriptor':{'direction':'forward'}}
         reverse={'descriptor':{'direction':'reverse'},'output':{'verified':True}}
         state={'phase':'PAUSED_APPLY','status':'BLOCKED','operation':'123456abcdef','target':receipt['target'],
             'authorization':receipt,'events':[],'provenance':{},'cut':{},'context':{},'renderer_authority':forward}
-        stage=Mock();stage.final_path=Path('/same-selected-store');stage.refence.return_value={'verified':True}
+        stage=Mock();stage.final_path=Path('/same-selected-store');stage.refence.return_value={'verified':True};stage.finish_released_marker=None;stage.snapshots={}
         written=[];calls=[]
         def cas(current,authority):
             self.assertEqual(written[-1]['renderer_recovery_authority'],reverse)
@@ -335,6 +338,7 @@ class TransactionFailureTest(unittest.TestCase):
              patch.object(transaction,'save',side_effect=lambda p,s:written.append(copy.deepcopy(s))),\
              patch.object(transaction.renderer_root,'recovery_authority',return_value=reverse) as invert,\
              patch.object(transaction.renderer_root,'apply_paused',side_effect=cas),\
+             patch.object(transaction,'attach_closed_preservation'),\
              patch.object(transaction.renderer_root,'verify_live',return_value={'verified':True}) as live,\
              patch.object(transaction,'verify_post_apply',return_value={'verified':True}) as proof:
             with self.assertRaisesRegex(transaction.Blocked,'renderer_cas_interrupted'):

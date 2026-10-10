@@ -382,6 +382,11 @@ def verify_adopted_binding(base,state,binding):
     import root_cli
     import guard
     base=Path(base)
+    expired_revision=base/'expired-recovery-adoption.json'
+    if expired_revision.exists() and decode(private_bytes(expired_revision,65536)).get('replacement_code_sha256')==digest(binding):
+        import expired_recovery
+        expired_recovery.verify_adopted_binding(base,state,binding)
+        return
     if state.get('code_capture')!=binding and (base/'recovery-v9-revision.json').exists():
         import preserved_upload
         predecessor,_=preserved_upload.verify_helper_continuity(base,state,binding)
@@ -458,6 +463,9 @@ def install_repair(code,installed,kube,version='v7'):
             raise Blocked('bridge_upgrade_directory_untrusted')
     inbox=installed/'inbox';inbox.chmod(0o700)
     try:
+        if version=='v10':
+            import expired_recovery
+            return expired_recovery.install_helper(code,installed,kube,version)
         if version=='v9':
             import preserved_upload
             return preserved_upload.install_helper(code,installed,kube)

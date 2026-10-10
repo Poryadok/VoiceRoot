@@ -16,6 +16,11 @@ FIELDS={
     'resume-cold-backup':{'operation','run_id','token'},
     'resume-cipher-upload':{'operation','run_id','token'},
     'authorize-preserved-upload':{'operation','artifact_id','upload_nonce','run_id','token'},
+    'prepare-expired-native':{'operation','run_id','token'},
+    'prepare-expired-finish':{'operation','run_id','token'},
+    'authorize-expired-native':{'operation','original_artifact_id','observation_artifact_id','upload_nonce','run_id','token'},
+    'authorize-expired-finish':{'operation','original_artifact_id','observation_artifact_id','upload_nonce','run_id','token'},
+    'finish-expired-native':{'operation','claim_rv','run_id','token'},
     'authorize':{'operation','artifact_id','token'},
     'finish':{'operation','claim_rv'},
     'status':{'operation'},
@@ -41,8 +46,10 @@ def validate(row):
         if key in row and (not isinstance(row[key],str) or not re.fullmatch(pattern,row[key])):raise BridgeError('bridge_identity_invalid')
     if 'upload_nonce' in row and (not isinstance(row['upload_nonce'],str) or not re.fullmatch('[a-f0-9]{64}',row['upload_nonce'])):
         raise BridgeError('bridge_upload_nonce_invalid')
-    for key in ('run_id','artifact_id'):
+    for key in ('run_id','artifact_id','original_artifact_id','observation_artifact_id'):
         if key in row and (type(row[key]) is not int or not 0<row[key]<2**63):raise BridgeError('bridge_identity_invalid')
+    if 'original_artifact_id' in row and row['original_artifact_id']==row['observation_artifact_id']:
+        raise BridgeError('bridge_artifact_identity_not_distinct')
     if 'token' in row and (not isinstance(row['token'],str) or not 1<=len(row['token'])<=4096 or any(ord(c)<33 or ord(c)>126 for c in row['token'])):raise BridgeError('bridge_token_invalid')
     if row['action']=='prepare':
         if row['mode'] not in ('full','app-only','images-only') or not isinstance(row['changed_services'],list) or not 0<=len(row['changed_services'])<=23 or len(set(row['changed_services']))!=len(row['changed_services']) or row['mode']=='images-only' and not row['changed_services']:raise BridgeError('bridge_target_invalid')

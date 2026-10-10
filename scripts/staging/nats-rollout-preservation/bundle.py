@@ -17,6 +17,9 @@ ROLLOUT+=('prebuild_v5_disposition.py',)
 ROLLOUT+=('story_witness.py',)
 ROLLOUT+=('paused_recovery.py','v8_upgrade.py')
 ROLLOUT+=('preserved_upload.py',)
+ROLLOUT+=('expired_recovery.py','expired_proof.py','expired_admission.py','expired_transport.py','expired_finish.py')
+ROLLOUT+=('hub_bridge_identity.py','hub_bridge_unit.py')
+ROLLOUT+=('closed_archive.py','closed_durable.py','closed-seal-source-policies.json')
 
 def build(kernel,output,renewer):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
