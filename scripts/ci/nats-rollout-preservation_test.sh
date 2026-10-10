@@ -21,7 +21,7 @@ docker run --rm --network none --entrypoint tar \
     cp -R /work/src/backend/migrations /tmp/repo/src/backend/
     cp -R /work/src/backend/auth/src/main/resources/db/migration /tmp/repo/src/backend/auth/src/main/resources/db/
     cp -R /work/docker/clickhouse/init /tmp/repo/docker/clickhouse/
-    apk add --no-cache bash openssl >/dev/null
+    apk add --no-cache bash git jq openssl >/dev/null
     ln -s /usr/local/bin/python3 /usr/bin/python3
     python -m pip install --quiet --root-user-action=ignore --disable-pip-version-check PyYAML==6.0.3
     cd /tmp/repo/scripts/staging/nats-rollout-preservation
