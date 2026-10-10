@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -17,6 +18,62 @@ TREE = 'b' * 40
 
 
 class SourceTests(unittest.TestCase):
+    def test_cached_archive_runs_complete_capture_without_remote_tarball(self):
+        private=tempfile.TemporaryDirectory(dir='/home/pmd');self.addCleanup(private.cleanup)
+        cache=Path(private.name)/'source-archives';cache.mkdir(mode=0o750)
+        # Shared cache uses the exact full-SHA codeload root.
+        buffer=io.BytesIO()
+        with tarfile.open(fileobj=buffer,mode='w:gz') as archive:
+            for path,content in self.files.items():
+                member=tarfile.TarInfo('VoiceRoot-'+SHA+'/'+path)
+                member.size=len(content);member.mode=0o664
+                archive.addfile(member,io.BytesIO(content))
+        cached=cache/(SHA+'.tar.gz');cached.write_bytes(buffer.getvalue());cached.chmod(0o440)
+        calls=[]
+        def fetch(url,*args,**kwargs):
+            calls.append(url)
+            if url.endswith('/tarball/'+SHA):raise AssertionError('cache must avoid archive network')
+            return self.fetch(url,*args,**kwargs)
+        with patch.object(module,'SOURCE_CACHE_DIR',cache,create=True),patch.object(module,'_fetch',fetch):
+            result=module.capture_source('private-token',123,SHA,self.destination)
+        self.assertTrue(result['verified']);self.assertEqual(result['tree_sha'],TREE)
+        self.assertTrue(any('/git/trees/' in url for url in calls))
+        self.assertTrue(any('/actions/artifacts/99/zip' in url for url in calls))
+        self.assertTrue(any('/manifests/' in url for url in calls))
+
+    def test_archive_executable_mode_mismatch_is_rejected(self):
+        tree=self.tree();tree['tree'][0]['mode']='100755'
+        with patch.object(self,'tree',return_value=tree),self.assertRaises(module.SourceError):
+            self.capture()
+
+    def test_cache_custody_rejects_invalid_present_and_changed_held_bytes(self):
+        with tempfile.TemporaryDirectory(dir='/home/pmd') as td:
+            root=Path(td);root.chmod(0o750)
+            cache=root/'cache';cache.mkdir(mode=0o750)
+            path=cache/(SHA+'.tar.gz')
+            with patch.object(module,'SOURCE_CACHE_DIR',cache):
+                for drift in ('writable','hardlink','symlink','directory'):
+                    with self.subTest(drift=drift):
+                        path.write_bytes(b'archive');path.chmod(0o440)
+                        if drift=='writable':path.chmod(0o660)
+                        elif drift=='hardlink':os.link(path,root/'linked')
+                        elif drift=='symlink':path.unlink();path.symlink_to(root/'missing')
+                        else:path.unlink();path.mkdir()
+                        with self.assertRaises((module.SourceError,OSError)):
+                            with module.cached_archive(SHA):pass
+                        if path.is_dir():path.rmdir()
+                        else:path.unlink()
+                        if (root/'linked').exists():(root/'linked').unlink()
+                path.write_bytes(b'archive');path.chmod(0o440)
+                with self.assertRaises(module.SourceError):
+                    with module.cached_archive(SHA) as held:
+                        self.assertEqual(held.read(),b'archive')
+                        path.chmod(0o600)
+                        path.write_bytes(b'changed')
+                path.unlink();cache.rmdir();cache.symlink_to(root)
+                with self.assertRaises(OSError):
+                    with module.cached_archive(SHA):pass
+
     def test_immutable_runtime_index_and_child_require_same_content_chain(self):
         prefix=module.REGISTRY+'/auth@sha256:'
         actual=prefix+'a'*64; target=prefix+'b'*64

@@ -2,6 +2,7 @@
 import datetime as dt
 import grp
 import json
+import re
 import os
 from pathlib import Path
 import secrets
@@ -100,7 +101,8 @@ class Actions:
         workflow=run['workflow_id'];path=run['path'].split('@',1)[0]
         if workflow==source_authority.WORKFLOW and path=='.github/workflows/ci.yml' and run['event']=='push':source_run=run['id']
         elif workflow==263689731 and path=='.github/workflows/staging-deploy.yml' and run['event']=='workflow_dispatch':
-            result=source_authority._get(source_authority.API+'/actions/workflows/'+str(source_authority.WORKFLOW)+'/runs?branch=master&event=push&per_page=100',headers,deadline)
+            if not re.fullmatch(r'[a-f0-9]{40}',run['head_sha']):raise Blocked('bridge_dispatcher_authority_invalid')
+            result=source_authority._get(source_authority.API+'/actions/workflows/'+str(source_authority.WORKFLOW)+'/runs?branch=master&event=push&per_page=100&head_sha='+run['head_sha'],headers,deadline)
             candidates=[r for r in result['workflow_runs'] if r['head_sha']==run['head_sha'] and r['event']=='push' and r['head_branch']=='master' and r['workflow_id']==source_authority.WORKFLOW and r['status'] in ('in_progress','completed')]
             if not candidates:raise Blocked('bridge_approved_ci_source_missing')
             source_run=max(candidates,key=lambda r:r['id'])['id']

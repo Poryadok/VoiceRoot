@@ -213,6 +213,9 @@ class ComposedStateReaderTests(unittest.TestCase):
     def test_v12_state_and_common_reader_preserve_both_original_upgrade_receipts(self):
         self.exercise_reader('v12')
 
+    def test_v13_state_and_common_reader_preserve_all_installed_upgrade_receipts(self):
+        self.exercise_reader('v13')
+
     def exercise_reader(self,version):
         import bridge_root,paused_recovery,root_cli
         fixture=RecoveryAuthorityTests();fixture.setUp()
@@ -222,23 +225,28 @@ class ComposedStateReaderTests(unittest.TestCase):
         old=json.loads((data/'expired-recovery-v9-manifest.json').read_text())
         prior=json.loads((data/'expired-recovery-v10-manifest.json').read_text())
         middle=json.loads((data/'expired-recovery-v11-manifest.json').read_text())
+        latest=json.loads((data/'expired-recovery-v12-manifest.json').read_text())
         current=middle if version=='v11' else {'corrected-reader':'3'*64}
         adopted['code_capture']=copy.deepcopy(old)
         raw=json.dumps(adopted).encode()
         self.assertEqual(digest(prior),recovery.V10_BINDING)
         self.assertEqual(digest(middle),recovery.V11_BINDING)
+        self.assertEqual(digest(latest),'731ac6444f604ee26ce7ab4e3fe193144f9d803e97864527585ee6121ad35f31')
         record=recovery.adoption_record(raw,recovery.V9_BINDING,prior)
         original_receipt={'schema':'voice-nats-code-upgrade-v11','from':digest(prior),'to':digest(middle)}
         receipt=original_receipt if version=='v11' else {
             'schema':'voice-nats-code-upgrade-v12','from':digest(middle),'to':digest(current)}
+        prior_receipt={'schema':'voice-nats-code-upgrade-v12','from':digest(middle),'to':digest(latest)}
+        if version=='v13':receipt={'schema':'voice-nats-code-upgrade-v13','from':digest(latest),'to':digest(current)}
         def binding(path):
-            return {'installed-code':current,'code-v9-preserved':old,'code-v10-preserved':prior,'code-v11-preserved':middle}[path.name]
+            return {'installed-code':current,'code-v9-preserved':old,'code-v10-preserved':prior,'code-v11-preserved':middle,'code-v12-preserved':latest}[path.name]
         def read(path,limit=0):
-            return {'expired-recovery-adoption.json':record,'upgrade-v11.json':original_receipt,'upgrade-v12.json':receipt}[path.name]
+            return {'expired-recovery-adoption.json':record,'upgrade-v11.json':original_receipt,
+                'upgrade-v12.json':prior_receipt if version=='v13' else receipt,'upgrade-v13.json':receipt}[path.name]
         def continuity(path,state,bound):
             if bound!=old:raise recovery.upload.UploadError('preserved_upload_helper_revision_changed')
         def private(path,limit=0):return json.dumps(read(path)).encode()
-        def exists(path):return path.name in ('expired-recovery-adoption.json','upgrade-v11.json','recovery-v9-revision.json') or version=='v12' and path.name=='upgrade-v12.json'
+        def exists(path):return path.name in ('expired-recovery-adoption.json','upgrade-v11.json','recovery-v9-revision.json') or version in ('v12','v13') and path.name=='upgrade-v12.json' or version=='v13' and path.name=='upgrade-v13.json'
         before=copy.deepcopy(adopted)
         with patch('guard.ROOT',base.parent),patch.object(root_cli,'code_binding',side_effect=binding),\
             patch.object(root_cli,'operation_path',return_value=base),patch.object(bridge_root,'private_json',return_value=adopted),\
@@ -258,16 +266,33 @@ class ComposedStateReaderTests(unittest.TestCase):
                 with self.subTest(key=key),self.assertRaises((ValueError,root_cli.Blocked)):
                     actions.state(adopted['operation'])
                 receipt[key]=saved
-            if version=='v12':
-                for key in ('schema','from','to'):
-                    saved=original_receipt[key];original_receipt[key]='changed'
-                    with self.subTest(prior_receipt=key),self.assertRaises(ValueError):
-                        actions.state(adopted['operation'])
-                    original_receipt[key]=saved
+            if version in ('v12','v13'):
+                for earlier in (original_receipt,prior_receipt) if version=='v13' else (original_receipt,):
+                    for key in ('schema','from','to'):
+                        saved=earlier[key];earlier[key]='changed'
+                        with self.subTest(prior_receipt=key),self.assertRaises(ValueError):
+                            actions.state(adopted['operation'])
+                        earlier[key]=saved
         self.assertEqual(adopted,before)
 
 
 class InstallHistoryTests(unittest.TestCase):
+    def test_failed_transport_disposition_binds_exact_pre_source_failure(self):
+        request=copy.deepcopy(recovery.FAILED_TRANSPORT_REQUEST)
+        journal={'schema':'voice-nats-bridge-request-v1','request':request,'request_sha256':digest(request),
+            'phase':'STARTED','prepare_error':'transport_rejected'}
+        response={'status':'BLOCKED','error':'blocked_unclassified'}
+        raw=json.dumps(journal).encode();answer=json.dumps(response).encode()
+        self.assertEqual(recovery.failed_transport_execution(raw,answer)['disposition'],'FROZEN_FAILED_PRE_SOURCE_NO_REPLAY')
+        for drift in ('request','phase','prepare_error','response'):
+            changed=copy.deepcopy(journal);reply=copy.deepcopy(response)
+            if drift=='request':changed['request']['run_id']+=1;changed['request_sha256']=digest(changed['request'])
+            elif drift=='phase':changed['phase']='COMPLETE'
+            elif drift=='prepare_error':changed['prepare_error']='unexpected'
+            else:reply['status']='READY'
+            with self.subTest(drift=drift),self.assertRaises(ValueError):
+                recovery.failed_transport_execution(json.dumps(changed).encode(),json.dumps(reply).encode())
+
     def test_failed_common_reader_disposition_is_exact_and_never_replays(self):
         request=copy.deepcopy(recovery.FAILED_READER_REQUEST)
         journal={'schema':'voice-nats-bridge-request-v1','request':request,'request_sha256':digest(request),

@@ -209,7 +209,49 @@ jobs:
             echo 'STAGING_SOURCE_ARCHIVE=FAIL_COMMIT_IDENTITY'
             exit 1
           fi
-          if ! curl --fail --silent --show-error --proto '=https' \
+          # Cached bytes remain passive: fresh commit identity and the complete
+          # reconstructed Git tree below are required for every use.
+          cache_status=0
+          python3 -I -S - "$source_sha" "$tmp/source.tar.gz" <<'PY' || cache_status=$?
+          import os,pathlib,stat,sys
+          cache=pathlib.Path('/var/lib/voice-nats-preservation/installed/source-archives')
+          name=sys.argv[1]+'.tar.gz'
+          def identity(row):
+              return (row.st_dev,row.st_ino,row.st_mode,row.st_uid,row.st_gid,row.st_nlink,row.st_size,row.st_mtime_ns,row.st_ctime_ns)
+          parent=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+          fd=None
+          try:
+              for component in cache.parts[1:]:
+                  try:child=os.open(component,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+                  except FileNotFoundError:sys.exit(2)
+                  row=os.fstat(child)
+                  if row.st_uid!=0 or row.st_mode&0o022:
+                      os.close(child);raise SystemExit(1)
+                  os.close(parent);parent=child
+              try:fd=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+              except FileNotFoundError:sys.exit(2)
+              before=os.fstat(fd)
+              if (not stat.S_ISREG(before.st_mode) or before.st_uid!=0 or before.st_nlink!=1
+                  or before.st_mode&0o022 or not 1<=before.st_size<=104857600
+                  or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before)):raise SystemExit(1)
+              out=os.open(sys.argv[2],os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+              with os.fdopen(out,'wb') as output:
+                  count=0
+                  while chunk:=os.read(fd,1<<20):
+                      count+=len(chunk)
+                      if count>before.st_size:raise SystemExit(1)
+                      output.write(chunk)
+              if (count!=before.st_size or identity(os.fstat(fd))!=identity(before)
+                  or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before)):raise SystemExit(1)
+          finally:
+              if fd is not None:os.close(fd)
+              os.close(parent)
+          PY
+          if [[ "$cache_status" != 0 && "$cache_status" != 2 ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_CACHE_CUSTODY'
+            exit 1
+          fi
+          if [[ "$cache_status" == 2 ]] && ! curl --fail --silent --show-error --proto '=https' \
             --connect-timeout 5 --max-time 600 --speed-limit 1024 --speed-time 30 --max-filesize 104857600 \
             --output "$tmp/source.tar.gz" "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/$source_sha"; then
             echo 'STAGING_SOURCE_ARCHIVE=FAIL_DOWNLOAD'

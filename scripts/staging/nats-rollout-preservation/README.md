@@ -598,3 +598,16 @@ The historical V9 reader cannot be redirected by a newer receipt. Installation
 preserves V11 code, its upgrade receipt and all original history; a separate V12
 receipt binds the replacement and a separate disposition freezes the exact
 failed pre-proof reader request. Neither record grants recovery permission.
+
+V13 prefers an optional protected archive at
+`installed/source-archives/<full-commit-sha>.tar.gz` in both source consumers.
+Archives are passive data: each use still verifies the live approved commit,
+complete Git tree, blob contents and executable modes, CI, image lock and image
+identity. Only a missing archive uses the existing network download; an invalid
+present archive blocks. The dispatcher filters CI runs by its exact validated
+head SHA while retaining the existing response checks and deadline.
+
+Installation preserves the installed V12 code and all earlier upgrade receipts,
+adoption, checkpoint and request history. A separate V13 receipt binds the new
+helper, and an immutable disposition records the exact failed pre-source
+transport request without replay or recovery authority.
