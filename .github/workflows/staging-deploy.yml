@@ -346,7 +346,7 @@ jobs:
                   return raw
               finally:os.close(fd)
           manifest=json.loads(read(code/'capture-manifest.json',65536))
-          if not isinstance(manifest,dict) or not 1<=len(manifest)<=69:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
           for relative,wanted in manifest.items():
               part=pathlib.Path(relative)
               if part.is_absolute() or '..' in part.parts or not isinstance(wanted,str) or not re.fullmatch(r'[a-f0-9]{64}',wanted):raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')

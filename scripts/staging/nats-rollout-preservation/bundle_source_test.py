@@ -1,6 +1,7 @@
 """Actual archive dependency closure; fake ELF tests packaging, not execution."""
-import ast,io,json,os,tarfile,tempfile,unittest
+import ast,hashlib,io,json,os,runpy,sys,tarfile,tempfile,textwrap,unittest
 from pathlib import Path
+from unittest.mock import patch
 import bundle
 
 class CompleteBundleTests(unittest.TestCase):
@@ -57,5 +58,72 @@ class RootPackageReaderTests(unittest.TestCase):
                 self.assertEqual(reader(checkpoint),value)
                 other=base/'other.json';other.write_text(json.dumps(value));other.chmod(0o600)
                 with self.assertRaises(Blocked):reader(other)
+
+@unittest.skipUnless(os.name=='posix' and os.getuid()==0,'isolated Linux ROOT custody fixture')
+class WorkflowLauncherTests(unittest.TestCase):
+    def members(self,base):
+        # CI builds the same qualified member closure. The isolated operator
+        # check can supply the exact already-reviewed production archive.
+        supplied=os.environ.get('VOICE_TEST_ROLLOUT_BUNDLE')
+        if supplied:path=Path(supplied)
+        else:
+            kernel=base/'kernel';kernel.write_bytes(b'\x7fELFlauncher-parser-fixture')
+            bundle.build(kernel,base/'out',kernel);path=base/'out/rollout-bundle.tar'
+        with tarfile.open(path) as archive:
+            result={row.name:archive.extractfile(row).read() for row in archive.getmembers() if row.isfile()}
+        manifest=json.loads(result['capture-manifest.json'])
+        self.assertEqual(len(manifest),len(bundle.KNOWN)+len(bundle.ROLLOUT)+4)
+        self.assertEqual(set(manifest),set(result)-{'capture-manifest.json'})
+        for name,wanted in manifest.items():self.assertEqual(hashlib.sha256(result[name]).hexdigest(),wanted)
+        return result
+
+    def launch(self,root):
+        workflow=Path(__file__).resolve().parents[3]/'.github/workflows/staging-deploy.yml'
+        raw=workflow.read_text(encoding='utf-8')
+        start=raw.index('          import hashlib, json, os, pathlib, re, runpy, stat, sys')
+        program=ast.parse(textwrap.dedent(raw[start:raw.index('          PY',start)]))
+        # Only the external installed-root location is replaced; every actual
+        # custody/hash/bound/routing predicate executes unchanged.
+        roots=[node for node in ast.walk(program) if isinstance(node,ast.Constant)
+               and node.value=='/var/lib/voice-nats-preservation']
+        self.assertEqual(len(roots),1);roots[0].value=str(root)
+        with patch.dict(os.environ,{'ROLLOUT_ACTION':'--bridge-status','VOICE_NATS_ROLLOUT_OPERATION':'3340764a7d24'},clear=True),\
+             patch.object(sys,'argv',[]),patch.object(runpy,'run_path') as run:
+            exec(compile(program,str(workflow),'exec'),{})
+            run.assert_called_once_with(str(root/'installed/code/nats-rollout-preservation/bridge_client.py'),run_name='__main__')
+            self.assertEqual(sys.argv[1:],['status','3340764a7d24'])
+
+    def test_actual_workflow_admits_complete_shipped_bundle_before_bridge_dispatch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);members=self.members(root);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
+            for name,raw in members.items():
+                path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
+            self.launch(root)
+
+    def test_actual_workflow_keeps_custody_member_and_entrypoint_vetoes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder);members=self.members(base)
+            for failure in ('hash','digest','absolute','parent','missing-entry','overbound','directory-mode',
+                            'member-mode','member-owner','hardlink','symlink','oversize'):
+                with self.subTest(failure=failure),tempfile.TemporaryDirectory(dir=base) as slot:
+                    root=Path(slot);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
+                    for name,raw in members.items():
+                        path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
+                    target=code/'nats-rollout-preservation/bridge_client.py';manifest=json.loads(members['capture-manifest.json'])
+                    if failure=='hash':target.chmod(0o600);target.write_bytes(b'changed');target.chmod(0o400)
+                    elif failure=='digest':manifest[str(target.relative_to(code))]='invalid'
+                    elif failure=='absolute':manifest['/outside']='a'*64
+                    elif failure=='parent':manifest['../outside']='a'*64
+                    elif failure=='missing-entry':del manifest[str(target.relative_to(code))]
+                    elif failure=='overbound':
+                        for index in range(86-len(manifest)):manifest['extra'+str(index)]='a'*64
+                    elif failure=='directory-mode':code.chmod(0o720)
+                    elif failure=='member-mode':target.chmod(0o420)
+                    elif failure=='member-owner':os.chown(target,1000,0)
+                    elif failure=='hardlink':os.link(target,root/'another-link')
+                    elif failure=='symlink':target.unlink();target.symlink_to(code/'configure-kubectl-ci.sh')
+                    elif failure=='oversize':target.chmod(0o600);target.write_bytes(b'x'*((16<<20)+1));target.chmod(0o400)
+                    index=code/'capture-manifest.json';index.chmod(0o600);index.write_bytes(json.dumps(manifest).encode());index.chmod(0o400)
+                    with self.assertRaises((SystemExit,OSError)):self.launch(root)
 
 if __name__=='__main__':unittest.main()
