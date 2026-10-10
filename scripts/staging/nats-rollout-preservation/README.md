@@ -574,3 +574,19 @@ reject as unsupported before pause, copied broker startup or release. Their
 source/evidence remains preserved outside the qualified package. Each admitted
 finish checks resumed workloads and its deadline before release/publication;
 failure retains truthful progress and fresh safety-pause obligations.
+# Cold native proof and V11 continuity
+
+Active cold deployment, rollback and expired recovery copy readbacks verify the
+complete authoritative native archive, exact message-file inventory and hashes,
+restored pinned-broker census/configuration, and complete decoded durable state
+(including pending timestamps and redelivery maps). They do not require the live
+bootstrap role to publish message GET requests and do not claim API-decoded
+message semantics. Authenticated CMS decryption verifies every promised member
+and repeats the isolated native restore/readback before release authority.
+
+V11 preserves the V10 helper and original adoption, checkpoint, request journal,
+response and recovery keys. Its separate upgrade record binds the replacement
+code. The exact failed pre-proof recovery request is recorded without replay;
+new recovery requires a fresh dispatcher and separately verified current proof.
+Exact native continuity requires no inferred historical startup interval;
+changed metadata remains subject to the pinned interval/checksum classifier.

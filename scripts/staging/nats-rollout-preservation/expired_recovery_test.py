@@ -207,6 +207,47 @@ if __name__=='__main__':unittest.main()
 
 
 class InstallHistoryTests(unittest.TestCase):
+    def test_failed_native_get_request_disposition_is_exact_and_never_replays(self):
+        request=copy.deepcopy(recovery.FAILED_NATIVE_REQUEST)
+        journal={'schema':'voice-nats-bridge-request-v1','request':request,'request_sha256':digest(request),
+            'phase':'STARTED','prepare_error':'unexpected'}
+        response={'status':'BLOCKED','error':'blocked_unclassified'}
+        raw=json.dumps(journal).encode();answer=json.dumps(response).encode()
+        disposition=recovery.failed_native_execution(raw,answer)
+        self.assertEqual(disposition['disposition'],'FROZEN_FAILED_PRE_PROOF_NO_REPLAY')
+        self.assertEqual(json.loads(raw),journal)
+        for drift in ('run_id','nonce','action','phase','response'):
+            changed=copy.deepcopy(journal);reply=copy.deepcopy(response)
+            if drift in request:
+                changed['request'][drift]=1 if drift=='run_id' else 'changed'
+                changed['request_sha256']=digest(changed['request'])
+            elif drift=='phase':changed['phase']='COMPLETE'
+            else:reply['status']='READY'
+            with self.subTest(drift=drift),self.assertRaises(ValueError):
+                recovery.failed_native_execution(json.dumps(changed).encode(),json.dumps(reply).encode())
+
+    def test_v11_reader_requires_preserved_v10_and_exact_upgrade_without_rewriting_adoption(self):
+        import paused_recovery
+        fixture=RecoveryAuthorityTests();fixture.setUp()
+        adopted=fixture.state;adopted['events']=[]
+        raw=json.dumps(adopted).encode();base=Path('/root-fixture/rollout-'+adopted['operation'])
+        old=json.loads((Path(__file__).parent/'testdata/expired-recovery-v9-manifest.json').read_text())
+        prior={'runtime':'1'*64};new={'runtime':'2'*64}
+        record=recovery.adoption_record(raw,recovery.V9_BINDING,prior)
+        receipt={'schema':'voice-nats-code-upgrade-v11','from':digest(prior),'to':digest(new)}
+        def binding(path):return old if path.name=='code-v9-preserved' else prior
+        def read(path,limit):return record if path.name=='expired-recovery-adoption.json' else receipt
+        with patch('guard.ROOT',base.parent),patch('root_cli.code_binding',side_effect=binding),\
+            patch.object(recovery,'V10_BINDING',digest(prior)),patch.object(recovery.upload,'private_read',return_value=raw),\
+            patch.object(recovery.upload,'private_json',side_effect=read),patch.object(recovery.upload,'verify_helper_continuity'),\
+            patch.object(paused_recovery,'original_target_unchanged'):
+            self.assertEqual(recovery.verify_adopted_binding(base,adopted,new),record)
+            self.assertEqual(record,recovery.adoption_record(raw,recovery.V9_BINDING,prior))
+            for key in ('from','to','schema'):
+                saved=receipt[key];receipt[key]='changed'
+                with self.subTest(key=key),self.assertRaises(ValueError):recovery.verify_adopted_binding(base,adopted,new)
+                receipt[key]=saved
+
     def test_exact_preintent_history_rejects_issued_unknown_or_unclosed_before_upgrade(self):
         from docker_runtime import NATS_IMAGE
         state={'nats_contract':{'fixed':'plan'},'cut':{'manifest_sha256':'a'*64,'census_sha256':'b'*64}}

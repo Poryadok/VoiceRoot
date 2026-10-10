@@ -211,7 +211,7 @@ def get_permission_proof(kube,state,input_bindings,unchanged,cached=None):
     unchanged();return expected
 
 
-def admit(kube,base,state,code,binding,historical_source,verify_current_source,get_proof=None):
+def admit(kube,base,state,code,binding,historical_source,verify_current_source):
     """Every returned predicate has an actual production consumer, no cache waiver."""
     import actor_root
     import migrations
@@ -229,7 +229,6 @@ def admit(kube,base,state,code,binding,historical_source,verify_current_source,g
     if transaction.file_sha(Path(base)/'kernel')!=state['kernel_sha256']:
         recovery.reject('admission_kernel_changed')
     hashes=input_hashes(kube,state)
-    get_proof=get_permission_proof(kube,state,hashes,verify_current_source,get_proof)
     actor_root.revalidate(kube,workspace,code,binding,stage,state['service_actor_services'],
         compiler.decode_yaml,state['service_actor_authority'])
     database=migrations.preflight(kube,state['migrations'],state['target']['mode'])
@@ -239,10 +238,10 @@ def admit(kube,base,state,code,binding,historical_source,verify_current_source,g
     if private_read(Path(base)/'checkpoint.json')!=checkpoint:recovery.reject('admission_checkpoint_changed')
     return stage,{'schema':'voice-expired-native-admission-v1','operation':state['operation'],
         'checkpoint_sha256':hashlib.sha256(checkpoint).hexdigest(),'helper_binding_sha256':digest(binding),
-        'target':target,'input_hashes':hashes,'database_sha256':digest(database),'get_permission_proof':get_proof}
+        'target':target,'input_hashes':hashes,'database_sha256':digest(database)}
 
 
-def admit_finish(kube,base,state,code,binding,verify_current_source,get_proof=None):
+def admit_finish(kube,base,state,code,binding,verify_current_source):
     """Applied target observation has no recompile/apply/migration capability.
 
     The expired native authority is verified only at its immutable issuance
@@ -295,7 +294,6 @@ def admit_finish(kube,base,state,code,binding,verify_current_source,get_proof=No
         recovery.reject('finish_applied_marker_invalid')
     if transaction.file_sha(base/'kernel')!=state['kernel_sha256']:recovery.reject('finish_original_kernel_changed')
     hashes=input_hashes(kube,state)
-    get_proof=get_permission_proof(kube,state,hashes,verify_current_source,get_proof)
     workspace=guard.ROOT/'installed'/'sources'/state['operation']
     actor_root.revalidate(kube,workspace,code,binding,stage,state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
     database=migrations.preflight(kube,state['migrations'],state['target']['mode'])
@@ -308,4 +306,4 @@ def admit_finish(kube,base,state,code,binding,verify_current_source,get_proof=No
         'checkpoint_sha256':hashlib.sha256(checkpoint).hexdigest(),'helper_binding_sha256':digest(binding),
         'applied_receipt_sha256':digest(receipt),'target_sha256':digest(state['target']),
         'native_history_sha256':digest(authority),'input_hashes':hashes,'database_sha256':digest(database),
-        'get_permission_proof':get_proof}
+        }

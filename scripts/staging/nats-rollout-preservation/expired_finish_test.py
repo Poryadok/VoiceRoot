@@ -98,7 +98,7 @@ class FinishProducerActionsTests(unittest.TestCase):
                     row={'schema':'voice-expired-finish-current-observation-v1','operation':state['operation'],
                         'original_cut_sha256':transport.upload.digest(state['cut']),
                         'post_apply_cut_sha256':transport.upload.digest(state['nats_migration']['cut']),
-                        'selected_inventory_sha256':'a'*64,'census':{'full':'postapply'},'full_records':{'all':6}}
+                        'selected_inventory_sha256':'a'*64,'census':{'full':'postapply'},'native_messages':{'all':6}}
                     transport.put(slot/'rollout-before-manifest.json',row)
                     transport.put(slot/'copy-checkpoint.json',{'bound':'closed copied proof'})
                     return row
@@ -141,7 +141,7 @@ class FinishCommitTests(unittest.TestCase):
                     'selected_inventory_sha256':fixture.proof['selected_inventory_sha256'],
                     'manifest':{'archive_sha256':'a'*64,'files':[]},
                     'raw_source_sha256':'b'*64,
-                    'census':{'full':'consumer state'},'full_records':{'full':'all six records'}}
+                    'census':{'full':'consumer state'},'native_messages':{'full':'all six records'}}
                 pause={'schema':'voice-expired-finish-owned-pause-v1','operation':state['operation'],
                     'checkpoint_sha256':transport.upload.digest(state),'workloads':fixture.proof['applied_workloads']}
                 source={'execution':execution,'target':state['target']['tag'],'binding':'current helper'}
@@ -160,7 +160,7 @@ class FinishCommitTests(unittest.TestCase):
                     'observation-cipher.json':producer['cipher'],
                     'producer.json':producer,'upload.json':record,'verified-pause.json':pause,
                     'paused-checkpoint.json':state}.items():transport.put(slot/name,row)
-                if drift=='observation':current['full_records']={'missing':'a record'}
+                if drift=='observation':current['native_messages']={'missing':'a record'}
                 elif drift=='pause':pause['workloads'][HUB]['replicas']=1
                 elif drift=='readback':
                     row=transport.upload.private_json(slot/'original-readback.json');row['run_id']+=1
@@ -220,7 +220,7 @@ class FinishCompositionTests(unittest.TestCase):
             'started_at':(self.now-timedelta(seconds=20)).isoformat(),'completed_at':self.now.isoformat(),
             'checkpoint_sha256':transport.upload.digest(self.state),'applied_receipt_sha256':transport.upload.digest(receipt),
             'post_apply_cut_sha256':transport.upload.digest(self.state['nats_migration']['cut']),
-            'selected_inventory_sha256':'a'*64,'census_sha256':'b'*64,'records_sha256':'c'*64,'source_admission_sha256':'d'*64,
+            'selected_inventory_sha256':'a'*64,'census_sha256':'b'*64,'native_messages_sha256':'c'*64,'source_admission_sha256':'d'*64,
             'applied_workloads':{name:{'uid':row['metadata']['uid'],'template_sha256':transport.upload.digest(template),
                 'replicas':0,'generation':1,'pause_proof_sha256':'d'*64} for name,row in snapshots.items()},
             'original_cipher_binding':self.state['cipher_binding'],'observation_cipher_binding':cipher,'artifact_bindings':bindings}
@@ -289,7 +289,7 @@ class FinishCompositionTests(unittest.TestCase):
                 self.setup_files(folder);self.expire=False;self.adapters(stack)
                 if drift!='ordinary':
                     path=self.slot/('proof.json' if drift=='proof' else 'original-readback.json');row=transport.upload.private_json(path)
-                    row['records_sha256' if drift=='proof' else 'cipher_sha256']='f'*64;path.unlink();transport.put(path,row)
+                    row['native_messages_sha256' if drift=='proof' else 'cipher_sha256']='f'*64;path.unlink();transport.put(path,row)
                 else:self.state.update(phase='PAUSED_APPLY',status='WAITING')
                 with self.assertRaises((ValueError,transaction.Blocked)):
                     transaction.finish(None,self.base,self.state,self.state['authorization'],'unused',{},**({} if drift=='ordinary' else {'finish_authority':self.authority}))
@@ -406,15 +406,17 @@ class FinishObservationTests(unittest.TestCase):
                 'manifest_sha256':transport.upload.digest(manifest),'archive':str(base/'post.tar')}
             state={'operation':transport.upload.OPERATION,'cut':copy.deepcopy(cut),'nats_migration':{'verified':True,'cut':copy.deepcopy(cut)}}
             original=copy.deepcopy(state);runtime=Mock();runtime.base=base;stage=Mock();stage.final_path=Path('/selected')
-            observed={'census':census,'records':{'sha256':'b'*64,'messages':6},'recovery':{'server_image':'pinned','started_at':'start','finished_at':'end'}}
+            observed={'census':census,'native_messages':{'sha256':'b'*64,'messages':6},'closed_durable_states':{'exact':'all pending fields'},'recovery':{'server_image':'pinned','started_at':'start','finished_at':'end'}}
             calls=[]
-            def copy_observation(*args):calls.append(args[1]);return copy.deepcopy(observed)
+            def copy_observation(*args,**kwargs):
+                self.assertEqual(kwargs,{'native_only':True})
+                calls.append(args[1]);return copy.deepcopy(observed)
             with patch('native_store.verify_archive',return_value=True),patch('native_store.archive_closed_store',return_value=manifest),\
                  patch('expired_proof.observe_copy',side_effect=copy_observation),patch('preserve.recovered_census',side_effect=lambda before,after,*args:(after,[])),\
                  patch('expired_proof.current_inventory',return_value=transport.upload.digest({key:manifest[key] for key in ('mechanism','file_count','bytes','dirs','files')})):
                 result=finish.observe_post_apply(runtime,stage,state,slot,lambda *args:None,lambda *args:b'',None)
             self.assertEqual(len(calls),3);self.assertEqual(state,original)
-            self.assertEqual(result['full_records'],observed['records']);self.assertEqual(result['native_disposition']['branch'],'EXACT')
+            self.assertEqual(result['native_messages'],observed['native_messages']);self.assertEqual(result['native_disposition']['branch'],'EXACT')
             self.assertTrue((slot/'rollout-before-manifest.json').exists())
 
     def test_changed_current_record_proof_rejects_without_observation_commit(self):
@@ -425,7 +427,7 @@ class FinishObservationTests(unittest.TestCase):
             cut={'manifest':manifest,'census':census,'census_sha256':transport.upload.digest(census),'archive':str(base/'post.tar')}
             runtime=Mock();runtime.base=base;stage=Mock();stage.final_path=Path('/selected')
             state={'operation':transport.upload.OPERATION,'cut':cut,'nats_migration':{'verified':True,'cut':cut}}
-            rows=[{'census':census,'records':{'sha256':'a'*64},'recovery':{}} for _ in range(3)];rows[-1]['records']={'sha256':'b'*64}
+            rows=[{'census':census,'native_messages':{'sha256':'a'*64},'closed_durable_states':{'exact':'all pending fields'},'recovery':{}} for _ in range(3)];rows[-1]['native_messages']={'sha256':'b'*64}
             with patch('native_store.verify_archive',return_value=True),patch('native_store.archive_closed_store',return_value=manifest),\
                  patch('expired_proof.observe_copy',side_effect=rows),patch('preserve.recovered_census',side_effect=lambda before,after,*args:(after,[])),self.assertRaises(ValueError):
                 finish.observe_post_apply(runtime,stage,state,slot,lambda *args:None,lambda *args:b'',None)

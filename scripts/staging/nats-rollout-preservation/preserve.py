@@ -30,6 +30,20 @@ def native_inventory(manifest):
     return {key:manifest[key] for key in ('mechanism','file_count','bytes','dirs','files')}
 
 
+def native_message_files(manifest):
+    """Exact closed record-file bytes, not decoded/API message semantics."""
+    def message_path(path):
+        parts=path.split('/')
+        return len(parts)>=5 and parts[0]=='jetstream' and parts[2]=='streams' and parts[4]=='msgs'
+    files=sorted((copy.deepcopy(row) for row in manifest['files'] if message_path(row['path'])),key=lambda row:row['path'])
+    dirs=sorted(path for path in manifest['dirs'] if message_path(path))
+    if len({row['path'] for row in files})!=len(files) or len(set(dirs))!=len(dirs):
+        raise Blocked('rollout_native_store_changed')
+    return {'schema':'voice-native-message-files-v1','dirs':dirs,'files':files,
+        'file_count':len(files),'bytes':sum(row['size'] for row in files),
+        'sha256':canonical({'dirs':dirs,'files':files})}
+
+
 def _native_members(runtime,archive,manifest,paths,authority):
     from closed_archive import Archive
     reader=Archive(runtime.base,archive,manifest,authority)
