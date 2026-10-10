@@ -101,6 +101,9 @@ HASH_FIELDS={'checkpoint_sha256','original_cut_sha256','original_cipher_sha256',
 PROOF_FIELDS=HASH_FIELDS|{'schema','operation','started_at','completed_at'}
 V9_BINDING='23a055aca7f2fca8e068810fd5c98ccc6c08b51dfd5d287d6344e2c2787a9b11'
 V10_BINDING='317486fa04b6ed2c39dbad7708431537f1ec8bc24050fe5a6217f6ca6e56182b'
+V11_BINDING='57058302ff72ed8880ff04e86c5db744bdc41b608261d47c19fc46572ea9b7ba'
+FAILED_READER_REQUEST={'action':'prepare-expired-native','operation':upload.OPERATION,
+    'run_id':38070044426,'nonce':'044adcd8e48a29499b773014634febbfe0f165a102ba7676a6574ea5d0929251'}
 FAILED_NATIVE_REQUEST={'action':'prepare-expired-native','operation':upload.OPERATION,
     'run_id':38061196243,'nonce':'754203e7f72b64b8a2d432685be93dc17ff55522f037fdd83144bde2e31021eb'}
 FAILED_REQUEST={'action':'authorize-preserved-upload','operation':upload.OPERATION,
@@ -172,6 +175,19 @@ def adoption_record(raw,previous_binding_sha256,replacement_binding):
     except (KeyError,TypeError,AttributeError,json.JSONDecodeError):reject('adoption_shape_invalid')
 
 
+def failed_reader_execution(journal_raw,response_raw):
+    """Freeze the exact diagnosed V11 reader failure without replay."""
+    journal=json.loads(journal_raw,object_pairs_hook=upload.pairs)
+    response=json.loads(response_raw,object_pairs_hook=upload.pairs)
+    expected={'schema':'voice-nats-bridge-request-v1','request':FAILED_READER_REQUEST,
+        'request_sha256':upload.digest(FAILED_READER_REQUEST),'phase':'STARTED','prepare_error':'unexpected'}
+    if journal!=expected or response!={'status':'BLOCKED','error':'blocked_unclassified'}:
+        reject('failed_reader_execution_changed')
+    return {'schema':'voice-expired-native-reader-failure-disposition-v1','operation':upload.OPERATION,
+        'request_sha256':upload.digest(FAILED_READER_REQUEST),'journal_sha256':hashlib.sha256(journal_raw).hexdigest(),
+        'response_sha256':hashlib.sha256(response_raw).hexdigest(),'disposition':'FROZEN_FAILED_PRE_PROOF_NO_REPLAY'}
+
+
 def verify_adopted_binding(base,state,binding):
     """Both existing state readers enter through paused_recovery, then here.
 
@@ -192,10 +208,15 @@ def verify_adopted_binding(base,state,binding):
     adopted_binding=binding
     if record!=adoption_record(raw,V9_BINDING,binding):
         adopted_binding=root_cli.code_binding(base/'code-v10-preserved')
-        if (upload.digest(adopted_binding)!=V10_BINDING or
-            upload.private_json(base/'upgrade-v11.json',65536)!=
-                {'schema':'voice-nats-code-upgrade-v11','from':V10_BINDING,'to':upload.digest(binding)}):
-            reject('adoption_upgrade_changed')
+        if upload.digest(adopted_binding)!=V10_BINDING:reject('adoption_upgrade_changed')
+        upgrade=upload.private_json(base/'upgrade-v11.json',65536)
+        if upgrade!={'schema':'voice-nats-code-upgrade-v11','from':V10_BINDING,'to':upload.digest(binding)}:
+            middle=root_cli.code_binding(base/'code-v11-preserved')
+            if (upload.digest(middle)!=V11_BINDING
+                or upgrade!={'schema':'voice-nats-code-upgrade-v11','from':V10_BINDING,'to':V11_BINDING}
+                or upload.private_json(base/'upgrade-v12.json',65536)!=
+                    {'schema':'voice-nats-code-upgrade-v12','from':V11_BINDING,'to':upload.digest(binding)}):
+                reject('adoption_upgrade_changed')
     if record!=adoption_record(raw,V9_BINDING,adopted_binding):reject('adoption_record_changed')
     for key in ('operation','code_capture','cipher_binding','cut','execution_authority',
                 'source_authority','nats_contract_expires_at','repair_adoption','repair_revision'):
@@ -227,7 +248,7 @@ def install_helper(code,installed,kube,version):
     import paused_recovery
     import story_witness
     from docker_runtime import DockerRuntime
-    if version not in ('v10','v11'):
+    if version not in ('v10','v11','v12'):
         reject('helper_version_invalid')
     installed=Path(installed);base=root_cli.operation_path(str(guard.ROOT/('rollout-'+upload.OPERATION)))
     checkpoint=base/'checkpoint.json';snapshot=base/'expired-recovery-adopted-checkpoint.json'
@@ -243,10 +264,14 @@ def install_helper(code,installed,kube,version):
     awaiting=upload.private_json(base/'recovery-v8-awaiting-checkpoint.json',128<<20)
     install_history(state,awaiting)
     new_binding=root_cli.code_binding(Path(code));record=adoption_record(raw,V9_BINDING,new_binding)
-    if version=='v11':
+    if version in ('v11','v12'):
         prior=root_cli.code_binding(base/('code-v10-preserved' if (base/'code-v10-preserved').exists() else 'code'))
         if upload.digest(prior)!=V10_BINDING:reject('helper_v10_predecessor_changed')
         if upload.private_json(record_path,65536)!=adoption_record(raw,V9_BINDING,prior):reject('helper_revision_conflict')
+        if version=='v12':
+            installed_prior=root_cli.code_binding(base/('code-v11-preserved' if (base/'code-v11-preserved').exists() else 'code'))
+            if upload.digest(installed_prior)!=V11_BINDING:reject('helper_v11_predecessor_changed')
+            verify_adopted_binding(base,state,installed_prior)
     elif record_path.exists() and upload.private_json(record_path,65536)!=record:reject('helper_revision_conflict')
     stage=transaction.reconstruct(kube,state,lambda event:None);stage.verify_final_storage()
     DockerRuntime(base,upload.OPERATION).no_operation_containers(running_only=False)
@@ -268,12 +293,17 @@ def install_helper(code,installed,kube,version):
     disposition=failed_execution(journals[failed_name],responses[failed_name])
     native_name=FAILED_NATIVE_REQUEST['nonce']+'.json'
     native_disposition=None
-    if version=='v11':
+    if version in ('v11','v12'):
         native_disposition=failed_native_execution(journals[native_name],responses[native_name])
         if (base/'expired-recovery-proofs'/FAILED_NATIVE_REQUEST['nonce']).exists():reject('helper_failed_native_proof_present')
+    reader_name=FAILED_READER_REQUEST['nonce']+'.json';reader_disposition=None
+    if version=='v12':
+        reader_disposition=failed_reader_execution(journals[reader_name],responses[reader_name])
+        if (base/'expired-recovery-proofs'/FAILED_READER_REQUEST['nonce']).exists():reject('helper_failed_reader_proof_present')
     for name,value in journals.items():
         if name==failed_name:continue
-        if version=='v11' and name==native_name:continue
+        if version in ('v11','v12') and name==native_name:continue
+        if version=='v12' and name==reader_name:continue
         if name==paused_recovery.NONCE+'.json':continue
         if name==__import__('v8_upgrade').FAILED_NONCE+'.json':
             __import__('v8_upgrade').failed_execution(value,responses[name]);continue
@@ -301,7 +331,12 @@ def install_helper(code,installed,kube,version):
         if native_path.exists():
             if upload.private_json(native_path,65536)!=native_disposition:reject('helper_failed_native_disposition_changed')
         else:upload.exclusive(native_path,json.dumps(native_disposition,sort_keys=True,separators=(',',':')).encode())
-    predecessor,previous=(V10_BINDING,'v10') if version=='v11' else (V9_BINDING,'v9')
+    if reader_disposition is not None:
+        reader_path=base/'expired-recovery-reader-failed-execution.json'
+        if reader_path.exists():
+            if upload.private_json(reader_path,65536)!=reader_disposition:reject('helper_failed_reader_disposition_changed')
+        else:upload.exclusive(reader_path,json.dumps(reader_disposition,sort_keys=True,separators=(',',':')).encode())
+    predecessor,previous={'v10':(V9_BINDING,'v9'),'v11':(V10_BINDING,'v10'),'v12':(V11_BINDING,'v11')}[version]
     installer._upgrade_code(code,installed,1000,predecessor,version,previous)
     installer._upgrade_code(code,base,1000,predecessor,version,previous)
     if (upload.private_read(checkpoint)!=current_raw or upload.private_read(snapshot)!=raw

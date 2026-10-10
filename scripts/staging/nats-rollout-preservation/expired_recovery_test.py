@@ -206,7 +206,84 @@ class FinishLedgerTests(unittest.TestCase):
 if __name__=='__main__':unittest.main()
 
 
+class ComposedStateReaderTests(unittest.TestCase):
+    def test_installed_v11_state_and_common_reader_use_full_expired_adoption_chain(self):
+        self.exercise_reader('v11')
+
+    def test_v12_state_and_common_reader_preserve_both_original_upgrade_receipts(self):
+        self.exercise_reader('v12')
+
+    def exercise_reader(self,version):
+        import bridge_root,paused_recovery,root_cli
+        fixture=RecoveryAuthorityTests();fixture.setUp()
+        adopted=fixture.state;adopted['events']=[]
+        base=Path('/root-fixture/rollout-'+adopted['operation'])
+        data=Path(__file__).parent/'testdata'
+        old=json.loads((data/'expired-recovery-v9-manifest.json').read_text())
+        prior=json.loads((data/'expired-recovery-v10-manifest.json').read_text())
+        middle=json.loads((data/'expired-recovery-v11-manifest.json').read_text())
+        current=middle if version=='v11' else {'corrected-reader':'3'*64}
+        adopted['code_capture']=copy.deepcopy(old)
+        raw=json.dumps(adopted).encode()
+        self.assertEqual(digest(prior),recovery.V10_BINDING)
+        self.assertEqual(digest(middle),recovery.V11_BINDING)
+        record=recovery.adoption_record(raw,recovery.V9_BINDING,prior)
+        original_receipt={'schema':'voice-nats-code-upgrade-v11','from':digest(prior),'to':digest(middle)}
+        receipt=original_receipt if version=='v11' else {
+            'schema':'voice-nats-code-upgrade-v12','from':digest(middle),'to':digest(current)}
+        def binding(path):
+            return {'installed-code':current,'code-v9-preserved':old,'code-v10-preserved':prior,'code-v11-preserved':middle}[path.name]
+        def read(path,limit=0):
+            return {'expired-recovery-adoption.json':record,'upgrade-v11.json':original_receipt,'upgrade-v12.json':receipt}[path.name]
+        def continuity(path,state,bound):
+            if bound!=old:raise recovery.upload.UploadError('preserved_upload_helper_revision_changed')
+        def private(path,limit=0):return json.dumps(read(path)).encode()
+        def exists(path):return path.name in ('expired-recovery-adoption.json','upgrade-v11.json','recovery-v9-revision.json') or version=='v12' and path.name=='upgrade-v12.json'
+        before=copy.deepcopy(adopted)
+        with patch('guard.ROOT',base.parent),patch.object(root_cli,'code_binding',side_effect=binding),\
+            patch.object(root_cli,'operation_path',return_value=base),patch.object(bridge_root,'private_json',return_value=adopted),\
+            patch.object(recovery.upload,'private_read',return_value=raw),patch.object(recovery.upload,'private_json',side_effect=read),\
+            patch.object(recovery.upload,'verify_helper_continuity',side_effect=continuity),\
+            patch.object(paused_recovery,'private_bytes',side_effect=private),patch.object(Path,'exists',exists):
+            self.assertEqual(recovery.verify_adopted_binding(base,adopted,current),record)
+            actions=bridge_root.Actions(Path('/installed-code'))
+            self.assertEqual(actions.state(adopted['operation']),(base,adopted))
+            self.assertIsNone(paused_recovery.verify_adopted_binding(base,adopted,current))
+            saved=original_receipt['to'];original_receipt['to']=recovery.V9_BINDING
+            with patch.object(recovery,'verify_adopted_binding',side_effect=AssertionError('historical V9 redirected')):
+                self.assertIsNone(paused_recovery.verify_adopted_binding(base,adopted,old))
+            original_receipt['to']=saved
+            for key in ('schema','from','to'):
+                saved=receipt[key];receipt[key]='changed'
+                with self.subTest(key=key),self.assertRaises((ValueError,root_cli.Blocked)):
+                    actions.state(adopted['operation'])
+                receipt[key]=saved
+            if version=='v12':
+                for key in ('schema','from','to'):
+                    saved=original_receipt[key];original_receipt[key]='changed'
+                    with self.subTest(prior_receipt=key),self.assertRaises(ValueError):
+                        actions.state(adopted['operation'])
+                    original_receipt[key]=saved
+        self.assertEqual(adopted,before)
+
+
 class InstallHistoryTests(unittest.TestCase):
+    def test_failed_common_reader_disposition_is_exact_and_never_replays(self):
+        request=copy.deepcopy(recovery.FAILED_READER_REQUEST)
+        journal={'schema':'voice-nats-bridge-request-v1','request':request,'request_sha256':digest(request),
+            'phase':'STARTED','prepare_error':'unexpected'}
+        response={'status':'BLOCKED','error':'blocked_unclassified'}
+        raw=json.dumps(journal).encode();answer=json.dumps(response).encode()
+        self.assertEqual(recovery.failed_reader_execution(raw,answer)['disposition'],'FROZEN_FAILED_PRE_PROOF_NO_REPLAY')
+        for key in ('run_id','nonce','phase','response'):
+            changed=copy.deepcopy(journal);reply=copy.deepcopy(response)
+            if key in request:
+                changed['request'][key]=1 if key=='run_id' else 'changed';changed['request_sha256']=digest(changed['request'])
+            elif key=='phase':changed['phase']='COMPLETE'
+            else:reply['status']='READY'
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                recovery.failed_reader_execution(json.dumps(changed).encode(),json.dumps(reply).encode())
+
     def test_failed_native_get_request_disposition_is_exact_and_never_replays(self):
         request=copy.deepcopy(recovery.FAILED_NATIVE_REQUEST)
         journal={'schema':'voice-nats-bridge-request-v1','request':request,'request_sha256':digest(request),

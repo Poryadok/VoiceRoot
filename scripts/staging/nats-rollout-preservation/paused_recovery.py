@@ -383,8 +383,21 @@ def verify_adopted_binding(base,state,binding):
     import guard
     base=Path(base)
     expired_revision=base/'expired-recovery-adoption.json'
-    if expired_revision.exists() and decode(private_bytes(expired_revision,65536)).get('replacement_code_sha256')==digest(binding):
+    expired_reader=False
+    if expired_revision.exists():
         import expired_recovery
+        # The expired reader itself re-enters this adapter for historical V9.
+        # A newer receipt, even a malformed one naming V9, cannot redirect it.
+        if digest(binding)!=expired_recovery.V9_BINDING:
+            expired_reader=decode(private_bytes(expired_revision,65536)).get('replacement_code_sha256')==digest(binding)
+            for version,predecessor in (('v11',expired_recovery.V10_BINDING),('v12',expired_recovery.V11_BINDING)):
+                receipt=base/('upgrade-'+version+'.json')
+                if receipt.exists() and decode(private_bytes(receipt,65536))=={
+                    'schema':'voice-nats-code-upgrade-'+version,'from':predecessor,'to':digest(binding)}:
+                    expired_reader=True
+    if expired_reader:
+        # Routing recognizes only an exact current receipt. The full reader
+        # below still authenticates every preserved predecessor and adoption.
         expired_recovery.verify_adopted_binding(base,state,binding)
         return
     if state.get('code_capture')!=binding and (base/'recovery-v9-revision.json').exists():
@@ -463,7 +476,7 @@ def install_repair(code,installed,kube,version='v7'):
             raise Blocked('bridge_upgrade_directory_untrusted')
     inbox=installed/'inbox';inbox.chmod(0o700)
     try:
-        if version in ('v10','v11'):
+        if version in ('v10','v11','v12'):
             import expired_recovery
             return expired_recovery.install_helper(code,installed,kube,version)
         if version=='v9':

@@ -590,3 +590,11 @@ code. The exact failed pre-proof recovery request is recorded without replay;
 new recovery requires a fresh dispatcher and separately verified current proof.
 Exact native continuity requires no inferred historical startup interval;
 changed metadata remains subject to the pinned interval/checksum classifier.
+
+V12 corrects the common state-reader routing after the V11 helper upgrade. The
+reader selects the expired adoption verifier only for the exact current upgrade
+receipt and then verifies the full preserved V11/V10/V9 code and adoption chain.
+The historical V9 reader cannot be redirected by a newer receipt. Installation
+preserves V11 code, its upgrade receipt and all original history; a separate V12
+receipt binds the replacement and a separate disposition freezes the exact
+failed pre-proof reader request. Neither record grants recovery permission.
