@@ -42,7 +42,7 @@ def issue(state,execution,observation,readbacks,*,now):
             recovery.reject('finish_applied_identity_invalid')
         fields={'schema','operation','started_at','completed_at','checkpoint_sha256',
             'applied_receipt_sha256','post_apply_cut_sha256','selected_inventory_sha256',
-            'census_sha256','records_sha256','applied_workloads','original_cipher_binding',
+            'census_sha256','native_messages_sha256','applied_workloads','original_cipher_binding',
             'observation_cipher_binding','artifact_bindings','source_admission_sha256'}
         postseal=observation.get('schema')=='voice-expired-finish-postseal-proof-v1'
         if postseal:fields.add('postseal_binding')
@@ -53,7 +53,7 @@ def issue(state,execution,observation,readbacks,*,now):
             or observation['post_apply_cut_sha256']!=upload.digest(state['nats_migration']['cut'])
             or observation['original_cipher_binding']!=state['cipher_binding']
             or any(not isinstance(observation[key],str) or not re.fullmatch('[a-f0-9]{64}',observation[key])
-                for key in ('selected_inventory_sha256','census_sha256','records_sha256','source_admission_sha256'))):
+                for key in ('selected_inventory_sha256','census_sha256','native_messages_sha256','source_admission_sha256'))):
             recovery.reject('finish_proof_binding_invalid')
         if postseal:
             bound=observation['postseal_binding']
@@ -65,7 +65,7 @@ def issue(state,execution,observation,readbacks,*,now):
                 or bound['current_cut']['manifest_sha256']!=upload.digest(bound['current_cut']['manifest'])
                 or bound['current_cut']['census_sha256']!=upload.digest(bound['current_cut']['census'])
                 or bound['postseal_members']!=observation['observation_cipher_binding'].get('postseal_members')
-                or upload.digest(bound['observation']['full_records'])!=observation['records_sha256']
+                or upload.digest(bound['observation']['native_messages'])!=observation['native_messages_sha256']
                 or bound['observation']['selected_inventory_sha256']!=observation['selected_inventory_sha256']):
                 recovery.reject('finish_postseal_proof_invalid')
         workloads=observation['applied_workloads']
@@ -159,7 +159,7 @@ def commit_authority(base,state,slot,execution,*,clock=None,stage=None,verify_so
             'checkpoint_sha256':upload.digest(state),'applied_receipt_sha256':upload.digest(state['authorization']),
             'post_apply_cut_sha256':upload.digest(state['nats_migration']['cut']),
             'selected_inventory_sha256':observed['selected_inventory_sha256'],
-            'census_sha256':upload.digest(observed['census']),'records_sha256':upload.digest(observed['full_records']),
+            'census_sha256':upload.digest(observed['census']),'native_messages_sha256':upload.digest(observed['native_messages']),
             'applied_workloads':pause['workloads'],'original_cipher_binding':record['original_cipher_binding'],
             'observation_cipher_binding':record['observation_cipher_binding'],
             'artifact_bindings':record['artifact_bindings'],'source_admission_sha256':upload.digest(source)}
@@ -441,7 +441,7 @@ def pause_owned(stage,base,state,slot,journal,verify_source,*,clock=None):
 def observe_post_apply(runtime,stage,state,slot,validate,checksum,startup_interval):
     """Distinct CLOSED finish observation, never a replacement original cut.
 
-    Three private copies prove all original records, the authorized post-apply
+    Three private copies prove exact native message-file bytes, the authorized post-apply
     contract/full consumer state, and the current observation. A changed native
     inventory needs a separately source-bound selected startup interval and the
     same strict pinned metadata classifier; unknown changes always veto.
@@ -450,7 +450,7 @@ def observe_post_apply(runtime,stage,state,slot,validate,checksum,startup_interv
     from native_store import verify_archive,archive_closed_store
     from preserve import recovered_census,native_inventory,canonical
     from rollout_census import semantic
-    from expired_proof import observe_copy,current_inventory
+    from expired_proof import observe_copy,current_inventory,verify_native_continuity
     import tarfile
     slot=Path(slot);base=Path(runtime.base)
     if (slot.parent!=base/'expired-finish-proofs' or not callable(validate)
@@ -465,16 +465,17 @@ def observe_post_apply(runtime,stage,state,slot,validate,checksum,startup_interv
             or not verify_archive(archive,cut['manifest'])):recovery.reject('finish_baseline_changed')
     stage.verify_final_storage();runtime.no_operation_containers(running_only=False)
     current=slot/'rollout-before.tar';manifest=archive_closed_store(stage.final_path,current)
-    originals=observe_copy(runtime,original,old['manifest'],'finish-original',stage.verify_final_storage)
+    originals=observe_copy(runtime,original,old['manifest'],'finish-original',stage.verify_final_storage,native_only=True)
     original_row,original_observations=recovered_census(old['census'],originals['census'],originals['recovery'],old['manifest'])
     if semantic(original_row)!=semantic(old['census']):recovery.reject('finish_original_census_changed')
-    applied=observe_copy(runtime,post_archive,post['manifest'],'finish-applied',stage.verify_final_storage,validate)
+    applied=observe_copy(runtime,post_archive,post['manifest'],'finish-applied',stage.verify_final_storage,validate,native_only=True)
     applied_row,applied_observations=recovered_census(post['census'],applied['census'],applied['recovery'],post['manifest'])
-    observed=observe_copy(runtime,current,manifest,'finish-current',stage.verify_final_storage,validate)
+    observed=observe_copy(runtime,current,manifest,'finish-current',stage.verify_final_storage,validate,native_only=True)
     current_row,current_observations=recovered_census(post['census'],observed['census'],observed['recovery'],post['manifest'])
     if (semantic(applied_row)!=semantic(post['census']) or semantic(current_row)!=semantic(post['census'])
-        or originals['records']!=applied['records'] or applied['records']!=observed['records']):
+        or originals['native_messages']!=applied['native_messages']):
         recovery.reject('finish_records_or_consumer_state_changed')
+    verify_native_continuity(applied,observed)
     if native_inventory(manifest)==native_inventory(post['manifest']):
         disposition={'schema':'voice-native-startup-disposition-v1','branch':'EXACT','changed_paths':[]}
     else:
@@ -489,7 +490,7 @@ def observe_post_apply(runtime,stage,state,slot,validate,checksum,startup_interv
                 if source is None:recovery.reject('finish_native_field_missing')
                 with source:return source.read((256<<10)+1)
         disposition=recovery.classify_startup(post['manifest'],manifest,post['census'],current_row,
-            applied['records'],observed['records'],read,checksum,startup_interval)
+            applied['native_messages'],observed['native_messages'],read,checksum,startup_interval)
     for archive,cut in ((original,old),(post_archive,post)):
         if not verify_archive(archive,cut['manifest']):recovery.reject('finish_final_baseline_changed')
     stage.verify_final_storage();runtime.no_operation_containers(running_only=False)
@@ -497,7 +498,8 @@ def observe_post_apply(runtime,stage,state,slot,validate,checksum,startup_interv
     if current_inventory(runtime,stage)!=inventory:recovery.reject('finish_selected_changed_during_proof')
     result={'schema':'voice-expired-finish-current-observation-v1','operation':state['operation'],
         'original_cut_sha256':upload.digest(old),'post_apply_cut_sha256':upload.digest(post),
-        'manifest':manifest,'census':current_row,'full_records':observed['records'],
+        'manifest':manifest,'census':current_row,'native_messages':observed['native_messages'],
+        'closed_durable_states':observed['closed_durable_states'],
         'native_disposition':disposition,'selected_inventory_sha256':inventory,
         'original_private_recovery':originals['recovery'],'applied_private_recovery':applied['recovery'],
         'current_private_recovery':observed['recovery'],'ephemeral_observations':{

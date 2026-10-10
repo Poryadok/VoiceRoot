@@ -13,6 +13,12 @@ MAX_RECORD_BYTES=48<<30
 
 def fail():raise ValueError('expired_recovery_full_record_proof_invalid')
 
+def verify_native_continuity(before,after):
+    """Compare authoritative message files and every decoded durable field."""
+    if (before['native_messages']!=after['native_messages']
+        or before['closed_durable_states']!=after['closed_durable_states']):
+        raise ValueError('expired_recovery_native_state_changed')
+
 
 def cri_time(value):
     """Exact RFC3339Nano copied-container timestamp, without live-HUB runtime."""
@@ -63,7 +69,7 @@ def record_digest(actor,row):
     return {'schema':'voice-full-record-proof-v1','messages':count,'decoded_bytes':total,
             'sequences_observed':scanned,'sha256':digest.hexdigest()}
 
-def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,record_sink=None,closed_archive=None):
+def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,record_sink=None,closed_archive=None,native_only=False):
     """One owned copy feeds full census/config and all-record proof.
 
     Failure removes only newly owned container IDs and the private restored
@@ -74,6 +80,8 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
     from rollout_census import census
     from nats_contract_actor import Actor
     from docker_runtime import NATS_IMAGE
+    from preserve import native_catalog,verify_catalog,closed_native_states,native_message_files
+    if native_only and record_sink is not None:fail()
     if record_sink is not None and not callable(record_sink):fail()
     if closed_archive is not None:
         closed_archive=Path(closed_archive)
@@ -82,6 +90,7 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
             or closed_archive==Path(archive)):fail()
     verify_fence()
     if not verify_archive(archive,manifest):fail()
+    catalog=native_catalog(runtime,archive,manifest,verify_fence) if native_only else None
     baseline=set(runtime.owned)
     parent=Path(tempfile.mkdtemp(prefix=label+'-',dir=runtime.base))
     started=datetime.now(timezone.utc)
@@ -98,11 +107,16 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
                 if name!=broker:fail()
                 return tree
         row=census(Snapshot(),broker,runtime.account_id())
-        actor=Actor(runtime,broker,owned['Id'],parent/'store',verify_fence)
         ledger=None
-        if record_sink is None:
+        if native_only:
+            verify_catalog(catalog,row)
+            states=closed_native_states(runtime,archive,manifest,row,verify_fence)
+            records=native_message_files(manifest)
+        elif record_sink is None:
+            actor=Actor(runtime,broker,owned['Id'],parent/'store',verify_fence)
             records=record_digest(actor,row)
         else:
+            actor=Actor(runtime,broker,owned['Id'],parent/'store',verify_fence)
             streams={item['name']:{'records':{},'missing_sequences':[]} for item in row['streams']}
             class Capture:
                 def get_record(self,stream,sequence):
@@ -117,8 +131,10 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
                 'storage':'ROOT_IMMUTABLE_RECORD_FILES','streams':streams,'record_proof':records}
         if validate is not None:validate(runtime,broker,tree,row,manifest,records)
         verify_fence()
-        result={'census':row,'records':records,'recovery':{'server_image':NATS_IMAGE,
+        result={'census':row,'recovery':{'server_image':NATS_IMAGE,
             'container_id':owned['Id'],'started_at':started.isoformat()}}
+        if native_only:result.update(native_messages=records,closed_durable_states=states)
+        else:result['records']=records
         if ledger is not None:
             result.update(private_record_ledger=ledger,private_monitor=tree)
         if closed_archive is not None:
@@ -226,16 +242,17 @@ def produce(runtime,stage,state,awaiting,slot,checksum,validate):
         or hashlib.sha256(raw_manifest).hexdigest()!=cut['manifest_sha256']
         or json.loads(raw_manifest)!=cut['manifest']):fail()
     if not verify_archive(original,cut['manifest']):fail()
-    interval=failed_startup_interval(state,awaiting)
     current=slot/'rollout-before.tar'
     manifest=archive_closed_store(stage.final_path,current)
     stage.verify_final_storage()
-    old=observe_copy(runtime,original,cut['manifest'],'expired-original',stage.verify_final_storage)
+    old=observe_copy(runtime,original,cut['manifest'],'expired-original',stage.verify_final_storage,native_only=True)
     old_row,old_observations=recovered_census(cut['census'],old['census'],old['recovery'],cut['manifest'])
     if semantic(old_row)!=semantic(cut['census']):fail()
-    observed=observe_copy(runtime,current,manifest,'expired-current',stage.verify_final_storage,validate)
+    observed=observe_copy(runtime,current,manifest,'expired-current',stage.verify_final_storage,validate,native_only=True)
     row,observations=recovered_census(cut['census'],observed['census'],observed['recovery'],cut['manifest'])
-    if semantic(row)!=semantic(cut['census']) or old['records']!=observed['records']:fail()
+    if semantic(row)!=semantic(cut['census']):fail()
+    verify_native_continuity(old,observed)
+    interval=None if native_inventory(cut['manifest'])==native_inventory(manifest) else failed_startup_interval(state,awaiting)
     def read_bytes(side,path):
         archive,wanted=(original,cut['manifest']) if side=='before' else (current,manifest)
         if not verify_archive(archive,wanted):fail()
@@ -246,12 +263,13 @@ def produce(runtime,stage,state,awaiting,slot,checksum,validate):
             if stream is None:fail()
             with stream:return stream.read(256*1024+1)
     disposition=classify_startup(cut['manifest'],manifest,cut['census'],row,
-        old['records'],observed['records'],read_bytes,checksum,interval)
+        old['native_messages'],observed['native_messages'],read_bytes,checksum,interval)
     if not verify_archive(original,cut['manifest']) or not verify_archive(current,manifest):fail()
     stage.verify_final_storage();runtime.no_operation_containers(running_only=False)
     result={'schema':'voice-expired-current-observation-v1','operation':state['operation'],
         'original_cut_sha256':digest(cut),'manifest':manifest,'census':row,
-        'full_records':observed['records'],'native_disposition':disposition,
+        'native_messages':observed['native_messages'],'closed_durable_states':observed['closed_durable_states'],
+        'native_disposition':disposition,
         'private_recovery':observed['recovery'],'ephemeral_observations':observations,
         'original_private_recovery':old['recovery'],'original_ephemeral_observations':old_observations,
         'selected_inventory_sha256':digest(native_inventory(manifest))}

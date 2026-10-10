@@ -9,6 +9,50 @@ from unittest.mock import Mock
 sys.path.insert(0,str(Path(__file__).parents[1]/'nats-known-baseline'))
 
 class RecordProofTests(unittest.TestCase):
+    def test_native_continuity_rejects_changed_missing_messages_and_complete_pending_state(self):
+        from preserve import native_message_files
+        manifest={'dirs':['jetstream/account/streams/events/msgs'],
+            'files':[{'path':'jetstream/account/streams/events/msgs/1.blk','size':3,'sha256':'a'*64}]}
+        before={'native_messages':native_message_files(manifest),
+            'closed_durable_states':{'events/durable':{'pending':{'7':{'timestamp':123,'redeliveries':2}}}}}
+        expired_proof.verify_native_continuity(before,copy.deepcopy(before))
+        for mutation in ('changed','missing','pending','redelivery'):
+            with self.subTest(mutation=mutation):
+                after=copy.deepcopy(before)
+                if mutation=='changed':after['native_messages']['files'][0]['sha256']='b'*64
+                elif mutation=='missing':after['native_messages']['files']=[]
+                elif mutation=='pending':after['closed_durable_states']['events/durable']['pending']['7']['timestamp']=124
+                else:after['closed_durable_states']['events/durable']['pending']['7']['redeliveries']=3
+                with self.assertRaisesRegex(ValueError,'native_state_changed'):
+                    expired_proof.verify_native_continuity(before,after)
+
+    def test_native_copy_proof_reads_closed_messages_and_durables_without_get_grant(self):
+        from docker_runtime import NATS_IMAGE
+        with TemporaryDirectory() as folder:
+            class Runtime:
+                base=Path(folder);owned={}
+                def restore(self,archive,target,manifest):target.mkdir()
+                def start_broker(self,label,target):self.owned['copy']={'id':'1'*64};return 'copy'
+                def inspect(self,name):return {'Id':'1'*64,'Config':{'Image':NATS_IMAGE},'HostConfig':{'NetworkMode':'none'}}
+                def monitor_jsz(self,broker):return {'server_id':'owned'}
+                def account_id(self):return 'account'
+                def run(self,args):return ''
+            manifest={'dirs':['jetstream/account/streams/events/msgs'],
+                'files':[{'path':'jetstream/account/streams/events/msgs/1.blk','size':3,'sha256':'a'*64}]}
+            states={'complete':'pending timestamps and redelivery map'}
+            row={'streams':[],'consumers':[],'account':'account'}
+            with patch('native_store.verify_archive',return_value=True),patch('scenario.ready'),\
+                patch('rollout_census.census',return_value=row),\
+                patch('preserve.native_catalog',autospec=True,return_value={'complete':'catalog'}),patch('preserve.verify_catalog') as catalog,\
+                patch('preserve.closed_native_states',autospec=True,return_value=states) as durable,\
+                patch('nats_contract_actor.Actor',side_effect=AssertionError('bootstrap GET forbidden')):
+                proof=expired_proof.observe_copy(Runtime(),Path(folder)/'archive',manifest,'native',lambda:None,native_only=True)
+            self.assertEqual(proof['native_messages']['schema'],'voice-native-message-files-v1')
+            self.assertEqual(proof['native_messages']['files'],manifest['files'])
+            self.assertEqual(proof['closed_durable_states'],states)
+            self.assertNotIn('records',proof)
+            durable.assert_called_once();catalog.assert_called_once()
+
     def test_current_copy_orderly_close_archives_only_exact_successful_exit(self):
         from docker_runtime import NATS_IMAGE
         from datetime import datetime, timezone, timedelta

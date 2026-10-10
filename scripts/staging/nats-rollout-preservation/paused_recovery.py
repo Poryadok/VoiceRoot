@@ -463,7 +463,7 @@ def install_repair(code,installed,kube,version='v7'):
             raise Blocked('bridge_upgrade_directory_untrusted')
     inbox=installed/'inbox';inbox.chmod(0o700)
     try:
-        if version=='v10':
+        if version in ('v10','v11'):
             import expired_recovery
             return expired_recovery.install_helper(code,installed,kube,version)
         if version=='v9':

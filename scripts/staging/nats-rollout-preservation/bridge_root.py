@@ -229,14 +229,14 @@ class Actions:
             if not verify_archive(archive,cut['manifest']):raise Blocked('decrypted_restore_native_changed')
             states=closed_native_states(runtime,archive,cut['manifest'],cut['census'],stage.verify_final_storage)
             catalog=native_catalog(runtime,archive,cut['manifest'],stage.verify_final_storage)
-            observed=observe_copy(runtime,archive,cut['manifest'],'decrypted-readback',stage.verify_final_storage)
+            observed=observe_copy(runtime,archive,cut['manifest'],'decrypted-readback',stage.verify_final_storage,native_only=True)
             verify_catalog(catalog,observed['census'])
             compared,ephemeral=recovered_census(cut['census'],observed['census'],observed['recovery'],cut['manifest'])
             if (canonical(cut['census'])!=cut['census_sha256'] or semantic(compared)!=semantic(cut['census'])):
                 raise Blocked('decrypted_restore_census_changed')
             stage.verify_final_storage()
             return {'native_archive_verified':True,'complete_durable_sha256':canonical(states),
-                'census_sha256':cut['census_sha256'],'full_records':observed['records'],
+                'census_sha256':cut['census_sha256'],'native_messages':observed['native_messages'],
                 'ephemeral_recovery_observations':ephemeral,'server_image':NATS_IMAGE}
         members={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json'}
         if payload_base==Path(base):members.update(state.get('cipher_space_members',{}))
@@ -416,8 +416,7 @@ class Actions:
             expired_recovery.verify_adopted_binding(base,state,self.binding)
         stage,admission=expired_admission.admit(Kube(),base,state,self.code,self.binding,historical,fresh)
         def all_fresh():
-            _,again=expired_admission.admit(Kube(),base,state,self.code,self.binding,historical,fresh,
-                admission['get_permission_proof'])
+            _,again=expired_admission.admit(Kube(),base,state,self.code,self.binding,historical,fresh)
             if again!=admission:raise Blocked('expired_recovery_admission_changed')
         return base,state,stage,execution,current,admission,all_fresh
 
@@ -444,8 +443,7 @@ class Actions:
             expired_recovery.verify_adopted_binding(base,state,self.binding)
         stage,admission=expired_admission.admit_finish(Kube(),base,state,self.code,self.binding,source_fresh)
         def all_fresh():
-            _,again=expired_admission.admit_finish(Kube(),base,state,self.code,self.binding,source_fresh,
-                admission['get_permission_proof'])
+            _,again=expired_admission.admit_finish(Kube(),base,state,self.code,self.binding,source_fresh)
             stable=lambda row:{key:value for key,value in row.items() if key!='checkpoint_sha256'}
             if stable(again)!=stable(admission):raise Blocked('expired_finish_admission_changed')
         return base,state,stage,execution,current,admission,all_fresh
@@ -620,8 +618,8 @@ class Actions:
             if (actual['plan']!=state['nats_contract'] or actual['binding']!=state['nats_contract_binding']
                 or actual['scripts']!=state['nats_target_scripts']):
                 raise Blocked('expired_recovery_original_nats_authority_changed')
-            # Full records were read using actual retained bootstrap credentials
-            # before this callback; failed GET permission rejects the proof.
+            # The authoritative archive's exact message-file bytes and complete
+            # durable state are verified; this makes no API record-decoding claim.
             fresh();stage.verify_final_storage()
         awaiting=preserved_upload.private_json(base/'recovery-v8-awaiting-checkpoint.json',128<<20)
         started=dt.datetime.now(dt.timezone.utc)

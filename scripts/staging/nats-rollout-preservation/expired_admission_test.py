@@ -51,7 +51,7 @@ class FinishAdmissionTests(unittest.TestCase):
                 for adapter in (patch('expired_recovery.verify_adopted_binding'),patch('expired_recovery.runtime_authority'),
                     patch('guard.protected_receipt',return_value=receipt),patch.object(transaction,'reconstruct',return_value=stage),
                     patch.object(admission,'input_hashes',return_value={'bound':'inputs'}),
-                    patch.object(admission,'get_permission_proof',return_value={'bound':'actual scratch GET'}),
+                    patch.object(admission,'get_permission_proof',side_effect=AssertionError('bootstrap GET forbidden')),
                     patch('actor_root.revalidate'),patch('migrations.preflight',return_value={'after':True}),patch('nonnats_runtime.verify')):
                     stack.enter_context(adapter)
                 if drift is None:
@@ -108,7 +108,7 @@ class AdmissionTests(unittest.TestCase):
                 current={'verified':True,'source_files':{}};admission_row={'input_hashes':{},'target':{'bound':'original target'}}
                 def fresh():
                     if drift:checkpoint.write_bytes(b'changed-checkpoint')
-                observation={'schema':'fixture','full_records':{'messages':6}}
+                observation={'schema':'fixture','native_messages':{'messages':6}}
                 with patch.object(actions,'_expired_source_admission',return_value=
                     (base,state,stage,execution,current,admission_row,fresh)),\
                      patch('expired_recovery.repair_inputs',return_value={'verified':True}),\

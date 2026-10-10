@@ -28,13 +28,6 @@ def classify_startup(before, after, before_census, after_census,
     from docker_runtime import NATS_IMAGE
     from datetime import datetime
     def veto(): raise RecoveryError('expired_recovery_native_startup_invalid')
-    if (set(provenance) != {'server_image','started_at','closed_at'}
-            or provenance['server_image'] != NATS_IMAGE): veto()
-    try:
-        start=datetime.fromisoformat(provenance['started_at'].replace('Z','+00:00'))
-        end=datetime.fromisoformat(provenance['closed_at'].replace('Z','+00:00'))
-        if start.tzinfo is None or end.tzinfo is None or end < start: veto()
-    except (KeyError, TypeError, ValueError): veto()
     if semantic(before_census) != semantic(after_census) or before_records != after_records: veto()
     if before['dirs'] != after['dirs'] or before_census['account'] != after_census['account']: veto()
     old={row['path']:row for row in before['files']}
@@ -43,6 +36,13 @@ def classify_startup(before, after, before_census, after_census,
     changed={path for path in old if old[path]!=new[path]}
     if not changed:
         return {'schema':'voice-native-startup-disposition-v1','branch':'EXACT', 'changed_paths':[]}
+    if (not isinstance(provenance,dict) or set(provenance) != {'server_image','started_at','closed_at'}
+            or provenance['server_image'] != NATS_IMAGE): veto()
+    try:
+        start=datetime.fromisoformat(provenance['started_at'].replace('Z','+00:00'))
+        end=datetime.fromisoformat(provenance['closed_at'].replace('Z','+00:00'))
+        if start.tzinfo is None or end.tzinfo is None or end < start: veto()
+    except (KeyError, TypeError, ValueError): veto()
     account=before_census['account']
     consumers={(row['stream'],row['name']):row for row in before_census['consumers']}
     if len(consumers)!=len(before_census['consumers']): veto()
@@ -100,6 +100,9 @@ HASH_FIELDS={'checkpoint_sha256','original_cut_sha256','original_cipher_sha256',
     'observation_readback_sha256'}
 PROOF_FIELDS=HASH_FIELDS|{'schema','operation','started_at','completed_at'}
 V9_BINDING='23a055aca7f2fca8e068810fd5c98ccc6c08b51dfd5d287d6344e2c2787a9b11'
+V10_BINDING='317486fa04b6ed2c39dbad7708431537f1ec8bc24050fe5a6217f6ca6e56182b'
+FAILED_NATIVE_REQUEST={'action':'prepare-expired-native','operation':upload.OPERATION,
+    'run_id':38061196243,'nonce':'754203e7f72b64b8a2d432685be93dc17ff55522f037fdd83144bde2e31021eb'}
 FAILED_REQUEST={'action':'authorize-preserved-upload','operation':upload.OPERATION,
     'artifact_id':11610996097,'upload_nonce':'02f20dcb7549ae659428504c7096900effec0d099bb5e3ae15314c5ad68fe959',
     'run_id':37917461677,'nonce':'f6995aab48da04b205315abb6be906725bb810edefe90b9a36f2b77b100fd60c'}
@@ -129,6 +132,21 @@ def failed_execution(journal_raw,response_raw):
             'response_sha256':hashlib.sha256(response_raw).hexdigest(),
             'disposition':'FROZEN_FAILED_NATIVE_PRE_INTENT_NO_REPLAY'}
     except (KeyError,TypeError,AttributeError,json.JSONDecodeError):reject('failed_execution_shape_invalid')
+
+def failed_native_execution(journal_raw,response_raw):
+    """Exact diagnosed pre-proof GET refusal; never replay or rewrite history."""
+    try:
+        journal=json.loads(journal_raw,object_pairs_hook=upload.pairs)
+        response=json.loads(response_raw,object_pairs_hook=upload.pairs)
+        expected={'schema':'voice-nats-bridge-request-v1','request':FAILED_NATIVE_REQUEST,
+            'request_sha256':upload.digest(FAILED_NATIVE_REQUEST),'phase':'STARTED','prepare_error':'unexpected'}
+        if journal!=expected or response!={'status':'BLOCKED','error':'blocked_unclassified'}:
+            reject('failed_native_execution_changed')
+        return {'schema':'voice-expired-native-get-failure-disposition-v1','operation':upload.OPERATION,
+            'request_sha256':upload.digest(FAILED_NATIVE_REQUEST),'journal_sha256':hashlib.sha256(journal_raw).hexdigest(),
+            'response_sha256':hashlib.sha256(response_raw).hexdigest(),
+            'disposition':'FROZEN_FAILED_PRE_PROOF_NO_REPLAY'}
+    except (KeyError,TypeError,AttributeError,json.JSONDecodeError):reject('failed_native_execution_shape_invalid')
 
 
 def adoption_record(raw,previous_binding_sha256,replacement_binding):
@@ -171,7 +189,14 @@ def verify_adopted_binding(base,state,binding):
     if upload.digest(predecessor)!=V9_BINDING:reject('adoption_predecessor_changed')
     upload.verify_helper_continuity(base,adopted,predecessor)
     record=upload.private_json(base/'expired-recovery-adoption.json',65536)
-    if record!=adoption_record(raw,V9_BINDING,binding):reject('adoption_record_changed')
+    adopted_binding=binding
+    if record!=adoption_record(raw,V9_BINDING,binding):
+        adopted_binding=root_cli.code_binding(base/'code-v10-preserved')
+        if (upload.digest(adopted_binding)!=V10_BINDING or
+            upload.private_json(base/'upgrade-v11.json',65536)!=
+                {'schema':'voice-nats-code-upgrade-v11','from':V10_BINDING,'to':upload.digest(binding)}):
+            reject('adoption_upgrade_changed')
+    if record!=adoption_record(raw,V9_BINDING,adopted_binding):reject('adoption_record_changed')
     for key in ('operation','code_capture','cipher_binding','cut','execution_authority',
                 'source_authority','nats_contract_expires_at','repair_adoption','repair_revision'):
         if state.get(key)!=adopted.get(key):reject('adoption_original_changed')
@@ -202,7 +227,7 @@ def install_helper(code,installed,kube,version):
     import paused_recovery
     import story_witness
     from docker_runtime import DockerRuntime
-    if not isinstance(version,str) or not re.fullmatch('v[0-9]{1,2}',version) or int(version[1:])<=9:
+    if version not in ('v10','v11'):
         reject('helper_version_invalid')
     installed=Path(installed);base=root_cli.operation_path(str(guard.ROOT/('rollout-'+upload.OPERATION)))
     checkpoint=base/'checkpoint.json';snapshot=base/'expired-recovery-adopted-checkpoint.json'
@@ -218,7 +243,11 @@ def install_helper(code,installed,kube,version):
     awaiting=upload.private_json(base/'recovery-v8-awaiting-checkpoint.json',128<<20)
     install_history(state,awaiting)
     new_binding=root_cli.code_binding(Path(code));record=adoption_record(raw,V9_BINDING,new_binding)
-    if record_path.exists() and upload.private_json(record_path,65536)!=record:reject('helper_revision_conflict')
+    if version=='v11':
+        prior=root_cli.code_binding(base/('code-v10-preserved' if (base/'code-v10-preserved').exists() else 'code'))
+        if upload.digest(prior)!=V10_BINDING:reject('helper_v10_predecessor_changed')
+        if upload.private_json(record_path,65536)!=adoption_record(raw,V9_BINDING,prior):reject('helper_revision_conflict')
+    elif record_path.exists() and upload.private_json(record_path,65536)!=record:reject('helper_revision_conflict')
     stage=transaction.reconstruct(kube,state,lambda event:None);stage.verify_final_storage()
     DockerRuntime(base,upload.OPERATION).no_operation_containers(running_only=False)
     marker=kube.get('configmap','voice-nats-generation')
@@ -237,8 +266,14 @@ def install_helper(code,installed,kube,version):
     responses={p.name:paused_recovery.owned_bytes(p,65536,private=False) for p in (installed/'responses').iterdir()}
     failed_name=FAILED_REQUEST['nonce']+'.json'
     disposition=failed_execution(journals[failed_name],responses[failed_name])
+    native_name=FAILED_NATIVE_REQUEST['nonce']+'.json'
+    native_disposition=None
+    if version=='v11':
+        native_disposition=failed_native_execution(journals[native_name],responses[native_name])
+        if (base/'expired-recovery-proofs'/FAILED_NATIVE_REQUEST['nonce']).exists():reject('helper_failed_native_proof_present')
     for name,value in journals.items():
         if name==failed_name:continue
+        if version=='v11' and name==native_name:continue
         if name==paused_recovery.NONCE+'.json':continue
         if name==__import__('v8_upgrade').FAILED_NONCE+'.json':
             __import__('v8_upgrade').failed_execution(value,responses[name]);continue
@@ -261,8 +296,14 @@ def install_helper(code,installed,kube,version):
     if disposition_path.exists():
         if upload.private_json(disposition_path,65536)!=disposition:reject('helper_failed_disposition_changed')
     else:upload.exclusive(disposition_path,json.dumps(disposition,sort_keys=True,separators=(',',':')).encode())
-    installer._upgrade_code(code,installed,1000,V9_BINDING,version,'v9')
-    installer._upgrade_code(code,base,1000,V9_BINDING,version,'v9')
+    if native_disposition is not None:
+        native_path=base/'expired-recovery-get-failed-execution.json'
+        if native_path.exists():
+            if upload.private_json(native_path,65536)!=native_disposition:reject('helper_failed_native_disposition_changed')
+        else:upload.exclusive(native_path,json.dumps(native_disposition,sort_keys=True,separators=(',',':')).encode())
+    predecessor,previous=(V10_BINDING,'v10') if version=='v11' else (V9_BINDING,'v9')
+    installer._upgrade_code(code,installed,1000,predecessor,version,previous)
+    installer._upgrade_code(code,base,1000,predecessor,version,previous)
     if (upload.private_read(checkpoint)!=current_raw or upload.private_read(snapshot)!=raw
         or {p.name:upload.private_read(p,65536) for p in (installed/'journal').iterdir()}!=journals
         or {p.name:paused_recovery.owned_bytes(p,65536,private=False) for p in (installed/'responses').iterdir()}!=responses
