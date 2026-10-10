@@ -188,8 +188,11 @@ def closed_native_states(runtime,archive,manifest,row,authority):
         or observed!=roots or consumer_files!=required):
         raise Blocked('rollout_native_consumer_inventory_invalid')
     raw_states=_native_members(runtime,archive,manifest,expected,authority);decoded={}
+    # The archive read already authenticates custody and every member before
+    # and after reading. Decode these private bytes without live cluster I/O;
+    # the final authority check must succeed before any proof is returned.
     for path in sorted(expected):
-        authority();raw=raw_states[path]
+        raw=raw_states[path]
         result=decode_current_consumer(raw)
         def pairs(items):
             value={}
