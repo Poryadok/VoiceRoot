@@ -390,7 +390,7 @@ def verify_adopted_binding(base,state,binding):
         # A newer receipt, even a malformed one naming V9, cannot redirect it.
         if digest(binding)!=expired_recovery.V9_BINDING:
             expired_reader=decode(private_bytes(expired_revision,65536)).get('replacement_code_sha256')==digest(binding)
-            for version,predecessor in (('v11',expired_recovery.V10_BINDING),('v12',expired_recovery.V11_BINDING)):
+            for version,predecessor in (('v11',expired_recovery.V10_BINDING),('v12',expired_recovery.V11_BINDING),('v13',expired_recovery.V12_BINDING)):
                 receipt=base/('upgrade-'+version+'.json')
                 if receipt.exists() and decode(private_bytes(receipt,65536))=={
                     'schema':'voice-nats-code-upgrade-'+version,'from':predecessor,'to':digest(binding)}:

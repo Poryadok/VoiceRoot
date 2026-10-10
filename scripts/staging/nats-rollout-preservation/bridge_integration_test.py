@@ -76,8 +76,9 @@ class IntegrationTests(unittest.TestCase):
         actions=object.__new__(bridge_root.Actions)
         dispatcher=self.run_fixture(263689731,'workflow_dispatch')
         approved=self.run_fixture(263230665,'push',9001)
-        with patch.object(bridge_root.source_authority,'_get',side_effect=[dispatcher,{'workflow_runs':[approved]}]):
+        with patch.object(bridge_root.source_authority,'_get',side_effect=[dispatcher,{'workflow_runs':[approved]}]) as get:
             source_run,execution=actions._dispatcher({'run_id':9002,'token':'private'})
+        self.assertIn('&head_sha='+dispatcher['head_sha'],get.call_args_list[1].args[0])
         self.assertEqual(source_run,9001);self.assertEqual(execution['dispatcher_run_id'],9002)
         self.assertEqual(execution['head_sha'],'a'*40)
         # A called reusable workflow is the original CI push run, not a
