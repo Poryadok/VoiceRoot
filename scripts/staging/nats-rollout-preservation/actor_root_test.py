@@ -49,7 +49,8 @@ class Tests(unittest.TestCase):
             def read(path):return story_witness.encoded(selected) if path.name=='selector.json' else raw
             with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch('space_authority.capture',return_value={'root-pg':'bound'}),\
                  patch.object(root.actor_verification,'verify',return_value={'server_authentication_verified':True}),\
-                 patch.object(story_witness,'read',read),patch('source_authority.immutable_image_identity',return_value=chain):
+                 patch.object(story_witness,'read',read),patch('source_authority.immutable_image_identity',return_value=chain),\
+                 patch.object(stage,'drain_client_pods'),patch.object(stage,'shutdown_original_hub',side_effect=lambda:stage.scale(runtime_stage.HUB,0)):
                 before=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
                 self.assertEqual(before['compatible_story_candidate']['root_witness_authority']['witness_sha256'],sha)
                 stage.fence()
@@ -114,7 +115,8 @@ class Tests(unittest.TestCase):
             with patch.object(runtime_stage.Staging,'preflight',captured_preflight),patch.object(runtime_stage,'pv_storage_path',return_value='/captured/selected'),patch.object(runtime_stage,'running_image_pins',return_value={}):
                 stage=runtime_stage.RolloutStage.capture(kube,'a'*12,lambda event:None)
             self.assertNotIn('secret_refs',stage.expected)
-            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}) as verify:
+            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}) as verify,\
+                 patch.object(stage,'drain_client_pods'),patch.object(stage,'shutdown_original_hub',side_effect=lambda:stage.scale(runtime_stage.HUB,0)):
                 result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
                 self.assertEqual(result['mounts']['social']['container'],'nats-leaf')
                 self.assertEqual(result['mounts']['social']['key'],'social.creds')

@@ -8,6 +8,7 @@ from nats_contract_plan import execute,SCHEMA
 from runtime_stage import RolloutStage
 
 class Runtime:
+    def inputs_directory(self):return self.base/'inputs'
     def __init__(self,clock,expire_at_create=False):
         self.clock=clock;self.expire_at_create=expire_at_create;self.base=Path('/synthetic-operation');self.owned=['broker'];self.commands={};self.started=[]
         self.config={'chat_events':{'name':'chat_events','subjects':['chat.old']},'social_events':{'name':'social_events','subjects':['social.old']}}
@@ -310,7 +311,7 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                             def restart():
                                 stage.finish_authority_guard();return {'verified':True}
                             stage.restart.side_effect=restart
-                            with self.assertRaises(ValueError):
+                            with self.assertRaisesRegex(Blocked,'rollout_finish_authorization_expired'):
                                 transaction.finish(None,fixture.base,state,receipt,rv,{},publication=actions._active_release)
                             self.assertEqual(state['status'],'BLOCKED');self.assertEqual(state['fence_status'],'VERIFIED');stage.refence.assert_called_once()
                             self.assertTrue((fixture.base.parent/'installed/active-release.json').exists())

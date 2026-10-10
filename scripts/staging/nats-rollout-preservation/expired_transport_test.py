@@ -35,8 +35,10 @@ class TransportTests(unittest.TestCase):
         for file,raw in ((self.base/'rollout-backup.cms',original),(self.slot/'rollout-backup.cms',observed)):
             file.write_bytes(raw);file.chmod(0o600)
         observation={'selected_inventory_sha256':'a'*64,'native_disposition':{'branch':'EXACT'},
+            'manifest':copy.deepcopy(self.state['cut']['manifest']),'census':{'fixture':'closed-current-census'},
             'original_cut_sha256':transport.upload.digest(self.state['cut'])}
         transport.put(self.slot/'rollout-before-manifest.json',observation)
+        transport.put(self.slot/'observation-cipher.json',self.cipher)
         transport.put(self.slot/'producer.json',{'cipher':self.cipher,'operation':self.state['operation'],
             'original_checkpoint_sha256':hashlib.sha256((self.base/'checkpoint.json').read_bytes()).hexdigest(),
             'observation_sha256':transport.upload.digest(observation),
@@ -97,6 +99,7 @@ class TransportTests(unittest.TestCase):
                     **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
                     'artifact_id':artifact,'verified':True}
             def authorize(kube,base,actual,archive,manifest,contract,**keywords):
+                self.assertEqual(decrypt.call_count,2,'both restore adapters precede durable authorization')
                 calls.append(keywords)
                 self.assertEqual(actual['cipher_binding'],self.state['cipher_binding'])
                 self.assertEqual(keywords['expired_authority']['execution'],self.execution)
@@ -106,12 +109,16 @@ class TransportTests(unittest.TestCase):
                 'token':'synthetic-token','original_artifact_id':11,'observation_artifact_id':12}
             source_tuple=(self.base,state,Mock(),copy.deepcopy(self.execution),{}, {},lambda:None)
             with patch.object(actions,'_expired_source_admission',return_value=source_tuple),\
+                 patch.object(actions,'_verify_decrypted_restore') as decrypt,\
                  patch('github_custody.verify_artifact',side_effect=verify),\
                  patch('guard.ROOT',self.base.parent),patch('root_cli.code_binding',return_value={}),\
                  patch('expired_recovery.verify_adopted_binding'),\
                  patch('transaction.authorize',side_effect=authorize),patch('bridge_root.grp.getgrnam',return_value=Mock(gr_gid=1000)):
                 result=actions._authorize_expired_native(request)
             self.assertEqual(len(calls),1)
+            self.assertEqual(decrypt.call_count,2)
+            self.assertEqual(decrypt.call_args_list[0].args[:2],(self.base,state))
+            self.assertEqual(decrypt.call_args_list[1].kwargs['payload_base'],self.slot)
             self.assertEqual(result['operation'],self.state['operation'])
             self.assertEqual(calls[0]['authorization_deadline'].isoformat(),calls[0]['expired_authority']['expires_at'])
 

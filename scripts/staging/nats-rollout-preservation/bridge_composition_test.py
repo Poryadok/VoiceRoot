@@ -24,12 +24,13 @@ class CompositionTests(unittest.TestCase):
         order=[]
         with patch.object(actions,'state',return_value=(Path('/private-op'),state)),\
              patch.object(bridge_root.github_custody,'verify_artifact',side_effect=lambda *a:order.append('full-offnode-readback') or {'verified':True}),\
+             patch.object(actions,'_verify_decrypted_restore',side_effect=lambda *a:order.append('decrypted-restore')),\
              patch.object(bridge_root,'save'),patch.object(bridge_root,'Kube'),\
              patch.object(bridge_root.transaction,'reconstruct'),\
              patch.object(actor_root,'revalidate',side_effect=bridge_root.Blocked('existing_service_actor_authority_changed')) as actor,\
              patch.object(bridge_root.transaction,'authorize') as authorize:
             with self.assertRaises(bridge_root.Blocked):actions.execute({'action':'authorize','operation':'123456abcdef','token':'private-token','artifact_id':1})
-        self.assertEqual(order,['full-offnode-readback'])
+        self.assertEqual(order,['full-offnode-readback','decrypted-restore'])
         actor.assert_called_once();authorize.assert_not_called()
 
     def test_real_prepare_source_failure_saves_boundary_before_build(self):
