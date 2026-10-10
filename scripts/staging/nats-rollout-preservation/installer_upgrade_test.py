@@ -5,6 +5,25 @@ from unittest.mock import patch
 import installer
 
 class Tests(unittest.TestCase):
+    def test_v12_swap_preserves_v11_code_and_receipt_bytes_and_is_idempotent(self):
+        import expired_recovery
+        with tempfile.TemporaryDirectory() as td:
+            source,installed=self.fixture(Path(td))
+            prior=b'{"schema":"voice-nats-code-upgrade-v11","from":"preserved","to":"original"}'
+            (installed/'upgrade-v11.json').write_bytes(prior)
+            def binding(path):
+                return expired_recovery.V11_BINDING if (Path(path)/'binding').read_text()=='old' else 'b'*64
+            with patch.object(installer,'binding_sha',side_effect=binding),patch.object(installer.os,'chown'),\
+                patch.object(installer,'private_json',side_effect=lambda p:json.loads(Path(p).read_text())):
+                installer._upgrade_code(source,installed,1000,expired_recovery.V11_BINDING,'v12','v11')
+                installer._upgrade_code(source,installed,1000,expired_recovery.V11_BINDING,'v12','v11')
+            self.assertEqual((installed/'code-v11-preserved/binding').read_text(),'old')
+            self.assertEqual((installed/'upgrade-v11.json').read_bytes(),prior)
+            self.assertEqual(json.loads((installed/'upgrade-v12.json').read_bytes()),
+                {'schema':'voice-nats-code-upgrade-v12','from':expired_recovery.V11_BINDING,'to':'b'*64})
+            self.assertEqual((installed/'policy.json').read_bytes(),b'fixture-policy')
+            self.assertEqual((installed/'recovery/recovery-key.pem').read_bytes(),b'fixture-private-key')
+
     def fixture(self,root):
         source=root/'source';source.mkdir();(source/'binding').write_text('new')
         installed=root/'installed';installed.mkdir();code=installed/'code';code.mkdir()
