@@ -66,7 +66,9 @@ class PublicCodeReaderTests(unittest.TestCase):
         import subprocess
         # Dropping this owned child to the real runner identity requires only
         # SETUID/SETGID in the isolated fixture; no FOWNER or live files.
-        with tempfile.TemporaryDirectory() as folder:
+        # The CI TMPDIR ancestor is private; use the fixture's public /tmp
+        # ancestor so this reaches O_NOATIME EPERM rather than traversal EACCES.
+        with tempfile.TemporaryDirectory(dir='/tmp') as folder:
             base=Path(folder);base.chmod(0o755)
             code=base/'rollout-3340764a7d24/code'
             code.mkdir(parents=True,mode=0o755);code.parent.chmod(0o755)
