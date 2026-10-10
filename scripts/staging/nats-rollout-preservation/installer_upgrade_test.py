@@ -86,4 +86,41 @@ class Tests(unittest.TestCase):
                 with self.assertRaisesRegex(installer.Blocked,'predecessor_unapproved'):installer.upgrade_code(source,installed,1000)
             rename.assert_not_called()
 
+class ActualUpgradeDispatchTests(unittest.TestCase):
+    def test_actual_v13_upgrade_reaches_expired_helper_and_restores_ingress(self):
+        import contextlib,expired_recovery
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td); installed=root/'installed'; installed.mkdir()
+            for name in ('inbox','processing','journal','responses','recovery','sources'):
+                (installed/name).mkdir(mode=0o700)
+            kube=object(); code=root/'candidate'; code.mkdir()
+            with patch.object(installer.os,'geteuid',return_value=0), \
+                patch.object(installer.sys,'platform','linux'), \
+                patch.object(installer.root_cli,'code_binding',return_value={}), \
+                patch.object(installer.guard,'ROOT',root), \
+                patch.object(installer,'operation_lock',return_value=contextlib.nullcontext()), \
+                patch.object(installer,'Kube',return_value=kube), \
+                patch.object(expired_recovery,'install_helper',autospec=True) as helper:
+                installer.upgrade(code,version='v13')
+            helper.assert_called_once_with(code,installed,kube,'v13')
+            self.assertEqual((installed/'inbox').stat().st_mode & 0o7777,0o1730)
+
+    def test_actual_v13_helper_refusal_restores_ingress(self):
+        import contextlib,expired_recovery
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td); installed=root/'installed'; installed.mkdir()
+            for name in ('inbox','processing','journal','responses','recovery','sources'):
+                (installed/name).mkdir(mode=0o700)
+            code=root/'candidate'; code.mkdir()
+            with patch.object(installer.os,'geteuid',return_value=0), \
+                patch.object(installer.sys,'platform','linux'), \
+                patch.object(installer.root_cli,'code_binding',return_value={}), \
+                patch.object(installer.guard,'ROOT',root), \
+                patch.object(installer,'operation_lock',return_value=contextlib.nullcontext()), \
+                patch.object(installer,'Kube',return_value=object()), \
+                patch.object(expired_recovery,'install_helper',autospec=True,side_effect=installer.Blocked('fixture_helper_refused')):
+                with self.assertRaisesRegex(installer.Blocked,'fixture_helper_refused'):
+                    installer.upgrade(code,version='v13')
+            self.assertEqual((installed/'inbox').stat().st_mode & 0o7777,0o1730)
+
 if __name__=='__main__':unittest.main()
