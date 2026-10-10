@@ -230,7 +230,7 @@ def admit(kube,base,state,code,binding,historical_source,verify_current_source):
         recovery.reject('admission_kernel_changed')
     hashes=input_hashes(kube,state)
     actor_root.revalidate(kube,workspace,code,binding,stage,state['service_actor_services'],
-        compiler.decode_yaml,state['service_actor_authority'])
+        compiler.decode_yaml,state['service_actor_authority'],historical_code=Path(base)/'code-v9-preserved')
     database=migrations.preflight(kube,state['migrations'],state['target']['mode'])
     if database!=state['migration_secret_metadata']:recovery.reject('admission_database_changed')
     nonnats_runtime.verify(kube,state['nonnats'],state['nonnats_binding'],stage)
@@ -295,7 +295,8 @@ def admit_finish(kube,base,state,code,binding,verify_current_source):
     if transaction.file_sha(base/'kernel')!=state['kernel_sha256']:recovery.reject('finish_original_kernel_changed')
     hashes=input_hashes(kube,state)
     workspace=guard.ROOT/'installed'/'sources'/state['operation']
-    actor_root.revalidate(kube,workspace,code,binding,stage,state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
+    actor_root.revalidate(kube,workspace,code,binding,stage,state['service_actor_services'],compiler.decode_yaml,
+        state['service_actor_authority'],historical_code=base/'code-v9-preserved')
     database=migrations.preflight(kube,state['migrations'],state['target']['mode'])
     expected=state.get('migration_completed_metadata',state['migration_secret_metadata'])
     if database!=expected:recovery.reject('finish_database_changed')

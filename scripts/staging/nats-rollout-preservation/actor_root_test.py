@@ -4,6 +4,57 @@ from pathlib import Path
 from unittest.mock import Mock,patch
 import actor_root as root
 
+class HistoricalVerifierTests(unittest.TestCase):
+    def setUp(self):
+        self.old=json.loads((Path(__file__).parent/'testdata/expired-recovery-v9-manifest.json').read_text())
+        self.old_sha=self.old['nats-rollout-preservation/bootstrap-renewer']
+        self.new_sha='69455179e7724f199f1dc2edbada23c22bc33b1030aea6da88328b7ad9a1fea8'
+        self.previous={'schema':'voice-nats-service-actor-authority-v1','roles':['story'],
+            'binding':{'credential':'unchanged'},'mounts':{'story':{'uid':'original'}},
+            'proofs':{'story':{'verifier_sha256':self.old_sha,'credential_sha256':'a'*64,
+                'effective_permissions_sha256':'b'*64,'signed_chain_verified':True}},
+            'source_acl_sha256':'c'*64,'story_schema':{'version':4},
+            'compatible_story_candidate':{'image':'immutable content','root_witness_authority':{'bound':'original'}}}
+        self.bind_hash(self.previous)
+        self.current=copy.deepcopy(self.previous)
+        self.current['proofs']['story']['verifier_sha256']=self.new_sha;self.bind_hash(self.current)
+    def bind_hash(self,row):
+        row['compatible_story_candidate']['actor_sha256']=root.hash_bytes(json.dumps(
+            {'binding':row['binding'],'mount':row['mounts']['story'],'proof':row['proofs']['story']},
+            sort_keys=True,separators=(',',':')).encode())
+    def run_actual(self,current,previous=None):
+        with patch.object(root,'preflight',return_value=current) as fresh,\
+            patch('root_cli.code_binding',return_value=self.old):
+            root.revalidate('kube','source','CURRENT',{'nats-rollout-preservation/bootstrap-renewer':self.new_sha},
+                'stage',['story'],'decoder',previous or self.previous,historical_code=Path('/preserved-v9'))
+            fresh.assert_called_once_with('kube','source','CURRENT',
+                {'nats-rollout-preservation/bootstrap-renewer':self.new_sha},'stage',['story'],'decoder')
+    def test_fresh_current_verification_accepts_only_bound_helper_provenance_delta(self):
+        before=copy.deepcopy(self.previous);current=copy.deepcopy(self.current)
+        self.run_actual(current)
+        self.assertEqual(self.previous,before);self.assertEqual(current,self.current)
+        with patch.object(root,'preflight',return_value=current),self.assertRaises(root.Blocked):
+            root.revalidate(None,None,None,{},None,[],None,self.previous)
+    def test_changed_authority_or_unbound_derived_proof_is_refused(self):
+        for drift in ('credential','grant','mount','acl','schema','content','witness','derived','verifier','old-derived','old-verifier','old-binding'):
+            with self.subTest(drift=drift):
+                current=copy.deepcopy(self.current);previous=copy.deepcopy(self.previous)
+                if drift=='credential':current['proofs']['story']['credential_sha256']='d'*64
+                elif drift=='grant':current['proofs']['story']['effective_permissions_sha256']='d'*64
+                elif drift=='mount':current['mounts']['story']['uid']='other'
+                elif drift=='acl':current['source_acl_sha256']='d'*64
+                elif drift=='schema':current['story_schema']['version']=5
+                elif drift=='content':current['compatible_story_candidate']['image']='other'
+                elif drift=='witness':current['compatible_story_candidate']['root_witness_authority']={}
+                elif drift=='verifier':current['proofs']['story']['verifier_sha256']='d'*64
+                elif drift=='old-verifier':previous['proofs']['story']['verifier_sha256']='d'*64;self.bind_hash(previous)
+                elif drift=='old-derived':previous['compatible_story_candidate']['actor_sha256']='d'*64
+                elif drift=='old-binding':self.old['extra']='d'*64
+                if drift not in ('old-derived','old-verifier','old-binding'):self.bind_hash(current)
+                if drift=='derived':current['compatible_story_candidate']['actor_sha256']='d'*64
+                with self.assertRaises(root.Blocked):self.run_actual(current,previous)
+                self.old.pop('extra',None)
+
 class Tests(unittest.TestCase):
     def test_dynamic_root_witness_is_captured_before_real_fence_and_drift_vetoes_revalidation(self):
         import runtime_stage,story_witness
