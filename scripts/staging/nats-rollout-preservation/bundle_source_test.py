@@ -59,6 +59,97 @@ class RootPackageReaderTests(unittest.TestCase):
                 other=base/'other.json';other.write_text(json.dumps(value));other.chmod(0o600)
                 with self.assertRaises(Blocked):reader(other)
 
+
+@unittest.skipUnless(os.name=='posix' and os.getuid()==0,'isolated Linux public-code ownership fixture')
+class PublicCodeReaderTests(unittest.TestCase):
+    def test_uid1000_reads_root_captured_code_and_all_workflow_ingress(self):
+        import subprocess
+        # Dropping this owned child to the real runner identity requires only
+        # SETUID/SETGID in the isolated fixture; no FOWNER or live files.
+        # The CI TMPDIR ancestor is private; use the fixture's public /tmp
+        # ancestor so this reaches O_NOATIME EPERM rather than traversal EACCES.
+        with tempfile.TemporaryDirectory(dir='/tmp') as folder:
+            base=Path(folder);base.chmod(0o755)
+            code=base/'rollout-3340764a7d24/code'
+            code.mkdir(parents=True,mode=0o755);code.parent.chmod(0o755)
+            (code/'nats-rollout-preservation').mkdir(mode=0o755)
+            payload=code/'payload.txt';payload.write_bytes(b'public captured source')
+            helper=code/'configure-kubectl-ci.sh';helper.write_bytes(b'#!/bin/bash\nexit 0\n')
+            manifest={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (payload,helper)}
+            for p in (payload,helper):p.chmod(0o444)
+            (code/'capture-manifest.json').write_text(json.dumps(manifest))
+            (code/'capture-manifest.json').chmod(0o444)
+            script=r"""
+import errno,json,os,sys
+from pathlib import Path
+from unittest.mock import patch
+sys.path[:0]=sys.argv[2:]
+import controller,root_cli,workflow_entry
+assert os.getuid()==1000
+code=Path(sys.argv[1])
+# The private/native reader stays root-only and must still refuse this file.
+try:controller.file_sha(code/'payload.txt')
+except PermissionError as error:assert error.errno==errno.EPERM
+else:raise AssertionError('native_noatime_reader_was_weakened')
+expected=json.loads((code/'capture-manifest.json').read_text())
+assert root_cli.code_binding(code)==expected
+workflow_entry.__file__=str(code/'nats-rollout-preservation/workflow_entry.py')
+with patch.dict(os.environ,{'VOICE_NATS_ROLLOUT_OPERATION':'3340764a7d24','GITHUB_WORKSPACE':str(code)},clear=False):
+    with patch.object(workflow_entry.subprocess,'run') as shell:
+        workflow_entry.main(['--configure'])
+        shell.assert_called_once_with(['/bin/bash',str(code/'configure-kubectl-ci.sh')],check=True,timeout=120)
+    for action,arguments in (('--preflight',['--preflight']),('--apply',[])):
+        with patch.object(workflow_entry.runner,'main') as runner:
+            workflow_entry.main([action]);runner.assert_called_once_with(arguments)
+print('PUBLIC_CODE_RUNNER=PASS')
+"""
+            source=Path(__file__).resolve().parent
+            result=subprocess.run([sys.executable,'-B','-c',script,str(code),str(source),
+                str(source.parent/'nats-known-baseline')],user=1000,group=1000,
+                capture_output=True,text=True,timeout=30)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(result.stdout.strip(),'PUBLIC_CODE_RUNNER=PASS')
+
+
+    def test_public_code_reader_keeps_hash_custody_and_identity_vetoes(self):
+        import root_cli
+        from controller import Blocked
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)
+            for failure in ('hash','write','hardlink','symlink','oversize','read-race'):
+                with self.subTest(failure=failure),tempfile.TemporaryDirectory(dir=base) as slot:
+                    code=Path(slot);payload=code/'payload.txt'
+                    payload.write_bytes(b'captured public source');payload.chmod(0o444)
+                    wanted=hashlib.sha256(payload.read_bytes()).hexdigest()
+                    (code/'capture-manifest.json').write_text(json.dumps({'payload.txt':wanted}))
+                    if failure=='hash':
+                        payload.chmod(0o600);payload.write_bytes(b'changed');payload.chmod(0o444)
+                    elif failure=='write':payload.chmod(0o664)
+                    elif failure=='hardlink':os.link(payload,code/'second-link')
+                    elif failure=='symlink':
+                        payload.rename(code/'real');payload.symlink_to('real')
+                    elif failure=='oversize':
+                        payload.chmod(0o600)
+                        with payload.open('r+b') as stream:stream.truncate((16<<20)+1)
+                        payload.chmod(0o444)
+                    if failure=='read-race':
+                        original=os.read;changed=False
+                        def mutate(fd,size):
+                            nonlocal changed
+                            result=original(fd,size)
+                            # Ignore the preceding manifest read; mutate exactly
+                            # while the held payload descriptor is being hashed.
+                            if not changed and os.fstat(fd).st_ino==payload.lstat().st_ino:
+                                changed=True;payload.chmod(0o600)
+                                payload.write_bytes(b'captured public SOURCE changed length')
+                                payload.chmod(0o444)
+                            return result
+                        with patch.object(root_cli.os,'read',side_effect=mutate):
+                            with self.assertRaises(Blocked):root_cli.code_binding(code)
+                        self.assertTrue(changed)
+                    else:
+                        with self.assertRaises(Blocked):root_cli.code_binding(code)
+
 @unittest.skipUnless(os.name=='posix' and os.getuid()==0,'isolated Linux ROOT custody fixture')
 class WorkflowLauncherTests(unittest.TestCase):
     def members(self,base):

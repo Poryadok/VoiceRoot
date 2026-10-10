@@ -92,9 +92,9 @@ class PublicRecoveryTests(unittest.TestCase):
     def test_real_bundle_inventory_and_manifest_reader_new_bound_and_custody_veto(self):
         import bundle,root_cli,hashlib
         added={'expired_recovery.py','expired_proof.py','expired_admission.py','expired_transport.py','expired_finish.py',
-            'closed_archive.py','closed_durable.py','hub_bridge_identity.py','hub_bridge_unit.py'}
+            'closed_archive.py','closed_durable.py','hub_bridge_identity.py','hub_bridge_unit.py','operator_retirement.py'}
         self.assertTrue(added<=set(bundle.ROLLOUT))
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+4,74)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+4,75)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
             manifest={}

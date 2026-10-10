@@ -1,0 +1,298 @@
+"""One specific human-root waiver closure; never a deployment or rollback PASS."""
+import copy
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+import guard
+import root_cli
+from controller import Blocked,READ,file_sha
+from root_main import operation_lock,save
+from stage_runtime import Staging,Kube,HUB,LEAVES,MARKER,pv_storage_path
+
+OPERATION='3340764a7d24'
+SNAPSHOT_SHA='c776c76492c6266eeaed8eae736224435814f68a76e2a57c892aa9de86925672'
+V15_BINDING='10b5e8f3b5b8676bdc8d4e1f5432304933b3205e7a4a820e09730459ba923d2b'
+CONFIGMAPS={'voice-app-config','voice-nats-analytics-chat-bootstrap','voice-nats-hub-config',
+    'voice-nats-leaf-config','voice-nats-realtime-bootstrap'}
+CORE={HUB,'voice-gateway',*('voice-'+s for s in LEAVES)}
+WAIVER='CURRENT_STAGING_MESSAGES_AND_CONSUMERS_MAY_BE_LOST_SETUP_RETAINED'
+
+def fail():raise Blocked('operator_retirement_binding_invalid')
+def canonical(row):return hashlib.sha256(json.dumps(row,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+def private_bytes(path,limit=128<<20,*,group_read=False):
+    path=Path(path);before=path.lstat();fd=os.open(path,READ)
+    identity=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    try:
+        opened=os.fstat(fd)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0 or opened.st_mode&(0o037 if group_read else 0o077)
+            or opened.st_nlink!=1 or not 0<opened.st_size<=limit or identity(before)!=identity(opened)):fail()
+        chunks=[];size=0
+        while raw:=os.read(fd,min(1<<20,limit-size+1)):
+            chunks.append(raw);size+=len(raw)
+            if size>limit:fail()
+        if size!=opened.st_size or identity(opened)!=identity(os.fstat(fd)) or identity(opened)!=identity(path.lstat()):fail()
+        return b''.join(chunks)
+    finally:os.close(fd)
+
+def document(path):return json.loads(private_bytes(path))
+def exclusive(path,raw):
+    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+    try:
+        with os.fdopen(fd,'wb',closefd=False) as stream:
+            stream.write(raw);stream.flush();os.fsync(fd)
+    finally:os.close(fd)
+    fd=os.open(Path(path).parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+def terminal_state(snapshot,events,receipt_sha):
+    if (snapshot.get('operation')!=OPERATION or snapshot.get('phase')!='PAUSED_APPLY'
+        or snapshot.get('status')!='WAITING' or snapshot.get('fence_status')!='VERIFIED'
+        or len(snapshot.get('events',[]))!=83 or snapshot.get('nats_migration',{}).get('verified') is not True
+        or not isinstance(events,list) or len(events)<2
+        or events[0].get('kind')!='operator_retirement_intent'
+        or events[-1].get('kind')!='operator_retirement_completed'
+        or any(e.get('kind') not in {'operator_retirement_intent','operator_retirement_completed',
+            'workload_scaled','user_cycle_override','user_cycle_restored'} for e in events)
+        or not re.fullmatch('[a-f0-9]{64}',receipt_sha)):fail()
+    result=copy.deepcopy(snapshot)
+    result.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',
+        events=copy.deepcopy(snapshot['events']+events),
+        operator_retirement={'schema':'voice-operator-retirement-reference-v1',
+            'snapshot_sha256':SNAPSHOT_SHA,'receipt_sha256':receipt_sha})
+    return result
+
+def validate_terminal(snapshot,state,events,receipt_sha):
+    if state!=terminal_state(snapshot,events,receipt_sha):fail()
+
+def journal_binding(installed,rows):
+    if not isinstance(rows,dict) or len(rows)>100:fail()
+    for name,wanted in rows.items():
+        if not re.fullmatch('[a-f0-9]{64}\\.json',name) or set(wanted)!={'journal_sha256','request_sha256','response_sha256'}:fail()
+        raw=private_bytes(installed/'journal'/name,2<<20);row=json.loads(raw)
+        if hashlib.sha256(raw).hexdigest()!=wanted['journal_sha256'] or row.get('request_sha256')!=wanted['request_sha256']:fail()
+        request=row.get('request',{})
+        if canonical(request)!=wanted['request_sha256']:fail()
+        if not (request.get('operation')==OPERATION or request.get('action')=='prepare' and request.get('nonce','')[:12]==OPERATION):fail()
+        if hashlib.sha256(private_bytes(installed/'responses'/name,2<<20,group_read=True)).hexdigest()!=wanted['response_sha256']:fail()
+    return rows
+
+def verify_terminal(base,state):
+    base=Path(base)
+    if base.name!='rollout-'+OPERATION or state.get('operation')!=OPERATION:fail()
+    raw=private_bytes(base/'operator-retirement-snapshot.json')
+    if hashlib.sha256(raw).hexdigest()!=SNAPSHOT_SHA:fail()
+    snapshot=json.loads(raw);receipt=document(base/'operator-retirement-receipt.json')
+    reference=state.get('operator_retirement',{})
+    if (reference.get('receipt_sha256')!=canonical(receipt)
+        or receipt.get('schema')!='voice-operator-retirement-closure-v1'
+        or receipt.get('operation')!=OPERATION or receipt.get('snapshot_sha256')!=SNAPSHOT_SHA
+        or receipt.get('waiver')!=WAIVER or receipt.get('deployment_pass') is not False
+        or receipt.get('rollback_eligible') is not False):fail()
+    plan_raw=private_bytes(base/'operator-retirement-plan.json',2<<20);plan=json.loads(plan_raw)
+    if (hashlib.sha256(plan_raw).hexdigest()!=receipt.get('plan_sha256')
+        or set(plan)!={'schema','operation','checkpoint_sha256','code_binding_sha256','waiver','configmaps','journals'}
+        or plan.get('schema')!='voice-specific-operator-retirement-plan-v1'
+        or plan.get('waiver')!=WAIVER or plan.get('operation')!=OPERATION
+        or plan.get('checkpoint_sha256')!=SNAPSHOT_SHA
+        or plan.get('code_binding_sha256')!=receipt.get('code_binding_sha256')
+        or plan.get('journals')!=receipt.get('journals') or set(plan.get('configmaps',{}))!=CONFIGMAPS):fail()
+    validate_terminal(snapshot,state,receipt['events'],canonical(receipt))
+    original=snapshot['context']['original_snapshots']
+    expected={n:{'uid':r['metadata']['uid'],'template_sha256':canonical(r['spec']['template']),
+        'replicas':1,'ready':True} for n,r in original.items()}
+    if set(original)!=CORE or receipt.get('setup')!=expected:fail()
+    before=snapshot['context']['marker'];after=receipt.get('released_marker',{})
+    wanted=copy.deepcopy(before['data']);wanted['phase']='active';wanted.pop('knownRolloutOperation',None)
+    if (before['metadata']['resourceVersion']!='3154269' or before['data'].get('phase')!='rollout-prepared'
+        or before['data'].get('knownRolloutOperation')!=OPERATION
+        or after.get('uid')!=before['metadata']['uid'] or after.get('data')!=wanted
+        or not isinstance(after.get('resourceVersion'),str) or after['resourceVersion']==before['metadata']['resourceVersion']
+        or receipt.get('storage_verified') is not True or receipt.get('config_verified') is not True
+        or receipt.get('user_cycle_restored') is not True):fail()
+    journal_binding(guard.ROOT/'installed',receipt['journals'])
+    return receipt
+
+def idle_state(base,state):
+    if state.get('status') in ('PASS','ROLLED_BACK'):return True
+    verify_terminal(base,state)
+    return True
+
+
+PREBUILD_RECEIPTS={
+    '161c282144ec':'ded7b5fb7a1342653b2067157b0b2410b4d888f5a4fc23cd6050d8fb8ebd3db3',
+    '65607cfc9397':'707e8b70d15f0ead23da0f87ed1aac519b40435ff2774266fc7a0eb553a63594',
+    'c8862dbc23a8':'ce3b0e55845c8bc898d02577c9e850f61de0063c435af65cfe4e8ccc1add4110'}
+
+def pending_request_accepted(installed,path,closure):
+    installed=Path(installed);path=Path(path)
+    if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
+    row=document(path)
+    if row.get('phase')=='COMPLETE':return
+    if path.name in closure['journals']:
+        journal_binding(installed,{path.name:closure['journals'][path.name]})
+        return
+    operation=path.stem[:12];wanted=PREBUILD_RECEIPTS.get(operation)
+    if wanted is None:raise Blocked('bridge_upgrade_interrupted_request')
+    raw=private_bytes(installed/('prebuild-disposition-'+operation+'.json'),2<<20)
+    if hashlib.sha256(raw).hexdigest()!=wanted:fail()
+    receipt=json.loads(raw)
+    if (receipt.get('operation')!=operation or receipt.get('original_journal')!=row
+        or receipt.get('journal_sha256')!=hashlib.sha256(private_bytes(path,2<<20)).hexdigest()
+        or receipt.get('response_sha256')!=hashlib.sha256(private_bytes(installed/'responses'/path.name,2<<20,group_read=True)).hexdigest()
+        or receipt.get('operation_absent') is not True or receipt.get('build_absent') is not True):fail()
+    for candidate in (guard.ROOT/('rollout-'+operation),installed/'sources'/(operation+'-build')):
+        try:candidate.lstat()
+        except FileNotFoundError:continue
+        fail()
+
+class RetirementStage(Staging):
+    def __init__(self,kube,snapshot,plan,journal):
+        ctx=snapshot['context'];super().__init__(kube,OPERATION,copy.deepcopy(ctx['expected']),journal)
+        for key in ('snapshots','marker','service','final_claim','final_pv'):
+            setattr(self,key,copy.deepcopy(ctx[key]))
+        self.final_path=Path(ctx['final_path']);self.original=ctx['original_snapshots'];self.plan=plan
+        self.released=None;self.setup=None
+
+    def owned_marker(self):
+        marker=self.kube.get('configmap',MARKER)
+        if (marker['metadata']['uid']!=self.marker['metadata']['uid']
+            or marker['metadata']['resourceVersion']!=self.marker['metadata']['resourceVersion']
+            or marker['data']!=self.marker['data']
+            or marker['data'].get('phase')!='rollout-prepared'
+            or marker['data'].get('knownRolloutOperation')!=OPERATION):fail()
+        self.storage_config()
+        return marker
+
+    def storage_config(self):
+        namespace=self.kube.get('namespace',guard.NS)
+        claim=self.kube.get('pvc',self.expected['source_claim']);pv=self.kube.get('pv',claim['spec']['volumeName'])
+        if (namespace['metadata']['uid']!=self.expected['namespace_uid']
+            or claim['metadata']['uid']!=self.expected['source_claim_uid'] or claim['status']['phase']!='Bound'
+            or pv['metadata']['uid']!=self.expected['source_pv_uid']
+            or pv_storage_path(pv,claim['metadata']['uid'],claim['metadata']['name'],pv['metadata']['uid'])!=str(self.final_path)
+            or claim['spec']!=self.final_claim['spec'] or pv['spec']!=self.final_pv['spec']
+            or self.kube.get('service','voice-nats')!=self.service):fail()
+        for name,wanted in self.plan['configmaps'].items():
+            row=self.kube.get('configmap',name)
+            if row['metadata']['uid']!=wanted['uid'] or canonical(row.get('data',{}))!=wanted['data_sha256']:fail()
+
+    def release_marker(self):
+        self.owned_marker();setup={}
+        for name,original in self.original.items():
+            self.wait_ready(name);row=self.kube.get('deployment',name)
+            if (row['metadata']['uid']!=original['metadata']['uid'] or row['spec']['template']!=original['spec']['template']
+                or row['spec'].get('replicas',1)!=1):fail()
+            setup[name]={'uid':row['metadata']['uid'],'template_sha256':canonical(row['spec']['template']),
+                'replicas':1,'ready':True}
+        marker=self.owned_marker()
+        self.released=self.kube.cas('configmap',marker,[
+            {'op':'test','path':'/data/phase','value':'rollout-prepared'},
+            {'op':'test','path':'/data/knownRolloutOperation','value':OPERATION},
+            {'op':'replace','path':'/data/phase','value':'active'},
+            {'op':'remove','path':'/data/knownRolloutOperation'}])
+        wanted=copy.deepcopy(marker['data']);wanted['phase']='active';wanted.pop('knownRolloutOperation')
+        if self.released['metadata']['uid']!=marker['metadata']['uid'] or self.released['data']!=wanted:fail()
+        self.setup=setup
+
+    def restore_owned_cycle(self):
+        row=self.kube.get('deployment','voice-user');original=self.original['voice-user']['spec']['template']
+        if row['spec']['template']==original:return
+        owned=self.snapshots['voice-user']['spec']['template']
+        if (row['metadata']['uid']!=self.original['voice-user']['metadata']['uid']
+            or row['spec']['template']!=owned
+            or owned.get('metadata',{}).get('annotations',{}).get('voice.io/nats-user-space-bootstrap')!=OPERATION):fail()
+        self.snapshots['voice-user']=self.kube.cas('deployment',row,[
+            {'op':'test','path':'/spec/template','value':owned},
+            {'op':'replace','path':'/spec/template','value':original}])
+        self.save({'kind':'user_cycle_restored','owner':OPERATION})
+
+def retire(code,plan_path,plan_sha,kube=None):
+    if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('operator_retirement_human_root_required')
+    code=Path(code);binding=root_cli.code_binding(code)
+    plan_raw=private_bytes(plan_path,2<<20)
+    if hashlib.sha256(plan_raw).hexdigest()!=plan_sha:fail()
+    plan=json.loads(plan_raw)
+    if (set(plan)!={'schema','operation','checkpoint_sha256','code_binding_sha256','waiver','configmaps','journals'}
+        or plan['schema']!='voice-specific-operator-retirement-plan-v1' or plan['operation']!=OPERATION
+        or plan['checkpoint_sha256']!=SNAPSHOT_SHA or plan['code_binding_sha256']!=canonical(binding)
+        or plan['waiver']!=WAIVER or set(plan['configmaps'])!=CONFIGMAPS):fail()
+    installed=guard.ROOT/'installed';base=root_cli.operation_path(str(guard.ROOT/('rollout-'+OPERATION)))
+    with operation_lock():
+        if canonical(root_cli.code_binding(installed/'code'))!=V15_BINDING:fail()
+        inbox=installed/'inbox';old_mode=stat.S_IMODE(inbox.lstat().st_mode)
+        if old_mode!=0o1730:fail()
+        inbox.chmod(0o700)
+        try:
+            if any(inbox.iterdir()) or any((installed/'processing').iterdir()):fail()
+            raw=private_bytes(base/'checkpoint.json')
+            if hashlib.sha256(raw).hexdigest()!=SNAPSHOT_SHA:fail()
+            snapshot=json.loads(raw)
+            # Exact checkpoint bytes pin all private authority/contract inputs.
+            terminal_state(snapshot,[{'kind':'operator_retirement_intent'},{'kind':'operator_retirement_completed'}],'a'*64)
+            ctx=snapshot['context'];original=ctx['original_snapshots']
+            if set(original)!=CORE or set(ctx['snapshots'])!=CORE:fail()
+            for name,row in original.items():
+                current=ctx['snapshots'][name]
+                if (row['spec'].get('replicas',1)!=1 or current['spec'].get('replicas',1)!=0
+                    or current['metadata']['uid']!=row['metadata']['uid'] or current['spec']['template']!=row['spec']['template']):fail()
+            journal_binding(installed,plan['journals'])
+            stage=None;events=[{'kind':'operator_retirement_intent','waiver':WAIVER,'plan_sha256':plan_sha}]
+            progress=copy.deepcopy(snapshot)
+            def journal(event):
+                events.append(copy.deepcopy(event))
+                progress.update(phase='OPERATOR_RETIRING',status='RUNNING',
+                    events=copy.deepcopy(snapshot['events']+events))
+                save(base/'checkpoint.json',progress,limit=128<<20)
+            stage=RetirementStage(kube or Kube(),snapshot,plan,journal)
+            stage.verify_closed()
+            if stage.marker['metadata']['resourceVersion']!='3154269':fail()
+            exclusive(base/'operator-retirement-snapshot.json',raw)
+            exclusive(base/'operator-retirement-plan.json',plan_raw)
+            progress.update(phase='OPERATOR_RETIRING',status='RUNNING',events=snapshot['events']+events)
+            save(base/'checkpoint.json',progress,limit=128<<20)
+            try:
+                stage.restart()
+                if stage.released is None or stage.setup is None:fail()
+                events.append({'kind':'operator_retirement_completed'})
+                receipt={'schema':'voice-operator-retirement-closure-v1','operation':OPERATION,
+                    'snapshot_sha256':SNAPSHOT_SHA,'waiver':WAIVER,'plan_sha256':plan_sha,
+                    'code_binding_sha256':canonical(binding),'deployment_pass':False,'rollback_eligible':False,
+                    'events':events,'setup':stage.setup,'journals':plan['journals'],
+                    'released_marker':{'uid':stage.released['metadata']['uid'],
+                        'resourceVersion':stage.released['metadata']['resourceVersion'],'data':stage.released['data']},
+                    'storage_verified':True,'config_verified':True,'user_cycle_restored':True}
+                exclusive(base/'operator-retirement-receipt.json',
+                    json.dumps(receipt,sort_keys=True,separators=(',',':')).encode())
+                state=terminal_state(snapshot,events,canonical(receipt))
+                verify_terminal(base,state);save(base/'checkpoint.json',state,limit=128<<20)
+                return {'operation':OPERATION,'status':'ABORTED','phase':'OPERATOR_RETIRED',
+                    'receipt_sha256':canonical(receipt),'setup_ready':True}
+            except Exception:
+                progress.update(phase='OPERATOR_RETIRING',status='BLOCKED',fence_status='UNKNOWN')
+                try:
+                    if stage.released is None:
+                        stage.restore_owned_cycle()
+                        if stage.refence().get('verified') is True:progress['fence_status']='VERIFIED'
+                finally:
+                    progress.update(phase='OPERATOR_RETIRING',status='BLOCKED')
+                    save(base/'checkpoint.json',progress,limit=128<<20)
+                raise
+        finally:inbox.chmod(0o1730)
+
+if __name__=='__main__':
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
+    if len(sys.argv)!=3:raise SystemExit('usage: operator_retirement.py REVIEWED_PRIVATE_PLAN PLAN_SHA256')
+    try:
+        result=retire(Path(__file__).resolve().parents[1],sys.argv[1],sys.argv[2])
+        print(json.dumps(result,sort_keys=True))
+    except Exception:
+        print('NATS_OPERATOR_RETIREMENT=BLOCKED',file=sys.stderr);sys.exit(1)

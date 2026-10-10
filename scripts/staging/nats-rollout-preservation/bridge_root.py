@@ -46,6 +46,10 @@ class Actions:
         base=root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)))
         state=private_json(base/'checkpoint.json')
         if state.get('operation')!=operation:raise Blocked('bridge_operation_custody_invalid')
+        if state.get('operator_retirement') is not None:
+            from operator_retirement import verify_terminal
+            verify_terminal(base,state)
+            raise Blocked('bridge_operation_operator_retired')
         import paused_recovery
         paused_recovery.verify_adopted_binding(base,state,self.binding)
         return base,state
@@ -92,7 +96,9 @@ class Actions:
             if root_cli.rollout_directory_kind(base)=='capture':continue
             if not (base/'checkpoint.json').exists():raise Blocked('bridge_incomplete_operation_present')
             row=private_json(base/'checkpoint.json')
-            if row.get('status') not in ('PASS','ROLLED_BACK'):raise Blocked('bridge_active_operation_present')
+            if row.get('status') not in ('PASS','ROLLED_BACK'):
+                from operator_retirement import verify_terminal
+                verify_terminal(base,row)
 
     def _dispatcher(self,request):
         headers=source_authority._headers(request['token']);deadline=time.monotonic()+30
