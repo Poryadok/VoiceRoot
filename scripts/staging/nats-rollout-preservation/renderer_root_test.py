@@ -223,4 +223,52 @@ class RendererImageAcquisitionTests(unittest.TestCase):
                     self.assertEqual([args for args,_ in runtime.calls if args[0]=='pull'],[['pull',image]])
                 else:self.assertEqual(runtime.calls,[])
 
+
+class RendererScratchCustodyTests(unittest.TestCase):
+    def test_actual_prove_keeps_fixed_group_read_custody_under_service_umask(self):
+        import base64,os,stat,tempfile
+        from pathlib import Path
+        stage,_,authority=RendererLiveTests().fixture()
+        hub=stage.snapshots[HUB]
+        stage.old_images={HUB+'/nats-config-renderer':authority['descriptor']['images']['old'],
+            HUB+'/nats':authority['broker_image']}
+        tokens={key:('synthetic-'+key).encode() for key in
+            ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
+        tls={key:('synthetic-'+key).encode() for key in ('tls.crt','tls.key','ca.crt')}
+        encode=lambda values:{'data':{key:base64.b64encode(value).decode() for key,value in values.items()}}
+        rows={'operator':encode(tokens),'tls':encode(tls),
+            'template':{'data':{'nats.conf':'synthetic renderer template\n'}}}
+        observed=[]
+        def isolated(base,descriptor,dirs,unchanged):
+            unchanged()
+            self.assertEqual(set(dirs),{'input','jwt','tls','template'})
+            expected={'input':tokens,'jwt':{'operator.jwt':tokens['operator.jwt']},
+                'tls':tls,'template':{'nats.conf':b'synthetic renderer template\n'}}
+            for name,path in dirs.items():
+                info=path.stat()
+                self.assertEqual((info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode)),(0,65532,0o750))
+                self.assertEqual({p.name for p in path.iterdir()},set(expected[name]))
+                for filename,wanted in expected[name].items():
+                    item=path/filename;info=item.stat()
+                    self.assertEqual((info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode),info.st_nlink),
+                        (0,65532,0o440,1))
+                    self.assertEqual(item.read_bytes(),wanted)
+            observed.append(True)
+            return {'verified':True,'sha256':'d'*64,'bytes':10}
+        with tempfile.TemporaryDirectory() as td:
+            prior=os.umask(0o077)
+            try:
+                with patch.object(renderer_root.guard,'ROOT',Path(td)), \
+                     patch.object(renderer_root,'storage',return_value=authority['descriptor']['storage_binding']), \
+                     patch.object(renderer_root,'inputs',return_value=(rows,{})), \
+                     patch.object(renderer_root,'image_identity',return_value={}), \
+                     patch.object(renderer_root,'revalidate'), \
+                     patch.object(renderer_root.renderer_execution,'prove',side_effect=isolated):
+                    result=renderer_root.prove(stage.kube,stage,'e'*40,authority['descriptor']['images']['target'])
+                self.assertTrue(result['output']['verified'])
+                self.assertEqual(observed,[True])
+                self.assertEqual(list(Path(td).iterdir()),[])
+            finally:os.umask(prior)
+
+
 if __name__=='__main__':unittest.main()

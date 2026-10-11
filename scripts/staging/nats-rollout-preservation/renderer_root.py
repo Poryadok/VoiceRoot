@@ -203,11 +203,13 @@ def prove(kube,stage,source_sha,target_image):
         base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
         dirs={}
         for name in ('input','jwt','tls','template'):
-            p=base/name;p.mkdir(mode=0o750);os.chown(p,0,65532);dirs[name]=p
+            p=base/name;p.mkdir(mode=0o750);os.chown(p,0,65532);p.chmod(0o750);dirs[name]=p
         def write(path,raw):
             fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o440)
-            with os.fdopen(fd,'wb') as f:f.write(raw)
-            os.chown(path,0,65532)
+            with os.fdopen(fd,'wb') as f:
+                f.write(raw)
+                # The service's 0077 umask must not remove renderer group reads.
+                os.fchown(f.fileno(),0,65532);os.fchmod(f.fileno(),0o440)
         for key in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public'):
             write(dirs['input']/key,secret_bytes(rows['operator'],key))
         write(dirs['jwt']/'operator.jwt',secret_bytes(rows['operator'],'operator.jwt'))
