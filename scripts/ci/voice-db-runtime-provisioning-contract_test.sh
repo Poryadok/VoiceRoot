@@ -1066,6 +1066,15 @@ f13_develop_aggregate_enabled() {
   [[ "${1:-}" == 'push' && "${2:-}" == 'refs/heads/develop' ]]
 }
 
+# Only the named release branch uses per-contribution analysis on a master PR.
+# Ordinary pull requests and all branch pushes retain the aggregate path below.
+f13_master_release_pr_enabled() {
+  [[ "${1:-}" == 'pull_request' &&
+    "${2:-}" == 'master' &&
+    "${3:-}" == codex/voice-master-release-* &&
+    "${4:-}" =~ ^refs/pull/[0-9]+/merge$ ]]
+}
+
 f13_path_is_guarded() {
   case "$1" in
     protos/*|*/pb/*|*.pb.go|src/backend/space/*|src/backend/role/*|\
@@ -1213,7 +1222,85 @@ f13_collect_develop_contributions() {
   done < <(git -C "${repo}" rev-list --first-parent --reverse "${base}..${target}" 2>/dev/null)
 }
 
-f13_base_origin_class() {
+# A release PR is GitHub's synthetic merge of its exact base and head. Partition
+# the source head using the existing contribution collector, then verify the
+# synthetic merge retained the source-side path set and every full tree entry.
+f13_collect_master_release_pr_contributions() {
+  local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
+  local target_line base_commit target_first_parent source_head
+  local source_delta="${output}.source-delta" result_delta="${output}.result-delta"
+  local source_map="${output}.source-map" path source_entry result_entry
+  local -a target_line_fields
+  : >"${output}"
+
+  [[ -n "${base}" ]] || {
+    f13_collect_failure "${diagnostic_file}" release_pr_missing_base
+    return 1
+  }
+  git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || {
+    f13_collect_failure "${diagnostic_file}" base_object
+    return 1
+  }
+  git -C "${repo}" rev-parse --verify "${target}^{commit}" >/dev/null 2>&1 || {
+    f13_collect_failure "${diagnostic_file}" target_object
+    return 1
+  }
+  base_commit="$(git -C "${repo}" rev-parse --verify "${base}^{commit}" 2>/dev/null)" || {
+    f13_collect_failure "${diagnostic_file}" base_object
+    return 1
+  }
+  target_line="$(git -C "${repo}" rev-list --parents -n 1 "${target}" 2>/dev/null)" || {
+    f13_collect_failure "${diagnostic_file}" release_pr_shape
+    return 1
+  }
+  read -r -a target_line_fields <<<"${target_line}"
+  ((${#target_line_fields[@]} == 3)) || {
+    f13_collect_failure "${diagnostic_file}" release_pr_shape
+    return 1
+  }
+  target_first_parent="${target_line_fields[1]}"
+  source_head="${target_line_fields[2]}"
+  [[ "${target_first_parent}" == "${base_commit}" ]] || {
+    f13_collect_failure "${diagnostic_file}" release_pr_base_parent
+    return 1
+  }
+
+  f13_collect_develop_contributions "${repo}" "${base_commit}" "${source_head}" \
+    "${source_map}" "${diagnostic_file}" || return 1
+  git -C "${repo}" diff --name-only "${base_commit}" "${source_head}" 2>/dev/null >"${source_delta}" || {
+    f13_collect_failure "${diagnostic_file}" release_pr_source_delta
+    return 1
+  }
+  git -C "${repo}" diff --name-only "${base_commit}" "${target}" 2>/dev/null >"${result_delta}" || {
+    f13_collect_failure "${diagnostic_file}" release_pr_result_delta
+    return 1
+  }
+  cmp -s "${source_delta}" "${result_delta}" || {
+    f13_collect_failure "${diagnostic_file}" release_pr_delta_mismatch
+    return 1
+  }
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    source_entry="$(git -C "${repo}" ls-tree "${source_head}" -- "${path}" 2>/dev/null)" || {
+      f13_collect_failure "${diagnostic_file}" source_tree_entry
+      return 1
+    }
+    result_entry="$(git -C "${repo}" ls-tree "${target}" -- "${path}" 2>/dev/null)" || {
+      f13_collect_failure "${diagnostic_file}" merge_tree_entry
+      return 1
+    }
+    [[ "${source_entry}" == "${result_entry}" ]] || {
+      f13_collect_failure "${diagnostic_file}" release_pr_merge_tree_mismatch
+      return 1
+    }
+  done <"${source_delta}"
+  cat "${source_map}" >"${output}" || {
+    f13_collect_failure "${diagnostic_file}" release_pr_map_write
+    return 1
+  }
+}
+
+ f13_base_origin_class() {
   if [[ -n "${VOICE_R22_BASE_SHA:-}" ]]; then
     printf '%s\n' push-before
   else
@@ -1260,6 +1347,73 @@ grep -Fqx $'protos/voice/bot/v1/bot.proto\tfalse' <(cut -f1-2 "${TMP_DIR}/f13-fi
 }
 f13_cross_scope_path_allowed 'protos/voice/bot/v1/bot.proto' false || {
   printf '%s\n' 'F13 oracle bug: unrelated-only proto contribution was rejected' >&2
+  exit 2
+}
+
+f13_master_release_pr_enabled pull_request master codex/voice-master-release-20261011 refs/pull/741/merge || {
+  printf '%s\n' 'F13 oracle bug: identified master release PR was not selected' >&2
+  exit 2
+}
+if f13_master_release_pr_enabled pull_request master codex/feature/example refs/pull/99/merge ||
+  f13_master_release_pr_enabled pull_request develop codex/voice-master-release-20261011 refs/pull/741/merge ||
+  f13_master_release_pr_enabled push refs/heads/master codex/voice-master-release-20261011 refs/heads/master ||
+  f13_master_release_pr_enabled pull_request master codex/voice-master-release-20261011 refs/pull/741/head; then
+  printf '%s\n' 'F13 oracle bug: non-release event or ref selected master release partitioning' >&2
+  exit 2
+fi
+
+git -C "${f13_fixture_repo}" checkout -qb f13-master-release-pr "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 synthetic master release PR merge' f13-integration
+f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-release-map" \
+  "${TMP_DIR}/f13-release-category" || {
+  printf '%s\n' 'F13 oracle bug: valid two-parent release PR provenance was rejected' >&2
+  exit 2
+}
+grep -Fqx $'src/backend/voice/main.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-release-map") || {
+  printf '%s\n' 'F13 oracle bug: release PR lost its R22 source contribution' >&2
+  exit 2
+}
+grep -Fqx $'protos/voice/bot/v1/bot.proto\tfalse' <(cut -f1-2 "${TMP_DIR}/f13-release-map") || {
+  printf '%s\n' 'F13 oracle bug: unrelated Bot contribution inherited the R22 trigger in release PR' >&2
+  exit 2
+}
+
+# A source head is not enough: the synthetic PR merge must retain its exact tree entries.
+git -C "${f13_fixture_repo}" checkout -q f13-master-release-pr
+printf '%s\n' 'conflict-altered result' >"${f13_fixture_repo}/protos/voice/bot/v1/bot.proto"
+git -C "${f13_fixture_repo}" add protos/voice/bot/v1/bot.proto
+f13_release_bad_tree="$(git -C "${f13_fixture_repo}" write-tree)"
+f13_release_bad_commit="$(printf '%s\n' 'F13 altered release PR result' | git -C "${f13_fixture_repo}" -c user.name='Voice CI fixture' -c user.email='voice-ci@example.invalid' commit-tree "${f13_release_bad_tree}" -p "${f13_fixture_base}" -p f13-integration)"
+git -C "${f13_fixture_repo}" update-ref refs/heads/f13-release-mismatch "${f13_release_bad_commit}"
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" f13-release-mismatch \
+  "${TMP_DIR}/f13-release-mismatch-map" "${TMP_DIR}/f13-release-mismatch-category"; then
+  printf '%s\n' 'F13 oracle bug: conflict-altered release PR tree was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-release-mismatch-category")" == release_pr_merge_tree_mismatch ]] || {
+  printf '%s\n' 'F13 oracle bug: altered release PR tree did not fail at exact tree retention' >&2
+  exit 2
+}
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" f13-integration \
+  "${TMP_DIR}/f13-release-wrong-parent-map" "${TMP_DIR}/f13-release-wrong-parent-category"; then
+  printf '%s\n' 'F13 oracle bug: release PR with wrong synthetic base parent was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-release-wrong-parent-category")" == release_pr_base_parent ]] || {
+  printf '%s\n' 'F13 oracle bug: wrong release PR base parent was not rejected precisely' >&2
+  exit 2
+}
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" '' f13-master-release-pr \
+  "${TMP_DIR}/f13-release-missing-base-map" "${TMP_DIR}/f13-release-missing-base-category"; then
+  printf '%s\n' 'F13 oracle bug: missing release PR base was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-release-missing-base-category")" == release_pr_missing_base ]] || {
+  printf '%s\n' 'F13 oracle bug: missing release PR base did not fail closed' >&2
   exit 2
 }
 
@@ -1405,6 +1559,18 @@ if f13_collect_develop_contributions \
   printf '%s\n' 'F13 oracle bug: guarded path with multiple contribution owners was accepted' >&2
   exit 2
 fi
+git -C "${f13_fixture_repo}" checkout -qb f13-release-duplicate-pr "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 synthetic duplicate release PR merge' f13-repeat-integration
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD \
+  "${TMP_DIR}/f13-release-duplicate-map" "${TMP_DIR}/f13-release-duplicate-category"; then
+  printf '%s\n' 'F13 oracle bug: duplicate guarded release contribution was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-release-duplicate-category")" == duplicate_guarded_owner ]] || {
+  printf '%s\n' 'F13 oracle bug: duplicate release provenance did not fail closed' >&2
+  exit 2
+}
 
 git -C "${f13_fixture_repo}" checkout -q --orphan f13-unrelated-source
 git -C "${f13_fixture_repo}" rm -rf -q .
@@ -1461,15 +1627,31 @@ f13_develop_aggregate_enabled push refs/heads/develop || {
   exit 2
 }
 
-if f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
-  if ! f13_collect_develop_contributions \
-    "${ROOT}" "${base_sha}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category"; then
+f13_master_release_pr=false
+f13_collect_status=0
+if f13_master_release_pr_enabled \
+  "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_BASE_REF:-}" \
+  "${GITHUB_HEAD_REF:-}" "${GITHUB_REF:-}"; then
+  f13_master_release_pr=true
+fi
+if [[ "${f13_master_release_pr}" == true ]] || \
+  f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
+  if [[ "${f13_master_release_pr}" == true ]]; then
+    f13_collect_master_release_pr_contributions \
+      "${ROOT}" "${VOICE_R22_BASE_SHA:-}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
+  else
+    f13_collect_develop_contributions \
+      "${ROOT}" "${base_sha}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
+  fi
+  if [[ "${f13_collect_status}" != 0 ]]; then
     f13_failure_category=unknown
     if [[ -s "${TMP_DIR}/f13-failure-category" ]]; then
       case "$(<"${TMP_DIR}/f13-failure-category")" in
         base_object|target_object|base_ancestry|first_parent_range|parent_count|source_base|source_delta|\
         source_tree_entry|merge_tree_entry|merge_tree_mismatch|target_tree_entry|guarded_target_mismatch|\
-        duplicate_guarded_owner)
+        duplicate_guarded_owner|release_pr_missing_base|release_pr_shape|release_pr_base_parent|\
+        release_pr_source_delta|release_pr_result_delta|release_pr_delta_mismatch|\
+        release_pr_merge_tree_mismatch|release_pr_map_write)
           f13_failure_category="$(<"${TMP_DIR}/f13-failure-category")" ;;
       esac
     fi
