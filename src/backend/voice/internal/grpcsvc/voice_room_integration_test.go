@@ -244,7 +244,7 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 		{
 			name:         "role unavailable fails closed",
 			profileID:    fixtureProfileMember,
-			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")},
+			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: status.Error(codes.Unavailable, "Role unavailable")},
 			wantCode:     codes.Unavailable,
 			wantRoleCall: true,
 		},
