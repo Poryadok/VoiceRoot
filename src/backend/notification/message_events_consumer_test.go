@@ -74,6 +74,12 @@ func (p *failOnceMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, er
 	return false, nil
 }
 
+type offlineMessagePresence struct{}
+
+func (offlineMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
 func (p *failOnMessagePolicyCall) LoadPolicy(ctx context.Context, profileID uuid.UUID, chatID string, typ delivery.NotificationType, at time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
 	if p.calls.Add(1) == p.failAt {
 		return delivery.SettingsSnapshot{}, delivery.QuietHoursSnapshot{}, p.err
@@ -167,7 +173,7 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	senderID := uuid.NewString()
 	recipientID := uuid.NewString()
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-	pusher := &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}
+	pusher := &dispatch.MessagePusher{Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore()}
 	env := &eventsv1.MessageStreamEvent{
 		Payload: &eventsv1.MessageStreamEvent_MessageSent{
 			MessageSent: &eventsv1.MessageSent{
@@ -187,6 +193,7 @@ func TestRouteMessageNotificationPolicyFailureRetriesAllRecipientsBeforeSending(
 	policyErr := errors.New("recipient policy unavailable")
 	policy := &failOnMessagePolicyCall{failAt: 2, err: policyErr}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
@@ -220,6 +227,7 @@ func TestRouteMessageNotificationDoesNotReloadPoliciesDuringDispatch(t *testing.
 	policyErr := errors.New("unexpected second policy read")
 	policy := &failOnMessagePolicyCall{failAt: 3, err: policyErr}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
@@ -279,7 +287,7 @@ func TestRouteMessageNotificationCarriesGameScopeAndUsesPrivatePushCopy(t *testi
 	consent := &recordingGameConsent{allowed: true}
 	pusher := &dispatch.MessagePusher{
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), GameConsent: consent, GameBlocks: noGameBlock{},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore(), GameConsent: consent, GameBlocks: noGameBlock{},
 	}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting},
 		stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, pusher, pushenrich.NoopResolver{},
@@ -344,8 +352,9 @@ func assertChatScopePush(t *testing.T, category, chatID, senderID, recipientID s
 	recorder := &recordingMessageFCM{}
 	scope := &recordingGameChatScope{gameScoped: true, allowed: false}
 	pusher := &dispatch.MessagePusher{
-		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientUUID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, GameChatScope: scope, GameBlocks: noGameBlock{}, Grouping: grouping.NewMemoryStore(),
+		Presence: offlineMessagePresence{},
+		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientUUID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher:   &dispatch.PushDispatcher{FCM: recorder}, GameChatScope: scope, GameBlocks: noGameBlock{}, Grouping: grouping.NewMemoryStore(),
 	}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, members, pusher, pushenrich.NoopResolver{}, event)
 	require.NoError(t, err)
@@ -361,6 +370,7 @@ func TestRouteQueuedGameMessageSuppressesPushAfterOptOutForEveryDevice(t *testin
 	recorder := &recordingMessageFCM{}
 	consent := &recordingGameConsent{allowed: true}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {
 				{Token: "device-one", PushService: "fcm"},
@@ -410,6 +420,7 @@ func TestMessageEventsJetStreamRedeliveryRechecksQueuedGameConsentAndSuppressesE
 	recorder := &recordingMessageFCM{}
 	consent := &retryThenOptedOutConsent{redeliveryHit: make(chan struct{}, 1), release: make(chan struct{})}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {
 			{Token: "device-one", PushService: "fcm"}, {Token: "device-two", PushService: "fcm"},
 		}}},
@@ -480,8 +491,9 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	senderID, recipientID := uuid.New(), uuid.New()
 	deliveries := make(chan push.Payload, 2)
 	pusher := &dispatch.MessagePusher{
-		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(),
+		Presence: offlineMessagePresence{},
+		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher:   &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(),
 	}
 	members := stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}
 
@@ -590,7 +602,7 @@ func TestRouteMessageNotification_MentionAdded(t *testing.T) {
 	senderID := uuid.NewString()
 	mentionedID := uuid.NewString()
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-	pusher := &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}
+	pusher := &dispatch.MessagePusher{Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore()}
 	env := &eventsv1.MessageStreamEvent{
 		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
 			MentionAdded: &eventsv1.MentionAdded{
@@ -610,6 +622,7 @@ func TestRouteMessageNotification_SendSilentMarksPushWithoutSuppressingIt(t *tes
 	recipientID := uuid.New()
 	recorder := &recordingMessageFCM{}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
@@ -629,6 +642,7 @@ func TestRouteMessageNotification_SilentMentionDoesNotIntroduceAudiblePush(t *te
 	recipientID := uuid.New()
 	recorder := &recordingMessageFCM{}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
@@ -693,6 +707,7 @@ func TestRouteMessageNotification_ArchivedRecipientGetsNoPush(t *testing.T) {
 				},
 			}}
 			err := routeMessageNotification(context.Background(), handler, stubChatMembers{rows: members}, &dispatch.MessagePusher{
+				Presence: offlineMessagePresence{},
 				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 					recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 				}},
@@ -733,6 +748,7 @@ func TestRouteMessageNotification_ArchivedReplyAndMentionSuppressNotificationDel
 			recipientID := uuid.NewString()
 			recorder := &recordingMessageFCM{}
 			pusher := &dispatch.MessagePusher{
+				Presence: offlineMessagePresence{},
 				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 					uuid.MustParse(recipientID): {{Token: "recipient-token", PushService: "fcm"}},
 				}},

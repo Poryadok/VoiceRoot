@@ -204,18 +204,18 @@ func loadNotificationSigningKeys(dir string) (map[string]*rsa.PrivateKey, error)
 		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		key, ok := parsed.(*rsa.PrivateKey)
 		if err != nil || !ok || key.Validate() != nil || key.N.BitLen() < 2048 {
-			return nil, errors.New("Notification principal key must be RSA 2048+")
+			return nil, errors.New("notification principal key must be RSA 2048+")
 		}
 		keys[kid] = key
 	}
 	if len(keys) != 2 {
-		return nil, errors.New("Notification principal key directory must contain exactly two keys")
+		return nil, errors.New("notification principal key directory must contain exactly two keys")
 	}
 	seen := map[string]struct{}{}
 	for _, key := range keys {
 		fingerprint := fmt.Sprintf("%s:%d", key.N.Text(16), key.E)
 		if _, ok := seen[fingerprint]; ok {
-			return nil, errors.New("Notification principal rotation keys must be distinct")
+			return nil, errors.New("notification principal rotation keys must be distinct")
 		}
 		seen[fingerprint] = struct{}{}
 	}
