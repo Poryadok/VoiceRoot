@@ -20,6 +20,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = ROOT / "scripts/dev/generate-phase0-fixture.py"
 OVERLAY = ROOT / "docker-compose.phase0.yml"
+MEDIA_OVERLAY = ROOT / "docker-compose.voice-space-media.yml"
 PROXY = "phase0-jwks"
 URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
@@ -132,6 +133,16 @@ class FixtureTests(unittest.TestCase):
                     normalized_subject,
                     rf"(?:^|[,/])CN={re.escape(service)}(?:$|[,/])",
                 )
+
+    def test_gateway_voice_media_client_leaf_is_root_ca_client_only(self):
+        cert = self.dest / "tls/gateway-client.crt"
+        self.openssl("verify", "-CAfile", self.dest / "ca/ca.crt", "-purpose", "sslclient", cert)
+        eku = self.openssl("x509", "-in", cert, "-noout", "-ext", "extendedKeyUsage")
+        self.assertIn("TLS Web Client Authentication", eku)
+        self.assertNotIn("TLS Web Server Authentication", eku)
+        subject = self.openssl("x509", "-in", cert, "-noout", "-subject")
+        normalized_subject = re.sub(r"\s+", "", subject).removeprefix("subject=")
+        self.assertRegex(normalized_subject, r"(?:^|[,/])CN=gateway(?:$|[,/])")
 
     def test_gis_client_leaves_use_dedicated_ca_for_chat_and_voice(self):
         ca = self.dest / "ca/gameintegration-client-ca.crt"
@@ -291,6 +302,8 @@ class ComposeTests(unittest.TestCase):
     def setUpClass(cls):
         if not OVERLAY.is_file():
             raise AssertionError("Phase0 Compose overlay does not exist")
+        if not MEDIA_OVERLAY.is_file():
+            raise AssertionError("Voice space-media Compose overlay does not exist")
         require_binary("docker")
         cls.temp = tempfile.TemporaryDirectory(prefix="voice-phase0-compose-")
         cls.addClassCleanup(cls.temp.cleanup)
@@ -307,6 +320,7 @@ class ComposeTests(unittest.TestCase):
         cls.env["PHASE0_FIXTURE_DIR"] = str(cls.fixture.resolve())
         cls.base = cls.render(False)
         cls.merged = cls.render(True)
+        cls.media_merged = cls.render_media()
 
     @classmethod
     def command(cls, overlay):
@@ -319,6 +333,13 @@ class ComposeTests(unittest.TestCase):
     @classmethod
     def render(cls, overlay):
         return json.loads(require_success(run(*cls.command(overlay), env=cls.env)))["services"]
+
+    @classmethod
+    def render_media(cls):
+        command = ["docker", "compose", "--env-file", cls.empty_env,
+                   "--profile", "*", "-f", ROOT / "docker-compose.yml",
+                   "-f", MEDIA_OVERLAY, "config", "--format", "json"]
+        return json.loads(require_success(run(*command, env=cls.env)))["services"]
 
     def fixture_mounts(self, service):
         mounts = []
@@ -575,6 +596,120 @@ class ComposeTests(unittest.TestCase):
                 r"if\s*\(\s*\$request_method\s*!=\s*[\"']?GET[\"']?\s*\)"
                 r"\s*\{\s*return\s+(?:403|405)\s*;\s*\}", body)
             self.assertIsNotNone(method_guard, "exact JWKS route must reject non-GET methods")
+
+    def test_voice_space_media_overlay_is_limited_to_existing_services_and_tls_helper(self):
+        added = set(self.media_merged) - set(self.base)
+        self.assertEqual(added, {PROXY})
+        self.assertEqual(self.media_merged[PROXY], self.merged[PROXY],
+                         "media proof must reuse the existing phase0-jwks service definition exactly")
+        expected_environment = {
+            "auth": {
+                "AUTH_PRINCIPAL_GRPC_PORT", "AUTH_SESSION_FLOOR_GRPC_PORT",
+                "AUTH_GRPC_TLS_CERT_FILE", "AUTH_GRPC_TLS_KEY_FILE",
+                "AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE",
+                "S2S_JWKS_URLS_JSON", "JAVA_TOOL_OPTIONS",
+            },
+            "gateway": {
+                "GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR", "GATEWAY_PRINCIPAL_ACTIVE_KID",
+                "GATEWAY_VOICE_USER_GRPC_ADDR", "GATEWAY_VOICE_USER_TLS_CA_FILE",
+                "GATEWAY_VOICE_USER_TLS_SERVER_NAME", "GATEWAY_VOICE_USER_CLIENT_CERT_FILE",
+                "GATEWAY_VOICE_USER_CLIENT_KEY_FILE",
+            },
+            "voice": {
+                "VOICE_PRINCIPAL_PRIVATE_KEY_FILE", "VOICE_PRINCIPAL_KID",
+                "VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE", "VOICE_PRINCIPAL_NEXT_KID",
+                "VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE", "VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE",
+                "VOICE_PRINCIPAL_JWKS_LISTEN_ADDR", "VOICE_USER_PRINCIPAL_REPLAY_REDIS_ADDR",
+                "VOICE_USER_PRINCIPAL_TLS_CERT_FILE", "VOICE_USER_PRINCIPAL_TLS_KEY_FILE",
+                "VOICE_USER_PRINCIPAL_CLIENT_CA_FILE", "VOICE_USER_PRINCIPAL_GRPC_LISTEN",
+                "VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR", "VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE",
+                "VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME", "VOICE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE",
+                "VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE",
+                "S2S_JWKS_URLS_JSON", "S2S_JWKS_CA_FILE",
+                "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE",
+            },
+        }
+        for service, expected in expected_environment.items():
+            baseline = set(self.base[service].get("environment", {}))
+            actual = set(self.media_merged[service].get("environment", {}))
+            self.assertEqual(actual - baseline, expected,
+                             f"unexpected {service} media-overlay environment additions")
+        auth_env = self.media_merged["auth"]["environment"]
+        self.assertEqual(auth_env["S2S_JWKS_URLS_JSON"],
+                         '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}')
+        self.assertEqual(auth_env["AUTH_SESSION_FLOOR_GRPC_PORT"], "9092")
+        self.assertEqual(auth_env["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
+        gateway_env = self.media_merged["gateway"]["environment"]
+        self.assertEqual(gateway_env["GATEWAY_VOICE_USER_GRPC_ADDR"], "voice:9092")
+        self.assertEqual(gateway_env["GATEWAY_VOICE_USER_TLS_SERVER_NAME"], "voice")
+        voice_env = self.media_merged["voice"]["environment"]
+        self.assertEqual(json.loads(voice_env["S2S_JWKS_URLS_JSON"]), {
+            "space": "https://phase0-jwks:8443/space/jwks.json",
+            "gateway": "https://phase0-jwks:8443/gateway/jwks.json",
+        })
+        self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR"], "auth:9092")
+        self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME"], "auth")
+        self.assertEqual(voice_env["VOICE_USER_PRINCIPAL_GRPC_LISTEN"], ":9092")
+        self.assertEqual(voice_env["S2S_JWKS_CA_FILE"], "/run/phase0/ca.crt")
+        self.assertEqual(voice_env["S2S_JWKS_CLIENT_CERT_FILE"], "/run/phase0/voice-client.crt")
+        self.assertEqual(voice_env["S2S_JWKS_CLIENT_KEY_FILE"], "/run/phase0/voice-client.key")
+        self.assertEqual(self.media_merged["gateway"]["depends_on"]["voice"]["condition"], "service_started",
+                         "Gateway must serve its JWKS while Voice bootstraps the TLS JWKS proxy")
+        self.assertIn("phase0-jwks", self.media_merged["voice"].get("depends_on", {}))
+        for service in self.base:
+            for name, value in self.base[service].get("environment", {}).items():
+                if service in {"auth", "gateway", "voice"} and name in {
+                    "AUTH_PRINCIPAL_GRPC_PORT", "AUTH_GRPC_TLS_CERT_FILE", "AUTH_GRPC_TLS_KEY_FILE",
+                    "GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR", "GATEWAY_PRINCIPAL_ACTIVE_KID",
+                    "GATEWAY_VOICE_USER_GRPC_ADDR", "GATEWAY_VOICE_USER_TLS_CA_FILE",
+                    "GATEWAY_VOICE_USER_TLS_SERVER_NAME", "GATEWAY_VOICE_USER_CLIENT_CERT_FILE",
+                    "GATEWAY_VOICE_USER_CLIENT_KEY_FILE", "VOICE_USER_PRINCIPAL_GRPC_LISTEN",
+                    "VOICE_USER_PRINCIPAL_TLS_CERT_FILE", "VOICE_USER_PRINCIPAL_TLS_KEY_FILE",
+                    "VOICE_USER_PRINCIPAL_CLIENT_CA_FILE", "VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR",
+                    "VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE", "VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME",
+                    "VOICE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE", "VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE",
+                    "VOICE_PRINCIPAL_PRIVATE_KEY_FILE", "VOICE_PRINCIPAL_KID",
+                    "VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE", "VOICE_PRINCIPAL_NEXT_KID",
+                    "VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE", "VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE",
+                    "VOICE_PRINCIPAL_JWKS_LISTEN_ADDR", "VOICE_USER_PRINCIPAL_REPLAY_REDIS_ADDR",
+                    "S2S_JWKS_URLS_JSON", "S2S_JWKS_CA_FILE", "S2S_JWKS_CLIENT_CERT_FILE",
+                    "S2S_JWKS_CLIENT_KEY_FILE", "JAVA_TOOL_OPTIONS",
+                }:
+                    continue
+                self.assertEqual(self.media_merged[service].get("environment", {}).get(name), value,
+                                 f"media overlay changed unrelated environment: {service}/{name}")
+        for service in ("auth", "voice", PROXY):
+            self.assertFalse(self.media_merged[service].get("ports"), f"private port published: {service}")
+        self.assertIn("9091", [str(port) for port in self.media_merged["auth"].get("expose", [])])
+        self.assertIn("9092", [str(port) for port in self.media_merged["voice"].get("expose", [])])
+        self.assertNotIn("PRIVATE KEY", json.dumps(self.media_merged))
+
+    def test_media_overlay_mounts_only_ephemeral_chain_credentials_readonly(self):
+        allowed = {
+            "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "ca/ca.crt"},
+            "gateway": {"gateway/current.pem", "gateway/next.pem", "tls/gateway-client.crt", "tls/gateway-client.key", "ca/ca.crt"},
+            "voice": {"voice/current.pem", "voice/next.pem", "tls/voice-jwks.crt", "tls/voice-jwks.key",
+                      "tls/voice-game-grpc.crt", "tls/voice-game-grpc.key", "tls/voice-client.crt",
+                      "tls/voice-client.key", "ca/ca.crt"},
+            PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"},
+        }
+        for service, sources in allowed.items():
+            for volume in self.media_merged[service].get("volumes", []):
+                if volume.get("type") != "bind":
+                    continue
+                source = Path(volume["source"])
+                if source.is_relative_to(self.fixture):
+                    relative = source.relative_to(self.fixture).as_posix()
+                    if service == "gateway" and relative == "gateway":
+                        self.assertTrue(source.is_dir() and not source.is_symlink())
+                        entries = list(source.iterdir())
+                        self.assertEqual({entry.name for entry in entries}, {"current.pem", "next.pem"})
+                        self.assertTrue(all(entry.is_file() and not entry.is_symlink() for entry in entries))
+                    else:
+                        self.assertIn(relative, sources,
+                                      f"unexpected fixture material mounted into {service}")
+                    self.assertTrue(volume.get("read_only"), f"writable fixture mounted into {service}")
+        config = re.sub(r"(?m)#.*$", "", (ROOT / "docker/phase0/nginx.conf").read_text(encoding="utf-8"))
         for directive, source in (("ssl_certificate", "tls/proxy.crt"),
                                   ("ssl_certificate_key", "tls/proxy.key")):
             match = re.search(rf"\b{directive}\s+([^;\s]+)\s*;", config)

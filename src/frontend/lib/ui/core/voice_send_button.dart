@@ -7,11 +7,13 @@ class VoiceSendButton extends StatelessWidget {
   const VoiceSendButton({
     super.key,
     required this.onPressed,
+    this.onLongPress,
     this.isLoading = false,
     this.tooltip,
   });
 
   final VoidCallback? onPressed;
+  final VoidCallback? onLongPress;
   final bool isLoading;
   final String? tooltip;
 
@@ -21,6 +23,7 @@ class VoiceSendButton extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: isLoading ? null : onPressed,
+      onLongPress: isLoading ? null : onLongPress,
       icon: isLoading
           ? SizedBox(
               width: 20,

@@ -333,6 +333,8 @@ message ChatStreamEvent {
     VoiceRoomAccessInvalidated voice_room_access_invalidated = 20;
     voice.events.v1.SpaceDeletionScheduled space_deletion_scheduled = 21;
     voice.events.v1.SpaceRestored space_restored = 22;
+    ChatUpdated chat_updated = 23;
+    ChatDeleted chat_deleted = 24;
   }
 }
 
@@ -344,7 +346,7 @@ message ChatCreated {
 message ChatMemberChanged {
   string chat_id = 1;
   string profile_id = 2;
-  string change = 3; // joined | left
+  string change = 3; // joined | added | removed | left | owner_transferred | inbox_bucket_changed | role_changed
 }
 
 message SpaceTreeChanged {
@@ -943,4 +945,19 @@ message SpaceRestored {
   string deletion_operation_id = 3;
   uint64 generation = 4;
   google.protobuf.Timestamp restored_at = 5;
+}
+
+// Appended to preserve descriptor indices for existing Chat event message types.
+message ChatUpdated {
+  string chat_id = 1;
+  repeated string changed_fields = 2;
+}
+
+message ChatDeleted {
+  string chat_id = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  string manifest_id = 5;
+  bytes manifest_sha256 = 6;
 }

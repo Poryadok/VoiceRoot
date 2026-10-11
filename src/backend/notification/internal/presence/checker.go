@@ -11,7 +11,7 @@ type Checker interface {
 	IsOnline(ctx context.Context, profileID uuid.UUID) (bool, error)
 }
 
-// OfflineChecker treats all profiles as offline (degraded when USER_GRPC_ADDR unset).
+// OfflineChecker explicitly treats every profile as offline. Message routing must not use it as an authority fallback.
 type OfflineChecker struct{}
 
 func (OfflineChecker) IsOnline(context.Context, uuid.UUID) (bool, error) {

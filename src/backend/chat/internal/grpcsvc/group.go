@@ -50,7 +50,36 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 
 	var row *store.ChatRow
 	var err error
-	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
+	replayed := false
+	requestID, err := parseCreateRequestID(req.GetRequestId())
+	if err != nil {
+		return nil, err
+	}
+	if requestID != nil {
+		kind := "group"
+		if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
+			kind = "channel"
+		}
+		var spaceID *uuid.UUID
+		if spaceIDRaw != "" {
+			parsed, parseErr := parseUUIDField("space_id", spaceIDRaw)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			spaceID = &parsed
+		}
+		row, replayed, err = s.DM.CreateChatWithRequestID(ctx, store.ChatCreateRequest{
+			CreatorProfileID: caller,
+			RequestID:        *requestID,
+			Type:             kind,
+			SpaceID:          spaceID,
+			Name:             name,
+			Topic:            topic,
+		})
+		if errors.Is(err, store.ErrChatCreateRequestConflict) {
+			return nil, status.Error(codes.AlreadyExists, "request_id already used for a different chat create")
+		}
+	} else if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		if spaceIDRaw == "" {
 			row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
 		} else {
@@ -72,7 +101,7 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.ChatEvents != nil {
+	if s.ChatEvents != nil && !replayed {
 		eventType := "group"
 		if row.Type == "channel" {
 			eventType = "channel"
@@ -147,6 +176,7 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		v := req.GetAllowGuests()
 		allowGuests = &v
 	}
+	changedFields := updateChatChangedFields(req)
 
 	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil
 	if row.SpaceID != nil && slowModeOnly && s.Roles != nil {
@@ -169,7 +199,41 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if updated == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
+	if len(changedFields) > 0 && s.ChatEvents != nil {
+		if err := s.ChatEvents.PublishChatUpdated(ctx, chatID.String(), changedFields); err != nil {
+			s.logPublishError(ctx, "chat.updated", err, slog.String("chat_id", chatID.String()))
+		}
+	}
 	return &chatv1.UpdateChatResponse{Chat: chatRowToProto(updated)}, nil
+}
+
+func updateChatChangedFields(req *chatv1.UpdateChatRequest) []string {
+	if req == nil {
+		return nil
+	}
+	fields := make([]string, 0, 7)
+	if req.Name != nil {
+		fields = append(fields, "name")
+	}
+	if req.Topic != nil {
+		fields = append(fields, "topic")
+	}
+	if req.SlowModeSeconds != nil {
+		fields = append(fields, "slow_mode_seconds")
+	}
+	if req.AvatarUrl != nil {
+		fields = append(fields, "avatar_url")
+	}
+	if req.ThreadsEnabled != nil {
+		fields = append(fields, "threads_enabled")
+	}
+	if req.AllowUserMainFeed != nil {
+		fields = append(fields, "allow_user_main_feed")
+	}
+	if req.AllowGuests != nil {
+		fields = append(fields, "allow_guests")
+	}
+	return fields
 }
 
 func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest) (*chatv1.AddMembersResponse, error) {

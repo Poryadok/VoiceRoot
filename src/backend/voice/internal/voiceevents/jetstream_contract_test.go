@@ -8,6 +8,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "voice.app/voice/events/v1"
 )
@@ -92,6 +93,24 @@ func TestJetStreamPublisher_CompatibilityPublishFailureIsReturnedAfterLifecycleC
 	publisher := &JetStreamPublisher{js: &failingJetStream{}}
 	err := publisher.PublishCallStarted(context.Background(), &eventsv1.CallStarted{RoomId: uuid.NewString()})
 	require.Error(t, err)
+}
+
+func TestJetStreamPublisher_DurableAdmissionPreservesEnvelopeAndMessageIdentity(t *testing.T) {
+	stream := &recordingJetStream{}
+	publisher := &JetStreamPublisher{js: stream}
+	eventID := uuid.New()
+	envelope := &eventsv1.VoiceStreamEvent{
+		EventId: eventID.String(), OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_VoiceMemberJoined{VoiceMemberJoined: &eventsv1.VoiceMemberJoined{RoomId: uuid.NewString()}},
+	}
+	payload, err := proto.Marshal(envelope)
+	require.NoError(t, err)
+	require.NoError(t, publisher.PublishAdmissionEvent(t.Context(), eventID, "voice.member_joined", payload))
+	require.Len(t, stream.messages, 1)
+	require.Equal(t, "voice.member_joined", stream.messages[0].Subject)
+	require.Equal(t, eventID.String(), stream.messages[0].Header.Get("Nats-Msg-Id"))
+	require.Equal(t, payload, stream.messages[0].Data)
+	require.Error(t, publisher.PublishAdmissionEvent(t.Context(), eventID, "voice.call_started", payload))
 }
 
 type failingJetStream struct{}

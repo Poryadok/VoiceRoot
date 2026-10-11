@@ -37,6 +37,10 @@ const (
 	maxPageSize                = 100
 	fallbackSize               = 50
 	historyBlockScanMultiplier = 4
+	profilePairBlockBatchSize  = 500
+	metadataChatRefBudget      = 100
+	metadataProfilePairBudget  = 5000
+	metadataPreviewRowBudget   = 5000
 )
 
 // MessagingGRPC implements MessagingService (app stack: DM send, history, read receipts).
@@ -210,7 +214,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if content == "" && attachmentCount == 0 {
 		return nil, status.Error(codes.InvalidArgument, "content or attachments is required")
 	}
-	if len(content) > 4000 {
+	if !messageTextWithinLimit(content) {
 		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
 	}
 	var ghostOnly bool
@@ -306,7 +310,32 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		ContentType:     contentType,
 		SendSilent:      req.GetSendSilent(),
 	}
-	saved, err := s.insertMessageWithAttachments(ctx, row)
+	var outboxEvents []messageevents.OutboxEvent
+	if !ghostOnly {
+		hasMentions := len(mentionTargets) > 0
+		threadParentID := ""
+		if row.ThreadParentID != nil {
+			threadParentID = row.ThreadParentID.String()
+		}
+		event, eventErr := messageevents.NewMessageSentOutbox(row.ID.String(), row.ChatID.String(), row.SenderProfileID.String(), hasMentions, threadParentID, row.IsE2E, store.EffectiveContentType(row.ContentType, row.Content, row.AttachmentsJSON), row.SendSilent)
+		if eventErr != nil {
+			return nil, status.Error(codes.Internal, "message event could not be encoded")
+		}
+		outboxEvents = append(outboxEvents, event)
+		if hasMentions {
+			ids := make([]string, 0, len(mentionTargets))
+			for _, pid := range mentionTargets {
+				ids = append(ids, pid.String())
+			}
+			appID, envID := gameMessageEventScope(row.GameAppID, row.GameEnvironmentID)
+			mentioned, mentionErr := messageevents.NewMentionAddedOutbox(row.ID.String(), row.ChatID.String(), row.SenderProfileID.String(), ids, row.SendSilent, appID, envID)
+			if mentionErr != nil {
+				return nil, status.Error(codes.Internal, "mention event could not be encoded")
+			}
+			outboxEvents = append(outboxEvents, mentioned)
+		}
+	}
+	saved, err := s.insertMessageWithAttachments(ctx, row, outboxEvents)
 	if err != nil {
 		if status.Code(err) != codes.Unknown {
 			return nil, err
@@ -316,26 +345,6 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.MessageEvents != nil && !ghostOnly {
-		hasMentions := len(mentionTargets) > 0
-		threadParentID := ""
-		if saved.ThreadParentID != nil {
-			threadParentID = saved.ThreadParentID.String()
-		}
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID, saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON), saved.SendSilent); err != nil {
-			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
-		}
-		if hasMentions {
-			ids := make([]string, 0, len(mentionTargets))
-			for _, pid := range mentionTargets {
-				ids = append(ids, pid.String())
-			}
-			appID, envID := gameMessageEventScope(saved.GameAppID, saved.GameEnvironmentID)
-			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids, saved.SendSilent, appID, envID); err != nil {
-				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
-			}
-		}
-	}
 	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
 
@@ -344,6 +353,23 @@ func (s *MessagingGRPC) loadChatMeta(ctx context.Context, chatID uuid.UUID) (men
 		return s.ChatMentionsMeta.LoadChatMeta(ctx, chatID)
 	}
 	return mentions.ChatMeta{}, errors.New("chat mentions meta not configured")
+}
+
+func (s *MessagingGRPC) loadMutationChatPolicy(ctx context.Context, chatID uuid.UUID) (*store.ChatThreadPolicy, error) {
+	if s == nil || s.ChatThreadPolicy == nil {
+		return nil, status.Error(codes.Unavailable, "authoritative chat Space scope unavailable")
+	}
+	policy, err := s.ChatThreadPolicy.Load(ctx, chatID)
+	if errors.Is(err, store.ErrChatNotFound) {
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "authoritative chat Space scope unavailable")
+	}
+	if policy == nil {
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	return policy, nil
 }
 
 type messageAttachment struct {
@@ -680,7 +706,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if content == "" {
 		return nil, status.Error(codes.InvalidArgument, "content is required")
 	}
-	if len(content) > 4000 {
+	if !messageTextWithinLimit(content) {
 		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
 	}
 	row, err := s.Messages.GetMessageByID(ctx, msgID)
@@ -732,27 +758,37 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if mentionsJSON != row.MentionsJSON {
 		mentionsPtr = &mentionsJSON
 	}
-	updated, err := s.Messages.UpdateMessageContentAndMentions(ctx, msgID, profileID, content, mentionsPtr)
+	policy, err := s.loadMutationChatPolicy(ctx, row.ChatID)
+	if err != nil {
+		return nil, err
+	}
+	event, err := messageevents.NewMessageEditedOutbox(msgID.String(), row.ChatID.String(), row.IsE2E)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	outboxEvents := []messageevents.OutboxEvent{event}
+	if len(mentionTargets) > 0 && mentionsJSON != row.MentionsJSON {
+		ids := make([]string, 0, len(mentionTargets))
+		for _, pid := range mentionTargets {
+			ids = append(ids, pid.String())
+		}
+		appID, envID := gameMessageEventScope(row.GameAppID, row.GameEnvironmentID)
+		mentionEvent, err := messageevents.NewMentionAddedOutbox(msgID.String(), row.ChatID.String(), row.SenderProfileID.String(), ids, row.SendSilent, appID, envID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		outboxEvents = append(outboxEvents, mentionEvent)
+	}
+	var spaceID uuid.UUID
+	if policy.SpaceID != nil {
+		spaceID = *policy.SpaceID
+	}
+	updated, err := s.Messages.UpdateMessageContentAndMentionsWithOutbox(ctx, row.ChatID, spaceID, msgID, profileID, content, mentionsPtr, outboxEvents)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "message not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageEdited(ctx, updated.ID.String(), updated.ChatID.String(), updated.IsE2E); err != nil {
-			s.logPublishError(ctx, "message.edited", err, slog.String("message_id", updated.ID.String()), slog.String("chat_id", updated.ChatID.String()))
-		}
-		if len(mentionTargets) > 0 && mentionsJSON != row.MentionsJSON {
-			ids := make([]string, 0, len(mentionTargets))
-			for _, pid := range mentionTargets {
-				ids = append(ids, pid.String())
-			}
-			appID, envID := gameMessageEventScope(updated.GameAppID, updated.GameEnvironmentID)
-			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids, updated.SendSilent, appID, envID); err != nil {
-				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", updated.ID.String()), slog.String("chat_id", updated.ChatID.String()))
-			}
-		}
 	}
 	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil
 }
@@ -792,7 +828,15 @@ func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.Dele
 		scope = messagingv1.DeleteScope_DELETE_SCOPE_FOR_EVERYONE
 	}
 	if scope == messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME {
-		if err := s.Messages.HideMessageForProfile(ctx, msgID, profileID); err != nil {
+		policy, err := s.loadMutationChatPolicy(ctx, row.ChatID)
+		if err != nil {
+			return nil, err
+		}
+		var spaceID uuid.UUID
+		if policy.SpaceID != nil {
+			spaceID = *policy.SpaceID
+		}
+		if err := s.Messages.HideMessageForProfileWithMutationFence(ctx, row.ChatID, spaceID, msgID, profileID); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		return &messagingv1.DeleteMessageResponse{}, nil
@@ -800,16 +844,23 @@ func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.Dele
 	if row.SenderProfileID != profileID {
 		return nil, status.Error(codes.PermissionDenied, "only the message author can delete for everyone")
 	}
-	if err := s.Messages.SoftDeleteMessage(ctx, msgID, profileID); err != nil {
+	policy, err := s.loadMutationChatPolicy(ctx, row.ChatID)
+	if err != nil {
+		return nil, err
+	}
+	deletedEvent, err := messageevents.NewMessageDeletedOutbox(msgID.String(), row.ChatID.String())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	var spaceID uuid.UUID
+	if policy.SpaceID != nil {
+		spaceID = *policy.SpaceID
+	}
+	if err := s.Messages.SoftDeleteMessageWithOutbox(ctx, row.ChatID, spaceID, msgID, profileID, deletedEvent); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "message not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageDeleted(ctx, msgID.String(), row.ChatID.String()); err != nil {
-			s.logPublishError(ctx, "message.deleted", err, slog.String("message_id", msgID.String()), slog.String("chat_id", row.ChatID.String()))
-		}
 	}
 	return &messagingv1.DeleteMessageResponse{}, nil
 }
@@ -1041,7 +1092,14 @@ func historyBlockScanLimit(pageLimit int) int {
 }
 
 func (s *MessagingGRPC) filterBlockedHistoryRows(ctx context.Context, viewerProfileID uuid.UUID, rows []store.MessageRow) ([]store.MessageRow, error) {
-	if isNilDependency(s.ProfilePairBlocks) {
+	needSocial := false
+	for _, row := range rows {
+		if row.SenderProfileID != viewerProfileID {
+			needSocial = true
+			break
+		}
+	}
+	if needSocial && isNilDependency(s.ProfilePairBlocks) {
 		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
 	}
 	blockedByProfile := make(map[uuid.UUID]bool)
@@ -1069,6 +1127,74 @@ func (s *MessagingGRPC) filterBlockedHistoryRows(ctx context.Context, viewerProf
 		}
 	}
 	return visible, nil
+}
+
+func (s *MessagingGRPC) resolveProfilePairBlocks(ctx context.Context, viewerProfileID uuid.UUID, profileIDs []uuid.UUID, cache map[uuid.UUID]bool) error {
+	if cache == nil {
+		return status.Error(codes.Internal, "message visibility cache unavailable")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(profileIDs))
+	missing := make([]uuid.UUID, 0, len(profileIDs))
+	for _, profileID := range profileIDs {
+		if profileID == uuid.Nil {
+			return status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		if profileID == viewerProfileID {
+			cache[profileID] = false
+			continue
+		}
+		if _, ok := cache[profileID]; ok {
+			continue
+		}
+		if _, ok := seen[profileID]; ok {
+			continue
+		}
+		seen[profileID] = struct{}{}
+		missing = append(missing, profileID)
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	resolvedCount := len(cache)
+	if _, hasViewer := cache[viewerProfileID]; hasViewer {
+		resolvedCount--
+	}
+	if resolvedCount+len(missing) > metadataProfilePairBudget {
+		return status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	checker, ok := s.ProfilePairBlocks.(ProfilePairBatchBlockChecker)
+	if !ok || isNilDependency(checker) {
+		return status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	for start := 0; start < len(missing); start += profilePairBlockBatchSize {
+		end := start + profilePairBlockBatchSize
+		if end > len(missing) {
+			end = len(missing)
+		}
+		batch := missing[start:end]
+		results, err := checker.ProfilePairsBlocked(ctx, viewerProfileID, batch)
+		if err != nil || len(results) != len(batch) {
+			return status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		for _, profileID := range batch {
+			blocked, ok := results[profileID]
+			if !ok {
+				return status.Error(codes.Unavailable, "message visibility policy unavailable")
+			}
+			cache[profileID] = blocked
+		}
+	}
+	return nil
+}
+
+func blockedProfilePairIDs(decisions map[uuid.UUID]bool) []uuid.UUID {
+	blocked := make([]uuid.UUID, 0)
+	for profileID, isBlocked := range decisions {
+		if isBlocked {
+			blocked = append(blocked, profileID)
+		}
+	}
+	return blocked
 }
 
 // dmPeerStateForHistory resolves only the other participant's Auth state for a
@@ -1131,18 +1257,36 @@ func (s *MessagingGRPC) GetMessage(ctx context.Context, req *messagingv1.GetMess
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
 	if profileID, ok := authctx.ProfileID(ctx); ok {
-		if s.ChatGuard != nil {
-			if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
-				if errors.Is(err, store.ErrNotChatMember) {
-					return nil, status.Error(codes.PermissionDenied, "not a chat member")
-				}
-				return nil, status.Error(codes.Internal, err.Error())
+		if isNilDependency(s.ChatGuard) {
+			return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+		}
+		if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
+			return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 		}
 		if err := s.requireMessageReadEntitlement(ctx, row.ChatID, profileID, row.CreatedAt); err != nil {
 			return nil, err
 		}
 		if row.GhostOnly && row.SenderProfileID != profileID {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		hidden, err := s.Messages.IsHiddenForProfile(ctx, row.ID, profileID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if hidden {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		if _, err := s.resolveAuthoritativeChatType(ctx, row.ChatID, profileID); err != nil {
+			return nil, err
+		}
+		visible, err := s.filterBlockedHistoryRows(ctx, profileID, []store.MessageRow{*row})
+		if err != nil {
+			return nil, err
+		}
+		if len(visible) == 0 {
 			return nil, status.Error(codes.NotFound, "message not found")
 		}
 	}
@@ -1210,13 +1354,14 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
-			return nil, status.Error(codes.Internal, err.Error())
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	}
 	parent, err := s.Messages.GetMessageByID(ctx, parentID)
 	if err != nil {
@@ -1226,6 +1371,26 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if parent.DeletedAt != nil || parent.ChatID != chatID || parent.ThreadParentID != nil {
+		return nil, status.Error(codes.NotFound, "thread parent not found")
+	}
+	if parent.GhostOnly && parent.SenderProfileID != profileID {
+		return nil, status.Error(codes.NotFound, "thread parent not found")
+	}
+	hidden, err := s.Messages.IsHiddenForProfile(ctx, parent.ID, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if hidden {
+		return nil, status.Error(codes.NotFound, "thread parent not found")
+	}
+	if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
+	parentVisible, err := s.filterBlockedHistoryRows(ctx, profileID, []store.MessageRow{*parent})
+	if err != nil {
+		return nil, err
+	}
+	if len(parentVisible) == 0 {
 		return nil, status.Error(codes.NotFound, "thread parent not found")
 	}
 	if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, parent.CreatedAt); err != nil {
@@ -1266,6 +1431,10 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 		rows = rows[:pageSize]
 	}
 	paginationRows := append([]store.MessageRow(nil), rows...)
+	rows, err = s.filterBlockedHistoryRows(ctx, profileID, rows)
+	if err != nil {
+		return nil, err
+	}
 	visibleRows := rows[:0]
 	for i := range rows {
 		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, rows[i].CreatedAt); err != nil {
@@ -1508,7 +1677,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 
 	commentary := strings.TrimSpace(req.GetCommentary())
 	if commentary != "" {
-		if len(commentary) > 4000 {
+		if !messageTextWithinLimit(commentary) {
 			return nil, status.Error(codes.InvalidArgument, "commentary exceeds 4000 characters")
 		}
 		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary, ghostOnly); err != nil {
@@ -1552,22 +1721,27 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		row.ForwardFromSender = originSender
 	}
 
-	saved, err := s.insertMessageWithAttachments(ctx, row)
+	var outboxEvents []messageevents.OutboxEvent
+	if !ghostOnly {
+		sent, eventErr := messageevents.NewMessageSentOutbox(row.ID.String(), row.ChatID.String(), row.SenderProfileID.String(), false, "", row.IsE2E, store.EffectiveContentType(row.ContentType, row.Content, row.AttachmentsJSON), row.SendSilent)
+		if eventErr != nil {
+			return nil, status.Error(codes.Internal, "message event could not be encoded")
+		}
+		outboxEvents = append(outboxEvents, sent)
+		if !withoutAttribution {
+			forwarded, forwardErr := messageevents.NewMessageForwardedOutbox(row.ID.String(), source.ChatID.String(), row.ChatID.String(), profileID.String())
+			if forwardErr != nil {
+				return nil, status.Error(codes.Internal, "forward event could not be encoded")
+			}
+			outboxEvents = append(outboxEvents, forwarded)
+		}
+	}
+	saved, err := s.insertMessageWithAttachments(ctx, row, outboxEvents)
 	if err != nil {
 		if status.Code(err) != codes.Unknown {
 			return nil, err
 		}
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if s.MessageEvents != nil && !ghostOnly {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON), saved.SendSilent); err != nil {
-			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
-		}
-		if !withoutAttribution {
-			if err := s.MessageEvents.PublishMessageForwarded(ctx, saved.ID.String(), source.ChatID.String(), saved.ChatID.String(), profileID.String()); err != nil {
-				s.logPublishError(ctx, "message.forwarded", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
-			}
-		}
 	}
 	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
@@ -1577,7 +1751,7 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	saved, err := s.Messages.InsertMessage(ctx, store.MessageRow{
+	row := store.MessageRow{
 		ID:              msgID,
 		ChatID:          chatID,
 		ChatType:        chatType,
@@ -1588,14 +1762,18 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 		MentionsJSON:    "[]",
 		GhostOnly:       ghostOnly,
 		ContentType:     "text",
-	})
+	}
+	var events []messageevents.OutboxEvent
+	if !ghostOnly {
+		event, eventErr := messageevents.NewMessageSentOutbox(row.ID.String(), row.ChatID.String(), row.SenderProfileID.String(), false, "", false, "text", row.SendSilent)
+		if eventErr != nil {
+			return status.Error(codes.Internal, "message event could not be encoded")
+		}
+		events = append(events, event)
+	}
+	_, err = s.insertMessageWithAttachments(ctx, row, events)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
-	}
-	if s.MessageEvents != nil && !ghostOnly {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", false, "text", saved.SendSilent); err != nil {
-			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
-		}
 	}
 	return nil
 }
@@ -1654,25 +1832,26 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 		}
 	}
 
+	policy, err := s.loadMutationChatPolicy(ctx, msg.ChatID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	var spaceID uuid.UUID
+	if policy.SpaceID != nil {
+		spaceID = *policy.SpaceID
+	}
+	var event messageevents.OutboxEvent
 	if add {
-		if err := s.Reactions.UpsertReaction(ctx, messageID, profileID, emoji); err != nil {
-			return uuid.Nil, status.Error(codes.Internal, err.Error())
-		}
-		if s.MessageEvents != nil {
-			appID, envID := gameMessageEventScope(msg.GameAppID, msg.GameEnvironmentID)
-			if err := s.MessageEvents.PublishReactionAdded(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), msg.SenderProfileID.String(), emoji, appID, envID); err != nil {
-				s.logPublishError(ctx, "reaction.added", err, slog.String("message_id", messageID.String()), slog.String("chat_id", msg.ChatID.String()))
-			}
-		}
+		appID, envID := gameMessageEventScope(msg.GameAppID, msg.GameEnvironmentID)
+		event, err = messageevents.NewReactionAddedOutbox(messageID.String(), msg.ChatID.String(), profileID.String(), msg.SenderProfileID.String(), emoji, appID, envID)
 	} else {
-		if err := s.Reactions.DeleteReaction(ctx, messageID, profileID, emoji); err != nil {
-			return uuid.Nil, status.Error(codes.Internal, err.Error())
-		}
-		if s.MessageEvents != nil {
-			if err := s.MessageEvents.PublishReactionRemoved(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), emoji); err != nil {
-				s.logPublishError(ctx, "reaction.removed", err, slog.String("message_id", messageID.String()), slog.String("chat_id", msg.ChatID.String()))
-			}
-		}
+		event, err = messageevents.NewReactionRemovedOutbox(messageID.String(), msg.ChatID.String(), profileID.String(), emoji)
+	}
+	if err != nil {
+		return uuid.Nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := s.Reactions.MutateReactionWithOutbox(ctx, msg.ChatID, spaceID, messageID, profileID, emoji, add, event); err != nil {
+		return uuid.Nil, status.Error(codes.Internal, err.Error())
 	}
 	return msg.ChatID, nil
 }
@@ -1706,13 +1885,17 @@ func (s *MessagingGRPC) GetPinnedMessages(ctx context.Context, req *messagingv1.
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
-			return nil, status.Error(codes.Internal, err.Error())
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+		return nil, err
 	}
 	pins, err := s.Pins.ListPins(ctx, chatID)
 	if err != nil {
@@ -1728,6 +1911,23 @@ func (s *MessagingGRPC) GetPinnedMessages(ctx context.Context, req *messagingv1.
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		if row.DeletedAt != nil || row.ChatID != chatID {
+			continue
+		}
+		if row.GhostOnly && row.SenderProfileID != profileID {
+			continue
+		}
+		hidden, err := s.Messages.IsHiddenForProfile(ctx, row.ID, profileID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if hidden {
+			continue
+		}
+		visible, err := s.filterBlockedHistoryRows(ctx, profileID, []store.MessageRow{*row})
+		if err != nil {
+			return nil, err
+		}
+		if len(visible) == 0 {
 			continue
 		}
 		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, row.CreatedAt); err != nil {
@@ -1796,27 +1996,28 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 			return err
 		}
 	}
+	policy, err := s.loadMutationChatPolicy(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	var spaceID uuid.UUID
+	if policy.SpaceID != nil {
+		spaceID = *policy.SpaceID
+	}
+	var event messageevents.OutboxEvent
 	if pin {
-		if err := s.Pins.UpsertPin(ctx, chatID, messageID, profileID); err != nil {
-			if errors.Is(err, store.ErrPinLimitReached) {
-				return status.Error(codes.ResourceExhausted, "pin limit reached")
-			}
-			return status.Error(codes.Internal, err.Error())
-		}
-		if s.MessageEvents != nil {
-			if err := s.MessageEvents.PublishMessagePinned(ctx, messageID.String(), chatID.String(), profileID.String()); err != nil {
-				s.logPublishError(ctx, "message.pinned", err, slog.String("message_id", messageID.String()), slog.String("chat_id", chatID.String()))
-			}
-		}
+		event, err = messageevents.NewMessagePinnedOutbox(messageID.String(), chatID.String(), profileID.String())
 	} else {
-		if err := s.Pins.DeletePin(ctx, chatID, messageID); err != nil {
-			return status.Error(codes.Internal, err.Error())
+		event, err = messageevents.NewMessageUnpinnedOutbox(messageID.String(), chatID.String(), profileID.String())
+	}
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if err := s.Pins.MutatePinWithOutbox(ctx, chatID, spaceID, messageID, profileID, pin, event); err != nil {
+		if errors.Is(err, store.ErrPinLimitReached) {
+			return status.Error(codes.ResourceExhausted, "pin limit reached")
 		}
-		if s.MessageEvents != nil {
-			if err := s.MessageEvents.PublishMessageUnpinned(ctx, messageID.String(), chatID.String(), profileID.String()); err != nil {
-				s.logPublishError(ctx, "message.unpinned", err, slog.String("message_id", messageID.String()), slog.String("chat_id", chatID.String()))
-			}
-		}
+		return status.Error(codes.Internal, err.Error())
 	}
 	return nil
 }
@@ -1943,22 +2144,25 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 	if !okMsg {
 		return nil, status.Error(codes.NotFound, "message not found in chat")
 	}
-	// A private read position always advances: it drives this reader's unread
-	// counter and must not be coupled to receipt visibility.
-	if err := s.Messages.UpsertReadPosition(ctx, chatID, profileID, lastRead); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
 	publishReceipt := s.shouldPublishReadReceipt(ctx, chatID, profileID)
-	if !publishReceipt {
-		return &messagingv1.MarkReadResponse{}, nil
+	policy, err := s.loadMutationChatPolicy(ctx, chatID)
+	if err != nil {
+		return nil, err
 	}
-	if err := s.Messages.UpsertReadReceipt(ctx, chatID, profileID, lastRead); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	var spaceID uuid.UUID
+	if policy.SpaceID != nil {
+		spaceID = *policy.SpaceID
 	}
-	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageRead(ctx, lastRead.String(), chatID.String(), profileID.String()); err != nil {
-			s.logPublishError(ctx, "message.read", err, slog.String("message_id", lastRead.String()), slog.String("chat_id", chatID.String()), slog.String("profile_id", profileID.String()))
+	var event *messageevents.OutboxEvent
+	if publishReceipt {
+		created, err := messageevents.NewMessageReadOutbox(lastRead.String(), chatID.String(), profileID.String())
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
 		}
+		event = &created
+	}
+	if err := s.Messages.UpsertReadStateAndOutbox(ctx, chatID, spaceID, profileID, lastRead, publishReceipt, event); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &messagingv1.MarkReadResponse{}, nil
 }
@@ -2046,11 +2250,83 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	if len(req.GetChats()) > metadataChatRefBudget {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
 	chatIDs, refByID, err := s.authorizedChatRefs(ctx, profileID, req.GetChats())
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Messages.GetChatListMetadata(ctx, profileID, chatIDs)
+	blockedProfiles := make(map[uuid.UUID]bool)
+	for _, chatID := range chatIDs {
+		if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+			return nil, err
+		}
+	}
+	unreadCandidateIDs, err := s.Messages.UnreadMessageSenders(ctx, profileID, chatIDs, metadataProfilePairBudget)
+	if err != nil {
+		if errors.Is(err, store.ErrVisibilityCandidateBudgetExceeded) {
+			return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := s.resolveProfilePairBlocks(ctx, profileID, unreadCandidateIDs, blockedProfiles); err != nil {
+		return nil, err
+	}
+
+	previewDone := make(map[uuid.UUID]bool, len(chatIDs))
+	remainingChats := len(chatIDs)
+	previewRowsRead := 0
+	for remainingChats > 0 {
+		candidatesByChat := make(map[uuid.UUID][]store.LatestPreviewMessageCandidate)
+		var candidateProfileIDs []uuid.UUID
+		blockedSenderIDs := blockedProfilePairIDs(blockedProfiles)
+		for _, chatID := range chatIDs {
+			if previewDone[chatID] {
+				continue
+			}
+			remainingRows := metadataPreviewRowBudget - previewRowsRead
+			pageSize := profilePairBlockBatchSize
+			if remainingRows < pageSize {
+				pageSize = remainingRows + 1
+			}
+			candidates, err := s.Messages.LatestPreviewMessageCandidates(ctx, chatID, profileID, blockedSenderIDs, pageSize)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if len(candidates) > remainingRows {
+				return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+			}
+			previewRowsRead += len(candidates)
+			if len(candidates) == 0 {
+				previewDone[chatID] = true
+				remainingChats--
+				continue
+			}
+			candidatesByChat[chatID] = candidates
+			for _, candidate := range candidates {
+				candidateProfileIDs = append(candidateProfileIDs, candidate.SenderProfileID)
+			}
+		}
+		if err := s.resolveProfilePairBlocks(ctx, profileID, candidateProfileIDs, blockedProfiles); err != nil {
+			return nil, err
+		}
+		for chatID, candidates := range candidatesByChat {
+			foundVisiblePreview := false
+			for _, candidate := range candidates {
+				if blockedProfiles[candidate.SenderProfileID] {
+					continue
+				}
+				foundVisiblePreview = true
+				break
+			}
+			if foundVisiblePreview || len(candidates) < profilePairBlockBatchSize {
+				previewDone[chatID] = true
+				remainingChats--
+			}
+		}
+	}
+	rows, err := s.Messages.GetChatListMetadataWithVisibility(ctx, profileID, chatIDs, blockedProfilePairIDs(blockedProfiles))
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -2306,6 +2582,9 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
 	kind, err := protoSharedMediaKind(req.GetKind())
 	if err != nil {
 		return nil, err
@@ -2322,13 +2601,33 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 		pageSize = maxPageSize
 	}
 
-	rows, nextCursor, hasMore, err := s.SharedMedia.List(ctx, chatID, kind, cursor, pageSize)
+	rows, nextCursor, hasMore, err := s.SharedMedia.List(ctx, chatID, kind, cursor, pageSize, profileID)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid shared media cursor") {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	mediaAsMessages := make([]store.MessageRow, len(rows))
+	for i := range rows {
+		mediaAsMessages[i] = store.MessageRow{ChatID: chatID, SenderProfileID: rows[i].SenderProfileID}
+	}
+	visibleBlockRows, err := s.filterBlockedHistoryRows(ctx, profileID, mediaAsMessages)
+	if err != nil {
+		return nil, err
+	}
+	visibleSenders := make(map[uuid.UUID]int, len(visibleBlockRows))
+	for _, row := range visibleBlockRows {
+		visibleSenders[row.SenderProfileID]++
+	}
+	filteredRows := rows[:0]
+	for _, row := range rows {
+		if visibleSenders[row.SenderProfileID] > 0 {
+			filteredRows = append(filteredRows, row)
+			visibleSenders[row.SenderProfileID]--
+		}
+	}
+	rows = filteredRows
 	visibleRows := rows[:0]
 	for i := range rows {
 		allowed, err := s.messageReadEntitled(ctx, chatID, profileID, rows[i].CreatedAt)

@@ -192,6 +192,20 @@ type readResult struct {
 	err error
 }
 
+func readWSMessages(ctx context.Context, read func() (wsInbound, error), readCh chan<- readResult) {
+	for {
+		in, err := read()
+		select {
+		case readCh <- readResult{in: in, err: err}:
+		case <-ctx.Done():
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 func closeFanoutOverflow(c *websocket.Conn, reg *connReg, writeMu *sync.Mutex) {
 	writeMu.Lock()
 	defer writeMu.Unlock()
@@ -243,6 +257,8 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		}
 		_ = c.Close()
 	}()
+	readerCtx, cancelReader := context.WithCancel(context.Background())
+	defer cancelReader()
 
 	if rf != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -308,17 +324,12 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 
 	readCh := make(chan readResult, 1)
 	go func() {
-		for {
+		readWSMessages(readerCtx, func() (wsInbound, error) {
 			_ = c.SetReadDeadline(time.Now().Add(90 * time.Second))
 			var in wsInbound
 			err := c.ReadJSON(&in)
-			// Always deliver to the main loop (blocking). A non-blocking send would
-			// drop disconnect errors when the buffer is full and leave the conn hung.
-			readCh <- readResult{in: in, err: err}
-			if err != nil {
-				return
-			}
-		}
+			return in, err
+		}, readCh)
 	}()
 
 	for {
@@ -566,6 +577,36 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
+				if hub.deliveryAckReader == nil {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_delivery_ack",
+						"message": "message visibility could not be verified",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				message, err := hub.deliveryAckReader.GetMessage(context.Background(), mid, claims.ProfileID)
+				if err != nil || canonicalUUID(message.ID) != canonicalUUID(mid) ||
+					canonicalUUID(message.ChatID) != canonicalUUID(cid) ||
+					canonicalUUID(message.SenderProfileID) != canonicalUUID(senderID) ||
+					canonicalUUID(message.SenderProfileID) == canonicalUUID(claims.ProfileID) ||
+					!validRFC4122ChatID(message.ID) || !validRFC4122ChatID(message.ChatID) ||
+					!validRFC4122ChatID(message.SenderProfileID) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_delivery_ack",
+						"message": "message visibility could not be verified",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				// Use the authoritative message binding for every downstream effect.
+				cid = canonicalUUID(message.ChatID)
+				mid = canonicalUUID(message.ID)
+				senderID = canonicalUUID(message.SenderProfileID)
 				d, _ := json.Marshal(map[string]any{
 					"chat_id":              cid,
 					"message_id":           mid,

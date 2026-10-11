@@ -22,6 +22,9 @@ ci_global:
   - .github/ci/**
   - scripts/ci/**
 
+a1_t106_live:
+  - src/frontend/test/t106_account_soft_delete_e2e_live_test.dart
+
 a1_e2e:
   - Makefile
   - .github/workflows/ci.yml
@@ -67,6 +70,12 @@ frontend:
   - src/frontend/**
   - design/**
   - scripts/design/**
+
+# Changes that alter the built Windows desktop target or bundled app-icon resources.
+windows_desktop:
+  - src/frontend/windows/**
+  - src/frontend/pubspec.yaml
+  - src/frontend/assets/app_icons/**
 
 auth:
   - src/backend/auth/**

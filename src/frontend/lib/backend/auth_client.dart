@@ -350,6 +350,37 @@ class VoiceAuthClient {
     };
   }
 
+  /// Changes the signed-in account password. Auth revokes every session and
+  /// returns 204, so this request never replaces the caller's session.
+  Future<AuthApiResult<void>> changePassword({
+    required AuthSession session,
+    required String currentPassword,
+    required String newPassword,
+    String? totpCode,
+  }) async {
+    final body = <String, dynamic>{
+      'current_password': currentPassword,
+      'new_password': newPassword,
+    };
+    final normalizedTotpCode = totpCode?.trim();
+    if (normalizedTotpCode != null && normalizedTotpCode.isNotEmpty) {
+      body['totp_code'] = normalizedTotpCode;
+    }
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/password/change'),
+      authorization: session.authorizationHeader,
+      jsonBody: body,
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   Future<AuthSessionResult> switchActiveProfile({
     required AuthSession session,
     required String profileId,

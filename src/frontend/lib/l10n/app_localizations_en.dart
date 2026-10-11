@@ -547,6 +547,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatListLoadMore => 'Load more chats';
 
   @override
+  String get chatScheduleMessage => 'Schedule message';
+
+  @override
+  String get chatSendWhenOnline => 'Send when online';
+
+  @override
+  String get chatSchedulePickerTitle => 'Schedule message';
+
+  @override
+  String get chatSchedulePending => 'Pending';
+
+  @override
+  String get chatScheduleEdit => 'Edit scheduled message';
+
+  @override
+  String get chatScheduleCancel => 'Cancel scheduled message';
+
+  @override
+  String get chatScheduleSendNow => 'Send now';
+
+  @override
+  String get chatScheduleRetry => 'Retry';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Choose a time within the next 365 days';
+
+  @override
+  String get chatScheduleFailure =>
+      'Could not complete the scheduled-message request. Try again.';
+
+  @override
+  String get chatScheduleLoadMore => 'Load more scheduled messages';
+
+  @override
   String chatListUnreadCount(int count) {
     return '$count unread';
   }
@@ -1215,6 +1250,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageUnpin => 'Unpin message';
 
   @override
+  String get chatPinnedLimitReached => 'You can pin up to 5 messages.';
+
+  @override
   String chatPinnedBar(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -1865,6 +1903,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'You will no longer receive messages from this group.';
 
   @override
+  String get chatChannelLeave => 'Leave channel';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Leave channel?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'You will no longer receive messages from this channel.';
+
+  @override
   String get chatGroupOwnerLeaveHint =>
       'Transfer ownership to another member before leaving.';
 
@@ -1889,6 +1937,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsTooltip => 'Settings';
+
+  @override
+  String get settingsAppearance => 'Appearance';
+
+  @override
+  String get settingsChatThemes => 'Chat themes';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Exclusive themes are available to Voice Plus subscribers.';
+
+  @override
+  String get chatThemesSelected => 'Selected';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Apply $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Reset';
+
+  @override
+  String get appIconTitle => 'App Icon';
+
+  @override
+  String get appIconDeviceNotice => 'This choice applies on this device only.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Voice Plus is required to apply this icon.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Your saved icon will return when Voice Plus is active again.';
+
+  @override
+  String get appIconUnavailable =>
+      'Runtime app icons are unavailable on this device.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Voice Plus status could not be checked. Retry or choose Voice Sky.';
+
+  @override
+  String get appIconSubscriptionStatusChecking => 'Checking Voice Plus status…';
+
+  @override
+  String get appIconApplyFailure =>
+      'The app icon could not be applied. Your saved choice is kept; retry to apply it.';
+
+  @override
+  String get appIconRetry => 'Retry';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Apply $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Selected';
 
   @override
   String get settingsTheme => 'Theme';
@@ -1940,6 +2052,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHelpTitle => 'Help';
+
+  @override
+  String get settingsHelpSubtitle =>
+      'Find an answer or contact the Voice team.';
+
+  @override
+  String get settingsHelpHeading => 'How can we help?';
+
+  @override
+  String get settingsHelpBackLabel => 'Back';
+
+  @override
+  String get settingsHelpSearchHint => 'Search help (e.g. voice rooms)';
+
+  @override
+  String get settingsHelpDocsLabel => 'Project documentation';
+
+  @override
+  String get settingsHelpSupportLabel => 'Contact support';
+
+  @override
+  String get settingsHelpNoResults => 'No help topics match your search.';
+
+  @override
+  String get settingsHelpLaunchError => 'Could not open link.';
 
   @override
   String get settingsHelpChatsTitle => 'Chats';
@@ -2129,6 +2266,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get securitySettingsTitle => 'Security';
+
+  @override
+  String get securityChangePasswordAction => 'Change password';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Password changed. Sign in with your new password.';
 
   @override
   String get appealSettingsTitle => 'Appeal a sanction';
@@ -3417,4 +3561,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eKeyBackupManage => 'Manage encrypted key backup';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Not in contacts · messages may be unsafe';
 }

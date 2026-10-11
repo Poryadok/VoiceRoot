@@ -40,6 +40,7 @@ const (
 	SocialService_GetFriendsOfFriends_FullMethodName     = "/voice.social.v1.SocialService/GetFriendsOfFriends"
 	SocialService_HasContact_FullMethodName              = "/voice.social.v1.SocialService/HasContact"
 	SocialService_IsProfilePairBlocked_FullMethodName    = "/voice.social.v1.SocialService/IsProfilePairBlocked"
+	SocialService_IsProfilePairsBlocked_FullMethodName   = "/voice.social.v1.SocialService/IsProfilePairsBlocked"
 )
 
 // SocialServiceClient is the client API for SocialService service.
@@ -71,6 +72,8 @@ type SocialServiceClient interface {
 	HasContact(ctx context.Context, in *HasContactRequest, opts ...grpc.CallOption) (*HasContactResponse, error)
 	// Internal S2S: directional block visibility for a profile pair; returns only a boolean.
 	IsProfilePairBlocked(ctx context.Context, in *IsProfilePairBlockedRequest, opts ...grpc.CallOption) (*IsProfilePairBlockedResponse, error)
+	// Internal S2S: bounded batch of directional profile-pair visibility decisions.
+	IsProfilePairsBlocked(ctx context.Context, in *IsProfilePairsBlockedRequest, opts ...grpc.CallOption) (*IsProfilePairsBlockedResponse, error)
 }
 
 type socialServiceClient struct {
@@ -291,6 +294,16 @@ func (c *socialServiceClient) IsProfilePairBlocked(ctx context.Context, in *IsPr
 	return out, nil
 }
 
+func (c *socialServiceClient) IsProfilePairsBlocked(ctx context.Context, in *IsProfilePairsBlockedRequest, opts ...grpc.CallOption) (*IsProfilePairsBlockedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IsProfilePairsBlockedResponse)
+	err := c.cc.Invoke(ctx, SocialService_IsProfilePairsBlocked_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SocialServiceServer is the server API for SocialService service.
 // All implementations must embed UnimplementedSocialServiceServer
 // for forward compatibility.
@@ -320,6 +333,8 @@ type SocialServiceServer interface {
 	HasContact(context.Context, *HasContactRequest) (*HasContactResponse, error)
 	// Internal S2S: directional block visibility for a profile pair; returns only a boolean.
 	IsProfilePairBlocked(context.Context, *IsProfilePairBlockedRequest) (*IsProfilePairBlockedResponse, error)
+	// Internal S2S: bounded batch of directional profile-pair visibility decisions.
+	IsProfilePairsBlocked(context.Context, *IsProfilePairsBlockedRequest) (*IsProfilePairsBlockedResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }
 
@@ -392,6 +407,9 @@ func (UnimplementedSocialServiceServer) HasContact(context.Context, *HasContactR
 }
 func (UnimplementedSocialServiceServer) IsProfilePairBlocked(context.Context, *IsProfilePairBlockedRequest) (*IsProfilePairBlockedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IsProfilePairBlocked not implemented")
+}
+func (UnimplementedSocialServiceServer) IsProfilePairsBlocked(context.Context, *IsProfilePairsBlockedRequest) (*IsProfilePairsBlockedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsProfilePairsBlocked not implemented")
 }
 func (UnimplementedSocialServiceServer) mustEmbedUnimplementedSocialServiceServer() {}
 func (UnimplementedSocialServiceServer) testEmbeddedByValue()                       {}
@@ -792,6 +810,24 @@ func _SocialService_IsProfilePairBlocked_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SocialService_IsProfilePairsBlocked_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IsProfilePairsBlockedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).IsProfilePairsBlocked(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_IsProfilePairsBlocked_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).IsProfilePairsBlocked(ctx, req.(*IsProfilePairsBlockedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SocialService_ServiceDesc is the grpc.ServiceDesc for SocialService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -882,6 +918,10 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IsProfilePairBlocked",
 			Handler:    _SocialService_IsProfilePairBlocked_Handler,
+		},
+		{
+			MethodName: "IsProfilePairsBlocked",
+			Handler:    _SocialService_IsProfilePairsBlocked_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

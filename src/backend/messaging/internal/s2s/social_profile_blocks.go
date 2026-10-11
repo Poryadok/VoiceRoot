@@ -13,6 +13,7 @@ import (
 
 type profilePairBlockClient interface {
 	IsProfilePairBlocked(context.Context, *socialv1.IsProfilePairBlockedRequest, ...grpc.CallOption) (*socialv1.IsProfilePairBlockedResponse, error)
+	IsProfilePairsBlocked(context.Context, *socialv1.IsProfilePairsBlockedRequest, ...grpc.CallOption) (*socialv1.IsProfilePairsBlockedResponse, error)
 }
 
 // SocialGRPCProfileBlocks asks Social to resolve profile ownership and evaluate
@@ -44,4 +45,40 @@ func (s *SocialGRPCProfileBlocks) ProfilePairBlocked(ctx context.Context, viewer
 		return false, status.Error(codes.Unavailable, "social service returned empty block response")
 	}
 	return resp.GetBlocked(), nil
+}
+
+func (s *SocialGRPCProfileBlocks) ProfilePairsBlocked(ctx context.Context, viewerProfileID uuid.UUID, otherProfileIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	if s == nil || s.Client == nil {
+		return nil, status.Error(codes.Unavailable, "social service not configured")
+	}
+	if viewerProfileID == uuid.Nil || len(otherProfileIDs) > 500 {
+		return nil, status.Error(codes.InvalidArgument, "invalid profile pair batch")
+	}
+	ids := make([]string, len(otherProfileIDs))
+	for i, profileID := range otherProfileIDs {
+		if profileID == uuid.Nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid profile pair batch")
+		}
+		ids[i] = profileID.String()
+	}
+	ctx = ForwardIncomingMetadata(ctx)
+	resp, err := s.Client.IsProfilePairsBlocked(ctx, &socialv1.IsProfilePairsBlockedRequest{
+		ViewerProfileId: viewerProfileID.String(),
+		OtherProfileIds: ids,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || len(resp.GetResults()) != len(otherProfileIDs) {
+		return nil, status.Error(codes.Unavailable, "social service returned incomplete block batch")
+	}
+	out := make(map[uuid.UUID]bool, len(resp.GetResults()))
+	for i, result := range resp.GetResults() {
+		if result == nil || result.GetOtherProfileId() != ids[i] {
+			return nil, status.Error(codes.Unavailable, "social service returned invalid block batch")
+		}
+		profileID := otherProfileIDs[i]
+		out[profileID] = result.GetBlocked()
+	}
+	return out, nil
 }

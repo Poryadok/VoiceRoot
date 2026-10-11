@@ -4,11 +4,19 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	ErrChatDeletedProjectionNotReady = errors.New("chat deletion projection is waiting for the permanent purge fence")
+	ErrChatDeletedProjectionConflict = errors.New("chat deletion event conflicts with the permanent purge fence")
 )
 
 // ProfileSpaceSearchStore queries profile and space projection tables.
@@ -281,6 +289,82 @@ func (s *ProfileSpaceSearchStore) UpsertChat(ctx context.Context, chatID uuid.UU
 		chatID, title,
 	)
 	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// DeleteChat applies only a terminal Chat event bound to the exact completed Search P3 purge.
+func (s *ProfileSpaceSearchStore) DeleteChat(ctx context.Context, chatID, spaceID, operationID uuid.UUID, generation uint64, manifestID uuid.UUID, manifestHash []byte) error {
+	if s == nil || s.Pool == nil {
+		return fmt.Errorf("chat search store unavailable")
+	}
+	if chatID == uuid.Nil || spaceID == uuid.Nil || operationID == uuid.Nil || manifestID == uuid.Nil || generation < 2 || generation > math.MaxInt64 || len(manifestHash) != 32 {
+		return ErrChatDeletedProjectionConflict
+	}
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := AcquireLifecycleSpaceLock(ctx, tx, spaceID); err != nil {
+		return err
+	}
+	var state string
+	var currentOperation uuid.UUID
+	var currentGeneration int64
+	err = tx.QueryRow(ctx, `SELECT state,deletion_operation_id,generation FROM search_space_lifecycle_fences WHERE space_id=$1`, spaceID).Scan(&state, &currentOperation, &currentGeneration)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrChatDeletedProjectionNotReady
+	}
+	if err != nil {
+		return err
+	}
+	if state != "PURGED" {
+		return ErrChatDeletedProjectionNotReady
+	}
+	if currentOperation != operationID || currentGeneration != int64(generation) {
+		return ErrChatDeletedProjectionConflict
+	}
+	var retainedManifest, compactBinding, compactLegacy, compactPresent, retainedEvidence bool
+	if err := tx.QueryRow(ctx, `SELECT
+		EXISTS(
+		SELECT 1 FROM search_space_chat_manifest_items i
+		JOIN search_space_chat_manifests m USING(space_id,deletion_operation_id)
+		WHERE i.space_id=$1 AND i.deletion_operation_id=$2 AND i.generation=$3-1 AND i.chat_id=$4
+		  AND m.generation=$3-1 AND m.manifest_id=$5 AND m.manifest_sha256=$6),
+		EXISTS(
+			SELECT 1 FROM search_space_purged_chat_fences q
+			WHERE q.space_id=$1 AND q.chat_id=$4
+			  AND q.deletion_operation_id=$2 AND q.event_generation=$3
+			  AND q.manifest_id=$5 AND q.manifest_sha256=$6),
+		EXISTS(
+			SELECT 1 FROM search_space_purged_chat_fences q
+			WHERE q.space_id=$1 AND q.chat_id=$4
+			  AND q.deletion_operation_id IS NULL AND q.event_generation IS NULL
+			  AND q.manifest_id IS NULL AND q.manifest_sha256 IS NULL),
+		EXISTS(
+			SELECT 1 FROM search_space_purged_chat_fences q
+			WHERE q.space_id=$1 AND q.chat_id=$4),
+		EXISTS(
+			SELECT 1 FROM search_space_chat_manifests m
+			WHERE m.space_id=$1 AND m.deletion_operation_id=$2 AND m.generation=$3-1
+			UNION ALL
+			SELECT 1 FROM search_space_chat_manifest_items i
+			WHERE i.space_id=$1 AND i.deletion_operation_id=$2 AND i.generation=$3-1 AND i.chat_id=$4)`,
+		spaceID, operationID, generation, chatID, manifestID.String(), manifestHash).Scan(&retainedManifest, &compactBinding, &compactLegacy, &compactPresent, &retainedEvidence); err != nil {
+		return err
+	}
+	if (compactPresent && !compactBinding && !compactLegacy) || (compactBinding && retainedEvidence && !retainedManifest) {
+		return ErrChatDeletedProjectionConflict
+	}
+	if !retainedManifest && !compactBinding {
+		if compactLegacy {
+			return ErrChatDeletedProjectionNotReady
+		}
+		return ErrChatDeletedProjectionConflict
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM chat_search_documents WHERE chat_id=$1`, chatID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

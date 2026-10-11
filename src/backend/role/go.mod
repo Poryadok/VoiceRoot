@@ -18,6 +18,7 @@ require (
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
+	voice.app/voice/events v0.0.0
 	voice.app/voice/role v0.0.0
 	voice/backend/pkg v0.0.0
 )
@@ -97,3 +98,5 @@ replace voice.app/voice/role => ./pb/voice/role
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/common => ../user/pb/voice/common
+
+replace voice.app/voice/events => ../messaging/pb/voice/events

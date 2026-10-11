@@ -3,9 +3,9 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -54,8 +54,10 @@ func validateStars(stars int) error {
 	return nil
 }
 
-// InsertMatchRating stores a single peer rating.
-func (s *RatingStore) InsertMatchRating(ctx context.Context, p InsertMatchRatingParams) error {
+// RecordMatchRating stores the raw vote and rebuilds its per-game aggregate in
+// one transaction. The aggregate row lock serializes votes for one profile and
+// game; rebuilding from match_ratings also repairs a prior partial write.
+func (s *RatingStore) RecordMatchRating(ctx context.Context, p InsertMatchRatingParams) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("rating store unavailable")
 	}
@@ -65,54 +67,68 @@ func (s *RatingStore) InsertMatchRating(ctx context.Context, p InsertMatchRating
 	if p.RaterProfileID == p.RatedProfileID {
 		return errors.New("cannot rate self")
 	}
-	tag, err := s.Pool.Exec(ctx, `
-		INSERT INTO match_ratings (match_id, rater_profile_id, rated_profile_id, score)
-		VALUES ($1, $2, $3, $4)
-	`, p.MatchID, p.RaterProfileID, p.RatedProfileID, p.Stars)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
-		if isUniqueViolation(err) {
-			return ErrDuplicateMatchRating
-		}
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("insert match rating: no rows")
+	defer func() { _ = tx.Rollback(context.Background()) }()
+
+	var gameID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT game_id FROM matches WHERE id = $1`, p.MatchID).Scan(&gameID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO player_ratings (profile_id, game_id)
+		VALUES ($1, $2)
+		ON CONFLICT (profile_id, game_id) DO NOTHING
+	`, p.RatedProfileID, gameID); err != nil {
+		return err
+	}
+	var lockedProfileID uuid.UUID
+	if err := tx.QueryRow(ctx, `
+		SELECT profile_id FROM player_ratings
+		WHERE profile_id = $1 AND game_id = $2
+		FOR UPDATE
+	`, p.RatedProfileID, gameID).Scan(&lockedProfileID); err != nil {
+		return err
+	}
+	var insertedMatchID uuid.UUID
+	insertErr := tx.QueryRow(ctx, `
+		INSERT INTO match_ratings (match_id, rater_profile_id, rated_profile_id, score)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (match_id, rater_profile_id, rated_profile_id) DO NOTHING
+		RETURNING match_id
+	`, p.MatchID, p.RaterProfileID, p.RatedProfileID, p.Stars).Scan(&insertedMatchID)
+	if insertErr != nil && !errors.Is(insertErr, pgx.ErrNoRows) {
+		return insertErr
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE player_ratings AS pr
+		SET average_rating = COALESCE((
+				SELECT AVG(mr.score)::double precision
+				FROM match_ratings mr
+				JOIN matches m ON m.id = mr.match_id
+				WHERE mr.rated_profile_id = pr.profile_id AND m.game_id = pr.game_id
+			), 0),
+			total_ratings_received = (
+				SELECT COUNT(*)::int
+				FROM match_ratings mr
+				JOIN matches m ON m.id = mr.match_id
+				WHERE mr.rated_profile_id = pr.profile_id AND m.game_id = pr.game_id
+			),
+			updated_at = now()
+		WHERE pr.profile_id = $1 AND pr.game_id = $2
+	`, p.RatedProfileID, gameID)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if errors.Is(insertErr, pgx.ErrNoRows) {
+		return ErrDuplicateMatchRating
 	}
 	return nil
-}
-
-// UpsertPlayerRating increments the running average for a profile+game.
-func (s *RatingStore) UpsertPlayerRating(ctx context.Context, profileID, gameID uuid.UUID, stars int) (PlayerRating, error) {
-	if s == nil || s.Pool == nil {
-		return PlayerRating{}, errors.New("rating store unavailable")
-	}
-	if err := validateStars(stars); err != nil {
-		return PlayerRating{}, err
-	}
-	var pr PlayerRating
-	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO player_ratings (profile_id, game_id, average_rating, total_ratings_received)
-		VALUES ($1, $2, $3, 1)
-		ON CONFLICT (profile_id, game_id) DO UPDATE SET
-			average_rating = (
-				player_ratings.average_rating * player_ratings.total_ratings_received + EXCLUDED.average_rating
-			) / (player_ratings.total_ratings_received + 1),
-			total_ratings_received = player_ratings.total_ratings_received + 1,
-			updated_at = now()
-		RETURNING profile_id, game_id, average_rating
-	`, profileID, gameID, float64(stars)).Scan(
-		&pr.ProfileID, &pr.GameID, &pr.RatingValue,
-	)
-	if err != nil {
-		return PlayerRating{}, err
-	}
-	err = s.Pool.QueryRow(ctx, completedMatchesForRating, profileID, gameID).Scan(
-		&pr.GamesPlayed,
-	)
-	if err != nil {
-		return PlayerRating{}, err
-	}
-	return pr, nil
 }
 
 // GetPlayerRating loads the rating aggregate and the number of completed

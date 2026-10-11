@@ -65,6 +65,67 @@ func TestCreateStory_andGetStory(t *testing.T) {
 	require.Equal(t, author, got.AuthorProfileID)
 }
 
+func TestStoryAccessStateUsesDatabaseExpiryClock(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startStoryStore(t)
+	author := uuid.New()
+	text := "database expiry"
+	row, err := st.CreateStory(ctx, store.CreateStoryInput{
+		AuthorProfileID: author, Type: "text", TextContent: &text, Visibility: "everyone",
+	})
+	require.NoError(t, err)
+
+	active, err := st.IsStoryActive(ctx, row.ID)
+	require.NoError(t, err)
+	require.True(t, active)
+	_, err = st.Pool.Exec(ctx, `UPDATE stories SET expires_at = now() WHERE id = $1`, row.ID)
+	require.NoError(t, err)
+	active, err = st.IsStoryActive(ctx, row.ID)
+	require.NoError(t, err)
+	require.False(t, active, "expiry at database now is no longer active even before the worker sets expired_at")
+	_, err = st.Pool.Exec(ctx, `UPDATE stories SET expires_at = now() + interval '1 hour', expired_at = now() WHERE id = $1`, row.ID)
+	require.NoError(t, err)
+	active, err = st.IsStoryActive(ctx, row.ID)
+	require.NoError(t, err)
+	require.False(t, active, "worker-marked Stories are not active even if expires_at is later")
+}
+
+func TestListStoryHighlightsTracksCurrentMembershipAndIndependentVisibility(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startStoryStore(t)
+	author := uuid.New()
+	text := "archived highlight"
+	story, err := st.CreateStory(ctx, store.CreateStoryInput{
+		AuthorProfileID: author, Type: "text", TextContent: &text, Visibility: "nobody",
+	})
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `UPDATE stories SET expires_at = now() - interval '1 minute', expired_at = now() WHERE id = $1`, story.ID)
+	require.NoError(t, err)
+
+	for _, visibility := range []string{"everyone", "friends"} {
+		highlight, err := st.CreateHighlight(ctx, author, "saved", visibility)
+		require.NoError(t, err)
+		require.NoError(t, st.AddToHighlight(ctx, highlight.ID, author, story.ID))
+	}
+	highlights, err := st.ListHighlightsForStory(ctx, story.ID)
+	require.NoError(t, err)
+	require.Len(t, highlights, 2)
+	require.ElementsMatch(t, []string{"everyone", "friends"}, []string{highlights[0].Visibility, highlights[1].Visibility})
+
+	for _, highlight := range highlights {
+		require.NoError(t, st.RemoveFromHighlight(ctx, highlight.ID, author, story.ID))
+	}
+	highlights, err = st.ListHighlightsForStory(ctx, story.ID)
+	require.NoError(t, err)
+	require.Empty(t, highlights, "removed membership must not authorize old Story IDs")
+}
+
 func TestDeleteStory_removesFromActive(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

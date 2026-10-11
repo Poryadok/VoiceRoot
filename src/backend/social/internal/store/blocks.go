@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -190,4 +191,31 @@ SELECT EXISTS(
 		return false, err
 	}
 	return exists, nil
+}
+
+// DirectedBlocksExist reports the subset of accounts blocked by blockerAccountID.
+func (s *BlockStore) DirectedBlocksExist(ctx context.Context, blockerAccountID uuid.UUID, blockedAccountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("block store not configured")
+	}
+	blocked := make(map[uuid.UUID]struct{}, len(blockedAccountIDs))
+	if len(blockedAccountIDs) == 0 {
+		return blocked, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT blocked_account_id FROM blocks
+WHERE blocker_account_id = $1 AND blocked_account_id = ANY($2::uuid[])
+`, blockerAccountID, blockedAccountIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var blockedAccountID uuid.UUID
+		if err := rows.Scan(&blockedAccountID); err != nil {
+			return nil, err
+		}
+		blocked[blockedAccountID] = struct{}{}
+	}
+	return blocked, rows.Err()
 }

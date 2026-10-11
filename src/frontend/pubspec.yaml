@@ -112,6 +112,7 @@ flutter:
 
   assets:
     - assets/design/voice.tokens.json
+    - assets/app_icons/
 
   fonts:
     - family: Noto Sans

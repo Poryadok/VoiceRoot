@@ -109,6 +109,15 @@ void DesktopHost::HandleMethodCall(
     result->Success();
     return;
   }
+  if (call.method_name() == "setAppIcon") {
+    const auto icon_id = args ? StringArg(*args, "iconId") : std::string();
+    if (!SetAppIcon(icon_id)) {
+      result->Error("app_icon_unavailable", "The requested app icon could not be applied.");
+      return;
+    }
+    result->Success();
+    return;
+  }
   if (call.method_name() == "registerPttHotkey") {
     if (args) {
       RegisterPtt(IntArg(*args, "vkCode"), IntArg(*args, "modifiers"));
@@ -176,9 +185,49 @@ void DesktopHost::AddTrayIcon() {
   nid_.uID = kTrayIconId;
   nid_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
   nid_.uCallbackMessage = kTrayCallback;
-  nid_.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+  nid_.hIcon = current_app_icon_ != nullptr
+                   ? current_app_icon_
+                   : LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
   wcsncpy_s(nid_.szTip, L"Voice", _TRUNCATE);
   tray_added_ = Shell_NotifyIcon(NIM_ADD, &nid_) == TRUE;
+}
+
+bool DesktopHost::SetAppIcon(const std::string& icon_id) {
+  int resource_id = 0;
+  if (icon_id == "voice_sky") {
+    resource_id = IDI_APP_ICON_VOICE_SKY;
+  } else if (icon_id == "midnight") {
+    resource_id = IDI_APP_ICON_MIDNIGHT;
+  } else if (icon_id == "violet") {
+    resource_id = IDI_APP_ICON_VIOLET;
+  } else if (icon_id == "sunrise") {
+    resource_id = IDI_APP_ICON_SUNRISE;
+  } else if (icon_id == "mint") {
+    resource_id = IDI_APP_ICON_MINT;
+  } else if (icon_id == "coral") {
+    resource_id = IDI_APP_ICON_CORAL;
+  } else {
+    return false;
+  }
+
+  HICON icon = static_cast<HICON>(LoadImage(
+      GetModuleHandle(nullptr), MAKEINTRESOURCE(resource_id), IMAGE_ICON, 0, 0,
+      LR_DEFAULTSIZE | LR_SHARED));
+  HWND hwnd = window_->GetHandle();
+  if (icon == nullptr || hwnd == nullptr) {
+    return false;
+  }
+
+  current_app_icon_ = icon;
+  SendMessage(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
+  SendMessage(hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon));
+  if (tray_added_) {
+    nid_.hIcon = icon;
+    if (!Shell_NotifyIcon(NIM_MODIFY, &nid_)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void DesktopHost::RemoveTrayIcon() {

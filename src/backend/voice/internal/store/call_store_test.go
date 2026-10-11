@@ -115,6 +115,37 @@ func TestCallStore_oneActiveVoicePerProfileUntilLeave(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCallStore_spaceAdmissionHasOneActiveRoomIncarnation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	voiceRoom := callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM
+	for _, roomID := range []string{"pending-first", "pending-second"} {
+		_, err := s.CreateCall(ctx, Call{
+			RoomID: roomID, LivekitRoomName: "lk-" + roomID, VoiceRoomID: "voice-room-single",
+			SpaceID: "space", SessionKind: voiceRoom, InitiatorProfileID: roomID,
+			MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+			Status:    callsv1.CallStatus_CALL_STATUS_UNSPECIFIED,
+		})
+		require.NoError(t, err)
+	}
+	participant := func(profileID string) SpaceMediaParticipant {
+		return SpaceMediaParticipant{AccountID: profileID, AdmissionOperationID: profileID, ProfileID: profileID,
+			Identity: "identity-" + profileID, Generation: "generation-" + profileID,
+			Issued: SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true}}
+	}
+	_, err := s.AdmitSpaceMediaParticipant(ctx, "pending-first", participant("account-a"), MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	_, err = s.AdmitSpaceMediaParticipant(ctx, "pending-second", participant("account-b"), MaxVoiceRoomParticipants)
+	require.ErrorIs(t, err, ErrActiveCall, "only one committed call projection may own a voice-room ID")
+	active, err := s.GetCallByVoiceRoomID(ctx, "voice-room-single")
+	require.NoError(t, err)
+	require.Equal(t, "pending-first", active.RoomID)
+	loser, err := s.GetCall(ctx, "pending-second")
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_UNSPECIFIED, loser.Status, "losing shell remains unpublished for exact recovery cleanup")
+}
+
 func TestCallStore_GetActiveGroupCallForChat(t *testing.T) {
 	ctx := context.Background()
 	s := NewMemoryCallStore()

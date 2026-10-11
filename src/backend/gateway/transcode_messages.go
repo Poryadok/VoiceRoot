@@ -11,6 +11,9 @@ import (
 
 func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest string) bool {
 	ctx := withGRPCMetadata(r.Context(), r)
+	if rest == "scheduled" || strings.HasPrefix(rest, "scheduled/") {
+		return t.serveScheduledMessages(w, r, ctx, rest)
+	}
 
 	switch {
 	case r.Method == http.MethodPost && rest == "forward":

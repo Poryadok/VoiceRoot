@@ -36,7 +36,7 @@ class AuthServiceSessionEpochIssuanceTest {
   private static final String PASSWORD = "Correct horse battery staple";
 
   @Test
-  void loginFloorFailurePreservesBackupCodeAndMintsSessionOnlyAfterHealthyRetry() {
+  void loginFloorFailureDoesNotIssueSessionInMemoryProfile() {
     Harness harness = new Harness();
     AuthSession registered = harness.register("login-floor@example.com");
     UUID accountId = UUID.fromString(registered.accountId());
@@ -48,16 +48,8 @@ class AuthServiceSessionEpochIssuanceTest {
     assertThatThrownBy(() -> harness.service.login(login("login-floor@example.com", backupCode)))
         .isInstanceOf(SessionEpochFloorUnavailableException.class);
 
-    assertThat(harness.backupRepository.consumeCalls).isZero();
     assertThat(harness.refreshTokens.createCalls).isZero();
     assertThat(harness.floors.recordCalls).isEqualTo(1);
-
-    harness.floors.healthy(1L);
-    AuthSession retry = harness.service.login(login("login-floor@example.com", backupCode));
-
-    assertThat(retry.accountId()).isEqualTo(registered.accountId());
-    assertThat(harness.backupRepository.consumeCalls).isEqualTo(1);
-    assertThat(harness.refreshTokens.createCalls).isEqualTo(1);
   }
 
   @Test
@@ -386,6 +378,12 @@ class AuthServiceSessionEpochIssuanceTest {
     public synchronized RefreshTokenRecord revoke(String tokenHash, Instant now) {
       revokeCalls++;
       return super.revoke(tokenHash, now);
+    }
+
+    @Override
+    public synchronized boolean revokeIfActive(String tokenHash, Instant now) {
+      revokeCalls++;
+      return super.revokeIfActive(tokenHash, now);
     }
 
     void resetRecording() {

@@ -65,6 +65,62 @@ func TestChatEventBytesToFanout_CreatedAndMemberChanged(t *testing.T) {
 	}
 }
 
+func TestChatEventBytesToFanout_UpdatedAndDeleted(t *testing.T) {
+	chatID, spaceID, operationID, manifestID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	updatedBytes, err := proto.Marshal(&eventsv1.ChatStreamEvent{
+		EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.ChatStreamEvent_ChatUpdated{ChatUpdated: &eventsv1.ChatUpdated{ChatId: chatID, ChangedFields: []string{"name", "topic"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profileID, updated, ok := chatEventBytesToFanout(updatedBytes)
+	if !ok || profileID != "" || updated.Op != "chat_update" {
+		t.Fatalf("updated fanout: profile=%q ok=%v op=%q", profileID, ok, updated.Op)
+	}
+	var updatedPayload struct {
+		ChatID        string   `json:"chat_id"`
+		ChangedFields []string `json:"changed_fields"`
+	}
+	if err := json.Unmarshal(updated.D, &updatedPayload); err != nil {
+		t.Fatal(err)
+	}
+	if updatedPayload.ChatID != chatID || len(updatedPayload.ChangedFields) != 2 || updatedPayload.ChangedFields[0] != "name" || updatedPayload.ChangedFields[1] != "topic" {
+		t.Fatalf("updated payload = %+v", updatedPayload)
+	}
+
+	deletedPayload := &eventsv1.ChatDeleted{
+		ChatId: chatID, SpaceId: spaceID, DeletionOperationId: operationID,
+		Generation: 4, ManifestId: manifestID, ManifestSha256: make([]byte, 32),
+	}
+	deletedBytes, err := proto.Marshal(&eventsv1.ChatStreamEvent{
+		EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.ChatStreamEvent_ChatDeleted{ChatDeleted: deletedPayload},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profileID, deleted, ok := chatEventBytesToFanout(deletedBytes)
+	if !ok || profileID != "" || deleted.Op != "chat_update" {
+		t.Fatalf("deleted fanout: profile=%q ok=%v op=%q", profileID, ok, deleted.Op)
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(deleted.D, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload) != 1 || payload["chat_id"] != chatID {
+		t.Fatalf("deleted payload = %+v", payload)
+	}
+	deletedPayload.ChatId = "malformed"
+	deletedBytes, err = proto.Marshal(&eventsv1.ChatStreamEvent{Payload: &eventsv1.ChatStreamEvent_ChatDeleted{ChatDeleted: deletedPayload}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := chatEventBytesToFanout(deletedBytes); ok {
+		t.Fatal("malformed deleted event was fanned out")
+	}
+}
+
 func TestChatEventBytesToFanout_DmPeerDeleted(t *testing.T) {
 	chatID := uuid.NewString()
 	recipientProfileID := uuid.NewString()

@@ -58,6 +58,13 @@ type ProfileAccountsResolver interface {
 	AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error)
 }
 
+// ProfileAccountsBatchResolver is an optional batch lookup used by block checks.
+// Keeping it separate lets older single-profile resolvers fail closed when batch
+// resolution is unavailable.
+type ProfileAccountsBatchResolver interface {
+	AccountIDsByProfileIDs(ctx context.Context, profileIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
+}
+
 // BlockedProfile is the selected public identity captured when an account is blocked.
 type BlockedProfile = store.BlockedProfile
 

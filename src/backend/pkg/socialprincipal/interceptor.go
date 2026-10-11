@@ -1,4 +1,5 @@
-// Package socialprincipal secures the two Social privacy decision boundaries.
+// Package socialprincipal secures narrow authenticated service boundaries on
+// User and related services.
 package socialprincipal
 
 import (
@@ -28,6 +29,10 @@ func Method(target string) string {
 		return "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
 	case "auth":
 		return "/voice.user.v1.UserService/GetSdkProfileEligibility"
+	case "notification":
+		return "/voice.user.v1.UserService/GetNotificationRoutingPresence"
+	case "messaging":
+		return "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
 	}
 	return ""
 }
@@ -41,6 +46,7 @@ func AllowsMethod(target, method string) bool {
 		switch method {
 		case "/voice.user.v1.UserService/GetPrivacySettings",
 			"/voice.user.v1.UserService/GetProfile",
+			"/voice.user.v1.UserService/GetProfiles",
 			"/voice.user.v1.UserService/ListProfileIDsForAccount":
 			return true
 		}
@@ -62,6 +68,10 @@ func AllowsMethod(target, method string) bool {
 			"/voice.user.v1.UserService/RecordSdkAuthorTombstone":
 			return true
 		}
+	case "notification":
+		return method == "/voice.user.v1.UserService/GetNotificationRoutingPresence"
+	case "messaging":
+		return method == "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
 	}
 	return false
 }
@@ -219,6 +229,35 @@ func RequireSearchProjection(ctx context.Context, method string, req proto.Messa
 	return nil
 }
 
+// RequireNotificationPresence binds the narrow routing-only capability to the
+// exact User RPC. It never accepts a viewer or user identity.
+func RequireNotificationPresence(ctx context.Context, method string, req proto.Message) error {
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || verified.Issuer != "notification" || verified.Subject != "service:notification" {
+		return status.Error(codes.PermissionDenied, "Notification principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil || !AllowsMethod("notification", method) || verified.Audience != "user" || verified.RPC != method || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		return status.Error(codes.Unauthenticated, "invalid principal binding")
+	}
+	return nil
+}
+
+// RequireMessagingPresence binds the scheduled-delivery decision to the exact
+// User RPC and its deterministic request body. It grants no general presence
+// or profile lookup capability.
+func RequireMessagingPresence(ctx context.Context, method string, req proto.Message) error {
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || verified.Issuer != "messaging" || verified.Subject != "service:messaging" {
+		return status.Error(codes.PermissionDenied, "Messaging principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil || !AllowsMethod("messaging", method) || verified.Audience != "user" || verified.RPC != method || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		return status.Error(codes.Unauthenticated, "invalid principal binding")
+	}
+	return nil
+}
+
 // RequireSocial is the domain defense for a protected listener. Its context
 // value is server-owned and its request binding is checked again before storage.
 func RequireSocial(ctx context.Context, target string, req proto.Message) error {
@@ -252,6 +291,12 @@ func expectedIssuer(target string) string {
 	}
 	if target == "auth" {
 		return "auth"
+	}
+	if target == "notification" {
+		return "notification"
+	}
+	if target == "messaging" {
+		return "messaging"
 	}
 	return "social"
 }

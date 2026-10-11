@@ -7,7 +7,7 @@ streams:
     max_age: 168h
     storage: file
   - name: chat_events
-    subjects: [chat.created, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted, space.deletion_scheduled, space.restored]
+    subjects: [chat.created, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted, space.deletion_scheduled, space.restored, space.voice_room_access_invalidated]
     retention: limits
     max_age: 168h
     storage: file
@@ -53,7 +53,7 @@ streams:
     duplicate_window: 24h
     storage: file
   - name: role_events
-    subjects: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed]
+    subjects: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, role.voice_policy_invalidated]
     retention: limits
     max_age: 168h
     storage: file

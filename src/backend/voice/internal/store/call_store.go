@@ -3,8 +3,11 @@ package store
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	callsv1 "voice.app/voice/calls/v1"
 )
@@ -17,15 +20,17 @@ const (
 )
 
 var (
-	ErrNotFound          = errors.New("call not found")
-	ErrActiveCall        = errors.New("profile already has active call")
-	ErrInvalidState      = errors.New("invalid call state")
-	ErrNotParticipant    = errors.New("profile is not a call participant")
-	ErrRoomFull          = errors.New("voice room is full")
-	ErrScreenShareLimit  = errors.New("screen share limit reached")
-	ErrNotScreenSharing  = errors.New("profile is not screen sharing")
-	ErrScreenShareDenied = errors.New("screen share not permitted")
-	ErrOperationConflict = errors.New("operation id conflicts with a different request")
+	ErrNotFound             = errors.New("call not found")
+	ErrActiveCall           = errors.New("profile already has active call")
+	ErrInvalidState         = errors.New("invalid call state")
+	ErrNotParticipant       = errors.New("profile is not a call participant")
+	ErrRoomFull             = errors.New("voice room is full")
+	ErrScreenShareLimit     = errors.New("screen share limit reached")
+	ErrNotScreenSharing     = errors.New("profile is not screen sharing")
+	ErrScreenShareDenied    = errors.New("screen share not permitted")
+	ErrOperationConflict    = errors.New("operation id conflicts with a different request")
+	ErrSpaceMediaStaleGrant = errors.New("space media grant is below the current authority floor")
+	ErrSpaceMediaTransition = errors.New("space media participant transition is in progress")
 	// ErrMoveContention means the bounded Redis CAS retry budget was exhausted.
 	// It is deliberately distinct from a dependency outage so the transport can
 	// expose the same safe retryable result without leaking Redis details.
@@ -72,26 +77,112 @@ type ParticipantState struct {
 	IsBroadcasting  bool   `json:"is_broadcasting"`
 }
 
+type SpaceMediaGrant struct {
+	SessionEpoch    uint64 `json:"session_epoch"`
+	AccessEpoch     uint64 `json:"access_epoch"`
+	PolicyEpoch     uint64 `json:"policy_epoch"`
+	CanJoin         bool   `json:"can_join"`
+	CanPublishAudio bool   `json:"can_publish_audio"`
+	CanSubscribe    bool   `json:"can_subscribe"`
+}
+
+type SpaceMediaParticipant struct {
+	AccountID            string          `json:"account_id,omitempty"`
+	AdmissionOperationID string          `json:"admission_operation_id,omitempty"`
+	RoomGeneration       uint64          `json:"room_generation,omitempty"`
+	CreatedRoom          bool            `json:"created_room,omitempty"`
+	ProfileID            string          `json:"profile_id"`
+	Identity             string          `json:"identity"`
+	Generation           string          `json:"generation"`
+	Issued               SpaceMediaGrant `json:"issued"`
+	Reconciled           SpaceMediaGrant `json:"reconciled"`
+	Revoking             bool            `json:"revoking"`
+}
+
+type SpaceMediaAdmissionEvent struct {
+	ID      uuid.UUID
+	Subject string
+	Payload []byte
+}
+
+type SpaceMediaAdmission struct {
+	OperationID       uuid.UUID
+	Generation        string
+	RoomGeneration    uint64
+	AccountID         uuid.UUID
+	ProfileID         uuid.UUID
+	SpaceID           uuid.UUID
+	RoomID            string
+	VoiceRoomID       string
+	Identity          string
+	CreatedRoom       bool
+	CallStartedAt     time.Time
+	MaxParticipants   int
+	SessionEpoch      uint64
+	AccessEpoch       uint64
+	PolicyEpoch       uint64
+	CanJoin           bool
+	CanPublishAudio   bool
+	CanSubscribe      bool
+	State             string
+	ParticipantState  string
+	ProjectionApplied bool
+	Events            []SpaceMediaAdmissionEvent
+}
+
+// SpaceMediaRoomHead is the PostgreSQL authority for one canonical Space
+// voice-room incarnation. Redis indexes are only projections of this claim.
+type SpaceMediaRoomHead struct {
+	VoiceRoomID        string
+	SpaceID            string
+	RoomID             string
+	RoomGeneration     uint64
+	CreatorOperationID uuid.UUID
+	State              string
+	Ready              bool
+}
+
+type SpaceMediaEpochKind uint8
+
+const (
+	SpaceAccessEpoch SpaceMediaEpochKind = iota + 1
+	RolePolicyEpoch
+)
+
+type SpaceMediaEpochFloors struct {
+	AccessEpoch uint64
+	PolicyEpoch uint64
+}
+
+// SpaceMediaEpochProgress distinguishes an observed authority fence from a
+// completed reconciliation pass. An observed epoch must never be treated as
+// fully applied until every indexed active room has been scanned.
+type SpaceMediaEpochProgress struct {
+	Observed   SpaceMediaEpochFloors
+	Reconciled SpaceMediaEpochFloors
+}
+
 type Call struct {
-	RoomID             string                      `json:"room_id"`
-	LivekitRoomName    string                      `json:"livekit_room_name"`
-	ChatID             string                      `json:"chat_id"`
-	ManagedGameSession bool                        `json:"managed_game_session,omitempty"`
-	ApplicationID      string                      `json:"application_id,omitempty"`
-	EnvironmentID      string                      `json:"environment_id,omitempty"`
-	SessionID          string                      `json:"session_id,omitempty"`
-	VoiceRoomID        string                      `json:"voice_room_id,omitempty"`
-	SpaceID            string                      `json:"space_id,omitempty"`
-	SessionKind        callsv1.VoiceSessionKind    `json:"session_kind,omitempty"`
-	InitiatorProfileID string                      `json:"initiator_profile_id"`
-	CalleeProfileID    string                      `json:"callee_profile_id"`
-	MediaKind          callsv1.CallMediaKind       `json:"media_kind"`
-	Status             callsv1.CallStatus          `json:"status"`
-	StartedAt          time.Time                   `json:"started_at"`
-	ExpiresAt          time.Time                   `json:"expires_at"`
-	EndedAt            time.Time                   `json:"ended_at,omitempty"`
-	States             map[string]ParticipantState `json:"states"`
-	ScreenShares       []ScreenShareEntry          `json:"screen_shares,omitempty"`
+	RoomID             string                           `json:"room_id"`
+	LivekitRoomName    string                           `json:"livekit_room_name"`
+	ChatID             string                           `json:"chat_id"`
+	ManagedGameSession bool                             `json:"managed_game_session,omitempty"`
+	ApplicationID      string                           `json:"application_id,omitempty"`
+	EnvironmentID      string                           `json:"environment_id,omitempty"`
+	SessionID          string                           `json:"session_id,omitempty"`
+	VoiceRoomID        string                           `json:"voice_room_id,omitempty"`
+	SpaceID            string                           `json:"space_id,omitempty"`
+	SessionKind        callsv1.VoiceSessionKind         `json:"session_kind,omitempty"`
+	InitiatorProfileID string                           `json:"initiator_profile_id"`
+	CalleeProfileID    string                           `json:"callee_profile_id"`
+	MediaKind          callsv1.CallMediaKind            `json:"media_kind"`
+	Status             callsv1.CallStatus               `json:"status"`
+	StartedAt          time.Time                        `json:"started_at"`
+	ExpiresAt          time.Time                        `json:"expires_at"`
+	EndedAt            time.Time                        `json:"ended_at,omitempty"`
+	States             map[string]ParticipantState      `json:"states"`
+	ScreenShares       []ScreenShareEntry               `json:"screen_shares,omitempty"`
+	SpaceMedia         map[string]SpaceMediaParticipant `json:"space_media,omitempty"`
 }
 
 func (c Call) IsGroupVoice() bool {
@@ -164,12 +255,24 @@ type CallStore interface {
 	StopScreenShare(ctx context.Context, roomID, profileID, streamID string) (Call, error)
 	StopScreenSharesForProfile(ctx context.Context, roomID, profileID string) (Call, error)
 	ListExpiredRinging(ctx context.Context, now time.Time) ([]Call, error)
+	ListActiveSpaceVoiceCalls(ctx context.Context, spaceID string) ([]Call, error)
+	ListActiveSpaceIDs(ctx context.Context) ([]string, error)
+	RaiseSpaceMediaEpochFloor(ctx context.Context, spaceID string, kind SpaceMediaEpochKind, epoch uint64) (SpaceMediaEpochFloors, error)
+	GetSpaceMediaEpochFloors(ctx context.Context, spaceID string) (SpaceMediaEpochFloors, error)
+	GetSpaceMediaEpochProgress(ctx context.Context, spaceID string) (SpaceMediaEpochProgress, error)
+	MarkSpaceMediaEpochReconciled(ctx context.Context, spaceID string, kind SpaceMediaEpochKind, epoch uint64) (SpaceMediaEpochProgress, error)
+	AdmitSpaceMediaParticipant(ctx context.Context, roomID string, participant SpaceMediaParticipant, maxParticipants int) (Call, error)
+	BeginSpaceMediaRevocation(ctx context.Context, roomID, profileID, identity, generation string) (Call, bool, error)
+	CompleteSpaceMediaRevocation(ctx context.Context, roomID, profileID, identity, generation string) (Call, bool, error)
+	ReconcileSpaceMediaParticipant(ctx context.Context, roomID, profileID, identity, generation string, grant SpaceMediaGrant) (Call, bool, error)
 }
 
 type MemoryCallStore struct {
-	mu    sync.Mutex
-	calls map[string]Call
-	moves map[string]memoryVoiceRoomMove
+	mu         sync.Mutex
+	calls      map[string]Call
+	moves      map[string]memoryVoiceRoomMove
+	floors     map[string]SpaceMediaEpochFloors
+	reconciled map[string]SpaceMediaEpochFloors
 }
 
 type memoryVoiceRoomMove struct {
@@ -178,7 +281,7 @@ type memoryVoiceRoomMove struct {
 }
 
 func NewMemoryCallStore() *MemoryCallStore {
-	return &MemoryCallStore{calls: map[string]Call{}, moves: map[string]memoryVoiceRoomMove{}}
+	return &MemoryCallStore{calls: map[string]Call{}, moves: map[string]memoryVoiceRoomMove{}, floors: map[string]SpaceMediaEpochFloors{}, reconciled: map[string]SpaceMediaEpochFloors{}}
 }
 
 func (s *MemoryCallStore) CreateCall(_ context.Context, call Call) (Call, error) {
@@ -205,6 +308,15 @@ func (s *MemoryCallStore) CreateCall(_ context.Context, call Call) (Call, error)
 func (s *MemoryCallStore) ensureNoActiveCallLocked(profileID string) error {
 	for _, existing := range s.calls {
 		if existing.IsActiveForProfile(profileID) {
+			return ErrActiveCall
+		}
+	}
+	return nil
+}
+
+func (s *MemoryCallStore) ensureNoActiveCallExceptLocked(profileID, roomID string) error {
+	for _, existing := range s.calls {
+		if existing.RoomID != roomID && existing.IsActiveForProfile(profileID) {
 			return ErrActiveCall
 		}
 	}
@@ -290,6 +402,7 @@ func (s *MemoryCallStore) RemoveParticipant(_ context.Context, roomID, profileID
 		return Call{}, ErrNotParticipant
 	}
 	delete(call.States, profileID)
+	delete(call.SpaceMedia, profileID)
 	call = removeScreenSharesForProfile(call, profileID)
 	s.calls[roomID] = call
 	return call, nil
@@ -466,6 +579,192 @@ func (s *MemoryCallStore) ListExpiredRinging(_ context.Context, now time.Time) (
 		}
 	}
 	return out, nil
+}
+
+func (s *MemoryCallStore) ListActiveSpaceVoiceCalls(_ context.Context, spaceID string) ([]Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var calls []Call
+	for _, call := range s.calls {
+		if call.IsVoiceRoom() && call.SpaceID == spaceID && call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+			calls = append(calls, call)
+		}
+	}
+	return calls, nil
+}
+
+func (s *MemoryCallStore) ListActiveSpaceIDs(_ context.Context) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := make(map[string]struct{})
+	for _, call := range s.calls {
+		if call.IsVoiceRoom() && call.SpaceID != "" && call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+			seen[call.SpaceID] = struct{}{}
+		}
+	}
+	spaces := make([]string, 0, len(seen))
+	for id := range seen {
+		spaces = append(spaces, id)
+	}
+	sort.Strings(spaces)
+	return spaces, nil
+}
+
+func (s *MemoryCallStore) RaiseSpaceMediaEpochFloor(_ context.Context, spaceID string, kind SpaceMediaEpochKind, epoch uint64) (SpaceMediaEpochFloors, error) {
+	if spaceID == "" || epoch == 0 || (kind != SpaceAccessEpoch && kind != RolePolicyEpoch) {
+		return SpaceMediaEpochFloors{}, ErrInvalidState
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	floors := s.floors[spaceID]
+	if kind == SpaceAccessEpoch && epoch > floors.AccessEpoch {
+		floors.AccessEpoch = epoch
+	}
+	if kind == RolePolicyEpoch && epoch > floors.PolicyEpoch {
+		floors.PolicyEpoch = epoch
+	}
+	s.floors[spaceID] = floors
+	return floors, nil
+}
+
+func (s *MemoryCallStore) GetSpaceMediaEpochFloors(_ context.Context, spaceID string) (SpaceMediaEpochFloors, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.floors[spaceID], nil
+}
+
+func (s *MemoryCallStore) GetSpaceMediaEpochProgress(_ context.Context, spaceID string) (SpaceMediaEpochProgress, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return SpaceMediaEpochProgress{Observed: s.floors[spaceID], Reconciled: s.reconciled[spaceID]}, nil
+}
+
+func (s *MemoryCallStore) MarkSpaceMediaEpochReconciled(_ context.Context, spaceID string, kind SpaceMediaEpochKind, epoch uint64) (SpaceMediaEpochProgress, error) {
+	if spaceID == "" || epoch == 0 || (kind != SpaceAccessEpoch && kind != RolePolicyEpoch) {
+		return SpaceMediaEpochProgress{}, ErrInvalidState
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	observed := s.floors[spaceID]
+	reconciled := s.reconciled[spaceID]
+	observedEpoch, reconciledEpoch := observed.AccessEpoch, &reconciled.AccessEpoch
+	if kind == RolePolicyEpoch {
+		observedEpoch, reconciledEpoch = observed.PolicyEpoch, &reconciled.PolicyEpoch
+	}
+	if epoch > observedEpoch {
+		return SpaceMediaEpochProgress{}, ErrSpaceMediaStaleGrant
+	}
+	if epoch > *reconciledEpoch {
+		*reconciledEpoch = epoch
+	}
+	s.reconciled[spaceID] = reconciled
+	return SpaceMediaEpochProgress{Observed: observed, Reconciled: reconciled}, nil
+}
+
+func (s *MemoryCallStore) AdmitSpaceMediaParticipant(_ context.Context, roomID string, participant SpaceMediaParticipant, maxParticipants int) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, ErrNotFound
+	}
+	if !call.IsVoiceRoom() || (call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE && call.Status != callsv1.CallStatus_CALL_STATUS_UNSPECIFIED) || participant.ProfileID == "" ||
+		participant.Identity == "" || participant.Generation == "" || participant.Issued.SessionEpoch == 0 ||
+		participant.Issued.AccessEpoch == 0 || participant.Issued.PolicyEpoch == 0 || !participant.Issued.CanJoin || !participant.Issued.CanSubscribe {
+		return Call{}, ErrInvalidState
+	}
+	floors := s.floors[call.SpaceID]
+	if participant.Issued.AccessEpoch < floors.AccessEpoch || participant.Issued.PolicyEpoch < floors.PolicyEpoch {
+		return Call{}, ErrSpaceMediaStaleGrant
+	}
+	if current, exists := call.SpaceMedia[participant.ProfileID]; exists {
+		if current.Generation == participant.Generation && current.Identity == participant.Identity && !current.Revoking {
+			return call, nil
+		}
+		return Call{}, ErrSpaceMediaTransition
+	}
+	for existingRoomID, existing := range s.calls {
+		if existingRoomID != roomID && existing.IsVoiceRoom() && existing.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE && existing.VoiceRoomID == call.VoiceRoomID {
+			return Call{}, ErrActiveCall
+		}
+	}
+	if err := s.ensureNoActiveCallExceptLocked(participant.ProfileID, roomID); err != nil {
+		return Call{}, err
+	}
+	if len(call.States) >= maxParticipants {
+		return Call{}, ErrRoomFull
+	}
+	if call.States == nil {
+		call.States = map[string]ParticipantState{}
+	}
+	call.States[participant.ProfileID] = ParticipantState{ProfileID: participant.ProfileID}
+	if call.SpaceMedia == nil {
+		call.SpaceMedia = map[string]SpaceMediaParticipant{}
+	}
+	participant.Reconciled = participant.Issued
+	call.SpaceMedia[participant.ProfileID] = participant
+	call.Status = callsv1.CallStatus_CALL_STATUS_ACTIVE
+	s.calls[roomID] = call
+	return call, nil
+}
+
+func (s *MemoryCallStore) BeginSpaceMediaRevocation(_ context.Context, roomID, profileID, identity, generation string) (Call, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, false, ErrNotFound
+	}
+	participant, ok := call.SpaceMedia[profileID]
+	if !ok || participant.Identity != identity || participant.Generation != generation {
+		return call, false, nil
+	}
+	participant.Revoking = true
+	call.SpaceMedia[profileID] = participant
+	s.calls[roomID] = call
+	return call, true, nil
+}
+
+func (s *MemoryCallStore) CompleteSpaceMediaRevocation(_ context.Context, roomID, profileID, identity, generation string) (Call, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, false, ErrNotFound
+	}
+	participant, ok := call.SpaceMedia[profileID]
+	if !ok || !participant.Revoking || participant.Identity != identity || participant.Generation != generation {
+		return call, false, nil
+	}
+	delete(call.SpaceMedia, profileID)
+	delete(call.States, profileID)
+	call = removeScreenSharesForProfile(call, profileID)
+	if len(call.States) == 0 {
+		call.Status, call.EndedAt = callsv1.CallStatus_CALL_STATUS_ENDED, time.Now().UTC()
+	}
+	s.calls[roomID] = call
+	return call, true, nil
+}
+
+func (s *MemoryCallStore) ReconcileSpaceMediaParticipant(_ context.Context, roomID, profileID, identity, generation string, grant SpaceMediaGrant) (Call, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, false, ErrNotFound
+	}
+	participant, ok := call.SpaceMedia[profileID]
+	if !ok || participant.Identity != identity || participant.Generation != generation || participant.Revoking {
+		return call, false, nil
+	}
+	floors := s.floors[call.SpaceID]
+	if grant.AccessEpoch < floors.AccessEpoch || grant.PolicyEpoch < floors.PolicyEpoch {
+		return Call{}, false, ErrSpaceMediaStaleGrant
+	}
+	participant.Reconciled = grant
+	call.SpaceMedia[profileID] = participant
+	s.calls[roomID] = call
+	return call, true, nil
 }
 
 func (s *MemoryCallStore) StartScreenShare(_ context.Context, roomID, profileID, streamID string) (Call, ScreenShareEntry, error) {

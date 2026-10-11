@@ -55,10 +55,16 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 		action := parts[1]
 		switch {
 		case r.Method == http.MethodPost && action == "join":
-			resp, err := t.clients.voice.JoinVoiceRoom(ctx, &callsv1.JoinVoiceRoomRequest{
+			req := &callsv1.JoinVoiceRoomRequest{
 				VoiceRoomId: voiceRoomID,
 				Space:       readSpaceRefJSON(r),
-			})
+			}
+			userCtx, err := t.voiceUserContext(r, req, callsv1.VoiceService_JoinVoiceRoom_FullMethodName)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			resp, err := t.clients.voiceUser.JoinVoiceRoom(userCtx, req)
 			if err != nil {
 				writeGRPCError(w, err)
 				return true
@@ -66,9 +72,15 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 			writeProtoJSON(w, http.StatusOK, resp)
 			return true
 		case r.Method == http.MethodPost && action == "leave":
-			_, err := t.clients.voice.LeaveVoiceRoom(ctx, &callsv1.LeaveVoiceRoomRequest{
+			req := &callsv1.LeaveVoiceRoomRequest{
 				VoiceRoomId: voiceRoomID,
-			})
+			}
+			userCtx, err := t.voiceUserContext(r, req, callsv1.VoiceService_LeaveVoiceRoom_FullMethodName)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			_, err = t.clients.voiceUser.LeaveVoiceRoom(userCtx, req)
 			if err != nil {
 				writeGRPCError(w, err)
 				return true

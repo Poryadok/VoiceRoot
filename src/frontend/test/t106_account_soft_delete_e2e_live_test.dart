@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,18 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   _T106LiveTestBinding();
+
+  test('T106 marker detector catches marker text in message_create data', () {
+    const frame = RealtimeFrame(
+      op: 'message_create',
+      data: {
+        'chat_id': 't106-marker-detector',
+        'message': {'content': 'User deleted'},
+      },
+    );
+
+    expect(_messageCreateEventExposesDeletedPeerMarker(frame), isTrue);
+  });
 
   testWidgets('T106 live binding permits native loopback HTTP', (tester) async {
     final statusCode = await tester.runAsync(() async {
@@ -67,6 +80,7 @@ void main() {
       late LiveGatewayContext ctx;
       late StreamSubscription<RealtimeFrame> deletionEventsSubscription;
       final deletionEvents = <RealtimeFrame>[];
+      final messageCreateEvents = <RealtimeFrame>[];
       final realtimeTrace = <String>[];
       late final Completer<void> firstDeletionEvent;
 
@@ -196,6 +210,9 @@ void main() {
         addTearDown(realtime.dispose);
         deletionEventsSubscription = realtime.events.listen((frame) {
           realtimeTrace.add('${frame.op}:${frame.data?['chat_id']}');
+          if (frame.op == 'message_create' && frame.data?['chat_id'] == dm.id) {
+            messageCreateEvents.add(frame);
+          }
           if (frame.op == 'dm_peer_deleted' &&
               frame.data?['chat_id'] == dm.id) {
             deletionEvents.add(frame);
@@ -217,8 +234,18 @@ void main() {
             'missing dm_peer_deleted for ${dm.id}; frames=$realtimeTrace',
           ),
         );
+        // Observe only the finite interval from subscription through 500 ms
+        // after dm_peer_deleted; this does not assert anything about later events.
         await Future<void>.delayed(const Duration(milliseconds: 500));
         expect(deletionEvents, hasLength(1));
+        expect(
+          messageCreateEvents.any(
+            _messageCreateEventExposesDeletedPeerMarker,
+          ),
+          isFalse,
+          reason:
+              'a message_create event exposed the local deleted-peer marker text',
+        );
         final deletionEvent = deletionEvents.single;
         expect(deletionEvent.data, {
           'chat_id': dm.id,
@@ -336,6 +363,10 @@ void main() {
     skip: !runLiveIntegration,
   );
 }
+
+bool _messageCreateEventExposesDeletedPeerMarker(RealtimeFrame frame) =>
+    frame.op == 'message_create' &&
+    jsonEncode(frame.data).contains('User deleted');
 
 class _RecordingHttpClient extends http.BaseClient {
   _RecordingHttpClient(this._inner);

@@ -51,6 +51,42 @@ void main() {
       expect(decoded['type'], 'CHAT_TYPE_GROUP');
       expect(decoded['name'], 'Friday squad');
     });
+
+    test(
+      'preserves the supplied idempotency key in the create request',
+      () async {
+        String? body;
+        final mock = MockClient((req) async {
+          body = req.body;
+          return http.Response(
+            jsonEncode({
+              'chat': {
+                'id': 'group-1',
+                'type': 'CHAT_TYPE_GROUP',
+                'name': 'Friday squad',
+                'creator_profile_id': 'profile-a',
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceChatsClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.createGroup(
+          authorization: auth,
+          name: 'Friday squad',
+          requestId: 'create-attempt-1',
+        );
+
+        expect(result, isA<ChatsApiOk<VoiceChat>>());
+        expect(
+          jsonDecode(body!) as Map<String, dynamic>,
+          containsPair('request_id', 'create-attempt-1'),
+        );
+      },
+    );
   });
 
   group('VoiceChatsClient.addGroupMembers', () {

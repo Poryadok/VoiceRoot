@@ -18,7 +18,7 @@ type privacyStoreStub struct{}
 func (privacyStoreStub) ReadReceiptChatIDsForProfile(context.Context, uuid.UUID) ([]uuid.UUID, error) {
 	return nil, nil
 }
-func (privacyStoreStub) ClearPublicReadReceiptsForProfile(context.Context, uuid.UUID, []uuid.UUID) ([]store.PublicReadReceipt, error) {
+func (privacyStoreStub) ClearPublicReadReceiptsWithOutbox(context.Context, uuid.UUID, map[uuid.UUID]uuid.UUID) ([]store.PublicReadReceipt, error) {
 	return nil, nil
 }
 
@@ -26,12 +26,6 @@ type privacyTargetsStub struct{}
 
 func (privacyTargetsStub) DMReceiptVisibilityTargets(context.Context, uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
 	return nil, nil
-}
-
-type privacyPublisherStub struct{}
-
-func (privacyPublisherStub) PublishReadReceiptRevoked(context.Context, string, string, string, string) error {
-	return nil
 }
 
 func TestReceiptPrivacyRequiresExactPreprovisionedDurable(t *testing.T) {
@@ -62,10 +56,10 @@ func TestReceiptPrivacyBindsPreprovisionedQueue(t *testing.T) {
 	require.NoError(t, err)
 	_, err = js.AddConsumer(privacySettingsStreamName, receiptPrivacyConsumerConfig())
 	require.NoError(t, err)
-	subA, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, privacyPublisherStub{}, nil)
+	subA, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subA.Unsubscribe() })
-	subB, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, privacyPublisherStub{}, nil)
+	subB, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subB.Unsubscribe() })
 }

@@ -22,6 +22,7 @@ const (
 	AuthService_IssueOwnershipTransferProof_FullMethodName          = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof"
 	AuthService_ConsumeOwnershipTransferProof_FullMethodName        = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
 	AuthService_GetOwnershipTransferReceipt_FullMethodName          = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
+	AuthService_GetVoiceSessionEpochFloor_FullMethodName            = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor"
 	AuthService_Register_FullMethodName                             = "/voice.auth.v1.AuthService/Register"
 	AuthService_Login_FullMethodName                                = "/voice.auth.v1.AuthService/Login"
 	AuthService_Logout_FullMethodName                               = "/voice.auth.v1.AuthService/Logout"
@@ -64,6 +65,8 @@ type AuthServiceClient interface {
 	ConsumeOwnershipTransferProof(ctx context.Context, in *ConsumeOwnershipTransferProofRequest, opts ...grpc.CallOption) (*ConsumeOwnershipTransferProofResponse, error)
 	// Private Space-only read of an already committed receipt; never grants or consumes.
 	GetOwnershipTransferReceipt(ctx context.Context, in *GetOwnershipTransferReceiptRequest, opts ...grpc.CallOption) (*GetOwnershipTransferReceiptResponse, error)
+	// Private Voice-only read of the effective session epoch floor for a verified media actor.
+	GetVoiceSessionEpochFloor(ctx context.Context, in *GetVoiceSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetVoiceSessionEpochFloorResponse, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
@@ -142,6 +145,16 @@ func (c *authServiceClient) GetOwnershipTransferReceipt(ctx context.Context, in 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetOwnershipTransferReceiptResponse)
 	err := c.cc.Invoke(ctx, AuthService_GetOwnershipTransferReceipt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetVoiceSessionEpochFloor(ctx context.Context, in *GetVoiceSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetVoiceSessionEpochFloorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetVoiceSessionEpochFloorResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetVoiceSessionEpochFloor_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -449,6 +462,8 @@ type AuthServiceServer interface {
 	ConsumeOwnershipTransferProof(context.Context, *ConsumeOwnershipTransferProofRequest) (*ConsumeOwnershipTransferProofResponse, error)
 	// Private Space-only read of an already committed receipt; never grants or consumes.
 	GetOwnershipTransferReceipt(context.Context, *GetOwnershipTransferReceiptRequest) (*GetOwnershipTransferReceiptResponse, error)
+	// Private Voice-only read of the effective session epoch floor for a verified media actor.
+	GetVoiceSessionEpochFloor(context.Context, *GetVoiceSessionEpochFloorRequest) (*GetVoiceSessionEpochFloorResponse, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
@@ -511,6 +526,9 @@ func (UnimplementedAuthServiceServer) ConsumeOwnershipTransferProof(context.Cont
 }
 func (UnimplementedAuthServiceServer) GetOwnershipTransferReceipt(context.Context, *GetOwnershipTransferReceiptRequest) (*GetOwnershipTransferReceiptResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetOwnershipTransferReceipt not implemented")
+}
+func (UnimplementedAuthServiceServer) GetVoiceSessionEpochFloor(context.Context, *GetVoiceSessionEpochFloorRequest) (*GetVoiceSessionEpochFloorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVoiceSessionEpochFloor not implemented")
 }
 func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
@@ -670,6 +688,24 @@ func _AuthService_GetOwnershipTransferReceipt_Handler(srv interface{}, ctx conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).GetOwnershipTransferReceipt(ctx, req.(*GetOwnershipTransferReceiptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetVoiceSessionEpochFloor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVoiceSessionEpochFloorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetVoiceSessionEpochFloor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetVoiceSessionEpochFloor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetVoiceSessionEpochFloor(ctx, req.(*GetVoiceSessionEpochFloorRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1214,6 +1250,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetOwnershipTransferReceipt",
 			Handler:    _AuthService_GetOwnershipTransferReceipt_Handler,
+		},
+		{
+			MethodName: "GetVoiceSessionEpochFloor",
+			Handler:    _AuthService_GetVoiceSessionEpochFloor_Handler,
 		},
 		{
 			MethodName: "Register",

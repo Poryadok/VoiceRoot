@@ -20,6 +20,25 @@
 - ММ-специфичные баны (через Matchmaking Service)
 - Федеративная модерация (нода отвечает за свой контент, нарушения → дефедерация)
 
+## Account-ban enforcement
+
+Auth account status is suspended while at least one temp_ban or perm_ban
+sanction for the account is not revoked and has not expired. Revoking, expiring,
+or approving an appeal for one sanction reactivates the account only when no
+other effective account ban remains. Applying or removing account bans and
+reconciling Auth status are serialized per account by Moderation. Matchmaking
+bans remain an independent measure and do not change Auth account status.
+
+A sanction removal and its durable moderation_account_status_sync intent commit
+before Moderation calls Auth to reconcile status. Reconciliation rechecks effective
+bans while holding the same per-account lock, then removes the pending row only
+after Auth accepts the derived status. Auth failures and ambiguous reconciliation
+commits leave retry work for the existing one-minute expiry sweeper. A failed or
+ambiguous sanction-mutation commit never triggers account activation; the persisted
+ban remains effective if that transaction did not commit. Applying a ban still
+suspends Auth before committing the local ban, so failure can only leave an extra
+suspension; an uncertain apply result is reconciled from committed sanctions.
+
 ## API (gRPC)
 
 Жалобы — **один** RPC `CreateReport` с полем `target_type` (`user` | `message` | `space` | `story`), не отдельные методы по типу объекта. Клиент: `POST /api/v1/moderation/reports` (202 Accepted). Категория `mm_toxic` на HTTP нормализуется в `cheating`.
@@ -83,6 +102,10 @@ sanctions
 ├── revoked_by (profile_id, nullable)
 ├── created_at
 └── updated_at
+
+moderation_account_status_sync
+├── account_id (UUID, primary key)
+└── requested_at (timestamp; pending Auth reconciliation)
 
 appeals
 ├── id (UUID)

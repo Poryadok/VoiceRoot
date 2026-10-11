@@ -15,6 +15,8 @@ service AuthService {
   rpc ConsumeOwnershipTransferProof(ConsumeOwnershipTransferProofRequest) returns (ConsumeOwnershipTransferProofResponse);
   // Private Space-only read of an already committed receipt; never grants or consumes.
   rpc GetOwnershipTransferReceipt(GetOwnershipTransferReceiptRequest) returns (GetOwnershipTransferReceiptResponse);
+  // Private Voice-only read of the effective session epoch floor for a verified media actor.
+  rpc GetVoiceSessionEpochFloor(GetVoiceSessionEpochFloorRequest) returns (GetVoiceSessionEpochFloorResponse);
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
@@ -384,6 +386,14 @@ message GetOwnershipTransferReceiptResponse {
   int64 session_epoch = 7;
   google.protobuf.Timestamp consumed_at = 8;
   repeated string verified_factors = 9;
+}
+
+message GetVoiceSessionEpochFloorRequest {
+  string account_id = 1;
+}
+
+message GetVoiceSessionEpochFloorResponse {
+  int64 session_epoch_floor = 1;
 }
 
 enum VerifiedFactor {

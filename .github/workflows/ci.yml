@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [master, codex/game-sdk-federation-docs]
+    branches: [master, develop, codex/game-sdk-federation-docs, codex/appearance-settings-view, codex/settings-app-icon]
   push:
-    branches: [master]
+    branches: [master, develop]
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
@@ -49,9 +49,11 @@ jobs:
       global: ${{ steps.filter.outputs.global }}
       ci_global: ${{ steps.filter.outputs.ci_global }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
+      a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      windows_desktop: ${{ steps.filter.outputs.windows_desktop }}
       auth: ${{ steps.filter.outputs.auth }}
       developer-portal: ${{ steps.filter.outputs.developer-portal }}
       admin: ${{ steps.filter.outputs.admin }}
@@ -298,7 +300,12 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: AppIcon Chrome favicon DOM regression
+        if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
+        working-directory: src/frontend
+        run: flutter test --no-pub --platform chrome --reporter expanded --concurrency=1 test/app_shell_icon_web_test.dart
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
+        id: network_offline_capture
         if: >-
           github.event_name == 'pull_request' ||
           (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
@@ -307,12 +314,26 @@ jobs:
         env:
           VOICE_NETWORK_OFFLINE_CAPTURE_DIR: ${{ runner.temp }}/network-offline-captures
         run: |
+          set -o pipefail
           mkdir -p "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR"
-          flutter test test/network_offline_banner_capture_test.dart --reporter expanded --concurrency=1
+          flutter test test/network_offline_banner_capture_test.dart --reporter expanded --concurrency=1 2>&1 |
+            tee "$RUNNER_TEMP/network-offline-capture-test.log"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-h.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-v.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-light-h.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-light-v.png"
+      - name: Upload NetworkOffline capture diagnostics on failure
+        if: >-
+          failure() &&
+          steps.network_offline_capture.outcome == 'failure' &&
+          (github.event_name == 'pull_request' ||
+           (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+        uses: actions/upload-artifact@v6
+        with:
+          name: network-offline-capture-failure-${{ github.run_id }}
+          path: ${{ runner.temp }}/network-offline-capture-test.log
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Upload NetworkOffline banner reference captures
         if: >-
           success() &&
@@ -1219,15 +1240,126 @@ jobs:
           bash ../../scripts/ci/patch-livekit-webrtc-podspec.sh ../..
           flutter build ios --simulator --debug --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
+  flutter-key-backup-goldens:
+    name: Key-backup golden (${{ matrix.platform }})
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+          - platform: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: actions/cache@v5
+        with:
+          path: src/frontend/.dart_tool/hooks_runner
+          key: flutter-sqlite3-hooks-${{ matrix.platform }}-${{ hashFiles('src/frontend/pubspec.lock') }}
+      - name: Prefetch SQLite native assets (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Prefetch SQLite native assets (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ci/flutter-windows-prefetch-sqlite3.ps1
+      - name: Prepare key-backup capture directory
+        shell: pwsh
+        env:
+          VOICE_E2E_KEY_BACKUP_CAPTURE_DIR: ${{ runner.temp }}/e2e-key-backup-goldens
+        run: New-Item -ItemType Directory -Force -Path $env:VOICE_E2E_KEY_BACKUP_CAPTURE_DIR | Out-Null
+      - name: Resolve frontend dependencies
+        working-directory: src/frontend
+        run: flutter pub get
+      - name: Run key-backup golden test
+        working-directory: src/frontend
+        shell: pwsh
+        env:
+          VOICE_E2E_KEY_BACKUP_CAPTURE_DIR: ${{ runner.temp }}/e2e-key-backup-goldens
+        run: flutter test test/e2e_key_backup_settings_test.dart
+      - name: Record key-backup golden provenance
+        if: always()
+        working-directory: src/frontend
+        shell: pwsh
+        env:
+          VOICE_E2E_KEY_BACKUP_CAPTURE_DIR: ${{ runner.temp }}/e2e-key-backup-goldens
+          VOICE_KEY_BACKUP_PLATFORM: ${{ matrix.platform }}
+        run: |
+          $manifest = Join-Path $env:RUNNER_TEMP 'e2e-key-backup-provenance.txt'
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add("source_sha=$(git rev-parse HEAD)")
+          $lines.Add("runner_os=$env:RUNNER_OS")
+          $lines.Add("runner_platform=$env:VOICE_KEY_BACKUP_PLATFORM")
+          $lines.Add('command=flutter test test/e2e_key_backup_settings_test.dart')
+          $lines.Add('flutter_version:')
+          $lines.Add((flutter --version 2>&1 | Out-String).Trim())
+          $lines.Add('dart_version:')
+          $lines.Add((dart --version 2>&1 | Out-String).Trim())
+          $goldenDirectory = "test/goldens/$env:VOICE_KEY_BACKUP_PLATFORM"
+          foreach ($orientation in @('h', 'v')) {
+            $reference = Join-Path $goldenDirectory "e2e_key_backup_$orientation.png"
+            if (Test-Path -LiteralPath $reference) {
+              $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $reference).Hash.ToLowerInvariant()
+              $lines.Add("reference_$orientation=$reference sha256=$hash")
+            } else {
+              $lines.Add("reference_$orientation=missing")
+            }
+            $actual = Join-Path $env:VOICE_E2E_KEY_BACKUP_CAPTURE_DIR "e2e_key_backup_$orientation.png"
+            if (Test-Path -LiteralPath $actual) {
+              $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $actual).Hash.ToLowerInvariant()
+              $lines.Add("actual_$orientation=$actual sha256=$hash")
+            } else {
+              $lines.Add("actual_$orientation=missing")
+            }
+          }
+          $failureDirectory = 'test/failures'
+          foreach ($image in @(Get-ChildItem -LiteralPath $failureDirectory -Filter 'e2e_key_backup_*.png' -File -ErrorAction SilentlyContinue)) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $image.FullName).Hash.ToLowerInvariant()
+            $lines.Add("failure_image=$($image.Name) sha256=$hash")
+          }
+          [System.IO.File]::WriteAllLines($manifest, $lines, [System.Text.UTF8Encoding]::new($false))
+      - name: Upload key-backup golden evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-key-backup-golden-${{ matrix.platform }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/e2e-key-backup-provenance.txt
+            ${{ runner.temp }}/e2e-key-backup-goldens/e2e_key_backup_h.png
+            ${{ runner.temp }}/e2e-key-backup-goldens/e2e_key_backup_v.png
+            src/frontend/test/goldens/${{ matrix.platform }}/e2e_key_backup_h.png
+            src/frontend/test/goldens/${{ matrix.platform }}/e2e_key_backup_v.png
+            src/frontend/test/failures/e2e_key_backup_h_*.png
+            src/frontend/test/failures/e2e_key_backup_v_*.png
+          if-no-files-found: warn
+          retention-days: 7
   flutter-windows:
     needs: [changes, flutter]
     if: >-
       always() &&
       needs.changes.result == 'success' &&
-      (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
-      needs.changes.outputs.code == 'true' &&
-      needs.changes.outputs.run_flutter_tier2 == 'true'
+      ((github.event_name == 'pull_request' &&
+        needs.changes.outputs.windows_desktop == 'true') ||
+       (((github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+        needs.changes.outputs.code == 'true' &&
+        needs.changes.outputs.run_flutter_tier2 == 'true'))
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -1267,6 +1399,7 @@ jobs:
       - ci-script-tests
       - flutter
       - flutter-device-driver
+      - flutter-windows
       - web
       - golangci
       - backend-go-pkg
@@ -1290,6 +1423,7 @@ jobs:
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
+          RUN_WINDOWS_DESKTOP: ${{ (github.event_name == 'pull_request' && needs.changes.outputs.windows_desktop == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true') }}
           RUN_WEB: ${{ needs.changes.outputs.run_web }}
           RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
           RUN_PORTAL: ${{ needs.changes.outputs.run_developer_portal }}
@@ -1303,6 +1437,7 @@ jobs:
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
+          JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
           JOB_WEB: ${{ needs.web.result }}
           JOB_GOLANGCI: ${{ needs.golangci.result }}
@@ -1382,8 +1517,12 @@ jobs:
         run: bash scripts/ci/wait-postgres-steady.sh "$GITHUB_WORKSPACE"
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
+      - name: Generate disposable media principal and TLS fixture
+        run: |
+          echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
+          python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
       - name: Start app stack
-        run: make compose-app-up
+        run: COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build
       - name: Wait for gateway health
         run: |
           for i in $(seq 1 72); do
@@ -1408,7 +1547,10 @@ jobs:
         env:
           VOICE_RUN_LIVE_COMPOSE: "true"
           VOICE_API_BASE_URL: http://127.0.0.1:18080
-        run: bash scripts/ci/compose-e2e-smoke.sh
+        run: |
+          bash scripts/ci/compose-e2e-smoke.sh
+          cd src/backend/gateway
+          CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^TestComposeSpaceVoiceRoomBidirectionalAudio_live$' ./...
 
   a1-e2e:
     needs: changes
@@ -1466,7 +1608,10 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.global == 'true'
+          (
+            needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.a1_t106_live == 'true'
+          )
         ) ||
         (
           github.event_name == 'push' &&

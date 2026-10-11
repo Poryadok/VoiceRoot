@@ -644,7 +644,9 @@ final defaultJoinRoleProvider = FutureProvider.family<SpaceRole?, String>((
       .getDefaultJoinRole(authorization: auth, spaceId: spaceId);
   return switch (result) {
     RolesApiOk(:final data) => data,
-    RolesApiFailure() => null,
+    RolesApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    RolesApiFailure(:final message) => throw Exception(message),
   };
 });
 

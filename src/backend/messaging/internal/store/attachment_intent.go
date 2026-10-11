@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/proto"
 	filev1 "voice.app/voice/file/v1"
+	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/pkg/spacemutationlock"
 )
 
@@ -54,6 +55,10 @@ func attachmentIntentOperation(row MessageRow) uuid.UUID {
 }
 
 func (s *MessagesStore) InsertMessageWithReferences(ctx context.Context, row MessageRow, space *uuid.UUID, request *filev1.AcquireFileReferencesRequest, acquire func(context.Context, *filev1.AcquireFileReferencesRequest) error) (*MessageRow, error) {
+	return s.InsertMessageWithReferencesAndOutbox(ctx, row, space, request, acquire, nil)
+}
+
+func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context, row MessageRow, space *uuid.UUID, request *filev1.AcquireFileReferencesRequest, acquire func(context.Context, *filev1.AcquireFileReferencesRequest) error, events []messageevents.OutboxEvent) (*MessageRow, error) {
 	if s == nil || s.Pool == nil || request == nil || len(request.References) == 0 || acquire == nil {
 		return nil, errors.New("attachment reference dependencies unavailable")
 	}
@@ -180,17 +185,8 @@ func (s *MessagesStore) InsertMessageWithReferences(ctx context.Context, row Mes
 		return nil, err
 	}
 	defer func() { _ = commit.Rollback(context.Background()) }()
-	if space != nil {
-		if _, err = commit.Exec(ctx, `SELECT pg_advisory_xact_lock($1::bigint)`, spacemutationlock.Key(*space)); err != nil {
-			return nil, err
-		}
-		var blocked bool
-		if err = commit.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM messaging_space_lifecycle_fences WHERE space_id=$1 AND state<>'LIVE')`, *space).Scan(&blocked); err != nil {
-			return nil, err
-		}
-		if blocked {
-			return nil, ErrSpaceLifecycleOrder
-		}
+	if err = lockMessageMutation(ctx, commit, row.ChatID, space, &row.ID); err != nil {
+		return nil, err
 	}
 	saved, err := insertMessageDB(ctx, commit, row)
 	if err != nil {
@@ -198,6 +194,14 @@ func (s *MessagesStore) InsertMessageWithReferences(ctx context.Context, row Mes
 	}
 	if saved.ID != savedID {
 		return nil, ErrAttachmentIntentConflict
+	}
+	for _, event := range events {
+		if event.MessageID != saved.ID || event.ChatID != saved.ChatID {
+			return nil, errors.New("attachment message outbox does not match inserted message")
+		}
+		if err := enqueueMessageEvent(ctx, commit, event); err != nil {
+			return nil, err
+		}
 	}
 	if _, err = commit.Exec(ctx, `UPDATE messaging_attachment_send_intents SET state='COMMITTED',completed_at=clock_timestamp() WHERE operation_id=$1`, op); err != nil {
 		return nil, err

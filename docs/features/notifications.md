@@ -64,6 +64,16 @@ notification center не создаются.
 `invisible` имеют приоритет над устаревшими call metadata и остаются
 push-eligible.
 
+Notification obtains only a boolean active-session signal through User's
+dedicated authenticated `GetNotificationRoutingPresence` RPC. It does not use
+the viewerless public presence projection for routing. Online, idle and DND
+suppress push; offline and invisible remain eligible. If the protected
+authority is missing or unavailable, the event attempt fails and is retried;
+Notification must not interpret that failure as offline and send a push.
+Message events resolve all recipients' presence and delivery policies before
+dispatching any push. A policy-loader failure likewise fails the event attempt
+before the recipient batch is sent.
+
 - Sender **никогда** не получает push/in-app на собственное сообщение
 - **Matchmaking / voice join** — presence check **пропускается** (always evaluate push policy); см. [todo/backend.md](../todo/backend.md)
 - **Moderation-produced `system` sanctions** — узкое временное исключение в текущем коде: presence enrichment пропускается и push сохраняется, пока нет отдельного Notification→Realtime in-app пути. Это не правило для всех `system` notifications; transport/payload/dedupe/account→profiles/Flutter presentation остаются открыты — [todo/backend.md](../todo/backend.md)

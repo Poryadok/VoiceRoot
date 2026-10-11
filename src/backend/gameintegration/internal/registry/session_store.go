@@ -9,6 +9,14 @@ import (
 )
 
 var ErrSessionNotFound = errors.New("session not found")
+var ErrSessionOperationAmbiguous = errors.New("session operation ID is ambiguous without app/environment scope")
+var ErrSessionLeaseLost = errors.New("session operation lease was lost or expired")
+
+type SessionOperationKey struct {
+	ApplicationID uuid.UUID
+	EnvironmentID uuid.UUID
+	OperationID uuid.UUID
+}
 
 type SessionPrincipal struct {
 	ApplicationID uuid.UUID
@@ -128,41 +136,91 @@ func (s *Store) getOperation(ctx context.Context, p SessionPrincipal, operationI
 	return o, err
 }
 
-func (s *Store) claim(ctx context.Context, op uuid.UUID) (uuid.UUID, string, string, uuid.UUID, error) {
+func (s *Store) operationKeyForID(ctx context.Context, operationID uuid.UUID) (SessionOperationKey, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT application_id,environment_id FROM gis_session_operations
+		WHERE operation_id=$1 ORDER BY application_id,environment_id`, operationID)
+	if err != nil {
+		return SessionOperationKey{}, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err = rows.Err(); err != nil {
+			return SessionOperationKey{}, err
+		}
+		return SessionOperationKey{}, ErrSessionNotFound
+	}
+	key := SessionOperationKey{OperationID: operationID}
+	if err = rows.Scan(&key.ApplicationID, &key.EnvironmentID); err != nil {
+		return SessionOperationKey{}, err
+	}
+	if rows.Next() {
+		return SessionOperationKey{}, ErrSessionOperationAmbiguous
+	}
+	if err = rows.Err(); err != nil {
+		return SessionOperationKey{}, err
+	}
+	return key, nil
+}
+
+func (s *Store) claim(ctx context.Context, operationID uuid.UUID) (uuid.UUID, string, string, uuid.UUID, error) {
+	key, err := s.operationKeyForID(ctx, operationID)
+	if err != nil {
+		return uuid.Nil, "", "", uuid.Nil, err
+	}
+	return s.claimScoped(ctx, key)
+}
+
+func (s *Store) claimScoped(ctx context.Context, key SessionOperationKey) (uuid.UUID, string, string, uuid.UUID, error) {
+	if key.ApplicationID == uuid.Nil || key.EnvironmentID == uuid.Nil || key.OperationID == uuid.Nil {
+		return uuid.Nil, "", "", uuid.Nil, errors.New("invalid session operation key")
+	}
 	owner := uuid.New()
 	var session uuid.UUID
 	var kind, stage string
-	err := s.Pool.QueryRow(ctx, `UPDATE gis_session_operations SET lease_owner=$2,lease_until=now()+interval '5 seconds',attempts=attempts+1,updated_at=now() WHERE operation_id=$1 AND status='pending' AND (lease_until IS NULL OR lease_until<now()) RETURNING session_id,operation_kind,stage`, op, owner).Scan(&session, &kind, &stage)
+	err := s.Pool.QueryRow(ctx, `UPDATE gis_session_operations
+		SET lease_owner=$4,lease_until=now()+interval '5 seconds',attempts=attempts+1,updated_at=now()
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND status='pending'
+		AND (lease_until IS NULL OR lease_until<now())
+		RETURNING session_id,operation_kind,stage`,
+		key.ApplicationID, key.EnvironmentID, key.OperationID, owner).Scan(&session, &kind, &stage)
 	return session, kind, stage, owner, err
 }
 
-func (s *Store) saveOwnerReceipt(ctx context.Context, op, ownerOp uuid.UUID, stage string, reqHash []byte, r SessionOwnerReceipt) error {
-	_, err := s.Pool.Exec(ctx, `INSERT INTO gis_session_owner_receipts(operation_id,stage,owner_operation_id,owner_request_hash,resource_id,receipt_id,receipt_bytes) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(operation_id,stage) DO NOTHING`, op, stage, ownerOp, reqHash, r.ResourceID, r.ReceiptID, []byte(r.ReceiptID.String()))
+func saveOwnerReceiptTx(ctx context.Context, tx pgx.Tx, key SessionOperationKey, ownerOp uuid.UUID, stage string, reqHash []byte, r SessionOwnerReceipt) error {
+	_, err := tx.Exec(ctx, `INSERT INTO gis_session_owner_receipts
+		(application_id,environment_id,operation_id,stage,owner_operation_id,owner_request_hash,resource_id,receipt_id,receipt_bytes)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		ON CONFLICT(application_id,environment_id,operation_id,stage) DO NOTHING`,
+		key.ApplicationID, key.EnvironmentID, key.OperationID, stage, ownerOp, reqHash, r.ResourceID, r.ReceiptID, []byte(r.ReceiptID.String()))
 	return err
 }
 
-func (s *Store) due(ctx context.Context) ([]uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM gis_session_operations WHERE status='pending' AND next_attempt_at<=now() AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 50`)
+func (s *Store) due(ctx context.Context) ([]SessionOperationKey, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT application_id,environment_id,operation_id FROM gis_session_operations
+		WHERE status='pending' AND next_attempt_at<=now() AND (lease_until IS NULL OR lease_until<now())
+		ORDER BY created_at LIMIT 50`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var ids []uuid.UUID
+	var keys []SessionOperationKey
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
+		var key SessionOperationKey
+		if err := rows.Scan(&key.ApplicationID, &key.EnvironmentID, &key.OperationID); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		keys = append(keys, key)
 	}
-	return ids, rows.Err()
+	return keys, rows.Err()
 }
 
-func (s *Store) scheduleRetry(ctx context.Context, op, owner uuid.UUID, err error) error {
+func (s *Store) scheduleRetry(ctx context.Context, key SessionOperationKey, owner uuid.UUID, err error) error {
 	_, e := s.Pool.Exec(ctx, `UPDATE gis_session_operations SET lease_owner=NULL,lease_until=NULL,
 		stage_retry_count=stage_retry_count+1,
 		next_attempt_at=now()+LEAST(30, (1 << LEAST(stage_retry_count,5))) * interval '1 second',
-		error_code=$3,updated_at=now() WHERE operation_id=$1 AND lease_owner=$2`, op, owner, safeOwnerError(err))
+		error_code=$4,updated_at=now() WHERE application_id=$1 AND environment_id=$2
+		AND operation_id=$3 AND status='pending' AND lease_owner=$5 AND lease_until>clock_timestamp()`,
+		key.ApplicationID, key.EnvironmentID, key.OperationID, safeOwnerError(err), owner)
 	return e
 }
 

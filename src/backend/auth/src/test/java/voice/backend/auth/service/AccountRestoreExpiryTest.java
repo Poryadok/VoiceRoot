@@ -192,6 +192,11 @@ class AccountRestoreExpiryTest {
     }
 
     @Override
+    public boolean revokeIfActive(String tokenHash, Instant now) {
+      return delegate.revokeIfActive(tokenHash, now);
+    }
+
+    @Override
     public RefreshTokenRecord revokeById(UUID id, Instant now) {
       return delegate.revokeById(id, now);
     }

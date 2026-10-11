@@ -86,8 +86,9 @@ ON CONFLICT(account_id) DO UPDATE SET
  state=CASE WHEN voice_account_voice_fences.state='active' THEN 'active' ELSE 'reserving' END,
  reservation_expires_at=CASE WHEN voice_account_voice_fences.state='active' THEN NULL ELSE clock_timestamp()+interval '30 seconds' END,
  updated_at=clock_timestamp()
-WHERE (voice_account_voice_fences.profile_id=EXCLUDED.profile_id AND voice_account_voice_fences.room_id=EXCLUDED.room_id)
-   OR (voice_account_voice_fences.state='reserving' AND voice_account_voice_fences.reservation_expires_at <= clock_timestamp())`, accountID, profileID, roomID)
+WHERE voice_account_voice_fences.admission_operation_id IS NULL AND (
+      (voice_account_voice_fences.profile_id=EXCLUDED.profile_id AND voice_account_voice_fences.room_id=EXCLUDED.room_id)
+   OR (voice_account_voice_fences.state='reserving' AND voice_account_voice_fences.reservation_expires_at <= clock_timestamp()))`, accountID, profileID, roomID)
 	if err != nil {
 		return false, fmt.Errorf("reserve account Voice fence: %w", err)
 	}
@@ -108,7 +109,7 @@ func (s *PostgresAccountVoiceFenceStore) Commit(ctx context.Context, accountID, 
 	tag, err := s.pool.Exec(ctx, `UPDATE voice_account_voice_fences
 SET state='active',reservation_expires_at=NULL,updated_at=clock_timestamp()
 WHERE account_id=$1 AND profile_id=$2 AND room_id=$3
-  AND (state='active' OR reservation_expires_at > clock_timestamp())`, accountID, profileID, roomID)
+  AND admission_operation_id IS NULL AND (state='active' OR reservation_expires_at > clock_timestamp())`, accountID, profileID, roomID)
 	if err != nil {
 		return fmt.Errorf("commit account Voice fence: %w", err)
 	}
@@ -122,7 +123,7 @@ func (s *PostgresAccountVoiceFenceStore) Release(ctx context.Context, accountID,
 	if s == nil || s.pool == nil {
 		return ErrAccountVoiceFenceUnavailable
 	}
-	_, err := s.pool.Exec(ctx, `DELETE FROM voice_account_voice_fences WHERE account_id=$1 AND profile_id=$2 AND room_id=$3`, accountID, profileID, roomID)
+	_, err := s.pool.Exec(ctx, `DELETE FROM voice_account_voice_fences WHERE account_id=$1 AND profile_id=$2 AND room_id=$3 AND admission_operation_id IS NULL`, accountID, profileID, roomID)
 	if err != nil {
 		return fmt.Errorf("release account Voice fence: %w", err)
 	}
@@ -152,14 +153,15 @@ VALUES($1,$2) ON CONFLICT(profile_id) DO NOTHING`, profileID, accountID); err !=
 		return ErrAccountProfileMappingConflict
 	}
 	tag, err := tx.Exec(ctx, `UPDATE voice_account_voice_fences SET room_id=$4,updated_at=clock_timestamp()
-WHERE account_id=$1 AND profile_id=$2 AND room_id=$3 AND state='active'`, accountID, profileID, fromRoom, toRoom)
+WHERE account_id=$1 AND profile_id=$2 AND room_id=$3 AND state='active' AND admission_operation_id IS NULL`, accountID, profileID, fromRoom, toRoom)
 	if err != nil {
 		return fmt.Errorf("transfer account Voice fence: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		var currentProfile uuid.UUID
 		var currentRoom, state string
-		readErr := tx.QueryRow(ctx, `SELECT profile_id,room_id,state FROM voice_account_voice_fences WHERE account_id=$1 FOR UPDATE`, accountID).Scan(&currentProfile, &currentRoom, &state)
+		var admissionOperation *uuid.UUID
+		readErr := tx.QueryRow(ctx, `SELECT profile_id,room_id,state,admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1 FOR UPDATE`, accountID).Scan(&currentProfile, &currentRoom, &state, &admissionOperation)
 		if errors.Is(readErr, pgx.ErrNoRows) {
 			if _, err := tx.Exec(ctx, `INSERT INTO voice_account_voice_fences(account_id,profile_id,room_id,state,reservation_expires_at)
 VALUES($1,$2,$3,'active',NULL)`, accountID, profileID, toRoom); err != nil {
@@ -167,7 +169,7 @@ VALUES($1,$2,$3,'active',NULL)`, accountID, profileID, toRoom); err != nil {
 			}
 		} else if readErr != nil {
 			return fmt.Errorf("read transferred account Voice fence: %w", readErr)
-		} else if currentProfile != profileID || currentRoom != toRoom || state != "active" {
+		} else if currentProfile != profileID || currentRoom != toRoom || state != "active" || admissionOperation != nil {
 			return ErrActiveAccountVoiceSession
 		}
 	}

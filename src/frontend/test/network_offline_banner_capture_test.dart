@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show DiagnosticableTreeNode;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,7 @@ import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/core/voice_compact_banner.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -28,6 +30,85 @@ import 'support/fake_voice_api_clients.dart';
 const _captureDirectoryVariable = 'VOICE_NETWORK_OFFLINE_CAPTURE_DIR';
 const _captureBoundaryKey = Key('network_offline_app_capture');
 const _captureChatId = 'network-offline-capture-chat';
+
+String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
+  if (details == null || details.exception is! FlutterError) {
+    return 'layout diagnostic unavailable';
+  }
+  final summary = (details.exception as FlutterError).toString();
+  if (!summary.startsWith('A RenderFlex overflowed by')) {
+    return 'layout diagnostic unavailable';
+  }
+  final diagnostics =
+      details.informationCollector?.call() ?? const <DiagnosticsNode>[];
+  final renderFlexNode = diagnostics
+      .where((node) => node.name == 'The specific RenderFlex in question is')
+      .firstOrNull;
+  final renderFlexValue = renderFlexNode is DiagnosticableTreeNode
+      ? renderFlexNode.value
+      : null;
+  final renderFlex = renderFlexValue is RenderFlex ? renderFlexValue : null;
+  if (renderFlex == null) return 'layout diagnostic unavailable';
+
+  final creatorNode = diagnostics
+      .whereType<DiagnosticsDebugCreator>()
+      .firstOrNull;
+  final creator = creatorNode?.value;
+  final owner = creator is DebugCreator
+      ? _knownLayoutOwner(creator.element)
+      : 'unavailable';
+  final flexAxis = renderFlex.direction == Axis.horizontal
+      ? 'horizontal'
+      : renderFlex.direction == Axis.vertical
+      ? 'vertical'
+      : 'unavailable';
+  final appFrame = RegExp(
+    r'(src/frontend/lib/[A-Za-z0-9_./-]+\.dart):(\d+)',
+  ).firstMatch(details.stack?.toString() ?? '');
+  final location = appFrame == null
+      ? 'unavailable'
+      : '${appFrame.group(1)}:${appFrame.group(2)}';
+  return 'layout overflow; render=RenderFlex; '
+      'geometry=${_renderFlexGeometry(renderFlex)}; '
+      'flexAxis=$flexAxis; creator=$owner; appFrame=$location';
+}
+
+String _knownLayoutOwner(Element element) {
+  var owner = 'unavailable';
+  final currentOwner = _fixedLayoutOwner(element.widget);
+  if (currentOwner != null) return currentOwner;
+  element.visitAncestorElements((ancestor) {
+    final ancestorOwner = _fixedLayoutOwner(ancestor.widget);
+    if (ancestorOwner != null) {
+      owner = ancestorOwner;
+      return false;
+    }
+    return true;
+  });
+  return owner;
+}
+
+String? _fixedLayoutOwner(Widget widget) {
+  if (widget is VoiceCompactBanner) return 'VoiceCompactBanner';
+  if (widget is Row) return 'Row';
+  if (widget is Column) return 'Column';
+  if (widget is Wrap) return 'Wrap';
+  if (widget is ChatRoomPanel) return 'ChatRoomPanel';
+  if (widget is ChatListBody) return 'ChatListBody';
+  if (widget is VoiceApp) return 'VoiceApp';
+  return null;
+}
+
+String _renderFlexGeometry(RenderFlex? renderFlex) {
+  if (renderFlex == null) return 'unavailable';
+  String dimension(double value) => value.isFinite
+      ? value.clamp(0.0, 100000.0).toStringAsFixed(1)
+      : 'unbounded';
+  final size = renderFlex.size;
+  final constraints = renderFlex.constraints;
+  return 'size=${dimension(size.width)}x${dimension(size.height)}; '
+      'max=${dimension(constraints.maxWidth)}x${dimension(constraints.maxHeight)}';
+}
 
 void main() {
   testWidgets('keeps one reconnect banner in the visible network context', (
@@ -175,14 +256,48 @@ void main() {
         isNull,
         reason: 'selected-room fixture must lay out before reconnect begins',
       );
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.reconnecting;
-      await tester.pump(reconnectBannerShowDelay);
+      String? reconnectOverflowEvidence;
+      final previousFlutterErrorHandler = FlutterError.onError;
+      if (viewport.name == 'v') {
+        if (previousFlutterErrorHandler == null) {
+          throw StateError('Flutter test error handler is unavailable');
+        }
+        FlutterError.onError = (details) {
+          try {
+            if (reconnectOverflowEvidence == null &&
+                details.exception is FlutterError &&
+                (details.exception as FlutterError).toString().startsWith(
+                  'A RenderFlex overflowed by',
+                )) {
+              try {
+                final evidence = _renderFlexFailureEvidence(details);
+                if (evidence != 'layout diagnostic unavailable') {
+                  reconnectOverflowEvidence = evidence;
+                }
+              } catch (_) {
+                reconnectOverflowEvidence = 'layout diagnostic unavailable';
+              }
+            }
+          } finally {
+            previousFlutterErrorHandler(details);
+          }
+        };
+      }
+      try {
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.reconnecting;
+        await tester.pump(reconnectBannerShowDelay);
+      } finally {
+        if (viewport.name == 'v') {
+          FlutterError.onError = previousFlutterErrorHandler;
+        }
+      }
       expect(
         tester.takeException(),
         isNull,
         reason:
-            'reconnect state must lay out without overflowing (${viewport.name})',
+            'reconnect state must lay out without overflowing (${viewport.name}); '
+            '${reconnectOverflowEvidence ?? 'layout diagnostic unavailable'}',
       );
 
       final navigationOwnsBanner =

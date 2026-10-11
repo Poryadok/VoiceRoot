@@ -7,6 +7,8 @@ import re
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +62,31 @@ class ComposeBootstrapEnvironmentTests(unittest.TestCase):
         self.assertNotIn("compose.env", artifact_step)
         self.assertNotIn("/state/", artifact_step)
         self.assertNotIn("/tls/", artifact_step)
+
+    def test_compose_reuses_canonical_voice_space_media_mtls_overlay(self):
+        args = SimpleNamespace(phase0_env=Path("phase0.env"), compose_env=Path("t31.env"), project="t31-proof")
+        with patch.object(bootstrap.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            bootstrap.compose(args, "config")
+        command = run.call_args.args[0]
+        compose_files = [command[index + 1] for index, value in enumerate(command[:-1]) if value == "-f"]
+        self.assertEqual(
+            compose_files,
+            [
+                "docker-compose.yml",
+                "docker-compose.phase0.yml",
+                "docker-compose.voice-space-media.yml",
+                "docker-compose.t31-session-events-e2e.yml",
+            ],
+        )
+        workflow_paths = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn('"docker-compose.voice-space-media.yml"', workflow_paths)
+        workflow_lines = workflow_paths.splitlines()
+        phase0_lines = [i for i, line in enumerate(workflow_lines) if "-f docker-compose.phase0.yml" in line]
+        self.assertEqual(len(phase0_lines), 13)
+        for index in phase0_lines:
+            self.assertIn("-f docker-compose.voice-space-media.yml", workflow_lines[index + 1])
+            self.assertIn("-f docker-compose.t31-session-events-e2e.yml", workflow_lines[index + 2])
 
     def test_rewrites_preserve_static_acceptance_inputs(self):
         with tempfile.TemporaryDirectory(prefix="voice-t31-compose-env-") as directory:

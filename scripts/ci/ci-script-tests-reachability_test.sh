@@ -22,11 +22,54 @@ echo "${global_paths}" | grep -Fxq "  - ${GO_DOWNLOAD_HELPER}" \
   || fail "Docker Go module download helper must be a global CI-policy path"
 
 pr_trigger="$(sed -n '/^  pull_request:$/,/^  push:$/p' "${WORKFLOW}" | sed '$d')"
-echo "${pr_trigger}" | grep -Fq 'branches: [master, codex/game-sdk-federation-docs]' \
-  || fail "CI must run for PRs targeting master and the game SDK feature base"
+echo "${pr_trigger}" | grep -Fq 'master' \
+  || fail "CI must run for PRs targeting master"
+echo "${pr_trigger}" | grep -Fq 'develop' \
+  || fail "CI must run for PRs targeting develop"
+echo "${pr_trigger}" | grep -Fq 'codex/game-sdk-federation-docs' \
+  || fail "CI must run for PRs targeting the game SDK feature base"
+echo "${pr_trigger}" | grep -Fq 'codex/appearance-settings-view' \
+  || fail "CI must run for PRs targeting the Appearance feature base"
+echo "${pr_trigger}" | grep -Fq 'codex/settings-app-icon' \
+  || fail "CI must run for PRs targeting the App Icon feature base"
+pr_branches="$(echo "${pr_trigger}" | sed -n 's/.*branches: \[\(.*\)\].*/\1/p')"
+[[ -n "${pr_branches}" && "${pr_branches}" != *'*'* && "${pr_branches}" != *'?'* ]] \
+  || fail "CI pull-request branch filter must remain exact, without wildcard widening"
+key_backup_job_block="$(tr -d '\r' < "${WORKFLOW}" | sed -n '/^  flutter-key-backup-goldens:$/,/^  [[:alnum:]_-]*:$/p')"
+[[ -n "${key_backup_job_block}" ]] || fail "CI must define the cross-platform key-backup golden job"
+echo "${key_backup_job_block}" | grep -Fq 'os: ubuntu-latest' \
+  || fail "key-backup golden job must run on Linux"
+echo "${key_backup_job_block}" | grep -Fq 'os: windows-latest' \
+  || fail "key-backup golden job must run on Windows"
+echo "${key_backup_job_block}" | grep -Fq 'flutter-version: ${{ env.FLUTTER_VERSION }}' \
+  || fail "key-backup golden job must use the pinned Flutter version"
+echo "${key_backup_job_block}" | grep -Fq 'flutter test test/e2e_key_backup_settings_test.dart' \
+  || fail "key-backup golden job must run the targeted golden test"
+echo "${key_backup_job_block}" | grep -Fq 'VOICE_E2E_KEY_BACKUP_CAPTURE_DIR' \
+  || fail "key-backup golden job must preserve actual platform captures"
+echo "${key_backup_job_block}" | grep -Fq 'flutter-linux-prefetch-sqlite3.sh host' \
+  || fail "Linux key-backup golden job must prefetch SQLite native assets"
+echo "${key_backup_job_block}" | grep -Fq 'flutter-windows-prefetch-sqlite3.ps1' \
+  || fail "Windows key-backup golden job must prefetch SQLite native assets"
+echo "${key_backup_job_block}" | grep -Fq 'e2e-key-backup-golden-${{ matrix.platform }}-${{ github.sha }}' \
+  || fail "golden evidence artifact must identify platform and source SHA"
+echo "${key_backup_job_block}" | grep -Fq 'if: always()' \
+  || fail "golden evidence must be collected on success and failure"
 push_trigger="$(sed -n '/^  push:$/,/^  schedule:$/p' "${WORKFLOW}" | sed '$d')"
-echo "${push_trigger}" | grep -Fq 'branches: [master]' \
-  || fail "CI push trigger must remain limited to master"
+echo "${push_trigger}" | grep -Fq 'branches: [master, develop]' \
+  || fail "CI push trigger must target only master and develop"
+deploy_block="$(sed -n '/^  deploy-staging:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+[[ -n "${deploy_block}" ]] || fail "CI workflow must define deploy-staging"
+echo "${deploy_block}" | grep -Fq "github.event_name == 'push'" \
+  || fail "staging deployment must remain push-only"
+echo "${deploy_block}" | grep -Fq "github.ref == 'refs/heads/master'" \
+  || fail "staging deployment must remain master-only"
+echo "${deploy_block}" | grep -Fq "vars.STAGING_DEPLOY_ENABLED == 'true'" \
+  || fail "staging deployment must retain its explicit enable gate"
+echo "${deploy_block}" | grep -Fq "needs.staging-stack-lock.result == 'success'" \
+  || fail "staging deployment must retain the successful stack-lock gate"
+echo "${deploy_block}" | grep -Fq '      - staging-stack-lock' \
+  || fail "staging deployment must depend on the stack-lock job"
 ! grep -Fq 'github.event.pull_request.draft' "${WORKFLOW}" \
   || fail "draft PRs must use the same path-filtered CI selection"
 changes_block="$(sed -n '/^  changes:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
@@ -104,11 +147,56 @@ if resolve_voice_base pull_request "${zero_sha}" "${push_before}" >/dev/null 2>&
   fail "Voice scope base must reject an invalid pull request base SHA"
 fi
 
+windows_job_block="$(sed -n '/^  flutter-windows:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+[[ -n "${windows_job_block}" ]] || fail "CI workflow must define flutter-windows"
+echo "${windows_job_block}" | grep -Fq "github.event_name == 'pull_request'" \
+  || fail "Windows desktop build must be selected for native-target PR changes"
+echo "${windows_job_block}" | grep -Fq "needs.changes.outputs.windows_desktop == 'true'" \
+  || fail "Windows desktop PR selection must use its dedicated path filter"
+echo "${windows_job_block}" | grep -Fq "github.event_name == 'workflow_dispatch' && inputs.profile == 'full'" \
+  || fail "Windows desktop build must preserve manual full-profile selection"
+echo "${windows_job_block}" | grep -Fq "needs.changes.outputs.run_flutter_tier2 == 'true'" \
+  || fail "Windows desktop build must preserve its master/manual tier-2 predicate"
 gate_block="$(sed -n '/^  ci-gate:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 echo "${gate_block}" | grep -Eq '^      - ci-script-tests$' \
   || fail "ci-gate must require ci-script-tests"
 grep -Fq 'check_if "${GLOBAL}" ci-script-tests' "${REQUIRED_JOBS}" \
   || fail "ci-gate must require ci-script-tests for global CI-policy paths"
+echo "${gate_block}" | grep -Eq '^      - flutter-windows$' \
+  || fail "ci-gate must wait for the Windows desktop job"
+echo "${gate_block}" | grep -Fq 'RUN_WINDOWS_DESKTOP:' \
+  || fail "ci-gate must receive the conditional Windows selection"
+echo "${gate_block}" | grep -Fq 'JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}' \
+  || fail "ci-gate must receive the Windows job result"
+grep -Fq 'check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows' "${REQUIRED_JOBS}" \
+  || fail "ci-gate must require Windows only when its job selector is true"
+
+echo "== Windows path-filter restricted-pattern model (not dorny equivalence) =="
+python - "${PATH_FILTERS}" <<'PY'
+import fnmatch
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r"(?m)^windows_desktop:\s*\n((?:[ \t]+-\s+[^\n]+\n)+)", text)
+if not match:
+    raise SystemExit("FAIL: windows_desktop path filter is missing or empty")
+patterns = [line.strip()[2:].strip().strip("'\"") for line in match.group(1).splitlines()]
+cases = {
+    "src/frontend/windows/runner/desktop_host.cpp": True,
+    "src/frontend/pubspec.yaml": True,
+    "src/frontend/assets/app_icons/voice_sky.png": True,
+    "src/frontend/lib/services/windows_desktop_host.dart": False,
+    "src/backend/windows/desktop_host.cpp": False,
+    "src/frontend/assets/avatars/profile.png": False,
+}
+for path, expected in cases.items():
+    actual = any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
+    if actual != expected:
+        raise SystemExit(f"FAIL: Windows path-filter model for {path}: expected {expected}, got {actual}")
+print("Windows path-filter model cases passed; actual dorny selection is verified by the PR job.")
+PY
 
 compose_e2e_block="$(sed -n '/^  compose-e2e:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 [[ -n "${compose_e2e_block}" ]] || fail "CI workflow must define a compose-e2e job"

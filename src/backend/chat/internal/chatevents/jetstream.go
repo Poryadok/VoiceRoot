@@ -20,6 +20,8 @@ import (
 const (
 	streamName               = "chat_events"
 	subjectChatCreated       = "chat.created"
+	subjectChatUpdated       = "chat.updated"
+	subjectChatDeleted       = "chat.deleted"
 	subjectChatMemberChanged = "chat.member_changed"
 	subjectDMPeerDeleted     = "chat.dm_peer_deleted"
 )
@@ -81,7 +83,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 
 func chatEventStreamSubjects() []string {
 	return []string{
-		subjectChatCreated, subjectChatMemberChanged, subjectDMPeerDeleted,
+		subjectChatCreated, subjectChatUpdated, subjectChatDeleted, subjectChatMemberChanged, subjectDMPeerDeleted,
 		"space.tree_changed", "space.created", "voice.room_created", "voice.room_deleted",
 		"space.invite_created", "space.member_joined", "space.member_left", "space.updated", "space.deleted", "space.deletion_scheduled", "space.restored",
 	}
@@ -107,12 +109,16 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 }
 
 func (p *JetStreamPublisher) publishProtoWithMsgID(ctx context.Context, subject string, env *eventsv1.ChatStreamEvent, msgID string) error {
-	if err := p.ensureStream(); err != nil {
-		return err
-	}
 	b, err := proto.Marshal(env)
 	if err != nil {
 		return fmt.Errorf("marshal ChatStreamEvent: %w", err)
+	}
+	return p.publishBytesWithMsgID(ctx, subject, env, b, msgID)
+}
+
+func (p *JetStreamPublisher) publishBytesWithMsgID(ctx context.Context, subject string, env *eventsv1.ChatStreamEvent, b []byte, msgID string) error {
+	if err := p.ensureStream(); err != nil {
+		return err
 	}
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
@@ -126,6 +132,12 @@ func (p *JetStreamPublisher) publishProtoWithMsgID(ctx context.Context, subject 
 	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}
 	if created := env.GetChatCreated(); created != nil {
 		attrs = append(attrs, slog.String("chat_id", created.GetChatId()))
+	}
+	if updated := env.GetChatUpdated(); updated != nil {
+		attrs = append(attrs, slog.String("chat_id", updated.GetChatId()))
+	}
+	if deleted := env.GetChatDeleted(); deleted != nil {
+		attrs = append(attrs, slog.String("chat_id", deleted.GetChatId()))
 	}
 	if changed := env.GetChatMemberChanged(); changed != nil {
 		attrs = append(attrs, slog.String("chat_id", changed.GetChatId()), slog.String("profile_id", changed.GetProfileId()))
@@ -150,6 +162,80 @@ func (p *JetStreamPublisher) PublishChatCreated(ctx context.Context, chatID, cha
 		},
 	}
 	return p.publishProto(ctx, subjectChatCreated, env)
+}
+
+// PublishChatUpdated emits the fields changed by one successful UpdateChat request.
+func (p *JetStreamPublisher) PublishChatUpdated(ctx context.Context, chatID string, changedFields []string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_ChatUpdated{
+			ChatUpdated: &eventsv1.ChatUpdated{
+				ChatId:        chatID,
+				ChangedFields: append([]string(nil), changedFields...),
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectChatUpdated, env)
+}
+
+// PublishChatDeleted publishes the exact durable purge envelope and reuses its stable event ID
+// as the JetStream deduplication key.
+func (p *JetStreamPublisher) PublishChatDeleted(ctx context.Context, env *eventsv1.ChatStreamEvent) error {
+	if env == nil || env.GetChatDeleted() == nil || env.GetEventId() == "" || env.GetOccurredAt() == nil || env.GetOccurredAt().CheckValid() != nil {
+		return fmt.Errorf("invalid chat-deleted envelope")
+	}
+	eventID, err := uuid.Parse(env.GetEventId())
+	if err != nil || eventID == uuid.Nil || eventID.String() != env.GetEventId() {
+		return fmt.Errorf("invalid chat-deleted envelope")
+	}
+	deleted := env.GetChatDeleted()
+	if deleted.GetGeneration() == 0 || len(deleted.GetManifestSha256()) != 32 {
+		return fmt.Errorf("invalid chat-deleted purge binding")
+	}
+	for _, value := range []string{deleted.GetChatId(), deleted.GetSpaceId(), deleted.GetDeletionOperationId(), deleted.GetManifestId()} {
+		id, err := uuid.Parse(value)
+		if err != nil || id == uuid.Nil || id.String() != value {
+			return fmt.Errorf("invalid chat-deleted purge binding")
+		}
+	}
+	return p.publishProtoWithMsgID(ctx, subjectChatDeleted, env, env.GetEventId())
+}
+
+// PublishChatDeletedBytes publishes the exact serialized envelope persisted by the purge transaction.
+func (p *JetStreamPublisher) PublishChatDeletedBytes(ctx context.Context, eventID string, eventBytes []byte) error {
+	if eventID == "" || len(eventBytes) == 0 {
+		return fmt.Errorf("invalid persisted chat-deleted envelope")
+	}
+	env := new(eventsv1.ChatStreamEvent)
+	if err := proto.Unmarshal(eventBytes, env); err != nil || env.GetEventId() != eventID || env.GetChatDeleted() == nil {
+		return fmt.Errorf("invalid persisted chat-deleted envelope")
+	}
+	if err := validateChatDeletedEnvelope(env); err != nil {
+		return err
+	}
+	return p.publishBytesWithMsgID(ctx, subjectChatDeleted, env, eventBytes, eventID)
+}
+
+func validateChatDeletedEnvelope(env *eventsv1.ChatStreamEvent) error {
+	if env == nil || env.GetChatDeleted() == nil || env.GetEventId() == "" || env.GetOccurredAt() == nil || env.GetOccurredAt().CheckValid() != nil {
+		return fmt.Errorf("invalid chat-deleted envelope")
+	}
+	eventID, err := uuid.Parse(env.GetEventId())
+	if err != nil || eventID == uuid.Nil || eventID.String() != env.GetEventId() {
+		return fmt.Errorf("invalid chat-deleted envelope")
+	}
+	deleted := env.GetChatDeleted()
+	if deleted.GetGeneration() == 0 || len(deleted.GetManifestSha256()) != 32 {
+		return fmt.Errorf("invalid chat-deleted purge binding")
+	}
+	for _, value := range []string{deleted.GetChatId(), deleted.GetSpaceId(), deleted.GetDeletionOperationId(), deleted.GetManifestId()} {
+		id, err := uuid.Parse(value)
+		if err != nil || id == uuid.Nil || id.String() != value {
+			return fmt.Errorf("invalid chat-deleted purge binding")
+		}
+	}
+	return nil
 }
 
 // PublishChatMemberChanged implements Publisher.

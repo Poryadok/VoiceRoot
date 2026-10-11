@@ -9,7 +9,59 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	eventsv1 "voice.app/voice/events/v1"
 )
+
+type roleInvalidationJetStream struct {
+	nats.JetStreamContext
+	message *nats.Msg
+	ack     *nats.PubAck
+	err     error
+}
+
+func (c *roleInvalidationJetStream) PublishMsg(message *nats.Msg, _ ...nats.PubOpt) (*nats.PubAck, error) {
+	c.message = message
+	return c.ack, c.err
+}
+
+func TestJetStreamPublisher_VoicePolicyInvalidationUsesDedicatedSubjectStableIDAndPubAck(t *testing.T) {
+	wantAck := &nats.PubAck{Stream: streamName, Sequence: 43}
+	capture := &roleInvalidationJetStream{ack: wantAck}
+	publisher := &JetStreamPublisher{js: capture}
+	event := &eventsv1.RoleStreamEvent{
+		EventId: "00000000-0000-0000-0000-000000000051",
+		Payload: &eventsv1.RoleStreamEvent_VoiceRoomPolicyInvalidated{
+			VoiceRoomPolicyInvalidated: &eventsv1.VoiceRoomPolicyInvalidated{
+				SpaceId: "00000000-0000-0000-0000-000000000052", PolicyEpoch: 11,
+			},
+		},
+	}
+
+	ack, err := publisher.PublishVoiceRoomPolicyInvalidated(context.Background(), event)
+	require.NoError(t, err)
+	require.Same(t, wantAck, ack)
+	require.Equal(t, subjectVoicePolicyInvalid, capture.message.Subject)
+	require.Equal(t, event.GetEventId(), capture.message.Header.Get(nats.MsgIdHdr))
+	var decoded eventsv1.RoleStreamEvent
+	require.NoError(t, proto.Unmarshal(capture.message.Data, &decoded))
+	require.Equal(t, event.GetEventId(), decoded.GetEventId())
+	require.Equal(t, uint64(11), decoded.GetVoiceRoomPolicyInvalidated().GetPolicyEpoch())
+}
+
+func TestJetStreamPublisher_VoicePolicyInvalidationRejectsMissingAuthorityEpoch(t *testing.T) {
+	capture := &roleInvalidationJetStream{}
+	publisher := &JetStreamPublisher{js: capture}
+	_, err := publisher.PublishVoiceRoomPolicyInvalidated(context.Background(), &eventsv1.RoleStreamEvent{
+		EventId: "event",
+		Payload: &eventsv1.RoleStreamEvent_VoiceRoomPolicyInvalidated{
+			VoiceRoomPolicyInvalidated: &eventsv1.VoiceRoomPolicyInvalidated{SpaceId: "space"},
+		},
+	})
+	require.Error(t, err)
+	require.Nil(t, capture.message)
+}
 
 func startRoleJSTestServer(t *testing.T) *server.Server {
 	t.Helper()
@@ -40,7 +92,7 @@ func provisionRoleEventStream(t *testing.T, url string) {
 	require.NoError(t, err)
 	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: []string{
 		subjectRoleCreated, subjectRoleUpdated, subjectRoleDeleted, subjectRoleAssigned, subjectRoleRevoked,
-		subjectChatOverride, subjectChatOverrideRemoved, subjectVoiceOverride, subjectVoiceOverrideRemoved,
+		subjectChatOverride, subjectChatOverrideRemoved, subjectVoiceOverride, subjectVoiceOverrideRemoved, subjectVoicePolicyInvalid,
 	}})
 	require.NoError(t, err)
 }

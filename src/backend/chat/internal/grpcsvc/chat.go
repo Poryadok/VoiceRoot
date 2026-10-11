@@ -125,6 +125,7 @@ type DMStore interface {
 	InstallStickerPack(ctx context.Context, profileID, packID uuid.UUID) (*store.StickerPackRow, error)
 	UninstallStickerPack(ctx context.Context, profileID, packID uuid.UUID) error
 	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
+	CreateChatWithRequestID(ctx context.Context, request store.ChatCreateRequest) (*store.ChatRow, bool, error)
 	CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)

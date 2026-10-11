@@ -35,6 +35,21 @@ class OAuthAuthorizationCodeStorePeekTest {
     assertThat(store.peek("missing")).isEmpty();
   }
 
+  @Test
+  void codecPreservesOriginEpochAndTreatsLegacyPayloadAsUnbound() {
+    OAuthAuthorizationCodeCodec codec = new OAuthAuthorizationCodeCodec();
+    OAuthAuthorizationCode bound = new OAuthAuthorizationCode(
+        "bound", "account", "profile", "client", "https://voice.app/callback",
+        "challenge", "S256", NOW.plusSeconds(60), 12L);
+
+    assertThat(codec.decode(codec.encode(bound))).isEqualTo(bound);
+
+    String legacyPayload = String.join("\u001f", bound.code(), bound.accountId(),
+        bound.profileId(), bound.clientId(), bound.redirectUri(), bound.codeChallenge(),
+        bound.codeChallengeMethod(), bound.expiresAt().toString());
+    assertThat(codec.decode(legacyPayload).originSessionEpoch()).isZero();
+  }
+
   static OAuthAuthorizationCode code(String value, Instant expiresAt) {
     return new OAuthAuthorizationCode(
         value, "account", "profile", "client", "https://voice.app/callback", "challenge", "S256", expiresAt);
