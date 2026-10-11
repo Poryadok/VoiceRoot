@@ -15,7 +15,7 @@ report_unexpected_exit() {
   printf 'CI_DIAG stage=unexpected-command source_line=%s exit_status=%s\n' "$source_line" "$status" >&2
 }
 
-trap 'report_unexpected_exit "$?" "${BASH_LINENO[0]:-0}"' ERR
+trap 'report_unexpected_exit "$?" "$LINENO"' ERR
 
 fail() {
   printf 'CI_DIAG stage=assertion source_line=%s exit_status=1\n' "${BASH_LINENO[0]:-0}" >&2
