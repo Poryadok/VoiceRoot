@@ -201,6 +201,79 @@ class CapturedClosureTests(unittest.TestCase):
                 self.verify(snapshot,receipt,state)
 
 
+class PostmigrationClosureTests(unittest.TestCase):
+    def fixture(self):
+        helper=CapturedClosureTests();snapshot,receipt,_=helper.fixture();self.files=helper.files
+        original=snapshot['context']['original_snapshots']
+        snapshot.update(phase='PAUSED_APPLY',renderer_applied={'verified':True},
+            nats_migration={'verified':True},migration_jobs=[{'name':'migration','uid':'job','configmap_uid':'cm'}],
+            migration_completed_metadata={'bound':True},authorization={'expires_at':'2026-10-11T04:00:00+00:00'})
+        snapshot['target']['mode']='full'
+        snapshot['events'].append({'kind':'migration_complete',**snapshot['migration_jobs'][0]})
+        snapshot['context']['marker']['data']['phase']='rollout-prepared'
+        resources={}
+        for name,row in original.items():
+            if name==retirement.HUB:continue
+            r=copy.deepcopy(snapshot['context']['snapshots'][name]);r['kind']='Deployment';r['metadata']['name']=name
+            resources['Deployment/'+name]=r
+        for i in range(25):
+            name='service-'+str(i);resources['Service/'+name]={'kind':'Service','metadata':{'name':name,'uid':str(uuid.uuid4())},'spec':{'ports':[]}}
+        resources['ConfigMap/voice-app-config']={'kind':'ConfigMap','metadata':{'name':'voice-app-config','uid':str(uuid.uuid4())},'data':{'retained':'actual'}}
+        documents=list(resources.values());self.files['apply-manifests.json']=json.dumps({'apiVersion':'v1','kind':'List','items':documents}).encode()
+        snapshot['target']['manifest_sha256']=hashlib.sha256(self.files['apply-manifests.json']).hexdigest()
+        self.files['apply-authorization.json']=json.dumps(snapshot['authorization']).encode()
+        self.files['operator-postmigration-abort-resources.json']=json.dumps(resources).encode()
+        snapshot['nonnats_binding']={'objects':[{'kind':r['kind'],'name':r['metadata']['name'],'uid':r['metadata']['uid']} for r in documents]}
+        receipt.update(schema='voice-operator-postmigration-abort-closure-v1',snapshot_sha256=retirement.canonical(snapshot),
+            observed_at='2026-10-11T04:01:00+00:00',completed_migrations_sha256=retirement.canonical(snapshot['migration_jobs']),
+            configuration_basis='RETAIN_ACTUAL_POST_MIGRATION_CONFIGURATION_NO_ORIGINAL_WRITE_CLAIM',journals={},
+            resource_disposition_sha256=hashlib.sha256(self.files['operator-postmigration-abort-resources.json']).hexdigest(),
+            retained_files={n:{'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw),'mode':0o600} for n,raw in self.files.items() if n!='operator-postmigration-abort-resources.json'})
+        receipt['before_marker']['data']=dict(snapshot['context']['marker']['data'],phase='rollout-applying')
+        receipt['consumed_claim']={'uid':receipt['before_marker']['uid'],'resourceVersion':receipt['before_marker']['resourceVersion'],
+            'authorization_sha256':receipt['retained_files']['apply-authorization.json']['sha256'],'expires_at':snapshot['authorization']['expires_at']}
+        receipt['events']=[{'kind':'operator_postmigration_abort_intent'}]+[
+            {'kind':'operator_postmigration_workload_restored','name':n,'uid':r['metadata']['uid'],
+             'template_sha256':retirement.canonical(r['spec']['template']),'replicas':1} for n,r in sorted(original.items())]+[{'kind':'operator_postmigration_abort_completed'}]
+        return snapshot,receipt,self.terminal(snapshot,receipt)
+
+    def terminal(self,snapshot,receipt):
+        result=copy.deepcopy(snapshot);result.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',events=snapshot['events']+receipt['events'])
+        result['operator_postmigration_abort']={'schema':'voice-operator-postmigration-abort-reference-v1','snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':retirement.canonical(receipt)}
+        return result
+
+    def verify(self,snapshot,receipt,state):
+        base=Path('/private/rollout-'+snapshot['operation'])
+        def read(path,*args,**kwargs):
+            if Path(path).name=='operator-postmigration-abort-snapshot.json':return json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+            return self.files[Path(path).name]
+        with patch.object(retirement,'private_bytes',side_effect=read),patch.object(retirement,'document',return_value=receipt),\
+             patch.object(retirement.root_cli,'code_binding',return_value=snapshot['code_capture']),\
+             patch.object(retirement,'_retained_mode',return_value=0o600):
+            return retirement.verify_postmigration_terminal(base,state)
+
+    def test_forward_migrations_and_partial_configuration_retained_without_pass(self):
+        snapshot,receipt,state=self.fixture();self.verify(snapshot,receipt,state)
+        self.assertEqual(state['authorization'],snapshot['authorization']);self.assertEqual(state['migration_jobs'],snapshot['migration_jobs'])
+        self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
+
+    def test_postmigration_closure_refuses_effect_or_binding_drift(self):
+        for fault in ('pass','deadline','job','claim','inventory','template','file','history','ready'):
+            snapshot,receipt,state=self.fixture()
+            if fault=='pass':receipt['deployment_pass']=True
+            elif fault=='deadline':receipt['observed_at']='2026-10-11T03:59:00+00:00'
+            elif fault=='job':receipt['completed_migrations_sha256']='a'*64
+            elif fault=='claim':receipt['consumed_claim']['resourceVersion']='other'
+            elif fault=='inventory':receipt['resource_disposition_sha256']='a'*64
+            elif fault=='template':snapshot['context']['snapshots']['voice-story']['spec']['template']={'changed':True}
+            elif fault=='file':self.files['rollout-backup.cms']+=b'changed'
+            elif fault=='history':snapshot['events'].append({'kind':'rollout_target_applied'})
+            else:receipt['setup'][retirement.HUB]['ready']=False
+            receipt['snapshot_sha256']=retirement.canonical(snapshot)
+            with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError)):
+                self.verify(snapshot,receipt,self.terminal(snapshot,receipt))
+
+
 import contextlib
 import hashlib
 import json
