@@ -7,6 +7,28 @@ from controller import Blocked
 from stage_runtime import HUB
 
 class RendererLiveTests(unittest.TestCase):
+    def test_poststart_reads_only_canonical_hub_revisions_and_keeps_owner_template_checks(self):
+        for fault in (None,'owner','template'):
+            with self.subTest(fault=fault):
+                stage,pod,authority=self.fixture()
+                original=stage.kube.run.side_effect
+                def bounded_read(args):
+                    if args[1]=='replicasets':
+                        if args!=['get','replicasets','-l','app='+HUB,'-o','json']:
+                            raise Blocked('command_output_limit')
+                        result=copy.deepcopy(original(args))
+                        if fault=='owner':result['items'][0]['metadata']['ownerReferences'][0]['uid']='foreign'
+                        if fault=='template':result['items'][0]['spec']['template']['spec']['containers'][0]['image']='foreign'
+                        return result
+                    return original(args)
+                stage.kube.run.side_effect=bounded_read
+                with patch.object(renderer_root,'revalidate'),patch.object(renderer_root,'capture',return_value=('d'*64+'  /etc/nats/nats.conf\n').encode()):
+                    if fault:
+                        with self.assertRaisesRegex(Blocked,'renderer_live_pod_ambiguous'):
+                            renderer_root.verify_live(stage,authority)
+                    else:self.assertTrue(renderer_root.verify_live(stage,authority)['verified'])
+                stage.scale.assert_not_called()
+
     def test_actual_paused_cas_and_poststart_proof_accept_status_revision(self):
         for phase in ('paused','running'):
             stage,pod,authority=self.fixture()
