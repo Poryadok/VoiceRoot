@@ -501,11 +501,12 @@ func TestVoiceGRPCVoiceRoom_voiceSpeakDenialBlocksUnmuteButAllowsSelfMute(t *tes
 
 func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker(t *testing.T) {
 	cases := []struct {
-		name  string
-		roles RolePermissionChecker
+		name     string
+		roles    RolePermissionChecker
+		wantCode codes.Code
 	}{
-		{name: "missing"},
-		{name: "unavailable", roles: &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")}},
+		{name: "missing", wantCode: codes.Unavailable},
+		{name: "unavailable", roles: &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")}, wantCode: codes.PermissionDenied},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -525,7 +526,7 @@ func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker
 				RoomId:  roomID,
 				IsMuted: &unmuted,
 			})
-			require.Equal(t, codes.PermissionDenied, status.Code(err))
+			require.Equal(t, tc.wantCode, status.Code(err))
 			require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted(), "failed-closed unmute must not mutate state")
 		})
 	}
@@ -582,7 +583,7 @@ func TestVoiceGRPCVoiceRoom_protectedActionsFailClosedWithoutRoleChecker(t *test
 		require.NoError(t, err)
 		unmuted := false
 		_, err = f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &unmuted})
-		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		require.Equal(t, codes.Unavailable, status.Code(err))
 		require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted())
 	})
 
