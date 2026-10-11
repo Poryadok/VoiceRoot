@@ -145,4 +145,82 @@ class RendererLiveTests(unittest.TestCase):
                     with self.assertRaises((Blocked,renderer_transition.TransitionError)):
                         renderer_root.recovery_authority(stage,authority)
 
+
+class RendererImageAcquisitionTests(unittest.TestCase):
+    def runtime(self,base,image,*,cached=False,pull_fails=False,wrong_digest=False):
+        import json
+        class Runtime:
+            operation='renderer123456'
+            owned={}
+            def __init__(self):
+                self.base=base;self.calls=[];self.cached=cached;self.owned={}
+            def run(self,args,**kwargs):
+                self.calls.append((list(args),kwargs))
+                if args[:2]==['image','inspect']:
+                    if not self.cached:raise Blocked('command_failed')
+                    return json.dumps([{'Id':'sha256:'+'c'*64,
+                        'RepoDigests':[image if not wrong_digest else image.replace('a'*64,'b'*64)]}])
+                if args[0]=='pull':
+                    if pull_fails:raise Blocked('command_failed')
+                    self.cached=True;return image
+                if args[0]=='create':return 'd'*64
+                raise AssertionError(args)
+            def inspect(self,name):
+                entry=self.owned[name]
+                assert entry['network']=='none' and entry['image']==image
+                return {}
+        return Runtime()
+
+    def mounts(self,base):
+        targets=('input','template','jwt','tls','out')
+        paths=[]
+        for name in targets:
+            path=base/name;path.mkdir();paths.append(path)
+        return [(paths[0],'/run/nats/input',False),
+            (paths[1],'/run/nats/template',False),(paths[2],'/etc/nats/jwt',False),
+            (paths[3],'/etc/nats/tls',False),(paths[4],'/run/nats-rendered',True)]
+
+    def test_actual_create_fetches_missing_exact_renderer_then_reinspects_before_network_none_container(self):
+        import tempfile
+        from pathlib import Path
+        import renderer_execution
+        image='ghcr.io/poryadok/voiceroot/nats-hub-config-renderer@sha256:'+'a'*64
+        for cached in (False,True):
+            with self.subTest(cached=cached),tempfile.TemporaryDirectory() as td:
+                base=Path(td).resolve();runtime=self.runtime(base,image,cached=cached)
+                name=renderer_execution.create(runtime,image,self.mounts(base),'target')
+                self.assertIn(name,runtime.owned)
+                commands=[args for args,_ in runtime.calls]
+                if cached:
+                    self.assertFalse(any(args[0]=='pull' for args in commands))
+                else:
+                    self.assertEqual(commands[:3],[['image','inspect',image],['pull',image],['image','inspect',image]])
+                    pull_options=runtime.calls[1][1]
+                    self.assertGreater(pull_options['timeout'],0)
+                    self.assertLessEqual(pull_options['timeout'],120)
+                create=commands[-1]
+                self.assertEqual(create[create.index('--network')+1],'none')
+                self.assertEqual(create[create.index('--entrypoint')+1],'/nats-hub-config-renderer')
+                self.assertIn(image,create)
+                self.assertEqual(runtime.owned[name]['image_id'],'sha256:'+'c'*64)
+
+    def test_fetch_failure_or_wrong_fetched_digest_never_creates_and_unscoped_image_never_pulls(self):
+        import tempfile
+        from pathlib import Path
+        import renderer_execution
+        image='ghcr.io/poryadok/voiceroot/nats-hub-config-renderer@sha256:'+'a'*64
+        for fault in ('pull-fails','wrong-digest','wrong-repository','tag'):
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory() as td:
+                base=Path(td).resolve()
+                runtime=self.runtime(base,image,pull_fails=fault=='pull-fails',wrong_digest=fault=='wrong-digest')
+                attempted=image
+                if fault=='wrong-repository':attempted=image.replace('/nats-hub-config-renderer','/story')
+                if fault=='tag':attempted=image.split('@')[0]+':latest'
+                with self.assertRaises(Blocked):
+                    renderer_execution.create(runtime,attempted,self.mounts(base),'target')
+                self.assertFalse(any(args[0]=='create' for args,_ in runtime.calls))
+                if fault in ('pull-fails','wrong-digest'):
+                    self.assertEqual([args for args,_ in runtime.calls if args[0]=='pull'],[['pull',image]])
+                else:self.assertEqual(runtime.calls,[])
+
 if __name__=='__main__':unittest.main()

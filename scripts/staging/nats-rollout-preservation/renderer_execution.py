@@ -34,7 +34,15 @@ def read_output(path):
 def create(runtime,image,mounts,suffix):
     if not IMAGE.fullmatch(image) or suffix not in ('old','target'):
         raise Blocked('renderer_image_scope_invalid')
-    rows=json.loads(runtime.run(['image','inspect',image]))
+    try:
+        inspected=runtime.run(['image','inspect',image])
+    except Blocked as error:
+        if error.args!=('command_failed',):raise
+        # Fetch only the admitted immutable renderer, then verify Docker's
+        # exact repository digest before any isolated container is created.
+        runtime.run(['pull',image],timeout=120)
+        inspected=runtime.run(['image','inspect',image])
+    rows=json.loads(inspected)
     if len(rows)!=1 or image not in rows[0].get('RepoDigests',[]):
         raise Blocked('renderer_image_digest_invalid')
     name='voice-known-'+runtime.operation+'-'+suffix
