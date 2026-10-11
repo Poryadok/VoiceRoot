@@ -10,9 +10,10 @@ class CompleteBundleTests(unittest.TestCase):
         local={path.stem:path.name for path in source.glob('*.py') if not path.name.endswith('_test.py')}
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder);kernel=base/'kernel';kernel.write_bytes(b'\x7fELFpackage-parser-fixture')
-            bundle.build(kernel,base/'out',kernel)
+            bundle.build(kernel,base/'out',kernel,kernel)
             with tarfile.open(base/'out/rollout-bundle.tar') as archive:
                 members={row.name:archive.extractfile(row).read() for row in archive.getmembers()}
+            self.assertEqual(members['nats-rollout-preservation/story-current4-probe'],kernel.read_bytes())
             manifest=json.loads(members['capture-manifest.json'])
             self.assertEqual(set(manifest),set(members)-{'capture-manifest.json'})
             missing=set()
@@ -35,14 +36,14 @@ class RootPackageReaderTests(unittest.TestCase):
         self.assertEqual(os.getuid(),0)
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder);kernel=base/'kernel';kernel.write_bytes(b'\x7fELFpackage-reader-fixture')
-            bundle.build(kernel,base/'out',kernel)
+            bundle.build(kernel,base/'out',kernel,kernel)
             code=base/'code';code.mkdir(mode=0o700)
             with tarfile.open(base/'out/rollout-bundle.tar') as archive:
                 for row in archive.getmembers():
                     path=code/row.name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
                     path.write_bytes(archive.extractfile(row).read());path.chmod(0o400)
             captured=root_cli.code_binding(code)
-            self.assertEqual(len(captured),len(bundle.KNOWN)+len(bundle.ROLLOUT)+4)
+            self.assertEqual(len(captured),len(bundle.KNOWN)+len(bundle.ROLLOUT)+5)
             profile=code/'nats-rollout-preservation/closed-seal-source-policies.json'
             raw=profile.read_bytes();profile.chmod(0o600);profile.write_bytes(raw+b' ');profile.chmod(0o400)
             with self.assertRaises(Blocked):root_cli.code_binding(code)
@@ -159,11 +160,11 @@ class WorkflowLauncherTests(unittest.TestCase):
         if supplied:path=Path(supplied)
         else:
             kernel=base/'kernel';kernel.write_bytes(b'\x7fELFlauncher-parser-fixture')
-            bundle.build(kernel,base/'out',kernel);path=base/'out/rollout-bundle.tar'
+            bundle.build(kernel,base/'out',kernel,kernel);path=base/'out/rollout-bundle.tar'
         with tarfile.open(path) as archive:
             result={row.name:archive.extractfile(row).read() for row in archive.getmembers() if row.isfile()}
         manifest=json.loads(result['capture-manifest.json'])
-        self.assertEqual(len(manifest),len(bundle.KNOWN)+len(bundle.ROLLOUT)+4)
+        self.assertEqual(len(manifest),len(bundle.KNOWN)+len(bundle.ROLLOUT)+5)
         self.assertEqual(set(manifest),set(result)-{'capture-manifest.json'})
         for name,wanted in manifest.items():self.assertEqual(hashlib.sha256(result[name]).hexdigest(),wanted)
         return result

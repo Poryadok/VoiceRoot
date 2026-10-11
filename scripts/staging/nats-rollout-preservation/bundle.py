@@ -14,14 +14,14 @@ ROLLOUT+=('actor_auth.py','actor_root.py','actor_verification.py','actor_permiss
     'space_authority.py','space_backup.py','space_migration.py','space_restore.py','space_safeguards.py')
 ROLLOUT+=('renderer_transition.py','renderer_execution.py','renderer_root.py','bot_migration.py')
 ROLLOUT+=('prebuild_v5_disposition.py',)
-ROLLOUT+=('story_witness.py',)
+ROLLOUT+=('story_witness.py','story_fixture.py')
 ROLLOUT+=('paused_recovery.py','v8_upgrade.py')
 ROLLOUT+=('preserved_upload.py',)
 ROLLOUT+=('expired_recovery.py','expired_proof.py','expired_admission.py','expired_transport.py','expired_finish.py')
 ROLLOUT+=('hub_bridge_identity.py','hub_bridge_unit.py','operator_retirement.py')
 ROLLOUT+=('closed_archive.py','closed_durable.py','closed-seal-source-policies.json')
 
-def build(kernel,output,renewer):
+def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
     raw=kernel.read_bytes()
     if not raw.startswith(b'\x7fELF') or len(raw)>32<<20:raise ValueError('Linux kernel required')
@@ -35,6 +35,9 @@ def build(kernel,output,renewer):
     raw=Path(renewer).read_bytes()
     if not raw.startswith(b'\x7fELF') or len(raw)>32<<20:raise ValueError('Linux bootstrap renewer required')
     contents['nats-rollout-preservation/bootstrap-renewer']=raw
+    raw=Path(story_probe).read_bytes()
+    if not raw.startswith(b'\x7fELF') or not 0<len(raw)<=32<<20:raise ValueError('Linux Story compatibility probe required')
+    contents['nats-rollout-preservation/story-current4-probe']=raw
     contents['configure-kubectl-ci.sh']=(source/'configure-kubectl-ci.sh').read_bytes()
     contents['mail-only-patch.py']=(source/'mail-only-patch.py').read_bytes()
     contents['capture-manifest.json']=json.dumps({n:hashlib.sha256(v).hexdigest() for n,v in contents.items()},sort_keys=True).encode()
@@ -52,5 +55,5 @@ def build(kernel,output,renewer):
     return sha
 
 if __name__=='__main__':
-    if len(sys.argv)!=4:raise SystemExit('usage: bundle.py LINUX_KERNEL OUTPUT_DIR LINUX_BOOTSTRAP_RENEWER')
+    if len(sys.argv)!=5:raise SystemExit('usage: bundle.py LINUX_KERNEL OUTPUT_DIR LINUX_BOOTSTRAP_RENEWER LINUX_STORY_PROBE')
     build(*sys.argv[1:])
