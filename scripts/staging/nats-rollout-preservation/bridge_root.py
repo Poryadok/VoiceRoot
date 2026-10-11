@@ -131,7 +131,8 @@ class Actions:
         self._report('workload-capture','STARTED')
         kube=Kube();marker=kube.get('configmap','voice-nats-generation')
         frontends=[s for s in request['changed_services'] if s in ('web','admin','developer-portal')] if request['mode']=='images-only' else ['web','admin','developer-portal']
-        renderer_selected=request['mode']=='full' or previous is not None and previous.get('renderer_authority') is not None
+        full_story=previous is not None and previous['input_target']['mode']=='full'
+        renderer_selected=request['mode']=='full' or previous is not None and not full_story and previous.get('renderer_authority') is not None
         stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else []))
         self._report('workload-capture','COMPLETE')
         self._report('policy-validation','STARTED')
@@ -155,7 +156,7 @@ class Actions:
                     expected_image=previous['target']['images'][key]
                     if stage.old_images[key]!=expected_image and not source_authority.same_image_content(stage.old_images[key],expected_image,image_deadline):
                         raise Blocked('bridge_rollback_current_image_changed')
-                    image=previous['context']['old_images'][key]
+                    image=(previous['context']['old_images'][key] if not full_story or key=='voice-story/story' else stage.old_images[key])
                 images[key]=image
         self._report('image-selection','COMPLETE')
         self._report('contract-selection','STARTED')
@@ -186,6 +187,7 @@ class Actions:
             renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
         import actor_root
         actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+        if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
         nats_authority=None
         if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
             try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
@@ -351,8 +353,9 @@ class Actions:
             base,previous=self.state(request['operation'])
             active=private_json(INSTALLED/'active-release.json')
             if active.get('operation')!=previous['operation'] or active.get('target_sha256')!=previous['target']['manifest_sha256']:raise Blocked('bridge_rollback_latest_release_required')
-            transaction.rollback_package(previous) # successful images-only/immutable old pins gate
-            changed=transaction.rollback_services(previous)
+            story_only=previous['input_target']['mode']=='full'
+            transaction.rollback_package(previous,story_only=story_only)
+            changed=transaction.rollback_services(previous,story_only=story_only)
             return self._prepare({**request,'mode':'images-only','changed_services':changed},previous)
         base,state=self.state(request['operation'])
         if request['action']=='status':return summary(state)

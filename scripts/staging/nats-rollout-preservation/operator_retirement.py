@@ -19,6 +19,8 @@ from stage_runtime import Staging,Kube,HUB,LEAVES,MARKER,pv_storage_path
 OPERATION='3340764a7d24'
 SNAPSHOT_SHA='c776c76492c6266eeaed8eae736224435814f68a76e2a57c892aa9de86925672'
 V15_BINDING='10b5e8f3b5b8676bdc8d4e1f5432304933b3205e7a4a820e09730459ba923d2b'
+FAILED_RETIREMENT_SHA='5a0e2c2437f3d6b96b57e5793d577d58d85ff0310996cf354dc658774ee5b7b6'
+ORIGINAL_RETIREMENT_BINDING='2f90bfbc649b4492c3ca997f8cbaf31932a1033b883bdda06c40a68f658e5173'
 CONFIGMAPS={'voice-app-config','voice-nats-analytics-chat-bootstrap','voice-nats-hub-config',
     'voice-nats-leaf-config','voice-nats-realtime-bootstrap'}
 CORE={HUB,'voice-gateway',*('voice-'+s for s in LEAVES)}
@@ -61,7 +63,7 @@ def terminal_state(snapshot,events,receipt_sha):
         or events[0].get('kind')!='operator_retirement_intent'
         or events[-1].get('kind')!='operator_retirement_completed'
         or any(e.get('kind') not in {'operator_retirement_intent','operator_retirement_completed',
-            'workload_scaled','user_cycle_override','user_cycle_restored'} for e in events)
+            'workload_scaled','user_cycle_override','user_cycle_restored','operator_retirement_continuation_intent'} for e in events)
         or not re.fullmatch('[a-f0-9]{64}',receipt_sha)):fail()
     result=copy.deepcopy(snapshot)
     result.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',
@@ -107,9 +109,16 @@ def verify_terminal(base,state):
         or plan.get('journals')!=receipt.get('journals') or set(plan.get('configmaps',{}))!=CONFIGMAPS):fail()
     validate_terminal(snapshot,state,receipt['events'],canonical(receipt))
     original=snapshot['context']['original_snapshots']
+    continuation=receipt.get('continuation')
+    if continuation is not None:
+        verify_continuation(base,snapshot,plan_raw,receipt)
+    elif any(e.get('kind')=='operator_retirement_continuation_intent' for e in receipt['events']):fail()
+    setup=receipt.get('setup',{})
+    if not isinstance(setup,dict) or set(setup)!=CORE:fail()
     expected={n:{'uid':r['metadata']['uid'],'template_sha256':canonical(r['spec']['template']),
-        'replicas':1,'ready':True} for n,r in original.items()}
-    if set(original)!=CORE or receipt.get('setup')!=expected:fail()
+        'replicas':1,'ready':setup[n].get('ready') if continuation is not None else True} for n,r in original.items()}
+    if (set(original)!=CORE or setup!=expected or any(type(row.get('ready')) is not bool for row in setup.values())
+        or setup[HUB]['ready'] is not True):fail()
     before=snapshot['context']['marker'];after=receipt.get('released_marker',{})
     wanted=copy.deepcopy(before['data']);wanted['phase']='active';wanted.pop('knownRolloutOperation',None)
     if (before['metadata']['resourceVersion']!='3154269' or before['data'].get('phase')!='rollout-prepared'
@@ -188,11 +197,14 @@ class RetirementStage(Staging):
     def release_marker(self):
         self.owned_marker();setup={}
         for name,original in self.original.items():
-            self.wait_ready(name);row=self.kube.get('deployment',name)
+            if not getattr(self,'waived_continuation',False):self.wait_ready(name)
+            row=self.kube.get('deployment',name)
             if (row['metadata']['uid']!=original['metadata']['uid'] or row['spec']['template']!=original['spec']['template']
                 or row['spec'].get('replicas',1)!=1):fail()
             setup[name]={'uid':row['metadata']['uid'],'template_sha256':canonical(row['spec']['template']),
-                'replicas':1,'ready':True}
+                'replicas':1,'ready':row.get('status',{}).get('observedGeneration',0)>=row['metadata']['generation']
+                    and all(row.get('status',{}).get(k,0)==1 for k in ('readyReplicas','updatedReplicas','availableReplicas'))}
+        if setup[HUB]['ready'] is not True:fail()
         marker=self.owned_marker()
         self.released=self.kube.cas('configmap',marker,[
             {'op':'test','path':'/data/phase','value':'rollout-prepared'},
@@ -288,11 +300,130 @@ def retire(code,plan_path,plan_sha,kube=None):
                 raise
         finally:inbox.chmod(0o1730)
 
+
+def failed_snapshot(snapshot,failed):
+    expected=copy.deepcopy(snapshot)
+    expected.update(phase='OPERATOR_RETIRING',status='BLOCKED',fence_status='VERIFIED',
+        events=failed.get('events'))
+    if (failed!=expected or len(failed.get('events',[]))!=125
+        or failed['events'][:83]!=snapshot['events']
+        or failed['events'][83].get('kind')!='operator_retirement_intent'
+        or any(e.get('kind') not in {'operator_retirement_intent','workload_scaled',
+            'user_cycle_override','user_cycle_restored'} for e in failed['events'][83:])):fail()
+
+def continuation_document(row,plan_sha):
+    if (not isinstance(row,dict) or set(row)!={'schema','operation','failed_checkpoint_sha256',
+        'original_plan_sha256','code_binding_sha256','waiver'}
+        or row['schema']!='voice-specific-retirement-continuation-v1'
+        or row['operation']!=OPERATION or row['failed_checkpoint_sha256']!=FAILED_RETIREMENT_SHA
+        or row['original_plan_sha256']!=plan_sha or row['waiver']!=WAIVER
+        or not re.fullmatch('[a-f0-9]{64}',row['code_binding_sha256'])):fail()
+
+def verify_continuation(base,snapshot,plan_raw,receipt):
+    failed_raw=private_bytes(base/'operator-retirement-failed-attempt.json')
+    if hashlib.sha256(failed_raw).hexdigest()!=FAILED_RETIREMENT_SHA:fail()
+    failed=json.loads(failed_raw);failed_snapshot(snapshot,failed)
+    raw=private_bytes(base/'operator-retirement-continuation.json',2<<20)
+    row=json.loads(raw);continuation_document(row,hashlib.sha256(plan_raw).hexdigest())
+    if (json.loads(plan_raw)['code_binding_sha256']!=ORIGINAL_RETIREMENT_BINDING
+        or receipt.get('continuation')!={'attestation_sha256':hashlib.sha256(raw).hexdigest(),
+            'code_binding_sha256':row['code_binding_sha256']}
+        or receipt['events'][:42]!=failed['events'][83:]
+        or receipt['events'][42]!={'kind':'operator_retirement_continuation_intent',
+            'attestation_sha256':hashlib.sha256(raw).hexdigest(),
+            'code_binding_sha256':row['code_binding_sha256']}):fail()
+    return row
+
+def continue_retirement(code,attestation_path,attestation_sha,kube=None):
+    """One exact failed-attempt continuation under the explicit current-data waiver."""
+    if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('operator_retirement_human_root_required')
+    code=Path(code);binding=root_cli.code_binding(code)
+    installed=guard.ROOT/'installed';base=root_cli.operation_path(str(guard.ROOT/('rollout-'+OPERATION)))
+    with operation_lock():
+        if canonical(root_cli.code_binding(installed/'code'))!=V15_BINDING:fail()
+        inbox=installed/'inbox'
+        if stat.S_IMODE(inbox.lstat().st_mode)!=0o1730:fail()
+        inbox.chmod(0o700)
+        try:
+            if any(inbox.iterdir()) or any((installed/'processing').iterdir()):fail()
+            raw=private_bytes(base/'checkpoint.json')
+            if hashlib.sha256(raw).hexdigest()!=FAILED_RETIREMENT_SHA:fail()
+            failed=json.loads(raw)
+            snapshot_raw=private_bytes(base/'operator-retirement-snapshot.json')
+            if hashlib.sha256(snapshot_raw).hexdigest()!=SNAPSHOT_SHA:fail()
+            snapshot=json.loads(snapshot_raw);failed_snapshot(snapshot,failed)
+            plan_raw=private_bytes(base/'operator-retirement-plan.json',2<<20);plan=json.loads(plan_raw)
+            if (plan.get('schema')!='voice-specific-operator-retirement-plan-v1'
+                or plan.get('operation')!=OPERATION or plan.get('checkpoint_sha256')!=SNAPSHOT_SHA
+                or plan.get('code_binding_sha256')!=ORIGINAL_RETIREMENT_BINDING
+                or plan.get('waiver')!=WAIVER or set(plan.get('configmaps',{}))!=CONFIGMAPS):fail()
+            att_raw=private_bytes(attestation_path,2<<20)
+            if hashlib.sha256(att_raw).hexdigest()!=attestation_sha:fail()
+            attestation=json.loads(att_raw);continuation_document(attestation,hashlib.sha256(plan_raw).hexdigest())
+            if attestation['code_binding_sha256']!=canonical(binding):fail()
+            journal_binding(installed,plan['journals'])
+            events=copy.deepcopy(failed['events'][83:])
+            events.append({'kind':'operator_retirement_continuation_intent',
+                'attestation_sha256':attestation_sha,'code_binding_sha256':canonical(binding)})
+            progress=copy.deepcopy(failed)
+            def journal(event):
+                events.append(copy.deepcopy(event))
+                progress.update(phase='OPERATOR_RETIRING',status='RUNNING',
+                    events=copy.deepcopy(snapshot['events']+events))
+                save(base/'checkpoint.json',progress,limit=128<<20)
+            stage=RetirementStage(kube or Kube(),snapshot,plan,journal)
+            stage.waived_continuation=True
+            stage.verify_closed()
+            # Authenticate every unchanged template before the first startup effect.
+            for name,original in stage.original.items():
+                row=stage.kube.get('deployment',name)
+                if (row['metadata']['uid']!=original['metadata']['uid']
+                    or row['spec']['template']!=original['spec']['template']
+                    or row['spec'].get('replicas',1)!=0):fail()
+            exclusive(base/'operator-retirement-failed-attempt.json',raw)
+            exclusive(base/'operator-retirement-continuation.json',att_raw)
+            progress.update(phase='OPERATOR_RETIRING',status='RUNNING',
+                events=copy.deepcopy(snapshot['events']+events))
+            save(base/'checkpoint.json',progress,limit=128<<20)
+            try:
+                stage.scale(HUB,1);stage.wait_ready(HUB)
+                for name in sorted(CORE-{HUB}):stage.scale(name,1)
+                stage.release_marker()
+                events.append({'kind':'operator_retirement_completed'})
+                receipt={'schema':'voice-operator-retirement-closure-v1','operation':OPERATION,
+                    'snapshot_sha256':SNAPSHOT_SHA,'waiver':WAIVER,
+                    'plan_sha256':hashlib.sha256(plan_raw).hexdigest(),
+                    'code_binding_sha256':plan['code_binding_sha256'],
+                    'continuation':{'attestation_sha256':attestation_sha,'code_binding_sha256':canonical(binding)},
+                    'deployment_pass':False,'rollback_eligible':False,
+                    'events':events,'setup':stage.setup,'journals':plan['journals'],
+                    'released_marker':{'uid':stage.released['metadata']['uid'],
+                        'resourceVersion':stage.released['metadata']['resourceVersion'],'data':stage.released['data']},
+                    'storage_verified':True,'config_verified':True,'user_cycle_restored':True}
+                exclusive(base/'operator-retirement-receipt.json',
+                    json.dumps(receipt,sort_keys=True,separators=(',',':')).encode())
+                state=terminal_state(snapshot,events,canonical(receipt))
+                verify_terminal(base,state);save(base/'checkpoint.json',state,limit=128<<20)
+                return {'operation':OPERATION,'status':'ABORTED','phase':'OPERATOR_RETIRED',
+                    'receipt_sha256':canonical(receipt),'setup_ready':all(r['ready'] for r in stage.setup.values())}
+            except Exception:
+                progress['fence_status']='UNKNOWN'
+                try:
+                    if stage.released is None and stage.refence().get('verified') is True:
+                        progress['fence_status']='VERIFIED'
+                finally:
+                    progress.update(phase='OPERATOR_RETIRING',status='BLOCKED')
+                    save(base/'checkpoint.json',progress,limit=128<<20)
+                raise
+        finally:inbox.chmod(0o1730)
+
 if __name__=='__main__':
     sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
-    if len(sys.argv)!=3:raise SystemExit('usage: operator_retirement.py REVIEWED_PRIVATE_PLAN PLAN_SHA256')
+    continuation=len(sys.argv)==4 and sys.argv[1]=='--continue'
+    if not continuation and len(sys.argv)!=3:raise SystemExit('usage: operator_retirement.py [--continue] REVIEWED_PRIVATE_DOCUMENT SHA256')
     try:
-        result=retire(Path(__file__).resolve().parents[1],sys.argv[1],sys.argv[2])
+        code=Path(__file__).resolve().parents[1]
+        result=(continue_retirement(code,sys.argv[2],sys.argv[3]) if continuation else retire(code,sys.argv[1],sys.argv[2]))
         print(json.dumps(result,sort_keys=True))
     except Exception:
         print('NATS_OPERATOR_RETIREMENT=BLOCKED',file=sys.stderr);sys.exit(1)

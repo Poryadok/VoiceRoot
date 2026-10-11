@@ -306,8 +306,11 @@ to the latest successful operation. Root derives its changed workloads and
 recorded actual old image digests from the protected receipt, keeps current live
 configuration, and takes a fresh cut of the current PVC, including records
 written after the previous release. It never replays the prior archive or
-undoes database migrations. Full/app-only rollback needs a separate explicit
-database compatibility plan and is rejected by this images-only endpoint.
+undoes database migrations. A latest successful FULL may be the origin of a
+Story-only rollback: only its recorded reviewed Story application predecessor
+is selected. Fresh current Story schema4 and the exact migration hashes are
+required; current configuration, template, sidecar/init pins, other workloads
+and HUB renderer remain. Generic FULL/app-only reversal is rejected.
 
 Recovery of an interrupted images-only apply before business restart uses the
 same ROOT CLOSED-seal producer after restoring its captured templates. The
@@ -626,8 +629,12 @@ and the exact frozen prepared/unapplied checkpoint. The user's current-data
 waiver permits loss of all current messages and consumers while retaining the
 staging setup. Retirement restores the original twenty workloads with their
 existing UIDs and templates, verifies configuration and selected storage, and
-releases the prepared marker only after readiness. It preserves the complete
-historical checkpoint as an immutable snapshot and appends truthful retirement
+releases the prepared marker only after the selected setup checks. The original
+strict action requires all workloads ready. The separately attested continuation
+of the exact failed125-event attempt restores original desired replicas and
+templates, requires HUB ready, and records actual readiness for all other apps;
+it may close with unhealthy old apps so a normal FULL can repair them. It
+preserves the complete historical checkpoint as an immutable snapshot and appends truthful retirement
 events. The terminal state is ABORTED/OPERATOR_RETIRED/RELEASED, never a
 deployment PASS or rollback source.
 
@@ -644,3 +651,10 @@ source. Its complete manifest, ownership, mode, single-link, size, hash and
 identity checks remain. Private state and native data retain their existing
 O_NOATIME readers. Future deployments and new rollbacks use the normal protected
 cold transaction and require fresh preservation and release evidence.
+
+
+Actual owned Running Pods can identify a previous application image even when
+the application is not Ready: a current container attempt and unique immutable
+runtime imageID must match its owned ReplicaSet and current deployment template.
+Missing or ambiguous attempts, foreign ownership and changed templates refuse
+capture. HUB live census and graceful shutdown health requirements are unchanged.

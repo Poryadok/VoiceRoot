@@ -15,7 +15,7 @@ class BundleCaptureTest(unittest.TestCase):
         self.assertEqual(os.getuid(),0)
         if not Path('/usr/bin/python3').exists():Path('/usr/bin/python3').symlink_to(sys.executable)
         self.root=Path('/var/lib/voice-nats-preservation');self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
-        self.source=Path('/home/pmd/voice-nats-rollout-idle/rollout-bundle.tar');self.source.parent.mkdir(parents=True,exist_ok=True)
+        self.source=Path('/home/pmd/voice-nats-rollout-full-repair/rollout-bundle.tar');self.source.parent.mkdir(parents=True,exist_ok=True)
         self.source.unlink(missing_ok=True)
         contents={'nats-rollout-preservation/operator_retirement.py':b"import sys\nprint('RETIRE_ARGS=' + ','.join(sys.argv[1:]))\n",
             'nats-rollout-preservation/root_cli.py':b"print('CAPTURED_ROOT_ENTRY')\n",
@@ -39,6 +39,10 @@ class BundleCaptureTest(unittest.TestCase):
         result=self.run_launcher('--retire','/root/reviewed-plan.json','a'*64)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(result.stdout.strip(),'RETIRE_ARGS=/root/reviewed-plan.json,'+'a'*64)
+    def test_exact_continuation_arguments_reach_root_only_captured_entry(self):
+        result=self.run_launcher('--continue-retirement','/root/reviewed-continuation.json','b'*64)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),'RETIRE_ARGS=--continue,/root/reviewed-continuation.json,'+'b'*64)
     def test_exact_captured_bytes_execute_root_private_copy(self):
         result=self.run_launcher();self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(result.stdout.strip(),'CAPTURED_ROOT_ENTRY')

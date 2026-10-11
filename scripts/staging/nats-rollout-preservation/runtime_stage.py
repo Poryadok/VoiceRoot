@@ -43,11 +43,11 @@ def terminated_hub(before,after):
 
 IMAGE_TEMPLATE=('{"items":[{{range $i,$r := .items}}{{if $i}},{{end}}'
     '{"kind":{{printf "%q" $r.kind}},"metadata":{"name":{{printf "%q" $r.metadata.name}},"uid":{{printf "%q" $r.metadata.uid}},'
-    '"ownerReferences":[{{range $j,$o := $r.metadata.ownerReferences}}{{if $j}},{{end}}'
+    '"deleting":{{if $r.metadata.deletionTimestamp}}true{{else}}false{{end}},"ownerReferences":[{{range $j,$o := $r.metadata.ownerReferences}}{{if $j}},{{end}}'
     '{"uid":{{printf "%q" $o.uid}},"kind":{{printf "%q" $o.kind}}}{{end}}]},'
     '"status":{"phase":{{if $r.status.phase}}{{printf "%q" $r.status.phase}}{{else}}""{{end}},'
     '"containerStatuses":[{{range $j,$c := $r.status.containerStatuses}}{{if $j}},{{end}}'
-    '{"name":{{printf "%q" $c.name}},"ready":{{$c.ready}},"imageID":{{printf "%q" $c.imageID}}}{{end}}],'
+    '{"name":{{printf "%q" $c.name}},"ready":{{$c.ready}},"imageID":{{printf "%q" $c.imageID}},"containerID":{{if $c.containerID}}{{printf "%q" $c.containerID}}{{else}}""{{end}},"running":{{if $c.state.running}}true{{else}}false{{end}},"lastAttemptID":{{if $c.lastState.terminated}}{{printf "%q" $c.lastState.terminated.containerID}}{{else}}""{{end}}}{{end}}],'
     '"initContainerStatuses":[{{range $j,$c := $r.status.initContainerStatuses}}{{if $j}},{{end}}'
     '{"name":{{printf "%q" $c.name}},"imageID":{{printf "%q" $c.imageID}}}{{end}}]}}{{end}}]}')
 
@@ -64,6 +64,7 @@ def running_image_pins(deployments,rows,*,include_hub=False):
         replicasets={r['metadata']['uid'] for r in rows if r['kind']=='ReplicaSet' and
             any(o.get('kind')=='Deployment' and o['uid']==deployment['metadata']['uid'] for o in r['metadata'].get('ownerReferences',[]))}
         pods=[r for r in rows if r['kind']=='Pod' and r.get('status',{}).get('phase')=='Running' and
+            not r.get('metadata',{}).get('deletionTimestamp') and not r.get('metadata',{}).get('deleting') and
             any(o.get('kind')=='ReplicaSet' and o['uid'] in replicasets for o in r['metadata'].get('ownerReferences',[]))]
         ready_rs={o['uid'] for pod in pods for o in pod['metadata'].get('ownerReferences',[]) if o.get('kind')=='ReplicaSet'}
         for rs in rows:
@@ -77,7 +78,16 @@ def running_image_pins(deployments,rows,*,include_hub=False):
             for pod in pods:
                 statuses=pod['status'].get('initContainerStatuses' if init else 'containerStatuses',[])
                 for status in statuses:
-                    if status['name']!=container['name'] or (not init and status.get('ready') is not True):continue
+                    if status['name']!=container['name']:continue
+                    if not init and status.get('ready') is not True:
+                        # Health is not predecessor identity. Require an actual
+                        # current or retained last container attempt, never a tag.
+                        cid=status.get('containerID','')
+                        running=status.get('running') is True or 'running' in status.get('state',{})
+                        previous=status.get('lastAttemptID') or status.get('lastState',{}).get('terminated',{}).get('containerID')
+                        if (not re.fullmatch('containerd://[a-f0-9]{64}',cid)
+                            or not running and previous!=cid):
+                            raise Blocked('rollout_old_container_attempt_missing')
                     image=status.get('imageID','').removeprefix('docker-pullable://')
                     if not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):
                         raise Blocked('rollout_old_image_identity_unusable')

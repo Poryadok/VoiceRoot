@@ -218,3 +218,45 @@ class StageTest(unittest.TestCase):
         ready.assert_called_once_with('voice-web')
 
 if __name__=='__main__':unittest.main()
+
+
+class ActualUnreadyImageIdentityTests(unittest.TestCase):
+    def fixture(self):
+        template={'spec':{'containers':[{'name':'space','image':'example.invalid/space:old'}]}}
+        deployment={'metadata':{'uid':'deployment'},'spec':{'template':template}}
+        rows=[{'kind':'ReplicaSet','metadata':{'uid':'rs','ownerReferences':[{'kind':'Deployment','uid':'deployment'}]},
+               'spec':{'template':copy.deepcopy(template)}},
+              {'kind':'Pod','metadata':{'uid':'pod','ownerReferences':[{'kind':'ReplicaSet','uid':'rs'}]},
+               'status':{'phase':'Running','containerStatuses':[{'name':'space','ready':False,
+                   'containerID':'containerd://'+'b'*64,'restartCount':2,
+                   'imageID':'example.invalid/space@sha256:'+'a'*64,
+                   'state':{'waiting':{'reason':'CrashLoopBackOff'}},
+                   'lastState':{'terminated':{'containerID':'containerd://'+'b'*64,
+                       'exitCode':1,'startedAt':'2026-10-10T23:00:00Z','finishedAt':'2026-10-10T23:00:01Z'}}}]}}]
+        return {'voice-space':deployment},rows
+
+    def test_actual_owned_unready_attempt_is_identity_not_health(self):
+        deployments,rows=self.fixture()
+        self.assertEqual(runtime_stage.running_image_pins(deployments,rows),
+            {'voice-space/space':'example.invalid/space@sha256:'+'a'*64})
+        status=rows[1]['status']['containerStatuses'][0]
+        status['state']={'running':{'startedAt':'2026-10-10T23:00:02Z'}}
+        status['lastState']={}
+        self.assertEqual(runtime_stage.running_image_pins(deployments,rows),
+            {'voice-space/space':'example.invalid/space@sha256:'+'a'*64})
+
+    def test_unready_capture_never_substitutes_missing_or_foreign_identity(self):
+        for change in ('missing_image','missing_attempt','deleted','foreign_owner','wrong_template','ambiguous'):
+            deployments,rows=self.fixture()
+            status=rows[1]['status']['containerStatuses'][0]
+            if change=='missing_image':status.pop('imageID')
+            elif change=='missing_attempt':status['lastState']={}
+            elif change=='deleted':rows[1]['metadata']['deletionTimestamp']='2026-10-10T23:00:03Z'
+            elif change=='foreign_owner':rows[1]['metadata']['ownerReferences'][0]['uid']='foreign'
+            elif change=='wrong_template':rows[0]['spec']['template']['spec']['containers'][0]['image']='different'
+            else:
+                second=copy.deepcopy(rows[1]);second['metadata']['uid']='pod2'
+                second['status']['containerStatuses'][0]['imageID']='example.invalid/space@sha256:'+'c'*64
+                rows.append(second)
+            with self.subTest(change=change),self.assertRaises(Blocked):
+                runtime_stage.running_image_pins(deployments,rows)

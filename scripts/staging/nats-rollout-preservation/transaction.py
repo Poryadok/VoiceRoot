@@ -29,7 +29,7 @@ from nats_migration import apply_contract
 def save(path,row):root_save(path,row,limit=128<<20)
 
 
-def rollback_services(previous):
+def rollback_services(previous,*,story_only=False):
     # Selection is not schema compatibility approval. Full admission remains a
     # separate prerequisite before any fresh prepare/fence is authorized.
     import source_authority
@@ -42,17 +42,18 @@ def rollback_services(previous):
             raise Blocked('renderer_rollback_authority_required')
         recorded.remove(renderer_root.HUB)
         if recorded!={'voice-'+name for name in catalog}:raise Blocked('rollout_rollback_full_catalog_incomplete')
-        return sorted(catalog)
+        return ['story'] if story_only else sorted(catalog)
     names=target.get('changed_services')
     if target.get('mode')!='images-only' or not isinstance(names,list) or not names or any(not isinstance(n,str) for n in names) or len(set(names))!=len(names) or not set(names)<=catalog:
         raise Blocked('rollout_rollback_service_selection_invalid')
     return sorted(names)
 
 
-def rollback_package(previous):
-    if previous.get('status')!='PASS' or previous['input_target']['mode']!='images-only':
+def rollback_package(previous,*,story_only=False):
+    full_story=story_only and previous.get('input_target',{}).get('mode')=='full'
+    if previous.get('status')!='PASS' or (previous['input_target']['mode']!='images-only' and not full_story):
         raise Blocked('rollout_rollback_database_compatibility_required')
-    selected=rollback_services(previous)
+    selected=rollback_services(previous,story_only=story_only)
     backends=set(selected)-{'web','admin','developer-portal'}
     if backends:
         import story_witness
@@ -73,18 +74,24 @@ def rollback_package(previous):
             or candidate!=expected):
             raise Blocked('rollout_rollback_backend_candidate_unproved')
     target=copy.deepcopy(previous['input_target']);rows=[];images={}
+    if full_story:
+        target['mode']='images-only';target['changed_services']=['story']
+        target['template_hashes']={'voice-story':previous['target']['template_hashes']['voice-story']}
     for name in target['template_hashes']:
         if name==renderer_root.HUB:
             if previous.get('renderer_authority') is None:raise Blocked('renderer_rollback_authority_required')
             # Root bridge captures a fresh renderer descriptor and proof. The
             # application runner never receives a hub Deployment document.
             continue
-        old=previous['context']['original_snapshots'][name]
+        old=previous['context']['snapshots'][name] if full_story else previous['context']['original_snapshots'][name]
+        if full_story and canonical(old['spec']['template'])!=previous['target']['template_hashes'][name]:
+            raise Blocked('rollout_rollback_current_template_changed')
         row={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':name,'namespace':guard.NS},
              'spec':copy.deepcopy(old['spec'])}
         template=row['spec']['template']
         for c in template['spec'].get('initContainers',[])+template['spec']['containers']:
-            key=name+'/'+c['name'];image=previous['context']['old_images'].get(key,'')
+            key=name+'/'+c['name']
+            image=(previous['context']['old_images'].get(key,'') if not full_story or key=='voice-story/story' else previous['target']['images'].get(key,''))
             if not guard.SHA.fullmatch(image.rsplit('@sha256:',1)[-1]) or '@sha256:' not in image:
                 raise Blocked('rollout_rollback_image_unpinned')
             c['image']=image;images[key]=image
@@ -102,6 +109,18 @@ def rollback_package(previous):
                 if image is not None:c['image']=image
     target['nonnats_sha256']=canonical(plan)
     return {'target':target,'manifests':rows,'migrations':[],'contract':copy.deepcopy(previous['contract']),'nonnats':plan}
+
+
+def validate_full_story_rollback_schema(previous,current):
+    # Fresh actor preflight reads the current database; the historical proof
+    # only identifies the reviewed predecessor, never authorizes a downgrade.
+    import actor_root
+    rollback_package(previous,story_only=True)
+    for authority in (previous.get('service_actor_authority') or {},current):
+        schema=authority.get('story_schema') or {}
+        if (schema.get('observation')!={'database':'story_db','version':4,'dirty':False}
+            or schema.get('migration_hashes')!=actor_root.STORY_UP):
+            raise Blocked('rollout_rollback_database_compatibility_required')
 
 
 def context(stage):
