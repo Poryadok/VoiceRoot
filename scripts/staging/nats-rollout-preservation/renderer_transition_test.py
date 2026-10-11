@@ -43,9 +43,9 @@ class RendererTransitionTests(unittest.TestCase):
 
     def test_live_or_ledger_drift(self):
         h=hub();h['spec']['replicas']=0;d=transition.plan(h,OLD,TARGET,SOURCE,STORAGE)
-        for field in ['uid','resourceVersion','replicas','broker','renderer-args','selector','strategy','pvc']:
+        for field in ['uid','name','namespace','replicas','broker','renderer-args','selector','strategy','pvc']:
             c=copy.deepcopy(h)
-            if field in ['uid','resourceVersion']:c['metadata'][field]='999'
+            if field in ['uid','name','namespace']:c['metadata'][field]='999'
             elif field=='replicas':c['spec']['replicas']=1
             elif field=='broker':c['spec']['template']['spec']['containers'][0]['image']='evil'
             elif field=='renderer-args':c['spec']['template']['spec']['initContainers'][0]['args'].append('other')
@@ -54,6 +54,18 @@ class RendererTransitionTests(unittest.TestCase):
             else:c['spec']['template']['spec']['volumes'][0]['persistentVolumeClaim']['claimName']='other'
             self.rejected(transition.validate,d,c,STORAGE,expected_hub=h)
             if field in ['uid','broker','renderer-args','pvc']:self.rejected(transition.validate,d,c,STORAGE,expected_hub=c)
+
+    def test_controller_status_revision_keeps_paused_and_running_identity(self):
+        original=hub();descriptor=transition.plan(original,OLD,TARGET,SOURCE,STORAGE)
+        for paused in (True,False):
+            expected=copy.deepcopy(original);expected['spec']['replicas']=0 if paused else 1
+            if not paused:expected['spec']['template']=copy.deepcopy(descriptor['target_template'])
+            current=copy.deepcopy(expected);current['metadata']['resourceVersion']='200'
+            expected['metadata']['annotations']={'deployment.kubernetes.io/revision':'68'}
+            current['metadata']['annotations']={'deployment.kubernetes.io/revision':'69'}
+            current['status']={'observedGeneration':1,'readyReplicas':0 if paused else 1}
+            with self.subTest(paused=paused):
+                self.assertTrue(transition.validate(descriptor,current,STORAGE,expected_hub=expected,paused=paused))
 
     def test_descriptor_and_storage_forgery(self):
         h=hub();h['spec']['replicas']=0;d=transition.plan(h,OLD,TARGET,SOURCE,STORAGE)

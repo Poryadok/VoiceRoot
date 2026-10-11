@@ -1,6 +1,9 @@
 import copy
 import datetime as dt
 import json
+import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 import guard
@@ -60,5 +63,43 @@ class ClaimTest(unittest.TestCase):
         self.assertIn({'op':'test','path':'/metadata/uid','value':MARKER_UID},patches[0])
         self.assertIn({'op':'test','path':'/metadata/resourceVersion','value':'100'},patches[0])
         self.assertEqual(patches[0][-1],{'op':'replace','path':'/data/phase','value':'rollout-applying'})
+
+class ReceiptSizeTest(unittest.TestCase):
+    def read_receipt(self,path,root,*,uid=0):
+        # Project test-directory ownership for nonroot CI; retain real leaf I/O.
+        real_lstat=Path.lstat;real_fstat=os.fstat
+        def directory_info(path):
+            row=real_lstat(path);fields=list(row)
+            fields[0]=row.st_mode&~0o022;fields[4]=0
+            return os.stat_result(fields)
+        def file_info(fd):
+            row=real_fstat(fd);fields=list(row);fields[4]=uid
+            return os.stat_result(fields)
+        with patch.object(Path,'lstat',directory_info),patch.object(guard.os,'fstat',file_info):
+            return guard.protected_receipt(path,root)
+
+    def test_full_source_inventory_receipt_above_64k_is_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);base=root/('rollout-'+OP);base.mkdir(mode=0o700)
+            path=base/'apply-authorization.json'
+            row=receipt();row['target']={'source_hashes':{
+                'deploy/staging/'+str(i).zfill(4)+'/'+'canonical-source-name-'*4+'.yaml':'a'*64 for i in range(446)}}
+            raw=(json.dumps(row,sort_keys=True,indent=2)+'\n').encode()
+            self.assertGreater(len(raw),65536);self.assertLess(len(raw),2<<20)
+            path.write_bytes(raw);path.chmod(0o440)
+            self.assertEqual(self.read_receipt(path,root),row)
+
+    def test_receipt_bound_and_real_custody_guards_remain_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);base=root/('rollout-'+OP);base.mkdir(mode=0o700)
+            path=base/'apply-authorization.json';path.write_text('{}');path.chmod(0o440)
+            with self.assertRaises(guard.Blocked):self.read_receipt(path,root,uid=1)
+            path.chmod(0o660)
+            with self.assertRaises(guard.Blocked):self.read_receipt(path,root)
+            path.chmod(0o440);os.link(path,base/'second-link')
+            with self.assertRaises(guard.Blocked):self.read_receipt(path,root)
+            (base/'second-link').unlink();path.chmod(0o600)
+            path.write_bytes(b' '*(2<<20)+b'{}');path.chmod(0o440)
+            with self.assertRaises(guard.Blocked):self.read_receipt(path,root)
 
 if __name__=='__main__':unittest.main()

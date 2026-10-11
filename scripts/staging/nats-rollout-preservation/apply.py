@@ -32,6 +32,9 @@ def paused_documents(documents,receipt):
             spec['replicas']=0
         if kind=='Service' and name=='voice-nats' and row['spec'].get('selector')!={'app':'voice-nats-pvc-candidate'}:
             raise Blocked('rollout_hub_service_changed')
+        # Own fencing changes live revisions after the frozen intent was captured.
+        # Keep identity/content; the consumed marker CAS remains apply authority.
+        meta.pop('resourceVersion',None)
     return result
 
 def main():

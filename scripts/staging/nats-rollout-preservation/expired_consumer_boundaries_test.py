@@ -229,6 +229,14 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                     'source_hashes':{'scripts/fixed':hashlib.sha256(b'bound').hexdigest()},'template_hashes':{'voice-story':'a'*64},
                     'input_template_hashes':{'voice-story':'a'*64},'images':{'voice-story/story':'registry/story@sha256:'+'b'*64},
                     'manifest_sha256':hashlib.sha256(raw).hexdigest(),'migration_sha256':transport.upload.digest([]),'nonnats_sha256':'e'*64}
+                # The real runner derives bootstrap pins from the root-bound target YAML.
+                repository=Path(__file__).resolve().parents[3]
+                (source/'deploy/templates').mkdir(parents=True)
+                for part in ('realtime','notification','analytics-chat','search'):
+                    relative='deploy/templates/nats-'+part+'-bootstrap.yaml'
+                    bootstrap=(repository/relative).read_bytes()
+                    (source/relative).write_bytes(bootstrap)
+                    state['target']['source_hashes'][relative]=hashlib.sha256(bootstrap).hexdigest()
                 state['events']=[]
                 state['context']['expected']={'namespace_uid':kube.r['namespace_uid'],'source_claim_uid':kube.r['pvc']['uid']}
                 for path in (fixture.base/'checkpoint.json',fixture.base/'expired-recovery-adopted-checkpoint.json'):
@@ -267,6 +275,8 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                     'VOICE_NATS_ACL_PROOF_GENERATION':receipt['marker']['generation']}
                 stack.enter_context(patch.dict(os.environ,env,clear=True));stack.enter_context(patch('guard.source_root',return_value=source))
                 stack.enter_context(patch('runner.compatible_bootstrap'))
+                import yaml
+                stack.enter_context(patch('runner.decode_yaml',side_effect=yaml.safe_load))
                 captured_read=guard.protected_receipt
                 stack.enter_context(patch('guard.protected_receipt',side_effect=lambda path,**kwargs:captured_read(path,root=fixture.base.parent,**{k:v for k,v in kwargs.items() if k!='root'})))
                 current=[dt.datetime.now(dt.timezone.utc)];real_datetime=dt.datetime

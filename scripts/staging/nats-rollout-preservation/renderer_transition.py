@@ -146,7 +146,11 @@ def validate(descriptor, current_hub, storage_binding, *, expected_hub, paused=T
         _fail()
     expected_meta,expected_spec=_snapshot(expected_hub,storage)
     current_meta,current_spec=_snapshot(current_hub,storage)
-    if expected_meta['uid']!=binding['uid'] or any(current_meta.get(key)!=expected_meta.get(key) for key in ('name','namespace','uid','resourceVersion')) or _json(current_spec)!=_json(expected_spec):
+    # Controller status updates advance RV/managedFields without changing authority.
+    # A mutation still CAS-tests the freshly fetched object's UID and current RV.
+    if (expected_meta['uid']!=binding['uid']
+            or any(current_meta.get(key)!=expected_meta.get(key) for key in ('name','namespace','uid'))
+            or _json(current_spec)!=_json(expected_spec)):
         _fail()
     if (paused and current_spec['replicas']!=0) or _json(expected_spec['template']) not in (_json(original),_json(descriptor['target_template'])):
         _fail()

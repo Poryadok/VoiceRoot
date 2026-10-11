@@ -11,7 +11,16 @@ artifact back through root, authorizes one paused apply, proves the original
 native bytes and complete account census again, and then resumes applications.
 No bootstrap Job runs against the retained store. NATS ConfigMaps, Secrets,
 credentials, streams and consumers are retained. A failed proof retains the
-owned fence and reports BLOCKED; it does not restart clients or overwrite data.
+owned fence and reports BLOCKED; it does not restart clients or overwrite data. A failure during
+read-only capture, before the FENCE checkpoint, instead records
+`FAILED_READ_ONLY / BLOCKED / NOT_ACQUIRED` with an immutable snapshot and a
+finite public guard label. This terminal attempt has no deployment PASS or
+rollback eligibility. Idle admission authenticates the captured code, complete
+unchanged snapshot, failure receipt and matching failed prepare journal; a raw
+BLOCKED status is insufficient. A new operation repeats every normal capture,
+backup and off-node restore check. An earlier stale read-only checkpoint may
+only be classified separately with explicit operator provenance and its exact
+original checkpoint and journal retained.
 
 ## V4 full-master safeguards and compatible backend proof
 
@@ -48,6 +57,8 @@ generated configuration and unchanged broker are checked after hub readiness
 and before applications resume. Failure refences; native migration/CAS still
 require closed writers. Renderer retry validates the recorded completed DB
 state rather than rerunning migrations or assuming the original version.
+Renderer continuity retains complete metadata authority and spec while allowing
+controller status revision churn; mutations CAS against the current live revision.
 
 The first compatible populated backend witness is the reviewed Story image
 pair, whose four schema UP files are identical and whose old binary has passed

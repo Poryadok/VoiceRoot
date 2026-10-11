@@ -108,7 +108,7 @@ class TransactionFailureTest(unittest.TestCase):
         proof={'schema':'voice-nats-service-actor-authority-v1','roles':['social'],'binding':{'services_uid':'fixed'}}
         saved=[]
         with tempfile.TemporaryDirectory() as td:
-            base=Path(td);(base/'apply-manifests.json').write_text('[]')
+            base=Path(td)/'rollout-123456abcdef';base.mkdir();(base/'apply-manifests.json').write_text('[]')
             with patch.object(transaction,'save',side_effect=lambda p,row:saved.append(copy.deepcopy(row))),\
                  patch.object(transaction.guard,'frontend_image_only',return_value=False),\
                  patch.object(transaction.RolloutStage,'capture',side_effect=RuntimeError('owned-capture-interrupted')):
@@ -118,6 +118,9 @@ class TransactionFailureTest(unittest.TestCase):
         self.assertEqual(saved[0]['service_actor_authority'],proof)
         self.assertEqual(saved[0]['service_actor_services'],['social'])
         self.assertEqual(saved[0]['phase'],'READ_ONLY_CAPTURE')
+        self.assertEqual(saved[-1]['service_actor_authority'],proof)
+        self.assertEqual(saved[-1]['service_actor_services'],['social'])
+        self.assertEqual(saved[-1]['phase'],'FAILED_READ_ONLY')
 
     def test_normal_space_gate_orders_offnode_migration_postcondition_before_prepared(self):
         import space_migration
@@ -495,3 +498,25 @@ class FullOriginStoryRollbackTests(unittest.TestCase):
             self.assertEqual(selected['images'],expected)
             self.assertEqual(selected['mode'],'images-only')
             self.assertEqual(selected['changed_services'],['story'])
+
+
+class ReadOnlyPrepareFailureTests(unittest.TestCase):
+    def test_actual_prepare_capture_failure_is_terminal_without_fence_or_refence(self):
+        import tempfile,json
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)/'rollout-669fd496166b';base.mkdir()
+            (base/'apply-manifests.json').write_text('[]')
+            saved=[];binding={'member':'a'*64}
+            def failed_capture(kube,operation,journal,names):
+                journal({'kind':'staging_preflight'})
+                raise transaction.Blocked('rollout_old_container_attempt_missing')
+            with patch.object(transaction,'save',side_effect=lambda path,row:saved.append(copy.deepcopy(row))),                 patch.object(transaction.RolloutStage,'capture',side_effect=failed_capture),                 patch.object(transaction.RolloutStage,'fence') as fence,                 patch.object(transaction.RolloutStage,'refence') as refence:
+                with self.assertRaisesRegex(transaction.Blocked,'rollout_old_container_attempt_missing'):
+                    transaction.prepare(None,base,base/'code',{'mode':'full'},{},'669fd496166b',binding,[],{'actions':[]})
+            self.assertEqual((saved[-1]['phase'],saved[-1]['status'],saved[-1]['fence_status']),
+                ('FAILED_READ_ONLY','BLOCKED','NOT_ACQUIRED'))
+            self.assertEqual(saved[-1]['events'][-1]['guard'],'rollout_old_container_attempt_missing')
+            fence.assert_not_called();refence.assert_not_called()
+            self.assertNotIn('context',saved[-1])
+            self.assertTrue((base/'failed-readonly-snapshot.json').is_file())
+            self.assertTrue((base/'failed-readonly-receipt.json').is_file())

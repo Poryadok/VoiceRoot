@@ -245,6 +245,31 @@ class ActualUnreadyImageIdentityTests(unittest.TestCase):
         self.assertEqual(runtime_stage.running_image_pins(deployments,rows),
             {'voice-space/space':'example.invalid/space@sha256:'+'a'*64})
 
+    def test_current_terminated_attempt_remains_an_exact_image_witness(self):
+        for projected in (False,True):
+            deployments,rows=self.fixture()
+            status=rows[1]['status']['containerStatuses'][0]
+            cid=status['containerID']
+            status['lastState']={'terminated':{'containerID':'containerd://'+'c'*64}}
+            status['state']={'terminated':{'containerID':cid,'exitCode':1}}
+            if projected:
+                status['currentTerminatedID']=cid
+                status.pop('state')
+            with self.subTest(projected=projected):
+                self.assertEqual(runtime_stage.running_image_pins(deployments,rows),
+                    {'voice-space/space':'example.invalid/space@sha256:'+'a'*64})
+
+    def test_current_terminated_identity_requires_matching_valid_container_id(self):
+        for cid,terminated in (('containerd://'+'b'*64,'containerd://'+'c'*64),
+                               ('',''),('containerd://invalid','containerd://invalid')):
+            deployments,rows=self.fixture()
+            status=rows[1]['status']['containerStatuses'][0]
+            status['containerID']=cid
+            status['state']={'terminated':{'containerID':terminated,'exitCode':1}}
+            status['lastState']={}
+            with self.subTest(cid=cid),self.assertRaises(Blocked):
+                runtime_stage.running_image_pins(deployments,rows)
+
     def test_unready_capture_never_substitutes_missing_or_foreign_identity(self):
         for change in ('missing_image','missing_attempt','deleted','foreign_owner','wrong_template','ambiguous'):
             deployments,rows=self.fixture()

@@ -201,6 +201,90 @@ class CapturedClosureTests(unittest.TestCase):
                 self.verify(snapshot,receipt,state)
 
 
+class PostmigrationClosureTests(unittest.TestCase):
+    def fixture(self):
+        helper=CapturedClosureTests();snapshot,receipt,_=helper.fixture();self.files=helper.files
+        original=snapshot['context']['original_snapshots']
+        snapshot.update(phase='PAUSED_APPLY',renderer_applied={'verified':True},
+            nats_migration={'verified':True},migration_jobs=[{'name':'migration','uid':'job','configmap_uid':'cm'}],
+            migration_completed_metadata={'bound':True},authorization={'expires_at':'2026-10-11T04:00:00+00:00'})
+        snapshot['target']['mode']='full'
+        snapshot['events'].append({'kind':'migration_complete',**snapshot['migration_jobs'][0]})
+        snapshot['context']['marker']['data']['phase']='rollout-prepared'
+        resources={}
+        for name,row in original.items():
+            if name==retirement.HUB:continue
+            r=copy.deepcopy(snapshot['context']['snapshots'][name]);r['kind']='Deployment';r['metadata']['name']=name
+            resources['Deployment/'+name]=r
+        for i in range(25):
+            name='service-'+str(i);resources['Service/'+name]={'kind':'Service','metadata':{'name':name,'uid':str(uuid.uuid4())},'spec':{'ports':[]}}
+        resources['ConfigMap/voice-app-config']={'kind':'ConfigMap','metadata':{'name':'voice-app-config','uid':str(uuid.uuid4())},'data':{'retained':'actual'}}
+        documents=copy.deepcopy(list(resources.values()))
+        for row in documents:
+            if row['kind']!='Deployment':row['metadata'].pop('uid')
+        self.files['apply-manifests.json']=json.dumps({'apiVersion':'v1','kind':'List','items':documents}).encode()
+        snapshot['target']['manifest_sha256']=hashlib.sha256(self.files['apply-manifests.json']).hexdigest()
+        self.files['apply-authorization.json']=json.dumps(snapshot['authorization']).encode()
+        self.files['operator-postmigration-abort-resources.json']=json.dumps(resources).encode()
+        snapshot['nonnats_binding']={'objects':[{'kind':r['kind'],'name':r['metadata']['name'],'uid':r['metadata']['uid']} for r in resources.values()]}
+        receipt.update(schema='voice-operator-postmigration-abort-closure-v1',snapshot_sha256=retirement.canonical(snapshot),
+            observed_at='2026-10-11T04:01:00+00:00',completed_migrations_sha256=retirement.canonical(snapshot['migration_jobs']),
+            configuration_basis='RETAIN_ACTUAL_POST_MIGRATION_CONFIGURATION_NO_ORIGINAL_WRITE_CLAIM',journals={},
+            resource_disposition_sha256=hashlib.sha256(self.files['operator-postmigration-abort-resources.json']).hexdigest(),
+            retained_files={n:{'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw),'mode':0o600} for n,raw in self.files.items() if n!='operator-postmigration-abort-resources.json'})
+        receipt['before_marker']['data']=dict(snapshot['context']['marker']['data'],phase='rollout-applying')
+        receipt['consumed_claim']={'uid':receipt['before_marker']['uid'],'resourceVersion':receipt['before_marker']['resourceVersion'],
+            'authorization_sha256':receipt['retained_files']['apply-authorization.json']['sha256'],'expires_at':snapshot['authorization']['expires_at']}
+        receipt['events']=[{'kind':'operator_postmigration_abort_intent'}]+[
+            {'kind':'operator_postmigration_workload_restored','name':n,'uid':r['metadata']['uid'],
+             'template_sha256':retirement.canonical(r['spec']['template']),'replicas':1} for n,r in sorted(original.items())]+[{'kind':'operator_postmigration_abort_completed'}]
+        return snapshot,receipt,self.terminal(snapshot,receipt)
+
+    def terminal(self,snapshot,receipt):
+        result=copy.deepcopy(snapshot);result.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',events=snapshot['events']+receipt['events'])
+        result['operator_postmigration_abort']={'schema':'voice-operator-postmigration-abort-reference-v1','snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':retirement.canonical(receipt)}
+        return result
+
+    def verify(self,snapshot,receipt,state):
+        base=Path('/private/rollout-'+snapshot['operation'])
+        def read(path,*args,**kwargs):
+            if Path(path).name=='operator-postmigration-abort-snapshot.json':return json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+            return self.files[Path(path).name]
+        with patch.object(retirement,'private_bytes',side_effect=read),patch.object(retirement,'document',return_value=receipt),\
+             patch.object(retirement.root_cli,'code_binding',return_value=snapshot['code_capture']),\
+             patch.object(retirement,'_retained_mode',return_value=0o600):
+            return retirement.verify_postmigration_terminal(base,state)
+
+    def test_forward_migrations_and_partial_configuration_retained_without_pass(self):
+        snapshot,receipt,state=self.fixture();self.verify(snapshot,receipt,state)
+        self.assertEqual(state['authorization'],snapshot['authorization']);self.assertEqual(state['migration_jobs'],snapshot['migration_jobs'])
+        self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
+
+    def test_postmigration_closure_refuses_effect_or_binding_drift(self):
+        for fault in ('pass','deadline','job','claim','inventory','template','file','history','ready','ledger_uid','explicit_frozen_uid'):
+            snapshot,receipt,state=self.fixture()
+            if fault=='pass':receipt['deployment_pass']=True
+            elif fault=='deadline':receipt['observed_at']='2026-10-11T03:59:00+00:00'
+            elif fault=='job':receipt['completed_migrations_sha256']='a'*64
+            elif fault=='claim':receipt['consumed_claim']['resourceVersion']='other'
+            elif fault=='inventory':receipt['resource_disposition_sha256']='a'*64
+            elif fault=='template':snapshot['context']['snapshots']['voice-story']['spec']['template']={'changed':True}
+            elif fault=='file':self.files['rollout-backup.cms']+=b'changed'
+            elif fault=='history':snapshot['events'].append({'kind':'rollout_target_applied'})
+            elif fault=='ready':receipt['setup'][retirement.HUB]['ready']=False
+            elif fault=='ledger_uid':snapshot['nonnats_binding']['objects'][0]['uid']='foreign'
+            else:
+                documents=json.loads(self.files['apply-manifests.json'])
+                next(r for r in documents['items'] if r['kind']=='Service')['metadata']['uid']='foreign'
+                self.files['apply-manifests.json']=json.dumps(documents).encode()
+                pin=hashlib.sha256(self.files['apply-manifests.json']).hexdigest()
+                snapshot['target']['manifest_sha256']=pin
+                receipt['retained_files']['apply-manifests.json'].update(sha256=pin,bytes=len(self.files['apply-manifests.json']))
+            receipt['snapshot_sha256']=retirement.canonical(snapshot)
+            with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError)):
+                self.verify(snapshot,receipt,self.terminal(snapshot,receipt))
+
+
 import contextlib
 import hashlib
 import json
@@ -519,3 +603,86 @@ class WaivedContinuationTests(unittest.TestCase):
             kube.objects[('deployment','voice-space')]['spec']['template']['metadata']['annotations']['foreign']='change'
             with self.assertRaises(Blocked):self.invoke(values,kube)
             self.assertEqual(kube.patches,[])
+
+
+class FailedReadOnlyClosureTests(unittest.TestCase):
+    def fixture(self,folder):
+        root=Path(folder);operation='669fd496166b';base=root/('rollout-'+operation);base.mkdir()
+        installed=root/'installed';(installed/'journal').mkdir(parents=True);(installed/'responses').mkdir()
+        nonce=operation+'a'*52
+        request={'action':'prepare','mode':'full','nonce':nonce,'source_sha':'a'*40,
+            'changed_services':[],'run_id':1}
+        row={'phase':'STARTED','prepare_error':'guard_rejected','request':request,
+             'request_sha256':retirement.canonical(request)}
+        response={'status':'BLOCKED','error':'exception_Blocked'}
+        for path,value in ((installed/'journal'/(nonce+'.json'),row),
+                           (installed/'responses'/(nonce+'.json'),response)):
+            path.write_text(json.dumps(value,sort_keys=True,separators=(',',':')));path.chmod(0o600)
+        binding={'member':'a'*64}
+        state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
+               'status':'RUNNING','fence_status':'UNKNOWN','events':[{'kind':'staging_preflight'}],
+               'code_capture':binding,'target':{'mode':'full','immutable':'source'},'input_target':{'mode':'full','immutable':'source'},
+               'contract':{'immutable':'contract'}}
+        return root,base,state,binding,nonce
+
+    def test_automatic_no_effect_failure_authenticates_idle_and_pending_request(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,base,state,binding,nonce=self.fixture(folder)
+            with patch.object(retirement.guard,'ROOT',root),patch.object(retirement.root_cli,'code_binding',return_value=binding):
+                result=retirement.record_readonly_failure(base,state,Blocked('rollout_old_container_attempt_missing'))
+                self.assertEqual((result['phase'],result['status'],result['fence_status']),
+                    ('FAILED_READ_ONLY','BLOCKED','NOT_ACQUIRED'))
+                self.assertEqual(result['events'][:-1],state['events'])
+                self.assertEqual(result['events'][-1]['guard'],'rollout_old_container_attempt_missing')
+                self.assertEqual(state['phase'],'READ_ONLY_CAPTURE')
+                (base/'checkpoint.json').write_text(json.dumps(result));(base/'checkpoint.json').chmod(0o600)
+                closure=retirement.verify_readonly_terminal(base,result)
+                self.assertTrue(retirement.idle_state(base,result))
+                retirement.pending_request_accepted(root/'installed',root/'installed/journal'/(nonce+'.json'),closure)
+                for fault in ('scale','cut','context_marker','snapshot','journal','response'):
+                    changed=copy.deepcopy(result)
+                    if fault=='scale':changed['events'].insert(0,{'kind':'workload_scaled','name':'voice-user','replicas':0})
+                    elif fault=='cut':changed['cut']={'unexpected':True}
+                    elif fault=='context_marker':changed['context']={'marker':{'data':{'phase':'rollout-capturing'}}}
+                    elif fault=='snapshot':changed['contract']={'changed':True}
+                    elif fault=='journal':
+                        path=root/'installed/journal'/(nonce+'.json');raw=path.read_bytes();row=json.loads(raw);row['request']['nonce']='b'*64;path.write_text(json.dumps(row))
+                    else:
+                        path=root/'installed/responses'/(nonce+'.json');raw=path.read_bytes();path.write_text(json.dumps({'status':'PASS'}))
+                    with self.subTest(fault=fault),self.assertRaises(Blocked):retirement.verify_readonly_terminal(base,changed)
+                    if fault in ('journal','response'):path.write_bytes(raw)
+
+    def test_mutation_evidence_or_arbitrary_error_text_never_becomes_a_readonly_closure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,base,state,binding,nonce=self.fixture(folder)
+            for key in ('authorization','cut','cipher_binding','custody','nats_migration','apply','restart'):
+                changed=copy.deepcopy(state);changed[key]={}
+                with self.subTest(key=key),self.assertRaises(Blocked):
+                    retirement.record_readonly_failure(base,changed,Blocked('rollout_old_image_ambiguous'))
+            with patch.object(retirement.guard,'ROOT',root),patch.object(retirement.root_cli,'code_binding',return_value=binding):
+                result=retirement.record_readonly_failure(base,state,RuntimeError('do not persist arbitrary private text'))
+                self.assertEqual(result['events'][-1]['guard'],'unclassified_readonly_failure')
+                self.assertNotIn('private text',json.dumps(result))
+
+
+    def test_failed_rollback_binds_new_nonce_and_distinct_prior_without_fake_mode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,base,state,binding,nonce=self.fixture(folder)
+            state['target']['mode']=state['input_target']['mode']='images-only'
+            path=root/'installed/journal'/(nonce+'.json');row=json.loads(path.read_bytes())
+            request={'action':'prepare-rollback','operation':'123456abcdef','nonce':nonce,
+                'run_id':1}
+            row['request']=request;row['request_sha256']=retirement.canonical(request)
+            path.write_text(json.dumps(row));path.chmod(0o600)
+            with patch.object(retirement.guard,'ROOT',root),patch.object(retirement.root_cli,'code_binding',return_value=binding):
+                result=retirement.record_readonly_failure(base,state,Blocked('rollout_old_container_attempt_missing'))
+                retirement.verify_readonly_terminal(base,result)
+                for fault in ('same_prior','malformed_prior','invented_mode','wrong_target_mode'):
+                    changed=copy.deepcopy(row)
+                    if fault=='same_prior':changed['request']['operation']=state['operation']
+                    elif fault=='malformed_prior':changed['request']['operation']='not-an-operation'
+                    elif fault=='invented_mode':changed['request']['mode']='images-only'
+                    else:changed['request']['action']='prepare';changed['request'].pop('operation');changed['request'].update(mode='full',source_sha='a'*40,changed_services=[])
+                    changed['request_sha256']=retirement.canonical(changed['request']);path.write_text(json.dumps(changed))
+                    with self.subTest(fault=fault),self.assertRaises(Blocked):retirement.verify_readonly_terminal(base,result)
+                path.write_text(json.dumps(row))

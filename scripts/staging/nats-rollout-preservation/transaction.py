@@ -161,45 +161,51 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
     save(base/'checkpoint.json',state)
-    manifests=json.loads((base/'apply-manifests.json').read_bytes())
-    if guard.frontend_image_only(target) and (migration_plan or non_nats['actions']):
-        raise Blocked('rollout_frontend_auxiliary_action_forbidden')
-    stage=RolloutStage.capture(kube,operation,journal,
-        [r['metadata']['name'] for r in manifests if r.get('kind')=='Deployment']+([renderer_root.HUB] if renderer_authority is not None else []))
-    if target['mode']=='images-only':
-        manifests,target=image_only_documents(stage,manifests,target,renderer_authority=renderer_authority)
-        save(base/'apply-manifests.json',manifests)
-        target['manifest_sha256']=file_sha(base/'apply-manifests.json')
-    state['target']=normalize_target(kube,stage,manifests,target,renderer_authority=renderer_authority)
-    if canonical(migration_plan)!=target['migration_sha256']:raise Blocked('rollout_target_migration_digest_invalid')
-    state['migrations']=copy.deepcopy(migration_plan)
-    state['migration_secret_metadata']=migrations.preflight(kube,migration_plan,target['mode'])
-    state['space_preflight']=space_safeguards.preflight(kube,base,migration_plan)
-    if canonical(non_nats)!=target['nonnats_sha256']:raise Blocked('rollout_target_nonnats_digest_invalid')
-    state['nonnats']=copy.deepcopy(non_nats)
-    state['nonnats_binding']=nonnats_runtime.preflight(kube,non_nats,target['mode'])
-    import source_plan
-    source_plan.verify_db_init(kube,non_nats)
-    state['context']=context(stage)
-    claim=kube.get('pvc',stage.expected['source_claim'])
-    capacity=claim['status']['capacity']['storage']
-    state['native_capacity']=native_preflight(stage.final_path,base,capacity)
-    state['combined_space_capacity']=space_safeguards.combined_capacity(base,state['native_capacity'],state['space_preflight'])
-    if state['space_preflight'] is not None:
-        state['space_preflight']['source_sha']=target['tag']
-        state['space_preflight']['migration_plan_sha256']=target['migration_sha256']
-    try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
-    except FileNotFoundError:enrollment=None
-    state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
-    if enrollment is not None:state['bootstrap_enrollment']=copy.deepcopy(enrollment)
-    if nats_authority is not None:
-        if enrollment is None:raise Blocked('nats_migration_enrollment_missing')
-        state['nats_contract']=copy.deepcopy(nats_authority['plan'])
-        state['nats_contract_binding']=copy.deepcopy(nats_authority['binding'])
-        state['nats_target_scripts']=copy.deepcopy(nats_authority['scripts'])
-        state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
-    shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
-    state['kernel_sha256']=file_sha(base/'kernel')
+    try:
+        manifests=json.loads((base/'apply-manifests.json').read_bytes())
+        if guard.frontend_image_only(target) and (migration_plan or non_nats['actions']):
+            raise Blocked('rollout_frontend_auxiliary_action_forbidden')
+        stage=RolloutStage.capture(kube,operation,journal,
+            [r['metadata']['name'] for r in manifests if r.get('kind')=='Deployment']+([renderer_root.HUB] if renderer_authority is not None else []))
+        if target['mode']=='images-only':
+            manifests,target=image_only_documents(stage,manifests,target,renderer_authority=renderer_authority)
+            save(base/'apply-manifests.json',manifests)
+            target['manifest_sha256']=file_sha(base/'apply-manifests.json')
+        state['target']=normalize_target(kube,stage,manifests,target,renderer_authority=renderer_authority)
+        if canonical(migration_plan)!=target['migration_sha256']:raise Blocked('rollout_target_migration_digest_invalid')
+        state['migrations']=copy.deepcopy(migration_plan)
+        state['migration_secret_metadata']=migrations.preflight(kube,migration_plan,target['mode'])
+        state['space_preflight']=space_safeguards.preflight(kube,base,migration_plan)
+        if canonical(non_nats)!=target['nonnats_sha256']:raise Blocked('rollout_target_nonnats_digest_invalid')
+        state['nonnats']=copy.deepcopy(non_nats)
+        state['nonnats_binding']=nonnats_runtime.preflight(kube,non_nats,target['mode'])
+        import source_plan
+        source_plan.verify_db_init(kube,non_nats)
+        state['context']=context(stage)
+        claim=kube.get('pvc',stage.expected['source_claim'])
+        capacity=claim['status']['capacity']['storage']
+        state['native_capacity']=native_preflight(stage.final_path,base,capacity)
+        state['combined_space_capacity']=space_safeguards.combined_capacity(base,state['native_capacity'],state['space_preflight'])
+        if state['space_preflight'] is not None:
+            state['space_preflight']['source_sha']=target['tag']
+            state['space_preflight']['migration_plan_sha256']=target['migration_sha256']
+        try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
+        except FileNotFoundError:enrollment=None
+        state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
+        if enrollment is not None:state['bootstrap_enrollment']=copy.deepcopy(enrollment)
+        if nats_authority is not None:
+            if enrollment is None:raise Blocked('nats_migration_enrollment_missing')
+            state['nats_contract']=copy.deepcopy(nats_authority['plan'])
+            state['nats_contract_binding']=copy.deepcopy(nats_authority['binding'])
+            state['nats_target_scripts']=copy.deepcopy(nats_authority['scripts'])
+            state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
+        shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
+        state['kernel_sha256']=file_sha(base/'kernel')
+    except Exception as error:
+        from operator_retirement import record_readonly_failure
+        failed=record_readonly_failure(base,state,error)
+        save(base/'checkpoint.json',failed)
+        raise
     state['phase']='FENCE';save(base/'checkpoint.json',state)
     try:
         nonnats_plan.revalidate(kube,state['nonnats_binding'])

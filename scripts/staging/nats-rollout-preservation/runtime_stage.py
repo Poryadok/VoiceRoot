@@ -47,7 +47,7 @@ IMAGE_TEMPLATE=('{"items":[{{range $i,$r := .items}}{{if $i}},{{end}}'
     '{"uid":{{printf "%q" $o.uid}},"kind":{{printf "%q" $o.kind}}}{{end}}]},'
     '"status":{"phase":{{if $r.status.phase}}{{printf "%q" $r.status.phase}}{{else}}""{{end}},'
     '"containerStatuses":[{{range $j,$c := $r.status.containerStatuses}}{{if $j}},{{end}}'
-    '{"name":{{printf "%q" $c.name}},"ready":{{$c.ready}},"imageID":{{printf "%q" $c.imageID}},"containerID":{{if $c.containerID}}{{printf "%q" $c.containerID}}{{else}}""{{end}},"running":{{if $c.state.running}}true{{else}}false{{end}},"lastAttemptID":{{if $c.lastState.terminated}}{{printf "%q" $c.lastState.terminated.containerID}}{{else}}""{{end}}}{{end}}],'
+    '{"name":{{printf "%q" $c.name}},"ready":{{$c.ready}},"imageID":{{printf "%q" $c.imageID}},"containerID":{{if $c.containerID}}{{printf "%q" $c.containerID}}{{else}}""{{end}},"running":{{if $c.state.running}}true{{else}}false{{end}},"currentTerminatedID":{{if $c.state.terminated}}{{printf "%q" $c.state.terminated.containerID}}{{else}}""{{end}},"lastAttemptID":{{if $c.lastState.terminated}}{{printf "%q" $c.lastState.terminated.containerID}}{{else}}""{{end}}}{{end}}],'
     '"initContainerStatuses":[{{range $j,$c := $r.status.initContainerStatuses}}{{if $j}},{{end}}'
     '{"name":{{printf "%q" $c.name}},"imageID":{{printf "%q" $c.imageID}}}{{end}}]}}{{end}}]}')
 
@@ -84,9 +84,10 @@ def running_image_pins(deployments,rows,*,include_hub=False):
                         # current or retained last container attempt, never a tag.
                         cid=status.get('containerID','')
                         running=status.get('running') is True or 'running' in status.get('state',{})
+                        terminated=status.get('currentTerminatedID') or status.get('state',{}).get('terminated',{}).get('containerID')
                         previous=status.get('lastAttemptID') or status.get('lastState',{}).get('terminated',{}).get('containerID')
                         if (not re.fullmatch('containerd://[a-f0-9]{64}',cid)
-                            or not running and previous!=cid):
+                            or not running and terminated!=cid and previous!=cid):
                             raise Blocked('rollout_old_container_attempt_missing')
                     image=status.get('imageID','').removeprefix('docker-pullable://')
                     if not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):
