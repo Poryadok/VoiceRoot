@@ -43,6 +43,9 @@ def source_root():
     # Its immutable target file hashes are checked regardless of workspace name.
     return Path(os.environ.get('VOICE_NATS_TARGET_SOURCE',str(Path(__file__).resolve().parents[3]))).resolve(strict=True)
 
+# FULL receipts retain the complete bounded canonical source-hash inventory.
+MAX_RECEIPT_BYTES=2<<20
+
 def protected_receipt(path, root=ROOT, *, name="apply-authorization.json"):
     path=Path(path)
     if path.parent.parent!=root or not re.fullmatch(r'rollout-[a-f0-9]{12}',path.parent.name) or path.name!=name:
@@ -54,7 +57,7 @@ def protected_receipt(path, root=ROOT, *, name="apply-authorization.json"):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     try:
         s=os.fstat(fd)
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022 or s.st_nlink!=1 or not 1<=s.st_size<=65536:
+        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022 or s.st_nlink!=1 or not 1<=s.st_size<=MAX_RECEIPT_BYTES:
             raise Blocked('rollout_receipt_custody_invalid')
         raw=os.read(fd,s.st_size+1)
         if len(raw)!=s.st_size:raise Blocked('rollout_receipt_changed')
