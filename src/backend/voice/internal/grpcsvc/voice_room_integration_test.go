@@ -245,13 +245,13 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 			name:         "role unavailable fails closed",
 			profileID:    fixtureProfileMember,
 			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")},
-			wantCode:     codes.PermissionDenied,
+			wantCode:     codes.Unavailable,
 			wantRoleCall: true,
 		},
 		{
 			name:      "role checker missing fails closed",
 			profileID: fixtureProfileMember,
-			wantCode:  codes.PermissionDenied,
+			wantCode:  codes.Unavailable,
 		},
 	}
 
@@ -433,11 +433,10 @@ func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *tes
 	require.NoError(t, err)
 	call, err := f.svc.Calls.GetCall(t.Context(), joined.GetVoiceSession().GetRoomId())
 	require.NoError(t, err)
-	call, err = f.svc.Calls.AdmitSpaceMediaParticipant(t.Context(), call.RoomID, voicestore.SpaceMediaParticipant{
-		ProfileID: fixtureProfileOwner, Identity: "space-media-owner", Generation: uuid.NewString(),
-		Issued: voicestore.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
-	}, voicestore.MaxSpaceProVoiceParticipants)
-	require.NoError(t, err)
+	participant, ok := call.SpaceMedia[fixtureProfileOwner]
+	require.True(t, ok, "canonical join must provide the exact admitted media target")
+	require.NotEmpty(t, participant.Identity)
+	require.NotEmpty(t, participant.Generation)
 	f.svc.SpaceMediaRevoker = failingSpaceMediaRevoker{err: errors.New("ejection unavailable")}
 
 	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx(fixtureProfileOwner), &callsv1.LeaveVoiceRoomRequest{VoiceRoomId: f.voiceRoomID})
@@ -445,7 +444,8 @@ func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *tes
 	current, err := f.svc.Calls.GetCall(t.Context(), call.RoomID)
 	require.NoError(t, err)
 	require.True(t, current.IsParticipant(fixtureProfileOwner), "failed ejection must not remove the Voice roster entry")
-	require.Equal(t, "space-media-owner", current.SpaceMedia[fixtureProfileOwner].Identity, "failed ejection must retain the exact media target")
+	require.Equal(t, participant.Identity, current.SpaceMedia[fixtureProfileOwner].Identity, "failed ejection must retain the exact media target")
+	require.Equal(t, participant.Generation, current.SpaceMedia[fixtureProfileOwner].Generation)
 }
 
 func TestVoiceGRPCVoiceRoom_max32Participants(t *testing.T) {
@@ -510,8 +510,9 @@ func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := startVoiceRoomFixture(t)
-			f.svc.Roles = tc.roles
+			f.svc.Roles = &recordingVoiceRolePermissions{}
 			roomID := f.joinParticipants(t)
+			f.svc.Roles = tc.roles
 			muted := true
 			_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 				RoomId:  roomID,
@@ -547,7 +548,8 @@ func TestVoiceGRPCVoiceRoom_nonMutePatchDoesNotRequireVoiceSpeak(t *testing.T) {
 }
 
 func TestVoiceGRPCUpdateVoiceState_groupNonMutePatchAllowsMissingRoleChecker(t *testing.T) {
-	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
+	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
+	svc.ChatMembers = &mapChatMembers{members: map[string]map[string]bool{"group-chat-1": {fixtureProfileOwner: true}}}
 	var noRoles RolePermissionChecker
 	svc.Roles = noRoles
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
@@ -574,6 +576,7 @@ func TestVoiceGRPCVoiceRoom_protectedActionsFailClosedWithoutRoleChecker(t *test
 	t.Run("unmute", func(t *testing.T) {
 		f := startVoiceRoomFixture(t)
 		roomID := f.joinParticipants(t)
+		f.svc.Roles = nil
 		muted := true
 		_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &muted})
 		require.NoError(t, err)

@@ -8,8 +8,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	callsv1 "voice.app/voice/calls/v1"
+	eventsv1 "voice.app/voice/events/v1"
 	spacev1 "voice.app/voice/space/v1"
 	voicestore "voice/backend/voice/internal/store"
 )
@@ -82,6 +84,8 @@ func TestVoiceSessionBinding_CanonicalJoinAndActiveResponse(t *testing.T) {
 	svc := newTestVoiceService(time.Now(), events)
 	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Member: true, Active: true, AccessEpoch: 11}}
 	configureReadySpaceMediaFixture(svc, resolver)
+	var admissions []voicestore.SpaceMediaAdmission
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{preparedAdmissions: &admissions}
 	svc.Roles = &canonicalRolePermissions{}
 	joined, err := joinSpaceVoiceUser(t, svc, profile, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})
 	require.NoError(t, err)
@@ -99,8 +103,23 @@ func TestVoiceSessionBinding_CanonicalJoinAndActiveResponse(t *testing.T) {
 	require.Equal(t, space, active.GetCallSession().GetSpaceId())
 	require.Equal(t, room, active.GetCallSession().GetVoiceRoomId())
 	require.Equal(t, joined.GetVoiceSession().GetRoomId(), active.GetCallSession().GetRoomId())
-	require.Len(t, events.startedCall, 1)
-	require.Equal(t, space, events.startedCall[0].GetSpaceId())
-	require.Equal(t, room, events.startedCall[0].GetVoiceRoomId())
-	require.Equal(t, []string{profile}, events.startedCall[0].GetProfileIds())
+	require.Empty(t, events.startedCall, "canonical admission events are journaled, not directly published")
+	require.Len(t, admissions, 1)
+	require.Len(t, admissions[0].Events, 2)
+	require.Equal(t, []string{"voice.call_started", "voice.member_joined"}, preparedSpaceMediaEventSubjects(t, admissions))
+	callStartedEvent := admissions[0].Events[0]
+	require.Equal(t, "voice.call_started", callStartedEvent.Subject)
+	require.NotEqual(t, uuid.Nil, callStartedEvent.ID)
+	require.NotEqual(t, callStartedEvent.ID, admissions[0].Events[1].ID)
+	require.Equal(t, profile, admissions[0].ProfileID.String())
+	require.Equal(t, space, admissions[0].SpaceID.String())
+	require.Equal(t, room, admissions[0].VoiceRoomID)
+	var callStartedEnvelope eventsv1.VoiceStreamEvent
+	require.NoError(t, proto.Unmarshal(callStartedEvent.Payload, &callStartedEnvelope))
+	require.Equal(t, callStartedEvent.ID.String(), callStartedEnvelope.GetEventId())
+	callStarted := callStartedEnvelope.GetCallStarted()
+	require.NotNil(t, callStarted, "prepared payload must be the CallStarted event kind")
+	require.Equal(t, space, callStarted.GetSpaceId())
+	require.Equal(t, room, callStarted.GetVoiceRoomId())
+	require.Equal(t, []string{profile}, callStarted.GetProfileIds())
 }
