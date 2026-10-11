@@ -19,7 +19,19 @@ TTL toDateTime(timestamp) + INTERVAL 90 DAY;
 
 -- Redelivery can insert the same immutable source event more than once. Keep raw
 -- evidence unchanged and expose one logical row per stable event_id to readers.
-CREATE VIEW IF NOT EXISTS voice.events_logical AS
+CREATE VIEW IF NOT EXISTS voice.events_logical (
+  event_id UUID,
+  event_type String,
+  source_service String,
+  timestamp DateTime64(3),
+  user_id_hashed String,
+  profile_id_hashed String,
+  properties String,
+  session_id Nullable(String),
+  platform Nullable(String),
+  app_version Nullable(String),
+  region Nullable(String)
+) AS
 SELECT
   event_id,
   any(event_type) AS event_type,
@@ -41,7 +53,10 @@ CREATE TABLE IF NOT EXISTS voice.dau_mv (
 ) ENGINE = AggregatingMergeTree()
 ORDER BY date;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS voice.dau_mv_mv TO voice.dau_mv AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS voice.dau_mv_mv TO voice.dau_mv (
+  date Date,
+  unique_users AggregateFunction(uniq, String)
+) AS
 SELECT
   toDate(timestamp) AS date,
   uniqState(user_id_hashed) AS unique_users
@@ -56,7 +71,11 @@ CREATE TABLE IF NOT EXISTS voice.events_by_type_mv (
 ) ENGINE = SummingMergeTree()
 ORDER BY (date, event_type);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS voice.events_by_type_mv_mv TO voice.events_by_type_mv AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS voice.events_by_type_mv_mv TO voice.events_by_type_mv (
+  date Date,
+  event_type String,
+  event_count UInt64
+) AS
 SELECT
   toDate(timestamp) AS date,
   event_type,
