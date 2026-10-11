@@ -87,7 +87,149 @@ def journal_binding(installed,rows):
         if hashlib.sha256(private_bytes(installed/'responses'/name,2<<20,group_read=True)).hexdigest()!=wanted['response_sha256']:fail()
     return rows
 
+# These labels describe public predicates; exception arguments outside the
+# fixed vocabulary never enter a checkpoint or operator receipt.
+from errors import CODES as PUBLIC_CODES, TYPES as PUBLIC_TYPES, safe_error
+READONLY_GUARDS=PUBLIC_CODES|frozenset(('rollout_old_container_attempt_missing',
+    'rollout_old_image_inventory_invalid','rollout_old_image_identity_unusable',
+    'rollout_old_revision_unconverged','unclassified_readonly_failure'))
+READONLY_KEYS=frozenset(('schema','operation','phase','status','fence_status','events',
+    'target','code_capture','contract','input_target','service_actor_authority',
+    'renderer_authority','service_actor_services','migrations','migration_secret_metadata',
+    'space_preflight','nonnats','nonnats_binding','context','native_capacity',
+    'combined_space_capacity','provenance','bootstrap_enrollment','nats_contract',
+    'nats_contract_binding','nats_target_scripts','nats_contract_expires_at','kernel_sha256'))
+READONLY_ABSENT=('rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json',
+    'rollout-backup.cms','decrypted-restore.json','authorization.json','apply-authorization.json')
+
+
+def _readonly_snapshot(base,snapshot):
+    operation=snapshot.get('operation','');history=snapshot.get('events')
+    if (not re.fullmatch('[a-f0-9]{12}',operation) or Path(base).name!='rollout-'+operation
+        or snapshot.get('schema')!='nats-rollout-root-v1' or snapshot.get('phase')!='READ_ONLY_CAPTURE'
+        or snapshot.get('status')!='RUNNING' or snapshot.get('fence_status')!='UNKNOWN'
+        or not set(snapshot)<=READONLY_KEYS or not isinstance(history,list)
+        or [e.get('kind') for e in history] not in ([],['staging_preflight'],
+            ['staging_preflight','rollout_original_capture'])
+        or any((Path(base)/name).exists() for name in READONLY_ABSENT)):fail()
+    if 'context' in snapshot:
+        ctx=snapshot['context'];marker=ctx.get('marker',{}).get('data',{})
+        original=ctx.get('original_snapshots',{});captured=ctx.get('snapshots',{})
+        if (marker.get('phase')!='active' or 'knownRolloutOperation' in marker
+            or not original or captured!=original
+            or any(row.get('spec',{}).get('replicas',1)!=1 for row in original.values())):fail()
+
+
+def _readonly_error(error):
+    name=type(error).__name__
+    kind=name if name in PUBLIC_TYPES|{'SourceError','CustodyError'} else 'OtherError'
+    guard_label=(error.args[0] if isinstance(error,Blocked) and len(error.args)==1
+        and isinstance(error.args[0],str) and error.args[0] in READONLY_GUARDS
+        else 'unclassified_readonly_failure')
+    prepare_label=('guard_rejected' if kind=='Blocked' else
+        'source_authority_rejected' if kind=='SourceError' else
+        'transport_rejected' if kind=='CustodyError' else
+        'exception_'+kind if kind in PUBLIC_TYPES else 'unexpected')
+    return {'guard':guard_label,'exception_class':kind,
+        'response_error':safe_error(error),'prepare_error':prepare_label}
+
+
+def _readonly_result(snapshot,receipt):
+    event={'kind':'read_only_capture_failed',**receipt['failure']}
+    result=copy.deepcopy(snapshot)
+    result.update(phase='FAILED_READ_ONLY',status='BLOCKED',fence_status='NOT_ACQUIRED',
+        events=copy.deepcopy(snapshot['events'])+[event],error=receipt['failure']['guard'])
+    result['failed_readonly']={'schema':'voice-failed-readonly-reference-v1',
+        'snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':canonical(receipt)}
+    return result
+
+
+def record_readonly_failure(base,snapshot,error,*,provenance=None,snapshot_raw=None):
+    """Local immutable evidence only; never fence, refence or touch workloads."""
+    base=Path(base);_readonly_snapshot(base,snapshot)
+    raw=(json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+        if snapshot_raw is None else snapshot_raw)
+    if not isinstance(raw,bytes) or json.loads(raw)!=snapshot:fail()
+    origin={'kind':'automatic_pre_fence'} if provenance is None else copy.deepcopy(provenance)
+    if (origin!={'kind':'automatic_pre_fence'} and (set(origin)!={'kind','journals'}
+        or origin.get('kind')!='operator_observed_failure' or not isinstance(origin.get('journals'),dict)
+        or len(origin['journals'])!=1)):fail()
+    receipt={'schema':'voice-failed-readonly-closure-v1','operation':snapshot['operation'],
+        'snapshot_sha256':hashlib.sha256(raw).hexdigest(),
+        'code_binding_sha256':canonical(snapshot['code_capture']),
+        'deployment_pass':False,'rollback_eligible':False,'provenance':origin,
+        'failure':_readonly_error(error)}
+    exclusive(base/'failed-readonly-snapshot.json',raw)
+    exclusive(base/'failed-readonly-receipt.json',json.dumps(receipt,sort_keys=True,separators=(',',':')).encode())
+    return _readonly_result(snapshot,receipt)
+
+
+def verify_readonly_terminal(base,state):
+    base=Path(base);raw=private_bytes(base/'failed-readonly-snapshot.json')
+    snapshot=json.loads(raw);receipt=document(base/'failed-readonly-receipt.json')
+    _readonly_snapshot(base,snapshot)
+    failure=receipt.get('failure',{});origin=receipt.get('provenance',{})
+    if (set(receipt)!={'schema','operation','snapshot_sha256','code_binding_sha256',
+            'deployment_pass','rollback_eligible','provenance','failure'}
+        or receipt.get('schema')!='voice-failed-readonly-closure-v1'
+        or receipt.get('operation')!=snapshot['operation']
+        or receipt.get('snapshot_sha256')!=hashlib.sha256(raw).hexdigest()
+        or receipt.get('code_binding_sha256')!=canonical(snapshot['code_capture'])
+        or root_cli.code_binding(base/'code')!=snapshot['code_capture']
+        or receipt.get('deployment_pass') is not False or receipt.get('rollback_eligible') is not False
+        or set(failure)!={'guard','exception_class','response_error','prepare_error'}
+        or failure.get('guard') not in READONLY_GUARDS
+        or failure.get('exception_class') not in PUBLIC_TYPES|{'SourceError','CustodyError','OtherError'}
+        or failure.get('response_error') not in PUBLIC_CODES|{'exception_'+n for n in PUBLIC_TYPES}|{'blocked_unclassified'}
+        or failure.get('prepare_error') not in {'guard_rejected','source_authority_rejected','transport_rejected',
+            'unexpected'}|{'exception_'+n for n in PUBLIC_TYPES}
+        or state!=_readonly_result(snapshot,receipt)):fail()
+    kind=failure['exception_class']
+    expected_response=(failure['guard'] if kind=='Blocked' and failure['guard'] in PUBLIC_CODES else
+        'exception_'+kind if kind in PUBLIC_TYPES else 'blocked_unclassified')
+    expected_prepare=('guard_rejected' if kind=='Blocked' else
+        'source_authority_rejected' if kind=='SourceError' else
+        'transport_rejected' if kind=='CustodyError' else
+        'exception_'+kind if kind in PUBLIC_TYPES else 'unexpected')
+    if (failure['response_error']!=expected_response or failure['prepare_error']!=expected_prepare
+        or kind!='Blocked' and failure['guard']!='unclassified_readonly_failure'):fail()
+    if (origin!={'kind':'automatic_pre_fence'} and (set(origin)!={'kind','journals'}
+        or origin.get('kind')!='operator_observed_failure' or not isinstance(origin.get('journals'),dict)
+        or len(origin['journals'])!=1)):fail()
+    installed=guard.ROOT/'installed';journals={}
+    paths=list((installed/'journal').glob(snapshot['operation']+'*.json'))
+    if len(paths)>100:fail()
+    for path in paths:
+        journal_raw=private_bytes(path,2<<20);journal=json.loads(journal_raw)
+        request=journal.get('request',{})
+        action=request.get('action')
+        if action not in ('prepare','prepare-rollback'):continue
+        import bridge
+        if set(request)!={'action','nonce'}|(bridge.FIELDS[action]-{'token'}):fail()
+        # Durable bridge journals intentionally omit the credential. Validate
+        # the exact public shape with a noncredential temporary placeholder.
+        try:bridge.validate(dict(request,token='public-journal-placeholder'))
+        except bridge.BridgeError:fail()
+        target_mode=snapshot.get('input_target',{}).get('mode')
+        selected=(request.get('mode')==target_mode if action=='prepare' else
+            target_mode=='images-only' and request['operation']!=snapshot['operation'])
+        nonce=request.get('nonce','')
+        response_raw=private_bytes(installed/'responses'/path.name,2<<20,group_read=True)
+        if (not re.fullmatch('[a-f0-9]{64}',nonce) or path.name!=nonce+'.json' or nonce[:12]!=snapshot['operation']
+            or not selected
+            or journal.get('phase')!='STARTED' or journal.get('prepare_error')!=failure['prepare_error']
+            or journal.get('request_sha256')!=canonical(request)
+            or json.loads(response_raw)!={'status':'BLOCKED','error':failure['response_error']}):fail()
+        journals[path.name]={'journal_sha256':hashlib.sha256(journal_raw).hexdigest(),
+            'request_sha256':canonical(request),'response_sha256':hashlib.sha256(response_raw).hexdigest()}
+    if len(journals)!=1 or origin.get('kind')=='operator_observed_failure' and origin['journals']!=journals:fail()
+    # The bridge records its failure after the immutable automatic receipt.
+    # Return the subsequently authenticated hashes for pending-request admission.
+    return dict(receipt,journals=journals)
+
+
 def verify_terminal(base,state):
+    if 'failed_readonly' in state:return verify_readonly_terminal(base,state)
     if 'operator_captured_abort' in state:return verify_captured_terminal(base,state)
     if 'operator_precut_abort' in state:return verify_precut_terminal(base,state)
     base=Path(base)
@@ -290,6 +432,10 @@ def pending_request_accepted(installed,path,closure):
     row=document(path)
     if row.get('phase')=='COMPLETE':return
     if path.name in closure['journals']:
+        if closure.get('schema')=='voice-failed-readonly-closure-v1':
+            base=guard.ROOT/('rollout-'+path.stem[:12])
+            if verify_readonly_terminal(base,document(base/'checkpoint.json'))!=closure:fail()
+            return
         journal_binding(installed,{path.name:closure['journals'][path.name]})
         return
     operation=path.stem[:12];wanted=PREBUILD_RECEIPTS.get(operation)

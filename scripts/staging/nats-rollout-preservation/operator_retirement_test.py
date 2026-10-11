@@ -519,3 +519,86 @@ class WaivedContinuationTests(unittest.TestCase):
             kube.objects[('deployment','voice-space')]['spec']['template']['metadata']['annotations']['foreign']='change'
             with self.assertRaises(Blocked):self.invoke(values,kube)
             self.assertEqual(kube.patches,[])
+
+
+class FailedReadOnlyClosureTests(unittest.TestCase):
+    def fixture(self,folder):
+        root=Path(folder);operation='669fd496166b';base=root/('rollout-'+operation);base.mkdir()
+        installed=root/'installed';(installed/'journal').mkdir(parents=True);(installed/'responses').mkdir()
+        nonce=operation+'a'*52
+        request={'action':'prepare','mode':'full','nonce':nonce,'source_sha':'a'*40,
+            'changed_services':[],'run_id':1}
+        row={'phase':'STARTED','prepare_error':'guard_rejected','request':request,
+             'request_sha256':retirement.canonical(request)}
+        response={'status':'BLOCKED','error':'exception_Blocked'}
+        for path,value in ((installed/'journal'/(nonce+'.json'),row),
+                           (installed/'responses'/(nonce+'.json'),response)):
+            path.write_text(json.dumps(value,sort_keys=True,separators=(',',':')));path.chmod(0o600)
+        binding={'member':'a'*64}
+        state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
+               'status':'RUNNING','fence_status':'UNKNOWN','events':[{'kind':'staging_preflight'}],
+               'code_capture':binding,'target':{'mode':'full','immutable':'source'},'input_target':{'mode':'full','immutable':'source'},
+               'contract':{'immutable':'contract'}}
+        return root,base,state,binding,nonce
+
+    def test_automatic_no_effect_failure_authenticates_idle_and_pending_request(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,base,state,binding,nonce=self.fixture(folder)
+            with patch.object(retirement.guard,'ROOT',root),patch.object(retirement.root_cli,'code_binding',return_value=binding):
+                result=retirement.record_readonly_failure(base,state,Blocked('rollout_old_container_attempt_missing'))
+                self.assertEqual((result['phase'],result['status'],result['fence_status']),
+                    ('FAILED_READ_ONLY','BLOCKED','NOT_ACQUIRED'))
+                self.assertEqual(result['events'][:-1],state['events'])
+                self.assertEqual(result['events'][-1]['guard'],'rollout_old_container_attempt_missing')
+                self.assertEqual(state['phase'],'READ_ONLY_CAPTURE')
+                (base/'checkpoint.json').write_text(json.dumps(result));(base/'checkpoint.json').chmod(0o600)
+                closure=retirement.verify_readonly_terminal(base,result)
+                self.assertTrue(retirement.idle_state(base,result))
+                retirement.pending_request_accepted(root/'installed',root/'installed/journal'/(nonce+'.json'),closure)
+                for fault in ('scale','cut','context_marker','snapshot','journal','response'):
+                    changed=copy.deepcopy(result)
+                    if fault=='scale':changed['events'].insert(0,{'kind':'workload_scaled','name':'voice-user','replicas':0})
+                    elif fault=='cut':changed['cut']={'unexpected':True}
+                    elif fault=='context_marker':changed['context']={'marker':{'data':{'phase':'rollout-capturing'}}}
+                    elif fault=='snapshot':changed['contract']={'changed':True}
+                    elif fault=='journal':
+                        path=root/'installed/journal'/(nonce+'.json');raw=path.read_bytes();row=json.loads(raw);row['request']['nonce']='b'*64;path.write_text(json.dumps(row))
+                    else:
+                        path=root/'installed/responses'/(nonce+'.json');raw=path.read_bytes();path.write_text(json.dumps({'status':'PASS'}))
+                    with self.subTest(fault=fault),self.assertRaises(Blocked):retirement.verify_readonly_terminal(base,changed)
+                    if fault in ('journal','response'):path.write_bytes(raw)
+
+    def test_mutation_evidence_or_arbitrary_error_text_never_becomes_a_readonly_closure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,base,state,binding,nonce=self.fixture(folder)
+            for key in ('authorization','cut','cipher_binding','custody','nats_migration','apply','restart'):
+                changed=copy.deepcopy(state);changed[key]={}
+                with self.subTest(key=key),self.assertRaises(Blocked):
+                    retirement.record_readonly_failure(base,changed,Blocked('rollout_old_image_ambiguous'))
+            with patch.object(retirement.guard,'ROOT',root),patch.object(retirement.root_cli,'code_binding',return_value=binding):
+                result=retirement.record_readonly_failure(base,state,RuntimeError('do not persist arbitrary private text'))
+                self.assertEqual(result['events'][-1]['guard'],'unclassified_readonly_failure')
+                self.assertNotIn('private text',json.dumps(result))
+
+
+    def test_failed_rollback_binds_new_nonce_and_distinct_prior_without_fake_mode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,base,state,binding,nonce=self.fixture(folder)
+            state['target']['mode']=state['input_target']['mode']='images-only'
+            path=root/'installed/journal'/(nonce+'.json');row=json.loads(path.read_bytes())
+            request={'action':'prepare-rollback','operation':'123456abcdef','nonce':nonce,
+                'run_id':1}
+            row['request']=request;row['request_sha256']=retirement.canonical(request)
+            path.write_text(json.dumps(row));path.chmod(0o600)
+            with patch.object(retirement.guard,'ROOT',root),patch.object(retirement.root_cli,'code_binding',return_value=binding):
+                result=retirement.record_readonly_failure(base,state,Blocked('rollout_old_container_attempt_missing'))
+                retirement.verify_readonly_terminal(base,result)
+                for fault in ('same_prior','malformed_prior','invented_mode','wrong_target_mode'):
+                    changed=copy.deepcopy(row)
+                    if fault=='same_prior':changed['request']['operation']=state['operation']
+                    elif fault=='malformed_prior':changed['request']['operation']='not-an-operation'
+                    elif fault=='invented_mode':changed['request']['mode']='images-only'
+                    else:changed['request']['action']='prepare';changed['request'].pop('operation');changed['request'].update(mode='full',source_sha='a'*40,changed_services=[])
+                    changed['request_sha256']=retirement.canonical(changed['request']);path.write_text(json.dumps(changed))
+                    with self.subTest(fault=fault),self.assertRaises(Blocked):retirement.verify_readonly_terminal(base,result)
+                path.write_text(json.dumps(row))
