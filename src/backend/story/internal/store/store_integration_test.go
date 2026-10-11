@@ -102,7 +102,7 @@ func TestListStoryHighlightsTracksCurrentMembershipAndIndependentVisibility(t *t
 	author := uuid.New()
 	text := "archived highlight"
 	story, err := st.CreateStory(ctx, store.CreateStoryInput{
-		AuthorProfileID: author, Type: "text", TextContent: &text, Visibility: "nobody",
+		AuthorProfileID: author, Type: "text", TextContent: &text, Visibility: "custom",
 	})
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE stories SET expires_at = now() - interval '1 minute', expired_at = now() WHERE id = $1`, story.ID)
