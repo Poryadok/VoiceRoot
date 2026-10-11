@@ -229,6 +229,7 @@ def verify_readonly_terminal(base,state):
 
 
 def verify_terminal(base,state):
+    if 'operator_applied_abort' in state:return verify_applied_terminal(base,state)
     if 'operator_postmigration_abort' in state:return verify_postmigration_terminal(base,state)
     if 'failed_readonly' in state:return verify_readonly_terminal(base,state)
     if 'operator_captured_abort' in state:return verify_captured_terminal(base,state)
@@ -533,6 +534,137 @@ def verify_postmigration_terminal(base,state):
     if state!=terminal:fail()
     return receipt
 
+def applied_journal_binding(installed,operation,claim,rows):
+    import bridge
+    if not isinstance(rows,dict) or not 1<=len(rows)<=100:fail()
+    for name,pins in rows.items():
+        if not re.fullmatch('[a-f0-9]{64}\\.json',name) or set(pins)!={'journal_sha256','request_sha256','response_sha256'}:fail()
+        raw=private_bytes(Path(installed)/'journal'/name,2<<20);row=json.loads(raw)
+        request=row.get('request',{})
+        try:bridge.validate(request)
+        except bridge.BridgeError:fail()
+        response_raw=private_bytes(Path(installed)/'responses'/name,2<<20,group_read=True);response=json.loads(response_raw)
+        if (hashlib.sha256(raw).hexdigest()!=pins['journal_sha256']
+            or canonical(request)!=pins['request_sha256'] or row.get('request_sha256')!=pins['request_sha256']
+            or request['nonce']+'.json'!=name or request.get('action')!='finish'
+            or request.get('operation')!=operation or request.get('claim_rv')!=claim.get('resourceVersion')
+            or row.get('phase')!='STARTED' or row.get('prepare_error')!='guard_rejected'
+            or hashlib.sha256(response_raw).hexdigest()!=pins['response_sha256']
+            or set(response)!={'status','error'} or response['status']!='BLOCKED'
+            or response['error'] not in PUBLIC_CODES|{'exception_'+name for name in PUBLIC_TYPES}|{'blocked_unclassified'}):fail()
+    return rows
+
+
+def verify_applied_terminal(base,state):
+    """Historical, effects-aware operator retirement; never release authority."""
+    from datetime import datetime
+    base=Path(base);operation=state.get('operation','')
+    if not re.fullmatch('[a-f0-9]{12}',operation) or base.name!='rollout-'+operation:fail()
+    raw=private_bytes(base/'operator-applied-abort-snapshot.json');snapshot=json.loads(raw)
+    sha=hashlib.sha256(raw).hexdigest();receipt=document(base/'operator-applied-abort-receipt.json')
+    reference={'schema':'voice-operator-applied-abort-reference-v1','snapshot_sha256':sha,'receipt_sha256':canonical(receipt)}
+    if (state.get('operator_applied_abort')!=reference or snapshot.get('schema')!='nats-rollout-root-v1'
+        or snapshot.get('operation')!=operation or snapshot.get('phase')!='RESTART'
+        or snapshot.get('status')!='BLOCKED' or snapshot.get('fence_status')!='VERIFIED'
+        or snapshot.get('target',{}).get('mode')!='full' or not snapshot.get('renderer_applied')
+        or snapshot.get('nats_migration',{}).get('verified') is not True
+        or not snapshot.get('migration_completed_metadata') or not snapshot.get('migration_jobs')
+        or snapshot.get('nonnats_applied',{}).get('verified') is not True
+        or snapshot.get('preservation',{}).get('native_files_verified') is not True
+        or snapshot.get('preservation',{}).get('census_verified') is not True
+        or not snapshot.get('closed_preservation_attempts')
+        or snapshot.get('closed_preservation_attempt_nonce') not in snapshot['closed_preservation_attempts']
+        or any(k in snapshot for k in ('restart',
+            'operator_retirement','operator_precut_abort','operator_captured_abort','failed_readonly','operator_postmigration_abort','operator_applied_abort'))
+        or receipt.get('schema')!='voice-operator-applied-abort-closure-v1'
+        or receipt.get('operation')!=operation or receipt.get('snapshot_sha256')!=sha
+        or receipt.get('waiver')!=WAIVER or receipt.get('deployment_pass') is not False
+        or receipt.get('rollback_eligible') is not False
+        or receipt.get('configuration_basis')!='RETAIN_APPLIED_TARGET_CONFIGURATION_AND_FORWARD_MIGRATIONS'
+        or receipt.get('completed_migrations_sha256')!=canonical(snapshot['migration_jobs'])):fail()
+    binding=root_cli.code_binding(base/'code')
+    if binding!=snapshot.get('code_capture') or canonical(binding)!=receipt.get('code_binding_sha256'):fail()
+    names=CORE|{'voice-web','voice-admin','voice-developer-portal'}
+    ctx=snapshot['context'];original=ctx['original_snapshots'];captured=ctx['snapshots'];setup=receipt.get('setup',{})
+    if (set(original)!=names or set(captured)!=names or set(setup)!=names
+        or any(r['spec'].get('replicas',1)!=1 or captured[n]['spec'].get('replicas',1)!=0
+            or captured[n]['metadata']['uid']!=r['metadata']['uid'] for n,r in original.items())):fail()
+    for name,row in captured.items():
+        if name!=HUB and canonical(row['spec']['template'])!=snapshot['target']['template_hashes'].get(name):fail()
+    wanted={n:{'uid':r['metadata']['uid'],'template_sha256':canonical(r['spec']['template']),
+        'replicas':1,'ready':setup[n].get('ready')} for n,r in captured.items()}
+    if (setup!=wanted or any(type(r['ready']) is not bool for r in setup.values()) or setup[HUB]['ready'] is not True
+        or receipt.get('retained_setup')!=precut_retained_setup(snapshot)
+        or receipt.get('storage_verified') is not True or receipt.get('config_verified') is not True):fail()
+    history=snapshot.get('events');events=receipt.get('events')
+    if (not isinstance(history,list) or len(history)<len(names)
+        or {e.get('name') for e in history[-len(names):]}!=names
+        or any(e!={'kind':'workload_scaled','name':e.get('name'),'replicas':0} for e in history[-len(names):])
+        or [e for e in history if e.get('kind')=='migration_complete']!=[dict(kind='migration_complete',**r) for r in snapshot['migration_jobs']]
+        or not isinstance(events,list) or events!=[{'kind':'operator_applied_abort_intent','waiver':WAIVER,'snapshot_sha256':sha}]+
+            [{'kind':'workload_scaled','name':n,'replicas':1} for n in [HUB,*sorted(names-{HUB})]]+[{'kind':'operator_applied_abort_completed'}]):fail()
+    files=receipt.get('retained_files',{})
+    required={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json','rollout-backup.cms',
+        'decrypted-restore.json','apply-manifests.json','apply-authorization.json'}
+    retained={}
+    if not isinstance(files,dict) or not required<=set(files):fail()
+    for name,row in files.items():
+        if (name not in required and not re.fullmatch(r'operator-(?:restart-(?:controller|readiness)-(?:snapshot|record)\.json|readiness-diagnostic-(?:file|messaging)-1\.log)',name)
+            or set(row)!={'sha256','bytes','mode'} or type(row['bytes']) is not int or not 0<row['bytes']<=128<<20
+            or not re.fullmatch('[a-f0-9]{64}',row['sha256']) or type(row['mode']) is not int
+            or row['mode']&0o022 or _retained_mode(base/name)!=row['mode']):fail()
+        retained[name]=private_bytes(base/name,group_read=True)
+        if len(retained[name])!=row['bytes'] or hashlib.sha256(retained[name]).hexdigest()!=row['sha256']:fail()
+    actual_names={p.name for pattern in ('operator-restart-*.json','operator-readiness-diagnostic-*-1.log') for p in base.glob(pattern)}
+    if actual_names-set(files):fail()
+    evidence={n:{k:files[n][k] for k in ('sha256','bytes')} for n in required-{'apply-authorization.json'}}
+    verify_captured_evidence(base,snapshot,{'retained_files':evidence})
+    authorization=json.loads(retained['apply-authorization.json']);claim=receipt.get('consumed_claim',{})
+    before=receipt.get('before_marker',{});marker=ctx['marker']
+    expected_data=marker['data']
+    if expected_data.get('phase')!='rollout-verified':fail()
+    if (authorization!=snapshot.get('authorization') or before.get('data')!=expected_data
+        or expected_data.get('knownRolloutOperation')!=operation or before.get('uid')!=marker['metadata']['uid']
+        or before.get('resourceVersion')!=marker['metadata']['resourceVersion']
+        or set(before)!={'uid','resourceVersion','data'} or not re.fullmatch('[0-9]+',before.get('resourceVersion',''))
+        or claim!={'uid':before['uid'],'resourceVersion':claim.get('resourceVersion'),
+            'authorization_sha256':files['apply-authorization.json']['sha256'],'expires_at':authorization['expires_at']}):fail()
+    try:
+        observed=datetime.fromisoformat(receipt['observed_at']);expired=datetime.fromisoformat(authorization['expires_at'])
+        contract=datetime.fromisoformat(snapshot['nats_contract_expires_at'])
+        if any(d.tzinfo is None for d in (observed,expired,contract)):fail()
+    except (ValueError,TypeError,KeyError):fail()
+    after=receipt.get('released_marker',{});active=dict(expected_data,phase='active');active.pop('knownRolloutOperation')
+    if (set(after)!={'uid','resourceVersion','data'} or after['uid']!=before['uid'] or after['data']!=active
+        or not re.fullmatch('[0-9]+',after.get('resourceVersion','')) or after['resourceVersion']==before['resourceVersion']):fail()
+    configs=receipt.get('configmaps',{})
+    if (set(configs)!=precut_configmaps(original) or any(set(r)!={'uid','data_sha256','binary_data_sha256'}
+        or not re.fullmatch('[a-f0-9-]{36}',r['uid']) or any(not re.fullmatch('[a-f0-9]{64}',r[k]) for k in ('data_sha256','binary_data_sha256')) for r in configs.values())):fail()
+    resource_raw=private_bytes(base/'operator-applied-abort-resources.json');resources=json.loads(resource_raw)
+    documents=json.loads(retained['apply-manifests.json'])
+    if isinstance(documents,dict):
+        if documents.get('kind')!='List' or not isinstance(documents.get('items'),list):fail()
+        documents=documents['items']
+    if not isinstance(documents,list):fail()
+    frozen={r['kind']+'/'+r['metadata']['name']:r for r in documents}
+    ledger={r['kind']+'/'+r['name']:r for r in snapshot['nonnats_binding']['objects']}
+    if (hashlib.sha256(resource_raw).hexdigest()!=receipt.get('resource_disposition_sha256')
+        or not isinstance(resources,dict) or len(documents)!=48 or len(frozen)!=48 or set(resources)!=set(frozen)
+        or {r['metadata']['name'] for r in documents if r['kind']=='Deployment'}!=names-{HUB}):fail()
+    for key,row in resources.items():
+        kind,name=key.split('/',1)
+        if (row.get('kind')!=kind or row.get('metadata',{}).get('name')!=name
+            or 'uid' in frozen[key]['metadata'] and row['metadata'].get('uid')!=frozen[key]['metadata']['uid']
+            or key not in ledger or row['metadata']['uid']!=ledger[key]['uid']):fail()
+        if kind=='Deployment':
+            if name not in names-{HUB} or row['spec']!=captured[name]['spec'] or row['spec']['replicas']!=0:fail()
+        elif kind not in ('Service','NetworkPolicy','ConfigMap'):fail()
+    applied_journal_binding(guard.ROOT/'installed',operation,claim,receipt.get('journals'))
+    terminal=copy.deepcopy(snapshot);terminal.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',events=history+events)
+    terminal['operator_applied_abort']=reference
+    if state!=terminal:fail()
+    return receipt
+
 
 def idle_state(base,state):
     if state.get('status') in ('PASS','ROLLED_BACK'):return True
@@ -554,6 +686,11 @@ def pending_request_accepted(installed,path,closure):
         if closure.get('schema')=='voice-failed-readonly-closure-v1':
             base=guard.ROOT/('rollout-'+path.stem[:12])
             if verify_readonly_terminal(base,document(base/'checkpoint.json'))!=closure:fail()
+            return
+        if closure.get('schema')=='voice-operator-applied-abort-closure-v1':
+            request=row.get('request',{});operation=request.get('operation','')
+            base=guard.ROOT/('rollout-'+operation)
+            if verify_applied_terminal(base,document(base/'checkpoint.json'))!=closure:fail()
             return
         journal_binding(installed,{path.name:closure['journals'][path.name]})
         return

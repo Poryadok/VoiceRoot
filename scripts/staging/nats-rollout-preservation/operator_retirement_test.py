@@ -686,3 +686,92 @@ class FailedReadOnlyClosureTests(unittest.TestCase):
                     changed['request_sha256']=retirement.canonical(changed['request']);path.write_text(json.dumps(changed))
                     with self.subTest(fault=fault),self.assertRaises(Blocked):retirement.verify_readonly_terminal(base,result)
                 path.write_text(json.dumps(row))
+
+
+class AppliedRestartClosureTests(unittest.TestCase):
+    def fixture(self):
+        helper=PostmigrationClosureTests();snapshot,receipt,_=helper.fixture();self.files=helper.files
+        snapshot.update(phase='RESTART',status='BLOCKED',error='restart_readiness_timeout',
+            preservation={'native_files_verified':True,'census_verified':True},
+            nonnats_applied={'verified':True},closed_preservation_attempt_nonce='a'*64,closed_preservation_attempts={'a'*64:{'retained':True}})
+        snapshot['context']['marker']['data']['phase']='rollout-verified'
+        names=set(snapshot['context']['snapshots'])
+        for name,row in snapshot['context']['snapshots'].items():
+            row['spec']['template']['metadata']={'annotations':{'approved-target':'immutable'}}
+        snapshot['target']['template_hashes']={n:retirement.canonical(r['spec']['template']) for n,r in snapshot['context']['snapshots'].items() if n!=retirement.HUB}
+        resources=json.loads(self.files.pop('operator-postmigration-abort-resources.json'))
+        for key,row in resources.items():
+            if row['kind']=='Deployment':row['spec']=copy.deepcopy(snapshot['context']['snapshots'][row['metadata']['name']]['spec'])
+        self.files['operator-applied-abort-resources.json']=json.dumps(resources).encode()
+        snapshot['events'] += [{'kind':'rollout_target_adopted'}]+[{'kind':'workload_scaled','name':n,'replicas':0} for n in sorted(names)]
+        receipt.update(schema='voice-operator-applied-abort-closure-v1',snapshot_sha256=retirement.canonical(snapshot),
+            configuration_basis='RETAIN_APPLIED_TARGET_CONFIGURATION_AND_FORWARD_MIGRATIONS',
+            resource_disposition_sha256=hashlib.sha256(self.files['operator-applied-abort-resources.json']).hexdigest())
+        receipt['before_marker']['data']=copy.deepcopy(snapshot['context']['marker']['data'])
+        receipt['consumed_claim']['resourceVersion']='100'
+        receipt['setup']={n:{'uid':r['metadata']['uid'],'template_sha256':retirement.canonical(r['spec']['template']),'replicas':1,'ready':n==retirement.HUB} for n,r in snapshot['context']['snapshots'].items()}
+        receipt['events']=[{'kind':'operator_applied_abort_intent','waiver':retirement.WAIVER,'snapshot_sha256':receipt['snapshot_sha256']}]+[{'kind':'workload_scaled','name':n,'replicas':1} for n in [retirement.HUB,*sorted(names-{retirement.HUB})]]+[{'kind':'operator_applied_abort_completed'}]
+        nonce='c'*64;request={'action':'finish','operation':snapshot['operation'],'nonce':nonce,'claim_rv':'100'}
+        self.journal={'phase':'STARTED','prepare_error':'guard_rejected','request':request,'request_sha256':retirement.canonical(request)}
+        self.response={'status':'BLOCKED','error':'exception_Blocked'}
+        receipt['journals']={nonce+'.json':{'journal_sha256':retirement.canonical(self.journal),'request_sha256':retirement.canonical(request),'response_sha256':retirement.canonical(self.response)}}
+        return snapshot,receipt,self.terminal(snapshot,receipt)
+
+    def terminal(self,snapshot,receipt):
+        result=copy.deepcopy(snapshot);result.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',events=snapshot['events']+receipt['events'])
+        result['operator_applied_abort']={'schema':'voice-operator-applied-abort-reference-v1','snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':retirement.canonical(receipt)}
+        return result
+
+    def verify(self,snapshot,receipt,state):
+        base=Path('/private/rollout-'+snapshot['operation'])
+        def read(path,*args,**kwargs):
+            path=Path(path)
+            if path.name=='operator-applied-abort-snapshot.json':return json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+            if path.parent.name in ('journal','responses'):return json.dumps(self.journal if path.parent.name=='journal' else self.response,sort_keys=True,separators=(',',':')).encode()
+            return self.files[path.name]
+        with patch.object(retirement,'private_bytes',side_effect=read),patch.object(retirement,'document',return_value=receipt),patch.object(retirement.root_cli,'code_binding',return_value=snapshot['code_capture']),patch.object(retirement,'_retained_mode',return_value=0o600):
+            return retirement.verify_applied_terminal(base,state)
+
+    def test_applied_failed_restart_retains_target_forward_data_and_original_authority(self):
+        snapshot,receipt,state=self.fixture();self.verify(snapshot,receipt,state)
+        self.assertNotIn('restart',snapshot)
+        self.assertEqual(state['authorization'],snapshot['authorization'])
+        self.assertEqual(state['context'],snapshot['context'])
+        self.assertEqual(state['events'][:len(snapshot['events'])],snapshot['events'])
+        self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
+
+    def test_no_pass_original_target_rewrite_proof_marker_or_journal_drift(self):
+        for fault in ('pass','target','proof','marker','claim','journal','history','ready','expired_rewrite','file'):
+            snapshot,receipt,state=self.fixture()
+            if fault=='pass':receipt['deployment_pass']=True
+            elif fault=='target':snapshot['target']['template_hashes']['voice-story']='f'*64
+            elif fault=='proof':snapshot.pop('preservation')
+            elif fault=='marker':receipt['before_marker']['data']['phase']='rollout-applying'
+            elif fault=='claim':receipt['consumed_claim']['resourceVersion']='101'
+            elif fault=='journal':self.journal['request']['operation']='123456abcdef'
+            elif fault=='history':state['events'][0]['kind']='changed'
+            elif fault=='ready':receipt['setup'][retirement.HUB]['ready']=False
+            elif fault=='expired_rewrite':state['authorization']['expires_at']='renewed'
+            else:self.files['rollout-backup.cms']+=b'changed'
+            receipt['snapshot_sha256']=retirement.canonical(snapshot)
+            receipt['events'][0]['snapshot_sha256']=receipt['snapshot_sha256']
+            if fault not in ('history','expired_rewrite'):state=self.terminal(snapshot,receipt)
+            with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError)):
+                self.verify(snapshot,receipt,state)
+
+
+    def test_operator_closure_preserves_distinct_later_apply_authority_deadline(self):
+        snapshot,receipt,_=self.fixture()
+        snapshot['authorization']['expires_at']='2026-10-11T12:34:11.549999+00:00'
+        snapshot['nats_contract_expires_at']='2026-10-11T12:26:51.376312+00:00'
+        receipt['observed_at']='2026-10-11T10:36:48.233176+00:00'
+        self.files['apply-authorization.json']=json.dumps(snapshot['authorization']).encode()
+        raw=self.files['apply-authorization.json']
+        receipt['retained_files']['apply-authorization.json'].update(sha256=hashlib.sha256(raw).hexdigest(),bytes=len(raw))
+        receipt['consumed_claim'].update(authorization_sha256=hashlib.sha256(raw).hexdigest(),expires_at=snapshot['authorization']['expires_at'])
+        receipt['snapshot_sha256']=retirement.canonical(snapshot)
+        receipt['events'][0]['snapshot_sha256']=receipt['snapshot_sha256']
+        state=self.terminal(snapshot,receipt);self.verify(snapshot,receipt,state)
+        self.assertEqual(state['authorization']['expires_at'],snapshot['authorization']['expires_at'])
+        self.assertEqual(state['nats_contract_expires_at'],snapshot['nats_contract_expires_at'])
+        self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
