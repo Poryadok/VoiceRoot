@@ -85,6 +85,19 @@ func (r readySpaceMediaAdmission) Prepare(_ context.Context, admission voicestor
 	}
 	return r.err
 }
+
+func preparedSpaceMediaEventSubjects(t *testing.T, admissions []voicestore.SpaceMediaAdmission) []string {
+	t.Helper()
+	var subjects []string
+	for _, admission := range admissions {
+		for _, event := range admission.Events {
+			require.NotEmpty(t, event.Payload, "prepared admission events must retain their durable payload")
+			subjects = append(subjects, event.Subject)
+		}
+	}
+	return subjects
+}
+
 func (r readySpaceMediaAdmission) Fence(context.Context, voicestore.SpaceMediaAdmission) error {
 	return r.err
 }
@@ -195,7 +208,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	require.NoError(t, err)
 	_, err = svc.Calls.AdmitSpaceMediaParticipant(t.Context(), call.RoomID, voicestore.SpaceMediaParticipant{
 		AccountID: accountID, AdmissionOperationID: uuid.NewString(), ProfileID: profileID,
-		Identity: identity, Generation: generation,
+		Identity: identity, Generation: generation, RoomGeneration: 1,
 		Issued: voicestore.SpaceMediaGrant{SessionEpoch: 9, AccessEpoch: 11, PolicyEpoch: 7, CanJoin: true, CanSubscribe: true},
 	}, voicestore.MaxVoiceRoomParticipants)
 	require.NoError(t, err)

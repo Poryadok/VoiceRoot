@@ -84,7 +84,11 @@ func TestJoinVoiceRoom_RequiresMatchingCanonicalSpaceAssertion(t *testing.T) {
 			svc.Roles, svc.SpaceMembers = roles, legacy
 			response, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: voiceRoomID, Space: &spacev1.SpaceRef{Id: tc.assertion}})
 			require.Equal(t, tc.want, status.Code(err))
-			require.Equal(t, []canonicalAccessCall{{voiceRoomID, profileID}}, resolver.calls)
+			wantResolverCalls := []canonicalAccessCall{{voiceRoomID, profileID}}
+			if tc.want == codes.OK {
+				wantResolverCalls = append(wantResolverCalls, canonicalAccessCall{voiceRoomID, profileID})
+			}
+			require.Equal(t, wantResolverCalls, resolver.calls)
 			require.Zero(t, legacy.calls)
 			if tc.want != codes.OK {
 				require.Nil(t, response)
@@ -241,7 +245,7 @@ func TestGetJoinToken_SpaceMediaDoesNotUseLegacyIssuerOrMintBeforeReadiness(t *t
 			require.Equal(t, []canonicalAccessCall{{room, profile}}, resolver.calls)
 			require.Zero(t, legacy.calls)
 			if tc.name == "media readiness absent" {
-				require.Equal(t, "canonical", tc.access.SpaceID)
+				require.Equal(t, canonical, tc.access.SpaceID)
 				requireVoiceRoleCheck(t, roles.joinChecks, canonical, profile, room)
 			}
 			require.Nil(t, response)
@@ -323,7 +327,8 @@ func TestGetJoinToken_CanonicalNotFoundDoesNotMint(t *testing.T) {
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 	resolver := &canonicalAccessResolver{err: status.Error(codes.NotFound, "room")}
 	roles, tokens, legacy := &canonicalRolePermissions{}, &canonicalTokenIssuer{}, &poisonLegacySpaceMembers{}
-	svc.VoiceRoomAccessResolver, svc.Roles, svc.Tokens, svc.SpaceMembers = resolver, roles, tokens, legacy
+	configureReadySpaceMediaFixture(svc, resolver)
+	svc.Roles, svc.Tokens, svc.SpaceMembers = roles, tokens, legacy
 	call, err := svc.Calls.CreateCall(t.Context(), voicestore.Call{
 		RoomID:             uuid.NewString(),
 		LivekitRoomName:    "voice-room-" + voiceRoomID,
@@ -337,7 +342,10 @@ func TestGetJoinToken_CanonicalNotFoundDoesNotMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	response, err := svc.GetJoinToken(voiceTestCtx(profileID), &callsv1.GetJoinTokenRequest{RoomId: call.RoomID})
+	request := &callsv1.GetJoinTokenRequest{RoomId: call.RoomID}
+	accountID := uuid.NewString()
+	ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, accountID, profileID, 9)
+	response, err := svc.GetJoinToken(ctx, request)
 	require.Nil(t, response)
 	require.Equal(t, codes.NotFound, status.Code(err))
 	require.Equal(t, []canonicalAccessCall{{voiceRoomID, profileID}}, resolver.calls)
