@@ -31,7 +31,7 @@ func TestWinningCloseReconcilesInFlightCreateOwnerStages(t *testing.T) {
 			o := NewSessionOrchestrator(store, owners.adapters())
 			created, err := o.CreateSession(ctx, p, CreateSessionInput{
 				OperationID: uuid.New(), Kind: "party", ExternalKey: "close-race-" + stage.ownerStage,
-				DisplayName: "Raid", RosterRevision: 1, RosterComplete: true,
+				DisplayName: "Raid", RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
 			})
 			require.NoError(t, err)
 			for i := 0; i < stage.prior; i++ {
@@ -75,6 +75,11 @@ func TestWinningCloseReconcilesInFlightCreateOwnerStages(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "failed", create.Status)
 			require.Nil(t, create.ActiveEventID)
+			if stage.ownerStage == "role_apply" {
+				key := sessionOwnerEffectKey{operationID: calls[0].OperationID, requestHash: calls[0].RequestHash}
+				require.NotNil(t, create.RoleGrantReceiptID, "the role_apply receipt must be persisted on the session")
+				require.Equal(t, owners.receipts[key].ReceiptID, *create.RoleGrantReceiptID)
+			}
 			_, err = o.AdvanceOne(ctx, created.OperationID)
 			require.Error(t, err, "terminal create state must fence any later grant application")
 			closedAgain, err := o.CloseSession(ctx, p, created.SessionID, closeOperationID)
