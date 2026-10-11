@@ -15,7 +15,9 @@ def verify(kube,plan,binding,stage,applied=False):
         key=(descriptor['kind'],descriptor['name'])
         if descriptor['kind']=='Deployment' and descriptor['name'] in stage.snapshots:
             owned=stage.snapshots[descriptor['name']];current=kube.get(*key)
-            if owned['metadata']['uid']!=descriptor['uid'] or any(current['metadata'][k]!=owned['metadata'][k] for k in ('uid','resourceVersion')) or plan_api.semantic(current)!=plan_api.semantic(owned):
+            # Controller status reconciliation may advance resourceVersion
+            # after our scale CAS; identity and complete semantics stay strict.
+            if owned['metadata']['uid']!=descriptor['uid'] or current['metadata']['uid']!=owned['metadata']['uid'] or plan_api.semantic(current)!=plan_api.semantic(owned):
                 raise Blocked('rollout_nonnats_owned_workload_changed')
         elif applied and descriptor['disposition']=='action':
             current=kube.get(*key)

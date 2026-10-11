@@ -88,6 +88,7 @@ def journal_binding(installed,rows):
     return rows
 
 def verify_terminal(base,state):
+    if 'operator_captured_abort' in state:return verify_captured_terminal(base,state)
     if 'operator_precut_abort' in state:return verify_precut_terminal(base,state)
     base=Path(base)
     if base.name!='rollout-'+OPERATION or state.get('operation')!=OPERATION:fail()
@@ -154,33 +155,51 @@ def precut_configmaps(original):
 
 def verify_precut_terminal(base,state):
     """Historical root-attested abort before any cold cut or application effect."""
+    return _verify_unapplied_terminal(base,state,captured=False)
+
+
+def verify_captured_terminal(base,state):
+    """Abort an unapplied captured rollout; retained backup is never release PASS."""
+    return _verify_unapplied_terminal(base,state,captured=True)
+
+
+def _verify_unapplied_terminal(base,state,*,captured):
+    kind='captured' if captured else 'precut';prefix='operator-'+kind+'-abort'
+    reference_key='operator_'+kind+'_abort' 
     base=Path(base);operation=state.get('operation','')
     if not re.fullmatch('[a-f0-9]{12}',operation) or base.name!='rollout-'+operation:fail()
-    raw=private_bytes(base/'operator-precut-abort-snapshot.json');snapshot=json.loads(raw)
-    sha=hashlib.sha256(raw).hexdigest();receipt=document(base/'operator-precut-abort-receipt.json')
-    reference={'schema':'voice-operator-precut-abort-reference-v1','snapshot_sha256':sha,'receipt_sha256':canonical(receipt)}
-    if (state.get('operator_precut_abort')!=reference or snapshot.get('schema')!='nats-rollout-root-v1'
-        or snapshot.get('operation')!=operation or snapshot.get('phase')!='FENCE' or snapshot.get('status')!='BLOCKED'
-        or snapshot.get('fence_status')!='VERIFIED'
-        or any(k in snapshot for k in ('cut','custody','authorization','nats_migration','space_gate','space_backup','apply','restart','preservation','closed_preservation','closed_preservation_sealed','operator_retirement','operator_precut_abort'))
-        or any((base/n).exists() for n in ('rollout-before.tar','rollout-before-manifest.json','authorization.json','apply-authorization.json','copy-checkpoint.json'))
-        or receipt.get('schema')!='voice-operator-precut-abort-closure-v1' or receipt.get('operation')!=operation
+    raw=private_bytes(base/(prefix+'-snapshot.json'));snapshot=json.loads(raw)
+    sha=hashlib.sha256(raw).hexdigest();receipt=document(base/(prefix+'-receipt.json'))
+    reference={'schema':'voice-'+prefix+'-reference-v1','snapshot_sha256':sha,'receipt_sha256':canonical(receipt)}
+    forbidden={'authorization','nats_migration','migration_jobs','migration_completed_metadata','space_postcondition',
+        'renderer_applied','apply','restart','preservation','closed_preservation','closed_preservation_sealed',
+        'operator_retirement','operator_precut_abort','operator_captured_abort'}
+    if not captured:forbidden.update({'cut','custody','space_gate','space_backup'})
+    absent=('authorization.json','apply-authorization.json') if captured else (
+        'rollout-before.tar','rollout-before-manifest.json','authorization.json','apply-authorization.json','copy-checkpoint.json')
+    if (state.get(reference_key)!=reference or snapshot.get('schema')!='nats-rollout-root-v1'
+        or snapshot.get('operation')!=operation or snapshot.get('phase')!=('AWAITING_OFF_NODE' if captured else 'FENCE')
+        or snapshot.get('status')!=('WAITING' if captured else 'BLOCKED') or snapshot.get('fence_status')!='VERIFIED'
+        or any(k in snapshot for k in forbidden) or any((base/n).exists() for n in absent)
+        or receipt.get('schema')!='voice-'+prefix+'-closure-v1' or receipt.get('operation')!=operation
         or receipt.get('snapshot_sha256')!=sha or receipt.get('waiver')!=WAIVER
         or receipt.get('deployment_pass') is not False or receipt.get('rollback_eligible') is not False):fail()
     binding=root_cli.code_binding(base/'code')
     if binding!=snapshot.get('code_capture') or canonical(binding)!=receipt.get('code_binding_sha256'):fail()
+    if captured:verify_captured_evidence(base,snapshot,receipt)
     history=snapshot.get('events');events=receipt.get('events')
-    if (not isinstance(history,list) or not history
-        or any(e.get('kind') not in {'staging_preflight','rollout_original_capture','rollout_maintenance_owned','workload_scaled'} for e in history)
-        or not isinstance(events,list) or len(events)<2 or events[0].get('kind')!='operator_precut_abort_intent'
-        or events[-1].get('kind')!='operator_precut_abort_completed'):fail()
+    allowed={'staging_preflight','rollout_original_capture','rollout_maintenance_owned','workload_scaled'}
+    if captured:allowed.update({'original_hub_shutdown_intent','original_hub_orderly_exit_verified','original_hub_owned_finalizer_removed'})
+    if (not isinstance(history,list) or not history or any(e.get('kind') not in allowed for e in history)
+        or not isinstance(events,list) or len(events)<2 or events[0].get('kind')!='operator_'+kind+'_abort_intent'
+        or events[-1].get('kind')!='operator_'+kind+'_abort_completed'):fail()
     original=snapshot['context']['original_snapshots'];names=CORE|{'voice-web','voice-admin','voice-developer-portal'}
     setup=receipt.get('setup',{})
     if set(original)!=names or not isinstance(setup,dict) or set(setup)!=names:fail()
-    captured=snapshot['context']['snapshots']
-    if (set(captured)!=names or any(r['spec'].get('replicas',1)!=1
-        or captured[n]['spec'].get('replicas',1)!=0 or captured[n]['metadata']['uid']!=r['metadata']['uid']
-        or captured[n]['spec']['template']!=r['spec']['template'] for n,r in original.items())
+    captured_snapshots=snapshot['context']['snapshots']
+    if (set(captured_snapshots)!=names or any(r['spec'].get('replicas',1)!=1
+        or captured_snapshots[n]['spec'].get('replicas',1)!=0 or captured_snapshots[n]['metadata']['uid']!=r['metadata']['uid']
+        or captured_snapshots[n]['spec']['template']!=r['spec']['template'] for n,r in original.items())
         or any(e.get('kind')=='workload_scaled' and (e.get('name') not in names or e.get('replicas')!=0) for e in history)
         or {e['name'] for e in events[1:-1]}!=names or len(events)!=len(names)+2):fail()
     expected={n:{'uid':r['metadata']['uid'],'template_sha256':canonical(r['spec']['template']),
@@ -205,16 +224,54 @@ def verify_precut_terminal(base,state):
         if not re.fullmatch('[a-f0-9]{64}\\.json',name) or set(wanted)!={'journal_sha256','request_sha256','response_sha256'}:fail()
         installed=guard.ROOT/'installed';raw=private_bytes(installed/'journal'/name,2<<20);journal=json.loads(raw)
         request=journal.get('request',{});response_raw=private_bytes(installed/'responses'/name,2<<20,group_read=True)
+        response=json.loads(response_raw);action=request.get('action')
+        failed=(journal.get('phase')=='STARTED' and journal.get('prepare_error')=='guard_rejected'
+            and response=={'status':'BLOCKED','error':'exception_Blocked'})
+        complete=(journal.get('phase')=='COMPLETE' and journal.get('result')==response
+            and response.get('operation')==operation and response.get('phase')=='AWAITING_OFF_NODE'
+            and response.get('status')=='WAITING' and response.get('fence_status')=='VERIFIED')
+        identity=(request.get('nonce')==name[:-5] and request.get('operation',operation)==operation)
+        admitted=(action=='prepare' and request.get('mode')=='full' and name[:12]==operation
+            and (complete if captured else failed))
+        if captured:admitted=admitted or action=='authorize' and request.get('operation')==operation and failed or action=='status' and request.get('operation')==operation and complete
         if (hashlib.sha256(raw).hexdigest()!=wanted['journal_sha256'] or journal.get('request_sha256')!=wanted['request_sha256']
-            or canonical(request)!=wanted['request_sha256'] or request.get('action')!='prepare' or request.get('mode')!='full'
-            or journal.get('phase')!='STARTED' or journal.get('prepare_error')!='guard_rejected'
-            or request.get('nonce')!=name[:-5] or name[:12]!=operation or request.get('operation',operation)!=operation
-            or hashlib.sha256(response_raw).hexdigest()!=wanted['response_sha256']
-            or json.loads(response_raw)!={'status':'BLOCKED','error':'exception_Blocked'}):fail()
-    terminal=copy.deepcopy(snapshot);terminal.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',events=history+events,operator_precut_abort=reference)
+            or canonical(request)!=wanted['request_sha256'] or not identity or not admitted
+            or hashlib.sha256(response_raw).hexdigest()!=wanted['response_sha256']):fail()
+    if captured and not any(json.loads(private_bytes((guard.ROOT/'installed/journal'/n),2<<20))['request']['action']=='authorize' for n in journals):fail()
+    terminal=copy.deepcopy(snapshot);terminal.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',events=history+events)
+    terminal[reference_key]=reference
     if state!=terminal:fail()
     return receipt
 
+
+
+def verify_captured_evidence(base,snapshot,receipt):
+    names={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json',
+        'rollout-backup.cms','decrypted-restore.json','apply-manifests.json'}
+    files=receipt.get('retained_files',{})
+    if not isinstance(files,dict) or set(files)!=names:fail()
+    raw={}
+    for name,row in files.items():
+        if (set(row)!={'sha256','bytes'} or not re.fullmatch('[a-f0-9]{64}',row['sha256'])
+            or type(row['bytes']) is not int or not 0<row['bytes']<=128<<20):fail()
+        raw[name]=private_bytes(Path(base)/name,group_read=True)
+        if len(raw[name])!=row['bytes'] or hashlib.sha256(raw[name]).hexdigest()!=row['sha256']:fail()
+    cut=snapshot['cut'];cipher=snapshot['cipher_binding'];custody=snapshot['custody']
+    hashes={'rollout-before.tar':cut['manifest']['archive_sha256'],
+        'rollout-before-manifest.json':cut['manifest_sha256'],'rollout-backup.cms':cipher['cipher_sha256'],
+        'apply-manifests.json':snapshot['target']['manifest_sha256']}
+    if (any(files[n]['sha256']!=h for n,h in hashes.items())
+        or json.loads(raw['rollout-before-manifest.json'])!=cut['manifest']
+        or files['rollout-backup.cms']['bytes']!=cipher['cipher_bytes'] or cipher['operation']!=snapshot['operation']
+        or custody.get('verified') is not True or any(custody.get(k)!=cipher[k] for k in (
+            'operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes'))):fail()
+    restored=json.loads(raw['decrypted-restore.json'])
+    members={n:files[n]['sha256'] for n in ('rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json')}
+    members.update(snapshot.get('cipher_space_members',{}));members.update(cipher.get('space_members',{}));members.update(cipher.get('postseal_members',{}))
+    if (restored.get('schema')!='voice-nats-decrypted-restore-v1' or restored.get('decrypted_members_verified') is not True
+        or restored.get('remote_equivalence')!='FULL_CIPHERTEXT_SHA256_AND_SIZE'
+        or restored.get('cipher_sha256')!=cipher['cipher_sha256'] or restored.get('cipher_bytes')!=cipher['cipher_bytes']
+        or restored.get('members')!=members or restored.get('readback',{}).get('native_archive_verified') is not True):fail()
 
 def idle_state(base,state):
     if state.get('status') in ('PASS','ROLLED_BACK'):return True
