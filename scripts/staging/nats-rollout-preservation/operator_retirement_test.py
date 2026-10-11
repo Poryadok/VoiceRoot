@@ -116,6 +116,91 @@ class PrecutClosureTests(unittest.TestCase):
 
 
 
+
+class CapturedClosureTests(unittest.TestCase):
+    def fixture(self):
+        helper=PrecutClosureTests();snapshot,receipt,state=helper.fixture()
+        operation=snapshot['operation'];self.files={}
+        self.files['rollout-before.tar']=b'authenticated native archive'
+        manifest={'archive_sha256':hashlib.sha256(self.files['rollout-before.tar']).hexdigest()}
+        self.files['rollout-before-manifest.json']=json.dumps(manifest,sort_keys=True,separators=(',',':')).encode()
+        self.files['copy-checkpoint.json']=b'{"status":"PASS"}'
+        self.files['rollout-backup.cms']=b'authenticated ciphertext'
+        self.files['apply-manifests.json']=b'[]'
+        cipher={'operation':operation,'challenge':'a'*32,'run_id':1,'head_sha':'b'*40,
+            'cipher_sha256':hashlib.sha256(self.files['rollout-backup.cms']).hexdigest(),
+            'cipher_bytes':len(self.files['rollout-backup.cms']),'created_at':'2026-10-11T03:51:00+00:00'}
+        restored={'schema':'voice-nats-decrypted-restore-v1','decrypted_members_verified':True,
+            'remote_equivalence':'FULL_CIPHERTEXT_SHA256_AND_SIZE','cipher_sha256':cipher['cipher_sha256'],
+            'cipher_bytes':cipher['cipher_bytes'],'readback':{'native_archive_verified':True},
+            'members':{n:hashlib.sha256(self.files[n]).hexdigest() for n in ('rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json')}}
+        self.files['decrypted-restore.json']=json.dumps(restored,sort_keys=True,separators=(',',':')).encode()
+        snapshot.update(phase='AWAITING_OFF_NODE',status='WAITING',cut={'manifest':manifest,
+            'manifest_sha256':hashlib.sha256(self.files['rollout-before-manifest.json']).hexdigest()},
+            cipher_binding=cipher,custody=dict(cipher,verified=True),
+            target={'manifest_sha256':hashlib.sha256(self.files['apply-manifests.json']).hexdigest()},
+            nats_contract_expires_at='2026-10-11T07:50:00+00:00')
+        snapshot['events'] += [{'kind':k} for k in ('original_hub_shutdown_intent',
+            'original_hub_orderly_exit_verified','original_hub_owned_finalizer_removed')]
+        events=copy.deepcopy(receipt['events']);events[0]['kind']='operator_captured_abort_intent';events[-1]['kind']='operator_captured_abort_completed'
+        receipt.update(schema='voice-operator-captured-abort-closure-v1',snapshot_sha256=retirement.canonical(snapshot),events=events,
+            retained_files={n:{'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)} for n,raw in self.files.items()})
+        nonce=operation+'a'*52;prepare=helper.journal
+        prepare.pop('prepare_error');prepare['phase']='COMPLETE';prepare['result']={'operation':operation,'phase':'AWAITING_OFF_NODE','status':'WAITING','fence_status':'VERIFIED'}
+        response=copy.deepcopy(prepare['result'])
+        auth_nonce='c'*64;auth={'phase':'STARTED','prepare_error':'guard_rejected',
+            'request':{'action':'authorize','operation':operation,'nonce':auth_nonce}}
+        auth['request_sha256']=retirement.canonical(auth['request'])
+        self.journals={nonce+'.json':prepare,auth_nonce+'.json':auth}
+        self.responses={nonce+'.json':response,auth_nonce+'.json':{'status':'BLOCKED','error':'exception_Blocked'}}
+        receipt['journals']={n:{'journal_sha256':retirement.canonical(r),'request_sha256':r['request_sha256'],
+            'response_sha256':retirement.canonical(self.responses[n])} for n,r in self.journals.items()}
+        terminal=copy.deepcopy(snapshot);terminal.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',
+            events=snapshot['events']+events,operator_captured_abort={'schema':'voice-operator-captured-abort-reference-v1',
+                'snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':retirement.canonical(receipt)})
+        return snapshot,receipt,terminal
+
+    def verify(self,snapshot,receipt,state):
+        base=Path('/private/rollout-'+snapshot['operation'])
+        def read(path,*args,**kwargs):
+            path=Path(path)
+            if path.name=='operator-captured-abort-snapshot.json':return json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+            if path.parent.name in ('journal','responses'):
+                rows=self.journals if path.parent.name=='journal' else self.responses
+                return json.dumps(rows[path.name],sort_keys=True,separators=(',',':')).encode()
+            return self.files[path.name]
+        with patch.object(retirement,'private_bytes',side_effect=read),patch.object(retirement,'document',return_value=receipt),\
+             patch.object(retirement.root_cli,'code_binding',return_value=snapshot['code_capture']):
+            return retirement.verify_captured_terminal(base,state)
+
+    def test_backup_complete_unapplied_closure_preserves_evidence_and_old_deadlines(self):
+        snapshot,receipt,state=self.fixture()
+        self.verify(snapshot,receipt,state)
+        self.assertEqual(state['events'][:len(snapshot['events'])],snapshot['events'])
+        self.assertEqual(state['cut'],snapshot['cut']);self.assertEqual(state['cipher_binding'],snapshot['cipher_binding'])
+        self.assertEqual(state['nats_contract_expires_at'],snapshot['nats_contract_expires_at'])
+        self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
+
+    def test_effect_evidence_identity_deadline_or_raw_abort_drift_refuses_closure(self):
+        for fault in ('authorization','migration','effect_event','archive','cipher','restore','manifest','deadline','code','custody','raw_aborted'):
+            snapshot,receipt,state=self.fixture()
+            if fault in ('authorization','migration'):
+                snapshot['authorization' if fault=='authorization' else 'nats_migration']={'present':True}
+            elif fault=='effect_event':snapshot['events'].append({'kind':'migration_complete'})
+            elif fault in ('archive','cipher','restore','manifest'):
+                name={'archive':'rollout-before.tar','cipher':'rollout-backup.cms','restore':'decrypted-restore.json','manifest':'apply-manifests.json'}[fault]
+                self.files[name]+=b'changed'
+            elif fault=='deadline':state['nats_contract_expires_at']='renewed'
+            elif fault=='code':receipt['code_binding_sha256']='f'*64
+            elif fault=='custody':snapshot['custody']['verified']=False
+            else:state.pop('operator_captured_abort')
+            if fault not in ('deadline','raw_aborted'):
+                receipt['snapshot_sha256']=retirement.canonical(snapshot)
+                state['operator_captured_abort'].update(snapshot_sha256=receipt['snapshot_sha256'],receipt_sha256=retirement.canonical(receipt))
+            with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError,FileNotFoundError)):
+                self.verify(snapshot,receipt,state)
+
+
 import contextlib
 import hashlib
 import json
