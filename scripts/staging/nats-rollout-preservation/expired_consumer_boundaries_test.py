@@ -315,6 +315,7 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                                 transaction.finish(None,fixture.base,state,receipt,rv,{},publication=actions._active_release)
                             self.assertEqual(state['status'],'BLOCKED');self.assertEqual(state['fence_status'],'VERIFIED');stage.refence.assert_called_once()
                             self.assertTrue((fixture.base.parent/'installed/active-release.json').exists())
+                            state['input_target']={'mode':'images-only','changed_services':['story']}
                             actions.state=Mock(return_value=(fixture.base,state));actions._prepare=Mock()
                             with self.assertRaises(Blocked):actions.execute({'action':'prepare-rollback','operation':state['operation']})
                             actions._prepare.assert_not_called()
@@ -354,6 +355,7 @@ class FinishPublicationCompositionTests(unittest.TestCase):
                 if boundary=='before-save':self.assertFalse(active.exists())
                 else:
                     self.assertEqual(expired_transport.upload.private_json(active)['operation'],fixture.state['operation'])
+                    fixture.state['input_target']={'mode':'images-only','changed_services':['story']}
                     actions.state=Mock(return_value=(fixture.base,fixture.state));actions._prepare=Mock()
                     with self.assertRaises(transaction.Blocked):actions.execute({'action':'prepare-rollback','operation':fixture.state['operation']})
                     actions._prepare.assert_not_called()

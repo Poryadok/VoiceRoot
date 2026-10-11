@@ -59,7 +59,8 @@ class CompositionTests(unittest.TestCase):
         class ReachedContract(Exception):pass
         repo=bridge_root.source_authority.REGISTRY+'/user@sha256:'
         actual=repo+'a'*64;expected=repo+'b'*64
-        previous={'target':{'images':{'voice-user/user':expected}},
+        previous={'input_target':{'mode':'images-only','changed_services':['user']},
+                  'target':{'images':{'voice-user/user':expected}},
                   'context':{'old_images':{'voice-user/user':repo+'c'*64}}}
         stage=SimpleNamespace(snapshots={'voice-user':{'spec':{'template':{'spec':{
             'containers':[{'name':'user','image':repo+'old-tag'}]}}}}},
