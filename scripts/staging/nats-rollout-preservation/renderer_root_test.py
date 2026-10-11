@@ -159,7 +159,7 @@ class RendererLiveTests(unittest.TestCase):
                 if fault=='original':original['spec']['template']['spec']['containers'][0]['image']='changed'
                 if fault=='old-image':stage.old_images[HUB+'/nats-config-renderer']='other'
                 if fault=='current-metadata':
-                    current=copy.deepcopy(stage.snapshots[HUB]);current['metadata']['annotations']={'unapproved':'change'}
+                    current=copy.deepcopy(stage.snapshots[HUB]);current['metadata']['uid']='foreign-hub-uid'
                     stage.kube.get.side_effect=lambda *args:current
                 with patch.object(renderer_root,'revalidate'):
                     with self.assertRaises((Blocked,renderer_transition.TransitionError)):
