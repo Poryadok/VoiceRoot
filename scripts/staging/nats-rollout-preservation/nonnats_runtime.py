@@ -7,6 +7,14 @@ def preflight(kube,plan,mode):
     try:return plan_api.preflight(kube,plan,mode)
     except plan_api.PlanError as error:raise Blocked('rollout_nonnats_'+str(error)) from None
 
+def owned_deployment_semantic(obj):
+    result=plan_api.semantic(obj)
+    annotations=result['metadata'].get('annotations',{})
+    # The Deployment controller advances this after our target-template CAS.
+    annotations.pop('deployment.kubernetes.io/revision',None)
+    if not annotations:result['metadata'].pop('annotations',None)
+    return result
+
 def verify(kube,plan,binding,stage,applied=False):
     if plan_api.digest(plan)!=binding['plan_sha256']:raise Blocked('rollout_nonnats_plan_changed')
     desired={(o['kind'],o['name']):o['desired'] for r in plan['checks'] for o in r['objects']}
@@ -17,7 +25,7 @@ def verify(kube,plan,binding,stage,applied=False):
             owned=stage.snapshots[descriptor['name']];current=kube.get(*key)
             # Controller status reconciliation may advance resourceVersion
             # after our scale CAS; identity and complete semantics stay strict.
-            if owned['metadata']['uid']!=descriptor['uid'] or current['metadata']['uid']!=owned['metadata']['uid'] or plan_api.semantic(current)!=plan_api.semantic(owned):
+            if owned['metadata']['uid']!=descriptor['uid'] or current['metadata']['uid']!=owned['metadata']['uid'] or owned_deployment_semantic(current)!=owned_deployment_semantic(owned):
                 raise Blocked('rollout_nonnats_owned_workload_changed')
         elif applied and descriptor['disposition']=='action':
             current=kube.get(*key)

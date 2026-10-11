@@ -43,5 +43,15 @@ class OwnedPlanTest(unittest.TestCase):
                     nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage)
                 self.current=before
 
+    def test_owned_controller_revision_after_target_adoption_is_not_config_drift(self):
+        self.stage.snapshots['voice-web']['metadata']['annotations']={
+            'deployment.kubernetes.io/revision':'5','voice.io/config':'unchanged'}
+        self.current['metadata']['annotations']={
+            'deployment.kubernetes.io/revision':'6','voice.io/config':'unchanged'}
+        self.assertTrue(nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage,applied=True)['verified'])
+        self.current['metadata']['annotations']['voice.io/config']='changed'
+        with self.assertRaisesRegex(nonnats_runtime.Blocked,'owned_workload_changed'):
+            nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage,applied=True)
+
 def setitem(mapping,key,value):mapping[key]=value
 if __name__=='__main__':unittest.main()

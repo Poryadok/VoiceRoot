@@ -233,7 +233,7 @@ def verify_live(stage,authority):
     for name in stage.snapshots:
         if name!=HUB and stage.kube.get('deployment',name)['spec'].get('replicas',1)!=0:
             raise Blocked('renderer_apps_released_before_proof')
-    sets=stage.kube.run(['get','replicasets','-o','json'])['items']
+    sets=stage.kube.run(['get','replicasets','-l','app='+HUB,'-o','json'])['items']
     owners={r['metadata']['uid'] for r in sets if any(o.get('kind')=='Deployment' and o.get('uid')==row['metadata']['uid'] for o in r['metadata'].get('ownerReferences',[])) and revision_template(r['spec']['template'])==revision_template(row['spec']['template'])}
     pods=[p for p in stage.kube.run(['get','pods','-o','json'])['items'] if p.get('status',{}).get('phase')=='Running' and any(o.get('kind')=='ReplicaSet' and o.get('uid') in owners for o in p['metadata'].get('ownerReferences',[]))]
     if len(pods)!=1:raise Blocked('renderer_live_pod_ambiguous')
