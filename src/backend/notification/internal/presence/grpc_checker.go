@@ -246,7 +246,7 @@ func marshalNotificationJWKS(keys map[string]*rsa.PrivateKey) ([]byte, error) {
 
 func (c *GRPCChecker) IsOnline(ctx context.Context, profileID uuid.UUID) (bool, error) {
 	if c == nil || c.client == nil || c.issuer == nil {
-		return false, errors.New("Notification routing presence authority is not configured")
+		return false, errors.New("notification routing presence authority is not configured")
 	}
 	req := &userv1.GetNotificationRoutingPresenceRequest{ProfileId: profileID.String()}
 	hash, err := principal.RequestHash(proto.Message(req))
@@ -264,7 +264,7 @@ func (c *GRPCChecker) IsOnline(ctx context.Context, profileID uuid.UUID) (bool, 
 		return false, err
 	}
 	if response == nil {
-		return false, errors.New("User returned no Notification routing presence")
+		return false, errors.New("user returned no Notification routing presence")
 	}
 	return response.GetHasActiveSession(), nil
 }
