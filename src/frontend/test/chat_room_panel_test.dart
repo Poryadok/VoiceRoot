@@ -701,7 +701,7 @@ void main() {
           );
       expect(selectedChatIsDm, isTrue);
       await tester.tap(find.text('Send when online'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(room.scheduledAttempts, hasLength(1));
       expect(room.state.isSending, isTrue);
