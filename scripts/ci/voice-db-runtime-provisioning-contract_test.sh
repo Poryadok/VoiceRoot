@@ -1124,7 +1124,7 @@ f13_collect_failure() {
 
 f13_collect_develop_contributions() {
   local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
-  local commit parent_count first_parent source_head source_base delta
+  local commit parent_count first_parent source_head source_base delta first_parent_commits
   local path source_entry result_entry target_entry blob trigger
   local -a commit_line
   local -A owners=()
@@ -1141,7 +1141,11 @@ f13_collect_develop_contributions() {
     f13_collect_failure "${diagnostic_file}" base_ancestry
     return 1
   }
-  git -C "${repo}" rev-list --first-parent "${target}" 2>/dev/null | grep -Fxq -- "${base}" || {
+  first_parent_commits="$(git -C "${repo}" rev-list --first-parent "${target}" 2>/dev/null)" || {
+    f13_collect_failure "${diagnostic_file}" first_parent_range
+    return 1
+  }
+  grep -Fxq -- "${base}" <<<"${first_parent_commits}" || {
     f13_collect_failure "${diagnostic_file}" first_parent_range
     return 1
   }
@@ -1348,6 +1352,58 @@ f13_collect_develop_contributions \
 }
 grep -Fqx $'src/backend/voice/main.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-fixture-map") || {
   printf '%s\n' 'F13 oracle bug: R22 contribution lost its own runtime trigger' >&2
+  exit 2
+}
+
+# A quiet exact-line reader must not make rev-list fail with SIGPIPE under
+# pipefail when the valid base is followed by a large first-parent output tail.
+f13_pipefail_repo="${TMP_DIR}/f13-first-parent-pipefail"
+mkdir -p "${f13_pipefail_repo}"
+git -C "${f13_pipefail_repo}" init -q
+git -C "${f13_pipefail_repo}" config user.name 'Voice CI fixture'
+git -C "${f13_pipefail_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${f13_pipefail_repo}" config commit.gpgsign false
+printf '%s\n' 'first-parent root' >"${f13_pipefail_repo}/README.md"
+git -C "${f13_pipefail_repo}" add README.md
+git -C "${f13_pipefail_repo}" commit -qm 'F13 first-parent root'
+printf '%s\n' 'valid base' >"${f13_pipefail_repo}/base.txt"
+git -C "${f13_pipefail_repo}" add base.txt
+git -C "${f13_pipefail_repo}" commit -qm 'F13 first-parent base'
+f13_pipefail_base="$(git -C "${f13_pipefail_repo}" rev-parse HEAD)"
+printf '%s\n' 'package main' >"${f13_pipefail_repo}/src/backend/voice/main.go"
+git -C "${f13_pipefail_repo}" add src/backend/voice/main.go
+git -C "${f13_pipefail_repo}" commit -qm 'F13 first-parent target'
+f13_pipefail_target="$(git -C "${f13_pipefail_repo}" rev-parse HEAD)"
+f13_real_git="$(command -v git)"
+f13_pipefail_marker="${TMP_DIR}/f13-first-parent-wrapper-called"
+git() {
+  if [[ "${1:-}" == -C && "${2:-}" == "${f13_pipefail_repo}" &&
+    "${3:-}" == rev-list && "${4:-}" == --first-parent &&
+    "${5:-}" == "${f13_pipefail_target}" && ! -e "${f13_pipefail_marker}" ]]; then
+    : >"${f13_pipefail_marker}"
+    "${f13_real_git}" "$@" || return $?
+    for ((f13_padding_line = 0; f13_padding_line < 50000; f13_padding_line++)); do
+      printf '%040d\n' 0
+    done
+  else
+    "${f13_real_git}" "$@"
+  fi
+}
+f13_collect_develop_contributions \
+  "${f13_pipefail_repo}" "${f13_pipefail_base}" "${f13_pipefail_target}" \
+  "${TMP_DIR}/f13-first-parent-pipefail-map" \
+  "${TMP_DIR}/f13-first-parent-pipefail-category" || {
+  unset -f git
+  printf '%s\n' 'F13 oracle bug: valid first-parent base was rejected after a large output tail' >&2
+  exit 2
+}
+unset -f git
+[[ -e "${f13_pipefail_marker}" ]] || {
+  printf '%s\n' 'F13 fixture setup bug: first-parent output wrapper was not exercised' >&2
+  exit 2
+}
+grep -Fqx $'src/backend/voice/main.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-first-parent-pipefail-map") || {
+  printf '%s\n' 'F13 oracle bug: first-parent output tail lost the guarded R22 contribution' >&2
   exit 2
 }
 grep -Fqx $'protos/voice/bot/v1/bot.proto\tfalse' <(cut -f1-2 "${TMP_DIR}/f13-fixture-map") || {
