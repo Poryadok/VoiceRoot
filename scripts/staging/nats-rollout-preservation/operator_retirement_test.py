@@ -219,11 +219,14 @@ class PostmigrationClosureTests(unittest.TestCase):
         for i in range(25):
             name='service-'+str(i);resources['Service/'+name]={'kind':'Service','metadata':{'name':name,'uid':str(uuid.uuid4())},'spec':{'ports':[]}}
         resources['ConfigMap/voice-app-config']={'kind':'ConfigMap','metadata':{'name':'voice-app-config','uid':str(uuid.uuid4())},'data':{'retained':'actual'}}
-        documents=list(resources.values());self.files['apply-manifests.json']=json.dumps({'apiVersion':'v1','kind':'List','items':documents}).encode()
+        documents=copy.deepcopy(list(resources.values()))
+        for row in documents:
+            if row['kind']!='Deployment':row['metadata'].pop('uid')
+        self.files['apply-manifests.json']=json.dumps({'apiVersion':'v1','kind':'List','items':documents}).encode()
         snapshot['target']['manifest_sha256']=hashlib.sha256(self.files['apply-manifests.json']).hexdigest()
         self.files['apply-authorization.json']=json.dumps(snapshot['authorization']).encode()
         self.files['operator-postmigration-abort-resources.json']=json.dumps(resources).encode()
-        snapshot['nonnats_binding']={'objects':[{'kind':r['kind'],'name':r['metadata']['name'],'uid':r['metadata']['uid']} for r in documents]}
+        snapshot['nonnats_binding']={'objects':[{'kind':r['kind'],'name':r['metadata']['name'],'uid':r['metadata']['uid']} for r in resources.values()]}
         receipt.update(schema='voice-operator-postmigration-abort-closure-v1',snapshot_sha256=retirement.canonical(snapshot),
             observed_at='2026-10-11T04:01:00+00:00',completed_migrations_sha256=retirement.canonical(snapshot['migration_jobs']),
             configuration_basis='RETAIN_ACTUAL_POST_MIGRATION_CONFIGURATION_NO_ORIGINAL_WRITE_CLAIM',journals={},
@@ -258,7 +261,7 @@ class PostmigrationClosureTests(unittest.TestCase):
         self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
 
     def test_postmigration_closure_refuses_effect_or_binding_drift(self):
-        for fault in ('pass','deadline','job','claim','inventory','template','file','history','ready'):
+        for fault in ('pass','deadline','job','claim','inventory','template','file','history','ready','ledger_uid','explicit_frozen_uid'):
             snapshot,receipt,state=self.fixture()
             if fault=='pass':receipt['deployment_pass']=True
             elif fault=='deadline':receipt['observed_at']='2026-10-11T03:59:00+00:00'
@@ -268,7 +271,15 @@ class PostmigrationClosureTests(unittest.TestCase):
             elif fault=='template':snapshot['context']['snapshots']['voice-story']['spec']['template']={'changed':True}
             elif fault=='file':self.files['rollout-backup.cms']+=b'changed'
             elif fault=='history':snapshot['events'].append({'kind':'rollout_target_applied'})
-            else:receipt['setup'][retirement.HUB]['ready']=False
+            elif fault=='ready':receipt['setup'][retirement.HUB]['ready']=False
+            elif fault=='ledger_uid':snapshot['nonnats_binding']['objects'][0]['uid']='foreign'
+            else:
+                documents=json.loads(self.files['apply-manifests.json'])
+                next(r for r in documents['items'] if r['kind']=='Service')['metadata']['uid']='foreign'
+                self.files['apply-manifests.json']=json.dumps(documents).encode()
+                pin=hashlib.sha256(self.files['apply-manifests.json']).hexdigest()
+                snapshot['target']['manifest_sha256']=pin
+                receipt['retained_files']['apply-manifests.json'].update(sha256=pin,bytes=len(self.files['apply-manifests.json']))
             receipt['snapshot_sha256']=retirement.canonical(snapshot)
             with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError)):
                 self.verify(snapshot,receipt,self.terminal(snapshot,receipt))

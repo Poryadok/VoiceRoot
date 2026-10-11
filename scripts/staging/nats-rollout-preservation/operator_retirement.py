@@ -523,7 +523,7 @@ def verify_postmigration_terminal(base,state):
     for key,row in resources.items():
         kind,name=key.split('/',1)
         if (row.get('kind')!=kind or row.get('metadata',{}).get('name')!=name
-            or row['metadata'].get('uid')!=frozen[key]['metadata'].get('uid')
+            or 'uid' in frozen[key]['metadata'] and row['metadata'].get('uid')!=frozen[key]['metadata']['uid']
             or key not in ledger or row['metadata']['uid']!=ledger[key]['uid']):fail()
         if kind=='Deployment':
             if name not in names-{HUB} or row['spec']!=captured[name]['spec'] or row['spec']['replicas']!=0:fail()
