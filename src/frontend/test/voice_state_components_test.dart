@@ -96,4 +96,46 @@ void main() {
 
     expect(find.byType(OutlinedButton), findsNothing);
   });
+
+  testWidgets(
+    'VoiceStatePanel keeps its empty state and retry reachable in a short viewport',
+    (tester) async {
+      var retries = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: voiceTestTheme(),
+          home: Scaffold(
+            body: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(360, 105),
+                textScaler: TextScaler.linear(1.5),
+              ),
+              child: SizedBox(
+                width: 360,
+                height: 105,
+                child: VoiceStatePanel(
+                  title: 'Could not load messages',
+                  message: 'Check your connection and try again.',
+                  icon: Icons.cloud_off_outlined,
+                  actionLabel: 'Retry',
+                  onAction: () => retries += 1,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Could not load messages'), findsOneWidget);
+      expect(find.text('Check your connection and try again.'), findsOneWidget);
+      expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+      expect(find.byType(OutlinedButton), findsOneWidget);
+
+      await tester.ensureVisible(find.byType(OutlinedButton));
+      await tester.tap(find.byType(OutlinedButton));
+      expect(retries, 1);
+    },
+  );
 }

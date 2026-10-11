@@ -26,48 +26,59 @@ class VoiceStatePanel extends StatelessWidget {
     return Semantics(
       container: true,
       label: title,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, color: voice.textSecondary, size: 28),
-                  const SizedBox(height: 12),
-                ],
-                ExcludeSemantics(
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: voice.textPrimary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, color: voice.textSecondary, size: 28),
+                    const SizedBox(height: 12),
+                  ],
+                  ExcludeSemantics(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: voice.textPrimary,
+                      ),
                     ),
                   ),
-                ),
-                if (message != null && message!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    message!,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: voice.textSecondary,
+                  if (message != null && message!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      message!,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: voice.textSecondary,
+                      ),
                     ),
-                  ),
+                  ],
+                  if (actionLabel != null && onAction != null) ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: onAction,
+                      child: Text(actionLabel!),
+                    ),
+                  ],
                 ],
-                if (actionLabel != null && onAction != null) ...[
-                  const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed: onAction,
-                    child: Text(actionLabel!),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+
+          if (!constraints.hasBoundedHeight) return Center(child: content);
+
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: content),
+            ),
+          );
+        },
       ),
     );
   }
