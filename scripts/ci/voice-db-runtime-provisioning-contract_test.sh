@@ -1370,6 +1370,7 @@ printf '%s\n' 'valid base' >"${f13_pipefail_repo}/base.txt"
 git -C "${f13_pipefail_repo}" add base.txt
 git -C "${f13_pipefail_repo}" commit -qm 'F13 first-parent base'
 f13_pipefail_base="$(git -C "${f13_pipefail_repo}" rev-parse HEAD)"
+mkdir -p "${f13_pipefail_repo}/src/backend/voice"
 printf '%s\n' 'package main' >"${f13_pipefail_repo}/src/backend/voice/main.go"
 git -C "${f13_pipefail_repo}" add src/backend/voice/main.go
 git -C "${f13_pipefail_repo}" commit -qm 'F13 first-parent target'
