@@ -3,6 +3,7 @@
 
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,12 @@ MEDIA_OVERLAY = ROOT / "docker-compose.voice-space-media.yml"
 PROXY = "phase0-jwks"
 URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
+STARTUP_DIAGNOSTICS = ROOT / "scripts/ci/t31-startup-diagnostics.py"
+sys.dont_write_bytecode = True
+STARTUP_SPEC = importlib.util.spec_from_file_location("t31_startup_diagnostics", STARTUP_DIAGNOSTICS)
+assert STARTUP_SPEC and STARTUP_SPEC.loader
+startup_diagnostics = importlib.util.module_from_spec(STARTUP_SPEC)
+STARTUP_SPEC.loader.exec_module(startup_diagnostics)
 
 
 def run(*args, env=None, input=None):
@@ -366,15 +373,140 @@ class ComposeTests(unittest.TestCase):
                       "all generated fixture files are root-owned mode 0600 in Linux CI")
 
     def test_bounded_startup_diagnostics_only_name_declared_services(self):
-        for path in (ROOT / ".github/workflows/t31-session-events-e2e.yml",
-                     ROOT / "scripts/ci/compose-file-attachment-restart-proof.sh"):
-            text = path.read_text()
-            batches = re.findall(r"logs --no-color --timestamps --tail=100 ([^\n]+)", text)
-            self.assertEqual(len(batches), 1)
-            names = shlex.split(re.split(r">&2|\|\|", batches[0])[0])
-            self.assertIn("matchmaking", names)
-            for name in names:
-                self.assertTrue(name in self.merged, f"undeclared diagnostic service {name} in {path.name}")
+        path = ROOT / "scripts/ci/compose-file-attachment-restart-proof.sh"
+        text = path.read_text()
+        batches = re.findall(r"logs --no-color --timestamps --tail=100 ([^\n]+)", text)
+        self.assertEqual(len(batches), 1)
+        names = shlex.split(re.split(r">&2|\|\|", batches[0])[0])
+        self.assertIn("matchmaking", names)
+        for name in names:
+            self.assertTrue(name in self.merged, f"undeclared diagnostic service {name} in {path.name}")
+
+        helper = STARTUP_DIAGNOSTICS.read_text()
+        workflow = (ROOT / ".github/workflows/t31-session-events-e2e.yml").read_text()
+        self.assertIn("scripts/ci/t31-startup-diagnostics.py", workflow)
+        self.assertIn('"logs", "--no-color", "--timestamps", *requested', helper)
+        self.assertNotIn("--tail", helper)
+        service_block = re.search(r"SERVICES = \((.*?)\n\)", helper, flags=re.DOTALL)
+        self.assertIsNotNone(service_block)
+        names = re.findall(r'"([a-z0-9-]+)"', service_block.group(1))
+        t31_overlay = (ROOT / "docker-compose.t31-session-events-e2e.yml").read_text()
+        for name in names:
+            declared = name in self.merged or bool(re.search(rf"^\s*{re.escape(name)}:\s*$", t31_overlay, flags=re.MULTILINE))
+            self.assertTrue(declared, f"undeclared diagnostic service {name} in T31 helper")
+        self.assertNotIn("container_id", helper)
+
+        start = workflow.index("      - name: Save sanitized T31 acceptance evidence")
+        end = workflow.index("      - name: Remove this run's isolated Compose project and fixtures", start)
+        artifact_step = workflow[start:end]
+        artifacts = re.findall(r"^\s+(tmp/[^\s]+)$", artifact_step, flags=re.MULTILINE)
+        self.assertEqual(artifacts, [
+            "tmp/t31-session-event-e2e/bootstrap-result.json",
+            "tmp/t31-session-event-e2e/acceptance.log",
+            "tmp/t31-session-event-e2e/startup-diagnostics.json",
+        ])
+        self.assertNotIn("compose.env", artifact_step)
+        self.assertNotIn("/state/", artifact_step)
+        self.assertNotIn("/tls/", artifact_step)
+        self.assertIn('startup_status=$?', workflow)
+        self.assertIn('python3 scripts/ci/t31-startup-diagnostics.py', workflow)
+        self.assertIn('|| true', workflow)
+        self.assertIn('exit "$startup_status"', workflow)
+        self.assertNotIn("logs --no-color --timestamps", workflow)
+
+    def test_t31_log_summary_only_emits_allowlisted_diagnostic_fields(self):
+        secret = "private-dsn-and-password-sentinel"
+        raw = (
+            "voice  | level=error error_code=UNAVAILABLE SQLSTATE=08006 "
+            "SQLNonTransientConnectionException /app/main.go:42 password=" + secret + "\n"
+        ).encode("utf-8")
+        summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+        self.assertEqual(summary["result"], "complete")
+        self.assertEqual(first["result"], "observed_in_bounded_window")
+        self.assertEqual(first["service"], "voice")
+        self.assertEqual(first["stage"], "database")
+        self.assertEqual(first["error_code"], "UNAVAILABLE")
+        self.assertEqual(first["exception_class"], "SQLNonTransientConnectionException")
+        self.assertEqual(first["sqlstate"], "08006")
+        self.assertEqual(first["source_basename"], "main.go")
+        self.assertEqual(first["source_line"], 42)
+        self.assertEqual(first["selection"], "first_marker_in_bounded_head")
+        self.assertEqual(first["causal_order"], "not_established")
+        self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
+        self.assertEqual(set(first), {
+            "result", "service", "stage", "error_code", "exception_class", "sqlstate",
+            "source_basename", "source_line", "selection", "causal_order",
+        })
+
+    def test_t31_first_emitted_window_does_not_claim_later_tail_cause(self):
+        early = b"voice | level=info service_starting\n"
+        early += b"chat | level=info service_starting\n"
+        head = (early * ((startup_diagnostics.MAX_LOG_BYTES // len(early)) + 1))[:startup_diagnostics.MAX_LOG_BYTES]
+        later = b"voice | level=error error_code=UNAVAILABLE\n"
+        full_stream = head + later
+        bounded = full_stream[:startup_diagnostics.MAX_LOG_BYTES]
+        self.assertNotIn(later, bounded)
+        summary, first = startup_diagnostics.sanitize_logs(bounded, "byte_limit", ("voice",))
+        self.assertEqual(summary["window"], "first_emitted")
+        self.assertEqual(summary["coverage"], "bounded_head_window_only")
+        self.assertTrue(summary["truncated"])
+        self.assertEqual(summary["causal_order"], "not_established")
+        self.assertEqual(first["result"], "unknown")
+        self.assertEqual(first["causal_order"], "not_established")
+
+    def test_t31_unrecognized_diagnostic_values_remain_unknown(self):
+        secret = "must-not-leak"
+        raw = (
+            "voice | level=error error_code=" + secret + " SQLSTATE=99999 "
+            "UnknownPrivateException /tmp/secret-path/private.go:700 password=" + secret + "\n"
+        ).encode("utf-8")
+        _, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+        self.assertEqual(first["error_code"], "unknown")
+        self.assertEqual(first["exception_class"], "unknown")
+        self.assertEqual(first["sqlstate"], "unknown")
+        self.assertEqual(first["source_basename"], "unknown")
+        self.assertNotIn(secret, json.dumps(first))
+        self.assertNotIn("private.go", json.dumps(first))
+
+    def test_t31_status_discards_unrecognized_services_and_identifiers(self):
+        raw = json.dumps([
+            {"Service": "voice", "State": "exited", "Health": "none", "ExitCode": 1,
+             "Name": "container-id-secret", "ID": "opaque-container-id"},
+            {"Service": "unknown-service", "State": "exited", "ExitCode": 77},
+        ]).encode("utf-8")
+        summary, failed = startup_diagnostics.sanitize_status(raw, "complete")
+        self.assertEqual(failed, ("voice",))
+        self.assertEqual(summary["services"], [
+            {"service": "voice", "state": "exited", "health": "none", "exit_code": 1},
+        ])
+        self.assertNotIn("container-id-secret", json.dumps(summary))
+        self.assertNotIn("opaque-container-id", json.dumps(summary))
+
+    def test_t31_truncated_logs_do_not_claim_an_error(self):
+        raw = b"voice | level=error " + b"x" * (startup_diagnostics.MAX_LOG_BYTES + 1)
+        bounded = raw[:startup_diagnostics.MAX_LOG_BYTES]
+        summary, first = startup_diagnostics.sanitize_logs(bounded, "byte_limit", ("voice",))
+        self.assertEqual(summary["result"], "byte_limit")
+        self.assertTrue(summary["truncated"])
+        self.assertEqual(first["result"], "unknown")
+        self.assertLessEqual(summary["bytes_read"], startup_diagnostics.MAX_LOG_BYTES)
+
+    @unittest.skipUnless(os.name == "posix", "process-group bounds are exercised on Linux CI")
+    def test_t31_direct_compose_process_wait_and_output_are_bounded(self):
+        ok = startup_diagnostics._bounded_command(
+            [sys.executable, "-c", "print('bounded-stub')"], 2.0, 128
+        )
+        self.assertEqual(ok, (b"bounded-stub\n", "complete", 0))
+        too_much = startup_diagnostics._bounded_command(
+            [sys.executable, "-c", "print('x' * 10000)"], 2.0, 128
+        )
+        self.assertEqual(too_much[1], "byte_limit")
+        self.assertLessEqual(len(too_much[0]), 128)
+        timed_out = startup_diagnostics._bounded_command(
+            [sys.executable, "-c", "import time; time.sleep(10)"], 0.05, 128
+        )
+        self.assertEqual(timed_out[1], "timeout")
+        self.assertIsNotNone(timed_out[2])
 
     def test_fixture_directory_is_required(self):
         env = dict(self.env)

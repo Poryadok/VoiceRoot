@@ -57,6 +57,7 @@ class ComposeBootstrapEnvironmentTests(unittest.TestCase):
             [
                 "tmp/t31-session-event-e2e/bootstrap-result.json",
                 "tmp/t31-session-event-e2e/acceptance.log",
+                "tmp/t31-session-event-e2e/startup-diagnostics.json",
             ],
         )
         self.assertNotIn("compose.env", artifact_step)
