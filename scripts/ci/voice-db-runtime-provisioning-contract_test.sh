@@ -1405,6 +1405,19 @@ fi
   printf '%s\n' 'F13 oracle bug: altered release PR tree did not fail at exact tree retention' >&2
   exit 2
 }
+
+# The negative case stages a deliberately altered Bot proto in this disposable
+# synthetic repository. Restore only that fixture-owned path before later
+# cases switch branches; do not let its index/worktree state contaminate them.
+git -C "${f13_fixture_repo}" checkout -q f13-master-release-pr -- protos/voice/bot/v1/bot.proto || {
+  printf '%s\n' 'F13 fixture setup bug: altered Bot proto could not be restored to the known merge tree' >&2
+  exit 2
+}
+if ! git -C "${f13_fixture_repo}" diff --quiet f13-master-release-pr -- protos/voice/bot/v1/bot.proto || \
+  ! git -C "${f13_fixture_repo}" diff --cached --quiet f13-master-release-pr -- protos/voice/bot/v1/bot.proto; then
+  printf '%s\n' 'F13 fixture setup bug: Bot proto index/worktree differs from the known merge tree' >&2
+  exit 2
+fi
 if f13_collect_master_release_pr_contributions \
   "${f13_fixture_repo}" "${f13_fixture_base}" f13-integration \
   "${TMP_DIR}/f13-release-wrong-parent-map" "${TMP_DIR}/f13-release-wrong-parent-category"; then
