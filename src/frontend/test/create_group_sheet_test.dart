@@ -924,15 +924,19 @@ void main() {
       await tester.pump();
       await tester.tap(friendBForNewAttempt);
       await tester.pump();
+      final friendC = find.byKey(CreateGroupSheet.memberTileKey('friend-c'));
       await tester.scrollUntilVisible(
-        find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
+        friendC,
         80,
         scrollable: find.descendant(
           of: find.byType(ListView),
           matching: find.byType(Scrollable),
         ),
       );
-      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-c')));
+      await tester.ensureVisible(friendC);
+      await tester.pump();
+      expect(friendC.hitTestable(), findsOneWidget);
+      await tester.tap(friendC);
       await tester.pump();
       await tester.tap(find.byKey(CreateGroupSheet.submitKey));
       await tester.pumpAndSettle();
