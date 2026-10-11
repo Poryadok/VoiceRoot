@@ -57,6 +57,8 @@ generated configuration and unchanged broker are checked after hub readiness
 and before applications resume. Failure refences; native migration/CAS still
 require closed writers. Renderer retry validates the recorded completed DB
 state rather than rerunning migrations or assuming the original version.
+Renderer continuity retains complete metadata authority and spec while allowing
+controller status revision churn; mutations CAS against the current live revision.
 
 The first compatible populated backend witness is the reviewed Story image
 pair, whose four schema UP files are identical and whose old binary has passed

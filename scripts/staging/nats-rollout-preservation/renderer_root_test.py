@@ -7,6 +7,26 @@ from controller import Blocked
 from stage_runtime import HUB
 
 class RendererLiveTests(unittest.TestCase):
+    def test_actual_paused_cas_and_poststart_proof_accept_status_revision(self):
+        for phase in ('paused','running'):
+            stage,pod,authority=self.fixture()
+            expected=copy.deepcopy(stage.snapshots[HUB])
+            expected['spec']['replicas']=0 if phase=='paused' else 1
+            if phase=='paused':expected['spec']['template']=copy.deepcopy(authority['descriptor']['original_template'])
+            stage.snapshots[HUB]=expected
+            current=copy.deepcopy(expected);current['metadata']['resourceVersion']='9'
+            current['status']={'readyReplicas':0 if phase=='paused' else 1}
+            stage.kube.get.side_effect=lambda kind,name: pod if kind=='pod' else current if name==HUB else stage.snapshots[name]
+            target=copy.deepcopy(current);target['spec']['template']=copy.deepcopy(authority['descriptor']['target_template']);target['metadata']['resourceVersion']='10'
+            stage.kube.cas.return_value=target
+            with self.subTest(phase=phase),patch.object(renderer_root,'revalidate'),patch.object(renderer_root,'capture',return_value=('d'*64+'  /etc/nats/nats.conf\n').encode()):
+                if phase=='paused':
+                    renderer_root.apply_paused(stage,authority)
+                    self.assertEqual(stage.kube.cas.call_args.args[1]['metadata']['resourceVersion'],'9')
+                    self.assertEqual(stage.kube.cas.call_args.args[2][0],{'op':'test','path':'/spec/replicas','value':0})
+                    self.assertEqual(stage.snapshots[HUB],target)
+                else:self.assertTrue(renderer_root.verify_live(stage,authority)['verified'])
+
     def test_real_stage_active_and_hub_running_identity_check_keeps_closed_gate(self):
         import runtime_stage,stat,types
         from pathlib import Path
@@ -128,8 +148,8 @@ class RendererLiveTests(unittest.TestCase):
         self.assertEqual(reverse['broker_image'],authority['broker_image'])
         self.assertEqual(reverse['descriptor']['hub']['resourceVersion'],'3')
 
-    def test_recovery_rejects_unbound_original_or_actual_image_or_current_rv(self):
-        for fault in ('original','old-image','current-rv'):
+    def test_recovery_rejects_unbound_original_or_actual_image_or_current_metadata(self):
+        for fault in ('original','old-image','current-metadata'):
             with self.subTest(fault=fault):
                 stage,_,authority=self.fixture();stage.snapshots[HUB]['spec']['replicas']=0
                 original=copy.deepcopy(stage.snapshots[HUB])
@@ -138,8 +158,8 @@ class RendererLiveTests(unittest.TestCase):
                 stage.old_images={HUB+'/nats-config-renderer':authority['descriptor']['images']['old']}
                 if fault=='original':original['spec']['template']['spec']['containers'][0]['image']='changed'
                 if fault=='old-image':stage.old_images[HUB+'/nats-config-renderer']='other'
-                if fault=='current-rv':
-                    current=copy.deepcopy(stage.snapshots[HUB]);current['metadata']['resourceVersion']='99'
+                if fault=='current-metadata':
+                    current=copy.deepcopy(stage.snapshots[HUB]);current['metadata']['annotations']={'unapproved':'change'}
                     stage.kube.get.side_effect=lambda *args:current
                 with patch.object(renderer_root,'revalidate'):
                     with self.assertRaises((Blocked,renderer_transition.TransitionError)):
