@@ -30,7 +30,7 @@ func stop(phase string, err error) {
 			r["grpc_code"] = status.Code(err).String()
 		}
 	}
-	json.NewEncoder(os.Stdout).Encode(r)
+	_ = json.NewEncoder(os.Stdout).Encode(r)
 	os.Exit(17)
 }
 func check(ok bool, phase string) {
@@ -59,7 +59,7 @@ func main() {
 	if e != nil {
 		stop("grpc_connect", e)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := storyv1.NewStoryServiceClient(conn)
 	account, author := uuid.New(), uuid.New()
 	rpcctx := metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-user-id", account.String(), "x-voice-profile-id", author.String()))
@@ -114,5 +114,5 @@ func main() {
 		stop("row_retention", e)
 	}
 	check(len(bytes.TrimSpace(after)) > 0, "row_retained")
-	json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "PASS", "create_grpc_code": "OK", "response_identity_type_verified": true, "sql_fields_verified": true, "story_count": count, "default_ttl_24h_verified": true, "archive_plus30d_verified": true, "missing_profile_code": "Unauthenticated", "negative_count_unchanged": true, "unrelated_row_count": unrelated, "row_retained": true})
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"status": "PASS", "create_grpc_code": "OK", "response_identity_type_verified": true, "sql_fields_verified": true, "story_count": count, "default_ttl_24h_verified": true, "archive_plus30d_verified": true, "missing_profile_code": "Unauthenticated", "negative_count_unchanged": true, "unrelated_row_count": unrelated, "row_retained": true})
 }
