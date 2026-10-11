@@ -36,7 +36,7 @@ func (b *startupOutput) Write(p []byte) (int, error) {
 func (b *startupOutput) text() string {
 	b.Lock()
 	defer b.Unlock()
-	return b.Buffer.String()
+	return b.String()
 }
 
 type observedListener struct {
