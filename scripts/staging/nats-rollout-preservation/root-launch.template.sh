@@ -15,7 +15,7 @@ try:
     fd=os.open(SOURCE,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     try:
         before=os.fstat(fd)
-        if not stat.S_ISREG(before.st_mode) or before.st_uid!=1000 or before.st_mode&0o022 or before.st_nlink!=1 or before.st_size!=EXPECTED_BYTES or not 1<=EXPECTED_BYTES<=32<<20:raise ValueError('source custody')
+        if not stat.S_ISREG(before.st_mode) or before.st_uid!=1000 or before.st_mode&0o022 or before.st_nlink!=1 or before.st_size!=EXPECTED_BYTES or not 1<=EXPECTED_BYTES<=64<<20:raise ValueError('source custody')
         raw=os.read(fd,EXPECTED_BYTES+1);after=os.fstat(fd)
         if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns) or len(raw)!=EXPECTED_BYTES or hashlib.sha256(raw).hexdigest()!=EXPECTED_SHA:raise ValueError('bundle hash')
     finally:os.close(fd)

@@ -69,45 +69,38 @@ Unknown old Story content and unproved backend rollback selections, including
 historical Bot/Search, fail closed. Ordinary frontend rollback remains separate.
 
 A rebuilt current Story component requires its own actual-binary/current4
-witness even when its source has not changed. Compatibility admission must bind
-the exact child manifest, config, application binary, component build source,
-four migration hashes, actual fixture receipt and successful publisher evidence.
-Historical caller/schema fixture inputs remain separate from the new image's
-build source. Current source CI approval remains a separate deployment gate.
+witness even when its source has not changed. The locked root preflight now
+admits a genuinely missing child/config pair automatically before capture or
+fence. It runs the bundled canonical Story probe against that exact immutable
+image and a disposable PostgreSQL clean4 store initialized with the four pinned
+migration files. Actual health, text creation, SQL defaults and archive timing,
+missing-profile refusal, the negative count control, unchanged complete schema
+catalog and complete owned cleanup must all pass before registration. This
+fixture accepts no selected store, staging address or service credentials.
 
-The V6 root-only witness promotion pins reviewed immutable evidence bytes;
-the runner cannot register a witness or supply a compatibility boolean. Both
-captured Story preflight and fresh rollback use the same selected root authority.
-Missing, revoked, corrupt or drifted authority vetoes before mutation. The
-captured witness digest is rechecked after custody and before authorization;
-schema, PostgreSQL, mounted actor and target-contract checks remain mandatory.
-The root-private registry retains at most 128 approved child/config pairs, so a
-new current pair does not erase the prior compatible rollback pair. Every
-selection binds the complete monotonic registry revision. Any registry change
-during an operation vetoes revalidation; revocation cannot silently re-enable
-the same record. Conflicting evidence for an existing pair is rejected.
+Automatic evidence binds child/config/application binary, migration and catalog
+hashes, authenticated helper/probe/fixture hashes and actual result/cleanup.
+An image revision label is retained when present; absence is recorded as null,
+not replaced with an invented source or publisher approval. Current source CI
+and immutable target image admission remain separate mandatory deployment gates.
 
-Delivery has two phases. First review, merge, publish and install the generic
-V6 helper using its exact immutable assets and fixed V5 predecessor. After the
-final master image is published, run and review the actual image/current4
-fixture and its publisher/component/schema evidence, then publish that evidence
-as separately pinned public data. This evidence contains no credentials and is
-not compiled into the helper. An explicit human-root command promotes the
-reviewed file; neither pmd nor the workflow can approve it:
+The existing root-private registry and locked atomic selector are reused. Both
+captured Story preflight and fresh rollback re-read the selected enabled record.
+Revoked, corrupt or conflicting evidence fails closed and never triggers a new
+fixture. Adding another automatically proven pair preserves an unchanged
+captured origin record; changed evidence or revocation still vetoes rollback.
+Manual v1 records retain their exact registry-revision comparison and publisher/
+review evidence contract. Code upgrades preserve every approved/revoked record.
+The runner cannot register evidence or supply a compatibility boolean, and
+schema, PostgreSQL identity, mounted actor and target-contract checks remain.
 
-```sh
-/usr/bin/python3 -I -S /var/lib/voice-nats-preservation/installed/code/nats-rollout-preservation/story_witness.py --promote /root/reviewed-story-witness.json REVIEWED_WITNESS_SHA256
-```
-
-The supplied file must be root-owned, private, regular, single-link and read
-through trusted ancestors. Root promotion takes the existing global operation
-lock, checks installed code and idle operations, and rereads the unchanged
-active marker before its atomic selector write. Use `--revoke` with the same
-record path/hash for explicit revocation. Code upgrades preserve every registry
-and immutable record byte; unknown partial files or corruption veto the upgrade.
-The V5 operator has no intake, so newly rebuilt content remains blocked until
-V6 and the separately reviewed evidence are installed. Promotion is scoped
-binary/schema compatibility authority, not current CI or live rollout proof.
+Build the probe once on Linux with Go 1.26.8 and `CGO_ENABLED=0` from
+`src/backend/story/cmd/owned-story-probe`, then bundle it with the existing kernel
+and renewer: `python bundle.py KERNEL OUTPUT LINUX_BOOTSTRAP_RENEWER LINUX_STORY_PROBE`.
+The launcher admits at most64MiB total with each member still bounded to32MiB;
+exact archive bytes/hash, complete manifest membership and root custody remain
+mandatory. Subsequent ordinary FULL and rollback releases require no manual
+per-image fixture, witness promotion or helper installation.
 
 Acceptance order is populated Story transition, an ordinary postrelease record,
 fresh latest-operation rollback preserving that record and all dynamic native

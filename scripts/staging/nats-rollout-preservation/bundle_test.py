@@ -25,12 +25,31 @@ class BundleCaptureTest(unittest.TestCase):
         with tarfile.open(fileobj=output,mode='w') as archive:
             for name,raw in contents.items():
                 member=tarfile.TarInfo(name);member.size=len(raw);archive.addfile(member,io.BytesIO(raw))
-        self.raw=output.getvalue();self.source.write_bytes(self.raw);os.chown(self.source,1000,1000);self.source.chmod(0o644)
+        self.raw=output.getvalue();self.source.write_bytes(self.raw);self.source.chmod(0o644)
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);self.launcher=Path(temp.name)/'launch.sh'
         template=Path(__file__).with_name('root-launch.template.sh').read_text()
         self.launcher.write_text(template.replace('__BUNDLE_SHA256__',hashlib.sha256(self.raw).hexdigest()).replace('__BUNDLE_BYTES__',str(len(self.raw))).replace('__BUNDLE_FILES__',repr(sorted(contents))))
     def run_launcher(self,*arguments):
+        # Transfer only after the root-owned test setup/mutations are complete.
+        # The real launcher always observes the canonical unprivileged owner.
+        os.chown(self.source,1000,1000)
         return subprocess.run(['/bin/bash',str(self.launcher),*(arguments or ('--status','unused'))],capture_output=True,text=True,timeout=3)
+    def test_expanded_native_bundle_above32MiB_is_captured_with_member_bounds(self):
+        with tarfile.open(fileobj=io.BytesIO(self.raw)) as archive:
+            contents={m.name:archive.extractfile(m).read() for m in archive.getmembers() if m.name!='capture-manifest.json'}
+        contents['nats-known-baseline/kernel']=b'\x7fELF'+b'k'*(20<<20)
+        contents['nats-rollout-preservation/story-current4-probe']=b'\x7fELF'+b'p'*(15<<20)
+        contents['capture-manifest.json']=json.dumps({n:hashlib.sha256(v).hexdigest() for n,v in contents.items()}).encode()
+        output=io.BytesIO()
+        with tarfile.open(fileobj=output,mode='w') as archive:
+            for name,raw in contents.items():
+                member=tarfile.TarInfo(name);member.size=len(raw);archive.addfile(member,io.BytesIO(raw))
+        self.raw=output.getvalue();self.assertGreater(len(self.raw),32<<20);self.assertLess(len(self.raw),64<<20)
+        self.source.write_bytes(self.raw)
+        template=Path(__file__).with_name('root-launch.template.sh').read_text()
+        self.launcher.write_text(template.replace('__BUNDLE_SHA256__',hashlib.sha256(self.raw).hexdigest()).replace('__BUNDLE_BYTES__',str(len(self.raw))).replace('__BUNDLE_FILES__',repr(sorted(contents))))
+        result=self.run_launcher();self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),'CAPTURED_ROOT_ENTRY')
     def test_exact_idle_upgrade_argument_reaches_captured_installer(self):
         result=self.run_launcher('--install','--upgrade-idle')
         self.assertEqual(result.returncode,0,result.stderr)
