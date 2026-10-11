@@ -136,13 +136,6 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	require.NoError(t, admissions.Fence(ctx, creator))
 	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
 
-	failed := admissionFixture()
-	failed.RoomID, failed.SpaceID, failed.VoiceRoomID = creator.RoomID, creator.SpaceID, creator.VoiceRoomID
-	failed.CreatedRoom = false
-	require.NoError(t, prepareAdmission(ctx, admissions, &failed))
-	require.NoError(t, admissions.Fence(ctx, failed))
-	require.NoError(t, admissions.MarkCommitted(ctx, failed.OperationID, failed.Generation))
-
 	calls := store.NewMemoryCallStore()
 	_, err := calls.CreateCall(ctx, store.Call{
 		RoomID: creator.RoomID, LivekitRoomName: "voice-room-" + creator.VoiceRoomID,
@@ -172,6 +165,13 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 		require.NoError(t, err)
 	}
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
+
+	failed := admissionFixture()
+	failed.RoomID, failed.SpaceID, failed.VoiceRoomID = creator.RoomID, creator.SpaceID, creator.VoiceRoomID
+	failed.CreatedRoom = false
+	require.NoError(t, prepareAdmission(ctx, admissions, &failed))
+	require.NoError(t, admissions.Fence(ctx, failed))
+	require.NoError(t, admissions.MarkCommitted(ctx, failed.OperationID, failed.Generation))
 
 	require.Len(t, creator.Events, 2, "a created Space room has exactly two canonical event intents")
 	expectedCreatorEvents := make(map[uuid.UUID]AdmissionEvent, len(creator.Events))
