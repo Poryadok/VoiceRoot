@@ -710,24 +710,32 @@ func (o *SessionOrchestrator) persistClosingCreateReceipt(ctx context.Context, c
 		}
 	}
 	var update string
+	var updateArgs []any
 	switch ownerStage {
 	case "chat_create":
 		update = `UPDATE gis_sessions SET chat_id=$4,chat_create_receipt_id=$5,terminalization_stage=$6,session_status=$7,stage=$6,updated_at=now()
 			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$8 AND terminalization_stage=$9 AND session_status='closing'`
+		updateArgs = []any{sessionID, closeKey.ApplicationID, closeKey.EnvironmentID, receipt.ResourceID,
+			receipt.ReceiptID, nextStage, sessionStatus, closeKey.OperationID, marker}
 	case "chat_roster":
-		update = `UPDATE gis_sessions SET chat_roster_receipt_id=$5,terminalization_stage=$6,session_status=$7,stage=$6,updated_at=now()
-			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$8 AND terminalization_stage=$9 AND session_status='closing'`
+		update = `UPDATE gis_sessions SET chat_roster_receipt_id=$4,terminalization_stage=$5,session_status=$6,stage=$5,updated_at=now()
+			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$7 AND terminalization_stage=$8 AND session_status='closing'`
+		updateArgs = []any{sessionID, closeKey.ApplicationID, closeKey.EnvironmentID, receipt.ReceiptID,
+			nextStage, sessionStatus, closeKey.OperationID, marker}
 	case "voice_provision":
 		update = `UPDATE gis_sessions SET voice_room_id=$4,voice_provision_receipt_id=$5,terminalization_stage=$6,session_status=$7,stage=$6,updated_at=now()
 			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$8 AND terminalization_stage=$9 AND session_status='closing'`
+		updateArgs = []any{sessionID, closeKey.ApplicationID, closeKey.EnvironmentID, receipt.ResourceID,
+			receipt.ReceiptID, nextStage, sessionStatus, closeKey.OperationID, marker}
 	case "role_apply":
-		update = `UPDATE gis_sessions SET role_grant_receipt_id=$5,terminalization_stage=$6,session_status=$7,stage=$6,updated_at=now()
-			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$8 AND terminalization_stage=$9 AND session_status='closing'`
+		update = `UPDATE gis_sessions SET role_grant_receipt_id=$4,terminalization_stage=$5,session_status=$6,stage=$5,updated_at=now()
+			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$7 AND terminalization_stage=$8 AND session_status='closing'`
+		updateArgs = []any{sessionID, closeKey.ApplicationID, closeKey.EnvironmentID, receipt.ReceiptID,
+			nextStage, sessionStatus, closeKey.OperationID, marker}
 	default:
 		return SessionOperation{}, fmt.Errorf("unsupported reconciliation receipt stage %q", ownerStage)
 	}
-	tag, err = tx.Exec(ctx, update, sessionID, closeKey.ApplicationID, closeKey.EnvironmentID, receipt.ResourceID,
-		receipt.ReceiptID, nextStage, sessionStatus, closeKey.OperationID, marker)
+	tag, err = tx.Exec(ctx, update, updateArgs...)
 	if err != nil {
 		return SessionOperation{}, err
 	}
@@ -1013,7 +1021,6 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, key SessionOp
 	return o.Store.getOperation(ctx, SessionPrincipal{ApplicationID: app, EnvironmentID: env}, key.OperationID)
 }
 
-
 func (o *SessionOrchestrator) coalesceOperation(ctx context.Context, key SessionOperationKey, session uuid.UUID, stage string, leaseOwner uuid.UUID) (SessionOperation, error) {
 	tx, err := o.Store.Pool.Begin(ctx)
 	if err != nil {
@@ -1120,4 +1127,3 @@ func deterministicOwnerID(app, env, session uuid.UUID, stage, discriminator stri
 	return uuid.NewSHA1(sessionURLNamespace, []byte(name))
 }
 func safeOwnerError(error) string { return "OWNER_UNAVAILABLE" }
-
