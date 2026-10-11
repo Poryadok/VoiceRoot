@@ -55,6 +55,7 @@ func TestSpaceMoveVoiceRoomParticipant_FailsClosedBeforeEffects(t *testing.T) {
 	require.Empty(t, f.events.startedCall, "canonical admission events are journaled, not directly published")
 	require.Empty(t, f.events.memberJoined, "canonical admission events are journaled, not directly published")
 	admissionCount := len(*f.admissions)
+	voiceJoinCheckCount := len(f.roles.voiceJoinChecks)
 	_, err := f.svc.MoveVoiceRoomParticipant(voiceTestCtx(f.actor), f.moderatorRequest(uuid.NewString()))
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	source, err := f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.source)
@@ -66,13 +67,14 @@ func TestSpaceMoveVoiceRoomParticipant_FailsClosedBeforeEffects(t *testing.T) {
 	require.Len(t, *f.admissions, admissionCount, "failed move must not prepare destination admission events")
 	require.Equal(t, wantAdmissionEvents, preparedSpaceMediaEventSubjects(t, *f.admissions))
 	require.Empty(t, f.roles.moveOthersChecks)
-	require.Empty(t, f.roles.voiceJoinChecks)
+	require.Len(t, f.roles.voiceJoinChecks, voiceJoinCheckCount, "failed move must not add a Voice join authorization check")
 	selfRequest := &callsv1.MoveToVoiceRoomRequest{FromVoiceRoomId: f.source, ToVoiceRoomId: f.dest, Space: &spacev1.SpaceRef{Id: f.spaceID}, OperationId: uuid.NewString()}
 	_, err = f.svc.MoveToVoiceRoom(voiceTestCtx(f.target), selfRequest)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	_, err = f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.dest)
 	require.ErrorIs(t, err, voicestore.ErrNotFound)
 	require.Len(t, *f.admissions, admissionCount)
+	require.Len(t, f.roles.voiceJoinChecks, voiceJoinCheckCount, "failed self-move must not add a Voice join authorization check")
 }
 
 func TestMoveVoiceRoomParticipant_ReplayAndConflictingReplayDoNotMutateRoster(t *testing.T) {

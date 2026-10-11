@@ -247,9 +247,11 @@ func TestGetJoinToken_SpaceMediaDoesNotUseLegacyIssuerOrMintBeforeReadiness(t *t
 			if tc.name == "media readiness absent" {
 				require.Equal(t, canonical, tc.access.SpaceID)
 				requireVoiceRoleCheck(t, roles.joinChecks, canonical, profile, room)
+				requireVoiceRoleCheck(t, roles.speakChecks, canonical, profile, room)
+			} else {
+				require.Empty(t, roles.speakChecks)
 			}
 			require.Nil(t, response)
-			require.Empty(t, roles.speakChecks)
 			require.Zero(t, tokens.joinCalls)
 		})
 	}
