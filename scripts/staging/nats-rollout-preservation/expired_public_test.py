@@ -69,7 +69,7 @@ class PublicRecoveryTests(unittest.TestCase):
     def test_real_active_release_feeds_new_latest_rollback_and_ordinary_finish_cannot_bypass(self):
         with tempfile.TemporaryDirectory() as folder:
             actions=object.__new__(bridge_root.Actions)
-            state={'operation':'3340764a7d24','status':'PASS','target':{'manifest_sha256':'a'*64},
+            state={'operation':'3340764a7d24','status':'PASS','input_target':{'mode':'images-only','changed_services':['story']},'target':{'manifest_sha256':'a'*64},
                    'context':{'expected':{'namespace_uid':'ns','source_claim_uid':'pvc'}},
                    'expired_recovery_authority':{'purpose':'native-migration'}}
             actions.state=Mock(return_value=(Path(folder),state));actions._prepare=Mock(return_value={'new':'closed capture'})
@@ -78,7 +78,7 @@ class PublicRecoveryTests(unittest.TestCase):
                 request={'action':'prepare-rollback','operation':state['operation'],'nonce':'c'*64,'token':'synthetic','run_id':99}
                 result=actions.execute(request)
                 self.assertEqual(result,{'new':'closed capture'})
-                package.assert_called_once_with(state);services.assert_called_once_with(state)
+                package.assert_called_once_with(state,story_only=False);services.assert_called_once_with(state,story_only=False)
                 args,kwargs=actions._prepare.call_args
                 self.assertEqual(args[0]['nonce'],'c'*64);self.assertEqual(args[0]['mode'],'images-only')
                 self.assertEqual(args[0]['changed_services'],['story']);self.assertIs(args[1],state)

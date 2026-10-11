@@ -273,3 +273,86 @@ class IdleUpgradeTests(unittest.TestCase):
         self.assertNotIn('ModuleNotFoundError',result.stderr)
 
 if __name__=='__main__':unittest.main()
+
+
+@unittest.skipUnless(os.name=='posix' and os.geteuid()==0,'owned Linux root fixture')
+class WaivedContinuationTests(unittest.TestCase):
+    def fixture(self,folder):
+        helper=RetirementActionTests();fixture=helper.fixture(folder)
+        root,base,snapshot,raw,objects,binding,plan,plan_sha=fixture
+        (base/'operator-retirement-snapshot.json').write_bytes(raw)
+        (base/'operator-retirement-plan.json').write_bytes(plan.read_bytes())
+        for name in ('operator-retirement-snapshot.json','operator-retirement-plan.json'):
+            (base/name).chmod(0o600)
+        failed=copy.deepcopy(snapshot)
+        prior=[{'kind':'operator_retirement_intent','waiver':retirement.WAIVER,'plan_sha256':plan_sha}]
+        prior += [{'kind':'workload_scaled','name':'voice-space','replicas':0} for _ in range(41)]
+        failed.update(phase='OPERATOR_RETIRING',status='BLOCKED',fence_status='VERIFIED',
+            events=copy.deepcopy(snapshot['events']+prior))
+        failed_raw=json.dumps(failed,sort_keys=True,separators=(',',':')).encode()
+        (base/'checkpoint.json').write_bytes(failed_raw)
+        current_binding={'test.py':'b'*64}
+        attestation={'schema':'voice-specific-retirement-continuation-v1',
+            'operation':retirement.OPERATION,'failed_checkpoint_sha256':hashlib.sha256(failed_raw).hexdigest(),
+            'original_plan_sha256':plan_sha,'code_binding_sha256':retirement.canonical(current_binding),
+            'waiver':retirement.WAIVER}
+        path=root/'continuation.json'
+        path.write_text(json.dumps(attestation,sort_keys=True,separators=(',',':')))
+        path.chmod(0o600)
+        return fixture,failed,failed_raw,current_binding,path
+
+    def invoke(self,values,kube):
+        fixture,failed,failed_raw,current_binding,path=values
+        root,base,snapshot,raw,objects,binding,plan,plan_sha=fixture
+        with patch.object(retirement.guard,'ROOT',root),\
+             patch.object(retirement,'SNAPSHOT_SHA',hashlib.sha256(raw).hexdigest()),\
+             patch.object(retirement,'FAILED_RETIREMENT_SHA',hashlib.sha256(failed_raw).hexdigest()),\
+             patch.object(retirement,'ORIGINAL_RETIREMENT_BINDING',retirement.canonical(binding)),\
+             patch.object(retirement,'V15_BINDING',retirement.canonical(binding)),\
+             patch.object(retirement.root_cli,'operation_path',side_effect=Path),\
+             patch.object(retirement.root_cli,'code_binding',
+                side_effect=lambda p:binding if Path(p)==root/'installed/code' else current_binding),\
+             patch.object(retirement,'operation_lock',return_value=contextlib.nullcontext()):
+            return retirement.continue_retirement(root/'candidate',path,
+                hashlib.sha256(path.read_bytes()).hexdigest(),kube=kube)
+
+    def test_actual_continuation_records_unready_setup_without_deployment_pass(self):
+        with tempfile.TemporaryDirectory() as folder:
+            values=self.fixture(folder);fixture,failed,failed_raw,current_binding,path=values
+            class UnreadyKube(FakeKube):
+                def cas(self,*args):
+                    result=super().cas(*args)
+                    if args[0]=='deployment' and args[1]['metadata']['name']=='voice-space':
+                        row=self.objects[('deployment','voice-space')]
+                        row['status'].update(readyReplicas=0,availableReplicas=0)
+                    return result
+            kube=UnreadyKube(fixture[4]);result=self.invoke(values,kube)
+            self.assertFalse(result['setup_ready'])
+            self.assertEqual(result['status'],'ABORTED')
+            base=fixture[1];state=json.loads((base/'checkpoint.json').read_bytes())
+            receipt=json.loads((base/'operator-retirement-receipt.json').read_bytes())
+            self.assertEqual(state['events'][:125],failed['events'])
+            self.assertFalse(receipt['setup']['voice-space']['ready'])
+            self.assertTrue(receipt['setup'][retirement.HUB]['ready'])
+            self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
+            self.assertEqual((base/'operator-retirement-failed-attempt.json').read_bytes(),failed_raw)
+            self.assertEqual((base/'operator-retirement-plan.json').read_bytes(),fixture[6].read_bytes())
+            self.assertEqual(kube.objects[('configmap','voice-nats-generation')]['data']['phase'],'active')
+            self.assertTrue(all(kube.objects[('deployment',n)]['spec']['replicas']==1 for n in retirement.CORE))
+            with patch.object(retirement.guard,'ROOT',fixture[0]),\
+                 patch.object(retirement,'SNAPSHOT_SHA',hashlib.sha256(fixture[3]).hexdigest()),\
+                 patch.object(retirement,'FAILED_RETIREMENT_SHA',hashlib.sha256(failed_raw).hexdigest()),\
+                 patch.object(retirement,'ORIGINAL_RETIREMENT_BINDING',retirement.canonical(fixture[5])):
+                retirement.verify_terminal(base,state)
+                changed=copy.deepcopy(state);changed['events'][100]['replicas']=1
+                with self.assertRaises(Blocked):retirement.verify_terminal(base,changed)
+                prior=path.read_bytes()
+                (base/'operator-retirement-continuation.json').write_bytes(prior+b' ')
+                with self.assertRaises(Blocked):retirement.verify_terminal(base,state)
+
+    def test_continuation_refuses_changed_original_setup_before_scaling(self):
+        with tempfile.TemporaryDirectory() as folder:
+            values=self.fixture(folder);kube=FakeKube(values[0][4])
+            kube.objects[('deployment','voice-space')]['spec']['template']['metadata']['annotations']['foreign']='change'
+            with self.assertRaises(Blocked):self.invoke(values,kube)
+            self.assertEqual(kube.patches,[])

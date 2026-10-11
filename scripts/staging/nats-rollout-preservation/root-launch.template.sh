@@ -6,7 +6,7 @@ import hashlib, io, json, os, pathlib, stat, sys, tarfile, uuid
 EXPECTED_SHA='__BUNDLE_SHA256__'
 EXPECTED_BYTES=__BUNDLE_BYTES__
 FILES=__BUNDLE_FILES__
-SOURCE=pathlib.Path('/home/pmd/voice-nats-rollout-idle/rollout-bundle.tar')
+SOURCE=pathlib.Path('/home/pmd/voice-nats-rollout-full-repair/rollout-bundle.tar')
 ROOT=pathlib.Path('/var/lib/voice-nats-preservation')
 try:
     for parent in (*ROOT.parents[::-1],ROOT):
@@ -38,6 +38,7 @@ try:
     entry='root_cli.py'
     if len(arguments)==2 and arguments[0]=='--install':entry='installer.py';arguments=arguments[1:]
     elif len(arguments)==3 and arguments[0]=='--retire':entry='operator_retirement.py';arguments=arguments[1:]
+    elif len(arguments)==3 and arguments[0]=='--continue-retirement':entry='operator_retirement.py';arguments=['--continue',*arguments[1:]]
     os.execve('/usr/bin/python3',['/usr/bin/python3','-I','-S',str(captured/'nats-rollout-preservation'/entry),*arguments],
               {'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'})
 except Exception:

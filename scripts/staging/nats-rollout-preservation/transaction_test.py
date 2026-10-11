@@ -372,3 +372,126 @@ class TransactionFailureTest(unittest.TestCase):
         self.assertEqual(written[-1]['fence_status'],'VERIFIED')
 
 if __name__=='__main__':unittest.main()
+
+
+class FullOriginStoryRollbackTests(unittest.TestCase):
+    def fixture(self):
+        import actor_root,source_authority
+        image=next(iter(actor_root.STORY_IMAGES));child,config,source=actor_root.STORY_IMAGES[image]
+        schema={'observation':{'database':'story_db','version':4,'dirty':False},
+            'migration_hashes':copy.deepcopy(actor_root.STORY_UP)}
+        authority={'roles':['story'],'proofs':{'story':{'root_verified':True}},
+            'mounts':{'story':{'exact':'captured'}},'binding':{'same':'account'},'story_schema':schema}
+        authority['compatible_story_candidate']={'schema':'voice-reviewed-story-compatible-pair-v1',
+            'image':image,'child_sha256':child,'config_sha256':config,'component_source_sha':source,
+            'schema_sha256':transaction.canonical(schema),
+            'actor_sha256':transaction.canonical({'binding':authority['binding'],
+                'mount':authority['mounts']['story'],'proof':authority['proofs']['story']})}
+        template={'metadata':{'annotations':{'current':'retained'}},'spec':{
+            'initContainers':[{'name':'init','image':'ghcr.io/poryadok/voiceroot/story@sha256:'+'a'*64}],
+            'containers':[{'name':'story','image':'ghcr.io/poryadok/voiceroot/story@sha256:'+'b'*64,
+                'env':[{'name':'CURRENT_CONFIG','value':'preserve'}]},
+                {'name':'leaf','image':'example.invalid/leaf@sha256:'+'c'*64}]}}
+        current={'metadata':{'name':'voice-story','uid':'owned','namespace':'voice-staging'},
+            'spec':{'replicas':1,'template':template}}
+        keys={'voice-'+n:'other' for n in set(source_authority.IMAGE_NAMES)-{'nats-hub-config-renderer'}}
+        keys[transaction.renderer_root.HUB]='renderer';keys['voice-story']=transaction.canonical(template)
+        target={'mode':'full','changed_services':[],'template_hashes':keys,
+            'images':{'voice-story/'+c['name']:c['image'] for c in template['spec']['initContainers']+template['spec']['containers']}}
+        return {'status':'PASS','operation':'123456abcdef','input_target':copy.deepcopy(target),
+            'target':copy.deepcopy(target),'renderer_authority':{'verified':'preserved'},
+            'context':{'snapshots':{'voice-story':current},
+                'original_snapshots':{'voice-story':{'spec':{'template':{'obsolete':'never restore'}}}},
+                'old_images':{'voice-story/story':image,'voice-story/leaf':'example.invalid/leaf@sha256:'+'d'*64}},
+            'service_actor_authority':authority,'nonnats':{'checks':[],'actions':[]},'contract':{'retained':True}}
+
+    def test_only_story_main_image_reverses_from_successful_full_current_template(self):
+        previous=self.fixture();before=copy.deepcopy(previous)
+        pack=transaction.rollback_package(previous,story_only=True)
+        self.assertEqual(transaction.rollback_services(previous,story_only=True),['story'])
+        self.assertEqual(pack['target']['mode'],'images-only')
+        self.assertEqual(pack['target']['changed_services'],['story'])
+        self.assertEqual(set(pack['target']['template_hashes']),{'voice-story'})
+        self.assertEqual(pack['migrations'],[])
+        actual=pack['manifests'][0]['spec']['template']
+        expected=copy.deepcopy(previous['context']['snapshots']['voice-story']['spec']['template'])
+        expected['spec']['containers'][0]['image']=previous['context']['old_images']['voice-story/story']
+        self.assertEqual(actual,expected)
+        self.assertEqual(previous,before)
+        # The original generic FULL rollback remains unsupported.
+        with self.assertRaises(transaction.Blocked):transaction.rollback_package(previous)
+
+    def test_current_clean_schema4_is_required_and_prior_candidate_cannot_drift(self):
+        previous=self.fixture();current=copy.deepcopy(previous['service_actor_authority'])
+        transaction.validate_full_story_rollback_schema(previous,current)
+        for field in ('version','dirty','hashes','candidate','template'):
+            p=copy.deepcopy(previous);a=copy.deepcopy(current)
+            if field=='version':a['story_schema']['observation']['version']=5
+            elif field=='dirty':a['story_schema']['observation']['dirty']=True
+            elif field=='hashes':a['story_schema']['migration_hashes']['000001_init.up.sql']='f'*64
+            elif field=='candidate':p['service_actor_authority']['compatible_story_candidate']['actor_sha256']='f'*64
+            else:p['context']['snapshots']['voice-story']['spec']['template']['metadata']['annotations']['foreign']='drift'
+            with self.subTest(field=field),self.assertRaises(transaction.Blocked):
+                transaction.validate_full_story_rollback_schema(p,a)
+
+    def test_actual_bridge_prepare_rollback_selects_only_story_and_keeps_active_release_binding(self):
+        import bridge_root
+        previous=self.fixture();actions=object.__new__(bridge_root.Actions)
+        actions.state=Mock(return_value=(Path('/private'),previous))
+        actions._prepare=Mock(return_value={'fresh':'transaction'})
+        active={'operation':previous['operation'],'target_sha256':'final-manifest'}
+        previous['target']['manifest_sha256']='final-manifest'
+        request={'action':'prepare-rollback','operation':previous['operation']}
+        with patch.object(bridge_root,'private_json',return_value=active):
+            result=actions.execute(request)
+        self.assertEqual(result,{'fresh':'transaction'})
+        self.assertEqual(actions._prepare.call_args.args[0]['changed_services'],['story'])
+        self.assertEqual(actions._prepare.call_args.args[0]['mode'],'images-only')
+        active['operation']='different';actions._prepare.reset_mock()
+        with patch.object(bridge_root,'private_json',return_value=active),self.assertRaises(transaction.Blocked):
+            actions.execute(request)
+        actions._prepare.assert_not_called()
+
+    def test_real_prepare_keeps_renderer_and_current_sidecars_out_of_story_reversal(self):
+        import bridge_root,actor_root,renderer_root,json,tempfile
+        from contextlib import ExitStack
+        previous=self.fixture()
+        class StopBeforeFence(Exception):pass
+        with tempfile.TemporaryDirectory() as td:
+            installed=Path(td);(installed/'sources').mkdir()
+            actions=object.__new__(bridge_root.Actions);actions.code=installed;actions.binding={}
+            actions._idle=Mock();actions._report=Mock()
+            actions._dispatcher=Mock(return_value=(1,{'head_sha':'a'*40}))
+            stage=Mock();stage.snapshots=copy.deepcopy(previous['context']['snapshots'])
+            stage.old_images=copy.deepcopy(previous['target']['images'])
+            stage.expected={'generation':'r20260930a4'}
+            kube=Mock();kube.get.return_value={'data':{'generation':'r20260930a4','dataPVC':'selected'}}
+            selected={}
+            def compile_target(args):
+                selected.update(json.loads(Path(args[1]).read_text()))
+                raise StopBeforeFence()
+            def read_private(path):
+                if path.name=='policy.json':return {'s3_signing_endpoint':'https://example.invalid'}
+                raise FileNotFoundError()
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(bridge_root,'INSTALLED',installed))
+                stack.enter_context(patch.object(bridge_root,'Kube',return_value=kube))
+                capture=stack.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
+                stack.enter_context(patch.object(bridge_root.source_authority,'capture_source',
+                    return_value={'source_sha':'a'*40,'images':{'story':'ghcr.io/poryadok/voiceroot/story@sha256:'+'e'*64}}))
+                stack.enter_context(patch.object(bridge_root,'private_json',side_effect=read_private))
+                stack.enter_context(patch.object(bridge_root,'public_read',return_value=b'{}'))
+                stack.enter_context(patch.object(bridge_root,'save',side_effect=lambda path,row:path.write_text(json.dumps(row))))
+                fresh=stack.enter_context(patch.object(actor_root,'preflight',return_value=previous['service_actor_authority']))
+                renderer=stack.enter_context(patch.object(renderer_root,'prove'))
+                stack.enter_context(patch.object(bridge_root.compiler,'main',side_effect=compile_target))
+                with self.assertRaises(StopBeforeFence):
+                    actions._prepare({'nonce':'1'*64,'token':'external-fixture','mode':'images-only','changed_services':['story']},previous)
+            self.assertEqual(capture.call_args.args[3],[])
+            renderer.assert_not_called()
+            self.assertEqual(fresh.call_args.args[5],['story'])
+            expected=copy.deepcopy(previous['target']['images'])
+            expected['voice-story/story']=previous['context']['old_images']['voice-story/story']
+            self.assertEqual(selected['images'],expected)
+            self.assertEqual(selected['mode'],'images-only')
+            self.assertEqual(selected['changed_services'],['story'])
