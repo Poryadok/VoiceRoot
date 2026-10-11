@@ -74,25 +74,24 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
 }
 
 String _knownLayoutOwner(Element element) {
-  var owner = 'unavailable';
-  final currentOwner = _fixedLayoutOwner(element.widget);
+  final currentOwner = _fixedComponentOwner(element.widget);
   if (currentOwner != null) return currentOwner;
+  var owner = 'unavailable';
+  var remainingAncestors = 32;
   element.visitAncestorElements((ancestor) {
-    final ancestorOwner = _fixedLayoutOwner(ancestor.widget);
+    remainingAncestors--;
+    final ancestorOwner = _fixedComponentOwner(ancestor.widget);
     if (ancestorOwner != null) {
       owner = ancestorOwner;
       return false;
     }
-    return true;
+    return remainingAncestors > 0;
   });
   return owner;
 }
 
-String? _fixedLayoutOwner(Widget widget) {
+String? _fixedComponentOwner(Widget widget) {
   if (widget is VoiceCompactBanner) return 'VoiceCompactBanner';
-  if (widget is Row) return 'Row';
-  if (widget is Column) return 'Column';
-  if (widget is Wrap) return 'Wrap';
   if (widget is ChatRoomPanel) return 'ChatRoomPanel';
   if (widget is ChatListBody) return 'ChatListBody';
   if (widget is VoiceApp) return 'VoiceApp';
