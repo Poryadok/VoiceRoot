@@ -169,6 +169,7 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	failed := admissionFixture()
 	failed.RoomID, failed.SpaceID, failed.VoiceRoomID = creator.RoomID, creator.SpaceID, creator.VoiceRoomID
 	failed.CreatedRoom = false
+	failed.Events = failed.Events[1:] // Existing-room joins emit member_joined, not call_started.
 	require.NoError(t, prepareAdmission(ctx, admissions, &failed))
 	require.NoError(t, admissions.Fence(ctx, failed))
 	require.NoError(t, admissions.MarkCommitted(ctx, failed.OperationID, failed.Generation))
