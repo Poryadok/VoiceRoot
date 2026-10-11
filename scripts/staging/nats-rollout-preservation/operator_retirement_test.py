@@ -758,3 +758,20 @@ class AppliedRestartClosureTests(unittest.TestCase):
             if fault not in ('history','expired_rewrite'):state=self.terminal(snapshot,receipt)
             with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError)):
                 self.verify(snapshot,receipt,state)
+
+
+    def test_operator_closure_preserves_distinct_later_apply_authority_deadline(self):
+        snapshot,receipt,_=self.fixture()
+        snapshot['authorization']['expires_at']='2026-10-11T12:34:11.549999+00:00'
+        snapshot['nats_contract_expires_at']='2026-10-11T12:26:51.376312+00:00'
+        receipt['observed_at']='2026-10-11T10:36:48.233176+00:00'
+        self.files['apply-authorization.json']=json.dumps(snapshot['authorization']).encode()
+        raw=self.files['apply-authorization.json']
+        receipt['retained_files']['apply-authorization.json'].update(sha256=hashlib.sha256(raw).hexdigest(),bytes=len(raw))
+        receipt['consumed_claim'].update(authorization_sha256=hashlib.sha256(raw).hexdigest(),expires_at=snapshot['authorization']['expires_at'])
+        receipt['snapshot_sha256']=retirement.canonical(snapshot)
+        receipt['events'][0]['snapshot_sha256']=receipt['snapshot_sha256']
+        state=self.terminal(snapshot,receipt);self.verify(snapshot,receipt,state)
+        self.assertEqual(state['authorization']['expires_at'],snapshot['authorization']['expires_at'])
+        self.assertEqual(state['nats_contract_expires_at'],snapshot['nats_contract_expires_at'])
+        self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])

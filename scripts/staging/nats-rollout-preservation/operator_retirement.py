@@ -632,7 +632,7 @@ def verify_applied_terminal(base,state):
     try:
         observed=datetime.fromisoformat(receipt['observed_at']);expired=datetime.fromisoformat(authorization['expires_at'])
         contract=datetime.fromisoformat(snapshot['nats_contract_expires_at'])
-        if any(d.tzinfo is None for d in (observed,expired,contract)) or expired>contract:fail()
+        if any(d.tzinfo is None for d in (observed,expired,contract)):fail()
     except (ValueError,TypeError,KeyError):fail()
     after=receipt.get('released_marker',{});active=dict(expected_data,phase='active');active.pop('knownRolloutOperation')
     if (set(after)!={'uid','resourceVersion','data'} or after['uid']!=before['uid'] or after['data']!=active
