@@ -88,6 +88,7 @@ def journal_binding(installed,rows):
     return rows
 
 def verify_terminal(base,state):
+    if 'operator_precut_abort' in state:return verify_precut_terminal(base,state)
     base=Path(base)
     if base.name!='rollout-'+OPERATION or state.get('operation')!=OPERATION:fail()
     raw=private_bytes(base/'operator-retirement-snapshot.json')
@@ -129,6 +130,91 @@ def verify_terminal(base,state):
         or receipt.get('user_cycle_restored') is not True):fail()
     journal_binding(guard.ROOT/'installed',receipt['journals'])
     return receipt
+
+def precut_retained_setup(snapshot):
+    ctx=snapshot['context'];expected=ctx['expected']
+    return {'namespace_uid':expected['namespace_uid'],
+        'selected_claim':{'name':expected['source_claim'],'uid':expected['source_claim_uid'],'spec_sha256':canonical(ctx['final_claim']['spec'])},
+        'selected_pv':{'uid':expected['source_pv_uid'],'spec_sha256':canonical(ctx['final_pv']['spec']),'path':ctx['final_path']},
+        'service':{'uid':ctx['service']['metadata']['uid'],'object_sha256':canonical(ctx['service'])}}
+
+
+def precut_configmaps(original):
+    names=set(CONFIGMAPS)
+    for row in original.values():
+        spec=row['spec']['template']['spec']
+        names.update(v['configMap']['name'] for v in spec.get('volumes',[]) if 'configMap' in v)
+        names.update(s['configMap']['name'] for v in spec.get('volumes',[])
+            for s in v.get('projected',{}).get('sources',[]) if 'configMap' in s)
+        for c in spec.get('initContainers',[])+spec.get('containers',[]):
+            names.update(v['configMapRef']['name'] for v in c.get('envFrom',[]) if 'configMapRef' in v)
+            names.update(v['valueFrom']['configMapKeyRef']['name'] for v in c.get('env',[]) if 'configMapKeyRef' in v.get('valueFrom',{}))
+    return names
+
+
+def verify_precut_terminal(base,state):
+    """Historical root-attested abort before any cold cut or application effect."""
+    base=Path(base);operation=state.get('operation','')
+    if not re.fullmatch('[a-f0-9]{12}',operation) or base.name!='rollout-'+operation:fail()
+    raw=private_bytes(base/'operator-precut-abort-snapshot.json');snapshot=json.loads(raw)
+    sha=hashlib.sha256(raw).hexdigest();receipt=document(base/'operator-precut-abort-receipt.json')
+    reference={'schema':'voice-operator-precut-abort-reference-v1','snapshot_sha256':sha,'receipt_sha256':canonical(receipt)}
+    if (state.get('operator_precut_abort')!=reference or snapshot.get('schema')!='nats-rollout-root-v1'
+        or snapshot.get('operation')!=operation or snapshot.get('phase')!='FENCE' or snapshot.get('status')!='BLOCKED'
+        or snapshot.get('fence_status')!='VERIFIED'
+        or any(k in snapshot for k in ('cut','custody','authorization','nats_migration','space_gate','space_backup','apply','restart','preservation','closed_preservation','closed_preservation_sealed','operator_retirement','operator_precut_abort'))
+        or any((base/n).exists() for n in ('rollout-before.tar','rollout-before-manifest.json','authorization.json','apply-authorization.json','copy-checkpoint.json'))
+        or receipt.get('schema')!='voice-operator-precut-abort-closure-v1' or receipt.get('operation')!=operation
+        or receipt.get('snapshot_sha256')!=sha or receipt.get('waiver')!=WAIVER
+        or receipt.get('deployment_pass') is not False or receipt.get('rollback_eligible') is not False):fail()
+    binding=root_cli.code_binding(base/'code')
+    if binding!=snapshot.get('code_capture') or canonical(binding)!=receipt.get('code_binding_sha256'):fail()
+    history=snapshot.get('events');events=receipt.get('events')
+    if (not isinstance(history,list) or not history
+        or any(e.get('kind') not in {'staging_preflight','rollout_original_capture','rollout_maintenance_owned','workload_scaled'} for e in history)
+        or not isinstance(events,list) or len(events)<2 or events[0].get('kind')!='operator_precut_abort_intent'
+        or events[-1].get('kind')!='operator_precut_abort_completed'):fail()
+    original=snapshot['context']['original_snapshots'];names=CORE|{'voice-web','voice-admin','voice-developer-portal'}
+    setup=receipt.get('setup',{})
+    if set(original)!=names or not isinstance(setup,dict) or set(setup)!=names:fail()
+    captured=snapshot['context']['snapshots']
+    if (set(captured)!=names or any(r['spec'].get('replicas',1)!=1
+        or captured[n]['spec'].get('replicas',1)!=0 or captured[n]['metadata']['uid']!=r['metadata']['uid']
+        or captured[n]['spec']['template']!=r['spec']['template'] for n,r in original.items())
+        or any(e.get('kind')=='workload_scaled' and (e.get('name') not in names or e.get('replicas')!=0) for e in history)
+        or {e['name'] for e in events[1:-1]}!=names or len(events)!=len(names)+2):fail()
+    expected={n:{'uid':r['metadata']['uid'],'template_sha256':canonical(r['spec']['template']),
+        'replicas':1,'ready':setup[n].get('ready')} for n,r in original.items()}
+    if (setup!=expected or any(type(r['ready']) is not bool for r in setup.values()) or setup[HUB]['ready'] is not True
+        or any(e.get('kind')!='workload_scaled' or e.get('name') not in names or e.get('replicas')!=1 for e in events[1:-1])
+        or receipt.get('retained_setup')!=precut_retained_setup(snapshot)
+        or receipt.get('storage_verified') is not True or receipt.get('config_verified') is not True):fail()
+    configs=receipt.get('configmaps',{})
+    if (not isinstance(configs,dict) or set(configs)!=precut_configmaps(original)
+        or any(set(r)!={'uid','data_sha256','binary_data_sha256'} or not re.fullmatch('[a-f0-9-]{36}',r['uid'])
+            or any(not re.fullmatch('[a-f0-9]{64}',r[k]) for k in ('data_sha256','binary_data_sha256')) for r in configs.values())):fail()
+    marker=snapshot['context']['marker'];before={'uid':marker['metadata']['uid'],'resourceVersion':marker['metadata']['resourceVersion'],'data':marker['data']}
+    after=receipt.get('released_marker',{});data=copy.deepcopy(before['data']);data['phase']='active';data.pop('knownRolloutOperation',None)
+    if (receipt.get('before_marker')!=before or before['data'].get('phase')!='rollout-capturing'
+        or before['data'].get('knownRolloutOperation')!=operation or set(after)!={'uid','resourceVersion','data'}
+        or after.get('uid')!=before['uid'] or after.get('data')!=data or not isinstance(after.get('resourceVersion'),str)
+        or after['resourceVersion']==before['resourceVersion']):fail()
+    journals=receipt.get('journals',{})
+    if not isinstance(journals,dict) or not 1<=len(journals)<=100:fail()
+    for name,wanted in journals.items():
+        if not re.fullmatch('[a-f0-9]{64}\\.json',name) or set(wanted)!={'journal_sha256','request_sha256','response_sha256'}:fail()
+        installed=guard.ROOT/'installed';raw=private_bytes(installed/'journal'/name,2<<20);journal=json.loads(raw)
+        request=journal.get('request',{});response_raw=private_bytes(installed/'responses'/name,2<<20,group_read=True)
+        if (hashlib.sha256(raw).hexdigest()!=wanted['journal_sha256'] or journal.get('request_sha256')!=wanted['request_sha256']
+            or canonical(request)!=wanted['request_sha256'] or request.get('action')!='prepare' or request.get('mode')!='full'
+            or journal.get('phase')!='STARTED' or journal.get('prepare_error')!='guard_rejected'
+            or request.get('nonce')!=name[:-5] or name[:12]!=operation or request.get('operation',operation)!=operation
+            or hashlib.sha256(response_raw).hexdigest()!=wanted['response_sha256']
+            or json.loads(response_raw)!={'status':'BLOCKED','error':'exception_Blocked'}):fail()
+    terminal=copy.deepcopy(snapshot);terminal.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',events=history+events,operator_precut_abort=reference)
+    if state!=terminal:fail()
+    return receipt
+
 
 def idle_state(base,state):
     if state.get('status') in ('PASS','ROLLED_BACK'):return True

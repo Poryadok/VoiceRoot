@@ -260,3 +260,57 @@ class ActualUnreadyImageIdentityTests(unittest.TestCase):
                 rows.append(second)
             with self.subTest(change=change),self.assertRaises(Blocked):
                 runtime_stage.running_image_pins(deployments,rows)
+
+
+class CanonicalHubShutdownTests(unittest.TestCase):
+    def shutdown(self,image):
+        from docker_runtime import NATS_IMAGE
+        hub={'metadata':{'uid':'hub'},'spec':{'template':{'spec':{'containers':[{'name':'nats','image':NATS_IMAGE}]}}}}
+        pod={'metadata':{'name':'hub-pod','uid':'pod','ownerReferences':[{'name':'hub-rs','uid':'rs','kind':'ReplicaSet','controller':True}]},
+             'spec':{'nodeName':'node','containers':[{'name':'nats','image':NATS_IMAGE}],
+                     'volumes':[{'persistentVolumeClaim':{'claimName':'selected'}}]},
+             'status':{'phase':'Running','containerStatuses':[{'name':'nats','ready':True,'imageID':image,
+                 'containerID':'containerd://'+'a'*64,'restartCount':0,
+                 'state':{'running':{'startedAt':'2026-10-11T03:00:00Z'}}}]}}
+        events=[]
+        class Kube:
+            def run(self,args):
+                return {'serverVersion':{'major':'1','minor':'33'}} if args[0]=='version' else {'items':[copy.deepcopy(pod)]}
+            def get(self,kind,name):
+                if kind=='deployment':return copy.deepcopy(hub)
+                if kind=='replicaset':return {'metadata':{'uid':'rs','ownerReferences':[{'kind':'Deployment','uid':'hub','controller':True}]}}
+                if kind=='node':return {'status':{'conditions':[{'type':'Ready','status':'True'}]}}
+                if kind=='pod':return copy.deepcopy(pod)
+                raise AssertionError(kind)
+            def cas(self,kind,row,changes):
+                if changes[0]['op']=='add':pod['metadata']['finalizers']=changes[0]['value']
+                else:pod['metadata']['finalizers']=[]
+                return copy.deepcopy(pod)
+        stage=RolloutStage(Kube(),'123456abcdef',{'source_claim':'selected'},events.append)
+        stage.snapshots={runtime_stage.HUB:copy.deepcopy(hub)};stage.runtime_base='/historical'
+        def stop(name,replicas):
+            self.assertEqual((name,replicas),(runtime_stage.HUB,0))
+            pod['metadata']['deletionTimestamp']='2026-10-11T03:01:00Z'
+            pod['status']['containerStatuses'][0]['state']={'terminated':{'exitCode':0,'signal':0,'reason':'Completed',
+                'startedAt':'2026-10-11T03:00:00Z','finishedAt':'2026-10-11T03:01:00Z'}}
+        with patch.object(stage,'owned_marker'),patch.object(stage,'scale',side_effect=stop),\
+             patch('commands.capture',return_value=b'{}'),patch('rollout_census.census',return_value={'verified':True}),\
+             patch('docker_runtime.DockerRuntime',autospec=True):
+            proof=stage.shutdown_original_hub()
+        self.assertEqual(proof['exit_code'],0)
+        self.assertEqual([e['kind'] for e in events],['original_hub_shutdown_intent','original_hub_orderly_exit_verified','original_hub_owned_finalizer_removed'])
+        self.assertEqual(pod['metadata']['finalizers'],[])
+
+    def test_canonical_docker_hub_identity_reaches_orderly_shutdown(self):
+        from docker_runtime import NATS_IMAGE
+        suffix=NATS_IMAGE[NATS_IMAGE.index('@'):]
+        for image in (NATS_IMAGE,'docker.io/library/nats'+suffix,'docker-pullable://docker.io/library/nats'+suffix):
+            with self.subTest(image=image):self.shutdown(image)
+
+    def test_same_digest_foreign_repository_or_changed_digest_cannot_shutdown(self):
+        from docker_runtime import NATS_IMAGE
+        suffix=NATS_IMAGE[NATS_IMAGE.index('@'):]
+        for image in ('example.invalid/nats'+suffix,'docker.io/library/other'+suffix,
+                      'sha256:'+suffix.split(':')[-1],'docker.io/library/nats@sha256:'+'0'*64):
+            with self.subTest(image=image),self.assertRaisesRegex(Blocked,'original_hub_container_changed'):
+                self.shutdown(image)

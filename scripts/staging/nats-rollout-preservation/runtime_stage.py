@@ -189,9 +189,14 @@ class RolloutStage(Staging):
             and o.get('uid')==hub['metadata']['uid'] and o.get('controller') is True for o in rs['metadata'].get('ownerReferences',[]))):
             raise Blocked('rollout_original_hub_owner_changed')
         current=statuses[0]
+        # Kubelet expands the fixed Docker Hub image to its canonical repository
+        # and omits the tag. Accept only these identities of the pinned image.
+        runtime_image=current.get('imageID','').removeprefix('docker-pullable://')
+        pinned_digest=NATS_IMAGE.split('@',1)[1]
+        fixed_images={NATS_IMAGE,'docker.io/library/nats@'+pinned_digest}
         if (current.get('name')!='nats' or current.get('ready') is not True
             or not re.fullmatch('containerd://[a-f0-9]{64}',current.get('containerID',''))
-            or current.get('imageID','').removeprefix('docker-pullable://')!=NATS_IMAGE
+            or runtime_image not in fixed_images
             or type(current.get('restartCount')) is not int or set(current.get('state',{}))!={'running'}):
             raise Blocked('rollout_original_hub_container_changed')
         node=self.kube.get('node',spec['nodeName'])

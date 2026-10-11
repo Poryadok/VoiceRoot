@@ -37,6 +37,84 @@ class RetirementTransitionTests(unittest.TestCase):
             retirement.verify_terminal('/nonexistent',{'status':'ABORTED'})
 
 
+class PrecutClosureTests(unittest.TestCase):
+    def fixture(self):
+        operation='d802f4190c05';names=retirement.CORE|{'voice-web','voice-admin','voice-developer-portal'}
+        originals={name:{'metadata':{'uid':str(uuid.uuid5(uuid.NAMESPACE_DNS,name))},
+            'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'main','image':'fixed'}]}}}} for name in names}
+        marker={'metadata':{'uid':str(uuid.uuid4()),'resourceVersion':'123'},
+            'data':{'phase':'rollout-capturing','knownRolloutOperation':operation,'dataPVC':'selected'}}
+        snapshot={'schema':'nats-rollout-root-v1','operation':operation,'phase':'FENCE','status':'BLOCKED',
+            'fence_status':'VERIFIED','error':'exception_Blocked','code_capture':{'member':'a'*64},
+            'events':[{'kind':'staging_preflight'},{'kind':'rollout_original_capture'},
+                      {'kind':'rollout_maintenance_owned'},{'kind':'workload_scaled','name':retirement.HUB,'replicas':0}],
+            'context':{'original_snapshots':originals,'snapshots':{n:dict(copy.deepcopy(r),spec=dict(copy.deepcopy(r['spec']),replicas=0)) for n,r in originals.items()},'marker':marker,'expected':{
+                'namespace_uid':str(uuid.uuid4()),'source_claim':'selected','source_claim_uid':str(uuid.uuid4()),
+                'source_pv_uid':str(uuid.uuid4())},'final_claim':{'spec':{'volumeName':'pv'}},
+                'final_pv':{'spec':{'claimRef':{'name':'selected'}}},'final_path':'/selected',
+                'service':{'metadata':{'uid':str(uuid.uuid4())},'spec':{'ports':[]}}}}
+        setup={n:{'uid':r['metadata']['uid'],'template_sha256':retirement.canonical(r['spec']['template']),
+            'replicas':1,'ready':n==retirement.HUB} for n,r in originals.items()}
+        events=[{'kind':'operator_precut_abort_intent'}]+[{'kind':'workload_scaled','name':n,'replicas':1} for n in sorted(names)]+[{'kind':'operator_precut_abort_completed'}]
+        receipt={'schema':'voice-operator-precut-abort-closure-v1','operation':operation,
+            'snapshot_sha256':retirement.canonical(snapshot),'code_binding_sha256':retirement.canonical(snapshot['code_capture']),
+            'waiver':retirement.WAIVER,'deployment_pass':False,'rollback_eligible':False,'events':events,
+            'setup':setup,'retained_setup':retirement.precut_retained_setup(snapshot),
+            'configmaps':{n:{'uid':str(uuid.uuid4()),'data_sha256':'a'*64,'binary_data_sha256':'b'*64} for n in retirement.CONFIGMAPS},
+            'before_marker':{'uid':marker['metadata']['uid'],'resourceVersion':'123','data':marker['data']},
+            'released_marker':{'uid':marker['metadata']['uid'],'resourceVersion':'124',
+                'data':{'phase':'active','dataPVC':'selected'}},'storage_verified':True,'config_verified':True,
+            'journals':{}}
+        nonce=operation+'a'*52
+        self.journal={'phase':'STARTED','prepare_error':'guard_rejected',
+            'request':{'action':'prepare','mode':'full','nonce':nonce}}
+        self.journal['request_sha256']=retirement.canonical(self.journal['request'])
+        self.response={'status':'BLOCKED','error':'exception_Blocked'}
+        receipt['journals'][nonce+'.json']={'journal_sha256':retirement.canonical(self.journal),
+            'request_sha256':self.journal['request_sha256'],'response_sha256':retirement.canonical(self.response)}
+        state=copy.deepcopy(snapshot);state.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',
+            events=snapshot['events']+events,operator_precut_abort={'schema':'voice-operator-precut-abort-reference-v1',
+                'snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':retirement.canonical(receipt)})
+        return snapshot,receipt,state
+
+    def verify(self,snapshot,receipt,state):
+        base=Path('/private/rollout-'+snapshot['operation'])
+        def read(path,*args,**kwargs):
+            if Path(path).name=='operator-precut-abort-snapshot.json':return json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+            if Path(path).parent.name in ('journal','responses'):
+                row=self.journal if Path(path).parent.name=='journal' else self.response
+                return json.dumps(row,sort_keys=True,separators=(',',':')).encode()
+            raise AssertionError(path)
+        with patch.object(retirement,'private_bytes',side_effect=read),\
+             patch.object(retirement,'document',return_value=receipt),\
+             patch.object(retirement.root_cli,'code_binding',return_value=snapshot['code_capture']):
+            return retirement.idle_state(base,state)
+
+    def test_bound_precut_closure_is_idle_without_claiming_deployment_success(self):
+        snapshot,receipt,state=self.fixture()
+        self.assertTrue(self.verify(snapshot,receipt,state))
+        self.assertEqual(state['status'],'ABORTED');self.assertFalse(receipt['deployment_pass'])
+        self.assertEqual(state['events'][:len(snapshot['events'])],snapshot['events'])
+
+    def test_cut_effects_history_setup_marker_and_provenance_drift_refuse_idle(self):
+        for fault in ('cut','effect_event','history','setup','marker','code','reference','receipt','raw_aborted'):
+            snapshot,receipt,state=self.fixture()
+            if fault=='cut':snapshot['cut']={'present':True}
+            elif fault=='effect_event':snapshot['events'].append({'kind':'original_hub_shutdown_intent'})
+            elif fault=='history':state['events'][0]['kind']='changed'
+            elif fault=='setup':receipt['setup'][retirement.HUB]['ready']=False
+            elif fault=='marker':receipt['released_marker']['data']['knownRolloutOperation']=snapshot['operation']
+            elif fault=='code':receipt['code_binding_sha256']='b'*64
+            elif fault=='reference':state['operator_precut_abort']['snapshot_sha256']='b'*64
+            elif fault=='receipt':receipt['deployment_pass']=True
+            else:state.pop('operator_precut_abort')
+            if fault not in ('reference','raw_aborted'):
+                receipt['snapshot_sha256']=retirement.canonical(snapshot)
+                state['operator_precut_abort'].update(snapshot_sha256=receipt['snapshot_sha256'],receipt_sha256=retirement.canonical(receipt))
+            with self.subTest(fault=fault),self.assertRaises((Blocked,FileNotFoundError)):
+                self.verify(snapshot,receipt,state)
+
+
 
 import contextlib
 import hashlib
