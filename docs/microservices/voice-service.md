@@ -388,6 +388,16 @@ listeners are enabled, their listen addresses must differ. The combined local/CI
 fixtures retain lifecycle port 9092 and use user-principal port 9093, with
 Gateway's matching private upstream; neither port is published to the host.
 
+The user-principal listener validates local TLS configuration and replay Redis
+before startup, but starts with an empty Gateway JWKS cache. Gateway waits for
+this listener before serving its own key endpoint, so requiring an initial key
+fetch would deadlock their startup. Listener readiness does not assert that
+Gateway keys are already available: protected RPC verification fetches a complete
+valid key set before accepting any principal and returns `UNAVAILABLE` during a
+key endpoint outage. Invalid keys still deny access. Background refresh, the
+issuer-wide unknown-key cooldown, hard expiry, replay prevention and Auth epoch
+checks retain the shared Phase-0 rules.
+
 **Public surface.** Gateway exposes Space room actions under
 `/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,
 `POST /leave`, `GET /roster`, `POST /move` (self; destination `voice_room_id`),

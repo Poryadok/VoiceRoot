@@ -126,10 +126,9 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 		_ = runtime.Close()
 		return nil, principalgrpc.Unavailable(errors.New("voice user principal replay Redis unavailable"))
 	}
-	if err := resolver.Refresh(startup, "gateway"); err != nil {
-		_ = runtime.Close()
-		return nil, errors.New("initial Gateway principal JWKS unavailable")
-	}
+	// Gateway waits for this listener before serving its JWKS endpoint. Start
+	// with an empty cache to break that bootstrap cycle. Resolve still fetches
+	// and validates trusted keys before any request can pass verification.
 	refreshCtx, cancelRefresh := context.WithCancel(ctx)
 	runtime.cancel = cancelRefresh
 	runtime.done = make(chan struct{})
