@@ -8,6 +8,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -70,10 +71,36 @@ func main() { if len(os.Args)==3 && os.Args[1]=="prepare" {prepare(os.Args[2]);r
 '''
 
 
+_SAFE_FAILURE = re.compile(r'^(AssertionError|Blocked|CensusError|KeyError|RuntimeError|TypeError|ValueError|panic)(?:: ([a-z][a-z0-9_]{0,95}))?$')
+_SAFE_FAILURE_CODES = frozenset({
+    'baseline_record_changed', 'chat_predecessor_subjects', 'disposable_census_fixture_failed',
+    'ephemeral_delivery_count', 'fixed_fixture_phase_required', 'fixture_interrupted_after_update_before_info',
+    'fixture_interruption_not_exercised', 'known_payload_changed', 'known_record_changed',
+    'nats_census_incomplete_or_invalid', 'owned_census_fixture_command_failed',
+    'post_release_record_changed', 'record_count', 'redelivery_count', 'reviewed_predecessor_shape',
+})
+
+
+def _safe_failure_detail(stderr):
+    safe = []
+    for line in stderr.decode(errors='replace').splitlines()[-40:]:
+        match = _SAFE_FAILURE.fullmatch(line.strip())
+        if match:
+            kind, code = match.groups()
+            detail = kind + (': ' + code if code in _SAFE_FAILURE_CODES else '')
+            if detail not in safe:
+                safe.append(detail)
+    return '; '.join(safe[-4:])
+
+
 def call(args, **kwargs):
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180, **kwargs)
     if result.returncode:
-        raise RuntimeError('owned_census_fixture_command_failed')
+        detail = _safe_failure_detail(result.stderr)
+        message = 'owned_census_fixture_command_failed'
+        if detail:
+            message += ': ' + detail
+        raise RuntimeError(message) from None
     return result.stdout.decode().strip()
 
 
@@ -179,17 +206,27 @@ def inner(base):
     print(json.dumps(receipt, sort_keys=True))
 
 
-def remote_run(bundle):
+def remote_run(bundle, transport='pmdebook'):
     import socket
-    if sys.platform != 'linux' or os.getuid() != 1000 or socket.gethostname() != 'pmdebook':
-        raise RuntimeError('approved_pmd_host_required')
+    if transport == 'pmdebook':
+        if sys.platform != 'linux' or os.getuid() != 1000 or socket.gethostname() != 'pmdebook':
+            raise RuntimeError('approved_pmd_host_required')
+    elif (transport == 'github-hosted' and
+          (sys.platform != 'linux' or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted'
+           or os.environ.get('GITHUB_ACTIONS') != 'true')):
+        raise RuntimeError('github_hosted_fixture_runner_required')
+    elif transport != 'github-hosted':
+        raise RuntimeError('owned_census_fixture_transport_invalid')
     assert call(['docker', 'info', '--format', '{{.OSType}}']) == 'linux'
     operation = 'voice-nats-rollout-fixture-' + uuid.uuid4().hex[:16]
     label = 'voice.rollout.census=' + operation
-    volume = call(['docker', 'volume', 'create', '--label', label, operation])
-    assert volume == operation
+    run_id = uuid.uuid4().hex[:12]
+    volume = operation
     outer = operation + '-runner'; runner_id = None
+    output = None; primary = None
     try:
+        volume = call(['docker', 'volume', 'create', '--label', label, operation])
+        assert volume == operation
         rows = json.loads(call(['docker', 'volume', 'inspect', volume]))
         assert len(rows) == 1 and rows[0]['Labels']['voice.rollout.census'] == operation
         base = rows[0]['Mountpoint']
@@ -198,26 +235,59 @@ def remote_run(bundle):
             ('/lib/x86_64-linux-gnu/libc.so.6','/lib/x86_64-linux-gnu/libc.so.6'),
             ('/lib64/ld-linux-x86-64.so.2','/lib64/ld-linux-x86-64.so.2'),
             (str(bundle / 'source'),'/source'), (str(bundle),'/bundle')]
+        marker = 'pmdebook' if transport == 'pmdebook' else 'github-hosted'
         args = ['docker', 'run', '--name', outer, '--label', label, '--network', 'none',
-            '--env', 'VOICE_CENSUS_APPROVED_HOST=pmdebook',
+            '--env', 'VOICE_CENSUS_APPROVED_HOST=' + marker,
+            '--env', 'VOICE_CENSUS_FIXTURE_ID=' + run_id,
             '--mount', 'type=volume,source=' + volume + ',target=' + base,
             '--mount', 'type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock']
         for origin,target in mounts:
             args += ['--mount','type=bind,source='+origin+',target='+target+',readonly']
-        output = call([*args, 'python:3.12-alpine', 'python3', '/bundle/rollout_census_integration.py', '--inner', base])
+        output = call([*args, 'python@sha256:1b668429b3511ab407d8e00648891631b0b1a4d7e15e3ca70f38ab5b91ad4ab4', 'python3', '/bundle/rollout_census_integration.py', '--inner', base])
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        rows = json.loads(call(['docker', 'inspect', outer]))
-        assert len(rows) == 1 and rows[0]['Config']['Labels']['voice.rollout.census'] == operation
-        runner_id = rows[0]['Id']; call(['docker', 'rm', '-f', runner_id])
-        rows = json.loads(call(['docker', 'volume', 'inspect', volume]))
-        assert rows[0]['Labels']['voice.rollout.census'] == operation
-        call(['docker', 'volume', 'rm', volume])
-        assert not call(['docker','ps','-a','--filter','label='+label,'--format','{{.ID}}'])
-        assert not call(['docker','volume','ls','--filter','label='+label,'--format','{{.Name}}'])
-        assert not call(['docker','network','ls','--filter','label='+label,'--format','{{.ID}}'])
+        cleanup_errors = []
+        try:
+            owned = call(['docker', 'ps', '-a', '--filter', 'label=' + label, '--format', '{{.ID}}'])
+            for container_id in owned.splitlines():
+                rows = json.loads(call(['docker', 'inspect', container_id]))
+                if len(rows) != 1 or rows[0]['Config']['Labels'].get('voice.rollout.census') != operation:
+                    raise RuntimeError('owned_fixture_container_identity_failed')
+                if rows[0]['Name'].lstrip('/') != outer:
+                    raise RuntimeError('owned_fixture_container_name_failed')
+                runner_id = rows[0]['Id']
+                call(['docker', 'rm', '-f', runner_id])
+            if call(['docker', 'ps', '-a', '--filter', 'label=' + label, '--format', '{{.ID}}']):
+                raise RuntimeError('owned_fixture_container_cleanup_failed')
+            for child_id in ('contract' + run_id, 'freshrollback' + run_id):
+                child_label = 'voice.known-nats.operation=' + child_id
+                children = call(['docker', 'ps', '-a', '--filter', 'label=' + child_label, '--format', '{{.ID}}'])
+                for container_id in children.splitlines():
+                    rows = json.loads(call(['docker', 'inspect', container_id]))
+                    if len(rows) != 1 or rows[0]['Config']['Labels'].get('voice.known-nats.operation') != child_id:
+                        raise RuntimeError('owned_fixture_child_identity_failed')
+                    call(['docker', 'rm', '-f', rows[0]['Id']])
+                if call(['docker', 'ps', '-a', '--filter', 'label=' + child_label, '--format', '{{.ID}}']):
+                    raise RuntimeError('owned_fixture_child_cleanup_failed')
+            rows = json.loads(call(['docker', 'volume', 'inspect', volume]))
+            if len(rows) != 1 or rows[0]['Labels'].get('voice.rollout.census') != operation:
+                raise RuntimeError('owned_fixture_volume_identity_failed')
+            call(['docker', 'volume', 'rm', volume])
+            for kind, args in (('volume', ['docker', 'volume', 'ls', '--filter', 'label=' + label, '--format', '{{.Name}}']),
+                               ('network', ['docker', 'network', 'ls', '--filter', 'label=' + label, '--format', '{{.ID}}'])):
+                if call(args):
+                    raise RuntimeError('owned_fixture_' + kind + '_cleanup_failed')
+        except Exception:
+            cleanup_errors.append('owned_fixture_cleanup_failed')
+        if cleanup_errors and primary is None:
+            raise RuntimeError(cleanup_errors[0])
+        if cleanup_errors:
+            print(cleanup_errors[0], file=sys.stderr, flush=True)
     receipt = json.loads(output)
     receipt.update(removed_volume=volume, removed_runner_id=runner_id,
-        execution_host='pmdebook', execution_uid=1000, execution_exit_code=0,
+        execution_host=transport, execution_uid=(1000 if transport == 'pmdebook' else os.getuid()), execution_exit_code=0,
         owned_container_volume_network_cleanup_verified=True)
     print(json.dumps(receipt, sort_keys=True))
 
@@ -251,7 +321,7 @@ def main():
 
 if __name__ == '__main__':
     if (len(sys.argv) == 3 and sys.argv[1] == '--inner' and sys.platform == 'linux'
-            and os.environ.get('VOICE_CENSUS_APPROVED_HOST') == 'pmdebook'):
+            and os.environ.get('VOICE_CENSUS_APPROVED_HOST') in ('pmdebook', 'github-hosted')):
         inner(sys.argv[2])
     elif len(sys.argv) == 1:
         main()

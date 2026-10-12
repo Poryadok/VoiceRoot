@@ -3,11 +3,23 @@
 Synthetic realm only. Same-host copy is a mechanism fixture, not off-node live
 custody or accepted staging rollout. No live credentials or PVC are referenced.
 """
-import base64,copy,hashlib,json,os
+import base64,copy,hashlib,json,os,re,subprocess,sys
 from pathlib import Path
-import shutil,sys,tempfile,time,uuid
+import shutil,tempfile,time,uuid
 import rollout_census_integration as fixture
 from nats_contract_plan import DECLARATIONS
+
+
+def select_transport(args, environ=None, platform=None):
+    env=os.environ if environ is None else environ
+    system=sys.platform if platform is None else platform
+    if not args:return 'pmdebook'
+    if args!=['--github-hosted']:
+        raise SystemExit('owned_contract_fixture_arguments_invalid')
+    if (system!='linux' or env.get('RUNNER_ENVIRONMENT')!='github-hosted'
+            or env.get('GITHUB_ACTIONS')!='true'):
+        raise SystemExit('github_hosted_fixture_runner_required')
+    return 'github-hosted'
 
 def fixture_bootstrap_grants(contract):
     """Exact disposable credentials for baseline resources plus v3 consumers."""
@@ -33,6 +45,7 @@ def inner(base):
     from preserve import verify_post_apply,canonical,capture_cut
     from nats_contract_actor import Actor
     from nats_contract_plan import compile_plan,execute,verify_census,DECLARATIONS
+    from nats_contract_plan import CHAT_SUBJECTS_14,ROLE_SUBJECTS_9
     from rollout_census import census
     from bootstrap_renewal import invoke
     import bootstrap_auth,guard
@@ -43,6 +56,18 @@ def inner(base):
         path=base/('bootstrap-'+role+'.sh')
         shutil.copyfile('/source/scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/'+role+'-bootstrap.sh',path)
         path.chmod(0o440);os.chown(path,0,65532)
+    baseline=json.loads(Path('/bundle/nats-9ae-predecessor.json').read_text())
+    if (baseline.get('schema')!='voice-nats-reviewed-predecessor-v1'
+            or baseline.get('source_commit')!='9ae2e0c259e5e039109f7331aaf62b3607e549dd'
+            or baseline.get('sources')!={'deploy/templates/nats-realtime-bootstrap.yaml':'59099dea8f129c1300b31c7441fc9cc393875108',
+                'deploy/templates/nats-analytics-chat-bootstrap.yaml':'a88ed972161f7445ad26886cf194d1a3b4f78125'}
+            or len(set(baseline.get('chat_subjects',[])))!=14
+            or len(set(baseline.get('role_subjects',[])))!=9
+            or set(baseline['chat_subjects'])!=CHAT_SUBJECTS_14
+            or set(baseline['role_subjects'])!=ROLE_SUBJECTS_9):
+        raise RuntimeError('reviewed_nats_predecessor_fixture_invalid')
+    shutil.copyfile('/bundle/nats-9ae-predecessor.json',base/'inputs/predecessor.json')
+    os.chmod(base/'inputs/predecessor.json',0o440);os.chown(base/'inputs/predecessor.json',0,65532)
     for p in [base/'inputs',base/'server.conf',*list((base/'inputs').iterdir())]:os.chown(p,0,65532)
     base.chmod(0o755)
     # These are disposable fixture identities, created inside this volume.
@@ -63,17 +88,23 @@ def inner(base):
     auth=bootstrap_auth.prove(renewed,operator,lambda:None)
     assert auth['verified'] and auth['reply_prefix']=='_INBOX.voice.bootstrap.reply'
     (base/'inputs/bootstrap.creds').write_bytes(renewed)
-    operation='contract'+uuid.uuid4().hex[:12]
+    fixture_id=os.environ.get('VOICE_CENSUS_FIXTURE_ID') or uuid.uuid4().hex[:12]
+    if not re.fullmatch(r'[0-9a-f]{12}',fixture_id):raise RuntimeError('owned_contract_fixture_identity_invalid')
+    operation='contract'+fixture_id
     runtime=DockerRuntime(base,operation);removed=[];fresh_runtime=None
     try:
         store=base/'store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
         broker=runtime.start_broker('original',store);ready(runtime,broker);runtime.bootstrap(broker)
         seeded=runtime.kernel(broker,'seed')/'fixture.json'
         snapshot=base/'inputs/fixture.json';snapshot.write_bytes(seeded.read_bytes());snapshot.chmod(0o440);os.chown(snapshot,0,65532)
+        baseline_seed=runtime.create('baseline-record-seed',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','seed-contract'],broker)
+        runtime.run(['start',baseline_seed]);assert runtime.run(['wait',baseline_seed])=='0'
         extra=runtime.create('extra-seed',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','extra'],broker)
         runtime.run(['start',extra]);assert runtime.run(['wait',extra])=='0'
+        precut_verifier=runtime.create('precut-record-verify',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','verify'],broker)
+        runtime.run(['start',precut_verifier]);assert runtime.run(['wait',precut_verifier])=='0'
         account=(base/'inputs/account.public').read_text().strip()
-        before=census(runtime,broker,account);assert sum(s['state']['messages'] for s in before['streams'])==5
+        before=census(runtime,broker,account);assert sum(s['state']['messages'] for s in before['streams'])==7
         raw=runtime.monitor_jsz(broker);details=next(a for a in raw['account_details'] if a['id']==account)['stream_detail']
         infos={s['name']:{'config':s['config'],'state':s['state']} for s in details}
         runtime.stop(broker)
@@ -189,9 +220,9 @@ def inner(base):
         for path in [fresh_base/'inputs',*(fresh_base/'inputs').rglob('*')]:os.chown(path,0,65532)
         for name in ('kernel','server.conf'):
             shutil.copyfile(base/name,fresh_base/name);os.chown(fresh_base/name,0,65532);(fresh_base/name).chmod(0o550 if name=='kernel' else 0o440)
-        fresh_runtime=DockerRuntime(fresh_base,'freshrollback'+uuid.uuid4().hex[:12])
+        fresh_runtime=DockerRuntime(fresh_base,'freshrollback'+fixture_id)
         fresh_cut=capture_cut(fresh_runtime,store,fenced)
-        assert sum(row['state']['messages'] for row in fresh_cut['census']['streams'])==6
+        assert sum(row['state']['messages'] for row in fresh_cut['census']['streams'])==8
         fresh_cut['manifest_sha256']=digest(fresh_cut['manifest'])
         fresh={'operation':fresh_runtime.operation,'events':[],'custody':{'verified':True,'scope':'same-host-fixture-only'},
             'bootstrap_enrollment':enrollment,'nats_contract':rollback_plan,
@@ -200,7 +231,7 @@ def inner(base):
         # additive contract; it never restores the original five-record cut.
         fresh_migration=apply_contract(fresh_base,fresh,Stage(),fresh['events'].append)
         fresh_proof=verify_post_apply(fresh_runtime,store,fresh_migration['cut'],fenced)
-        assert fresh_proof['messages']==6
+        assert fresh_proof['messages']==8
         for name in list(fresh_runtime.owned):
             row=fresh_runtime.inspect(name);fresh_runtime.run(['rm','-f',row['Id']]);removed.append(row['Id'])
             assert not fresh_runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}'])
@@ -215,7 +246,7 @@ def inner(base):
             'old_consumers_preserved':proof['old_consumers_preserved'],'created_consumers':proof['created_consumers'],
             'normalized_consumers_sha256':digest(plan['consumer_targets']),'native_record_files_equal':True,
             'known_payloads_verified':True,'same_original_store':True,'renewed_existing_actor_auth_verified':True,'normal_migration_phase_and_postapply_proof_verified':True,
-            'fresh_rollback_current_cut_records':6,'post_release_record_payload_verified':True,'rollback_retained_additive_contract':True,
+            'fresh_rollback_current_cut_records':8,'post_release_record_payload_verified':True,'rollback_retained_additive_contract':True,
             'actual_update_before_info_interruption_recovered':True,
             'new_durable_initial_delivery_ack_floors_verified':True,
             'events':[e['kind'] for e in events]}
@@ -226,15 +257,13 @@ def inner(base):
                 assert not owned_runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}'])
     receipt['removed_container_ids']=removed;print(json.dumps(receipt,sort_keys=True))
 
-def main():
+def build_fixture_records(bundle):
     source=Path(__file__).resolve().parents[3];module=source/'scripts/staging/nats-known-baseline'
-    with tempfile.TemporaryDirectory(prefix='voice-contract-build-') as td:
-        bundle=Path(td)
-        helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "fmt"; "os";')
-        contract=json.loads((module/'deployed-contract.json').read_text())
-        grants=fixture_bootstrap_grants(contract)
-        grant_text=json.dumps(grants,separators=(',',':'))
-        old_actor='''
+    helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "fmt"; "os"; "reflect";')
+    contract=json.loads((module/'deployed-contract.json').read_text())
+    grants=fixture_bootstrap_grants(contract)
+    grant_text=json.dumps(grants,separators=(',',':'))
+    old_actor='''
  bootstrap,e:=nkeys.CreateUser();must(e);defer bootstrap.Wipe();bootstrapPublic,e:=bootstrap.PublicKey();must(e)
  restricted:=jwt.NewUserClaims(bootstrapPublic);must(json.Unmarshal([]byte(`GRANTS`),&restricted.Pub.Allow));restricted.Sub.Allow=[]string{"_INBOX.voice.bootstrap.reply.>"}
  restrictedToken,e:=restricted.Encode(app);must(e);bootstrapSeed,e:=bootstrap.Seed();must(e)
@@ -242,11 +271,31 @@ def main():
  accountSeed,e:=app.Seed();must(e);write(base,"inputs/synthetic-account.seed",string(accountSeed))
  write(base,"inputs/operator.jwt",operator);write(base,"inputs/account.jwt",account);write(base,"inputs/system-account.jwt",system);write(base,"inputs/system-account.public",sysPub)
 '''.replace('GRANTS',grant_text)
-        helper=helper.replace('\n}\nfunc extra()',old_actor+'\n}\nfunc extra()')
-        # Payload/extra-fixture validation uses its separate disposable broad
-        # role; the migration actor retains the exact limited old grant list.
-        helper=helper.replace('"/inputs/bootstrap.creds"','"/inputs/social.creds"')
-        payload_check=r'''
+    helper=helper.replace('\n}\nfunc extra()',old_actor+'\n}\nfunc extra()')
+    # Payload/extra-fixture validation uses its separate disposable broad
+    # role; the migration actor retains the exact limited old grant list.
+    helper=helper.replace('"/inputs/bootstrap.creds"','"/inputs/social.creds"')
+    seed_contract=r'''
+func seedContract() {
+ nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/social.creds"),nats.Timeout(2*time.Second),nats.NoReconnect());must(e);defer nc.Close()
+ js,e:=nc.JetStream();must(e)
+ raw,e:=os.ReadFile("/inputs/predecessor.json");must(e)
+ var baseline struct {ChatSubjects []string `json:"chat_subjects"`;RoleSubjects []string `json:"role_subjects"`}
+ must(json.Unmarshal(raw,&baseline));if len(baseline.ChatSubjects)!=14 || len(baseline.RoleSubjects)!=9 {panic("reviewed_predecessor_shape")}
+ chat,e:=js.StreamInfo("chat_events");must(e);chat.Config.Subjects=baseline.ChatSubjects
+ _,e=js.UpdateStream(&chat.Config);must(e)
+ chat,e=js.StreamInfo("chat_events");must(e);if !reflect.DeepEqual(chat.Config.Subjects,baseline.ChatSubjects) {panic("chat_predecessor_subjects")}
+ role,e:=js.StreamInfo("role_events");must(e);if !reflect.DeepEqual(role.Config.Subjects,baseline.RoleSubjects) {panic("role_predecessor_subjects")}
+ for _,record:=range []struct{stream,subject,id,payload string}{{"chat_events","chat.created","fixture-chat-created-9ae","nats-9ae-fixture-chat-created-v1"},{"role_events","role.created","fixture-role-created-9ae","nats-9ae-fixture-role-created-v1"}} {
+  message:=nats.NewMsg(record.subject);message.Header.Set(nats.MsgIdHdr,record.id);message.Data=[]byte(record.payload)
+  _,e=js.PublishMsg(message);must(e)
+ }
+ must(nc.Flush())
+}
+'''
+    helper=helper.replace('func extra()',seed_contract+'\nfunc extra()')
+    helper=helper.replace('func main() {','func main() { if len(os.Args)==2 && os.Args[1]=="seed-contract" {seedContract();return};')
+    payload_check=r'''
  raw,e:=os.ReadFile("/inputs/fixture.json");must(e)
  var snapshot struct {Records []struct {Subject string `json:"subject"`;Sequence uint64 `json:"sequence"`;Payload string `json:"payload_sha256"`;Headers string `json:"headers_sha256"`;Event string `json:"event_id"`} `json:"records"`}
  must(json.Unmarshal(raw,&snapshot));if len(snapshot.Records)!=3 {panic("known_record_count")}
@@ -255,9 +304,13 @@ def main():
   payload:=sha256.Sum256(message.Data);headers,e:=json.Marshal(message.Header);must(e);header:=sha256.Sum256(headers)
   if message.Subject!=record.Subject || message.Header.Get(nats.MsgIdHdr)!=record.Event || hex.EncodeToString(payload[:])!=record.Payload || hex.EncodeToString(header[:])!=record.Headers {panic("known_record_changed")}
  }
+ for _,record:=range []struct{stream,subject,id,payload,digest string}{{"chat_events","chat.created","fixture-chat-created-9ae","nats-9ae-fixture-chat-created-v1","dfe6e978552b85640f75370dbedda5ead2f1211c466ccee1ba761f8fe54cfe27"},{"role_events","role.created","fixture-role-created-9ae","nats-9ae-fixture-role-created-v1","3038d7d6ca69d5b69dcc1c9baee9a905972ccd4f2d77be7cbfe293cfc313a372"}} {
+  message,e:=js.GetMsg(record.stream,1);must(e);payload:=sha256.Sum256(message.Data)
+  if message.Subject!=record.subject || message.Header.Get(nats.MsgIdHdr)!=record.id || string(message.Data)!=record.payload || hex.EncodeToString(payload[:])!=record.digest {panic("baseline_record_changed")}
+ }
 '''
-        helper=helper.replace('for index,payload:=range []string',payload_check+'\n for index,payload:=range []string')
-        post=r'''
+    helper=helper.replace('for index,payload:=range []string',payload_check+'\n for index,payload:=range []string')
+    post=r'''
 func post(check bool) {
  nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/social.creds"),nats.Timeout(2*time.Second),nats.NoReconnect());must(e);defer nc.Close()
  js,e:=nc.JetStream();must(e)
@@ -265,35 +318,60 @@ func post(check bool) {
  _,e=js.Publish("rollout.extra",[]byte("known-post-release-record"));must(e)
 }
 '''
-        helper=helper.replace('func main() {',post+'\nfunc main() { if len(os.Args)==2 && os.Args[1]=="post" {post(false);return};if len(os.Args)==2 && os.Args[1]=="verify-post" {post(true);return};')
-        (bundle/'helper.go').write_text(helper)
-        env=dict(os.environ,GOOS='linux',GOARCH='amd64',CGO_ENABLED='0')
-        fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env)
-        fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env)
-        fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env)
-        records={n:base64.b64encode((bundle/n).read_bytes()).decode() for n in ('helper','kernel','bootstrap-renewer')}
-        names=('rollout_census.py','rollout_census_integration.py','nats_contract_actor.py','nats_contract_plan.py','nats_migration.py','preserve.py','native_store.py','bootstrap_auth.py','bootstrap_root.py','bootstrap_enrollment.py','bootstrap_renewal.py','guard.py')
-        for n in names:records[n]=base64.b64encode((Path(__file__).parent/n).read_bytes()).decode()
-        records['contract_fixture.py']=base64.b64encode(Path(__file__).read_bytes()).decode()
-        # Existing bounded outer fixture invokes this entry; it owns cleanup.
-        transport=(Path(__file__).parent/'rollout_census_integration.py').read_bytes().replace(b'inner(sys.argv[2])',b"__import__('contract_fixture').inner(sys.argv[2])")
-        transport=transport.replace(b"raise RuntimeError('owned_census_fixture_command_failed')",b"raise RuntimeError('owned_census_fixture_command_failed: '+ '\\n'.join(x for x in result.stderr.decode(errors='replace').splitlines()[-20:] if x.lstrip().startswith(('File ', 'AssertionError', 'TypeError', 'ValueError', 'KeyError', 'ContractError', 'Blocked', 'FIXTURE_NEW_DURABLE_INITIAL_FLOORS='))))")
-        records['rollout_census_integration.py']=base64.b64encode(transport).decode()
-        for n in ('docker_runtime.py','scenario.py','controller.py','commands.py','stage_runtime.py'):
-            records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
-        for role in ('realtime','notification','analytics-chat','search'):
-            n='testdata/deployed-bootstrap-20261004/'+role+'-bootstrap.sh';records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
-        for role in ('realtime','analytics-chat'):
-            n='deploy/templates/nats-'+role+'-bootstrap.yaml';records['source/'+n]=base64.b64encode((source/n).read_bytes()).decode()
-        script='import base64,pathlib,tempfile,sys,os,socket\nassert sys.platform=="linux" and os.getuid()==1000 and socket.gethostname()=="pmdebook"\n'
-        script+='with tempfile.TemporaryDirectory(prefix="voice-contract-fixture-") as td:\n bundle=pathlib.Path(td)\n'
-        script+=' for n,data in '+repr(records)+'.items():\n  p=bundle/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(data));p.chmod(0o755 if n in ("helper","kernel") else 0o644)\n'
-        script+=' bundle.chmod(0o755);sys.path.insert(0,str(bundle));import rollout_census_integration as f;f.remote_run(bundle)\n'
-        import subprocess
-        result=subprocess.run(['ssh','voice-staging','python3 -'],input=script.encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=180)
-        if result.returncode:
-            print(result.stdout.decode(),flush=True)
-            print('\n'.join(x for x in result.stderr.decode(errors='replace').splitlines()[-30:] if x.lstrip().startswith(('File ','AssertionError','TypeError','ValueError','KeyError','ContractError','Blocked','RuntimeError','FIXTURE_NEW_DURABLE_INITIAL_FLOORS='))),file=sys.stderr)
-            raise RuntimeError('owned_contract_fixture_failed')
-        print(result.stdout.decode())
+    helper=helper.replace('func main() {',post+'\nfunc main() { if len(os.Args)==2 && os.Args[1]=="post" {post(false);return};if len(os.Args)==2 && os.Args[1]=="verify-post" {post(true);return};')
+    (bundle/'helper.go').write_text(helper)
+    env=dict(os.environ,GOOS='linux',GOARCH='amd64',CGO_ENABLED='0')
+    fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env)
+    fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env)
+    fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env)
+    records={n:base64.b64encode((bundle/n).read_bytes()).decode() for n in ('helper','kernel','bootstrap-renewer')}
+    names=('rollout_census.py','rollout_census_integration.py','nats_contract_actor.py','nats_contract_plan.py','nats_migration.py','preserve.py','native_store.py','bootstrap_auth.py','bootstrap_root.py','bootstrap_enrollment.py','bootstrap_renewal.py','guard.py')
+    for n in names:records[n]=base64.b64encode((Path(__file__).parent/n).read_bytes()).decode()
+    records['nats-9ae-predecessor.json']=base64.b64encode((Path(__file__).parent/'testdata/nats-9ae-predecessor.json').read_bytes()).decode()
+    records['contract_fixture.py']=base64.b64encode(Path(__file__).read_bytes()).decode()
+    # Existing bounded outer fixture invokes this entry; it owns cleanup.
+    transport=(Path(__file__).parent/'rollout_census_integration.py').read_bytes().replace(b'inner(sys.argv[2])',b"__import__('contract_fixture').inner(sys.argv[2])")
+    records['rollout_census_integration.py']=base64.b64encode(transport).decode()
+    for n in ('docker_runtime.py','scenario.py','controller.py','commands.py','stage_runtime.py'):
+        records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
+    for role in ('realtime','notification','analytics-chat','search'):
+        n='testdata/deployed-bootstrap-20261004/'+role+'-bootstrap.sh';records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
+    for role in ('realtime','analytics-chat'):
+        n='deploy/templates/nats-'+role+'-bootstrap.yaml';records['source/'+n]=base64.b64encode((source/n).read_bytes()).decode()
+    for name, encoded in records.items():
+        path=bundle/name
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_bytes(base64.b64decode(encoded))
+        path.chmod(0o755 if name in ('helper','kernel','bootstrap-renewer') else 0o644)
+def run_fixture(transport, bundle, environ=None):
+    env=os.environ if environ is None else environ
+    if transport=='github-hosted':
+        if select_transport(['--github-hosted'],env,'linux')!='github-hosted':
+            raise SystemExit('github_hosted_fixture_runner_required')
+        fixture.remote_run(bundle,transport='github-hosted')
+        return
+    if transport!='pmdebook':
+        raise SystemExit('owned_contract_fixture_transport_invalid')
+    records={path.relative_to(bundle).as_posix():base64.b64encode(path.read_bytes()).decode()
+             for path in bundle.rglob('*') if path.is_file()}
+    script='import base64,pathlib,tempfile,sys,os,socket\nassert sys.platform=="linux" and os.getuid()==1000 and socket.gethostname()=="pmdebook"\n'
+    script+='with tempfile.TemporaryDirectory(prefix="voice-contract-fixture-") as td:\n bundle=pathlib.Path(td)\n'
+    script+=' for n,data in '+repr(records)+'.items():\n  p=bundle/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(data));p.chmod(0o755 if n in ("helper","kernel","bootstrap-renewer") else 0o644)\n'
+    script+=' bundle.chmod(0o755);sys.path.insert(0,str(bundle));import rollout_census_integration as f;f.remote_run(bundle,transport="pmdebook")\n'
+    result=subprocess.run(['ssh','voice-staging','python3 -'],input=script.encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=180)
+    if result.returncode:
+        print(result.stdout.decode(),flush=True)
+        print('\n'.join(x for x in result.stderr.decode(errors='replace').splitlines()[-30:] if x.lstrip().startswith(('File ','AssertionError','TypeError','ValueError','KeyError','ContractError','Blocked','RuntimeError','FIXTURE_NEW_DURABLE_INITIAL_FLOORS='))),file=sys.stderr)
+        raise RuntimeError('owned_contract_fixture_failed')
+    print(result.stdout.decode())
+
+
+def main(argv=None):
+    argv=sys.argv[1:] if argv is None else argv
+    transport=select_transport(argv)
+    source=Path(__file__).resolve().parents[3]
+    with tempfile.TemporaryDirectory(prefix='voice-contract-build-') as td:
+        bundle=Path(td)
+        build_fixture_records(bundle)
+        run_fixture(transport,bundle)
 if __name__=='__main__':main()
