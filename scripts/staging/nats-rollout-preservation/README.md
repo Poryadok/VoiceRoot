@@ -171,11 +171,55 @@ is validated separately and bound into the new plan. This source change does
 not issue credentials or rewrite installed enrollment or recovery receipts.
 
 The already-installed idle helper requires its own separately reviewed,
-versioned predecessor transition. Do not rerun `--upgrade-idle` against an
-already-idle helper: that command accepts only its recorded V15 predecessor.
-Preserve all failed journals and enrollment artifacts while preparing any
-future operator transition; this change is not evidence that the live actor or
-broker was renewed.
+versioned predecessor transition. First compare the installed captured helper
+binding and manifest with the reviewed candidate; a release label or prior
+successful rollout does not identify the installed helper. The existing
+`--upgrade-idle` route remains limited to its exact V15 predecessor. The new
+`--upgrade-idle-ceccb-v1` route accepts only the reviewed installed binding
+`ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032` and writes
+its separate `upgrade-idle-ceccb-v1.json` receipt and `code-ceccb-preserved`
+backup. Both routes retain the same idle, closure, marker, queue, journal,
+policy, recovery-key, witness and history checks; neither permits a changed
+predecessor or replacement of earlier evidence.
+
+The prepare associated with d4 run `38274239522` is a hard stop until its
+exact journal, matching checkpoint and response are accepted by the existing
+operation-closure checks. Use the `Record exact operation status after failure`
+step in [`staging-deploy.yml`](../../../.github/workflows/staging-deploy.yml)
+when it has an operation ID; it records the finite summary fields `operation`,
+`phase`, `status`, `fence_status` and `error`. Correlate these with the exact
+checkpoint and request journal, including `prepare_stage.name`,
+`prepare_stage.status` and `prepare_error`. A `COMPLETE` journal by itself does
+not prove that the run has a valid terminal closure. If the workflow did not
+record an operation ID/status, associate only an existing
+`installed/journal/<nonce>.json` whose request has `action=prepare` and exact
+`run_id` and `source_sha` matching that workflow run and reviewed source. Its
+paired response is `installed/responses/<nonce>.json`; its checkpoint must name
+the same operation. Report only the nonce prefix, journal `phase`,
+`prepare_stage.name/status`, `prepare_error`, response `status/error`, and—when
+present—checkpoint `phase/status/fence_status`. If there is no unique exact
+match, the association remains unknown: no helper transition or deployment
+may proceed, and no ID should be inferred from unbounded logs. Preserve its
+journal, response, checkpoint and enrollment bytes; do not delete, rewrite,
+re-enroll or reset them to make admission pass.
+The helper transition does not renew bootstrap credentials or prove
+service-actor grants. Recheck the same actor/account/seed identity and exact v3
+grant scope through the existing approved authority path; never broaden
+wildcards or rotate keys as a workaround.
+
+Keep historical and current proof receipts distinct. The successful historical
+9ae full/rollback/full evidence remains valid for that release, but does not
+prove that a later helper or actor grant accepts the v3 contract. The current
+hosted native fixture separately passed with seven preserved records, 45 prior
+consumers and two declared consumers created; its fresh rollback retained eight
+records. This is fixture evidence, not a live staging receipt. Before any
+ordinary release, require current source CI and the native preservation gate,
+then use a new non-reset operation with a fresh populated cut, authenticated
+encrypted backup and complete readback, isolated restore, paused apply, native
+byte verification and full-account census. A rollback must take a fresh cut
+after release and preserve post-release records. The fixture is not staging
+acceptance; only actual staging release and fresh rollback receipts prove those
+gates.
 
 Service-actor authorization remains a separate prerequisite. Re-prove the
 current Role publish grant for `role.voice_policy_invalidated`, the Space

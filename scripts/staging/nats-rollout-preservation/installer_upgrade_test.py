@@ -5,6 +5,80 @@ from unittest.mock import patch
 import installer
 
 class Tests(unittest.TestCase):
+    def test_ceccb_idle_transition_uses_exact_receipt_stage_backup_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as td:
+            source,installed=self.fixture(Path(td))
+            prior=b'{"schema":"voice-nats-code-upgrade-idle","from":"v15","to":"earlier"}'
+            (installed/'upgrade-idle.json').write_bytes(prior)
+            def binding(path):
+                return installer.CECCB_INSTALLED_BINDING if (Path(path)/'binding').read_text()=='old' else 'd'*64
+            with patch.object(installer,'binding_sha',side_effect=binding),patch.object(installer.os,'chown'),\
+                patch.object(installer,'private_json',side_effect=lambda p:json.loads(Path(p).read_text())):
+                installer._upgrade_code(source,installed,1000,installer.CECCB_INSTALLED_BINDING,'idle-ceccb-v1','ceccb')
+                installer._upgrade_code(source,installed,1000,installer.CECCB_INSTALLED_BINDING,'idle-ceccb-v1','ceccb')
+            self.assertEqual((installed/'code/binding').read_text(),'new')
+            self.assertEqual((installed/'code-ceccb-preserved/binding').read_text(),'old')
+            self.assertEqual((installed/'upgrade-idle.json').read_bytes(),prior)
+            self.assertEqual(json.loads((installed/'upgrade-idle-ceccb-v1.json').read_bytes()),
+                {'schema':'voice-nats-code-upgrade-idle-ceccb-v1','from':installer.CECCB_INSTALLED_BINDING,'to':'d'*64})
+            self.assertFalse((installed/'code-idle-ceccb-v1-staged').exists())
+            self.assertEqual((installed/'policy.json').read_bytes(),b'fixture-policy')
+            self.assertEqual((installed/'recovery/recovery-key.pem').read_bytes(),b'fixture-private-key')
+
+    def test_ceccb_idle_transition_refuses_wrong_predecessor_receipt_stage_and_backup(self):
+        with tempfile.TemporaryDirectory() as td:
+            source,installed=self.fixture(Path(td))
+            with patch.object(installer,'binding_sha',return_value='c'*64),patch.object(installer.os,'rename') as rename:
+                with self.assertRaisesRegex(installer.Blocked,'predecessor_unapproved'):
+                    installer._upgrade_code(source,installed,1000,'wrong','idle-ceccb-v1','ceccb')
+            rename.assert_not_called()
+        for conflict in ('receipt','stage','backup','target'):
+            with self.subTest(conflict=conflict),tempfile.TemporaryDirectory() as td:
+                source,installed=self.fixture(Path(td))
+                def binding(path):
+                    marker=(Path(path)/'binding').read_text()
+                    return installer.CECCB_INSTALLED_BINDING if marker=='old' else 'd'*64 if marker=='new' else 'f'*64
+                receipt=installed/'upgrade-idle-ceccb-v1.json'
+                record={'schema':'voice-nats-code-upgrade-idle-ceccb-v1','from':installer.CECCB_INSTALLED_BINDING,'to':'d'*64}
+                if conflict=='receipt':record['from']='wrong'
+                receipt.write_text(json.dumps(record))
+                if conflict=='stage':
+                    stage=installed/'code-idle-ceccb-v1-staged';stage.mkdir();(stage/'binding').write_text('bad')
+                if conflict=='backup':
+                    (installed/'code').rename(installed/'unused')
+                    backup=installed/'code-ceccb-preserved';backup.mkdir();(backup/'binding').write_text('bad')
+                if conflict=='target':
+                    source.joinpath('binding').write_text('changed')
+                    (installed/'code').rename(installed/'code-ceccb-preserved')
+                    stage=installed/'code-idle-ceccb-v1-staged';stage.mkdir();(stage/'binding').write_text('new')
+                with patch.object(installer,'binding_sha',side_effect=binding),patch.object(installer.os,'rename') as rename,\
+                    patch.object(installer,'private_json',side_effect=lambda p:json.loads(Path(p).read_text())):
+                    label={'receipt':'receipt_conflict','stage':'staged_unapproved','backup':'backup_conflict','target':'receipt_conflict'}[conflict]
+                    with self.assertRaisesRegex(installer.Blocked,label):
+                        installer._upgrade_code(source,installed,1000,installer.CECCB_INSTALLED_BINDING,'idle-ceccb-v1','ceccb')
+                rename.assert_not_called()
+
+    def test_ceccb_idle_transition_crash_between_renames_resumes_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as td:
+            source,installed=self.fixture(Path(td));rename=installer.os.rename
+            def binding(path):
+                marker=(Path(path)/'binding').read_text()
+                return installer.CECCB_INSTALLED_BINDING if marker=='old' else 'd'*64
+            def crash(old,new):
+                if Path(old).name=='code-idle-ceccb-v1-staged':raise RuntimeError('fixture-process-interrupted')
+                return rename(old,new)
+            args=(source,installed,1000,installer.CECCB_INSTALLED_BINDING,'idle-ceccb-v1','ceccb')
+            with patch.object(installer,'binding_sha',side_effect=binding),patch.object(installer.os,'chown'),\
+                patch.object(installer,'private_json',side_effect=lambda p:json.loads(Path(p).read_text())):
+                with patch.object(installer.os,'rename',side_effect=crash):
+                    with self.assertRaisesRegex(RuntimeError,'process-interrupted'):installer._upgrade_code(*args)
+                self.assertFalse((installed/'code').exists())
+                self.assertEqual((installed/'code-ceccb-preserved/binding').read_text(),'old')
+                self.assertEqual((installed/'code-idle-ceccb-v1-staged/binding').read_text(),'new')
+                installer._upgrade_code(*args)
+            self.assertEqual((installed/'code/binding').read_text(),'new')
+            self.assertEqual((installed/'code-ceccb-preserved/binding').read_text(),'old')
+
     def test_v13_swap_preserves_v12_code_and_receipt_bytes_and_is_idempotent(self):
         import expired_recovery
         with tempfile.TemporaryDirectory() as td:
