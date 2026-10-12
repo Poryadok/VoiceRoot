@@ -373,6 +373,16 @@ class ComposeTests(unittest.TestCase):
         self.assertIn(str(self.merged["matchmaking"].get("user")), ("0", "0:0", "root"),
                       "all generated fixture files are root-owned mode 0600 in Linux CI")
 
+    def test_delivery_ack_has_authoritative_messaging_reader(self):
+        for name, services in (("base", self.base), ("phase0", self.merged),
+                               ("media", self.media_merged)):
+            with self.subTest(compose=name):
+                realtime = services["realtime"]
+                self.assertEqual(realtime["environment"]["REALTIME_MESSAGING_GRPC_ADDR"],
+                                 "messaging:9090")
+                self.assertEqual(realtime["depends_on"]["messaging"]["condition"],
+                                 "service_healthy")
+
     def test_bounded_startup_diagnostics_only_name_declared_services(self):
         path = ROOT / "scripts/ci/compose-file-attachment-restart-proof.sh"
         text = path.read_text()

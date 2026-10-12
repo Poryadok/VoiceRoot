@@ -398,6 +398,12 @@ key endpoint outage. Invalid keys still deny access. Background refresh, the
 issuer-wide unknown-key cooldown, hard expiry, replay prevention and Auth epoch
 checks retain the shared Phase-0 rules.
 
+Account-wide Voice reservation and transfer checks take the caller account and
+profile from the verified delegated principal on this listener, then compare
+against User's profile ownership. Legacy identity headers cannot override or
+repair an invalid delegated identity. The existing legacy call listener retains
+its metadata-based identity path when no verified principal is present.
+
 **Public surface.** Gateway exposes Space room actions under
 `/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,
 `POST /leave`, `GET /roster`, `POST /move` (self; destination `voice_room_id`),
