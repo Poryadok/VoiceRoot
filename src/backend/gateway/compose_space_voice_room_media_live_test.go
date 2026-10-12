@@ -69,8 +69,8 @@ func TestComposeSpaceVoiceRoomBidirectionalAudio_live(t *testing.T) {
 }
 
 type composeSpaceVoiceRoomJoin struct {
-	RoomID          string `json:"roomId"`
-	LivekitRoomName string `json:"livekitRoomName"`
+	RoomID          string `json:"room_id"`
+	LivekitRoomName string `json:"livekit_room_name"`
 }
 
 func joinComposeSpaceVoiceRoom(t *testing.T, client *http.Client, base, accessToken, voiceRoomID, spaceID string) composeSpaceVoiceRoomJoin {
@@ -95,7 +95,7 @@ func joinComposeSpaceVoiceRoom(t *testing.T, client *http.Client, base, accessTo
 			"Space voice join failed: code=%q message=%q error_decode=%v", failure.Code, failure.Message, decodeErr)
 	}
 	var result struct {
-		VoiceSession composeSpaceVoiceRoomJoin `json:"voiceSession"`
+		VoiceSession composeSpaceVoiceRoomJoin `json:"voice_session"`
 	}
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
