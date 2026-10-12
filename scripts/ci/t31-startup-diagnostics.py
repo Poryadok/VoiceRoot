@@ -48,7 +48,18 @@ COMMAND_TIMEOUT_SECONDS = 15.0
 READ_CHUNK_BYTES = 4096
 
 _SERVICE_PREFIX = re.compile(r"^\s*([A-Za-z0-9_-]+)\s+\|\s?(.*)$")
-_ERROR_MARKER = re.compile(r"(?:\blevel\s*[=:]\s*error\b|\bERROR\b|\bFATAL\b|\bPANIC\b|\bSQLSTATE\b|\bexception\b)", re.IGNORECASE)
+VOICE_STARTUP_PREFIXES = (
+    ("Space media admission requires the current Auth session-floor checker", "space_media_auth_checker_missing"),
+    ("Space media PostgreSQL admission schema:", "space_media_postgres_admission_schema"),
+    ("Space media initial reconciliation:", "space_media_initial_reconciliation"),
+    ("Space media invalidation consumer startup:", "space_media_invalidation_consumer_startup"),
+)
+_ERROR_MARKER = re.compile(
+    r"(?:\blevel\s*[=:]\s*error\b|\bERROR\b|\bFATAL\b|\bPANIC\b|\bSQLSTATE\b|\bexception\b|"
+    + "|".join(re.escape(prefix) for prefix, _ in VOICE_STARTUP_PREFIXES)
+    + r")",
+    re.IGNORECASE,
+)
 _ERROR_CODE = re.compile(r"\berror_code\s*[=:]\s*([A-Z0-9_]{1,64})\b")
 _SQLSTATE = re.compile(r"\bSQLSTATE\s*[=: ]\s*['\"]?([A-Z0-9]{5})\b", re.IGNORECASE)
 _EXCEPTION = re.compile(r"\b([A-Za-z][A-Za-z0-9]*(?:Exception|Error))\b")
@@ -73,7 +84,7 @@ def _base_record(startup_status: int) -> dict:
 def _error_record(result: str = "unknown") -> dict:
     return {
         "result": result, "service": "unknown", "stage": "unknown",
-        "error_code": "unknown", "exception_class": "unknown",
+        "error_code": "unknown", "startup_category": "unknown", "exception_class": "unknown",
         "sqlstate": "unknown", "source_basename": "unknown", "source_line": None,
         "selection": "unknown", "causal_order": "not_established",
     }
@@ -298,6 +309,10 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             continue
         code_match = _ERROR_CODE.search(message)
         code = code_match.group(1) if code_match and code_match.group(1) in ERROR_CODES else None
+        startup_category = next(
+            (category for prefix, category in VOICE_STARTUP_PREFIXES if prefix in message),
+            "unknown",
+        )
         state_match = _SQLSTATE.search(message)
         sqlstate = state_match.group(1).upper() if state_match and state_match.group(1).upper() in SQLSTATES else None
         exception_match = _EXCEPTION.search(message)
@@ -308,7 +323,8 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
         first_error = {
             "result": "observed_in_bounded_window", "service": service,
             "stage": _stage_for(message, sqlstate, exception),
-            "error_code": code or "unknown", "exception_class": exception or "unknown",
+            "error_code": code or "unknown", "startup_category": startup_category,
+            "exception_class": exception or "unknown",
             "sqlstate": sqlstate or "unknown", "source_basename": source or "unknown",
             "source_line": source_line, "selection": "first_marker_in_bounded_head",
             "causal_order": "not_established",
@@ -353,18 +369,19 @@ def _write_record(path: Path, record: dict) -> bool:
         return False
 
 
-def build_diagnostics(compose: list[str], startup_status: int) -> dict:
+def build_diagnostics(compose: list[str], startup_status: int, service: str | None = None) -> dict:
     record = _base_record(startup_status)
-    if not compose or compose[0] != "docker":
+    if not compose or compose[0] != "docker" or (service is not None and service not in SERVICE_SET):
         record["status_collection"]["result"] = "invalid_invocation"
         record["log_collection"]["result"] = "invalid_invocation"
         return record
 
-    ps_bytes, ps_result, _ = _bounded_command(compose + ["ps", "--all", "--format", "json"], COMMAND_TIMEOUT_SECONDS, MAX_PS_BYTES)
+    service_args = [service] if service is not None else []
+    ps_bytes, ps_result, _ = _bounded_command(compose + ["ps", "--all", "--format", "json", *service_args], COMMAND_TIMEOUT_SECONDS, MAX_PS_BYTES)
     status, failed_services = sanitize_status(ps_bytes, ps_result)
     record["status_collection"] = status
 
-    requested = failed_services or SERVICES
+    requested = (service,) if service is not None else (failed_services or SERVICES)
     log_bytes, log_result, _ = _bounded_command(
         compose + ["logs", "--no-color", "--timestamps", *requested],
         COMMAND_TIMEOUT_SECONDS,
@@ -380,12 +397,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--output", required=True)
     parser.add_argument("--startup-status", type=int, required=True)
+    parser.add_argument("--service", choices=SERVICES)
     parser.add_argument("--compose", nargs=argparse.REMAINDER, required=True)
     args = parser.parse_args(argv)
     compose = args.compose[1:] if args.compose[:1] == ["--"] else args.compose
     output = Path(args.output)
     try:
-        record = build_diagnostics(compose, args.startup_status)
+        record = build_diagnostics(compose, args.startup_status, args.service)
     except Exception:
         record = _base_record(args.startup_status)
         record["status_collection"]["result"] = "collector_error"

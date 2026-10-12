@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -410,6 +411,7 @@ class ComposeTests(unittest.TestCase):
         self.assertNotIn("/tls/", artifact_step)
         self.assertIn('startup_status=$?', workflow)
         self.assertIn('python3 scripts/ci/t31-startup-diagnostics.py', workflow)
+        self.assertIn('--service voice', workflow)
         self.assertIn('|| true', workflow)
         self.assertIn('exit "$startup_status"', workflow)
         self.assertNotIn("logs --no-color --timestamps", workflow)
@@ -430,13 +432,50 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(first["sqlstate"], "08006")
         self.assertEqual(first["source_basename"], "main.go")
         self.assertEqual(first["source_line"], 42)
+        self.assertEqual(first["startup_category"], "unknown")
         self.assertEqual(first["selection"], "first_marker_in_bounded_head")
         self.assertEqual(first["causal_order"], "not_established")
         self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
         self.assertEqual(set(first), {
-            "result", "service", "stage", "error_code", "exception_class", "sqlstate",
+            "result", "service", "stage", "error_code", "startup_category", "exception_class", "sqlstate",
             "source_basename", "source_line", "selection", "causal_order",
         })
+
+    def test_t31_voice_startup_prefix_emits_only_allowlisted_category(self):
+        secret = "private-dsn-sentinel"
+        raw = (
+            "voice | 2026-10-12T12:34:56.123456789Z 2026/10/12 12:34:56 "
+            "Space media initial reconciliation: " + secret + "\n"
+        ).encode("utf-8")
+        summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+        self.assertEqual(summary["services_seen"], ["voice"])
+        self.assertEqual(first["result"], "observed_in_bounded_window")
+        self.assertEqual(first["startup_category"], "space_media_initial_reconciliation")
+        self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
+
+    def test_startup_diagnostics_can_scope_status_and_logs_to_voice(self):
+        status = json.dumps([{
+            "Service": "voice", "State": "exited", "Health": "none", "ExitCode": 1,
+        }]).encode("utf-8")
+        logs = b"voice | level=error error_code=UNAVAILABLE\n"
+        calls = []
+
+        def bounded(command, _timeout, _limit):
+            calls.append(command)
+            return (status if "ps" in command else logs, "complete", 0)
+
+        with patch.object(startup_diagnostics, "_bounded_command", side_effect=bounded):
+            record = startup_diagnostics.build_diagnostics(
+                ["docker", "compose", "-f", "docker-compose.yml"], 1, "voice"
+            )
+
+        self.assertEqual(calls[0][-1], "voice")
+        self.assertEqual(calls[1][-1], "voice")
+        self.assertEqual(record["status_collection"]["services"], [
+            {"service": "voice", "state": "exited", "health": "none", "exit_code": 1},
+        ])
+        self.assertEqual(record["log_collection"]["services_requested"], ["voice"])
+        self.assertEqual(record["first_error"]["service"], "voice")
 
     def test_t31_first_emitted_window_does_not_claim_later_tail_cause(self):
         early = b"voice | level=info service_starting\n"
@@ -768,7 +807,7 @@ class ComposeTests(unittest.TestCase):
                              f"unexpected {service} media-overlay environment additions")
         auth_env = self.media_merged["auth"]["environment"]
         self.assertEqual(auth_env["S2S_JWKS_URLS_JSON"],
-                         '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}')
+                         '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}')
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_GRPC_PORT"], "9092")
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         gateway_env = self.media_merged["gateway"]["environment"]
