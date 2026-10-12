@@ -5,8 +5,10 @@ from pathlib import Path
 from nats_contract_plan import ContractError,DECLARATIONS
 _STREAMS=tuple(dict.fromkeys(stream for stream,_ in DECLARATIONS))
 _CONSUMERS={(stream,config['durable_name']):config for stream,config in DECLARATIONS}
+_CONSUMER_OBJECTS=frozenset(stream+'/'+durable for stream,durable in _CONSUMERS)
 INFO={name:'$JS.API.STREAM.INFO.'+name for name in _STREAMS}
 INFO.update({stream+'/'+durable:'$JS.API.CONSUMER.INFO.'+stream+'.'+durable for stream,durable in _CONSUMERS})
+_CONSUMER_INFO_APIS=frozenset(INFO[obj] for obj in _CONSUMER_OBJECTS)
 WRITE={'$JS.API.STREAM.UPDATE.'+name:name for name in ('chat_events','social_events','role_events')}
 WRITE.update({'$JS.API.CONSUMER.CREATE.'+stream+'.'+durable:stream+'/'+durable for stream,durable in _CONSUMERS})
 def fail():raise ContractError('nats_contract_actor_refused')
@@ -58,7 +60,7 @@ class Actor:
                     and type(error['err_code']) is int and error['err_code'] in (10037,10059)
                     and isinstance(error['description'],str) and 0<len(error['description'])<=256):return None
                 fail()
-            if missing and api in {INFO[key] for key in _CONSUMERS} and row['error'].get('err_code')==10014:return None
+            if missing and api in _CONSUMER_INFO_APIS and row['error'].get('err_code')==10014:return None
             if missing and api.startswith('$JS.API.STREAM.MSG.GET.') and row['error'].get('err_code')==10037:return None
             fail()
         return row
@@ -90,7 +92,7 @@ class Actor:
         return row['message']
     def info_config(self,obj):
         if obj not in INFO:fail()
-        row=self._request(INFO[obj],None,missing=obj in _CONSUMERS)
+        row=self._request(INFO[obj],None,missing=obj in _CONSUMER_OBJECTS)
         if row is None:return None
         if not isinstance(row.get('config'),dict):fail()
         if '/' not in obj:

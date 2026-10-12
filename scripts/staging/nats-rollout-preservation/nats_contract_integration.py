@@ -84,7 +84,13 @@ def inner(base):
             or len(set(baseline.get('chat_subjects',[])))!=14
             or len(set(baseline.get('role_subjects',[])))!=9
             or set(baseline['chat_subjects'])!=CHAT_SUBJECTS_14
-            or set(baseline['role_subjects'])!=ROLE_SUBJECTS_9):
+            or set(baseline['role_subjects'])!=ROLE_SUBJECTS_9
+            or baseline.get('social_subjects')!=['social.friend_request','social.friend_accepted','social.friend_removed','social.user_blocked','social.contacts_synced']
+            or baseline.get('social_max_age_ns')!=604800000000000
+            or baseline.get('social_duplicate_window_ns')!=86400000000000
+            or baseline.get('friend_removed_consumer')!={'stream':'social_events','name':'rt_realtime1_friend_removed',
+                'filter_subject':'social.friend_removed','deliver_subject':'_INBOX.voice.realtime1.friend_removed',
+                'deliver_policy':'new','ack_policy':'explicit'}):
         raise RuntimeError('reviewed_nats_predecessor_fixture_invalid')
     shutil.copyfile('/bundle/nats-9ae-predecessor.json',base/'inputs/predecessor.json')
     os.chmod(base/'inputs/predecessor.json',0o440);os.chown(base/'inputs/predecessor.json',0,65532)
@@ -125,8 +131,17 @@ def inner(base):
         runtime.run(['start',precut_verifier]);assert runtime.run(['wait',precut_verifier])=='0'
         account=(base/'inputs/account.public').read_text().strip()
         before=census(runtime,broker,account);assert sum(s['state']['messages'] for s in before['streams'])==7
+        if len(before['consumers'])!=45:raise RuntimeError('reviewed_predecessor_consumer_count_mismatch')
         raw=runtime.monitor_jsz(broker);details=next(a for a in raw['account_details'] if a['id']==account)['stream_detail']
         infos={s['name']:{'config':s['config'],'state':s['state']} for s in details}
+        existing_actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,lambda:None)
+        existing_consumers={}
+        for stream,declaration in DECLARATIONS:
+            durable=declaration['durable_name'];obj=stream+'/'+durable
+            config=existing_actor.info_config(obj)
+            if config is not None:existing_consumers[(stream,durable)]={'config':config}
+        if set(existing_consumers)!={('social_events','rt_realtime1_friend_removed')}:
+            raise RuntimeError('reviewed_predecessor_consumer_set_mismatch')
         runtime.stop(broker)
         assert not runtime.inspect(broker)['State']['Running']
         native=archive_closed_store(store,base/'before.tar')
@@ -148,8 +163,15 @@ def inner(base):
             assert len(normalized)>len(declaration)
             normalized_consumers[(stream,durable)]=normalized
         runtime.stop(normalizer)
-        plan=compile_plan('/source',infos,{},normalized_consumers)
-        assert len(plan['actions'])==6
+        plan=compile_plan('/source',infos,existing_consumers,normalized_consumers)
+        expected_actions={
+            '$JS.API.STREAM.UPDATE.chat_events',
+            '$JS.API.STREAM.UPDATE.role_events',
+            '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
+            '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',
+        }
+        if {action['api'] for action in plan['actions']}!=expected_actions:
+            raise RuntimeError('v3_migration_delta_unexpected')
         from nats_contract_plan import digest
         enrollment={'fixture_authenticated_existing_actor':auth}
         state={'operation':operation,'events':[],'custody':{'verified':True,'scope':'same-host-fixture-only'},
@@ -218,6 +240,8 @@ def inner(base):
         assert any(e['kind']=='nats_contract_mutation_issued' for e in state['events'])
         migration=apply_contract(base,state,Stage(),state['events'].append)
         assert migration['verified'] and migration['old_record_files_verified']
+        if migration['proof']['old_consumers_preserved']!=45 or migration['proof']['created_consumers']!=2:
+            raise RuntimeError('v3_consumer_census_unexpected')
         postproof=verify_post_apply(runtime,store,migration['cut'],fenced)
         assert postproof['native_files_verified'] and postproof['census_verified']
         proof=migration['proof'];events=state['events']
@@ -379,12 +403,28 @@ func seedContract() {
  nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/social.creds"),nats.Timeout(2*time.Second),nats.NoReconnect());must(e);defer nc.Close()
  js,e:=nc.JetStream();must(e)
  raw,e:=os.ReadFile("/inputs/predecessor.json");must(e)
- var baseline struct {ChatSubjects []string `json:"chat_subjects"`;RoleSubjects []string `json:"role_subjects"`}
- must(json.Unmarshal(raw,&baseline));if len(baseline.ChatSubjects)!=14 || len(baseline.RoleSubjects)!=9 {panic("reviewed_predecessor_shape")}
- chat,e:=js.StreamInfo("chat_events");must(e);chat.Config.Subjects=baseline.ChatSubjects
- _,e=js.UpdateStream(&chat.Config);must(e)
- chat,e=js.StreamInfo("chat_events");must(e);if !reflect.DeepEqual(chat.Config.Subjects,baseline.ChatSubjects) {panic("chat_predecessor_subjects")}
- role,e:=js.StreamInfo("role_events");must(e);if !reflect.DeepEqual(role.Config.Subjects,baseline.RoleSubjects) {panic("role_predecessor_subjects")}
+  var baseline struct {
+   ChatSubjects []string `json:"chat_subjects"`; RoleSubjects []string `json:"role_subjects"`
+   SocialSubjects []string `json:"social_subjects"`; SocialMaxAge int64 `json:"social_max_age_ns"`
+   SocialDuplicateWindow int64 `json:"social_duplicate_window_ns"`
+   FriendRemovedConsumer struct {Stream string `json:"stream"`; Name string `json:"name"`; FilterSubject string `json:"filter_subject"`; DeliverSubject string `json:"deliver_subject"`; DeliverPolicy string `json:"deliver_policy"`; AckPolicy string `json:"ack_policy"`} `json:"friend_removed_consumer"`
+  }
+  must(json.Unmarshal(raw,&baseline));if len(baseline.ChatSubjects)!=14 || len(baseline.RoleSubjects)!=9 || len(baseline.SocialSubjects)!=5 || baseline.SocialMaxAge!=604800000000000 || baseline.SocialDuplicateWindow!=86400000000000 {panic("reviewed_predecessor_shape")}
+  chat,e:=js.StreamInfo("chat_events");must(e);chat.Config.Subjects=baseline.ChatSubjects
+  _,e=js.UpdateStream(&chat.Config);must(e)
+  chat,e=js.StreamInfo("chat_events");must(e);if !reflect.DeepEqual(chat.Config.Subjects,baseline.ChatSubjects) {panic("chat_predecessor_subjects")}
+  role,e:=js.StreamInfo("role_events");must(e);if !reflect.DeepEqual(role.Config.Subjects,baseline.RoleSubjects) {panic("role_predecessor_subjects")}
+  social,e:=js.StreamInfo("social_events");must(e)
+  if social.Config.MaxAge!=time.Duration(baseline.SocialMaxAge) || !reflect.DeepEqual(social.Config.Subjects,baseline.SocialSubjects) {panic("social_predecessor_source_mismatch")}
+  social.Config.Duplicates=time.Duration(baseline.SocialDuplicateWindow)
+  _,e=js.UpdateStream(&social.Config);must(e)
+  social,e=js.StreamInfo("social_events");must(e)
+  if social.Config.MaxAge!=time.Duration(baseline.SocialMaxAge) || social.Config.Duplicates!=time.Duration(baseline.SocialDuplicateWindow) || !reflect.DeepEqual(social.Config.Subjects,baseline.SocialSubjects) {panic("social_predecessor_config")}
+  expected:=baseline.FriendRemovedConsumer
+  if expected.Stream!="social_events" || expected.Name!="rt_realtime1_friend_removed" || expected.FilterSubject!="social.friend_removed" || expected.DeliverSubject!="_INBOX.voice.realtime1.friend_removed" || expected.DeliverPolicy!="new" || expected.AckPolicy!="explicit" {panic("friend_removed_predecessor_source_mismatch")}
+  _,e=js.AddConsumer(expected.Stream,&nats.ConsumerConfig{Durable:expected.Name,FilterSubject:expected.FilterSubject,DeliverSubject:expected.DeliverSubject,DeliverPolicy:nats.DeliverNewPolicy,AckPolicy:nats.AckExplicitPolicy});must(e)
+  consumer,e:=js.ConsumerInfo(expected.Stream,expected.Name);must(e)
+  if consumer.Config.Durable!=expected.Name || consumer.Config.FilterSubject!=expected.FilterSubject || consumer.Config.DeliverSubject!=expected.DeliverSubject || consumer.Config.DeliverPolicy!=nats.DeliverNewPolicy || consumer.Config.AckPolicy!=nats.AckExplicitPolicy {panic("friend_removed_predecessor_consumer")}
  for _,record:=range []struct{stream,subject,id,payload string}{{"chat_events","chat.created","fixture-chat-created-9ae","nats-9ae-fixture-chat-created-v1"},{"role_events","role.created","fixture-role-created-9ae","nats-9ae-fixture-role-created-v1"}} {
   message:=nats.NewMsg(record.subject);message.Header.Set(nats.MsgIdHdr,record.id);message.Data=[]byte(record.payload)
   _,e=js.PublishMsg(message);must(e)

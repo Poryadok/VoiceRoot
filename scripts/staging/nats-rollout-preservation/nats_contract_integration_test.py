@@ -72,7 +72,7 @@ class HostedTransportTests(unittest.TestCase):
         remote.assert_called_once_with(Path('/synthetic-bundle'), transport='github-hosted')
         ssh.assert_not_called()
 
-    def test_predecessor_fixture_is_the_reviewed_9ae_chat14_role9_contract(self):
+    def test_predecessor_fixture_is_the_reviewed_9ae_stream_and_consumer_contract(self):
         from nats_contract_plan import CHAT_SUBJECTS_14, ROLE_SUBJECTS_9
 
         path = Path(__file__).parent / 'testdata/nats-9ae-predecessor.json'
@@ -85,6 +85,16 @@ class HostedTransportTests(unittest.TestCase):
         self.assertEqual(len(set(baseline['role_subjects'])), 9)
         self.assertEqual(len(baseline['chat_subjects']), 14)
         self.assertEqual(len(baseline['role_subjects']), 9)
+        self.assertEqual(baseline['social_subjects'], [
+            'social.friend_request', 'social.friend_accepted', 'social.friend_removed',
+            'social.user_blocked', 'social.contacts_synced'])
+        self.assertEqual(baseline['social_max_age_ns'], 604800000000000)
+        self.assertEqual(baseline['social_duplicate_window_ns'], 86400000000000)
+        self.assertEqual(baseline['friend_removed_consumer'], {
+            'stream': 'social_events', 'name': 'rt_realtime1_friend_removed',
+            'filter_subject': 'social.friend_removed',
+            'deliver_subject': '_INBOX.voice.realtime1.friend_removed',
+            'deliver_policy': 'new', 'ack_policy': 'explicit'})
 
     def test_bundle_contains_complete_captured_import_closure_and_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -114,6 +124,15 @@ class HostedTransportTests(unittest.TestCase):
             ):
                 content = (bundle / 'capture' / relative).read_bytes()
                 self.assertEqual(hashlib.sha256(content).hexdigest(), manifest[relative])
+            helper = (bundle / 'helper.go').read_text(encoding='utf-8')
+            for source_bound_seed in (
+                'SocialMaxAge int64',
+                'SocialDuplicateWindow int64',
+                'social.Config.Duplicates=time.Duration(baseline.SocialDuplicateWindow)',
+                'js.AddConsumer(expected.Stream,&nats.ConsumerConfig',
+                'js.ConsumerInfo(expected.Stream,expected.Name)',
+            ):
+                self.assertIn(source_bound_seed, helper)
             self.assertEqual(
                 (bundle / 'contract_fixture_entry.py').read_bytes(),
                 (bundle / 'capture/nats-rollout-preservation/contract_fixture_entry.py').read_bytes(),

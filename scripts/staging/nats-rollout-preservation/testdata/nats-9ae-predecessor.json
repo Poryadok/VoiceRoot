@@ -16,5 +16,19 @@
     "role.created", "role.updated", "role.deleted", "role.assigned",
     "role.revoked", "role.chat_override_set", "role.chat_override_removed",
     "role.voice_override_set", "role.voice_override_removed"
-  ]
+  ],
+  "social_subjects": [
+    "social.friend_request", "social.friend_accepted", "social.friend_removed",
+    "social.user_blocked", "social.contacts_synced"
+  ],
+  "social_max_age_ns": 604800000000000,
+  "social_duplicate_window_ns": 86400000000000,
+  "friend_removed_consumer": {
+    "stream": "social_events",
+    "name": "rt_realtime1_friend_removed",
+    "filter_subject": "social.friend_removed",
+    "deliver_subject": "_INBOX.voice.realtime1.friend_removed",
+    "deliver_policy": "new",
+    "ack_policy": "explicit"
+  }
 }

@@ -1,12 +1,29 @@
 import json
+import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 from nats_contract_actor import Actor,INFO,WRITE
 from nats_contract_plan import ContractError,DECLARATIONS
 class Runtime:
     base=Path('/root-owned');owned={}
     def __init__(self):self.row={'Id':'owned-id','State':{'Running':True},'HostConfig':{'NetworkMode':'none','PortBindings':{}},'Mounts':[{'Type':'bind','Source':str(Path('/selected-pvc')),'Destination':'/data','RW':True}]};self.calls=[]
     def inspect(self,name):return self.row
+class RequestRuntime(Runtime):
+    def __init__(self,response):
+        super().__init__();self.response=response;self.created=[]
+    def inputs_directory(self):return Path('/inputs')
+    def create(self,name,image,mounts,command,broker):
+        self.created.append((name,command));return name
+    def run(self,args,**kwargs):
+        if args[0]=='wait':return '0'
+        if args[0]=='logs':return json.dumps(self.response)
+        return ''
+    def inspect(self,name):
+        if name.startswith('contract-'):
+            return {'State':{'Running':False}}
+        return super().inspect(name)
 class Tests(unittest.TestCase):
     def actor(self,r,fence=lambda:None):return Actor(r,'owned-broker','owned-id',Path('/selected-pvc'),fence)
     def test_public_network_refused(self):
@@ -61,4 +78,27 @@ class Tests(unittest.TestCase):
             self.assertEqual(actor.info_config(stream+'/'+durable),config)
             actor._request=lambda *args,**kwargs:{'stream_name':'wrong','name':durable,'config':dict(config)}
             with self.subTest(stream=stream),self.assertRaises(ContractError):actor.info_config(stream+'/'+durable)
+    def test_all_declared_missing_consumers_accept_only_exact_10014(self):
+        with patch.dict(sys.modules,{'docker_runtime':SimpleNamespace(BOX_IMAGE='pinned-box')}):
+            for stream,config in DECLARATIONS:
+                durable=config['durable_name'];obj=stream+'/'+durable;api=INFO[obj]
+                runtime=RequestRuntime({'error':{'err_code':10014}})
+                actor=self.actor(runtime)
+                self.assertIsNone(actor.info_config(obj))
+                self.assertEqual(runtime.created[0][1][-2],api)
+                for code in (10037,10059,99999):
+                    runtime=RequestRuntime({'error':{'err_code':code}})
+                    with self.subTest(stream=stream,code=code),self.assertRaises(ContractError):
+                        self.actor(runtime).info_config(obj)
+            # A stream INFO error cannot borrow the missing-consumer exception.
+            runtime=RequestRuntime({'error':{'err_code':10014}})
+            with self.assertRaises(ContractError):
+                self.actor(runtime)._request(INFO['chat_events'],None,missing=True)
+    def test_existing_declared_consumers_are_read_as_configs(self):
+        with patch.dict(sys.modules,{'docker_runtime':SimpleNamespace(BOX_IMAGE='pinned-box')}):
+            for stream,config in DECLARATIONS:
+                durable=config['durable_name'];obj=stream+'/'+durable
+                response={'stream_name':stream,'name':durable,'config':dict(config)}
+                runtime=RequestRuntime(response)
+                self.assertEqual(self.actor(runtime).info_config(obj),config)
 if __name__=='__main__':unittest.main()
