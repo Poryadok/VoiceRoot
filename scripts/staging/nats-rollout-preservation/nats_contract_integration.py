@@ -35,6 +35,23 @@ def fixture_bootstrap_grants(contract):
     if len(grants)!=len(set(grants)):raise ValueError('fixture_bootstrap_grants_duplicate')
     return grants
 
+
+def _set_archive_base_custody(base):
+    base=Path(base)
+    os.chown(base,0,65532)
+    base.chmod(0o750)
+
+
+def _private_fixture_store_descriptor(base,store,fenced):
+    root=Path(base).resolve(strict=True)
+    original=Path(store)
+    path=original.resolve(strict=True)
+    if path==root or path!=original or not path.is_relative_to(root):
+        raise RuntimeError('fixture_private_store_binding_invalid')
+    fenced()
+    return None
+
+
 def inner(base):
     base=Path(base)
     code=base/'scripts/staging'
@@ -72,7 +89,7 @@ def inner(base):
     shutil.copyfile('/bundle/nats-9ae-predecessor.json',base/'inputs/predecessor.json')
     os.chmod(base/'inputs/predecessor.json',0o440);os.chown(base/'inputs/predecessor.json',0,65532)
     for p in [base/'inputs',base/'server.conf',*list((base/'inputs').iterdir())]:os.chown(p,0,65532)
-    base.chmod(0o755)
+    _set_archive_base_custody(base)
     # These are disposable fixture identities, created inside this volume.
     # No installed signer, live credentials, or production authority is read.
     old=(base/'inputs/bootstrap.creds').read_text()
@@ -143,6 +160,8 @@ def inner(base):
             final_path=store
             final_claim={};final_pv={} # private fixture store already inside runtime.base
             def verify_final_storage(self):fenced()
+            def selected_store_descriptor(self):
+                return _private_fixture_store_descriptor(base,self.final_path,fenced)
         original_verify=nats_migration.verify_census
         def diagnostic(plan,before,after):
             new=[c for c in after['consumers'] if (c['stream'],c.get('durable') or c['name']) not in {(c['stream'],c['name']) for c in before['consumers']}]

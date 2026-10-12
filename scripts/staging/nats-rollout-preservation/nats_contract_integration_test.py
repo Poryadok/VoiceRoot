@@ -6,12 +6,34 @@ import hashlib
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import nats_contract_integration as integration
 
 
 class HostedTransportTests(unittest.TestCase):
+    def test_private_archive_base_uses_required_root_group_and_mode(self):
+        base = Path('/synthetic-fixture-base')
+        with patch.object(integration.os, 'chown', create=True) as chown, patch.object(Path, 'chmod') as chmod:
+            integration._set_archive_base_custody(base)
+        chown.assert_called_once_with(base, 0, 65532)
+        chmod.assert_called_once_with(0o750)
+
+    def test_private_store_descriptor_requires_bound_path_and_fence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'base'
+            root.mkdir()
+            store = root / 'store'
+            store.mkdir()
+            escaped = Path(temporary) / 'outside'
+            escaped.mkdir()
+            fenced = Mock()
+            self.assertIsNone(integration._private_fixture_store_descriptor(root, store, fenced))
+            fenced.assert_called_once_with()
+            with self.assertRaisesRegex(RuntimeError, 'fixture_private_store_binding_invalid'):
+                integration._private_fixture_store_descriptor(root, escaped, fenced)
+            fenced.assert_called_once_with()
+
     def test_default_transport_remains_the_existing_pmd_host(self):
         self.assertEqual(integration.select_transport([], {}, 'linux'), 'pmdebook')
 
