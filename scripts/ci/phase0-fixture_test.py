@@ -398,6 +398,7 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("scripts/ci/t31-startup-diagnostics.py", workflow)
         self.assertIn('"logs", "--no-color", "--timestamps", *requested', helper)
         self.assertNotIn("--tail", helper)
+
         service_block = re.search(r"SERVICES = \((.*?)\n\)", helper, flags=re.DOTALL)
         self.assertIsNotNone(service_block)
         names = re.findall(r'"([a-z0-9-]+)"', service_block.group(1))
@@ -425,6 +426,16 @@ class ComposeTests(unittest.TestCase):
         self.assertIn('|| true', workflow)
         self.assertIn('exit "$startup_status"', workflow)
         self.assertNotIn("logs --no-color --timestamps", workflow)
+
+    def test_livekit_uses_single_published_udp_mux_port(self):
+        config = (ROOT / "deploy/livekit/livekit.yaml").read_text(encoding="utf-8")
+        self.assertRegex(config, r"(?m)^rtc:\s*\n(?:^[ \t]+[^\n]*\n)*?^[ \t]+udp_port:\s*7882\s*$")
+        self.assertNotRegex(config, r"(?m)^\s+port_range_(?:start|end):")
+        livekit_ports = self.base["livekit"]["ports"]
+        port_contract = [{key: port[key] for key in ("target", "published", "protocol")}
+                         for port in livekit_ports]
+        self.assertIn({"target": 7882, "published": "7882", "protocol": "udp"}, port_contract)
+        self.assertIn({"target": 7881, "published": "7881", "protocol": "tcp"}, port_contract)
 
     def test_t31_log_summary_only_emits_allowlisted_diagnostic_fields(self):
         secret = "private-dsn-and-password-sentinel"
