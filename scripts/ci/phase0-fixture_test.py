@@ -801,9 +801,16 @@ class ComposeTests(unittest.TestCase):
     def test_voice_space_media_overlay_is_limited_to_existing_services_and_tls_helper(self):
         added = set(self.media_merged) - set(self.base)
         self.assertEqual(added, {PROXY})
-        self.assertEqual(self.media_merged[PROXY], self.merged[PROXY],
-                         "media proof must reuse the existing phase0-jwks service definition exactly")
+        def common_proxy(services):
+            proxy = dict(services[PROXY])
+            proxy.pop("depends_on", None)
+            proxy["volumes"] = [v for v in proxy["volumes"]
+                                if not v["target"].startswith("/run/phase0/space-ca")]
+            return proxy
+        self.assertEqual(common_proxy(self.media_merged), common_proxy(self.merged),
+                         "proxy differs only in its upstream Space CA and initialization dependency")
         expected_environment = {
+            "space": {"SPACE_VOICE_S2S_TOKEN"},
             "auth": {
                 "AUTH_PRINCIPAL_GRPC_PORT", "AUTH_SESSION_FLOOR_GRPC_PORT",
                 "AUTH_GRPC_TLS_CERT_FILE", "AUTH_GRPC_TLS_KEY_FILE",
@@ -817,6 +824,12 @@ class ComposeTests(unittest.TestCase):
                 "GATEWAY_VOICE_USER_CLIENT_KEY_FILE",
             },
             "voice": {
+                "SPACE_VOICE_S2S_TOKEN",
+                "VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN",
+                "VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_CERT_FILE",
+                "VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE",
+                "VOICE_SPACE_LIFECYCLE_PRINCIPAL_CLIENT_CA_FILE",
+                "VOICE_SPACE_LIFECYCLE_PRINCIPAL_REPLAY_REDIS_ADDR",
                 "VOICE_PRINCIPAL_PRIVATE_KEY_FILE", "VOICE_PRINCIPAL_KID",
                 "VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE", "VOICE_PRINCIPAL_NEXT_KID",
                 "VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE", "VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE",
@@ -874,7 +887,7 @@ class ComposeTests(unittest.TestCase):
                     "VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE", "VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE",
                     "VOICE_PRINCIPAL_JWKS_LISTEN_ADDR", "VOICE_USER_PRINCIPAL_REPLAY_REDIS_ADDR",
                     "S2S_JWKS_URLS_JSON", "S2S_JWKS_CA_FILE", "S2S_JWKS_CLIENT_CERT_FILE",
-                    "S2S_JWKS_CLIENT_KEY_FILE", "JAVA_TOOL_OPTIONS",
+                    "S2S_JWKS_CLIENT_KEY_FILE", "JAVA_TOOL_OPTIONS", "LIVEKIT_URL",
                 }:
                     continue
                 self.assertEqual(self.media_merged[service].get("environment", {}).get(name), value,
@@ -884,6 +897,49 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("9091", [str(port) for port in self.media_merged["auth"].get("expose", [])])
         self.assertIn("9093", [str(port) for port in self.media_merged["voice"].get("expose", [])])
         self.assertNotIn("PRIVATE KEY", json.dumps(self.media_merged))
+
+    def test_media_canonical_admission_dependencies_are_wired(self):
+        voice = self.media_merged["voice"]["environment"]
+        space = self.media_merged["space"]["environment"]
+        token = voice.get("SPACE_VOICE_S2S_TOKEN", "")
+        self.assertTrue(token.strip(), "canonical Space resolver must have a fixture credential")
+        self.assertEqual(token, space.get("SPACE_VOICE_S2S_TOKEN"))
+        prefix = "VOICE_SPACE_LIFECYCLE_PRINCIPAL_"
+        for field in ("TLS_CERT_FILE", "TLS_KEY_FILE", "CLIENT_CA_FILE", "REPLAY_REDIS_ADDR"):
+            self.assertTrue(voice.get(prefix + field), f"missing lifecycle dependency: {field}")
+        self.assertEqual(voice[prefix + "GRPC_LISTEN"], ":9092")
+        self.assertNotEqual(voice[prefix + "GRPC_LISTEN"], voice["VOICE_USER_PRINCIPAL_GRPC_LISTEN"])
+        self.assertEqual(voice["LIVEKIT_URL"], "ws://livekit:7880")
+        self.assertEqual(self.media_merged["voice"]["depends_on"]["space"]["condition"], "service_healthy")
+        self.assertEqual(self.media_merged[PROXY]["depends_on"]["social-principal-init"]["condition"],
+                         "service_completed_successfully")
+
+    def test_proxy_trusts_the_ca_of_each_overlay_space_certificate(self):
+        ca_directory = "/run/phase0/space-ca"
+        ca_file = ca_directory + "/ca.crt"
+        config = (ROOT / "docker/phase0/nginx.conf").read_text(encoding="utf-8")
+        self.assertIn(f"proxy_ssl_trusted_certificate {ca_file};", config)
+        self.assertIn("proxy_ssl_verify on;", config)
+        self.assertIn("proxy_ssl_name space;", config)
+        media_ca = next(v for v in self.media_merged[PROXY]["volumes"] if v["target"] == ca_directory)
+        space_ca = next(v for v in self.base["space"]["volumes"]
+                        if v["target"] == "/etc/voice/principal/ca")
+        self.assertEqual(media_ca["type"], "volume")
+        self.assertEqual(media_ca["source"], space_ca["source"])
+        self.assertTrue(media_ca["read_only"])
+        for name in ("SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE", "SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE"):
+            self.assertEqual(self.media_merged["space"]["environment"][name], self.base["space"]["environment"][name])
+        self.assertEqual(self.source_at(PROXY, ca_file), "ca/ca.crt")
+        command = self.command(True)
+        command[-3:-3] = ["-f", MEDIA_OVERLAY]
+        combined = json.loads(require_success(run(*command, env=self.env)))["services"]
+        # The full Phase0 overlay replaces Space's leaf. Its more specific file
+        # mount retains the fixture CA over the media-only directory mount.
+        combined_ca = next(v for v in combined[PROXY]["volumes"] if v["target"] == ca_file)
+        self.assertEqual(Path(combined_ca["source"]), self.fixture / "ca/ca.crt")
+        self.assertTrue(combined_ca["read_only"])
+        self.assertEqual(combined["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"],
+                         self.merged["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"])
 
     def test_combined_phase0_media_listeners_have_distinct_ports_and_matching_caller(self):
         command = self.command(True)
@@ -904,7 +960,7 @@ class ComposeTests(unittest.TestCase):
             "gateway": {"gateway/current.pem", "gateway/next.pem", "tls/gateway-client.crt", "tls/gateway-client.key", "ca/ca.crt"},
             "voice": {"voice/current.pem", "voice/next.pem", "tls/voice-jwks.crt", "tls/voice-jwks.key",
                       "tls/voice-game-grpc.crt", "tls/voice-game-grpc.key", "tls/voice-client.crt",
-                      "tls/voice-client.key", "ca/ca.crt"},
+                      "tls/voice-client.key", "ca/ca.crt", "ca/space-lifecycle-client-ca.crt"},
             PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"},
         }
         for service, sources in allowed.items():

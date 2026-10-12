@@ -1,4 +1,9 @@
 services:
+  space:
+    environment:
+      # Disposable local/CI credential for the existing canonical resolver.
+      SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
+
   auth:
     user: "0:0"
     expose: ["9091", "9092"]
@@ -42,8 +47,12 @@ services:
 
   voice:
     user: "0:0"
-    expose: ["8443", "9093"]
+    expose: ["8443", "9092", "9093"]
     environment:
+      SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
+      # SDK control calls run inside Compose; host media peers use the test
+      # helper's VOICE_LIVEKIT_PUBLIC_URL mapping.
+      LIVEKIT_URL: ws://livekit:7880
       VOICE_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/voice/current.pem
       VOICE_PRINCIPAL_KID: current
       VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE: /run/phase0/voice/next.pem
@@ -57,6 +66,11 @@ services:
       VOICE_USER_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
       # Phase0's separate Space lifecycle listener retains port 9092.
       VOICE_USER_PRINCIPAL_GRPC_LISTEN: :9093
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN: :9092
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-game-grpc.crt
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
       VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
       VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth
@@ -81,14 +95,22 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.crt:/run/phase0/voice-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.key:/run/phase0/voice-client.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
 
   phase0-jwks:
     profiles: ["app"]
     image: nginx:1.28-alpine
     user: "0:0"
     expose: ["8443"]
+    depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
     volumes:
       - ./docker/phase0/nginx.conf:/etc/nginx/nginx.conf:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.crt:/run/phase0/proxy.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      # Media-only Compose keeps Space's base certificate and its issuing CA.
+      # The full Phase0 overlay supplies a nested file mount when it replaces
+      # Space's certificate with the generated fixture certificate instead.
+      - social_principal_ca:/run/phase0/space-ca:ro
