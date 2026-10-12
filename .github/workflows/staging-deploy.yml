@@ -327,6 +327,12 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Verify every exact staging image before cluster access
+        env:
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ inputs.image_tag }}
+        run: bash scripts/staging/verify-staging-images.sh
+
       - uses: azure/setup-kubectl@v5
 
       - name: Acquire preserved historical target as data before opening the upload window

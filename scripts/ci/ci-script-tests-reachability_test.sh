@@ -70,6 +70,11 @@ echo "${deploy_block}" | grep -Fq "needs.staging-stack-lock.result == 'success'"
   || fail "staging deployment must retain the successful stack-lock gate"
 echo "${deploy_block}" | grep -Fq '      - staging-stack-lock' \
   || fail "staging deployment must depend on the stack-lock job"
+echo "${deploy_block}" | grep -Fq "needs.changes.outputs.ci_only_change != 'true'" \
+  || fail "CI-only changes must never enter automatic staging deploy"
+lock_block="$(sed -n '/^  staging-stack-lock:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+echo "${lock_block}" | grep -Fq "needs.changes.outputs.ci_only_change != 'true'" \
+  || fail "CI-only changes must not publish a deployable stack lock"
 ! grep -Fq 'github.event.pull_request.draft' "${WORKFLOW}" \
   || fail "draft PRs must use the same path-filtered CI selection"
 changes_block="$(sed -n '/^  changes:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
@@ -79,6 +84,19 @@ echo "${changes_block}" | grep -Fq 'uses: dorny/paths-filter@v4' \
   || fail "feature-base PRs must use the existing path-filtered job selection"
 echo "${changes_block}" | grep -Fq 'filters: .github/ci/path-filters.yml' \
   || fail "feature-base PRs must use the repository path filter definitions"
+grep -Fq 'ci_only_change: ${{ steps.stagingmatrix.outputs.ci_only_change }}' "${WORKFLOW}" \
+  || fail "changes must expose the CI-only no-publication classification"
+
+staging_deploy_workflow="${ROOT}/.github/workflows/staging-deploy.yml"
+image_verify_line="$(grep -n '^      - name: Verify every exact staging image before cluster access$' "${staging_deploy_workflow}" | cut -d: -f1)"
+kubectl_setup_line="$(grep -n '^      - uses: azure/setup-kubectl@v5$' "${staging_deploy_workflow}" | head -n1 | cut -d: -f1)"
+[[ -n "${image_verify_line}" && -n "${kubectl_setup_line}" && "${image_verify_line}" -lt "${kubectl_setup_line}" ]] \
+  || fail "staging image manifests must be verified before kubectl setup or cluster access"
+grep -A7 '^      - name: Verify every exact staging image before cluster access$' "${staging_deploy_workflow}" \
+  | grep -Fq 'VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot' \
+  || fail "staging image preflight must use the trusted registry"
+grep -Fq 'VOICE_IMAGE_TAG: ${{ inputs.image_tag }}' "${staging_deploy_workflow}" \
+  || fail "all staging deploys must verify the exact requested image tag"
 
 integration_pr_block="$(sed -n '/^  backend-go-integration-pr:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 backend_go_block="$(sed -n '/^  backend-go:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
