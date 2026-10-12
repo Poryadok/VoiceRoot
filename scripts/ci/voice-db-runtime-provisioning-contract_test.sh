@@ -1351,11 +1351,29 @@ f13_collect_failure() {
   return 1
 }
 
+f13_validate_sync_merge_resolution() {
+  local repo="$1" commit="$2" diagnostic_file="${3:-}"
+  local path
+  local resolution_paths="${TMP_DIR}/f13-sync-merge-resolution-${commit}"
+  git -C "${repo}" show --remerge-diff --format= --name-only "${commit}" 2>/dev/null >"${resolution_paths}" || {
+    f13_collect_failure "${diagnostic_file}" sync_merge_resolution_inspection
+    return 1
+  }
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    if f13_path_is_guarded "${path}"; then
+      f13_collect_failure "${diagnostic_file}" sync_merge_guarded_resolution
+      return 1
+    fi
+  done <"${resolution_paths}"
+}
+
 f13_collect_develop_contributions() {
   local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
   local allow_direct_followup="${6:-false}"
   local partition_source_history="${7:-false}"
   local commit parent_count first_parent source_head source_base delta first_parent_commits is_direct
+  local sync_boundary boundary_commit
   local path source_entry result_entry target_entry blob trigger incremental_merge
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
   local previous_source_head previous_source_entry base_entry source_lineage
@@ -1378,7 +1396,18 @@ f13_collect_develop_contributions() {
     f13_collect_failure "${diagnostic_file}" first_parent_range
     return 1
   }
-  grep -Fxq -- "${base}" <<<"${first_parent_commits}" || {
+  sync_boundary=""
+  if ! grep -Fxq -- "${base}" <<<"${first_parent_commits}"; then
+    while IFS= read -r boundary_commit; do
+      [[ -n "${boundary_commit}" ]] || continue
+      read -r -a commit_line <<<"$(git -C "${repo}" rev-list --parents -n 1 "${boundary_commit}" 2>/dev/null)"
+      if ((${#commit_line[@]} == 3)) && [[ "${commit_line[2]}" == "${base}" ]]; then
+        sync_boundary="${boundary_commit}"
+        break
+      fi
+    done <<<"${first_parent_commits}"
+  fi
+  [[ -n "${sync_boundary}" || "$(grep -Fx -- "${base}" <<<"${first_parent_commits}")" == "${base}" ]] || {
     f13_collect_failure "${diagnostic_file}" first_parent_range
     return 1
   }
@@ -1391,6 +1420,13 @@ f13_collect_develop_contributions() {
       f13_collect_failure "${diagnostic_file}" parent_count
       return 1
     }
+    if ((parent_count == 2)) && [[ "${commit_line[2]}" == "${base}" ]]; then
+      # This merge only syncs the already-owned base into the source lane.
+      # Keep the novel first-parent commits from base..target, but do not
+      # re-attribute base-side history as a source contribution.
+      f13_validate_sync_merge_resolution "${repo}" "${commit}" "${diagnostic_file}" || return 1
+      continue
+    fi
     first_parent="${commit_line[1]}"
     is_direct=false
     if ((parent_count == 2)); then
@@ -2106,6 +2142,116 @@ IFS=$'\t' read -r _ f13_incremental_trigger f13_incremental_latest _ f13_increme
   exit 2
 }
 
+# A normal author-branch sync may import the current PR base as the second
+# parent of a merge. Keep novel first-parent commits on both sides of that
+# sync, exclude paths owned only by the imported base, and reject guarded
+# manual merge resolutions separately.
+f13_sync_fixture_repo="${TMP_DIR}/f13-sync-boundary-fixture"
+mkdir -p "${f13_sync_fixture_repo}"
+git -C "${f13_sync_fixture_repo}" init -q
+git -C "${f13_sync_fixture_repo}" config user.name 'Voice CI fixture'
+git -C "${f13_sync_fixture_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${f13_sync_fixture_repo}" config commit.gpgsign false
+printf '%s\n' 'sync fixture base' >"${f13_sync_fixture_repo}/README.md"
+git -C "${f13_sync_fixture_repo}" add README.md
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture shared base'
+f13_sync_shared_base="$(git -C "${f13_sync_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_sync_fixture_repo}" checkout -qb f13-sync-release-base
+mkdir -p "${f13_sync_fixture_repo}/src/backend/voice/internal/grpcsvc"
+printf '%s\n' 'package grpcsvc' 'const releaseOwned = true' >"${f13_sync_fixture_repo}/src/backend/voice/internal/grpcsvc/release_owned_test.go"
+git -C "${f13_sync_fixture_repo}" add src/backend/voice/internal/grpcsvc/release_owned_test.go
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture release-owned guarded path'
+f13_sync_release_ancestor="$(git -C "${f13_sync_fixture_repo}" rev-parse HEAD)"
+printf '%s\n' 'release base advanced' >>"${f13_sync_fixture_repo}/README.md"
+git -C "${f13_sync_fixture_repo}" add README.md
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture release base'
+f13_sync_base="$(git -C "${f13_sync_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_sync_fixture_repo}" checkout -qb f13-sync-source "${f13_sync_shared_base}"
+mkdir -p "${f13_sync_fixture_repo}/src/backend/voice"
+printf '%s\n' 'package voice' 'func beforeSync() {}' >"${f13_sync_fixture_repo}/src/backend/voice/sync_pre.go"
+git -C "${f13_sync_fixture_repo}" add src/backend/voice/sync_pre.go
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture guarded source before sync'
+f13_sync_pre_commit="$(git -C "${f13_sync_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_sync_fixture_repo}" merge --no-ff -qm 'F13 sync fixture imports exact release base' f13-sync-release-base
+printf '%s\n' 'package voice' 'func afterSync() {}' >"${f13_sync_fixture_repo}/src/backend/voice/sync_post.go"
+git -C "${f13_sync_fixture_repo}" add src/backend/voice/sync_post.go
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture guarded source after sync'
+f13_sync_post_commit="$(git -C "${f13_sync_fixture_repo}" rev-parse HEAD)"
+f13_sync_source_head="$(git -C "${f13_sync_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_sync_fixture_repo}" checkout -qb f13-sync-release-pr "${f13_sync_base}"
+git -C "${f13_sync_fixture_repo}" merge --no-ff -qm 'F13 sync fixture synthetic PR merge' f13-sync-source
+f13_collect_master_release_pr_contributions \
+  "${f13_sync_fixture_repo}" "${f13_sync_base}" HEAD \
+  "${TMP_DIR}/f13-sync-boundary-map" "${TMP_DIR}/f13-sync-boundary-category" || {
+  printf '%s\n' 'F13 oracle bug: normal second-parent base sync was rejected' >&2
+  exit 2
+}
+printf '%s\n' \
+  'src/backend/voice/sync_post.go' \
+  'src/backend/voice/sync_pre.go' >"${TMP_DIR}/f13-sync-boundary-expected-paths"
+cut -f1 "${TMP_DIR}/f13-sync-boundary-map" | sort >"${TMP_DIR}/f13-sync-boundary-actual-paths"
+cmp -s "${TMP_DIR}/f13-sync-boundary-expected-paths" "${TMP_DIR}/f13-sync-boundary-actual-paths" || {
+  printf '%s\n' 'F13 oracle bug: sync boundary reattributed imported base history or lost a source commit' >&2
+  exit 2
+}
+f13_sync_pre_row="$(awk -F '\t' '$1 == "src/backend/voice/sync_pre.go" { row=$0 } END { print row }' \
+  "${TMP_DIR}/f13-sync-boundary-map")"
+f13_sync_post_row="$(awk -F '\t' '$1 == "src/backend/voice/sync_post.go" { row=$0 } END { print row }' \
+  "${TMP_DIR}/f13-sync-boundary-map")"
+IFS=$'\t' read -r _ _ f13_sync_pre_owner _ _ f13_sync_pre_head _ <<<"${f13_sync_pre_row}"
+IFS=$'\t' read -r _ _ f13_sync_post_owner _ _ f13_sync_post_head _ <<<"${f13_sync_post_row}"
+[[ "${f13_sync_pre_owner}" == "${f13_sync_pre_commit}" && \
+  "${f13_sync_pre_head}" == "${f13_sync_pre_commit}" && \
+  "${f13_sync_post_owner}" == "${f13_sync_post_commit}" && \
+  "${f13_sync_post_head}" == "${f13_sync_post_commit}" ]] || {
+  printf '%s\n' 'F13 oracle bug: sync-boundary map lost exact pre/post source ownership' >&2
+  exit 2
+}
+
+# A base that is merely an ancestor of the sync merge's second parent is not
+# the exact imported boundary and must not gain the normal-sync exception.
+if f13_collect_develop_contributions \
+  "${f13_sync_fixture_repo}" "${f13_sync_release_ancestor}" "${f13_sync_source_head}" \
+  "${TMP_DIR}/f13-sync-nonboundary-map" "${TMP_DIR}/f13-sync-nonboundary-category" true true; then
+  printf '%s\n' 'F13 oracle bug: non-exact second-parent ancestor was accepted as a sync boundary' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-sync-nonboundary-category")" == first_parent_range ]] || {
+  printf '%s\n' 'F13 oracle bug: non-exact sync boundary failed for an unexpected reason' >&2
+  exit 2
+}
+
+# A manual guarded conflict resolution is not owned by either side of a sync
+# merge, even though the merge imports the exact base.
+git -C "${f13_sync_fixture_repo}" checkout -qb f13-sync-conflict-release "${f13_sync_shared_base}"
+mkdir -p "${f13_sync_fixture_repo}/src/backend/voice"
+printf '%s\n' 'package voice' 'const syncConflict = "release"' >"${f13_sync_fixture_repo}/src/backend/voice/sync_conflict.go"
+git -C "${f13_sync_fixture_repo}" add src/backend/voice/sync_conflict.go
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture release conflict side'
+f13_sync_conflict_base="$(git -C "${f13_sync_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_sync_fixture_repo}" checkout -qb f13-sync-conflict-source "${f13_sync_shared_base}"
+mkdir -p "${f13_sync_fixture_repo}/src/backend/voice"
+printf '%s\n' 'package voice' 'const syncConflict = "source"' >"${f13_sync_fixture_repo}/src/backend/voice/sync_conflict.go"
+git -C "${f13_sync_fixture_repo}" add src/backend/voice/sync_conflict.go
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture source conflict side'
+if git -C "${f13_sync_fixture_repo}" merge --no-ff -m 'F13 sync fixture conflicting base sync' f13-sync-conflict-release >/dev/null 2>&1; then
+  printf '%s\n' 'F13 oracle fixture error: expected guarded sync conflict did not occur' >&2
+  exit 2
+fi
+printf '%s\n' 'package voice' 'const syncConflict = "unowned-resolution"' >"${f13_sync_fixture_repo}/src/backend/voice/sync_conflict.go"
+git -C "${f13_sync_fixture_repo}" add src/backend/voice/sync_conflict.go
+git -C "${f13_sync_fixture_repo}" commit -qm 'F13 sync fixture unowned guarded resolution'
+if f13_collect_develop_contributions \
+  "${f13_sync_fixture_repo}" "${f13_sync_conflict_base}" HEAD \
+  "${TMP_DIR}/f13-sync-conflict-map" "${TMP_DIR}/f13-sync-conflict-category" true true; then
+  printf '%s\n' 'F13 oracle bug: guarded manual sync resolution was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-sync-conflict-category")" == sync_merge_guarded_resolution ]] || {
+  printf '%s\n' 'F13 oracle bug: guarded sync resolution failed for an unexpected reason' >&2
+  exit 2
+}
+
 git -C "${f13_fixture_repo}" checkout -qb f13-repeat-source-one "${f13_fixture_base}"
 mkdir -p "${f13_fixture_repo}/src/backend/voice"
 printf '%s\n' 'package voice' >"${f13_fixture_repo}/src/backend/voice/repeated.go"
@@ -2214,6 +2360,7 @@ if [[ "${f13_master_release_pr}" == true ]] || \
     if [[ -s "${TMP_DIR}/f13-failure-category" ]]; then
       case "$(<"${TMP_DIR}/f13-failure-category")" in
         base_object|target_object|base_ancestry|first_parent_range|parent_count|source_base|source_delta|\
+        sync_merge_resolution_inspection|sync_merge_guarded_resolution|\
         source_tree_entry|merge_tree_entry|merge_tree_mismatch|target_tree_entry|guarded_target_mismatch|\
         duplicate_guarded_owner|release_pr_missing_base|release_pr_shape|release_pr_base_parent|\
         release_pr_source_delta|release_pr_result_delta|release_pr_delta_mismatch|\
