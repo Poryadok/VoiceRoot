@@ -49,6 +49,44 @@ READ_CHUNK_BYTES = 4096
 
 _SERVICE_PREFIX = re.compile(r"^\s*([A-Za-z0-9_-]+)\s+\|\s?(.*)$")
 VOICE_STARTUP_PREFIXES = (
+    ("voice lifecycle database:", "voice_lifecycle_database"),
+    ("voice GIS principal configuration:", "voice_gis_principal_configuration"),
+    ("voice principal JWKS configuration:", "voice_principal_jwks_configuration"),
+    ("voice Role grant checker configuration:", "voice_role_grant_configuration"),
+    ("voice Space lifecycle principal configuration:", "voice_space_principal_configuration"),
+    ("voice user-principal configuration:", "voice_user_principal_configuration"),
+    ("voice Auth session-floor configuration:", "voice_auth_session_floor_configuration"),
+    ("Voice user-principal listener requires the private Auth session-floor client", "voice_auth_session_floor_client_missing"),
+    ("Voice Space lifecycle principal requires VOICE_DATABASE_URL", "voice_space_database_missing"),
+    ("voice Space lifecycle database schema:", "voice_space_database_schema"),
+    ("voice Space lifecycle principal runtime:", "voice_space_principal_runtime"),
+    ("Voice managed game-session admission requires both GIS provisioning and Role grant checker configuration", "voice_game_admission_configuration"),
+    ("Voice Role grants and user-principal listener require the Voice service principal signer", "voice_principal_signer_missing"),
+    ("voice principal issuer:", "voice_principal_issuer"),
+    ("voice Auth session-floor client:", "voice_auth_session_floor_client"),
+    ("voice user-principal runtime:", "voice_user_principal_runtime"),
+    ("voice Role grant checker:", "voice_role_grant_checker"),
+    ("voice GIS principal runtime:", "voice_gis_principal_runtime"),
+    ("VOICE_DATABASE_URL is required when GIS room provisioning is enabled", "voice_gis_database_missing"),
+    ("voice GIS database:", "voice_gis_database"),
+    ("voice GIS database schema:", "voice_gis_database_schema"),
+    ("voice account fence schema:", "voice_account_fence_schema"),
+    ("voice GIS listener:", "voice_gis_listener"),
+    ("nats jetstream publisher:", "voice_jetstream_publisher"),
+    ("chat grpc:", "voice_chat_grpc"),
+    ("user grpc:", "voice_user_grpc"),
+    ("social grpc:", "voice_social_grpc"),
+    ("space grpc:", "voice_space_grpc"),
+    ("subscription grpc:", "voice_subscription_grpc"),
+    ("role grpc:", "voice_role_grpc"),
+    ("federated media configuration invalid", "voice_federated_media_configuration"),
+    ("Space media invalidation requires the durable Voice Redis call store", "space_media_redis_store_missing"),
+    ("Space media invalidation requires Space and Role authority resolvers", "space_media_authority_resolvers_missing"),
+    ("Space media durable event publisher is not configured", "space_media_event_publisher_missing"),
+    ("grpc listen:", "voice_grpc_listen"),
+    ("grpc serve:", "voice_grpc_serve"),
+    ("voice Space lifecycle principal listen:", "voice_space_principal_listen"),
+    ("voice user-principal listener:", "voice_user_principal_listener"),
     ("Space media admission requires the current Auth session-floor checker", "space_media_auth_checker_missing"),
     ("Space media PostgreSQL admission schema:", "space_media_postgres_admission_schema"),
     ("Space media initial reconciliation:", "space_media_initial_reconciliation"),
@@ -302,6 +340,12 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
         if not match:
             continue
         service, message = match.group(1), match.group(2)
+        if service not in SERVICE_SET:
+            # Compose v2 prefixes replicas as service-1; older/project-prefixed
+            # forms may include project_service_1. Emit only the known service.
+            service = next((known for known in sorted(SERVICES, key=len, reverse=True)
+                            if re.fullmatch(r"(?:[A-Za-z0-9_-]+[-_])?" + re.escape(known)
+                                            + r"[-_][0-9]+", service)), "unknown")
         if service not in SERVICE_SET:
             continue
         seen.add(service)

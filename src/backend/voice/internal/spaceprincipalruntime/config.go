@@ -24,8 +24,10 @@ var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func LoadFromEnv() (Config, bool, error) {
 	prefix := "VOICE_SPACE_LIFECYCLE_PRINCIPAL_"
-	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE",
-		prefix + "REPLAY_REDIS_ADDR", prefix + "REPLAY_REDIS_PASSWORD", prefix + "TLS_CERT_FILE", prefix + "TLS_KEY_FILE", prefix + "CLIENT_CA_FILE", prefix + "GRPC_LISTEN"}
+	// Shared JWKS settings also configure other principal listeners. Only this
+	// listener's own settings opt it in; partial opt-in must still fail closed.
+	names := []string{prefix + "REPLAY_REDIS_ADDR", prefix + "REPLAY_REDIS_PASSWORD", prefix + "TLS_CERT_FILE",
+		prefix + "TLS_KEY_FILE", prefix + "CLIENT_CA_FILE", prefix + "GRPC_LISTEN"}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {

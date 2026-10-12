@@ -379,6 +379,15 @@ move handlers, Redis v2 encoding и replay deadline bridge semantics (D2/D3)
 также остаются отдельными gates. Hosted Linux proof относится только к явно
 выбранному BE255 media consumer и не означает завершение R22.3/BE255 целиком.
 
+The private Space lifecycle listener opts in only through
+`VOICE_SPACE_LIFECYCLE_PRINCIPAL_*` settings. Shared `S2S_JWKS_*` settings alone
+do not enable it; they also serve the separate user-principal listener. Any
+lifecycle-specific setting, including an empty value, still requires complete
+lifecycle TLS, replay, and trusted JWKS configuration or startup fails. When both
+listeners are enabled, their listen addresses must differ. The combined local/CI
+fixtures retain lifecycle port 9092 and use user-principal port 9093, with
+Gateway's matching private upstream; neither port is published to the host.
+
 **Public surface.** Gateway exposes Space room actions under
 `/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,
 `POST /leave`, `GET /roster`, `POST /move` (self; destination `voice_room_id`),

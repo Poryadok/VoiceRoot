@@ -443,15 +443,35 @@ class ComposeTests(unittest.TestCase):
 
     def test_t31_voice_startup_prefix_emits_only_allowlisted_category(self):
         secret = "private-dsn-sentinel"
-        raw = (
-            "voice | 2026-10-12T12:34:56.123456789Z 2026/10/12 12:34:56 "
-            "Space media initial reconciliation: " + secret + "\n"
-        ).encode("utf-8")
+        for container in ("voice", "voice-1", "private-project-voice-1", "private_project_voice_1"):
+            with self.subTest(container=container):
+                raw = (
+                    container + " | 2026-10-12T12:34:56.123456789Z 2026/10/12 12:34:56 "
+                    "Space media initial reconciliation: " + secret + "\n"
+                ).encode("utf-8")
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+                self.assertEqual(summary["services_seen"], ["voice"])
+                self.assertEqual(first["result"], "observed_in_bounded_window")
+                self.assertEqual(first["startup_category"], "space_media_initial_reconciliation")
+                serialized = json.dumps({"summary": summary, "first": first})
+                self.assertNotIn(secret, serialized)
+                self.assertNotIn("private", serialized)
+
+        raw = b"private-service-1 | ERROR private-dsn-sentinel\n"
         summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
-        self.assertEqual(summary["services_seen"], ["voice"])
-        self.assertEqual(first["result"], "observed_in_bounded_window")
-        self.assertEqual(first["startup_category"], "space_media_initial_reconciliation")
-        self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
+        self.assertEqual(summary["services_seen"], [])
+        self.assertEqual(first["result"], "no_error_marker")
+
+    def test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text(self):
+        source = (ROOT / "src/backend/voice/main.go").read_text()
+        prefixes = dict(startup_diagnostics.VOICE_STARTUP_PREFIXES)
+        for literal in re.findall(r'log\.Fatalf?\("([^"\n]+)"', source):
+            prefix = literal.split("%", 1)[0].rstrip()
+            self.assertIn(prefix, prefixes)
+            raw = ("voice-1 | 2026-10-12T12:34:56Z " + prefix + " private-sentinel\n").encode()
+            summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+            self.assertEqual(first["startup_category"], prefixes[prefix])
+            self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
 
     def test_startup_diagnostics_can_scope_status_and_logs_to_voice(self):
         status = json.dumps([{
@@ -811,7 +831,7 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_GRPC_PORT"], "9092")
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         gateway_env = self.media_merged["gateway"]["environment"]
-        self.assertEqual(gateway_env["GATEWAY_VOICE_USER_GRPC_ADDR"], "voice:9092")
+        self.assertEqual(gateway_env["GATEWAY_VOICE_USER_GRPC_ADDR"], "voice:9093")
         self.assertEqual(gateway_env["GATEWAY_VOICE_USER_TLS_SERVER_NAME"], "voice")
         voice_env = self.media_merged["voice"]["environment"]
         self.assertEqual(json.loads(voice_env["S2S_JWKS_URLS_JSON"]), {
@@ -820,7 +840,7 @@ class ComposeTests(unittest.TestCase):
         })
         self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR"], "auth:9092")
         self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME"], "auth")
-        self.assertEqual(voice_env["VOICE_USER_PRINCIPAL_GRPC_LISTEN"], ":9092")
+        self.assertEqual(voice_env["VOICE_USER_PRINCIPAL_GRPC_LISTEN"], ":9093")
         self.assertEqual(voice_env["S2S_JWKS_CA_FILE"], "/run/phase0/ca.crt")
         self.assertEqual(voice_env["S2S_JWKS_CLIENT_CERT_FILE"], "/run/phase0/voice-client.crt")
         self.assertEqual(voice_env["S2S_JWKS_CLIENT_KEY_FILE"], "/run/phase0/voice-client.key")
@@ -852,8 +872,21 @@ class ComposeTests(unittest.TestCase):
         for service in ("auth", "voice", PROXY):
             self.assertFalse(self.media_merged[service].get("ports"), f"private port published: {service}")
         self.assertIn("9091", [str(port) for port in self.media_merged["auth"].get("expose", [])])
-        self.assertIn("9092", [str(port) for port in self.media_merged["voice"].get("expose", [])])
+        self.assertIn("9093", [str(port) for port in self.media_merged["voice"].get("expose", [])])
         self.assertNotIn("PRIVATE KEY", json.dumps(self.media_merged))
+
+    def test_combined_phase0_media_listeners_have_distinct_ports_and_matching_caller(self):
+        command = self.command(True)
+        command[-3:-3] = ["-f", MEDIA_OVERLAY]
+        combined = json.loads(require_success(run(*command, env=self.env)))["services"]
+        voice = combined["voice"]["environment"]
+        listeners = [voice[name] for name in (
+            "VOICE_GAME_PRINCIPAL_GRPC_LISTEN", "VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN",
+            "VOICE_USER_PRINCIPAL_GRPC_LISTEN")]
+        self.assertEqual(len(set(listeners)), len(listeners))
+        self.assertEqual(combined["gateway"]["environment"]["GATEWAY_VOICE_USER_GRPC_ADDR"],
+                         "voice" + voice["VOICE_USER_PRINCIPAL_GRPC_LISTEN"])
+        self.assertFalse(combined["voice"].get("ports"))
 
     def test_media_overlay_mounts_only_ephemeral_chain_credentials_readonly(self):
         allowed = {

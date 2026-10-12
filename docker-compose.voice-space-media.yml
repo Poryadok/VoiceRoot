@@ -24,7 +24,7 @@ services:
     environment:
       GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
       GATEWAY_PRINCIPAL_ACTIVE_KID: current
-      GATEWAY_VOICE_USER_GRPC_ADDR: voice:9092
+      GATEWAY_VOICE_USER_GRPC_ADDR: voice:9093
       GATEWAY_VOICE_USER_TLS_CA_FILE: /run/phase0/ca.crt
       GATEWAY_VOICE_USER_TLS_SERVER_NAME: voice
       GATEWAY_VOICE_USER_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
@@ -42,7 +42,7 @@ services:
 
   voice:
     user: "0:0"
-    expose: ["8443", "9092"]
+    expose: ["8443", "9093"]
     environment:
       VOICE_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/voice/current.pem
       VOICE_PRINCIPAL_KID: current
@@ -55,7 +55,8 @@ services:
       VOICE_USER_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-game-grpc.crt
       VOICE_USER_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
       VOICE_USER_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
-      VOICE_USER_PRINCIPAL_GRPC_LISTEN: :9092
+      # Phase0's separate Space lifecycle listener retains port 9092.
+      VOICE_USER_PRINCIPAL_GRPC_LISTEN: :9093
       VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
       VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
       VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth
