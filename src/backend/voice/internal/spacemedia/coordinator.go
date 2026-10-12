@@ -23,7 +23,7 @@ const (
 	reconcilePasses   = 3
 )
 
-var ErrReconciliationPending = errors.New("Space media authority changed during reconciliation")
+var ErrReconciliationPending = errors.New("space media authority changed during reconciliation")
 
 type AccessResolver interface {
 	ResolveVoiceRoomAccess(context.Context, string, string) (grpcsvc.CanonicalVoiceRoomAccess, error)

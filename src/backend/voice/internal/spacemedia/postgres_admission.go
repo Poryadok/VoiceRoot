@@ -14,9 +14,9 @@ import (
 	"voice/backend/voice/internal/store"
 )
 
-var ErrAdmissionUnavailable = errors.New("Space media admission unavailable")
-var ErrAdmissionConflict = errors.New("Space media admission conflicts with current state")
-var ErrRoomHeadPending = errors.New("Space voice room incarnation is pending recovery")
+var ErrAdmissionUnavailable = errors.New("space media admission unavailable")
+var ErrAdmissionConflict = errors.New("space media admission conflicts with current state")
+var ErrRoomHeadPending = errors.New("space voice room incarnation is pending recovery")
 
 type AdmissionState = string
 

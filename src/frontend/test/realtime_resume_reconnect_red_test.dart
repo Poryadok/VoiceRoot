@@ -83,6 +83,16 @@ void main() {
         'status=${harness.container.read(realtimeLinkStatusProvider)}',
       );
 
+      Future<void> drainClosedSubscription() async {
+        // Cancelling an already-closed stream can return Dart's root-zone
+        // Future._nullFuture. Drain that continuation without advancing the
+        // fake clock, then flush work it schedules back into the test zone.
+        await tester.runAsync(() async {
+          await Future<void>.delayed(Duration.zero);
+        });
+        await tester.pump();
+      }
+
       harness = _ResumeReconnectHarness(trace: record);
       try {
         unawaited(harness.hub.ensureConnected());
@@ -123,6 +133,7 @@ void main() {
 
           elapsed += const Duration(seconds: 1);
           await tester.pump(const Duration(seconds: 1));
+          await drainClosedSubscription();
           elapsedSeconds += delay;
           snapshot('at retry deadline expectedAttempt=${attempt + 1}');
           expect(
@@ -145,6 +156,7 @@ void main() {
         expect(harness.transport.connections, hasLength(delays.length + 1));
         elapsed += const Duration(milliseconds: 1);
         await tester.pump(const Duration(milliseconds: 1));
+        await drainClosedSubscription();
         expect(
           harness.transport.connections,
           hasLength(delays.length + 2),
