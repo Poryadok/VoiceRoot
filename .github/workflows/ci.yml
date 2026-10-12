@@ -1397,6 +1397,7 @@ jobs:
     needs:
       - changes
       - ci-skip-gate
+      - compose-e2e
       - protobuf
       - compose-config
       - ci-script-tests
@@ -1436,7 +1437,22 @@ jobs:
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
           GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
+          RUN_COMPOSE_E2E: >-
+            ${{
+              (github.event_name == 'pull_request' &&
+               (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) ||
+              (github.event_name == 'push' &&
+               github.ref == 'refs/heads/master' &&
+               needs.changes.outputs.code == 'true' &&
+               (needs.changes.outputs.compose == 'true' ||
+                needs.changes.outputs.frontend == 'true' ||
+                needs.changes.outputs.global == 'true' ||
+                needs.changes.outputs.ci_global == 'true' ||
+                needs.changes.outputs.admin == 'true' ||
+                needs.changes.outputs.developer-portal == 'true'))
+            }}
           JOB_PROTOBUF: ${{ needs.protobuf.result }}
+          JOB_COMPOSE_E2E: ${{ needs.compose-e2e.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}

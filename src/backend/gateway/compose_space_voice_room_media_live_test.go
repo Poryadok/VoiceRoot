@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,33 +74,229 @@ type composeSpaceVoiceRoomJoin struct {
 	LivekitRoomName string `json:"livekit_room_name"`
 }
 
+const (
+	composeSpaceJoinMaxAttempts = 6
+	composeSpaceJoinRetryWindow = 6 * time.Second
+)
+
+var composeSpaceJoinRetryDelays = [...]time.Duration{
+	100 * time.Millisecond,
+	200 * time.Millisecond,
+	400 * time.Millisecond,
+	800 * time.Millisecond,
+	800 * time.Millisecond,
+}
+
+const composeSpaceAdmissionUnavailable = "Space media admission is not ready"
+
 func joinComposeSpaceVoiceRoom(t *testing.T, client *http.Client, base, accessToken, voiceRoomID, spaceID string) composeSpaceVoiceRoomJoin {
 	t.Helper()
-	body := strings.NewReader(fmt.Sprintf(`{"space":{"id":%q}}`, spaceID))
-	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/voice/rooms/"+voiceRoomID+"/join", body)
+	result, err := requestComposeSpaceVoiceRoomJoin(context.Background(), client, base, accessToken, voiceRoomID, spaceID, waitComposeSpaceJoinRetry)
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		// Decode only the public error fields; never dump credentials or a
-		// successful media response into CI logs.
-		var failure struct {
-			Code    string `json:"error_code"`
-			Message string `json:"message"`
+	return result
+}
+
+type composeSpaceJoinFailure struct {
+	Code    string `json:"error_code"`
+	Message string `json:"message"`
+}
+
+func requestComposeSpaceVoiceRoomJoin(
+	ctx context.Context,
+	client *http.Client,
+	base, accessToken, voiceRoomID, spaceID string,
+	wait func(context.Context, time.Duration) error,
+) (composeSpaceVoiceRoomJoin, error) {
+	ctx, cancel := context.WithTimeout(ctx, composeSpaceJoinRetryWindow)
+	defer cancel()
+	url := base + "/api/v1/voice/rooms/" + voiceRoomID + "/join"
+	body := fmt.Sprintf(`{"space":{"id":%q}}`, spaceID)
+	var last composeSpaceJoinFailure
+	var lastStatus int
+
+	for attempt := 1; attempt <= composeSpaceJoinMaxAttempts; attempt++ {
+		// Build a fresh request and body every time; retrying a consumed body would
+		// turn the second attempt into a different operation.
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+		if err != nil {
+			return composeSpaceVoiceRoomJoin{}, fmt.Errorf("build Space voice join request: %w", err)
 		}
-		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&failure)
-		require.Equal(t, http.StatusOK, resp.StatusCode,
-			"Space voice join failed: code=%q message=%q error_decode=%v", failure.Code, failure.Message, decodeErr)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			return composeSpaceVoiceRoomJoin{}, fmt.Errorf("send Space voice join request: %w", err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			var result struct {
+				VoiceSession composeSpaceVoiceRoomJoin `json:"voice_session"`
+			}
+			decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result)
+			_ = resp.Body.Close()
+			if decodeErr != nil {
+				return composeSpaceVoiceRoomJoin{}, fmt.Errorf("decode successful Space voice join response: %w", decodeErr)
+			}
+			return result.VoiceSession, nil
+		}
+
+		lastStatus = resp.StatusCode
+		last = composeSpaceJoinFailure{}
+		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&last)
+		_ = resp.Body.Close()
+		if decodeErr != nil {
+			return composeSpaceVoiceRoomJoin{}, fmt.Errorf("Space voice join failed: HTTP %d response did not contain a valid public error", lastStatus)
+		}
+		if lastStatus != http.StatusServiceUnavailable || last.Code != "unavailable" || last.Message != composeSpaceAdmissionUnavailable {
+			return composeSpaceVoiceRoomJoin{}, fmt.Errorf("Space voice join failed: HTTP %d code=%q message=%q", lastStatus, last.Code, last.Message)
+		}
+		if attempt == composeSpaceJoinMaxAttempts {
+			break
+		}
+		if err := wait(ctx, composeSpaceJoinRetryDelays[attempt-1]); err != nil {
+			return composeSpaceVoiceRoomJoin{}, fmt.Errorf("Space voice join readiness remained unavailable after %d attempts: code=%q message=%q: %w", attempt, last.Code, last.Message, err)
+		}
 	}
-	var result struct {
-		VoiceSession composeSpaceVoiceRoomJoin `json:"voice_session"`
+	return composeSpaceVoiceRoomJoin{}, fmt.Errorf("Space voice join readiness remained unavailable after %d attempts: code=%q message=%q", composeSpaceJoinMaxAttempts, last.Code, last.Message)
+}
+
+func waitComposeSpaceJoinRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
-	return result.VoiceSession
+}
+
+type composeJoinRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f composeJoinRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type composeJoinResponseBody struct {
+	reader io.Reader
+	closed bool
+}
+
+func (b *composeJoinResponseBody) Read(p []byte) (int, error) { return b.reader.Read(p) }
+func (b *composeJoinResponseBody) Close() error               { b.closed = true; return nil }
+
+func TestRequestComposeSpaceVoiceRoomJoinRetriesOnlyAdmissionReadiness(t *testing.T) {
+	const (
+		spaceID = "space-123"
+		roomID  = "voice-room-456"
+		token   = "fixture-token"
+	)
+	wantRequestBody := `{"space":{"id":"space-123"}}`
+	var requests []*http.Request
+	var requestBodies []string
+	var responseBodies []*composeJoinResponseBody
+	client := &http.Client{Transport: composeJoinRoundTripper(func(req *http.Request) (*http.Response, error) {
+		requests = append(requests, req)
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		requestBodies = append(requestBodies, string(body))
+		require.Equal(t, "Bearer "+token, req.Header.Get("Authorization"))
+		status, payload := http.StatusServiceUnavailable,
+			`{"error_code":"unavailable","message":"`+composeSpaceAdmissionUnavailable+`"}`
+		if len(requests) == 2 {
+			status, payload = http.StatusOK, `{"voice_session":{"room_id":"room","livekit_room_name":"lk-room"}}`
+		}
+		responseBody := &composeJoinResponseBody{reader: strings.NewReader(payload)}
+		responseBodies = append(responseBodies, responseBody)
+		return &http.Response{StatusCode: status, Body: responseBody, Header: make(http.Header)}, nil
+	})}
+	var waits []time.Duration
+	wait := func(ctx context.Context, delay time.Duration) error {
+		require.NoError(t, ctx.Err())
+		waits = append(waits, delay)
+		return nil
+	}
+
+	got, err := requestComposeSpaceVoiceRoomJoin(context.Background(), client, "http://fixture", token, roomID, spaceID, wait)
+	require.NoError(t, err)
+	require.Equal(t, composeSpaceVoiceRoomJoin{RoomID: "room", LivekitRoomName: "lk-room"}, got)
+	require.Len(t, requests, 2)
+	require.NotSame(t, requests[0], requests[1])
+	require.Equal(t, []string{wantRequestBody, wantRequestBody}, requestBodies)
+	require.Equal(t, []time.Duration{100 * time.Millisecond}, waits)
+	require.Len(t, responseBodies, 2)
+	for _, responseBody := range responseBodies {
+		require.True(t, responseBody.closed, "every response body must be closed")
+	}
+}
+
+func TestRequestComposeSpaceVoiceRoomJoinDoesNotRetryOtherFailures(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		payload string
+	}{
+		{name: "wrong status", status: http.StatusBadGateway, payload: `{"error_code":"unavailable","message":"` + composeSpaceAdmissionUnavailable + `"}`},
+		{name: "wrong code", status: http.StatusServiceUnavailable, payload: `{"error_code":"failed_precondition","message":"` + composeSpaceAdmissionUnavailable + `"}`},
+		{name: "wrong message", status: http.StatusServiceUnavailable, payload: `{"error_code":"unavailable","message":"Space voice media authority unavailable"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			body := &composeJoinResponseBody{reader: strings.NewReader(tc.payload)}
+			client := &http.Client{Transport: composeJoinRoundTripper(func(*http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{StatusCode: tc.status, Body: body, Header: make(http.Header)}, nil
+			})}
+			waits := 0
+			_, err := requestComposeSpaceVoiceRoomJoin(context.Background(), client, "http://fixture", "token", "room", "space", func(context.Context, time.Duration) error {
+				waits++
+				return nil
+			})
+			require.Error(t, err)
+			require.Equal(t, 1, calls)
+			require.Zero(t, waits)
+			require.True(t, body.closed)
+		})
+	}
+
+	calls := 0
+	client := &http.Client{Transport: composeJoinRoundTripper(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("fixture transport failure")
+	})}
+	_, err := requestComposeSpaceVoiceRoomJoin(context.Background(), client, "http://fixture", "token", "room", "space", func(context.Context, time.Duration) error {
+		t.Fatal("transport failures must not be retried")
+		return nil
+	})
+	require.Error(t, err)
+	require.Equal(t, 1, calls)
+}
+
+func TestRequestComposeSpaceVoiceRoomJoinCapsPersistentReadinessRetries(t *testing.T) {
+	calls := 0
+	var bodies []*composeJoinResponseBody
+	client := &http.Client{Transport: composeJoinRoundTripper(func(*http.Request) (*http.Response, error) {
+		calls++
+		body := &composeJoinResponseBody{reader: strings.NewReader(`{"error_code":"unavailable","message":"` + composeSpaceAdmissionUnavailable + `"}`)}
+		bodies = append(bodies, body)
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: body, Header: make(http.Header)}, nil
+	})}
+	var waits []time.Duration
+	_, err := requestComposeSpaceVoiceRoomJoin(context.Background(), client, "http://fixture", "token", "room", "space", func(ctx context.Context, delay time.Duration) error {
+		require.NoError(t, ctx.Err())
+		waits = append(waits, delay)
+		return nil
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "after 6 attempts")
+	require.Contains(t, err.Error(), `code="unavailable"`)
+	require.Contains(t, err.Error(), `message="`+composeSpaceAdmissionUnavailable+`"`)
+	require.Equal(t, composeSpaceJoinMaxAttempts, calls)
+	require.Len(t, waits, composeSpaceJoinMaxAttempts-1)
+	require.Equal(t, composeSpaceJoinRetryDelays[:], waits)
+	for _, body := range bodies {
+		require.True(t, body.closed, "every retry response body must be closed")
+	}
 }
 
 func leaveComposeSpaceVoiceRoom(t *testing.T, client *http.Client, base, accessToken, voiceRoomID string) {
