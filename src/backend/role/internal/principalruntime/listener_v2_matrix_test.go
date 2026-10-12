@@ -296,7 +296,7 @@ func TestRuntimeListener_RequiresVoicePrincipalForVoiceRoomGrants(t *testing.T) 
 
 	_, err := client.ResolveVoiceRoomGrants(ctx, &rolev1.ResolveVoiceRoomGrantsRequest{})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
-	require.Zero(t, recorder.calls, "unauthenticated request must not reach the handler")
+	require.Zero(t, recorder.calls.Load(), "unauthenticated request must not reach the handler")
 	require.Empty(t, recorder.principals)
 }
 

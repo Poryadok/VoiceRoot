@@ -455,6 +455,7 @@ game_checkpoint_path_allowed() {
 # path/blob at its own reviewed checkpoint.
 voice_room_grants_wiring_commit='c758b455103187fd1e40f76eabb35e90f62b7cf3'
 voice_room_grants_test_correction_commit='b4b04b9924bcca2b3e912406464bbffeda96a84f'
+voice_room_grants_listener_correction_commit='0e59d34239bd9f8bb375c7b1c4d1df5444175fb4'
 voice_room_grants_main_blob='952368ad43ee5631fe3b7049687f08e85fb93350'
 voice_room_grants_server_blob='9f6e879ff084469104810540fa2a3cdd1ea6dcbf'
 voice_room_grants_handler_blob='81853ed329b723941d6692efa32b66df2f56fba2'
@@ -462,6 +463,7 @@ voice_room_grants_original_handler_test_blob='6f648af7fade3c3a177b1def605df11eac
 voice_room_grants_original_listener_test_blob='96ac884d2d7774f37b3b370ab8a00b969fceae94'
 voice_room_grants_test_blob='4a9f707184175141fd9cf048430bbf21a00cf92b'
 voice_room_grants_listener_test_blob='112ed4f5c68e28fae373b7a23b76856ce2062cba'
+voice_room_grants_listener_final_blob='29abb80873eb6da42c08065f9df806861f134a52'
 voice_room_grants_checkpoint_for_path_blob() {
   local path="$1" actual_blob="$2"
   case "${path}:${actual_blob}" in
@@ -474,6 +476,8 @@ voice_room_grants_checkpoint_for_path_blob() {
     "src/backend/role/internal/grpcsvc/voice_room_grants_test.go:${voice_room_grants_test_blob}"|\
     "src/backend/role/internal/principalruntime/listener_v2_matrix_test.go:${voice_room_grants_listener_test_blob}")
       printf '%s\n' "${voice_room_grants_test_correction_commit}" ;;
+    "src/backend/role/internal/principalruntime/listener_v2_matrix_test.go:${voice_room_grants_listener_final_blob}")
+      printf '%s\n' "${voice_room_grants_listener_correction_commit}" ;;
     *) return 1 ;;
   esac
 }
@@ -503,12 +507,9 @@ voice_room_grants_corrected_test_paths=(
   'src/backend/role/internal/grpcsvc/voice_room_grants_test.go'
   'src/backend/role/internal/principalruntime/listener_v2_matrix_test.go'
 )
-voice_room_grants_checkpoint_paths=(
-  "${voice_room_grants_original_paths[@]}"
-  "${voice_room_grants_corrected_test_paths[@]}"
-)
 git -C "${ROOT}" diff --name-only "${voice_room_grants_wiring_commit}^" "${voice_room_grants_wiring_commit}" >"${TMP_DIR}/voice-room-grants-original-delta"
 git -C "${ROOT}" diff --name-only "${voice_room_grants_test_correction_commit}^" "${voice_room_grants_test_correction_commit}" >"${TMP_DIR}/voice-room-grants-correction-delta"
+git -C "${ROOT}" diff --name-only "${voice_room_grants_listener_correction_commit}^" "${voice_room_grants_listener_correction_commit}" >"${TMP_DIR}/voice-room-grants-listener-correction-delta"
 : >"${TMP_DIR}/voice-room-grants-empty-delta"
 for voice_room_grants_checkpoint_path in "${voice_room_grants_original_paths[@]}"; do
   voice_room_grants_checkpoint_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_wiring_commit}:${voice_room_grants_checkpoint_path}")"
@@ -526,6 +527,20 @@ for voice_room_grants_checkpoint_path in "${voice_room_grants_corrected_test_pat
     exit 2
   }
 done
+voice_room_grants_checkpoint_path='src/backend/role/internal/principalruntime/listener_v2_matrix_test.go'
+voice_room_grants_checkpoint_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_listener_correction_commit}:${voice_room_grants_checkpoint_path}")"
+voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${voice_room_grants_listener_correction_commit}" \
+  "${voice_room_grants_checkpoint_path}" "${TMP_DIR}/voice-room-grants-listener-correction-delta" \
+  "${voice_room_grants_checkpoint_blob}" || {
+  printf 'F13 oracle bug: exact Voice room-grant listener correction was rejected: %s\n' "${voice_room_grants_checkpoint_path}" >&2
+  exit 2
+}
+if voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${voice_room_grants_listener_correction_commit}^" \
+  "${voice_room_grants_checkpoint_path}" "${TMP_DIR}/voice-room-grants-listener-correction-delta" \
+  "${voice_room_grants_checkpoint_blob}"; then
+  printf 'F13 oracle bug: listener correction checkpoint accepted before its commit: %s\n' "${voice_room_grants_checkpoint_path}" >&2
+  exit 2
+fi
 for voice_room_grants_checkpoint_path in "${voice_room_grants_corrected_test_paths[@]}"; do
   voice_room_grants_checkpoint_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_test_correction_commit}:${voice_room_grants_checkpoint_path}")"
   if voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${voice_room_grants_test_correction_commit}^" \

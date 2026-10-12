@@ -533,7 +533,18 @@ func (c *Coordinator) ReconcileAll(ctx context.Context) error {
 	}
 	c.reconcileMu.Lock()
 	defer c.reconcileMu.Unlock()
-	c.setReady(false)
+	// Retain established readiness across a successful periodic refresh; each RPC
+	// still checks current authority and journal state. Startup stays closed, and
+	// a failed refresh closes serving below.
+	if !c.ready {
+		c.setReady(false)
+	}
+	converged := false
+	defer func() {
+		if !converged && c.ready {
+			c.setReady(false)
+		}
+	}()
 	if err := c.reconcileAdmissions(ctx); err != nil {
 		return err
 	}
@@ -546,7 +557,10 @@ func (c *Coordinator) ReconcileAll(ctx context.Context) error {
 			return err
 		}
 	}
-	c.setReady(true)
+	if !c.ready {
+		c.setReady(true)
+	}
+	converged = true
 	return nil
 }
 
