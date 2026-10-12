@@ -117,13 +117,17 @@ class CustodyPublicationBoundaryTests(unittest.TestCase):
     def test_custody_cas_rechecks_after_own_intent_and_default_remains_normal(self):
         import hashlib
         from nats_contract_custody import advance
+        from nats_contract_plan import DECLARATIONS,SCHEMA,MIGRATION_ID,digest
         for expired in (False,True):
             with self.subTest(expired=expired):
                 old='original-script';new='target-script';sha=lambda text:hashlib.sha256(text.encode()).hexdigest()
                 row={'metadata':{'uid':'cm','resourceVersion':'11'},'data':{'bootstrap.sh':old}}
                 state={'operation':'3340764a7d24','nats_migration':{'verified':True,'old_record_files_verified':True,'proof':{}},
                     'contract':{'scripts':[{'part':'realtime','configMapUID':'cm','configMapResourceVersion':'11','sha256':sha(old)}],'consumer_pairs':[]},
-                    'nats_target_scripts':{'realtime':{'script':new,'sha256':sha(new)}},'nats_contract':{'migration_id':'fixed','sources':{},'actions':[]}}
+                    'nats_target_scripts':{'realtime':{'script':new,'sha256':sha(new)}},
+                    'nats_contract':{'schema':SCHEMA,'migration_id':MIGRATION_ID,'sources':{},'actions':[],
+                        'consumer_targets':[{'stream':stream,'name':config['durable_name'],'config_sha256':digest(config)}
+                            for stream,config in DECLARATIONS]}}
                 kube=Mock();kube.get.return_value=row
                 kube.cas.return_value={'metadata':{'uid':'cm','resourceVersion':'12'},'data':{'bootstrap.sh':new}}
                 stage=Mock();stage.expected={'generation':'g','namespace_uid':'ns','source_claim_uid':'pvc'}

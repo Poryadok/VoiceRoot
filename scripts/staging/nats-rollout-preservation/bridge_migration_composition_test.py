@@ -12,6 +12,7 @@ import actor_root
 import github_custody_test as http
 from native_store import archive_closed_store
 from nats_contract_plan import digest
+from nats_contract_plan_test import CensusTests as ContractPlanFixture
 
 @unittest.skipUnless(os.name=='posix' and os.geteuid()==0,'disposable root Linux fixture')
 class Tests(unittest.TestCase):
@@ -63,7 +64,8 @@ class Tests(unittest.TestCase):
                 order.append('sole-restart');stage.marker['data']['phase']='active';stage.marker['data'].pop('knownRolloutOperation',None)
                 return {'verified':True}
             stage.restart.side_effect=restart
-            enrollment={'fixture':'existing-actor-auth-proof'};authority={'plan':{'migration_id':'fixed-approved','sources':{}},'binding':{},
+            enrollment={'fixture':'existing-actor-auth-proof'};plan_fixture=ContractPlanFixture();plan_fixture.setUp()
+            authority={'plan':plan_fixture.plan(),'binding':{},
                 'scripts':{part:{'script':'target','sha256':hashlib.sha256(b'target').hexdigest()} for part in scripts}}
             # Explicit external actor fixture; actual role/auth/schema checks have
             # separate real-capture and pinned-binary tests, never caller flags.
