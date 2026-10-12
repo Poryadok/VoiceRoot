@@ -405,6 +405,26 @@ func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemovePart
 	spaceMembers := f.svc.SpaceMembers.(*mapSpaceMembers)
 	delete(spaceMembers.members[f.spaceID], fixtureProfileMember)
 
+	// Leaving uses the admitted media incarnation, including its revocation
+	// dependency; membership loss must not turn this into legacy roster removal.
+	call, err := f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.voiceRoomID)
+	require.NoError(t, err)
+	participant, ok := call.SpaceMedia[fixtureProfileMember]
+	require.True(t, ok)
+	admissions := &screenShareLeaveAdmission{}
+	f.svc.SpaceMediaAdmissions = admissions
+	calls := f.svc.Calls.(*voicestore.MemoryCallStore)
+	media := &screenShareLeaveMedia{
+		calls: calls, admissions: admissions, roomName: call.LivekitRoomName,
+		roomID: call.RoomID, spaceID: f.spaceID, voiceRoomID: f.voiceRoomID,
+		identity: participant.Identity, participant: participant,
+	}
+	revoker := &screenShareLeaveRevoker{
+		calls: calls, media: media, spaceID: f.spaceID,
+		voiceRoomID: f.voiceRoomID, profileID: fixtureProfileMember,
+	}
+	f.svc.SpaceMediaRevoker = revoker
+
 	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx(fixtureProfileMember), &callsv1.LeaveVoiceRoomRequest{
 		VoiceRoomId: f.voiceRoomID,
 	})
@@ -425,6 +445,14 @@ func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemovePart
 	})
 	require.NoError(t, err)
 	require.Len(t, states.GetParticipants(), 1, "a different profile's leave cannot remove the remaining participant")
+	require.Equal(t, []string{fixtureProfileMember}, revoker.removedProfiles)
+	require.Equal(t, []string{participant.Identity}, media.removedIdentities)
+	require.True(t, media.participantRevoking)
+	require.Equal(t, []uuid.UUID{uuid.MustParse(participant.AdmissionOperationID)}, admissions.beginOperations)
+	require.Equal(t, []string{participant.Generation}, admissions.beginGenerations)
+	require.Len(t, admissions.completed, 1, "an outsider's leave does not start another cleanup")
+	require.Equal(t, participant.AdmissionOperationID, admissions.completed[0].OperationID.String())
+	require.Equal(t, participant.Generation, admissions.completed[0].Generation)
 }
 
 func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *testing.T) {

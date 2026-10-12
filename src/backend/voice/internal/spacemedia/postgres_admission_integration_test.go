@@ -201,10 +201,12 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	coordinator := &Coordinator{
 		Store: calls, Calls: calls, Admissions: faultingAdmissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			failed.ProfileID.String(): {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch},
+			creator.ProfileID.String(): {SpaceID: creator.SpaceID.String(), Active: true, Member: true, AccessEpoch: creator.AccessEpoch},
+			failed.ProfileID.String():  {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
-			failed.ProfileID.String(): {PolicyEpoch: failed.PolicyEpoch, CanJoin: true, CanSubscribe: true},
+			creator.ProfileID.String(): {PolicyEpoch: creator.PolicyEpoch, CanJoin: true, CanSubscribe: true},
+			failed.ProfileID.String():  {PolicyEpoch: failed.PolicyEpoch, CanJoin: true, CanSubscribe: true},
 		}},
 		SessionEpochChecker: currentEpochChecker{},
 	}
@@ -230,6 +232,14 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	require.NotContains(t, call.SpaceMedia, failed.ProfileID.String())
 
 	require.NoError(t, coordinator.reconcileAdmissions(ctx), "a normal retry after lost acknowledgement is harmless")
+	require.False(t, faultingAdmissions.loseNextCleanupAck, "the lost acknowledgement fault was exercised")
+	require.NoError(t, admissions.ConfirmProjection(ctx, creator.OperationID, creator.Generation))
+	call, err = calls.GetCall(ctx, creator.RoomID)
+	require.NoError(t, err)
+	require.Len(t, call.SpaceMedia, store.MaxVoiceRoomParticipants)
+	require.Equal(t, creator.OperationID.String(), call.SpaceMedia[creator.ProfileID.String()].AdmissionOperationID)
+	require.Equal(t, creator.Generation, call.SpaceMedia[creator.ProfileID.String()].Generation)
+	require.Equal(t, creator.Identity, call.SpaceMedia[creator.ProfileID.String()].Identity)
 	rows, err = admissions.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Empty(t, rows)
