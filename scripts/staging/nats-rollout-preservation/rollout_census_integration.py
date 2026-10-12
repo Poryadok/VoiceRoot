@@ -4,6 +4,7 @@ Run with Python on the development host. Only a fresh labeled test volume and
 owned network-none containers are accepted; no staging inputs or URLs exist.
 The embedded issuer makes disposable JWTs inside the private Linux test volume.
 """
+import ast
 import copy
 import json
 import os
@@ -127,6 +128,36 @@ def call(args, **kwargs):
     return result.stdout.decode().strip()
 
 
+def _pinned_runtime_images():
+    module_dir = Path(__file__).resolve().parents[1] / 'nats-known-baseline'
+    tree = ast.parse((module_dir / 'docker_runtime.py').read_text(encoding='utf-8'))
+    images = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Constant):
+            continue
+        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if node.targets[0].id in ('NATS_IMAGE', 'BOX_IMAGE') and isinstance(node.value.value, str):
+                images[node.targets[0].id] = node.value.value
+    if set(images) != {'NATS_IMAGE', 'BOX_IMAGE'}:
+        raise RuntimeError('fixture_runtime_image_source_invalid')
+    return images['NATS_IMAGE'], images['BOX_IMAGE']
+
+
+def _prefetch_pinned_images(images, command):
+    for image in images:
+        repository, separator, digest = image.partition('@sha256:')
+        if (not repository or not separator or len(digest) != 64
+                or any(char not in '0123456789abcdef' for char in digest)):
+            raise RuntimeError('fixture_pinned_image_reference_invalid')
+        command(['docker', 'pull', image])
+        rows = json.loads(command(['docker', 'image', 'inspect', image]))
+        if (not isinstance(rows, list) or len(rows) != 1
+                or not isinstance(rows[0].get('RepoDigests'), list)
+                or 'sha256:' + digest not in [row.split('@')[-1] for row in rows[0]['RepoDigests']
+                                             if isinstance(row, str)]):
+            raise RuntimeError('fixture_pinned_image_digest_invalid')
+
+
 def inner(base):
     sys.path[:0] = ['/bundle', '/source/scripts/staging/nats-known-baseline']
     from docker_runtime import DockerRuntime, NATS_IMAGE
@@ -241,6 +272,8 @@ def remote_run(bundle, transport='pmdebook'):
     elif transport != 'github-hosted':
         raise RuntimeError('owned_census_fixture_transport_invalid')
     assert call(['docker', 'info', '--format', '{{.OSType}}']) == 'linux'
+    if transport == 'github-hosted':
+        _prefetch_pinned_images(_pinned_runtime_images(), call)
     operation = 'voice-nats-rollout-fixture-' + uuid.uuid4().hex[:16]
     label = 'voice.rollout.census=' + operation
     run_id = uuid.uuid4().hex[:12]

@@ -70,6 +70,42 @@ class HostedTransportTests(unittest.TestCase):
                         integration.fixture.remote_run(Path('/synthetic'), transport='github-hosted')
         docker.assert_not_called()
 
+    def test_hosted_prefetches_exact_pinned_images_before_fixture_allocation(self):
+        images = integration.fixture._pinned_runtime_images()
+        calls = []
+
+        def docker(args):
+            calls.append(args)
+            if args[:3] == ['docker', 'image', 'inspect']:
+                image = args[3]
+                return json.dumps([{'RepoDigests': [image]}])
+            return ''
+
+        integration.fixture._prefetch_pinned_images(images, docker)
+        expected = []
+        for image in images:
+            self.assertRegex(image, r'.+@sha256:[a-f0-9]{64}\Z')
+            expected.extend((['docker', 'pull', image], ['docker', 'image', 'inspect', image]))
+        self.assertEqual(calls, expected)
+        self.assertEqual(len(images), 2)
+
+    def test_hosted_prefetch_rejects_wrong_digest_before_any_fixture_creation(self):
+        images = integration.fixture._pinned_runtime_images()
+        calls = []
+
+        def docker(args):
+            calls.append(args)
+            if args[:2] == ['docker', 'image']:
+                return json.dumps([{'RepoDigests': ['example.invalid/wrong@sha256:' + '0' * 64]}])
+            return ''
+
+        with self.assertRaisesRegex(RuntimeError, 'fixture_pinned_image_digest_invalid'):
+            integration.fixture._prefetch_pinned_images(images, docker)
+        self.assertEqual(calls, [
+            ['docker', 'pull', images[0]],
+            ['docker', 'image', 'inspect', images[0]],
+        ])
+
     def test_fixture_failure_reports_only_bounded_safe_exception_labels(self):
         stderr = (b'Traceback (most recent call last):\n'
                   b'  File "/bundle/contract_fixture.py", line 123, in inner\n'
@@ -93,12 +129,19 @@ class HostedTransportTests(unittest.TestCase):
     def test_failed_before_outer_creation_still_removes_exact_owned_volume(self):
         operation = 'voice-nats-rollout-fixture-' + '1' * 16
         label = 'voice.rollout.census=' + operation
+        images = integration.fixture._pinned_runtime_images()
         volume = {'Name': operation, 'Labels': {'voice.rollout.census': operation},
                   'Mountpoint': '/var/lib/docker/volumes/' + operation + '/_data'}
+        calls = []
 
         def docker(args):
+            calls.append(args)
             if args[:3] == ['docker', 'info', '--format']:
                 return 'linux'
+            if args[:2] == ['docker', 'pull']:
+                return ''
+            if args[:3] == ['docker', 'image', 'inspect']:
+                return json.dumps([{'RepoDigests': [args[3]]}])
             if args[:3] == ['docker', 'volume', 'create']:
                 return operation
             if args[:3] == ['docker', 'volume', 'inspect']:
@@ -119,6 +162,31 @@ class HostedTransportTests(unittest.TestCase):
                     with patch.dict(os.environ, {'RUNNER_ENVIRONMENT': 'github-hosted', 'GITHUB_ACTIONS': 'true'}):
                         with self.assertRaisesRegex(RuntimeError, 'synthetic_runner_create_failure'):
                             integration.fixture.remote_run(Path('/synthetic'), transport='github-hosted')
+        volume_create = calls.index(['docker', 'volume', 'create', '--label', label, operation])
+        self.assertLess(max(calls.index(['docker', 'pull', image]) for image in images), volume_create)
+        self.assertLess(max(calls.index(['docker', 'image', 'inspect', image]) for image in images), volume_create)
+
+    def test_hosted_pull_failure_precedes_fixture_volume_creation(self):
+        calls = []
+
+        def docker(args):
+            calls.append(args)
+            if args[:3] == ['docker', 'info', '--format']:
+                return 'linux'
+            if args[:2] == ['docker', 'pull']:
+                raise RuntimeError('synthetic_pinned_image_pull_failure')
+            raise AssertionError('fixture allocation started before image prefetch: ' + repr(args[:3]))
+
+        with patch.object(integration.fixture, 'call', side_effect=docker):
+            with patch.object(integration.uuid, 'uuid4', return_value=type('UUID', (), {'hex': '1' * 32})()):
+                with patch.object(integration.sys, 'platform', 'linux'):
+                    with patch.dict(os.environ, {'RUNNER_ENVIRONMENT': 'github-hosted', 'GITHUB_ACTIONS': 'true'}):
+                        with self.assertRaisesRegex(RuntimeError, 'synthetic_pinned_image_pull_failure'):
+                            integration.fixture.remote_run(Path('/synthetic'), transport='github-hosted')
+        self.assertEqual(calls[:2], [
+            ['docker', 'info', '--format', '{{.OSType}}'],
+            ['docker', 'pull', integration.fixture._pinned_runtime_images()[0]],
+        ])
 
 
 if __name__ == '__main__':
