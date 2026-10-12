@@ -67,6 +67,7 @@ func (s *SharedMediaStore) List(
 	kind SharedMediaKind,
 	cursor string,
 	limit int32,
+	viewerProfileIDs ...uuid.UUID,
 ) ([]SharedMediaRow, string, bool, error) {
 	if s == nil || s.Pool == nil {
 		return nil, "", false, errors.New("shared media store not configured")
@@ -77,10 +78,14 @@ func (s *SharedMediaStore) List(
 	if limit > 100 {
 		limit = 100
 	}
-	if kind == SharedMediaKindLinks {
-		return s.listLinks(ctx, chatID, cursor, limit)
+	var viewerProfileID *uuid.UUID
+	if len(viewerProfileIDs) > 0 {
+		viewerProfileID = &viewerProfileIDs[0]
 	}
-	return s.listAttachments(ctx, chatID, kind, cursor, limit)
+	if kind == SharedMediaKindLinks {
+		return s.listLinks(ctx, chatID, cursor, limit, viewerProfileID)
+	}
+	return s.listAttachments(ctx, chatID, kind, cursor, limit, viewerProfileID)
 }
 
 func (s *SharedMediaStore) listAttachments(
@@ -89,6 +94,7 @@ func (s *SharedMediaStore) listAttachments(
 	kind SharedMediaKind,
 	cursor string,
 	limit int32,
+	viewerProfileID *uuid.UUID,
 ) ([]SharedMediaRow, string, bool, error) {
 	types := attachmentTypesForKind(kind)
 	if len(types) == 0 {
@@ -111,6 +117,12 @@ WHERE m.chat_id = $1
 `
 	args := []any{chatID, types}
 	argN := 3
+	if viewerProfileID != nil {
+		query += ` AND (NOT COALESCE(m.ghost_only, false) OR m.sender_profile_id = $3)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = m.id AND h.profile_id = $3)`
+		args = append(args, *viewerProfileID)
+		argN++
+	}
 	if cursorMsgID != uuid.Nil {
 		query += fmt.Sprintf(`
   AND (
@@ -175,6 +187,7 @@ func (s *SharedMediaStore) listLinks(
 	chatID uuid.UUID,
 	cursor string,
 	limit int32,
+	viewerProfileID *uuid.UUID,
 ) ([]SharedMediaRow, string, bool, error) {
 	cursorMsgID, cursorSort, err := parseSharedMediaCursor(cursor)
 	if err != nil {
@@ -194,8 +207,13 @@ WHERE chat_id = $1
   AND content ~ 'https?://'
 `
 		args := []any{chatID}
+		if viewerProfileID != nil {
+			query += ` AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $2)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = messages.id AND h.profile_id = $2)`
+			args = append(args, *viewerProfileID)
+		}
 		if lastScannedID != nil {
-			query += ` AND id < $2`
+			query += fmt.Sprintf(` AND id < $%d`, len(args)+1)
 			args = append(args, *lastScannedID)
 		}
 		query += ` ORDER BY id DESC LIMIT $` + strconv.Itoa(len(args)+1)

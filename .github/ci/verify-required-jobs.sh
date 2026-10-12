@@ -58,6 +58,7 @@ RUN_GO_INTEGRATION="${RUN_GO_INTEGRATION:-false}"
 RUN_PKG="${RUN_PKG:-false}"
 RUN_AUTH="${RUN_AUTH:-false}"
 RUN_FLUTTER="${RUN_FLUTTER:-false}"
+RUN_WINDOWS_DESKTOP="${RUN_WINDOWS_DESKTOP:-false}"
 RUN_WEB="${RUN_WEB:-false}"
 RUN_ADMIN="${RUN_ADMIN:-false}"
 RUN_PORTAL="${RUN_PORTAL:-false}"
@@ -81,6 +82,7 @@ check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
 check_if "${GLOBAL}" ci-script-tests
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-driver
+check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
 check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg

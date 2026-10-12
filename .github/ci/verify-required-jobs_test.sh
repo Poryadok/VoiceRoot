@@ -33,6 +33,7 @@ all_jobs_success() {
   JOB_CI_SCRIPT_TESTS=success
   JOB_FLUTTER=success
   JOB_FLUTTER_DEVICE_DRIVER=success
+  JOB_FLUTTER_WINDOWS=success
   JOB_WEB=success
   JOB_GOLANGCI=success
   JOB_BACKEND_GO_PKG=success
@@ -94,6 +95,14 @@ echo "== selected Flutter device-driver abandoned result fails =="
 run_gate 1 \
   RUN_FLUTTER=true \
   JOB_FLUTTER=success JOB_FLUTTER_DEVICE_DRIVER=abandoned JOB_WEB=success
+
+echo "== selected Windows desktop build requires literal success =="
+run_gate 0 RUN_WINDOWS_DESKTOP=true JOB_FLUTTER_WINDOWS=success
+run_gate 1 RUN_WINDOWS_DESKTOP=true JOB_FLUTTER_WINDOWS=skipped
+run_gate 1 RUN_WINDOWS_DESKTOP=true JOB_FLUTTER_WINDOWS=failure
+
+echo "== unselected Windows desktop build may be skipped =="
+run_gate 0 RUN_WINDOWS_DESKTOP=false JOB_FLUTTER_WINDOWS=skipped
 
 echo "== broad Go CI with empty PR integration matrix permits skipped integration job =="
 all_jobs_success

@@ -136,6 +136,7 @@ class ChatRailQuickAccessSection extends ConsumerWidget {
 
   static const sectionKey = Key('chat_rail_quick_access');
   static const reorderListKey = Key('chat_rail_quick_access_reorder');
+  static const retryKey = Key('chat_rail_quick_access_retry');
   static Key itemKey(String chatId) => Key('chat_rail_qa_$chatId');
 
   @override
@@ -191,7 +192,16 @@ class ChatRailQuickAccessSection extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, _) => const SizedBox.shrink(),
+      error: (_, _) => Semantics(
+        label: l10n.chatListLoadError,
+        hint: l10n.commonRetry,
+        child: IconButton(
+          key: retryKey,
+          tooltip: l10n.commonRetry,
+          onPressed: () => ref.invalidate(quickAccessListProvider),
+          icon: const Icon(Icons.refresh),
+        ),
+      ),
     );
   }
 

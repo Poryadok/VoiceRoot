@@ -36,7 +36,7 @@
 
 **Heartbeat write:** each successful presence upsert sets session hash + refreshes interim Redis `last_seen`. Transition to offline / graceful disconnect must leave interim last_seen intact (do not delete the 30d key).
 
-`send_when_online` (Messaging) consumes **live** presence from User (`GetPresence` / `GetBulkPresence`), not durable last seen alone.
+Messaging's scheduled `when_online` DM dispatch uses User's dedicated authenticated `GetScheduledMessageDispatchPresence` decision. It rechecks current sender ownership, DM/guest/block policy, `show_online`, and exact live `online` status; `at` dispatch does not consult presence. For group/channel `at` schedules the same private operation validates the persisted sender only, while Messaging rechecks the chat-specific delivery guards. The method is not a general `GetPresence` / `GetBulkPresence` lookup, and durable last seen never makes a schedule eligible — see the [User service boundary](../microservices/user-service.md#messaging-scheduled-delivery-presence-principal-boundary).
 
 ### Realtime / event fan-out (gaps)
 

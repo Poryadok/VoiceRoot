@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/proto_mappers.dart';
 import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart'
     as messaging_pb;
 
@@ -77,7 +78,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getMessages(
         authorization: auth,
@@ -101,7 +104,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getMessages(
         authorization: auth,
@@ -139,7 +144,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getThreadMessages(
         authorization: auth,
@@ -171,7 +178,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getPinnedMessages(
         authorization: auth,
@@ -207,7 +216,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getMessages(
         authorization: auth,
         chatId: 'chat-1',
@@ -247,7 +258,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getMessages(authorization: auth, chatId: 'chat-1');
       final message =
           (r as MessagesApiOk<MessageListData>).data.messages.single;
@@ -272,7 +285,9 @@ void main() {
             200,
           );
         });
-        final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
         final r = await client.getMessages(
           authorization: auth,
           chatId: 'chat-1',
@@ -303,7 +318,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -311,6 +328,258 @@ void main() {
       );
       expect(r, isA<MessagesApiOk<VoiceMessage>>());
       expect((r as MessagesApiOk<VoiceMessage>).data.id, 'msg-new');
+    });
+
+    test(
+      'scheduled send preserves the documented request identity and mode',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'POST');
+          expect(req.url.path, '/api/v1/messages/send');
+          final body = jsonDecode(req.body) as Map<String, dynamic>;
+          expect(body['client_message_id'], 'schedule-retry-id');
+          expect(body['send_when_online'], isTrue);
+          expect(body.containsKey('scheduled_at'), isFalse);
+          expect(body['chat'], {'id': 'chat-1'});
+          return http.Response(
+            jsonEncode({
+              'scheduled_message': {
+                'id': 'schedule-1',
+                'chat': {'id': 'chat-1'},
+                'sender_profile_id': 'profile-a',
+                'client_message_id': 'schedule-retry-id',
+                'send_when_online': true,
+                'status': 'SCHEDULED_MESSAGE_STATUS_PENDING',
+                'payload': {'content': 'Later'},
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        final result = await client.scheduleMessage(
+          authorization: auth,
+          chatId: 'chat-1',
+          content: 'Later',
+          clientMessageId: 'schedule-retry-id',
+          sendWhenOnline: true,
+        );
+        expect(result, isA<MessagesApiOk<messaging_pb.ScheduledMessage>>());
+        expect(
+          (result as MessagesApiOk<messaging_pb.ScheduledMessage>).data.id,
+          'schedule-1',
+        );
+      },
+    );
+
+    test('scheduled send rejects an immediate-message response arm', () async {
+      final mock = MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'message': {
+              'id': 'msg-wrong-arm',
+              'chat': {'id': 'chat-1'},
+              'sender_profile_id': 'profile-a',
+              'content': 'Later',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.scheduleMessage(
+        authorization: auth,
+        chatId: 'chat-1',
+        content: 'Later',
+        clientMessageId: 'schedule-id',
+        scheduledAt: DateTime.utc(2026, 10, 10),
+      );
+      expect(result, isA<MessagesApiFailure>());
+    });
+
+    test(
+      'scheduled send preserves an unavailable response as a retryable failure',
+      () async {
+        final mock = MockClient((_) async {
+          return http.Response(
+            jsonEncode({'code': 'UNAVAILABLE', 'message': 'temporary failure'}),
+            503,
+          );
+        });
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.scheduleMessage(
+          authorization: auth,
+          chatId: 'chat-1',
+          content: 'Later',
+          clientMessageId: 'same-retry-id',
+          scheduledAt: DateTime.utc(2026, 10, 10),
+        );
+
+        expect(result, isA<MessagesApiFailure>());
+        expect((result as MessagesApiFailure).statusCode, 503);
+      },
+    );
+
+    test(
+      'schedule list uses chat-scoped cursor request and snake-case response',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/messages/scheduled');
+          expect(req.url.queryParameters, {
+            'chat_id': 'chat-1',
+            'cursor': 'opaque-cursor',
+            'page_size': '20',
+          });
+          return http.Response(
+            jsonEncode({
+              'scheduled_messages': [
+                {
+                  'id': 'schedule-1',
+                  'chat': {'id': 'chat-1'},
+                  'client_message_id': 'client-1',
+                  'send_when_online': true,
+                  'payload': {'content': 'Later'},
+                },
+              ],
+              'page': {'next_cursor': 'next', 'has_more': true},
+            }),
+            200,
+          );
+        });
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        final result = await client.listScheduledMessages(
+          authorization: auth,
+          chatId: 'chat-1',
+          cursor: 'opaque-cursor',
+          pageSize: 20,
+        );
+        expect(
+          result,
+          isA<MessagesApiOk<messaging_pb.ListScheduledMessagesResponse>>(),
+        );
+        final response =
+            (result
+                    as MessagesApiOk<
+                      messaging_pb.ListScheduledMessagesResponse
+                    >)
+                .data;
+        expect(response.scheduledMessages.single.id, 'schedule-1');
+        expect(response.page.nextCursor, 'next');
+      },
+    );
+
+    test('cancel and send-now use the documented lifecycle routes', () async {
+      var calls = 0;
+      final mock = MockClient((req) async {
+        calls++;
+        if (calls == 1) {
+          expect(req.method, 'DELETE');
+          expect(req.url.path, '/api/v1/messages/scheduled/schedule-1');
+          return http.Response('', 204);
+        }
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/messages/scheduled/schedule-1/send-now');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['scheduled_message_id'], 'schedule-1');
+        return http.Response(
+          jsonEncode({
+            'message': {
+              'id': 'msg-now',
+              'chat': {'id': 'chat-1'},
+              'sender_profile_id': 'profile-a',
+              'content': 'Later',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      expect(
+        await client.cancelScheduledMessage(
+          authorization: auth,
+          scheduledMessageId: 'schedule-1',
+        ),
+        isA<MessagesApiOk<void>>(),
+      );
+      final result = await client.sendScheduledMessageNow(
+        authorization: auth,
+        scheduledMessageId: 'schedule-1',
+      );
+      expect(result, isA<MessagesApiOk<VoiceMessage>>());
+      expect((result as MessagesApiOk<VoiceMessage>).data.id, 'msg-now');
+    });
+
+    test(
+      'schedule update sends an optional payload and selected delivery arm',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'PATCH');
+          expect(req.url.path, '/api/v1/messages/scheduled/schedule-1');
+          final body = jsonDecode(req.body) as Map<String, dynamic>;
+          expect(body['scheduled_message_id'], 'schedule-1');
+          expect(body['send_when_online'], isTrue);
+          expect(body.containsKey('scheduled_at'), isFalse);
+          expect(body['payload'], {'content': 'Updated'});
+          return http.Response(
+            jsonEncode({
+              'scheduled_message': {
+                'id': 'schedule-1',
+                'chat': {'id': 'chat-1'},
+                'client_message_id': 'client-1',
+                'send_when_online': true,
+                'payload': {'content': 'Updated'},
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        final result = await client.updateScheduledMessage(
+          authorization: auth,
+          scheduledMessageId: 'schedule-1',
+          payload: messaging_pb.ScheduledMessagePayload(content: 'Updated'),
+          sendWhenOnline: true,
+        );
+        expect(result, isA<MessagesApiOk<messaging_pb.ScheduledMessage>>());
+        expect(
+          (result as MessagesApiOk<messaging_pb.ScheduledMessage>)
+              .data
+              .payload
+              .content,
+          'Updated',
+        );
+      },
+    );
+
+    test('schedule request mapper sets only the selected delivery oneof', () {
+      final scheduled = sendMessageRequestToProto(
+        chatId: 'chat-1',
+        content: 'Later',
+        scheduledAt: DateTime.utc(2026, 10, 10),
+      );
+      expect(scheduled.hasScheduledAt(), isTrue);
+      expect(scheduled.whichDeliverySchedule().name, 'scheduledAt');
+      final online = sendMessageRequestToProto(
+        chatId: 'chat-1',
+        content: 'When available',
+        sendWhenOnline: true,
+      );
+      expect(online.sendWhenOnline, isTrue);
+      expect(online.whichDeliverySchedule().name, 'sendWhenOnline');
     });
 
     test('POST /api/v1/messages/send includes mentions_json', () async {
@@ -336,7 +605,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -350,7 +621,10 @@ void main() {
       );
       expect(r, isA<MessagesApiOk<VoiceMessage>>());
       final msg = (r as MessagesApiOk<VoiceMessage>).data;
-      expect(msg.mentions.single.targetId, '22222222-2222-2222-2222-222222222222');
+      expect(
+        msg.mentions.single.targetId,
+        '22222222-2222-2222-2222-222222222222',
+      );
     });
 
     test('POST /api/v1/messages/send includes attachments_json', () async {
@@ -376,7 +650,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -409,7 +685,9 @@ void main() {
         expect(body['last_read_message_id'], 'msg-9');
         return http.Response('{}', 200);
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.markRead(
         authorization: auth,
         chatId: 'chat-1',
@@ -439,7 +717,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.editMessage(
         authorization: auth,
         messageId: 'msg-1',
@@ -456,7 +736,9 @@ void main() {
         expect(req.url.queryParameters['scope'], 'me');
         return http.Response('', 204);
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.deleteMessage(
         authorization: auth,
         messageId: 'msg-1',
@@ -483,7 +765,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getReadState(
         authorization: auth,
         chatId: 'chat-1',

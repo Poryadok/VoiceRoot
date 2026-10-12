@@ -1046,6 +1046,72 @@ abstract class AppLocalizations {
   /// **'Load more chats'**
   String get chatListLoadMore;
 
+  /// No description provided for @chatScheduleMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatScheduleMessage;
+
+  /// No description provided for @chatSendWhenOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online'**
+  String get chatSendWhenOnline;
+
+  /// No description provided for @chatSchedulePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatSchedulePickerTitle;
+
+  /// No description provided for @chatSchedulePending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get chatSchedulePending;
+
+  /// No description provided for @chatScheduleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit scheduled message'**
+  String get chatScheduleEdit;
+
+  /// No description provided for @chatScheduleCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel scheduled message'**
+  String get chatScheduleCancel;
+
+  /// No description provided for @chatScheduleSendNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Send now'**
+  String get chatScheduleSendNow;
+
+  /// No description provided for @chatScheduleRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatScheduleRetry;
+
+  /// No description provided for @chatScheduleDateInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a time within the next 365 days'**
+  String get chatScheduleDateInvalid;
+
+  /// No description provided for @chatScheduleFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the scheduled-message request. Try again.'**
+  String get chatScheduleFailure;
+
+  /// No description provided for @chatScheduleLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more scheduled messages'**
+  String get chatScheduleLoadMore;
+
   /// No description provided for @chatListUnreadCount.
   ///
   /// In en, this message translates to:
@@ -2252,6 +2318,12 @@ abstract class AppLocalizations {
   /// **'Unpin message'**
   String get chatMessageUnpin;
 
+  /// No description provided for @chatPinnedLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'You can pin up to 5 messages.'**
+  String get chatPinnedLimitReached;
+
   /// No description provided for @chatPinnedBar.
   ///
   /// In en, this message translates to:
@@ -3386,6 +3458,24 @@ abstract class AppLocalizations {
   /// **'You will no longer receive messages from this group.'**
   String get chatGroupLeaveConfirmMessage;
 
+  /// No description provided for @chatChannelLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel'**
+  String get chatChannelLeave;
+
+  /// No description provided for @chatChannelLeaveConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel?'**
+  String get chatChannelLeaveConfirmTitle;
+
+  /// No description provided for @chatChannelLeaveConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You will no longer receive messages from this channel.'**
+  String get chatChannelLeaveConfirmMessage;
+
   /// No description provided for @chatGroupOwnerLeaveHint.
   ///
   /// In en, this message translates to:
@@ -3427,6 +3517,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Settings'**
   String get settingsTooltip;
+
+  /// No description provided for @settingsAppearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearance;
+
+  /// No description provided for @settingsChatThemes.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat themes'**
+  String get settingsChatThemes;
+
+  /// No description provided for @chatThemesPlusLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus'**
+  String get chatThemesPlusLabel;
+
+  /// No description provided for @chatThemesPlusNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclusive themes are available to Voice Plus subscribers.'**
+  String get chatThemesPlusNotice;
+
+  /// No description provided for @chatThemesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get chatThemesSelected;
+
+  /// No description provided for @chatThemesApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {theme}'**
+  String chatThemesApply(String theme);
+
+  /// No description provided for @chatThemesReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get chatThemesReset;
+
+  /// No description provided for @appIconTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App Icon'**
+  String get appIconTitle;
+
+  /// No description provided for @appIconDeviceNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'This choice applies on this device only.'**
+  String get appIconDeviceNotice;
+
+  /// No description provided for @appIconPlusRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus is required to apply this icon.'**
+  String get appIconPlusRequired;
+
+  /// No description provided for @appIconSavedChoiceNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your saved icon will return when Voice Plus is active again.'**
+  String get appIconSavedChoiceNotice;
+
+  /// No description provided for @appIconUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime app icons are unavailable on this device.'**
+  String get appIconUnavailable;
+
+  /// No description provided for @appIconSubscriptionStatusError.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus status could not be checked. Retry or choose Voice Sky.'**
+  String get appIconSubscriptionStatusError;
+
+  /// No description provided for @appIconSubscriptionStatusChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking Voice Plus status…'**
+  String get appIconSubscriptionStatusChecking;
+
+  /// No description provided for @appIconApplyFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'The app icon could not be applied. Your saved choice is kept; retry to apply it.'**
+  String get appIconApplyFailure;
+
+  /// No description provided for @appIconRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get appIconRetry;
+
+  /// No description provided for @appIconApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {iconName}'**
+  String appIconApply(String iconName);
+
+  /// No description provided for @appIconSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get appIconSelected;
 
   /// No description provided for @settingsTheme.
   ///
@@ -3529,6 +3727,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Help'**
   String get settingsHelpTitle;
+
+  /// No description provided for @settingsHelpSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find an answer or contact the Voice team.'**
+  String get settingsHelpSubtitle;
+
+  /// No description provided for @settingsHelpHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'How can we help?'**
+  String get settingsHelpHeading;
+
+  /// No description provided for @settingsHelpBackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get settingsHelpBackLabel;
+
+  /// No description provided for @settingsHelpSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search help (e.g. voice rooms)'**
+  String get settingsHelpSearchHint;
+
+  /// No description provided for @settingsHelpDocsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Project documentation'**
+  String get settingsHelpDocsLabel;
+
+  /// No description provided for @settingsHelpSupportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact support'**
+  String get settingsHelpSupportLabel;
+
+  /// No description provided for @settingsHelpNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No help topics match your search.'**
+  String get settingsHelpNoResults;
+
+  /// No description provided for @settingsHelpLaunchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open link.'**
+  String get settingsHelpLaunchError;
 
   /// No description provided for @settingsHelpChatsTitle.
   ///
@@ -3871,6 +4117,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Security'**
   String get securitySettingsTitle;
+
+  /// No description provided for @securityChangePasswordAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change password'**
+  String get securityChangePasswordAction;
+
+  /// No description provided for @securityChangePasswordSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password changed. Sign in with your new password.'**
+  String get securityChangePasswordSuccess;
 
   /// No description provided for @appealSettingsTitle.
   ///
@@ -6253,6 +6511,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage encrypted key backup'**
   String get e2eKeyBackupManage;
+
+  /// No description provided for @profileNotInContactsWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in contacts · messages may be unsafe'**
+  String get profileNotInContactsWarning;
 }
 
 class _AppLocalizationsDelegate

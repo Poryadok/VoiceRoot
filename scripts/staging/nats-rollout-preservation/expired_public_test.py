@@ -117,7 +117,7 @@ class PublicRecoveryTests(unittest.TestCase):
     def test_actual_bootstrap_prove_optional_get_census_and_cleanup_composition(self):
         import bootstrap_auth as auth,hashlib
         from nats_contract_actor import Actor
-        from nats_contract_plan import DECLARATION,digest
+        from nats_contract_plan import DECLARATIONS,digest
         from rollout_census_test import stream,consumer,ACCOUNT
         for mode in ('ordinary','get','denied','census-drift'):
             with self.subTest(mode=mode),tempfile.TemporaryDirectory() as folder:
@@ -133,14 +133,16 @@ class PublicRecoveryTests(unittest.TestCase):
                         return ''
                     def monitor_jsz(self,*args):
                         trees[0]+=1
-                        item=consumer('social_events','rt_realtime1_friend_removed')
-                        item.update(config=copy.deepcopy(DECLARATION),delivered={'consumer_seq':0,'stream_seq':0},
-                            ack_floor={'consumer_seq':0,'stream_seq':0},num_ack_pending=0,num_redelivered=0,num_pending=0,num_waiting=0)
-                        streams=[stream('chat_events',[]),stream('social_events',[item])]
-                        for row in streams:
-                            row['config']=copy.deepcopy(configs[row['name']]);row['state'].update(messages=0,bytes=0,first_seq=0,last_seq=0)
+                        streams=[]
+                        for stream_name,declaration in DECLARATIONS:
+                            item=consumer(stream_name,declaration['durable_name'])
+                            item.update(config=copy.deepcopy(declaration),delivered={'consumer_seq':0,'stream_seq':0},
+                                ack_floor={'consumer_seq':0,'stream_seq':0},num_ack_pending=0,num_redelivered=0,num_pending=0,num_waiting=0)
+                            row=stream(stream_name,[item])
+                            row['config']=copy.deepcopy(configs[stream_name]);row['state'].update(messages=0,bytes=0,first_seq=0,last_seq=0)
+                            streams.append(row)
                         if mode=='census-drift' and trees[0]>1:streams[1]['consumer_detail'][0]['config']['metadata']={'changed':'proof'}
-                        return {'streams':2,'consumers':1,'messages':0,'bytes':0,'total':1,
+                        return {'streams':len(streams),'consumers':sum(len(row['consumer_detail']) for row in streams),'messages':0,'bytes':0,'total':1,
                             'account_details':[{'id':ACCOUNT,'name':'fixture','stream_detail':streams}]}
                 class FixtureActor:
                     prove_get_permissions=Actor.prove_get_permissions

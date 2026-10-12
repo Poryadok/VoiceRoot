@@ -237,6 +237,17 @@
   "chatListEmpty": "No conversations yet",
   "chatListEmptyHint": "Find people in Search to start a direct message.",
   "chatListLoadMore": "Load more chats",
+  "chatScheduleMessage": "Schedule message",
+  "chatSendWhenOnline": "Send when online",
+  "chatSchedulePickerTitle": "Schedule message",
+  "chatSchedulePending": "Pending",
+  "chatScheduleEdit": "Edit scheduled message",
+  "chatScheduleCancel": "Cancel scheduled message",
+  "chatScheduleSendNow": "Send now",
+  "chatScheduleRetry": "Retry",
+  "chatScheduleDateInvalid": "Choose a time within the next 365 days",
+  "chatScheduleFailure": "Could not complete the scheduled-message request. Try again.",
+  "chatScheduleLoadMore": "Load more scheduled messages",
   "chatListUnreadCount": "{count} unread",
   "@chatListUnreadCount": {
     "placeholders": {
@@ -564,6 +575,7 @@
   "chatPinnedTypeMusic": "Music",
   "chatPinnedTypeVideoMessage": "Video message",
   "chatMessageUnpin": "Unpin message",
+  "chatPinnedLimitReached": "You can pin up to 5 messages.",
   "chatPinnedBar": "{count, plural, =1{1 pinned message} other{{count} pinned messages}}",
   "@chatPinnedBar": {
     "placeholders": {
@@ -913,6 +925,9 @@
   "chatGroupLeave": "Leave group",
   "chatGroupLeaveConfirmTitle": "Leave group?",
   "chatGroupLeaveConfirmMessage": "You will no longer receive messages from this group.",
+  "chatChannelLeave": "Leave channel",
+  "chatChannelLeaveConfirmTitle": "Leave channel?",
+  "chatChannelLeaveConfirmMessage": "You will no longer receive messages from this channel.",
   "chatGroupOwnerLeaveHint": "Transfer ownership to another member before leaving.",
   "chatGroupTransferOwnershipTo": "Transfer ownership to {name}",
   "@chatGroupTransferOwnershipTo": {
@@ -930,6 +945,32 @@
   "chatGroupTransferOwnershipConfirm": "Transfer",
   "settingsTitle": "Settings",
   "settingsTooltip": "Settings",
+  "settingsAppearance": "Appearance",
+  "settingsChatThemes": "Chat themes",
+  "chatThemesPlusLabel": "Voice Plus",
+  "chatThemesPlusNotice": "Exclusive themes are available to Voice Plus subscribers.",
+  "chatThemesSelected": "Selected",
+  "chatThemesApply": "Apply {theme}",
+  "@chatThemesApply": {
+    "placeholders": {
+      "theme": {
+        "type": "String"
+      }
+    }
+  },
+  "chatThemesReset": "Reset",
+  "appIconTitle": "App Icon",
+  "appIconDeviceNotice": "This choice applies on this device only.",
+  "appIconPlusRequired": "Voice Plus is required to apply this icon.",
+  "appIconSavedChoiceNotice": "Your saved icon will return when Voice Plus is active again.",
+  "appIconUnavailable": "Runtime app icons are unavailable on this device.",
+  "appIconSubscriptionStatusError": "Voice Plus status could not be checked. Retry or choose Voice Sky.",
+  "appIconSubscriptionStatusChecking": "Checking Voice Plus status…",
+  "appIconApplyFailure": "The app icon could not be applied. Your saved choice is kept; retry to apply it.",
+  "appIconRetry": "Retry",
+  "appIconApply": "Apply {iconName}",
+  "@appIconApply": { "placeholders": { "iconName": { "type": "String" } } },
+  "appIconSelected": "Selected",
   "settingsTheme": "Theme",
   "settingsThemeSystem": "System",
   "settingsThemeLight": "Light",
@@ -947,6 +988,14 @@
   "trayQuit": "Quit",
   "settingsHelp": "Help",
   "settingsHelpTitle": "Help",
+  "settingsHelpSubtitle": "Find an answer or contact the Voice team.",
+  "settingsHelpHeading": "How can we help?",
+  "settingsHelpBackLabel": "Back",
+  "settingsHelpSearchHint": "Search help (e.g. voice rooms)",
+  "settingsHelpDocsLabel": "Project documentation",
+  "settingsHelpSupportLabel": "Contact support",
+  "settingsHelpNoResults": "No help topics match your search.",
+  "settingsHelpLaunchError": "Could not open link.",
   "settingsHelpChatsTitle": "Chats",
   "settingsHelpChatsBody": "Direct messages, groups, and channels appear in the chat list. Use folders to organize.",
   "settingsHelpSpacesTitle": "Spaces",
@@ -1021,6 +1070,8 @@
   "premiumBadgeLabel": "Premium",
   "settingsSecurity": "Security & trust",
   "securitySettingsTitle": "Security",
+  "securityChangePasswordAction": "Change password",
+  "securityChangePasswordSuccess": "Password changed. Sign in with your new password.",
   "appealSettingsTitle": "Appeal a sanction",
   "appealTitle": "Submit an appeal",
   "appealDescription": "You may appeal a sanction once within 7 days. Enter the sanction ID from your notification and explain why you believe the decision was wrong.",
@@ -1489,5 +1540,6 @@
   "e2eBackupDeleteConfirm": "This deletes the encrypted backup from this account. Your keys on this device will stay intact.",
   "e2eBackupDelete": "Delete backup",
   "e2eBackupRestoreCta": "Restore encrypted history",
-  "e2eKeyBackupManage": "Manage encrypted key backup"
+  "e2eKeyBackupManage": "Manage encrypted key backup",
+  "profileNotInContactsWarning": "Not in contacts · messages may be unsafe"
 }

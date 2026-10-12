@@ -62,6 +62,16 @@ class AuthServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Private Voice-only read of the effective session epoch floor for a verified media actor.
+  $grpc.ResponseFuture<$0.GetVoiceSessionEpochFloorResponse>
+      getVoiceSessionEpochFloor(
+    $0.GetVoiceSessionEpochFloorRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getVoiceSessionEpochFloor, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.RegisterResponse> register(
     $0.RegisterRequest request, {
     $grpc.CallOptions? options,
@@ -314,6 +324,12 @@ class AuthServiceClient extends $grpc.Client {
       '/voice.auth.v1.AuthService/GetOwnershipTransferReceipt',
       ($0.GetOwnershipTransferReceiptRequest value) => value.writeToBuffer(),
       $0.GetOwnershipTransferReceiptResponse.fromBuffer);
+  static final _$getVoiceSessionEpochFloor = $grpc.ClientMethod<
+          $0.GetVoiceSessionEpochFloorRequest,
+          $0.GetVoiceSessionEpochFloorResponse>(
+      '/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor',
+      ($0.GetVoiceSessionEpochFloorRequest value) => value.writeToBuffer(),
+      $0.GetVoiceSessionEpochFloorResponse.fromBuffer);
   static final _$register =
       $grpc.ClientMethod<$0.RegisterRequest, $0.RegisterResponse>(
           '/voice.auth.v1.AuthService/Register',
@@ -502,6 +518,15 @@ abstract class AuthServiceBase extends $grpc.Service {
             $0.GetOwnershipTransferReceiptRequest.fromBuffer(value),
         ($0.GetOwnershipTransferReceiptResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetVoiceSessionEpochFloorRequest,
+            $0.GetVoiceSessionEpochFloorResponse>(
+        'GetVoiceSessionEpochFloor',
+        getVoiceSessionEpochFloor_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetVoiceSessionEpochFloorRequest.fromBuffer(value),
+        ($0.GetVoiceSessionEpochFloorResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.RegisterRequest, $0.RegisterResponse>(
         'Register',
         register_Pre,
@@ -784,6 +809,15 @@ abstract class AuthServiceBase extends $grpc.Service {
   $async.Future<$0.GetOwnershipTransferReceiptResponse>
       getOwnershipTransferReceipt($grpc.ServiceCall call,
           $0.GetOwnershipTransferReceiptRequest request);
+
+  $async.Future<$0.GetVoiceSessionEpochFloorResponse>
+      getVoiceSessionEpochFloor_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetVoiceSessionEpochFloorRequest> $request) async {
+    return getVoiceSessionEpochFloor($call, await $request);
+  }
+
+  $async.Future<$0.GetVoiceSessionEpochFloorResponse> getVoiceSessionEpochFloor(
+      $grpc.ServiceCall call, $0.GetVoiceSessionEpochFloorRequest request);
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
       $async.Future<$0.RegisterRequest> $request) async {

@@ -14,7 +14,6 @@ import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AuthSession;
 import voice.backend.auth.service.LoginCommand;
-import voice.backend.auth.sessionepoch.PreparedSessionEpoch;
 
 public class OAuth2Service {
   private final AuthProperties properties;
@@ -100,6 +99,16 @@ public class OAuth2Service {
     } catch (AuthException ex) {
       throw new OAuthException(ex.getMessage(), 401);
     }
+    long originSessionEpoch;
+    try {
+      var claims = authService.validate(session.accessToken());
+      if (!session.accountId().equals(claims.userId())) {
+        throw new AuthException("invalid_token");
+      }
+      originSessionEpoch = claims.sessionEpoch();
+    } catch (AuthException ex) {
+      throw new OAuthException("invalid_grant", 401);
+    }
     String code = randomCode();
     Instant expiresAt = Instant.now(clock).plus(client.authorizationCodeTtl());
     OAuthAuthorizationCode record =
@@ -111,7 +120,8 @@ public class OAuth2Service {
             request.redirectUri(),
             request.codeChallenge(),
             request.codeChallengeMethod(),
-            expiresAt);
+            expiresAt,
+            originSessionEpoch);
     codeStore.save(record, client.authorizationCodeTtl());
     return buildRedirect(request.redirectUri(), code, request.state());
   }
@@ -128,21 +138,37 @@ public class OAuth2Service {
             .peek(request.code())
             .orElseThrow(() -> new OAuthException("invalid_grant", 401));
     validateCodeRecord(peeked, request);
-    PreparedSessionEpoch prepared = authService.prepareOAuthAccessToken(peeked.accountId());
-    OAuthAuthorizationCode record =
-        codeStore
-            .consume(request.code())
-            .orElseThrow(() -> new OAuthException("invalid_grant", 401));
-    if (!peeked.equals(record)) {
+    if (peeked.originSessionEpoch() <= 0) {
       throw new OAuthException("invalid_grant", 401);
     }
-    validateCodeRecord(record, request);
-    String accessToken =
-        authService.issueOAuthAccessToken(record.accountId(), record.profileId(), prepared);
-    return new OAuthTokenResponse(accessToken, "Bearer", authService.accessTokenTtlSeconds());
+    try {
+      return authService.withOAuthAuthorizationCodeEpoch(
+          peeked.accountId(),
+          peeked.originSessionEpoch(),
+          prepared -> {
+            OAuthAuthorizationCode record =
+                codeStore
+                    .consume(request.code())
+                    .orElseThrow(() -> new OAuthException("invalid_grant", 401));
+            if (!peeked.equals(record)) {
+              throw new OAuthException("invalid_grant", 401);
+            }
+            validateCodeRecord(record, request);
+            String accessToken =
+                authService.issueOAuthAccessToken(
+                    record.accountId(), record.profileId(), prepared);
+            return new OAuthTokenResponse(
+                accessToken, "Bearer", authService.accessTokenTtlSeconds());
+          });
+    } catch (AuthException staleOrigin) {
+      throw new OAuthException("invalid_grant", 401);
+    }
   }
 
   private void validateCodeRecord(OAuthAuthorizationCode record, OAuthTokenRequest request) {
+    if (record.originSessionEpoch() <= 0) {
+      throw new OAuthException("invalid_grant", 401);
+    }
     if (record.isExpired(Instant.now(clock))) {
       throw new OAuthException("invalid_grant", 401);
     }

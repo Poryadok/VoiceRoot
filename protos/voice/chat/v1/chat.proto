@@ -179,6 +179,8 @@ message CreateChatRequest {
   optional string space_id = 2;
   optional string name = 3;
   optional string topic = 4;
+  // Stable UUID reused for retries of one logical create. Empty preserves legacy behavior.
+  string request_id = 5;
 }
 
 message UpdateChatRequest {

@@ -1364,6 +1364,24 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'spaceRestored'
     },
+    {
+      '1': 'chat_updated',
+      '3': 23,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.ChatUpdated',
+      '9': 0,
+      '10': 'chatUpdated'
+    },
+    {
+      '1': 'chat_deleted',
+      '3': 24,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.ChatDeleted',
+      '9': 0,
+      '10': 'chatDeleted'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1393,7 +1411,9 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'cGFjZV9kZWxldGlvbl9zY2hlZHVsZWQYFSABKAsyJy52b2ljZS5ldmVudHMudjEuU3BhY2VEZW'
     'xldGlvblNjaGVkdWxlZEgAUhZzcGFjZURlbGV0aW9uU2NoZWR1bGVkEkcKDnNwYWNlX3Jlc3Rv'
     'cmVkGBYgASgLMh4udm9pY2UuZXZlbnRzLnYxLlNwYWNlUmVzdG9yZWRIAFINc3BhY2VSZXN0b3'
-    'JlZEIJCgdwYXlsb2Fk');
+    'JlZBJBCgxjaGF0X3VwZGF0ZWQYFyABKAsyHC52b2ljZS5ldmVudHMudjEuQ2hhdFVwZGF0ZWRI'
+    'AFILY2hhdFVwZGF0ZWQSQQoMY2hhdF9kZWxldGVkGBggASgLMhwudm9pY2UuZXZlbnRzLnYxLk'
+    'NoYXREZWxldGVkSABSC2NoYXREZWxldGVkQgkKB3BheWxvYWQ=');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -3743,3 +3763,44 @@ final $typed_data.Uint8List spaceRestoredDescriptor = $convert.base64Decode(
     'AyABKAlSE2RlbGV0aW9uT3BlcmF0aW9uSWQSHgoKZ2VuZXJhdGlvbhgEIAEoBFIKZ2VuZXJhdG'
     'lvbhI7CgtyZXN0b3JlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCnJl'
     'c3RvcmVkQXQ=');
+
+@$core.Deprecated('Use chatUpdatedDescriptor instead')
+const ChatUpdated$json = {
+  '1': 'ChatUpdated',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'changed_fields', '3': 2, '4': 3, '5': 9, '10': 'changedFields'},
+  ],
+};
+
+/// Descriptor for `ChatUpdated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List chatUpdatedDescriptor = $convert.base64Decode(
+    'CgtDaGF0VXBkYXRlZBIXCgdjaGF0X2lkGAEgASgJUgZjaGF0SWQSJQoOY2hhbmdlZF9maWVsZH'
+    'MYAiADKAlSDWNoYW5nZWRGaWVsZHM=');
+
+@$core.Deprecated('Use chatDeletedDescriptor instead')
+const ChatDeleted$json = {
+  '1': 'ChatDeleted',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 4, '4': 1, '5': 4, '10': 'generation'},
+    {'1': 'manifest_id', '3': 5, '4': 1, '5': 9, '10': 'manifestId'},
+    {'1': 'manifest_sha256', '3': 6, '4': 1, '5': 12, '10': 'manifestSha256'},
+  ],
+};
+
+/// Descriptor for `ChatDeleted`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List chatDeletedDescriptor = $convert.base64Decode(
+    'CgtDaGF0RGVsZXRlZBIXCgdjaGF0X2lkGAEgASgJUgZjaGF0SWQSGQoIc3BhY2VfaWQYAiABKA'
+    'lSB3NwYWNlSWQSMgoVZGVsZXRpb25fb3BlcmF0aW9uX2lkGAMgASgJUhNkZWxldGlvbk9wZXJh'
+    'dGlvbklkEh4KCmdlbmVyYXRpb24YBCABKARSCmdlbmVyYXRpb24SHwoLbWFuaWZlc3RfaWQYBS'
+    'ABKAlSCm1hbmlmZXN0SWQSJwoPbWFuaWZlc3Rfc2hhMjU2GAYgASgMUg5tYW5pZmVzdFNoYTI1'
+    'Ng==');

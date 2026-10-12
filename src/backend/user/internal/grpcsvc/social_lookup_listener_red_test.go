@@ -19,7 +19,7 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
-// The protected User listener must expose only Social's three signed lookup
+// The protected User listener must expose only Social's four signed lookup
 // methods; 9090 remains incapable of accepting a raw Social identity.
 func TestSocialProtectedListener_ExposesOnlySignedLookupContract(t *testing.T) {
 	lis := bufconn.Listen(1 << 20)
@@ -34,7 +34,7 @@ func TestSocialProtectedListener_ExposesOnlySignedLookupContract(t *testing.T) {
 	for _, method := range methods {
 		got = append(got, method.Name)
 	}
-	require.ElementsMatch(t, []string{"GetPrivacySettings", "GetProfile", "ListProfileIDsForAccount"}, got)
+	require.ElementsMatch(t, []string{"GetPrivacySettings", "GetProfile", "GetProfiles", "ListProfileIDsForAccount"}, got)
 
 	go func() { _ = srv.Serve(lis) }()
 	conn, err := grpc.NewClient("passthrough:///social-user", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
@@ -44,6 +44,8 @@ func TestSocialProtectedListener_ExposesOnlySignedLookupContract(t *testing.T) {
 	t.Cleanup(func() { _ = conn.Close() })
 	client := userv1.NewUserServiceClient(conn)
 	_, err = client.GetProfile(context.Background(), &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: uuid.NewString()}})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	_, err = client.GetProfiles(context.Background(), &userv1.GetProfilesRequest{ProfileIds: []string{uuid.NewString()}})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	_, err = client.ListProfileIDsForAccount(context.Background(), &userv1.ListProfileIDsForAccountRequest{AccountId: uuid.NewString()})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
@@ -66,6 +68,8 @@ func TestOrdinaryUserListener_RejectsRawSocialLookupMetadata(t *testing.T) {
 	client := userv1.NewUserServiceClient(conn)
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-voice-internal-caller", "social"))
 	_, err = client.GetProfile(ctx, &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: "not-a-uuid"}})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	_, err = client.GetProfiles(ctx, &userv1.GetProfilesRequest{ProfileIds: []string{"not-a-uuid"}})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	_, err = client.ListProfileIDsForAccount(ctx, &userv1.ListProfileIDsForAccountRequest{AccountId: "not-a-uuid"})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))

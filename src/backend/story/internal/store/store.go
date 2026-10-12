@@ -185,6 +185,49 @@ WHERE id = $1 AND deleted_at IS NULL`, storyID)
 	return out, err
 }
 
+// IsStoryActive reports whether storyID remains in its 24-hour feed lifetime.
+// Expiry is decided by PostgreSQL wall-clock time, independently of the worker marker.
+func (s *StoryStore) IsStoryActive(ctx context.Context, storyID uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, ErrNotImplemented
+	}
+	var active bool
+	err := s.Pool.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1 FROM stories
+  WHERE id = $1 AND deleted_at IS NULL AND expired_at IS NULL AND expires_at > clock_timestamp()
+)`, storyID).Scan(&active)
+	return active, err
+}
+
+// ListHighlightsForStory returns current collections that still contain storyID.
+// It is intentionally independent of the Story's original audience.
+func (s *StoryStore) ListHighlightsForStory(ctx context.Context, storyID uuid.UUID) ([]HighlightRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrNotImplemented
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT h.id, h.profile_id, h.name, h.cover_file_id, h.sort_order, h.visibility, h.created_at, h.updated_at
+FROM highlights h
+JOIN highlight_stories hs ON hs.highlight_id = h.id
+JOIN stories st ON st.id = hs.story_id
+WHERE hs.story_id = $1 AND st.deleted_at IS NULL
+ORDER BY h.sort_order, h.created_at, h.id`, storyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []HighlightRow
+	for rows.Next() {
+		var row HighlightRow
+		if err := rows.Scan(&row.ID, &row.ProfileID, &row.Name, &row.CoverFileID, &row.SortOrder, &row.Visibility, &row.CreatedAt, &row.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func scanStory(row pgx.Row) (*StoryRow, error) {
 	var out StoryRow
 	var mediaID *uuid.UUID

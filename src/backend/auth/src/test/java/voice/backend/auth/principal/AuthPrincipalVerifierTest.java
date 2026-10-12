@@ -174,6 +174,31 @@ class AuthPrincipalVerifierTest {
       assertEquals(Status.Code.PERMISSION_DENIED, failure.getStatus().getCode());
     }
   }
+
+  @Test void voiceServiceIsAcceptedOnlyForSessionFloorAndCannotUseSpaceProofMethods() {
+    var floor = claims();
+    floor.put("iss", "voice"); floor.put("sub", "service:voice");
+    floor.put("principal_type", "service"); floor.put("rpc", AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
+    floor.remove("account_id"); floor.remove("profile_id"); floor.remove("session_epoch");
+    var accepted = verifier.verify(token(floor), AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC,
+        "request-1", "sha256:" + "0".repeat(64));
+    assertEquals("voice", accepted.issuer());
+    assertNull(accepted.accountId());
+
+    for (String issuer : List.of("space", "gateway")) {
+      var denied = new HashMap<>(floor);
+      denied.put("iss", issuer); denied.put("sub", "service:" + issuer); denied.put("jti", UUID.randomUUID().toString());
+      var failure = assertThrows(StatusRuntimeException.class, () -> verifier.verify(token(denied),
+          AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC, "request-1", "sha256:" + "0".repeat(64)));
+      assertEquals(Status.Code.PERMISSION_DENIED, failure.getStatus().getCode());
+    }
+    var wrongMethod = new HashMap<>(floor);
+    wrongMethod.put("rpc", AuthPrincipalServerInterceptor.LOOKUP_RPC);
+    wrongMethod.put("jti", UUID.randomUUID().toString());
+    var failure = assertThrows(StatusRuntimeException.class, () -> verifier.verify(token(wrongMethod),
+        AuthPrincipalServerInterceptor.LOOKUP_RPC, "request-1", "sha256:" + "0".repeat(64)));
+    assertEquals(Status.Code.PERMISSION_DENIED, failure.getStatus().getCode());
+  }
   @Test void canonicalHashIgnoresProtobufMapInsertionOrder() {
     var a=Struct.newBuilder().putFields("z",Value.newBuilder().setStringValue("last").build()).putFields("a",Value.newBuilder().setNumberValue(1).build()).build();
     var b=Struct.newBuilder().putFields("a",Value.newBuilder().setNumberValue(1).build()).putFields("z",Value.newBuilder().setStringValue("last").build()).build();

@@ -34,10 +34,12 @@ class DesktopHost {
   void UnregisterPtt();
   void Emit(const std::string& method, flutter::EncodableValue args);
   void UpdateTrayLabels(const flutter::EncodableMap& args);
+  bool SetAppIcon(const std::string& icon_id);
 
   Win32Window* window_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   NOTIFYICONDATA nid_{};
+  HICON current_app_icon_ = nullptr;
   bool tray_added_ = false;
   bool voice_active_ = false;
   bool muted_ = false;

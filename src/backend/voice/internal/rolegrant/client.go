@@ -19,6 +19,7 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/principal"
+	"voice/backend/voice/internal/grpcsvc"
 )
 
 const callTimeout = 2 * time.Second
@@ -136,4 +137,50 @@ func (c *Checker) CheckGameSessionGrant(ctx context.Context, applicationID, envi
 		return status.Error(codes.PermissionDenied, "managed game session grant denied")
 	}
 	return nil
+}
+
+// ResolveVoiceRoomGrants obtains Role's Voice-only per-Space decision over the
+// private mTLS listener, with a fresh service assertion bound to this request.
+func (c *Checker) ResolveVoiceRoomGrants(ctx context.Context, spaceID, voiceRoomID, profileID string) (grpcsvc.CanonicalVoiceRoomGrants, error) {
+	if c == nil || c.client == nil || c.issuer == nil {
+		return grpcsvc.CanonicalVoiceRoomGrants{}, status.Error(codes.Unavailable, "Role voice grant resolver unavailable")
+	}
+	ids := []string{spaceID, voiceRoomID, profileID}
+	for _, value := range ids {
+		id, err := uuid.Parse(value)
+		if err != nil || id == uuid.Nil || id.String() != value {
+			return grpcsvc.CanonicalVoiceRoomGrants{}, status.Error(codes.InvalidArgument, "canonical Voice grant identity required")
+		}
+	}
+	request := &rolev1.ResolveVoiceRoomGrantsRequest{SpaceId: spaceID, VoiceRoomId: voiceRoomID, ProfileId: profileID}
+	requestID := uuid.NewString()
+	requestHash, err := principal.RequestHash(request)
+	if err != nil {
+		return grpcsvc.CanonicalVoiceRoomGrants{}, status.Error(codes.Internal, "Role voice grant request could not be bound")
+	}
+	token, err := c.issuer.IssueService(principal.ServiceInput{
+		Audience: "role", RPC: rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName,
+		RequestID: requestID, RequestHash: requestHash,
+	})
+	if err != nil {
+		return grpcsvc.CanonicalVoiceRoomGrants{}, status.Error(codes.Internal, "Voice principal could not be issued")
+	}
+	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	callCtx = metadata.NewOutgoingContext(callCtx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID))
+	response, err := c.client.ResolveVoiceRoomGrants(callCtx, request)
+	if err != nil {
+		if status.Code(err) == codes.Unavailable {
+			return grpcsvc.CanonicalVoiceRoomGrants{}, status.Error(codes.Unavailable, "Role voice grant resolver unavailable")
+		}
+		return grpcsvc.CanonicalVoiceRoomGrants{}, err
+	}
+	if response == nil || response.GetPolicyEpoch() == 0 || response.GetGrants() == nil {
+		return grpcsvc.CanonicalVoiceRoomGrants{}, status.Error(codes.Unavailable, "Role voice grant decision incomplete")
+	}
+	grants := response.GetGrants()
+	return grpcsvc.CanonicalVoiceRoomGrants{
+		PolicyEpoch: response.GetPolicyEpoch(), CanJoin: grants.GetCanJoin(),
+		CanPublishAudio: grants.GetCanPublishAudio(), CanSubscribe: grants.GetCanSubscribe(),
+	}, nil
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../api_error_messages.dart';
+import '../../state/auth_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
@@ -50,6 +51,9 @@ class SocialPanel extends ConsumerStatefulWidget {
 
   static Key requestDeclineKey(String profileId) =>
       Key('social_request_decline_$profileId');
+
+  static Key requestActionProgressKey(String profileId) =>
+      Key('social_request_action_progress_$profileId');
 
   static Key profileTileKey(String profileId) =>
       Key('social_profile_tile_$profileId');
@@ -554,7 +558,15 @@ class _RequestsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final requestsAsync = ref.watch(friendRequestsProvider);
+    final profileSwitchInProgress = ref.watch(profileSwitchInProgressProvider);
     final actions = ref.read(socialActionsProvider);
+    final authController = ref.read(authControllerProvider.notifier);
+    final requestActor = authController.gatewayRequestIdentity;
+    final requestActorKey =
+        '${requestActor?.generation ?? -1}:'
+        '${requestActor?.accountId ?? ''}:'
+        '${requestActor?.profileId ?? ''}:'
+        '${authController.sessionInstallGeneration}';
 
     return requestsAsync.when(
       loading: () => const VoiceListSkeleton(),
@@ -588,7 +600,9 @@ class _RequestsTab extends ConsumerWidget {
               ),
               ...incoming.map(
                 (id) => _IncomingRequestTile(
+                  key: ValueKey('$requestActorKey:$id'),
                   profileId: id,
+                  canMutate: requestActor != null && !profileSwitchInProgress,
                   onOpenProfile: onOpenProfile,
                   onAccept: () => actions.acceptFriendInvitation(id),
                   onDecline: () => actions.declineFriendInvitation(id),
@@ -694,21 +708,70 @@ class _BlockedTab extends ConsumerWidget {
   }
 }
 
-class _IncomingRequestTile extends ConsumerWidget {
+class _IncomingRequestTile extends ConsumerStatefulWidget {
   const _IncomingRequestTile({
+    super.key,
     required this.profileId,
+    required this.canMutate,
     required this.onOpenProfile,
     required this.onAccept,
     required this.onDecline,
   });
 
   final String profileId;
+  final bool canMutate;
   final void Function(String profileId) onOpenProfile;
   final Future<String?> Function() onAccept;
   final Future<String?> Function() onDecline;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_IncomingRequestTile> createState() =>
+      _IncomingRequestTileState();
+}
+
+class _IncomingRequestTileState extends ConsumerState<_IncomingRequestTile> {
+  bool _busy = false;
+  int _actionGeneration = 0;
+
+  Future<void> _runAction(Future<String?> Function() action) async {
+    if (_busy) return;
+
+    final authController = ref.read(authControllerProvider.notifier);
+    final actor = authController.gatewayRequestIdentity;
+    if (actor == null || ref.read(profileSwitchInProgressProvider)) return;
+    final sessionInstallGeneration = authController.sessionInstallGeneration;
+    final actionGeneration = ++_actionGeneration;
+    setState(() => _busy = true);
+
+    String? error;
+    var threw = false;
+    try {
+      error = await action();
+    } catch (_) {
+      error = 'action_failed';
+      threw = true;
+    }
+
+    if (!mounted || actionGeneration != _actionGeneration) return;
+    final currentAuth = ref.read(authControllerProvider.notifier);
+    if (currentAuth.gatewayRequestIdentity != actor ||
+        currentAuth.sessionInstallGeneration != sessionInstallGeneration) {
+      return;
+    }
+
+    setState(() => _busy = false);
+    if (threw) ref.invalidate(friendRequestsProvider);
+    if (error != null) {
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(socialActionErrorMessage(l10n, error))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profileId = widget.profileId;
     final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
 
@@ -725,26 +788,31 @@ class _IncomingRequestTile extends ConsumerWidget {
         ),
         title: Text(profile?.displayName ?? profileId),
         subtitle: profile != null ? Text(profile.handle) : null,
-        onTap: () => onOpenProfile(profileId),
+        onTap: () => widget.onOpenProfile(profileId),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
               key: SocialPanel.requestAcceptKey(profileId),
               icon: const Icon(Icons.check),
-              onPressed: () async {
-                await onAccept();
-                ref.invalidate(friendRequestsProvider);
-              },
+              onPressed: _busy || !widget.canMutate
+                  ? null
+                  : () => _runAction(widget.onAccept),
             ),
             IconButton(
               key: SocialPanel.requestDeclineKey(profileId),
               icon: const Icon(Icons.close),
-              onPressed: () async {
-                await onDecline();
-                ref.invalidate(friendRequestsProvider);
-              },
+              onPressed: _busy || !widget.canMutate
+                  ? null
+                  : () => _runAction(widget.onDecline),
             ),
+            if (_busy)
+              SizedBox(
+                key: SocialPanel.requestActionProgressKey(profileId),
+                width: 18,
+                height: 18,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              ),
           ],
         ),
       ),

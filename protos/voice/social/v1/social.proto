@@ -37,6 +37,8 @@ service SocialService {
   rpc HasContact(HasContactRequest) returns (HasContactResponse);
   // Internal S2S: directional block visibility for a profile pair; returns only a boolean.
   rpc IsProfilePairBlocked(IsProfilePairBlockedRequest) returns (IsProfilePairBlockedResponse);
+  // Internal S2S: bounded batch of directional profile-pair visibility decisions.
+  rpc IsProfilePairsBlocked(IsProfilePairsBlockedRequest) returns (IsProfilePairsBlockedResponse);
 }
 
 message SendFriendInvitationRequest {
@@ -168,6 +170,20 @@ message IsProfilePairBlockedRequest {
 
 message IsProfilePairBlockedResponse {
   bool blocked = 1;
+}
+
+message IsProfilePairsBlockedRequest {
+  string viewer_profile_id = 1;
+  repeated string other_profile_ids = 2;
+}
+
+message ProfilePairBlockResult {
+  string other_profile_id = 1;
+  bool blocked = 2;
+}
+
+message IsProfilePairsBlockedResponse {
+  repeated ProfilePairBlockResult results = 1;
 }
 
 message AreFriendsRequest {

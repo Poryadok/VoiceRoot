@@ -228,22 +228,21 @@ void main() {
       );
 
       // Validate the public fixture over two actual one-row pages before
-      // starting the production-side recorder. The opaque cursors become the
-      // exact values expected from the production reconciler below.
-      final expectedCursors = <String, String>{};
-      expectedCursors['main'] = await _expectTwoInboxItems(
+      // starting the production-side recorder. Each traversal must consume
+      // its own response cursor; later snapshots may have a different boundary.
+      await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'main',
         chatIds: {selectedChatId, mainAltChatId},
       );
-      expectedCursors['requests'] = await _expectTwoInboxItems(
+      await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'requests',
         chatIds: {requestChatId, requestAltChatId},
       );
-      expectedCursors['archive'] = await _expectTwoInboxItems(
+      await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'archive',
@@ -440,15 +439,19 @@ void main() {
         'requests',
         'archive',
       });
-      for (final inbox in expectedCursors.keys) {
+      for (final inbox in const ['main', 'requests', 'archive']) {
         final pageRequests = bInboxRequests
             .where((request) => request.inbox == inbox)
             .toList(growable: false);
         expect(pageRequests, hasLength(2));
+        final cursor = pageRequests.first.responseNextCursor;
+        expect(cursor, isNotNull);
+        expect(cursor, isNotEmpty);
         expect(
           pageRequests.map((request) => request.uri.queryParameters['cursor']),
-          containsAllInOrder([null, expectedCursors[inbox]]),
+          orderedEquals([null, cursor]),
         );
+        expect(pageRequests.last.responseNextCursor, isNull);
         expect(
           pageRequests.every(
             (request) => request.uri.queryParameters['page_size'] == '1',

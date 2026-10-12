@@ -83,6 +83,55 @@ func wsUpgradeHeaders(token string) http.Header {
 	return h
 }
 
+func TestSendWSReadResultUnblocksWhenHandlerStops(t *testing.T) {
+	readCh := make(chan readResult, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	reads := make(chan struct{}, 2)
+	go func() {
+		defer close(done)
+		readWSMessages(ctx, func() (wsInbound, error) {
+			reads <- struct{}{}
+			return wsInbound{}, nil
+		}, readCh)
+	}()
+
+	// The first frame fills the one-slot handoff; the second simulates a
+	// pipelined frame whose result cannot be delivered until the handler reads.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-reads:
+		case <-time.After(time.Second):
+			t.Fatal("reader did not process pipelined frames")
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("reader remained blocked while handing off a frame after handler cancellation")
+	}
+}
+
+func TestReadWSMessagesPreservesDisconnectError(t *testing.T) {
+	readCh := make(chan readResult, 2)
+	wantErr := errors.New("peer disconnected")
+	reads := 0
+	readWSMessages(context.Background(), func() (wsInbound, error) {
+		reads++
+		if reads == 1 {
+			return wsInbound{}, nil
+		}
+		return wsInbound{}, wantErr
+	}, readCh)
+	if got := <-readCh; got.err != nil {
+		t.Fatalf("frame result error = %v, want nil", got.err)
+	}
+	if got := <-readCh; got.err != wantErr {
+		t.Fatalf("disconnect error = %v, want %v", got.err, wantErr)
+	}
+}
+
 func TestWSReturns503WhenJWKSNotConfigured(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(testRealtimeHandler(nil, nil))

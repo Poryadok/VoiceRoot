@@ -11,7 +11,14 @@ abstract class AuthSessionStorage {
   Future<void> clear();
 }
 
-class InMemoryAuthSessionStorage implements AuthSessionStorage {
+/// Optional compare-and-clear capability for a logout tied to one exact session.
+/// Implementations must order this operation with writes and unconditional clears.
+abstract interface class ConditionalAuthSessionStorage {
+  Future<bool> clearIfUnchanged(AuthSession expected);
+}
+
+class InMemoryAuthSessionStorage
+    implements AuthSessionStorage, ConditionalAuthSessionStorage {
   AuthSession? _session;
 
   @override
@@ -26,35 +33,65 @@ class InMemoryAuthSessionStorage implements AuthSessionStorage {
   Future<void> write(AuthSession session) async {
     _session = session;
   }
+
+  @override
+  Future<bool> clearIfUnchanged(AuthSession expected) async {
+    if (_session != expected) return false;
+    _session = null;
+    return true;
+  }
 }
 
 const _prefsKey = 'voice.auth.session';
 
-class SharedPreferencesAuthSessionStorage implements AuthSessionStorage {
+class SharedPreferencesAuthSessionStorage
+    implements AuthSessionStorage, ConditionalAuthSessionStorage {
   SharedPreferencesAuthSessionStorage(this._prefs);
 
   final SharedPreferences _prefs;
+  Future<void> _operations = Future<void>.value();
 
-  @override
-  Future<void> clear() async {
-    await _prefs.remove(_prefsKey);
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final result = _operations.then((_) => operation());
+    _operations = result.then<void>((_) {}, onError: (_, _) {});
+    return result;
   }
 
   @override
-  Future<AuthSession?> read() async {
+  Future<void> clear() => _serialize(() async {
+    await _prefs.remove(_prefsKey);
+  });
+
+  @override
+  Future<AuthSession?> read() => _serialize(() async {
     final raw = _prefs.getString(_prefsKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       return AuthSession.fromJson(json);
     } catch (_) {
-      await clear();
+      await _prefs.remove(_prefsKey);
       return null;
     }
-  }
+  });
 
   @override
-  Future<void> write(AuthSession session) async {
+  Future<void> write(AuthSession session) => _serialize(() async {
     await _prefs.setString(_prefsKey, jsonEncode(session.toJson()));
-  }
+  });
+
+  @override
+  Future<bool> clearIfUnchanged(AuthSession expected) => _serialize(() async {
+    final raw = _prefs.getString(_prefsKey);
+    if (raw == null || raw.isEmpty) return false;
+    AuthSession current;
+    try {
+      current = AuthSession.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } on Object {
+      return false;
+    }
+    if (current != expected) return false;
+    await _prefs.remove(_prefsKey);
+    return true;
+  });
 }

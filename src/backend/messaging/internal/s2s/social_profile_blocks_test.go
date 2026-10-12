@@ -20,8 +20,22 @@ type recordingSocialProfileBlock struct {
 	socialv1.UnimplementedSocialServiceServer
 	viewer  string
 	other   string
+	others  []string
 	blocked bool
 	err     error
+}
+
+func (s *recordingSocialProfileBlock) IsProfilePairsBlocked(_ context.Context, req *socialv1.IsProfilePairsBlockedRequest) (*socialv1.IsProfilePairsBlockedResponse, error) {
+	s.viewer = req.GetViewerProfileId()
+	s.others = append([]string(nil), req.GetOtherProfileIds()...)
+	if s.err != nil {
+		return nil, s.err
+	}
+	results := make([]*socialv1.ProfilePairBlockResult, len(s.others))
+	for i, profileID := range s.others {
+		results[i] = &socialv1.ProfilePairBlockResult{OtherProfileId: profileID, Blocked: profileID == s.other}
+	}
+	return &socialv1.IsProfilePairsBlockedResponse{Results: results}, nil
 }
 
 func (s *recordingSocialProfileBlock) IsProfilePairBlocked(_ context.Context, req *socialv1.IsProfilePairBlockedRequest) (*socialv1.IsProfilePairBlockedResponse, error) {
@@ -70,4 +84,16 @@ func TestSocialGRPCProfileBlocks_FailsClosedWithoutSocial(t *testing.T) {
 		require.False(t, blocked)
 		require.Equal(t, codes.Unavailable, status.Code(err))
 	}
+}
+
+func TestSocialGRPCProfileBlocks_BatchIsBoundedAndPreservesResults(t *testing.T) {
+	viewer, blocked, neutral := uuid.New(), uuid.New(), uuid.New()
+	server := &recordingSocialProfileBlock{other: blocked.String()}
+	checker := NewSocialGRPCProfileBlocks(socialv1.NewSocialServiceClient(startProfileBlockBufconn(t, server)))
+	results, err := checker.ProfilePairsBlocked(context.Background(), viewer, []uuid.UUID{blocked, neutral})
+	require.NoError(t, err)
+	require.Equal(t, []string{blocked.String(), neutral.String()}, server.others)
+	require.Equal(t, map[uuid.UUID]bool{blocked: true, neutral: false}, results)
+	_, err = checker.ProfilePairsBlocked(context.Background(), viewer, make([]uuid.UUID, 501))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }

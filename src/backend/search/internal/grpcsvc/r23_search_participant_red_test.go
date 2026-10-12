@@ -648,6 +648,7 @@ func startR23SearchFixture(t *testing.T) r23SearchFixture {
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000009_managed_chat_message_purge.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000010_chat_manifest_root_binding.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000011_chat_deleted_fence_binding.up.sql"))
 
 	messages := store.NewMessageSearchStore(pool)
 	projections := store.NewProfileSpaceSearchStore(pool)

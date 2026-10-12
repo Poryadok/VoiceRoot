@@ -87,6 +87,25 @@ room-привязки. WS `call_started` допускает additive `room_type`
 | `federation.events`    | Federation        | Analytics, Role, Moderation |
 | `bot.events`           | Bot               | Analytics, Messaging |
 
+### Space-room media authority invalidation (BE255 slice)
+
+These are dedicated typed subjects; they do not reuse legacy `space.updated`,
+`role.updated`, or their JSON payloads.
+
+| Subject / stream | Producer | Consumer | ACK boundary |
+|---|---|---|---|
+| `space.voice_room_access_invalidated` / `chat_events` | Space transactional outbox | Voice durable `voice_space_media_chat` | PubAck advances source delivery; Voice ACK follows a complete current-authority reconciliation of the indexed Space rooms |
+| `role.voice_policy_invalidated` / `role_events` | Role transactional outbox | Voice durable `voice_space_media_role` | PubAck advances source delivery; Voice ACK follows a complete current-authority reconciliation of the indexed Space rooms |
+
+Each typed envelope preserves its immutable event ID and authority epoch.
+Optional room/profile fields are scheduling hints, not a target allowlist;
+Voice raises the observed epoch before scanning and keeps failed or partial
+reconciliation open for retry. Durable consumers use explicit ACK, delayed NAK
+for transient reconciliation errors, and terminal handling for malformed or
+incompatible envelopes. The 2 s p95 / 5 s max LiveKit ejection target remains
+scoped to the membership and Role-rights changes stated in
+[voice-service.md](microservices/voice-service.md); this does not add an Auth epoch active-ejection SLA.
+
 ### Analytics telemetry (`analytics_events` stream)
 
 | Stream              | Publishers                                      | Subscribers   |
@@ -199,6 +218,9 @@ generation and exact root manifest; Role uses its stricter retirement wire.
 | `space.deletion_scheduled` / `SpaceDeletionScheduled` v1 | Space after full FROZEN barrier | generation-aware projections; notification only |
 | `space.restored` / `SpaceRestored` v1 | Space after full LIVE barrier | generation-aware projections; notification only |
 | `space.deleted` / additive `SpaceDeleted` v2 | Space after ten purge receipts plus tombstone/local purge | Realtime and projections; legacy field 1 remains `space_id` |
+| `chat.updated` / `ChatUpdated` v1 | Chat after successful metadata mutation | Realtime chat refresh and Search title projection; no new Analytics mapping |
+| `chat.deleted` / `ChatDeleted` v1 | Chat transactional outbox after exact P3 local purge commit | Realtime chat refresh and Search terminal projection removal after its matching permanent PURGED fence; Analytics safely ignores the unmapped fact |
+| `chat.member_changed` / `ChatMemberChanged` v1 | Chat after successful membership mutation | Realtime targeted refresh/revocation; Search/Analytics keep their established mappings and tolerate the complete change union |
 
 The events stay in `chat.events`; direct participant receipts prove convergence.
 `ChatStreamEvent` retains `event_id=1`, `occurred_at=2`. NATS delivery is

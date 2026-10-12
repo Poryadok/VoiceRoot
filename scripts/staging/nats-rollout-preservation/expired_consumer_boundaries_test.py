@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from controller import Blocked
 from nats_contract_actor import Actor,WRITE
-from nats_contract_plan import execute,SCHEMA
+from nats_contract_plan import execute,SCHEMA,MIGRATION_ID
 from runtime_stage import RolloutStage
 
 class Runtime:
@@ -13,7 +13,7 @@ class Runtime:
         self.clock=clock;self.expire_at_create=expire_at_create;self.base=Path('/synthetic-operation');self.owned=['broker'];self.commands={};self.started=[]
         self.config={'chat_events':{'name':'chat_events','subjects':['chat.old']},'social_events':{'name':'social_events','subjects':['social.old']}}
     def inspect(self,name):
-        return {'Id':'b'*64,'State':{'Running':name=='broker'},'HostConfig':{'NetworkMode':'none','PortBindings':{}},'Mounts':[{'Destination':'/data','Type':'bind','Source':'/synthetic-store','RW':True}]}
+        return {'Id':'b'*64,'State':{'Running':name=='broker'},'HostConfig':{'NetworkMode':'none','PortBindings':{}},'Mounts':[{'Destination':'/data','Type':'bind','Source':str(Path('/synthetic-store')),'RW':True}]}
     def create(self,suffix,image,mounts,command,broker):
         name='client-'+str(len(self.owned));self.owned.append(name);self.commands[name]=(command[-2],json.loads(command[-1]) if command[-1] else None)
         if command[-2] in WRITE and self.expire_at_create:self.clock[0]=1
@@ -38,7 +38,7 @@ class MutationBoundaryTests(unittest.TestCase):
                     if clock[0]:raise Blocked('expired_recovery_authority_expired')
                 actor.mutation_guard=authority
                 before=copy.deepcopy(runtime.config['chat_events']);after=copy.deepcopy(before);after['subjects'].append('chat.new')
-                plan={'schema':SCHEMA,'migration_id':'space-chat-social-24h-friend-removed-v1','actions':[{'api':'$JS.API.STREAM.UPDATE.chat_events','object':'chat_events','before':before,'after':after}]}
+                plan={'schema':SCHEMA,'migration_id':MIGRATION_ID,'actions':[{'api':'$JS.API.STREAM.UPDATE.chat_events','object':'chat_events','before':before,'after':after}]}
                 events=[]
                 def journal(row):
                     events.append(row)

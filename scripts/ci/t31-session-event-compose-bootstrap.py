@@ -45,6 +45,7 @@ def compose(args, *command, check=True, capture=False):
         "docker", "compose", "--env-file", str(args.phase0_env),
         "--env-file", str(args.compose_env), "--profile", "app",
         "-f", "docker-compose.yml", "-f", "docker-compose.phase0.yml",
+        "-f", "docker-compose.voice-space-media.yml",
         "-f", "docker-compose.t31-session-events-e2e.yml", "-p", args.project,
         *command,
     ]

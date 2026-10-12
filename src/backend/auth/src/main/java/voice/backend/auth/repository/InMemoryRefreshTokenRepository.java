@@ -97,6 +97,18 @@ public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
   }
 
   @Override
+  public synchronized boolean revokeIfActive(String tokenHash, Instant now) {
+    RefreshTokenRecord current = byHash.get(tokenHash);
+    if (current == null || current.revoked() || !current.expiresAt().isAfter(now)) {
+      return false;
+    }
+    byHash.put(tokenHash, new RefreshTokenRecord(
+        current.id(), current.accountId(), current.profileId(), current.tokenHash(),
+        current.deviceInfoJson(), current.accessJti(), current.expiresAt(), current.createdAt(), now));
+    return true;
+  }
+
+  @Override
   public synchronized RefreshTokenRecord revokeById(UUID id, Instant now) {
     String hash = hashById.get(id);
     if (hash == null) {

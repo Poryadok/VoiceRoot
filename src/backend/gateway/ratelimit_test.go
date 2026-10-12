@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -349,6 +350,54 @@ func TestGateway_authLoginAndRegister_separateBuckets(t *testing.T) {
 	}
 }
 
+func TestGateway_publicAuthRateLimit_ignoresAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		path  string
+		limit int
+	}{
+		{name: "login", path: "/api/v1/auth/login", limit: 5},
+		{name: "register", path: "/api/v1/auth/register", limit: 5},
+		{name: "otp", path: "/api/v1/auth/otp/send", limit: 3},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			upstreamCalls := 0
+			limiter := newSlidingWindowLimiter(defaultRateLimitRules())
+			h := newGatewayForContract(t, gatewayTestOptions{
+				rateLimiter: limiter,
+				restUpstreams: map[string]http.Handler{
+					"auth": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						upstreamCalls++
+						w.WriteHeader(http.StatusUnauthorized)
+					}),
+				},
+			})
+
+			for attempt := 1; attempt <= tc.limit+3; attempt++ {
+				headers := map[string]string{
+					"Authorization": "Bot caller-controlled-" + strconv.Itoa(attempt),
+				}
+				rec := performRequest(h, http.MethodPost, tc.path, `{}`, headers)
+				wantStatus := http.StatusUnauthorized
+				if attempt > tc.limit {
+					wantStatus = http.StatusTooManyRequests
+				}
+				if rec.Code != wantStatus {
+					t.Fatalf("attempt %d status=%d, want %d (body=%q)", attempt, rec.Code, wantStatus, rec.Body.String())
+				}
+			}
+			if upstreamCalls != tc.limit {
+				t.Fatalf("Auth upstream calls=%d, want %d", upstreamCalls, tc.limit)
+			}
+		})
+	}
+}
+
 func TestRateLimitKey_messagesSend_usesUserID(t *testing.T) {
 	t.Parallel()
 	g := &gateway{config: gatewayConfig{trustedProxyCIDRs: nil}}
@@ -356,6 +405,29 @@ func TestRateLimitKey_messagesSend_usesUserID(t *testing.T) {
 	claims := tokenClaims{UserID: "account-99", ProfileID: "prof-1"}
 	if got := g.rateLimitKey(r, claims, false); got != "user:account-99" {
 		t.Fatalf("rateLimitKey = %q, want user:account-99", got)
+	}
+}
+
+func TestRateLimitKey_publicRoute_ignoresAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+	for _, authorization := range []string{"", "Bot caller-controlled", "Bearer caller-controlled"} {
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+		r.RemoteAddr = "198.51.100.7:1234"
+		r.Header.Set("Authorization", authorization)
+		g := &gateway{config: gatewayConfig{trustedProxyCIDRs: nil}}
+		if got := g.rateLimitKey(r, tokenClaims{UserID: "untrusted-claim"}, true); got != "ip:198.51.100.7" {
+			t.Fatalf("authorization %q: rateLimitKey=%q, want ip:198.51.100.7", authorization, got)
+		}
+	}
+}
+
+func TestRateLimitKey_botTokenOnlyAppliesToBotCredentialRoute(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/messages/send", nil)
+	r.Header.Set("Authorization", "Bot caller-controlled")
+	g := &gateway{config: gatewayConfig{trustedProxyCIDRs: nil}}
+	if got := g.rateLimitKey(r, tokenClaims{UserID: "verified-account"}, false); got != "user:verified-account" {
+		t.Fatalf("rateLimitKey=%q, want user:verified-account", got)
 	}
 }
 

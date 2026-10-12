@@ -81,8 +81,6 @@ func TestSendGameEventMessagePersistsCardAndTrustedAttribution(t *testing.T) {
 	chatID, senderID, memberID := uuid.New(), uuid.New(), uuid.New()
 	seedGroupChat(t, ctx, pool, chatID, senderID, memberID)
 	service := startMessagingDirect(t, pool)
-	eventSpy := &spyMessageEvents{}
-	service.MessageEvents = eventSpy
 	request := validGameEventRequest()
 	request.Intent.SchemaVersion = 2
 	characterBindingID := uuid.NewString()
@@ -100,7 +98,10 @@ func TestSendGameEventMessagePersistsCardAndTrustedAttribution(t *testing.T) {
 	response, err := service.SendGameEventMessage(serviceCtx, request)
 	require.NoError(t, err)
 	require.Equal(t, gameintegrationv1.GameEventPublicationStatus_GAME_EVENT_PUBLICATION_STATUS_PUBLISHED, response.GetStatus())
-	require.Equal(t, [][2]string{{request.GetIntent().GetAppId(), request.GetIntent().GetEnvironmentId()}}, eventSpy.gameScopes)
+	events := storedOutboxEvents(t, pool, "message.sent")
+	require.Len(t, events, 1)
+	require.Equal(t, request.GetIntent().GetAppId(), events[0].GetMessageSent().GetGameApplicationId())
+	require.Equal(t, request.GetIntent().GetEnvironmentId(), events[0].GetMessageSent().GetGameEnvironmentId())
 
 	row, err := (&store.MessagesStore{Pool: pool}).GetMessageByID(ctx, uuid.MustParse(response.GetMessageId()))
 	require.NoError(t, err)

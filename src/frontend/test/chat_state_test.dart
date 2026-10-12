@@ -823,6 +823,7 @@ class _FakeChatsClient extends VoiceChatsClient {
   Future<ChatsApiResult<VoiceChat>> createGroup({
     required String authorization,
     required String name,
+    String? requestId,
   }) async {
     createGroupCalls.add(name);
     return ChatsApiOk(

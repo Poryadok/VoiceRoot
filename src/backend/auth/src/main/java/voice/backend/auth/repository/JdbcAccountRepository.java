@@ -132,6 +132,12 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
+  public void lockForSecurityMutation(UUID accountId) {
+    jdbc.query("SELECT id FROM accounts WHERE id=:id FOR UPDATE", new MapSqlParameterSource("id", accountId),
+        (rs, rowNum) -> rs.getObject("id", UUID.class));
+  }
+
+  @Override
   public void saveTotpSecret(UUID accountId, byte[] encryptedSecret, boolean enabled) {
     jdbc.update(
         """

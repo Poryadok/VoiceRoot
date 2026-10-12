@@ -138,6 +138,10 @@ class AuthUserGrpcContractTest {
     assertThat(login.refreshTokens.listActiveByAccount(UUID.fromString(original.accountId())))
         .noneMatch(record -> !record.revoked()
             && record.tokenHash().equals(new RefreshTokenCodec().hash(refreshCandidate.refreshToken())));
+    assertThat(login.blacklist.isRevoked("legacy-jti")).isTrue();
+    assertThatThrownBy(() -> login.service.refresh(
+        new RefreshCommand(refreshCandidate.refreshToken(), "{}")))
+        .isInstanceOf(AuthException.class).hasMessage("token_revoked");
   }
 
   @Test
@@ -378,6 +382,7 @@ class AuthUserGrpcContractTest {
   private static final class Harness {
     final InMemoryAccountRepository accounts = new InMemoryAccountRepository();
     final InMemoryRefreshTokenRepository refreshTokens = new InMemoryRefreshTokenRepository(CLOCK);
+    final InMemoryTokenBlacklist blacklist = new InMemoryTokenBlacklist(CLOCK);
     final RecordingProvisioner profiles;
     final RecordingPhoneResolver phone = new RecordingPhoneResolver();
     final RecordingSwitchValidator switches = new RecordingSwitchValidator();
@@ -393,7 +398,7 @@ class AuthUserGrpcContractTest {
       service = new AuthService(
           accounts, refreshTokens, new RefreshTokenCodec(), new BCryptPasswordHasher(),
           JwtService.forTests("voice-auth", "voice-client", "contract-key", Duration.ofMinutes(15), CLOCK),
-          new InMemoryTokenBlacklist(CLOCK), new TotpService(props),
+          blacklist, new TotpService(props),
           new BackupCodeService(new InMemoryBackupCodeRepository()), CLOCK, Duration.ofDays(30), profiles,
           phone, new InMemorySubscriptionTierStore(), switches, new InMemoryE2EKeyBackupRepository(), events,
           new SimpleMeterRegistry(), new InMemoryAccountRestoreTokenStore(), new NoopMailSender(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../backend/messages_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../settings/chat_theme_preference.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_chat_bubble.dart';
 
@@ -75,9 +76,9 @@ class ChatUnreadSeparator extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: voice.textSecondary,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: voice.textSecondary),
             ),
           ),
           Expanded(child: Divider(color: voice.borderDefault)),
@@ -129,6 +130,7 @@ class ChatMessageBubbleTile extends StatelessWidget {
     required this.l10n,
     required this.content,
     this.deliveryFooter,
+    this.theme,
   });
 
   final VoiceMessage message;
@@ -137,6 +139,7 @@ class ChatMessageBubbleTile extends StatelessWidget {
   final AppLocalizations l10n;
   final Widget content;
   final Widget? deliveryFooter;
+  final ChatTheme? theme;
 
   @override
   Widget build(BuildContext context) {
@@ -145,9 +148,11 @@ class ChatMessageBubbleTile extends StatelessWidget {
       isMine: isMine,
       showTailSpacing: showTimestamp,
       footer: deliveryFooter,
+      palette: theme == null ? null : ChatThemePalette.forTheme(theme!),
       child: Column(
-        crossAxisAlignment:
-            isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           content,
@@ -156,9 +161,9 @@ class ChatMessageBubbleTile extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 formatMessageTime(message.createdAt),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: voice.textDisabled,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: voice.textDisabled),
               ),
             ),
         ],

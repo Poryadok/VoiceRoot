@@ -207,6 +207,17 @@
   "chatListEmpty": "Пока нет диалогов",
   "chatListEmptyHint": "Найдите людей в поиске, чтобы начать личный диалог.",
   "chatListLoadMore": "Загрузить ещё чаты",
+  "chatScheduleMessage": "Запланировать сообщение",
+  "chatSendWhenOnline": "Отправить, когда будет в сети",
+  "chatSchedulePickerTitle": "Запланировать сообщение",
+  "chatSchedulePending": "Ожидает отправки",
+  "chatScheduleEdit": "Изменить запланированное сообщение",
+  "chatScheduleCancel": "Отменить запланированное сообщение",
+  "chatScheduleSendNow": "Отправить сейчас",
+  "chatScheduleRetry": "Повторить",
+  "chatScheduleDateInvalid": "Выберите время в пределах следующих 365 дней",
+  "chatScheduleFailure": "Не удалось выполнить запрос для запланированного сообщения. Попробуйте ещё раз.",
+  "chatScheduleLoadMore": "Загрузить ещё запланированные сообщения",
   "chatListUnreadCount": "Непрочитанных: {count}",
   "@chatListUnreadCount": {
     "placeholders": {
@@ -527,6 +538,7 @@
   "chatPinnedTypeMusic": "Музыка",
   "chatPinnedTypeVideoMessage": "Видеосообщение",
   "chatMessageUnpin": "Открепить сообщение",
+  "chatPinnedLimitReached": "Можно закрепить не более 5 сообщений.",
   "chatPinnedBar": "{count, plural, one{{count} закреплённое сообщение} few{{count} закреплённых сообщения} many{{count} закреплённых сообщений} other{{count} закреплённых сообщения}}",
   "@chatPinnedBar": {
     "placeholders": {
@@ -852,6 +864,9 @@
   "chatGroupLeave": "Выйти из группы",
   "chatGroupLeaveConfirmTitle": "Выйти из группы?",
   "chatGroupLeaveConfirmMessage": "Вы больше не будете получать сообщения из этой группы.",
+  "chatChannelLeave": "Выйти из канала",
+  "chatChannelLeaveConfirmTitle": "Выйти из канала?",
+  "chatChannelLeaveConfirmMessage": "Вы больше не будете получать сообщения из этого канала.",
   "chatGroupOwnerLeaveHint": "Передайте владение другому участнику перед выходом.",
   "chatGroupTransferOwnershipTo": "Передать владение: {name}",
   "@chatGroupTransferOwnershipTo": {
@@ -869,6 +884,32 @@
   "chatGroupTransferOwnershipConfirm": "Передать",
   "settingsTitle": "Настройки",
   "settingsTooltip": "Настройки",
+  "settingsAppearance": "Оформление",
+  "settingsChatThemes": "Темы чатов",
+  "chatThemesPlusLabel": "Voice Plus",
+  "chatThemesPlusNotice": "Эксклюзивные темы доступны подписчикам Voice Plus.",
+  "chatThemesSelected": "Выбрана",
+  "chatThemesApply": "Применить {theme}",
+  "@chatThemesApply": {
+    "placeholders": {
+      "theme": {
+        "type": "String"
+      }
+    }
+  },
+  "chatThemesReset": "Сбросить",
+  "appIconTitle": "Значок приложения",
+  "appIconDeviceNotice": "Этот выбор применяется только на этом устройстве.",
+  "appIconPlusRequired": "Для применения этого значка нужна подписка Voice Plus.",
+  "appIconSavedChoiceNotice": "Сохранённый значок вернётся, когда Voice Plus снова будет активен.",
+  "appIconUnavailable": "На этом устройстве нельзя изменить значок работающего приложения.",
+  "appIconSubscriptionStatusError": "Не удалось проверить статус Voice Plus. Повторите попытку или выберите Voice Sky.",
+  "appIconSubscriptionStatusChecking": "Проверяем статус Voice Plus…",
+  "appIconApplyFailure": "Не удалось применить значок. Выбор сохранён; попробуйте применить его ещё раз.",
+  "appIconRetry": "Повторить",
+  "appIconApply": "Применить: {iconName}",
+  "@appIconApply": { "placeholders": { "iconName": { "type": "String" } } },
+  "appIconSelected": "Выбран",
   "settingsTheme": "Тема",
   "settingsThemeSystem": "Системная",
   "settingsThemeLight": "Светлая",
@@ -886,6 +927,14 @@
   "trayQuit": "Выйти",
   "settingsHelp": "Помощь",
   "settingsHelpTitle": "Помощь",
+  "settingsHelpSubtitle": "Найдите ответ или свяжитесь с командой Voice.",
+  "settingsHelpHeading": "Чем помочь?",
+  "settingsHelpBackLabel": "Назад",
+  "settingsHelpSearchHint": "Например, войс-комнаты",
+  "settingsHelpDocsLabel": "Документация проекта",
+  "settingsHelpSupportLabel": "Связаться с поддержкой",
+  "settingsHelpNoResults": "По запросу ничего не найдено.",
+  "settingsHelpLaunchError": "Не удалось открыть ссылку.",
   "settingsHelpChatsTitle": "Чаты",
   "settingsHelpChatsBody": "ЛС, группы и каналы — в списке чатов. Используйте папки для организации.",
   "settingsHelpSpacesTitle": "Спейсы",
@@ -953,6 +1002,8 @@
   "premiumBadgeLabel": "Премиум",
   "settingsSecurity": "Безопасность и доверие",
   "securitySettingsTitle": "Безопасность",
+  "securityChangePasswordAction": "Изменить пароль",
+  "securityChangePasswordSuccess": "Пароль изменён. Войдите с новым паролем.",
   "appealSettingsTitle": "Апелляция на санкцию",
   "appealTitle": "Подать апелляцию",
   "appealDescription": "Апелляцию можно подать один раз в течение 7 дней. Укажите ID санкции из уведомления и объясните, почему решение ошибочно.",
@@ -1390,5 +1441,6 @@
   "e2eBackupDeleteConfirm": "Зашифрованная копия будет удалена из аккаунта. Ключи на этом устройстве останутся без изменений.",
   "e2eBackupDelete": "Удалить копию",
   "e2eBackupRestoreCta": "Восстановить зашифрованную историю",
-  "e2eKeyBackupManage": "Управление резервной копией ключей"
+  "e2eKeyBackupManage": "Управление резервной копией ключей",
+  "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны"
 }

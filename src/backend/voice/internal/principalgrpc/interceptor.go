@@ -50,8 +50,17 @@ func OrdinaryUnaryInterceptor() grpc.UnaryServerInterceptor {
 		if isLifecycleMethod(info.FullMethod) {
 			return nil, status.Error(codes.Unavailable, "protected lifecycle method unavailable on ordinary listener")
 		}
+		if isVoiceUserMethod(info.FullMethod) {
+			return nil, status.Error(codes.Unavailable, "authenticated Voice user method unavailable on ordinary listener")
+		}
 		return handler(ctx, request)
 	}
+}
+
+func isVoiceUserMethod(method string) bool {
+	return method == callsv1.VoiceService_JoinVoiceRoom_FullMethodName ||
+		method == callsv1.VoiceService_LeaveVoiceRoom_FullMethodName ||
+		method == callsv1.VoiceService_GetJoinToken_FullMethodName
 }
 
 func isLifecycleMethod(method string) bool {

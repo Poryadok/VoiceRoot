@@ -18,6 +18,11 @@ import {
   warningsForPrivilegedScopes,
 } from './scopeWarnings';
 
+type AuthenticatedRequest = {
+  generation: number;
+  accessToken: string;
+};
+
 function extractBots(body: Record<string, unknown>): BotSummary[] {
   const list = (body.bot_list as { bots?: BotSummary[] } | undefined)?.bots
     ?? (body.bots as BotSummary[] | undefined)
@@ -41,6 +46,12 @@ function Portal() {
   const [manifest, setManifest] = useState(defaultManifest);
   const [bots, setBots] = useState<BotSummary[]>([]);
   const [selectedBotId, setSelectedBotId] = useState('');
+  const selectedBotIdRef = useRef('');
+  const selectionGenerationRef = useRef(0);
+  const authSessionGenerationRef = useRef(0);
+  const secretSessionRef = useRef<AuthenticatedRequest | null>(null);
+  const [detailLoadedBotId, setDetailLoadedBotId] = useState('');
+  const [manifestLoadedBotId, setManifestLoadedBotId] = useState('');
   const [botToken, setBotToken] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [catalog, setCatalog] = useState<CatalogCommand[]>([]);
@@ -56,7 +67,24 @@ function Portal() {
   const secretDialogWasOpenRef = useRef(false);
   const shouldRefocusSecretDialogRef = useRef(false);
   const [secretDialogFocusGeneration, setSecretDialogFocusGeneration] = useState(0);
-  const hasOneShotSecrets = Boolean(botToken || webhookSecret);
+  const hasOneShotSecrets = Boolean(
+    (botToken || webhookSecret) &&
+    secretSessionRef.current &&
+    secretSessionRef.current.generation === authSessionGenerationRef.current &&
+    getAccessToken() === secretSessionRef.current.accessToken,
+  );
+
+  const beginAuthenticatedRequest = useCallback((): AuthenticatedRequest | null => {
+    const accessToken = getAccessToken();
+    return accessToken
+      ? { generation: authSessionGenerationRef.current, accessToken }
+      : null;
+  }, []);
+
+  const isCurrentAuthenticatedRequest = useCallback((request: AuthenticatedRequest) =>
+    request.generation === authSessionGenerationRef.current &&
+    getAccessToken() === request.accessToken,
+  []);
 
   useEffect(() => {
     if (hasOneShotSecrets) {
@@ -86,21 +114,36 @@ function Portal() {
     setEditScopesJson(bot?.scopes_json ?? '');
   }, []);
 
-  const loadBotDetail = useCallback(async (botId: string, fallback?: BotSummary) => {
+  const loadBotDetail = useCallback(async (
+    botId: string,
+    fallback: BotSummary | undefined,
+    request: AuthenticatedRequest,
+    selectionGeneration: number,
+  ) => {
     if (!botId) {
       applyBotToEditForm(undefined);
       return;
     }
     const result = await fetchBot(botId);
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     if (result.ok) {
       applyBotToEditForm(result.bot);
+      setDetailLoadedBotId(botId);
       return;
     }
     applyBotToEditForm(fallback);
     setStatus(`Load bot failed: ${result.error}`);
-  }, [applyBotToEditForm]);
+  }, [applyBotToEditForm, isCurrentAuthenticatedRequest]);
 
-  const loadBotCatalog = useCallback(async (botId: string) => {
+  const loadBotCatalog = useCallback(async (
+    botId: string,
+    request: AuthenticatedRequest,
+    selectionGeneration: number,
+  ) => {
     if (!botId) {
       setCatalog([]);
       return;
@@ -109,8 +152,18 @@ function Portal() {
       apiFetch(`/api/v1/bots/${botId}/commands`),
       apiFetch(`/api/v1/bots/${botId}/manifest`),
     ]);
+    const isCurrentSelection = () =>
+      isCurrentAuthenticatedRequest(request) &&
+      selectionGenerationRef.current === selectionGeneration &&
+      selectedBotIdRef.current === botId;
+    if (!isCurrentSelection()) {
+      return;
+    }
     if (commandsRes.ok) {
       const body = await commandsRes.json();
+      if (!isCurrentSelection()) {
+        return;
+      }
       const commandsJson = body.command_list?.commands_json ?? body.commands_json ?? '[]';
       try {
         setCatalog(parseCommandCatalog(commandsJson));
@@ -123,40 +176,78 @@ function Portal() {
     }
     if (manifestRes.ok) {
       const body = await manifestRes.json();
-      const yaml = body.manifest_yaml ?? '';
-      if (yaml.trim()) {
-        setManifest(yaml);
+      if (!isCurrentSelection()) {
+        return;
       }
+      const yaml = body.manifest_yaml ?? '';
+      setManifest(yaml.trim() ? yaml : defaultManifest);
+      setManifestLoadedBotId(botId);
     }
-  }, []);
+  }, [isCurrentAuthenticatedRequest]);
+
+  const selectBot = useCallback((
+    botId: string,
+    fallback: BotSummary | undefined,
+    request: AuthenticatedRequest,
+    clearSecrets = true,
+    clearStatus = true,
+  ) => {
+    const selectionGeneration = ++selectionGenerationRef.current;
+    selectedBotIdRef.current = botId;
+    setSelectedBotId(botId);
+    if (clearSecrets) {
+      secretSessionRef.current = null;
+      setBotToken('');
+      setWebhookSecret('');
+    }
+    setDetailLoadedBotId('');
+    setManifestLoadedBotId('');
+    applyBotToEditForm(undefined);
+    setCatalog([]);
+    setManifest(defaultManifest);
+    if (clearStatus) {
+      setStatus('');
+    }
+    void loadBotDetail(botId, fallback, request, selectionGeneration);
+    void loadBotCatalog(botId, request, selectionGeneration);
+  }, [applyBotToEditForm, loadBotCatalog, loadBotDetail]);
 
   const refreshBots = useCallback(async () => {
-    if (!isLoggedIn()) {
+    const request = beginAuthenticatedRequest();
+    if (!request) {
       return;
     }
     const res = await apiFetch('/api/v1/bots');
+    if (!isCurrentAuthenticatedRequest(request)) {
+      return;
+    }
     if (!res.ok) {
       setStatus(`List bots failed: ${res.status}`);
       return;
     }
     const body = await res.json();
+    if (!isCurrentAuthenticatedRequest(request)) {
+      return;
+    }
     const list = extractBots(body);
     setBots(list);
     if (list.length > 0 && list[0].id) {
-      setSelectedBotId((current) => {
-        const nextId =
-          current && list.some((b) => b.id === current) ? current : list[0].id!;
-        const selected = list.find((b) => b.id === nextId);
-        void loadBotDetail(nextId, selected);
-        void loadBotCatalog(nextId);
-        return nextId;
-      });
+      const current = selectedBotIdRef.current;
+      const nextId = current && list.some((bot) => bot.id === current)
+        ? current
+        : list[0].id!;
+      selectBot(nextId, list.find((bot) => bot.id === nextId), request, false, nextId !== current);
     } else {
+      selectedBotIdRef.current = '';
+      selectionGenerationRef.current += 1;
       setSelectedBotId('');
+      setDetailLoadedBotId('');
+      setManifestLoadedBotId('');
       applyBotToEditForm(undefined);
       setCatalog([]);
+      setManifest(defaultManifest);
     }
-  }, [applyBotToEditForm, loadBotCatalog, loadBotDetail]);
+  }, [applyBotToEditForm, beginAuthenticatedRequest, isCurrentAuthenticatedRequest, selectBot]);
 
   useEffect(() => {
     if (loggedIn) {
@@ -187,18 +278,29 @@ function Portal() {
       setStatus('Paste a JWT first');
       return;
     }
+    authSessionGenerationRef.current += 1;
+    selectionGenerationRef.current += 1;
+    selectedBotIdRef.current = '';
+    secretSessionRef.current = null;
     setAccessToken(trimmed);
     setLoggedIn(true);
     setStatus('Using pasted JWT');
   }
 
   function logout() {
+    authSessionGenerationRef.current += 1;
+    selectionGenerationRef.current += 1;
+    selectedBotIdRef.current = '';
+    secretSessionRef.current = null;
     clearSession();
     setLoggedIn(false);
     setBots([]);
+    setSelectedBotId('');
     setBotToken('');
     setWebhookSecret('');
     setCatalog([]);
+    setDetailLoadedBotId('');
+    setManifestLoadedBotId('');
     setEditName('');
     setEditDescription('');
     setEditScopesJson('');
@@ -210,6 +312,7 @@ function Portal() {
   }
 
   function clearOneShotSecrets() {
+    secretSessionRef.current = null;
     setBotToken('');
     setWebhookSecret('');
   }
@@ -269,17 +372,11 @@ function Portal() {
     }
   }
 
-  async function selectBot(botId: string) {
-    setSelectedBotId(botId);
-    setBotToken('');
-    setWebhookSecret('');
-    setStatus('');
-    await loadBotDetail(botId);
-    await loadBotCatalog(botId);
-  }
-
   async function saveBotChanges() {
-    if (!selectedBotId) {
+    const request = beginAuthenticatedRequest();
+    const botId = selectedBotIdRef.current;
+    const selectionGeneration = selectionGenerationRef.current;
+    if (!request || !botId || detailLoadedBotId !== botId) {
       setStatus('Select a bot first');
       return;
     }
@@ -291,7 +388,12 @@ function Portal() {
     if (editScopesJson.trim()) {
       fields.scopesJson = editScopesJson.trim();
     }
-    const result = await updateBot(selectedBotId, fields);
+    const result = await updateBot(botId, fields);
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     if (!result.ok) {
       setStatus(result.error);
       return;
@@ -301,21 +403,34 @@ function Portal() {
   }
 
   async function removeSelectedBot() {
-    if (!selectedBotId) {
+    const request = beginAuthenticatedRequest();
+    const botId = selectedBotIdRef.current;
+    const selectionGeneration = selectionGenerationRef.current;
+    if (!request || !botId) {
       setStatus('Select a bot first');
       return;
     }
-    const botName = editName.trim() || selectedBotId;
+    const botName = editName.trim() || botId;
     if (!window.confirm(`Delete bot "${botName}"? This cannot be undone.`)) {
       return;
     }
     setStatus('Deleting bot…');
-    const result = await deleteBot(selectedBotId);
+    const result = await deleteBot(botId);
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     if (!result.ok) {
       setStatus(result.error);
       return;
     }
+    selectedBotIdRef.current = '';
+    selectionGenerationRef.current += 1;
     setSelectedBotId('');
+    setDetailLoadedBotId('');
+    setManifestLoadedBotId('');
+    secretSessionRef.current = null;
     setBotToken('');
     setWebhookSecret('');
     setCatalog([]);
@@ -325,6 +440,10 @@ function Portal() {
   }
 
   async function registerBot() {
+    const request = beginAuthenticatedRequest();
+    if (!request) {
+      return;
+    }
     const name = regName.trim();
     if (!name) {
       setStatus('Enter a bot name');
@@ -343,77 +462,137 @@ function Portal() {
         scopes_json: scopesJson,
       }),
     });
+    if (!isCurrentAuthenticatedRequest(request)) {
+      return;
+    }
     const body = await res.json();
+    if (!isCurrentAuthenticatedRequest(request)) {
+      return;
+    }
     if (!res.ok) {
       setStatus(JSON.stringify(body));
       return;
     }
     const id = body.bot?.id ?? '';
-    setSelectedBotId(id);
-    setBotToken(body.token_response?.token ?? '');
-    setWebhookSecret(body.webhook_secret_response?.webhook_secret ?? '');
+    selectBot(id, body.bot, request);
+    const token = body.token_response?.token ?? '';
+    const webhookSecretValue = body.webhook_secret_response?.webhook_secret ?? '';
+    secretSessionRef.current = token || webhookSecretValue ? request : null;
+    setBotToken(token);
+    setWebhookSecret(webhookSecretValue);
     await refreshBots();
-    if (id) {
-      await loadBotCatalog(id);
+    if (!isCurrentAuthenticatedRequest(request)) {
+      return;
     }
     setStatus(`Registered bot ${id}`);
   }
 
   async function revokeAndRegenerateBotToken() {
-    if (!selectedBotId) {
+    const request = beginAuthenticatedRequest();
+    const botId = selectedBotIdRef.current;
+    const selectionGeneration = selectionGenerationRef.current;
+    if (!request || !botId) {
       setStatus('Select a bot first');
       return;
     }
-    const res = await apiFetch(`/api/v1/bots/${selectedBotId}/token/regenerate`, { method: 'POST' });
+    const res = await apiFetch(`/api/v1/bots/${botId}/token/regenerate`, { method: 'POST' });
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     const body = await res.json();
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     if (!res.ok) {
       setStatus(JSON.stringify(body));
       return;
     }
+    secretSessionRef.current = request;
     setBotToken(body.token_response?.token ?? '');
     setStatus('Bot token revoked and regenerated');
   }
 
   async function rotateWebhookSecret() {
-    if (!selectedBotId) {
+    const request = beginAuthenticatedRequest();
+    const botId = selectedBotIdRef.current;
+    const selectionGeneration = selectionGenerationRef.current;
+    if (!request || !botId) {
       setStatus('Select a bot first');
       return;
     }
-    const res = await apiFetch(`/api/v1/bots/${selectedBotId}/webhook-secret/regenerate`, { method: 'POST' });
+    const res = await apiFetch(`/api/v1/bots/${botId}/webhook-secret/regenerate`, { method: 'POST' });
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     const body = await res.json();
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     if (!res.ok) {
       setStatus(JSON.stringify(body));
       return;
     }
+    secretSessionRef.current = request;
     setWebhookSecret(body.webhook_secret_response?.webhook_secret ?? '');
     setStatus('Webhook secret rotated');
   }
 
   async function validateManifest() {
+    const request = beginAuthenticatedRequest();
+    if (!request) {
+      return;
+    }
     const res = await apiFetch('/api/v1/bots/manifest/validate', {
       method: 'POST',
       body: JSON.stringify({ manifest_yaml: manifest }),
     });
+    if (!isCurrentAuthenticatedRequest(request)) {
+      return;
+    }
     const body = await res.json();
+    if (!isCurrentAuthenticatedRequest(request)) {
+      return;
+    }
     setStatus(body.valid ? 'Manifest valid' : (body.errors ?? []).join(', '));
   }
 
   async function applyManifest() {
-    if (!selectedBotId) {
+    const request = beginAuthenticatedRequest();
+    const botId = selectedBotIdRef.current;
+    const selectionGeneration = selectionGenerationRef.current;
+    if (!request || !botId || manifestLoadedBotId !== botId) {
       setStatus('Select or register a bot first');
       return;
     }
-    const res = await apiFetch(`/api/v1/bots/${selectedBotId}/manifest`, {
+    const res = await apiFetch(`/api/v1/bots/${botId}/manifest`, {
       method: 'POST',
       body: JSON.stringify({ manifest_yaml: manifest }),
     });
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     const body = await res.json();
+    if (!isCurrentAuthenticatedRequest(request) ||
+      selectionGenerationRef.current !== selectionGeneration ||
+      selectedBotIdRef.current !== botId) {
+      return;
+    }
     if (!res.ok) {
       setStatus(JSON.stringify(body));
       return;
     }
     setStatus('Manifest applied');
-    await loadBotCatalog(selectedBotId);
+    void loadBotCatalog(botId, request, selectionGeneration);
   }
 
   const editScopeWarnings = warningsForPrivilegedScopes(privilegedScopesInJson(editScopesJson));
@@ -473,7 +652,10 @@ function Portal() {
                         if (!bot.id) {
                           return;
                         }
-                        void selectBot(bot.id);
+                        const request = beginAuthenticatedRequest();
+                        if (request) {
+                          selectBot(bot.id, undefined, request);
+                        }
                       }}
                     >
                       {bot.name ?? bot.id}
@@ -553,7 +735,7 @@ function Portal() {
                   </ul>
                 )}
                 <div className="actions">
-                  <button type="button" onClick={() => void saveBotChanges()}>
+                  <button type="button" disabled={detailLoadedBotId !== selectedBotId} onClick={() => void saveBotChanges()}>
                     Save bot changes
                   </button>
                   <button type="button" className="danger" onClick={() => void removeSelectedBot()}>
@@ -619,7 +801,7 @@ function Portal() {
 
           <section className="actions">
             <button type="button" onClick={() => void validateManifest()}>Validate</button>
-            <button type="button" onClick={() => void applyManifest()}>Apply to bot</button>
+            <button type="button" disabled={!selectedBotId || manifestLoadedBotId !== selectedBotId} onClick={() => void applyManifest()}>Apply to bot</button>
           </section>
         </>
       )}

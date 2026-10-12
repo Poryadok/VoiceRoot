@@ -58,6 +58,7 @@ void main() {
     });
 
     final host = MethodChannelWindowsDesktopHost();
+    await host.setAppIcon('midnight');
     await host.setTrayState(
       voiceActive: true,
       muted: true,
@@ -73,12 +74,14 @@ void main() {
     await host.quit();
 
     expect(calls.map((c) => c.method), [
+      'setAppIcon',
       'setTrayState',
       'hideToTray',
       'registerPttHotkey',
       'quit',
     ]);
-    expect(calls[0].arguments, {
+    expect(calls[0].arguments, {'iconId': 'midnight'});
+    expect(calls[1].arguments, {
       'voiceActive': true,
       'muted': true,
       'deafened': false,
@@ -88,7 +91,7 @@ void main() {
       'undeafenLabel': 'Undeafen',
       'quitLabel': 'Quit',
     });
-    expect(calls[2].arguments, {'vkCode': 0xC0, 'modifiers': 0});
+    expect(calls[3].arguments, {'vkCode': 0xC0, 'modifiers': 0});
   });
 
   test('tray mute/deafen toggle call state; hide does not hang up', () async {

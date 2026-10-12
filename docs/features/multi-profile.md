@@ -23,6 +23,9 @@
 - **Десктоп:** avatar в rail **ProfileStack** → контекстное меню §1.1a ([screen-controls.md](../design/screen-controls.md) §1.1 #6, §1.1a; [navigation.md](navigation.md) § Rail #5) — switch, create profile, presence, Archive; отдельного session-bar combobox нет
 - **Мобайл:** tap avatar → то же меню §1.1a; **swipe** по avatar для быстрого switch ([screen-controls.md](../design/screen-controls.md) §1.1 #6, [H vs V summary](../design/screen-controls.md#h-vs-v-layout-differences-summary))
 - Каждый профиль имеет свою цветовую тему для визуальной индикации
+- Автоматический HTTP retry после `401` сохраняет исходную identity аккаунта и
+  профиля. Обновление токена может повторить запрос, пока identity остаётся
+  активной; переключение профиля или logout отменяет повтор.
 
 ## Контакты и друзья
 

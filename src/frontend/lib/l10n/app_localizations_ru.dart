@@ -546,6 +546,41 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListLoadMore => 'Загрузить ещё чаты';
 
   @override
+  String get chatScheduleMessage => 'Запланировать сообщение';
+
+  @override
+  String get chatSendWhenOnline => 'Отправить, когда будет в сети';
+
+  @override
+  String get chatSchedulePickerTitle => 'Запланировать сообщение';
+
+  @override
+  String get chatSchedulePending => 'Ожидает отправки';
+
+  @override
+  String get chatScheduleEdit => 'Изменить запланированное сообщение';
+
+  @override
+  String get chatScheduleCancel => 'Отменить запланированное сообщение';
+
+  @override
+  String get chatScheduleSendNow => 'Отправить сейчас';
+
+  @override
+  String get chatScheduleRetry => 'Повторить';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Выберите время в пределах следующих 365 дней';
+
+  @override
+  String get chatScheduleFailure =>
+      'Не удалось выполнить запрос для запланированного сообщения. Попробуйте ещё раз.';
+
+  @override
+  String get chatScheduleLoadMore => 'Загрузить ещё запланированные сообщения';
+
+  @override
   String chatListUnreadCount(int count) {
     return 'Непрочитанных: $count';
   }
@@ -1220,6 +1255,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageUnpin => 'Открепить сообщение';
 
   @override
+  String get chatPinnedLimitReached => 'Можно закрепить не более 5 сообщений.';
+
+  @override
   String chatPinnedBar(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -1873,6 +1911,16 @@ class AppLocalizationsRu extends AppLocalizations {
       'Вы больше не будете получать сообщения из этой группы.';
 
   @override
+  String get chatChannelLeave => 'Выйти из канала';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Выйти из канала?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'Вы больше не будете получать сообщения из этого канала.';
+
+  @override
   String get chatGroupOwnerLeaveHint =>
       'Передайте владение другому участнику перед выходом.';
 
@@ -1897,6 +1945,72 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsTooltip => 'Настройки';
+
+  @override
+  String get settingsAppearance => 'Оформление';
+
+  @override
+  String get settingsChatThemes => 'Темы чатов';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Эксклюзивные темы доступны подписчикам Voice Plus.';
+
+  @override
+  String get chatThemesSelected => 'Выбрана';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Применить $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Сбросить';
+
+  @override
+  String get appIconTitle => 'Значок приложения';
+
+  @override
+  String get appIconDeviceNotice =>
+      'Этот выбор применяется только на этом устройстве.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Для применения этого значка нужна подписка Voice Plus.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Сохранённый значок вернётся, когда Voice Plus снова будет активен.';
+
+  @override
+  String get appIconUnavailable =>
+      'На этом устройстве нельзя изменить значок работающего приложения.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Не удалось проверить статус Voice Plus. Повторите попытку или выберите Voice Sky.';
+
+  @override
+  String get appIconSubscriptionStatusChecking =>
+      'Проверяем статус Voice Plus…';
+
+  @override
+  String get appIconApplyFailure =>
+      'Не удалось применить значок. Выбор сохранён; попробуйте применить его ещё раз.';
+
+  @override
+  String get appIconRetry => 'Повторить';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Применить: $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Выбран';
 
   @override
   String get settingsTheme => 'Тема';
@@ -1948,6 +2062,31 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsHelpTitle => 'Помощь';
+
+  @override
+  String get settingsHelpSubtitle =>
+      'Найдите ответ или свяжитесь с командой Voice.';
+
+  @override
+  String get settingsHelpHeading => 'Чем помочь?';
+
+  @override
+  String get settingsHelpBackLabel => 'Назад';
+
+  @override
+  String get settingsHelpSearchHint => 'Например, войс-комнаты';
+
+  @override
+  String get settingsHelpDocsLabel => 'Документация проекта';
+
+  @override
+  String get settingsHelpSupportLabel => 'Связаться с поддержкой';
+
+  @override
+  String get settingsHelpNoResults => 'По запросу ничего не найдено.';
+
+  @override
+  String get settingsHelpLaunchError => 'Не удалось открыть ссылку.';
 
   @override
   String get settingsHelpChatsTitle => 'Чаты';
@@ -2142,6 +2281,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get securitySettingsTitle => 'Безопасность';
+
+  @override
+  String get securityChangePasswordAction => 'Изменить пароль';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Пароль изменён. Войдите с новым паролем.';
 
   @override
   String get appealSettingsTitle => 'Апелляция на санкцию';
@@ -3442,4 +3588,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get e2eKeyBackupManage => 'Управление резервной копией ключей';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Не в контактах · сообщения могут быть небезопасны';
 }

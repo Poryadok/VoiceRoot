@@ -42,6 +42,7 @@ func TestMarkRead_DMReceiptOptOutKeepsPrivateCursor(t *testing.T) {
 	public, _, err := messages.GetReadReceipt(ctx, chatID, reader)
 	require.NoError(t, err)
 	require.Nil(t, public)
+	require.Zero(t, outboxCountForChat(t, pool, "message.read", chatID), "private progress must not enqueue a public read event")
 	events.mu.Lock()
 	reads := len(events.read)
 	events.mu.Unlock()

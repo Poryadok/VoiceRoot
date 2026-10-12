@@ -168,6 +168,8 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   String? clientMessageId,
   String? threadParentId,
   bool isE2e = false,
+  DateTime? scheduledAt,
+  bool sendWhenOnline = false,
 }) {
   final request = messaging_pb.SendMessageRequest(
     chat: chatRefToProto(chatId),
@@ -183,6 +185,11 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   );
   if (isE2e) {
     request.isE2e = true;
+  }
+  if (scheduledAt != null) {
+    request.scheduledAt = dateTimeToProtoTimestamp(scheduledAt.toUtc());
+  } else if (sendWhenOnline) {
+    request.sendWhenOnline = true;
   }
   return request;
 }
@@ -325,8 +332,15 @@ chat_pb.CreateDMRequest createDmRequestToProto(String otherProfileId) {
   return chat_pb.CreateDMRequest(otherProfileId: otherProfileId);
 }
 
-chat_pb.CreateChatRequest createGroupRequestToProto({required String name}) {
-  return chat_pb.CreateChatRequest(type: ChatType.CHAT_TYPE_GROUP, name: name);
+chat_pb.CreateChatRequest createGroupRequestToProto({
+  required String name,
+  String? requestId,
+}) {
+  return chat_pb.CreateChatRequest(
+    type: ChatType.CHAT_TYPE_GROUP,
+    name: name,
+    requestId: requestId,
+  );
 }
 
 chat_pb.AddMembersRequest addMembersRequestToProto({

@@ -43,6 +43,7 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 		"000012_mm_duo_live_seed.up.sql",
 		"000013_mm_duo_live_lfp_party.up.sql",
 		"000014_space_lifecycle_fences.up.sql",
+		"000015_reconcile_player_rating_aggregates.up.sql",
 	} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
@@ -58,7 +59,7 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 
 func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000014_space_lifecycle_fences.up.sql")
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000015_reconcile_player_rating_aggregates.up.sql")
 }
 
 func ApplyMatchmakingMigrationsThrough005ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

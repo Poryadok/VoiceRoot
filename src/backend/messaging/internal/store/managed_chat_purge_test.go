@@ -84,3 +84,30 @@ func TestManagedChatPurgeCannotStartBeforeFrozenCutoff(t *testing.T) {
 	_, err := (&MessagesStore{Pool: pool}).StartManagedChatPurge(ctx, uuid.New(), uuid.New(), time.Now().UTC().Add(time.Hour), requestHash[:])
 	require.ErrorIs(t, err, ErrManagedChatPurgeNotDue)
 }
+
+func TestManagedChatPurgeWaitsForEveryFrozenOutboxPubAck(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForStoreTest(t, ctx)
+	seedMessagingSchema(t, ctx, pool)
+	store := &MessagesStore{Pool: pool}
+	chatID, senderID, messageID, eventID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO messages(id,chat_id,chat_type,sender_profile_id,content,attachments,mentions,created_at) VALUES($1,$2,'dm',$3,'payload','[]'::jsonb,'[]'::jsonb,clock_timestamp()-interval '1 day')`, messageID, chatID, senderID)
+	require.NoError(t, err)
+	payload := []byte("immutable event bytes")
+	digest := sha256.Sum256(payload)
+	_, err = pool.Exec(ctx, `INSERT INTO message_event_outbox(event_id,subject,message_id,chat_id,payload_bytes,payload_sha256) VALUES($1,'message.sent',$2,$3,$4,$5)`, eventID, messageID, chatID, payload, digest[:])
+	require.NoError(t, err)
+	cutoff := time.Now().UTC().Add(-time.Hour)
+	requestHash := sha256.Sum256([]byte("purge request"))
+	opID := uuid.New()
+	work, err := store.StartManagedChatPurge(ctx, opID, chatID, cutoff, requestHash[:])
+	require.NoError(t, err)
+	require.EqualValues(t, 1, work.EventCount)
+	require.ErrorIs(t, store.RequireManagedChatPurgeEventsPublished(ctx, opID), ErrMessageEventOutboxUnavailable)
+	_, err = pool.Exec(ctx, `UPDATE message_event_outbox SET payload_bytes=NULL,headers='{}'::jsonb,pubacked_at=clock_timestamp(),puback_sequence=7,payload_pruned_at=clock_timestamp() WHERE event_id=$1`, eventID)
+	require.NoError(t, err)
+	require.NoError(t, store.RequireManagedChatPurgeEventsPublished(ctx, opID))
+	fileReceipt, searchReceipt := sha256.Sum256([]byte("file")), sha256.Sum256([]byte("search"))
+	_, err = store.CompleteManagedChatPurge(ctx, opID, fileReceipt[:], searchReceipt[:])
+	require.NoError(t, err)
+}
