@@ -17,7 +17,7 @@ class Tests(unittest.TestCase):
         for name,info in self.streams.items():
             state=dict(info['state'],consumer_count=0,bytes=100)
             self.tree['account_details'][0]['stream_detail'].append({'name':name,'created':CREATED,'config':info['config'],'state':state,'consumer_detail':[]})
-        chat=self.streams['chat_events']['config']['subjects']+['space.deletion_scheduled','space.restored']
+        chat=self.streams['chat_events']['config']['subjects']+['chat.updated','chat.deleted','space.deletion_scheduled','space.restored']
         social=self.streams['social_events']['config']['subjects']
         role=self.streams['role_events']['config']['subjects']
         common='    stream chat_events '+' '.join(chat)+'\n'

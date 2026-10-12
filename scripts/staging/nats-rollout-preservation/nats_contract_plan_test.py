@@ -4,6 +4,9 @@ from pathlib import Path
 from nats_contract_plan import compile_plan, execute, verify_census, ContractError, DECLARATIONS
 
 SOURCE=Path(__file__).parents[3]
+REVIEWED_13=frozenset({'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.voice_room_access_invalidated'})
+REVIEWED_15=frozenset({'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.deletion_scheduled','space.restored','space.voice_room_access_invalidated'})
+TARGET_17=frozenset({'chat.created','chat.updated','chat.deleted','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.deletion_scheduled','space.restored','space.voice_room_access_invalidated'})
 def live():
     chat=['chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.voice_room_access_invalidated']
     social=['social.friend_request','social.friend_accepted','social.friend_removed','social.user_blocked','social.contacts_synced']
@@ -20,6 +23,20 @@ class Tests(unittest.TestCase):
             self.assertEqual(action['after']['metadata'],{'preserve':'yes'});self.assertEqual(action['after']['max_msgs'],-1)
         self.assertEqual(p['actions'][2]['after']['config']['deliver_policy'],'new')
         self.assertEqual(len(p['consumer_targets']),3)
+    def test_only_literal_reviewed_chat_subject_shapes_are_accepted(self):
+        for subjects,updates in ((REVIEWED_13,1),(REVIEWED_15,1),(TARGET_17,0)):
+            with self.subTest(count=len(subjects)):
+                s=live();s['chat_events']['config']['subjects']=list(subjects)
+                p=self.plan(s)
+                chat_update=next((a for a in p['actions'] if a['object']=='chat_events'),None)
+                self.assertEqual(chat_update is not None,updates==1)
+                if chat_update is not None:
+                    self.assertEqual(set(chat_update['before']['subjects']),set(subjects))
+                    self.assertEqual(set(chat_update['after']['subjects']),TARGET_17)
+    def test_unreviewed_chat_subject_shape_rejected(self):
+        for subjects in (TARGET_17-{'chat.updated'}, REVIEWED_13|{'unreviewed.subject'}):
+            s=live();s['chat_events']['config']['subjects']=list(subjects)
+            with self.subTest(subjects=subjects),self.assertRaises(ContractError):self.plan(s)
     def test_exact_desired_retry_is_preserve(self):
         p=self.plan();s=live()
         for action in p['actions'][:2]: s[action['object']]['config']=action['after']
@@ -37,7 +54,7 @@ class Tests(unittest.TestCase):
     def test_no_existing_record_state_in_mutation_payload(self):
         p=self.plan();self.assertTrue(all('state' not in a['after'] for a in p['actions']))
     def test_dynamic_stream_overlap_refused_before_plan(self):
-        for subject in ('space.restored','space.*','space.>','>'):
+        for subject in ('space.restored','chat.updated','chat.deleted','space.*','space.>','>'):
             s=live();s['dynamic_extra']={'config':{'name':'dynamic_extra','subjects':[subject]}}
             with self.assertRaises(ContractError):self.plan(s)
     def test_nonoverlapping_dynamic_stream_preserved(self):

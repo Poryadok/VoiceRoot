@@ -10,7 +10,25 @@ import json
 from pathlib import Path
 import re
 
-SCHEMA='voice-nats-additive-contract-v2'
+SCHEMA='voice-nats-additive-contract-v3'
+MIGRATION_ID='chat-space-social-role-media-consumers-v3'
+CHAT_SUBJECTS_13=frozenset({
+    'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created',
+    'voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left',
+    'space.updated','space.deleted','space.voice_room_access_invalidated',
+})
+CHAT_SUBJECTS_15=frozenset({
+    'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created',
+    'voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left',
+    'space.updated','space.deleted','space.deletion_scheduled','space.restored','space.voice_room_access_invalidated',
+})
+CHAT_SUBJECTS_17=frozenset({
+    'chat.created','chat.updated','chat.deleted','chat.member_changed','chat.dm_peer_deleted','space.tree_changed',
+    'space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined',
+    'space.member_left','space.updated','space.deleted','space.deletion_scheduled','space.restored',
+    'space.voice_room_access_invalidated',
+})
+CHAT_ADDITIONS=frozenset({'chat.updated','chat.deleted','space.deletion_scheduled','space.restored'})
 DECLARATIONS=(
     ('social_events', {'name':'rt_realtime1_friend_removed','durable_name':'rt_realtime1_friend_removed','filter_subject':'social.friend_removed','deliver_subject':'_INBOX.voice.realtime1.friend_removed','deliver_policy':'new','ack_policy':'explicit'}),
     ('chat_events', {'name':'voice_space_media_chat','durable_name':'voice_space_media_chat','filter_subject':'space.voice_room_access_invalidated','deliver_subject':'_INBOX.voice.voice.space_media_chat','deliver_policy':'new','ack_policy':'explicit'}),
@@ -64,15 +82,15 @@ def compile_plan(source,streams,consumers,normalized_consumers):
     if len(role_rows)!=1 or len(analytics_role_rows)!=1:fail()
     role=role_rows[0].split()
     if role!=analytics_role_rows[0].split():fail()
-    additions={'space.deletion_scheduled','space.restored'}
-    if not additions<=set(chat) or len(set(social))!=len(social) or len(set(role))!=len(role):fail()
+    if (len(set(chat))!=len(chat) or set(chat)!=CHAT_SUBJECTS_17
+        or len(set(social))!=len(social) or len(set(role))!=len(role)):fail()
     # streams is the complete account discovery, including dynamic resources.
     # Known conflicts must veto while clients still run, never at UPDATE.
     for name,info in streams.items():
         config=info.get('config') if isinstance(info,dict) else None
         if not isinstance(config,dict) or config.get('name')!=name or not isinstance(config.get('subjects'),list):fail()
-        own={'chat_events':additions|{'space.voice_room_access_invalidated'},'role_events':{'role.voice_policy_invalidated'}}.get(name,set())
-        if any(subject_overlap(added,subject) for added in ({*additions,'space.voice_room_access_invalidated','role.voice_policy_invalidated'}-own) for subject in config['subjects']):fail()
+        own={'chat_events':CHAT_ADDITIONS|{'space.voice_room_access_invalidated'},'role_events':{'role.voice_policy_invalidated'}}.get(name,set())
+        if any(subject_overlap(added,subject) for added in ({*CHAT_ADDITIONS,'space.voice_room_access_invalidated','role.voice_policy_invalidated'}-own) for subject in config['subjects']):fail()
     for stream,config in DECLARATIONS:
         line='    consumer '+stream+' '+config['name']+' '+config['filter_subject']+' '+config['deliver_subject']
         if texts['realtime'].splitlines().count(line)!=1:fail()
@@ -85,7 +103,7 @@ def compile_plan(source,streams,consumers,normalized_consumers):
         if not isinstance(config,dict) or config.get('name')!=name:fail()
         if (config.get('storage')!='file' or config.get('retention')!='limits' or config.get('max_age')!=604800000000000):fail()
         actual=config.get('subjects'); require_sets=[set(expected)]
-        if name=='chat_events':require_sets.append(set(expected)-additions)
+        if name=='chat_events':require_sets.extend((CHAT_SUBJECTS_13,CHAT_SUBJECTS_15))
         if not isinstance(actual,list) or len(actual)!=len(set(actual)) or set(actual) not in require_sets:fail()
         if name=='social_events' and config.get('duplicate_window') not in (120000000000,86400000000000):fail()
         before=copy.deepcopy(config);after=copy.deepcopy(config)
@@ -106,7 +124,7 @@ def compile_plan(source,streams,consumers,normalized_consumers):
                 'after':{'stream_name':stream,'action':'create','config':copy.deepcopy(config)},
                 'normalized_config_sha256':normalized_hashes[key]})
     targets=[{'stream':stream,'name':config['durable_name'],'config_sha256':normalized_hashes[(stream,config['durable_name'])]} for stream,config in DECLARATIONS]
-    return {'schema':SCHEMA,'migration_id':'space-chat-social-role-media-consumers-v2','sources':sources,'observed':observed,'consumer_targets':targets,'actions':actions}
+    return {'schema':SCHEMA,'migration_id':MIGRATION_ID,'sources':sources,'observed':observed,'consumer_targets':targets,'actions':actions}
 
 
 def execute(plan,actor,journal):
@@ -115,7 +133,7 @@ def execute(plan,actor,journal):
     Root owns immutable plan binding and authenticated isolated actor; this is
     not a callable CLI or generic privileged mutation interface.
     """
-    if plan.get('schema')!=SCHEMA or plan.get('migration_id')!='space-chat-social-role-media-consumers-v2':fail()
+    if plan.get('schema')!=SCHEMA or plan.get('migration_id')!=MIGRATION_ID:fail()
     fixed={'$JS.API.STREAM.UPDATE.chat_events':'chat_events','$JS.API.STREAM.UPDATE.social_events':'social_events'}
     for stream,config in DECLARATIONS:
         fixed['$JS.API.CONSUMER.CREATE.'+stream+'.'+config['durable_name']]=stream+'/'+config['durable_name']
@@ -188,7 +206,7 @@ def verify_census(plan,before,after):
             expected['config_sha256']=digest(action['after'])
         expected['state']['consumer_count']+=sum(1 for key in created_actions if key[0]==name)
         if new_streams[name]!=expected:fail()
-    return {'schema':'voice-nats-additive-census-proof-v1','migration_id':plan['migration_id'],
+    return {'schema':'voice-nats-additive-census-proof-v2','migration_id':plan['migration_id'],
         'before_sha256':digest(before),'after_sha256':digest(after),
         'messages':sum(row['state']['messages'] for row in new_streams.values()),
         'old_consumers_preserved':len(old_consumers),'created_consumers':len(create_actions)}
