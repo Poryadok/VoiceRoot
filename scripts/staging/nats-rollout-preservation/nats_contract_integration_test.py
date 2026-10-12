@@ -2,6 +2,8 @@ import os
 import sys
 import unittest
 import json
+import hashlib
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -61,6 +63,45 @@ class HostedTransportTests(unittest.TestCase):
         self.assertEqual(len(set(baseline['role_subjects'])), 9)
         self.assertEqual(len(baseline['chat_subjects']), 14)
         self.assertEqual(len(baseline['role_subjects']), 9)
+
+    def test_bundle_contains_complete_captured_import_closure_and_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary)
+
+            def fake_build(args, **kwargs):
+                output = Path(args[args.index('-o') + 1])
+                output.write_bytes(('synthetic:' + output.name).encode())
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+
+            with patch.object(integration.fixture, 'call', side_effect=fake_build):
+                integration.build_fixture_records(bundle)
+
+            manifest_path = bundle / 'capture/capture-manifest.json'
+            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+            self.assertLessEqual(len(manifest), 85)
+            self.assertIn('nats-rollout-preservation/contract_fixture_entry.py', manifest)
+            for relative, wanted in manifest.items():
+                content = (bundle / 'capture' / relative).read_bytes()
+                self.assertEqual(hashlib.sha256(content).hexdigest(), wanted)
+            for relative in (
+                'nats-rollout-preservation/closed_archive.py',
+                'nats-rollout-preservation/closed_durable.py',
+                'nats-rollout-preservation/root_cli.py',
+                'nats-rollout-preservation/nats_contract_integration.py',
+                'nats-known-baseline/kernel',
+            ):
+                content = (bundle / 'capture' / relative).read_bytes()
+                self.assertEqual(hashlib.sha256(content).hexdigest(), manifest[relative])
+            self.assertEqual(
+                (bundle / 'contract_fixture_entry.py').read_bytes(),
+                (bundle / 'capture/nats-rollout-preservation/contract_fixture_entry.py').read_bytes(),
+            )
+            transport = (bundle / 'rollout_census_integration.py').read_text(encoding='utf-8')
+            self.assertIn("__import__('contract_fixture_entry').inner(sys.argv[2])", transport)
+            self.assertNotIn('contract_fixture.py', manifest)
+            entry = (bundle / 'contract_fixture_entry.py').read_text(encoding='utf-8')
+            self.assertLess(entry.index('root_cli.code_binding(code)'),
+                            entry.index('from nats_contract_integration import inner'))
 
     def test_hosted_runner_rejection_precedes_docker(self):
         with patch.object(integration.sys, 'platform', 'linux'):
