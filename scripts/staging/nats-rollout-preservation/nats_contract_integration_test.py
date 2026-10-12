@@ -72,7 +72,9 @@ class HostedTransportTests(unittest.TestCase):
 
     def test_fixture_failure_reports_only_bounded_safe_exception_labels(self):
         stderr = (b'Traceback (most recent call last):\n'
-                  b'RuntimeError: owned_census_fixture_command_failed\n'
+                  b'  File "/bundle/contract_fixture.py", line 123, in inner\n'
+                  b'RuntimeError: owned_census_fixture_command_failed: RuntimeError: baseline_record_changed\n'
+                  b'RuntimeError: owned_census_fixture_command_failed: RuntimeError: identifier_shaped_secret123\n'
                   b'AssertionError: known_record_changed\n'
                   b'ValueError: nats_census_incomplete_or_invalid\n'
                   b'RuntimeError: identifier_shaped_secret123\n'
@@ -82,8 +84,9 @@ class HostedTransportTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as raised:
                 integration.fixture.call(['docker', 'run', 'synthetic'])
         self.assertEqual(str(raised.exception),
-            'owned_census_fixture_command_failed: RuntimeError: owned_census_fixture_command_failed; '
-            'AssertionError: known_record_changed; ValueError: nats_census_incomplete_or_invalid; RuntimeError')
+            'owned_census_fixture_command_failed: frames=contract_fixture.py:123 '
+            'errors=RuntimeError: owned_census_fixture_command_failed;RuntimeError: baseline_record_changed;'
+            'RuntimeError;AssertionError: known_record_changed;ValueError: nats_census_incomplete_or_invalid')
         self.assertNotIn('raw credential material', str(raised.exception))
         self.assertNotIn('identifier_shaped_secret123', str(raised.exception))
 

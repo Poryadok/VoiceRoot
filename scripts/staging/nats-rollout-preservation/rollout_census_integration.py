@@ -71,26 +71,49 @@ func main() { if len(os.Args)==3 && os.Args[1]=="prepare" {prepare(os.Args[2]);r
 '''
 
 
-_SAFE_FAILURE = re.compile(r'^(AssertionError|Blocked|CensusError|KeyError|RuntimeError|TypeError|ValueError|panic)(?:: ([a-z][a-z0-9_]{0,95}))?$')
+_SAFE_FAILURE = re.compile(r'(?:^|:\s)(AssertionError|Blocked|CensusError|FileNotFoundError|ImportError|KeyError|ModuleNotFoundError|OSError|PermissionError|RuntimeError|TypeError|ValueError|panic)(?:: ([a-z][a-z0-9_]{0,95}))?')
+_SAFE_FRAME = re.compile(r'^File "([^"]+)", line ([0-9]+)(?:, in [A-Za-z0-9_.<>]+)?$')
+_SAFE_SOURCE_FILES = frozenset({
+    'bootstrap_auth.py', 'bootstrap_enrollment.py', 'bootstrap_renewal.py', 'bootstrap_root.py',
+    'commands.py', 'contract_fixture.py', 'controller.py', 'docker_runtime.py', 'guard.py',
+    'nats_contract_actor.py', 'nats_contract_integration.py', 'nats_contract_plan.py',
+    'nats_migration.py', 'native_store.py', 'preserve.py', 'rollout_census_integration.py',
+    'rollout_census.py', 'scenario.py', 'stage_runtime.py',
+})
 _SAFE_FAILURE_CODES = frozenset({
-    'baseline_record_changed', 'chat_predecessor_subjects', 'disposable_census_fixture_failed',
-    'ephemeral_delivery_count', 'fixed_fixture_phase_required', 'fixture_interrupted_after_update_before_info',
-    'fixture_interruption_not_exercised', 'known_payload_changed', 'known_record_changed',
-    'nats_census_incomplete_or_invalid', 'owned_census_fixture_command_failed',
-    'post_release_record_changed', 'record_count', 'redelivery_count', 'reviewed_predecessor_shape',
+    'baseline_record_changed', 'broker_not_running', 'broker_stop_failed', 'chat_predecessor_subjects',
+    'container_identity_invalid', 'container_isolation_invalid', 'container_mount_invalid',
+    'container_spec_invalid', 'disposable_census_fixture_failed', 'ephemeral_delivery_count',
+    'fixed_fixture_phase_required', 'fixture_interrupted_after_update_before_info',
+    'fixture_interruption_not_exercised', 'image_digest_invalid', 'kernel_failed', 'kernel_phase_invalid',
+    'known_payload_changed', 'known_record_changed', 'known_record_count', 'nats_census_incomplete_or_invalid',
+    'owned_census_fixture_command_failed', 'post_release_record_changed', 'record_count',
+    'redelivery_count', 'reviewed_predecessor_shape',
 })
 
 
 def _safe_failure_detail(stderr):
-    safe = []
+    frames = []
+    failures = []
     for line in stderr.decode(errors='replace').splitlines()[-40:]:
-        match = _SAFE_FAILURE.fullmatch(line.strip())
-        if match:
+        frame = _SAFE_FRAME.fullmatch(line.strip())
+        if frame:
+            filename, line_number = Path(frame.group(1)).name, int(frame.group(2))
+            if filename in _SAFE_SOURCE_FILES and 1 <= line_number <= 2000:
+                detail = filename + ':' + str(line_number)
+                if detail not in frames:
+                    frames.append(detail)
+        for match in _SAFE_FAILURE.finditer(line.strip()):
             kind, code = match.groups()
             detail = kind + (': ' + code if code in _SAFE_FAILURE_CODES else '')
-            if detail not in safe:
-                safe.append(detail)
-    return '; '.join(safe[-4:])
+            if detail not in failures:
+                failures.append(detail)
+    parts = []
+    if frames:
+        parts.append('frames=' + ','.join(frames[-4:]))
+    if failures:
+        parts.append('errors=' + ';'.join(failures[:8]))
+    return ' '.join(parts)
 
 
 def call(args, **kwargs):
