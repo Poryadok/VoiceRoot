@@ -1590,7 +1590,7 @@ jobs:
         run: |
           bash scripts/ci/compose-e2e-smoke.sh
           cd src/backend/gateway
-          CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^TestComposeSpaceVoiceRoomBidirectionalAudio_live$' ./...
+          CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^(TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*)$' ./...
 
   a1-e2e:
     needs: changes
