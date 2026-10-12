@@ -1560,6 +1560,10 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Install LiveKit native dependencies for the media proof
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
       - name: Compose E2E smoke (all features)
         env:
           VOICE_RUN_LIVE_COMPOSE: "true"
