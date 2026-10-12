@@ -46,19 +46,19 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 		return nil, err
 	}
 	if epochs == nil {
-		return nil, errors.New("Voice user principal requires Auth session epoch lookup")
+		return nil, errors.New("voice user principal requires Auth session epoch lookup")
 	}
 	serverCert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
-		return nil, errors.New("Voice user principal listener TLS unavailable")
+		return nil, errors.New("voice user principal listener TLS unavailable")
 	}
 	clientCAPEM, err := os.ReadFile(config.ClientCAFile)
 	if err != nil {
-		return nil, errors.New("Voice user principal client CA unavailable")
+		return nil, errors.New("voice user principal client CA unavailable")
 	}
 	clientCAs := x509.NewCertPool()
 	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
-		return nil, errors.New("Voice user principal client CA invalid")
+		return nil, errors.New("voice user principal client CA invalid")
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
@@ -66,16 +66,16 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 	}
 	jwksCA, err := os.ReadFile(config.JWKSCAFile)
 	if err != nil || !roots.AppendCertsFromPEM(jwksCA) {
-		return nil, errors.New("Gateway principal JWKS CA invalid")
+		return nil, errors.New("gateway principal JWKS CA invalid")
 	}
 	clientCert, err := tls.LoadX509KeyPair(config.JWKSClientCertFile, config.JWKSClientKeyFile)
 	if err != nil {
-		return nil, errors.New("Gateway principal JWKS client certificate unavailable")
+		return nil, errors.New("gateway principal JWKS client certificate unavailable")
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{clientCert}}
 	httpClient := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("Gateway principal JWKS redirects are forbidden")
+		return errors.New("gateway principal JWKS redirects are forbidden")
 	}}
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
 		if issuer != "gateway" {
@@ -87,11 +87,11 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 		}
 		response, err := httpClient.Do(request)
 		if err != nil {
-			return nil, principalgrpc.Unavailable(errors.New("Gateway principal JWKS unavailable"))
+			return nil, principalgrpc.Unavailable(errors.New("gateway principal JWKS unavailable"))
 		}
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
-			return nil, principalgrpc.Unavailable(errors.New("Gateway principal JWKS unavailable"))
+			return nil, principalgrpc.Unavailable(errors.New("gateway principal JWKS unavailable"))
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 65537))
 		if err != nil || len(body) > 65536 {
@@ -99,7 +99,7 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 		}
 		keys, err := principal.ParseJWKS(body)
 		if err != nil || len(keys) != 2 {
-			return nil, errors.New("Gateway principal JWKS requires current and next keys")
+			return nil, errors.New("gateway principal JWKS requires current and next keys")
 		}
 		var first *rsa.PublicKey
 		for _, key := range keys {
@@ -124,7 +124,7 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 	defer cancelStartup()
 	if err := replay.Ping(startup).Err(); err != nil {
 		_ = runtime.Close()
-		return nil, principalgrpc.Unavailable(errors.New("Voice user principal replay Redis unavailable"))
+		return nil, principalgrpc.Unavailable(errors.New("voice user principal replay Redis unavailable"))
 	}
 	if err := resolver.Refresh(startup, "gateway"); err != nil {
 		_ = runtime.Close()
@@ -139,7 +139,7 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
 	if r == nil || r.resolver == nil || r.replay == nil || r.epochs == nil {
-		return principal.Principal{}, principalgrpc.Unavailable(errors.New("Voice user principal runtime unavailable"))
+		return principal.Principal{}, principalgrpc.Unavailable(errors.New("voice user principal runtime unavailable"))
 	}
 	if !AllowsMethod(method) {
 		return principal.Principal{}, status.Error(codes.PermissionDenied, "method unavailable on Voice user listener")
@@ -180,7 +180,7 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 		return errors.New("delegated principal replay detected")
 	}
 	if err != nil {
-		return principalgrpc.Unavailable(errors.New("Voice user principal replay Redis unavailable"))
+		return principalgrpc.Unavailable(errors.New("voice user principal replay Redis unavailable"))
 	}
 	if result != "OK" {
 		return errors.New("delegated principal replay was not recorded")

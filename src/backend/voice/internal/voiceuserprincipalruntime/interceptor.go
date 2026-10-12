@@ -19,7 +19,7 @@ type Verifier interface {
 func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		if verifier == nil {
-			return nil, principalgrpc.Unavailable(errors.New("Voice user verifier unavailable"))
+			return nil, principalgrpc.Unavailable(errors.New("voice user verifier unavailable"))
 		}
 		if !AllowsMethod(info.FullMethod) {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on Voice user listener")

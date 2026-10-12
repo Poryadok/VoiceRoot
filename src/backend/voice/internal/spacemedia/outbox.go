@@ -31,7 +31,7 @@ type AdmissionOutboxRelay struct {
 
 func (r *AdmissionOutboxRelay) DispatchOnce(ctx context.Context) error {
 	if r == nil || r.Store == nil || r.Publisher == nil {
-		return errors.New("Space media event relay is not configured")
+		return errors.New("space media event relay is not configured")
 	}
 	lease := r.Lease
 	if lease <= 0 {
@@ -52,7 +52,7 @@ func (r *AdmissionOutboxRelay) DispatchOnce(ctx context.Context) error {
 
 func (r *AdmissionOutboxRelay) Run(ctx context.Context) error {
 	if r == nil || r.Store == nil || r.Publisher == nil {
-		return errors.New("Space media event relay is not configured")
+		return errors.New("space media event relay is not configured")
 	}
 	every := r.Every
 	if every <= 0 {
