@@ -825,6 +825,8 @@ class ComposeTests(unittest.TestCase):
             },
             "voice": {
                 "SPACE_VOICE_S2S_TOKEN",
+                "VOICE_ROLE_GRPC_ADDR", "VOICE_ROLE_TLS_CA_FILE",
+                "VOICE_ROLE_CLIENT_CERT_FILE", "VOICE_ROLE_CLIENT_KEY_FILE",
                 "VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN",
                 "VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_CERT_FILE",
                 "VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE",
@@ -841,6 +843,12 @@ class ComposeTests(unittest.TestCase):
                 "VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE",
                 "S2S_JWKS_URLS_JSON", "S2S_JWKS_CA_FILE",
                 "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE",
+            },
+            "role": {
+                "ROLE_PRINCIPAL_GRPC_LISTEN", "ROLE_PRINCIPAL_TLS_CERT_FILE",
+                "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE",
+                "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "S2S_JWKS_URLS_JSON",
+                "S2S_JWKS_CA_FILE",
             },
         }
         for service, expected in expected_environment.items():
@@ -863,6 +871,10 @@ class ComposeTests(unittest.TestCase):
         })
         self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR"], "auth:9092")
         self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME"], "auth")
+        self.assertEqual(voice_env["VOICE_ROLE_GRPC_ADDR"], "role:9091")
+        self.assertEqual(voice_env["VOICE_ROLE_TLS_CA_FILE"], "/run/phase0/ca.crt")
+        self.assertEqual(voice_env["VOICE_ROLE_CLIENT_CERT_FILE"], "/run/phase0/voice-client.crt")
+        self.assertEqual(voice_env["VOICE_ROLE_CLIENT_KEY_FILE"], "/run/phase0/voice-client.key")
         self.assertEqual(voice_env["VOICE_USER_PRINCIPAL_GRPC_LISTEN"], ":9093")
         self.assertEqual(voice_env["S2S_JWKS_CA_FILE"], "/run/phase0/ca.crt")
         self.assertEqual(voice_env["S2S_JWKS_CLIENT_CERT_FILE"], "/run/phase0/voice-client.crt")
@@ -892,9 +904,35 @@ class ComposeTests(unittest.TestCase):
                     continue
                 self.assertEqual(self.media_merged[service].get("environment", {}).get(name), value,
                                  f"media overlay changed unrelated environment: {service}/{name}")
-        for service in ("auth", "voice", PROXY):
+        role_env = self.media_merged["role"]["environment"]
+        self.assertEqual(self.media_merged["role"].get("user"), "0:0",
+                         "Role must read the private 0600 key in the disposable Phase0 fixture")
+        self.assertEqual(role_env["ROLE_PRINCIPAL_GRPC_LISTEN"], ":9091")
+        self.assertEqual(role_env["ROLE_PRINCIPAL_TLS_CERT_FILE"], "/run/phase0/role.crt")
+        self.assertEqual(role_env["ROLE_PRINCIPAL_TLS_KEY_FILE"], "/run/phase0/role.key")
+        self.assertEqual(role_env["ROLE_PRINCIPAL_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
+        self.assertEqual(role_env["ROLE_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
+        self.assertEqual(json.loads(role_env["S2S_JWKS_URLS_JSON"]), {
+            "space": "https://phase0-jwks:8443/space/jwks.json",
+            "gameintegration": "https://gameintegration:8443/internal/v1/principal/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        self.assertEqual(role_env["S2S_JWKS_CA_FILE"], "/run/phase0/ca.crt")
+        self.assertEqual(self.media_merged["role"]["depends_on"]["redis"]["condition"], "service_healthy")
+        self.assertEqual(self.media_merged["role"]["depends_on"]["phase0-jwks"]["condition"], "service_started")
+        self.assertNotIn("voice", self.media_merged["role"]["depends_on"],
+                         "Role JWKS refresh is lazy; a Voice dependency would cycle with Voice's Role health wait")
+        role_mounts = self.media_merged["role"]["volumes"]
+        for target, fixture_source in (("/run/phase0/role.crt", "tls/role.crt"),
+                                       ("/run/phase0/role.key", "tls/role.key"),
+                                       ("/run/phase0/ca.crt", "ca/ca.crt")):
+            mount = next(volume for volume in role_mounts if volume["target"] == target)
+            self.assertTrue(mount["read_only"], f"Role private mount must be read-only: {target}")
+            self.assertEqual(self.source_at("role", target), fixture_source)
+        for service in ("auth", "role", "voice", PROXY):
             self.assertFalse(self.media_merged[service].get("ports"), f"private port published: {service}")
         self.assertIn("9091", [str(port) for port in self.media_merged["auth"].get("expose", [])])
+        self.assertIn("9091", [str(port) for port in self.media_merged["role"].get("expose", [])])
         self.assertIn("9093", [str(port) for port in self.media_merged["voice"].get("expose", [])])
         self.assertNotIn("PRIVATE KEY", json.dumps(self.media_merged))
 

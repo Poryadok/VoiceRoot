@@ -281,11 +281,22 @@ func TestRuntimeListener_DeniesLegacyAndUnrelatedMethodsBeforeHandler(t *testing
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.CompensateOwnershipTransfer(ctx, &rolev1.CompensateOwnershipTransferRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	_, err = client.ResolveVoiceRoomGrants(ctx, &rolev1.ResolveVoiceRoomGrantsRequest{})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.ListRoles(ctx, &rolev1.ListRolesRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Zero(t, recorder.calls.Load())
+	require.Empty(t, recorder.principals)
+}
+
+func TestRuntimeListener_RequiresVoicePrincipalForVoiceRoomGrants(t *testing.T) {
+	f := newRuntimeFixture(t, 2)
+	address, recorder, roots := startRuntimeListener(t, f)
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := client.ResolveVoiceRoomGrants(ctx, &rolev1.ResolveVoiceRoomGrantsRequest{})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Zero(t, recorder.calls, "unauthenticated request must not reach the handler")
 	require.Empty(t, recorder.principals)
 }
 

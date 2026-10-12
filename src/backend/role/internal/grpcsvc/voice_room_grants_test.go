@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/store"
@@ -68,9 +69,9 @@ func TestResolveVoiceRoomGrantsRequiresExactVoicePrincipalAndUsesFencedDecision(
 	require.Equal(t, 1, grantStore.calls, "invalid principal must not reach the fenced store")
 }
 
-func TestResolveVoiceRoomGrantsRejectsNonCanonicalIDsAndIncompleteDecision(t *testing.T) {
+func TestResolveVoiceRoomGrantsRejectsNonCanonicalIDsAndZeroEpochDecision(t *testing.T) {
 	request := &rolev1.ResolveVoiceRoomGrantsRequest{SpaceId: uuid.NewString(), VoiceRoomId: uuid.NewString(), ProfileId: uuid.NewString()}
-	grantStore := &recordingVoiceRoomGrantStore{decision: store.VoiceRoomGrantDecision{PolicyEpoch: 19}}
+	grantStore := &recordingVoiceRoomGrantStore{}
 	svc := &RoleGRPC{voiceRoomGrantStore: grantStore}
 	principalFor := func(req *rolev1.ResolveVoiceRoomGrantsRequest, requestID string) context.Context {
 		hash, err := principal.RequestHash(req)
@@ -80,13 +81,23 @@ func TestResolveVoiceRoomGrantsRejectsNonCanonicalIDsAndIncompleteDecision(t *te
 			RPC: rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName, RequestID: requestID, RequestHash: hash,
 		})
 	}
-	bad := *request
+	bad := proto.Clone(request).(*rolev1.ResolveVoiceRoomGrantsRequest)
 	bad.SpaceId = "ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB"
-	_, err := svc.ResolveVoiceRoomGrants(principalFor(&bad, uuid.NewString()), &bad)
+	_, err := svc.ResolveVoiceRoomGrants(principalFor(bad, uuid.NewString()), bad)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Zero(t, grantStore.calls)
 
 	_, err = svc.ResolveVoiceRoomGrants(principalFor(request, uuid.NewString()), request)
-	require.Equal(t, codes.Unavailable, status.Code(err), "zero-grant response must fail closed")
+	require.Equal(t, codes.Unavailable, status.Code(err), "zero policy epoch must fail closed")
 	require.Equal(t, 1, grantStore.calls)
+
+	grantStore.decision.PolicyEpoch = 19
+	response, err := svc.ResolveVoiceRoomGrants(principalFor(request, uuid.NewString()), request)
+	require.NoError(t, err, "a complete all-false decision is a valid denial")
+	require.Equal(t, uint64(19), response.GetPolicyEpoch())
+	require.NotNil(t, response.GetGrants())
+	require.False(t, response.GetGrants().GetCanJoin())
+	require.False(t, response.GetGrants().GetCanPublishAudio())
+	require.False(t, response.GetGrants().GetCanSubscribe())
+	require.Equal(t, 2, grantStore.calls)
 }
