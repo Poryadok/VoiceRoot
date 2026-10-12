@@ -237,7 +237,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		}
 		return voicestore.Call{}, status.Error(codes.FailedPrecondition, "account already has an active Voice session")
 	}
-	latestAccess, accessErr := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(ctx, current.VoiceRoomID, profileID)
+	latestAccess, accessErr := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(ctx, current.SpaceID, current.VoiceRoomID, profileID)
 	latestGrants, grantErr := s.SpaceVoiceRoomGrants.ResolveVoiceRoomGrants(ctx, current.SpaceID, current.VoiceRoomID, profileID)
 	if accessErr != nil || grantErr != nil || latestAccess.SpaceID != current.SpaceID || !latestAccess.Active || !latestAccess.Member ||
 		latestAccess.AccessEpoch != access.AccessEpoch || latestGrants.PolicyEpoch != grants.PolicyEpoch ||
@@ -401,7 +401,7 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 		generation = participant.Generation
 	}
 	issued := participant.Issued
-	latestAccess, err := s.resolveCanonicalVoiceRoomAccess(ctx, current.VoiceRoomID, profileID)
+	latestAccess, err := s.resolveCanonicalVoiceRoomAccess(ctx, current.SpaceID, current.VoiceRoomID, profileID)
 	if err != nil {
 		return nil, err
 	}

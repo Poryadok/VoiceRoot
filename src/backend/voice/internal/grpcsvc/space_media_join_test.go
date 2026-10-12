@@ -158,8 +158,11 @@ type fixtureSpaceMediaAccessResolver struct {
 	accessEpoch uint64
 }
 
-func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Context, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
+func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Context, expectedSpaceID, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
 	spaceID, active := r.rooms[voiceRoomID]
+	if spaceID == "" || expectedSpaceID != spaceID {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.NotFound, "voice room is not bound to expected Space")
+	}
 	return CanonicalVoiceRoomAccess{
 		SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID], AccessEpoch: r.accessEpoch,
 	}, nil
