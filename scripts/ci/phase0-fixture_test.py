@@ -905,6 +905,8 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(self.media_merged[service].get("environment", {}).get(name), value,
                                  f"media overlay changed unrelated environment: {service}/{name}")
         role_env = self.media_merged["role"]["environment"]
+        self.assertEqual(self.media_merged["role"].get("user"), "0:0",
+                         "Role must read the private 0600 key in the disposable Phase0 fixture")
         self.assertEqual(role_env["ROLE_PRINCIPAL_GRPC_LISTEN"], ":9091")
         self.assertEqual(role_env["ROLE_PRINCIPAL_TLS_CERT_FILE"], "/run/phase0/role.crt")
         self.assertEqual(role_env["ROLE_PRINCIPAL_TLS_KEY_FILE"], "/run/phase0/role.key")

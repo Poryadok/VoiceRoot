@@ -104,6 +104,7 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
 
   role:
+    user: "0:0"
     expose: ["9091"]
     environment:
       ROLE_PRINCIPAL_GRPC_LISTEN: :9091

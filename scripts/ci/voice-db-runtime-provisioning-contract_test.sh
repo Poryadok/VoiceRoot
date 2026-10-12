@@ -449,37 +449,95 @@ game_checkpoint_path_allowed() {
   game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${actual_blob}"
 }
 
-# This exact Voice entrypoint wiring is the reviewed consumer for Role's
-# private Voice-only room-grant RPC. Pin both the implementation commit and
-# blob so F13 does not turn into a general main.go runtime exception.
+# These exact paths are the reviewed Role private room-grant handler and its
+# Voice wiring. The original implementation and the later fail-closed test
+# correction are separate source contributions, so authorize each exact
+# path/blob at its own reviewed checkpoint.
 voice_room_grants_wiring_commit='c758b455103187fd1e40f76eabb35e90f62b7cf3'
+voice_room_grants_test_correction_commit='b4b04b9924bcca2b3e912406464bbffeda96a84f'
 voice_room_grants_main_blob='952368ad43ee5631fe3b7049687f08e85fb93350'
-voice_room_grants_main_authorized_in_delta() {
-  local repo="$1" target="$2" path="$3" delta="$4" actual_blob="$5"
-  [[ "${path}" == 'src/backend/voice/main.go' ]] || return 1
-  git -C "${repo}" merge-base --is-ancestor "${voice_room_grants_wiring_commit}" "${target}" || return 1
-  grep -Fxq -- "${path}" "${delta}" || return 1
-  [[ "${actual_blob}" == "${voice_room_grants_main_blob}" ]]
+voice_room_grants_server_blob='9f6e879ff084469104810540fa2a3cdd1ea6dcbf'
+voice_room_grants_handler_blob='81853ed329b723941d6692efa32b66df2f56fba2'
+voice_room_grants_original_handler_test_blob='6f648af7fade3c3a177b1def605df11eacc7ae2f'
+voice_room_grants_original_listener_test_blob='96ac884d2d7774f37b3b370ab8a00b969fceae94'
+voice_room_grants_test_blob='4a9f707184175141fd9cf048430bbf21a00cf92b'
+voice_room_grants_listener_test_blob='112ed4f5c68e28fae373b7a23b76856ce2062cba'
+voice_room_grants_checkpoint_for_path_blob() {
+  local path="$1" actual_blob="$2"
+  case "${path}:${actual_blob}" in
+    "src/backend/voice/main.go:${voice_room_grants_main_blob}"|\
+    "src/backend/role/internal/grpcsvc/server.go:${voice_room_grants_server_blob}"|\
+    "src/backend/role/internal/grpcsvc/voice_room_grants.go:${voice_room_grants_handler_blob}"|\
+    "src/backend/role/internal/grpcsvc/voice_room_grants_test.go:${voice_room_grants_original_handler_test_blob}"|\
+    "src/backend/role/internal/principalruntime/listener_v2_matrix_test.go:${voice_room_grants_original_listener_test_blob}")
+      printf '%s\n' "${voice_room_grants_wiring_commit}" ;;
+    "src/backend/role/internal/grpcsvc/voice_room_grants_test.go:${voice_room_grants_test_blob}"|\
+    "src/backend/role/internal/principalruntime/listener_v2_matrix_test.go:${voice_room_grants_listener_test_blob}")
+      printf '%s\n' "${voice_room_grants_test_correction_commit}" ;;
+    *) return 1 ;;
+  esac
 }
-voice_room_grants_main_allowed() {
+voice_room_grants_checkpoint_authorized_in_delta() {
+  local repo="$1" target="$2" path="$3" delta="$4" actual_blob="$5" checkpoint
+  checkpoint="$(voice_room_grants_checkpoint_for_path_blob "${path}" "${actual_blob}")" || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint}" "${target}" || return 1
+  grep -Fxq -- "${path}" "${delta}" || return 1
+  return 0
+}
+voice_room_grants_checkpoint_allowed() {
   local path="$1" delta="$2" actual_blob
   [[ -f "${ROOT}/${path}" ]] || return 1
   actual_blob="$(git -C "${ROOT}" hash-object --path="${path}" "${ROOT}/${path}")"
-  voice_room_grants_main_authorized_in_delta "${ROOT}" HEAD "${path}" "${delta}" "${actual_blob}"
+  voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" HEAD "${path}" "${delta}" "${actual_blob}"
 }
 
 voice_room_grants_main_fixture='src/backend/voice/main.go'
-printf '%s\n' "${voice_room_grants_main_fixture}" >"${TMP_DIR}/voice-room-grants-main-delta"
+voice_room_grants_original_paths=(
+  'src/backend/voice/main.go'
+  'src/backend/role/internal/grpcsvc/server.go'
+  'src/backend/role/internal/grpcsvc/voice_room_grants.go'
+  'src/backend/role/internal/grpcsvc/voice_room_grants_test.go'
+  'src/backend/role/internal/principalruntime/listener_v2_matrix_test.go'
+)
+voice_room_grants_corrected_test_paths=(
+  'src/backend/role/internal/grpcsvc/voice_room_grants_test.go'
+  'src/backend/role/internal/principalruntime/listener_v2_matrix_test.go'
+)
+voice_room_grants_checkpoint_paths=(
+  "${voice_room_grants_original_paths[@]}"
+  "${voice_room_grants_corrected_test_paths[@]}"
+)
+git -C "${ROOT}" diff --name-only "${voice_room_grants_wiring_commit}^" "${voice_room_grants_wiring_commit}" >"${TMP_DIR}/voice-room-grants-original-delta"
+git -C "${ROOT}" diff --name-only "${voice_room_grants_test_correction_commit}^" "${voice_room_grants_test_correction_commit}" >"${TMP_DIR}/voice-room-grants-correction-delta"
 : >"${TMP_DIR}/voice-room-grants-empty-delta"
-voice_room_grants_main_fixture_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_wiring_commit}:${voice_room_grants_main_fixture}")"
-voice_room_grants_main_authorized_in_delta "${ROOT}" HEAD "${voice_room_grants_main_fixture}" \
-  "${TMP_DIR}/voice-room-grants-main-delta" "${voice_room_grants_main_fixture_blob}" || {
-  printf '%s\n' 'F13 oracle bug: exact Voice room-grant main.go checkpoint was rejected' >&2
-  exit 2
-}
+for voice_room_grants_checkpoint_path in "${voice_room_grants_original_paths[@]}"; do
+  voice_room_grants_checkpoint_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_wiring_commit}:${voice_room_grants_checkpoint_path}")"
+  voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${voice_room_grants_wiring_commit}" "${voice_room_grants_checkpoint_path}" \
+    "${TMP_DIR}/voice-room-grants-original-delta" "${voice_room_grants_checkpoint_blob}" || {
+    printf 'F13 oracle bug: exact Voice room-grant checkpoint was rejected: %s\n' "${voice_room_grants_checkpoint_path}" >&2
+    exit 2
+  }
+done
+for voice_room_grants_checkpoint_path in "${voice_room_grants_corrected_test_paths[@]}"; do
+  voice_room_grants_checkpoint_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_test_correction_commit}:${voice_room_grants_checkpoint_path}")"
+  voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${voice_room_grants_test_correction_commit}" "${voice_room_grants_checkpoint_path}" \
+    "${TMP_DIR}/voice-room-grants-correction-delta" "${voice_room_grants_checkpoint_blob}" || {
+    printf 'F13 oracle bug: exact Voice room-grant test correction was rejected: %s\n' "${voice_room_grants_checkpoint_path}" >&2
+    exit 2
+  }
+done
+for voice_room_grants_checkpoint_path in "${voice_room_grants_corrected_test_paths[@]}"; do
+  voice_room_grants_checkpoint_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_test_correction_commit}:${voice_room_grants_checkpoint_path}")"
+  if voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${voice_room_grants_test_correction_commit}^" \
+    "${voice_room_grants_checkpoint_path}" "${TMP_DIR}/voice-room-grants-correction-delta" "${voice_room_grants_checkpoint_blob}"; then
+    printf 'F13 oracle bug: correction checkpoint accepted before its commit: %s\n' "${voice_room_grants_checkpoint_path}" >&2
+    exit 2
+  fi
+done
+voice_room_grants_main_fixture_blob="${voice_room_grants_main_blob}"
 for rejected_voice_main in changed_blob near_path absent_delta non_ancestor; do
   rejected_path="${voice_room_grants_main_fixture}"
-  rejected_delta="${TMP_DIR}/voice-room-grants-main-delta"
+  rejected_delta="${TMP_DIR}/voice-room-grants-original-delta"
   rejected_blob="${voice_room_grants_main_fixture_blob}"
   rejected_target=HEAD
   case "${rejected_voice_main}" in
@@ -488,7 +546,7 @@ for rejected_voice_main in changed_blob near_path absent_delta non_ancestor; do
     absent_delta) rejected_delta="${TMP_DIR}/voice-room-grants-empty-delta" ;;
     non_ancestor) rejected_target="${voice_room_grants_wiring_commit}^" ;;
   esac
-  if voice_room_grants_main_authorized_in_delta "${ROOT}" "${rejected_target}" "${rejected_path}" \
+  if voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${rejected_target}" "${rejected_path}" \
     "${rejected_delta}" "${rejected_blob}"; then
     printf 'F13 oracle bug: unapproved Voice room-grant checkpoint accepted: %s\n' "${rejected_voice_main}" >&2
     exit 2
@@ -2166,7 +2224,7 @@ while IFS= read -r file; do
   fi
   game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || \
     be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)" || \
-    voice_room_grants_main_allowed "${file}" "${TMP_DIR}/changed-files" || \
+    voice_room_grants_checkpoint_allowed "${file}" "${TMP_DIR}/changed-files" || \
     printf '%s\n' "${file}"
 done <"${TMP_DIR}/changed-files" >"${TMP_DIR}/unapproved-runtime-delta"
 if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
@@ -2199,6 +2257,18 @@ f13_delta_for_path() {
     printf '%s\n' "${TMP_DIR}/f13-current-delta"
   else
     printf '%s\n' "${TMP_DIR}/changed-files"
+  fi
+}
+
+f13_source_head_for_path() {
+  local repo="$1" map="$2" path="$3" row source_head
+  if [[ -s "${map}" ]]; then
+    row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
+    IFS=$'\t' read -r _ _ _ _ _ source_head _ <<<"${row}"
+    [[ -n "${source_head}" ]] || return 1
+    printf '%s\n' "${source_head}"
+  else
+    printf '%s\n' HEAD
   fi
 }
 
@@ -2243,6 +2313,15 @@ while IFS= read -r file; do
       f13_path_delta="${TMP_DIR}/changed-files"
     }
   fi
+  f13_path_target="HEAD"
+  if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
+    f13_path_target="$(f13_source_head_for_path "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}")" || {
+      if f13_path_is_guarded "${file}"; then
+        fail "F13: changed guarded path has no source revision: ${file}"
+      fi
+      f13_path_target=HEAD
+    }
+  fi
   file_r22_runtime_delta="${r22_runtime_delta}"
   if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
     file_r22_runtime_delta="$(f13_runtime_for_path "${file}")" || {
@@ -2256,7 +2335,7 @@ while IFS= read -r file; do
     continue
   fi
   actual_blob="$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)"
-  if voice_room_grants_main_authorized_in_delta "${ROOT}" HEAD "${file}" "${f13_path_delta}" "${actual_blob}"; then
+  if voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${f13_path_target}" "${file}" "${f13_path_delta}" "${actual_blob}"; then
     continue
   fi
   if be255_checkpoint_path_authorized_in_delta "${file}" "${f13_path_delta}" "${actual_blob}"; then
@@ -2309,7 +2388,7 @@ while IFS= read -r file; do
   if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then
     continue
   fi
-  if voice_room_grants_main_allowed "${file}" "${TMP_DIR}/changed-files"; then
+  if voice_room_grants_checkpoint_allowed "${file}" "${TMP_DIR}/changed-files"; then
     continue
   fi
   if t31_runtime_path_allowed "${file}"; then
