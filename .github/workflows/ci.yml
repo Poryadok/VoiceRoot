@@ -249,6 +249,7 @@ jobs:
         run: |
           base_sha="$(bash scripts/ci/resolve-voice-r22-base.sh)"
           echo "VOICE_R22_BASE_SHA=${base_sha}" >> "${GITHUB_ENV}"
+          echo "VOICE_CI_PUSH_BEFORE_SHA=${VOICE_CI_PUSH_BEFORE_SHA}" >> "${GITHUB_ENV}"
       - name: CI script regression tests
         run: make ci-script-tests
       - uses: actions/setup-go@v5

@@ -1300,6 +1300,9 @@ fi
 
 source "${ROOT}/scripts/ci/voice-r22-runtime-scope.sh"
 
+expect_fixed '.github/workflows/ci.yml' \
+  'echo "VOICE_CI_PUSH_BEFORE_SHA=${VOICE_CI_PUSH_BEFORE_SHA}" >> "${GITHUB_ENV}"' F13
+
 f13_develop_aggregate_enabled() {
   [[ "${1:-}" == 'push' && "${2:-}" == 'refs/heads/develop' ]]
 }
@@ -1311,6 +1314,20 @@ f13_master_release_pr_enabled() {
     "${2:-}" == 'master' &&
     "${3:-}" == codex/voice-master-release-* &&
     "${4:-}" =~ ^refs/pull/[0-9]+/merge$ ]]
+}
+
+# Master pushes must be analyzed as a merge contribution. The merge collector
+# validates the event-before first parent, exact two-parent shape, and result
+# tree; malformed pushes must fail there rather than fall back to aggregate.
+f13_master_merge_push_enabled() {
+  [[ "${1:-}" == push && "${2:-}" == refs/heads/master ]]
+}
+
+f13_master_push_before_matches() {
+  local event_before="${1:-}" resolved_base="${2:-}"
+  [[ "${event_before}" =~ ^[0-9a-fA-F]{40}$ &&
+    "${event_before,,}" != 0000000000000000000000000000000000000000 &&
+    "${resolved_base}" == "${event_before}" ]]
 }
 
 f13_path_is_guarded() {
@@ -1768,6 +1785,29 @@ if f13_master_release_pr_enabled pull_request master codex/feature/example refs/
   exit 2
 fi
 
+f13_master_merge_push_enabled push refs/heads/master || {
+  printf '%s\n' 'F13 oracle bug: exact master merge push was not selected for contribution analysis' >&2
+  exit 2
+}
+if f13_master_merge_push_enabled push refs/heads/develop || \
+  f13_master_merge_push_enabled pull_request refs/heads/master || \
+  f13_master_merge_push_enabled push refs/heads/feature/example; then
+  printf '%s\n' 'F13 oracle bug: inexact master push context selected contribution analysis' >&2
+  exit 2
+fi
+f13_master_push_before_matches "${f13_fixture_base}" "${f13_fixture_base}" || {
+  printf '%s\n' 'F13 oracle bug: matching master push before/base pair was rejected' >&2
+  exit 2
+}
+f13_fixture_wrong_before="$(git -C "${f13_fixture_repo}" rev-parse f13-integration)"
+if f13_master_push_before_matches '' "${f13_fixture_base}" || \
+  f13_master_push_before_matches '0000000000000000000000000000000000000000' "${f13_fixture_base}" || \
+  f13_master_push_before_matches "${f13_fixture_wrong_before}" "${f13_fixture_base}" || \
+  f13_master_push_before_matches "${f13_fixture_base}" "${f13_fixture_wrong_before}"; then
+  printf '%s\n' 'F13 oracle bug: missing, zero, or mismatched master push before/base was accepted' >&2
+  exit 2
+fi
+
 git -C "${f13_fixture_repo}" checkout -qb f13-master-release-pr "${f13_fixture_base}"
 git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 synthetic master release PR merge' f13-integration
 f13_collect_master_release_pr_contributions \
@@ -1782,6 +1822,78 @@ grep -Fqx $'src/backend/voice/main.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-release
 }
 grep -Fqx $'protos/voice/bot/v1/bot.proto\tfalse' <(cut -f1-2 "${TMP_DIR}/f13-release-map") || {
   printf '%s\n' 'F13 oracle bug: unrelated Bot contribution inherited the R22 trigger in release PR' >&2
+  exit 2
+}
+
+f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" f13-master-release-pr \
+  "${TMP_DIR}/f13-master-push-map" "${TMP_DIR}/f13-master-push-category" || {
+  printf '%s\n' 'F13 oracle bug: exact master merge push failed contribution analysis' >&2
+  exit 2
+}
+cmp -s "${TMP_DIR}/f13-release-map" "${TMP_DIR}/f13-master-push-map" || {
+  printf '%s\n' 'F13 oracle bug: master merge push did not retain the PR contribution partition' >&2
+  exit 2
+}
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" '' f13-master-release-pr \
+  "${TMP_DIR}/f13-master-push-missing-before-map" "${TMP_DIR}/f13-master-push-missing-before-category"; then
+  printf '%s\n' 'F13 oracle bug: master merge push with missing before SHA was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-master-push-missing-before-category")" == release_pr_missing_base ]] || {
+  printf '%s\n' 'F13 oracle bug: missing master push before SHA did not fail closed' >&2
+  exit 2
+}
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" '0000000000000000000000000000000000000000' f13-master-release-pr \
+  "${TMP_DIR}/f13-master-push-zero-before-map" "${TMP_DIR}/f13-master-push-zero-before-category"; then
+  printf '%s\n' 'F13 oracle bug: zero master push before SHA was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-master-push-zero-before-category")" == base_object ]] || {
+  printf '%s\n' 'F13 oracle bug: zero master push before SHA did not fail at base validation' >&2
+  exit 2
+}
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" f13-integration f13-master-release-pr \
+  "${TMP_DIR}/f13-master-push-wrong-before-map" "${TMP_DIR}/f13-master-push-wrong-before-category"; then
+  printf '%s\n' 'F13 oracle bug: master push with before SHA outside first parent was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-master-push-wrong-before-category")" == release_pr_base_parent ]] || {
+  printf '%s\n' 'F13 oracle bug: mismatched master push before SHA did not fail at parent validation' >&2
+  exit 2
+}
+if f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" f13-r22-source \
+  "${TMP_DIR}/f13-master-push-nonmerge-map" "${TMP_DIR}/f13-master-push-nonmerge-category"; then
+  printf '%s\n' 'F13 oracle bug: master push with non-merge target was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-master-push-nonmerge-category")" == release_pr_shape ]] || {
+  printf '%s\n' 'F13 oracle bug: non-merge master push did not fail at exact shape validation' >&2
+  exit 2
+}
+
+# A later master push may be a normal follow-up PR containing only the
+# collector/test fix. It still uses exact merge provenance without inheriting
+# the earlier merge's unrelated runtime-triggered scope.
+git -C "${f13_fixture_repo}" checkout -qb f13-master-script-source f13-master-release-pr
+mkdir -p "${f13_fixture_repo}/scripts/ci"
+printf '%s\n' '# follow-up contract only' >"${f13_fixture_repo}/scripts/ci/f13-followup.sh"
+git -C "${f13_fixture_repo}" add scripts/ci/f13-followup.sh
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture follow-up collector change'
+git -C "${f13_fixture_repo}" checkout -qb f13-master-script-followup f13-master-release-pr
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 synthetic follow-up master merge' f13-master-script-source
+f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" f13-master-release-pr f13-master-script-followup \
+  "${TMP_DIR}/f13-master-followup-map" "${TMP_DIR}/f13-master-followup-category" || {
+  printf '%s\n' 'F13 oracle bug: script-only follow-up master merge failed contribution analysis' >&2
+  exit 2
+}
+grep -Fqx $'scripts/ci/f13-followup.sh\tfalse' <(cut -f1-2 "${TMP_DIR}/f13-master-followup-map") || {
+  printf '%s\n' 'F13 oracle bug: script-only follow-up master merge inherited runtime trigger' >&2
   exit 2
 }
 
@@ -2340,17 +2452,33 @@ f13_develop_aggregate_enabled push refs/heads/develop || {
 }
 
 f13_master_release_pr=false
+f13_master_merge_push=false
 f13_collect_status=0
 if f13_master_release_pr_enabled \
   "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_BASE_REF:-}" \
   "${GITHUB_HEAD_REF:-}" "${GITHUB_REF:-}"; then
   f13_master_release_pr=true
 fi
-if [[ "${f13_master_release_pr}" == true ]] || \
+if f13_master_merge_push_enabled \
+  "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
+  f13_master_merge_push=true
+fi
+if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]] || \
   f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
-  if [[ "${f13_master_release_pr}" == true ]]; then
-    f13_collect_master_release_pr_contributions \
-      "${ROOT}" "${VOICE_R22_BASE_SHA:-}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
+  if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]]; then
+    f13_master_base="${VOICE_R22_BASE_SHA:-}"
+    if [[ "${f13_master_merge_push}" == true ]]; then
+      f13_master_before="${VOICE_CI_PUSH_BEFORE_SHA:-}"
+      if ! f13_master_push_before_matches "${f13_master_before}" "${f13_master_base}"; then
+        f13_collect_failure "${TMP_DIR}/f13-failure-category" push_before_mismatch || true
+        f13_collect_status=1
+      fi
+      f13_master_base="${f13_master_before}"
+    fi
+    if [[ "${f13_collect_status}" == 0 ]]; then
+      f13_collect_master_release_pr_contributions \
+        "${ROOT}" "${f13_master_base}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
+    fi
   else
     f13_collect_develop_contributions \
       "${ROOT}" "${base_sha}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
@@ -2360,6 +2488,7 @@ if [[ "${f13_master_release_pr}" == true ]] || \
     if [[ -s "${TMP_DIR}/f13-failure-category" ]]; then
       case "$(<"${TMP_DIR}/f13-failure-category")" in
         base_object|target_object|base_ancestry|first_parent_range|parent_count|source_base|source_delta|\
+        push_before_mismatch|\
         sync_merge_resolution_inspection|sync_merge_guarded_resolution|\
         source_tree_entry|merge_tree_entry|merge_tree_mismatch|target_tree_entry|guarded_target_mismatch|\
         duplicate_guarded_owner|release_pr_missing_base|release_pr_shape|release_pr_base_parent|\
