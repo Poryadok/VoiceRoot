@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/store"
@@ -17,8 +19,12 @@ type fakeAccess struct {
 	byProfile map[string]grpcsvc.CanonicalVoiceRoomAccess
 }
 
-func (f fakeAccess) ResolveVoiceRoomAccess(_ context.Context, _, profileID string) (grpcsvc.CanonicalVoiceRoomAccess, error) {
-	return f.byProfile[profileID], nil
+func (f fakeAccess) ResolveVoiceRoomAccess(_ context.Context, expectedSpaceID, _, profileID string) (grpcsvc.CanonicalVoiceRoomAccess, error) {
+	access, ok := f.byProfile[profileID]
+	if !ok || access.SpaceID != expectedSpaceID {
+		return grpcsvc.CanonicalVoiceRoomAccess{}, status.Error(codes.NotFound, "voice room is not bound to expected Space")
+	}
+	return access, nil
 }
 
 type fakeGrants struct {

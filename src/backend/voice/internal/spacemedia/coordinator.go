@@ -26,7 +26,7 @@ const (
 var ErrReconciliationPending = errors.New("space media authority changed during reconciliation")
 
 type AccessResolver interface {
-	ResolveVoiceRoomAccess(context.Context, string, string) (grpcsvc.CanonicalVoiceRoomAccess, error)
+	ResolveVoiceRoomAccess(context.Context, string, string, string) (grpcsvc.CanonicalVoiceRoomAccess, error)
 }
 
 type GrantResolver interface {
@@ -323,7 +323,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	if err := c.Admissions.ConfirmRoomHeadOpen(ctx, admission); err != nil {
 		return err
 	}
-	access, err := c.Access.ResolveVoiceRoomAccess(ctx, admission.VoiceRoomID, admission.ProfileID.String())
+	access, err := c.Access.ResolveVoiceRoomAccess(ctx, admission.SpaceID.String(), admission.VoiceRoomID, admission.ProfileID.String())
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -427,7 +427,7 @@ func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call,
 		return err
 	}
 
-	access, accessErr := c.Access.ResolveVoiceRoomAccess(ctx, call.VoiceRoomID, participant.ProfileID)
+	access, accessErr := c.Access.ResolveVoiceRoomAccess(ctx, call.SpaceID, call.VoiceRoomID, participant.ProfileID)
 	if accessErr != nil && status.Code(accessErr) != codes.NotFound {
 		return accessErr
 	}

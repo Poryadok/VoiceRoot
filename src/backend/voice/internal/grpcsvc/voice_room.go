@@ -77,11 +77,11 @@ func (s *VoiceGRPC) moveVoiceRoomParticipant(ctx context.Context, actor, target,
 	// The authoritative resolver proves membership and canonical ownership for
 	// each involved profile.  Deliberately do not resolve destination access for
 	// actor: a moderator is allowed to move someone there without VOICE_JOIN.
-	actorSource, err := s.resolveCanonicalVoiceRoomAccess(ctx, fromRoom, actor)
+	actorSource, err := s.resolveCanonicalVoiceRoomAccess(ctx, assertedSpace, fromRoom, actor)
 	if err != nil {
 		return voicestore.VoiceRoomMoveResult{}, err
 	}
-	targetSource, err := s.resolveCanonicalVoiceRoomAccess(ctx, fromRoom, target)
+	targetSource, err := s.resolveCanonicalVoiceRoomAccess(ctx, assertedSpace, fromRoom, target)
 	if err != nil {
 		return voicestore.VoiceRoomMoveResult{}, err
 	}
@@ -100,7 +100,7 @@ func (s *VoiceGRPC) moveVoiceRoomParticipant(ctx context.Context, actor, target,
 		}
 		return replay, nil
 	}
-	targetDestination, err := s.resolveCanonicalVoiceRoomAccess(ctx, toRoom, target)
+	targetDestination, err := s.resolveCanonicalVoiceRoomAccess(ctx, assertedSpace, toRoom, target)
 	if err != nil {
 		return voicestore.VoiceRoomMoveResult{}, err
 	}
@@ -184,7 +184,7 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 	if _, err := uuid.Parse(spaceID); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid space id")
 	}
-	access, err := s.resolveCanonicalVoiceRoomAccess(ctx, voiceRoomID, profileID)
+	access, err := s.resolveCanonicalVoiceRoomAccess(ctx, spaceID, voiceRoomID, profileID)
 	if err != nil {
 		return nil, err
 	}
