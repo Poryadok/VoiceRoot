@@ -1124,10 +1124,12 @@ f13_collect_failure() {
 
 f13_collect_develop_contributions() {
   local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
-  local commit parent_count first_parent source_head source_base delta first_parent_commits
+  local allow_direct_followup="${6:-false}"
+  local commit parent_count first_parent source_head source_base delta first_parent_commits is_direct
   local path source_entry result_entry target_entry blob trigger
+  local previous_trigger content_base
   local -a commit_line
-  local -A owners=()
+  local -A owners=() owner_triggers=() owner_content_bases=() guarded_entries=()
   : >"${output}"
   git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || {
     f13_collect_failure "${diagnostic_file}" base_object
@@ -1159,6 +1161,7 @@ f13_collect_develop_contributions() {
       return 1
     }
     first_parent="${commit_line[1]}"
+    is_direct=false
     if ((parent_count == 2)); then
       source_head="${commit_line[2]}"
       source_base="$(git -C "${repo}" merge-base "${first_parent}" "${source_head}" 2>/dev/null)" || {
@@ -1174,6 +1177,7 @@ f13_collect_develop_contributions() {
         return 1
       }
     else
+      is_direct=true
       source_head="${commit}"
       source_base="${first_parent}"
       git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta" || {
@@ -1201,14 +1205,7 @@ f13_collect_develop_contributions() {
         }
       fi
       if f13_path_is_guarded "${path}"; then
-        target_entry="$(git -C "${repo}" ls-tree "${target}" -- "${path}" 2>/dev/null)" || {
-          f13_collect_failure "${diagnostic_file}" target_tree_entry
-          return 1
-        }
-        [[ "${source_entry}" == "${target_entry}" ]] || {
-          f13_collect_failure "${diagnostic_file}" guarded_target_mismatch
-          return 1
-        }
+        guarded_entries["${path}"]="${source_entry}"
       fi
       blob="$(awk '{print $3}' <<<"${source_entry}")"
       if game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${blob}" || \
@@ -1224,15 +1221,47 @@ f13_collect_develop_contributions() {
     fi
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue
+      content_base="${owner_content_bases[${path}]:-${first_parent}}"
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
-        f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
-        return 1
+        # A release PR may directly correct a guarded path imported by an
+        # earlier merge. This remains one reviewable PR contribution: retain
+        # the original runtime trigger, but attribute the path delta to the
+        # latest direct commit. A second merge-source owner stays ambiguous.
+        if [[ "${allow_direct_followup}" != true || "${is_direct}" != true ]]; then
+          f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
+          return 1
+        fi
+        previous_trigger="${owner_triggers[${path}]:-false}"
+        [[ "${previous_trigger}" == true ]] && trigger=true
+        awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-map-rewrite" || {
+          f13_collect_failure "${diagnostic_file}" release_pr_map_write
+          return 1
+        }
+        cat "${TMP_DIR}/f13-map-rewrite" >"${output}" || {
+          f13_collect_failure "${diagnostic_file}" release_pr_map_write
+          return 1
+        }
       fi
       owners["${path}"]="${commit}"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "${path}" "${trigger}" "${commit}" "${first_parent}" "${source_base}" "${source_head}" >>"${output}"
+      owner_triggers["${path}"]="${trigger}"
+      owner_content_bases["${path}"]="${content_base}"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${path}" "${trigger}" "${commit}" "${first_parent}" "${source_base}" "${source_head}" "${content_base}" >>"${output}"
     done <"${delta}"
   done < <(git -C "${repo}" rev-list --first-parent --reverse "${base}..${target}" 2>/dev/null)
+
+  # Historical source versions may be superseded by later direct commits in
+  # this PR. The final owner must still retain the exact guarded tree entry.
+  for path in "${!guarded_entries[@]}"; do
+    target_entry="$(git -C "${repo}" ls-tree "${target}" -- "${path}" 2>/dev/null)" || {
+      f13_collect_failure "${diagnostic_file}" target_tree_entry
+      return 1
+    }
+    [[ "${guarded_entries[${path}]}" == "${target_entry}" ]] || {
+      f13_collect_failure "${diagnostic_file}" guarded_target_mismatch
+      return 1
+    }
+  done
 }
 
 # A release PR is GitHub's synthetic merge of its exact base and head. Partition
@@ -1279,7 +1308,7 @@ f13_collect_master_release_pr_contributions() {
   }
 
   f13_collect_develop_contributions "${repo}" "${base_commit}" "${source_head}" \
-    "${source_map}" "${diagnostic_file}" || return 1
+    "${source_map}" "${diagnostic_file}" true || return 1
   git -C "${repo}" diff --name-only "${base_commit}" "${source_head}" 2>/dev/null >"${source_delta}" || {
     f13_collect_failure "${diagnostic_file}" release_pr_source_delta
     return 1
@@ -1536,10 +1565,15 @@ printf '%s\n' 'target version' >"${f13_fixture_repo}/protos/voice/bot/v1/conflic
 git -C "${f13_fixture_repo}" add protos/voice/bot/v1/conflict.proto
 git -C "${f13_fixture_repo}" commit -qm 'F13 fixture resolved conflict'
 if f13_collect_develop_contributions \
-  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-conflict-map"; then
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD \
+  "${TMP_DIR}/f13-conflict-map" "${TMP_DIR}/f13-conflict-category"; then
   printf '%s\n' 'F13 oracle bug: source/merge blob mismatch was accepted' >&2
   exit 2
 fi
+[[ "$(<"${TMP_DIR}/f13-conflict-category")" == merge_tree_mismatch ]] || {
+  printf '%s\n' 'F13 oracle bug: guarded conflict resolution did not fail at exact source/merge tree equality' >&2
+  exit 2
+}
 
 git -C "${f13_fixture_repo}" checkout -qb f13-doc-conflict-source "${f13_fixture_base}"
 mkdir -p "${f13_fixture_repo}/docs"
@@ -1626,12 +1660,12 @@ f13_collect_develop_contributions \
   exit 2
 }
 f13_changed_content() {
-  local repo="$1" map="$2" path="$3" commit first_parent source_base source_head row
+  local repo="$1" map="$2" path="$3" commit first_parent source_base source_head content_base row
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
-    IFS=$'\t' read -r _ _ commit first_parent source_base source_head <<<"${row}"
+    IFS=$'\t' read -r _ _ commit first_parent source_base source_head content_base <<<"${row}"
     [[ -n "${commit}" && -n "${first_parent}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
-    git -C "${repo}" diff --unified=0 "${first_parent}" "${commit}" -- "${path}" | sed -n '/^+++ /d; /^+/s/^+//p'
+    git -C "${repo}" diff --unified=0 "${content_base:-${first_parent}}" "${commit}" -- "${path}" | sed -n '/^+++ /d; /^+/s/^+//p'
   else
     changed_content "${base_sha}" "${path}"
   fi
@@ -1645,6 +1679,117 @@ if ! grep -Fq 'NewLifecycleWorker()' "${TMP_DIR}/f13-activation-content" || \
   printf '%s\n' 'F13 oracle bug: first-parent activation restoration was not detected' >&2
   exit 2
 fi
+
+# In a master release PR, a later direct correction may supersede an imported
+# guarded path. The map points to that exact latest delta and keeps the earlier
+# content-history base so the activation oracle sees all additions to the path.
+# The earlier runtime-trigger bit remains true as well.
+git -C "${f13_fixture_repo}" checkout -qb f13-release-followup-source "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
+cat >"${f13_fixture_repo}/src/backend/voice/main.go" <<'EOF'
+package main
+
+func main() {}
+EOF
+printf '%s\n' 'package voice' 'const fixture = "initial"' >"${f13_fixture_repo}/src/backend/voice/followup_test.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/main.go src/backend/voice/followup_test.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 release fixture imported guarded paths'
+git -C "${f13_fixture_repo}" checkout -qb f13-release-followup-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 release fixture imports guarded source' f13-release-followup-source
+cat >"${f13_fixture_repo}/src/backend/voice/main.go" <<'EOF'
+package main
+
+func main() {
+	NewLifecycleWorker()
+}
+EOF
+printf '%s\n' 'package voice' 'const newDirectPath = true' >"${f13_fixture_repo}/src/backend/voice/z_new_direct.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/main.go src/backend/voice/z_new_direct.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 release fixture direct guarded correction'
+f13_followup_activation_commit="$(git -C "${f13_fixture_repo}" rev-parse HEAD)"
+printf '%s\n' 'package voice' 'const fixture = "corrected"' >"${f13_fixture_repo}/src/backend/voice/followup_test.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/followup_test.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 release fixture direct test correction'
+f13_followup_head="$(git -C "${f13_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_fixture_repo}" checkout -qb f13-release-followup-pr "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 synthetic release PR with direct correction' f13-release-followup-integration
+f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD \
+  "${TMP_DIR}/f13-release-followup-map" "${TMP_DIR}/f13-release-followup-category" || {
+  printf '%s\n' 'F13 oracle bug: release PR direct correction of imported guarded paths was rejected' >&2
+  exit 2
+}
+grep -Fqx $'src/backend/voice/main.go\ttrue\t'"${f13_followup_activation_commit}" <(cut -f1-3 "${TMP_DIR}/f13-release-followup-map") || {
+  printf '%s\n' 'F13 oracle bug: corrected guarded path lost its latest owner or prior runtime trigger' >&2
+  exit 2
+}
+grep -Fqx $'src/backend/voice/followup_test.go\ttrue\t'"${f13_followup_head}" <(cut -f1-3 "${TMP_DIR}/f13-release-followup-map") || {
+  printf '%s\n' 'F13 oracle bug: test path correction did not retain the imported contribution runtime trigger' >&2
+  exit 2
+}
+f13_new_direct_row="$(awk -F '\t' '$1 == "src/backend/voice/z_new_direct.go" { row=$0 } END { print row }' \
+  "${TMP_DIR}/f13-release-followup-map")"
+IFS=$'\t' read -r _ _ _ f13_new_direct_parent _ _ f13_new_direct_content_base <<<"${f13_new_direct_row}"
+[[ -n "${f13_new_direct_parent}" && \
+  "${f13_new_direct_content_base}" == "${f13_new_direct_parent}" ]] || {
+  printf '%s\n' 'F13 oracle bug: new path in mixed direct follow-up inherited another path content history' >&2
+  exit 2
+}
+f13_changed_content "${f13_fixture_repo}" "${TMP_DIR}/f13-release-followup-map" \
+  'src/backend/voice/main.go' >"${TMP_DIR}/f13-release-followup-content"
+grep -Fq 'NewLifecycleWorker()' "${TMP_DIR}/f13-release-followup-content" && \
+  forbidden_activation_content "${TMP_DIR}/f13-release-followup-content" || {
+  printf '%s\n' 'F13 oracle bug: latest direct activation escaped its exact path/delta guard' >&2
+  exit 2
+}
+f13_followup_row="$(awk -F '\t' '$1 == "src/backend/voice/followup_test.go" { row=$0 } END { print row }' \
+  "${TMP_DIR}/f13-release-followup-map")"
+IFS=$'\t' read -r _ _ _ _ f13_followup_source_base f13_followup_source_head _ <<<"${f13_followup_row}"
+[[ "${f13_followup_source_base}" == "${f13_followup_activation_commit}" && \
+  "${f13_followup_source_head}" == "${f13_followup_head}" ]] && \
+  git -C "${f13_fixture_repo}" diff --name-only \
+    "${f13_followup_source_base}" "${f13_followup_source_head}" | \
+    grep -Fxq 'src/backend/voice/followup_test.go' || {
+  printf 'F13 oracle bug: latest guarded path delta did not isolate follow-up test (base=%s head=%s expected_base=%s expected_head=%s)\n' \
+    "${f13_followup_source_base}" "${f13_followup_source_head}" \
+    "${f13_followup_activation_commit}" "${f13_followup_head}" >&2
+  exit 2
+}
+
+# A harmless direct follow-up must not hide forbidden activation content that
+# was already introduced by the imported merge and remains in the final file.
+git -C "${f13_fixture_repo}" checkout -qb f13-release-retained-source "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
+cat >"${f13_fixture_repo}/src/backend/voice/database.go" <<'EOF'
+package voice
+
+func StartDatabaseLifecycle() {
+	NewLifecycleWorker()
+}
+EOF
+git -C "${f13_fixture_repo}" add src/backend/voice/database.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 retained activation fixture contribution'
+git -C "${f13_fixture_repo}" checkout -qb f13-release-retained-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 retained activation fixture merge' f13-release-retained-source
+sed -i 's/func StartDatabaseLifecycle/func StartDatabaseLifecycle \/\/ corrected/' \
+  "${f13_fixture_repo}/src/backend/voice/database.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/database.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 retained activation harmless direct correction'
+git -C "${f13_fixture_repo}" checkout -qb f13-release-retained-pr "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 retained activation synthetic PR merge' f13-release-retained-integration
+f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD \
+  "${TMP_DIR}/f13-release-retained-map" "${TMP_DIR}/f13-release-retained-category" || {
+  printf '%s\n' 'F13 oracle bug: harmless direct correction of retained activation was rejected' >&2
+  exit 2
+}
+f13_changed_content "${f13_fixture_repo}" "${TMP_DIR}/f13-release-retained-map" \
+  'src/backend/voice/database.go' >"${TMP_DIR}/f13-release-retained-content"
+grep -Fq 'NewLifecycleWorker()' "${TMP_DIR}/f13-release-retained-content" && \
+  forbidden_activation_content "${TMP_DIR}/f13-release-retained-content" || {
+  printf '%s\n' 'F13 oracle bug: direct follow-up hid forbidden activation retained from imported merge' >&2
+  exit 2
+}
 
 git -C "${f13_fixture_repo}" checkout -qb f13-repeat-source-one "${f13_fixture_base}"
 mkdir -p "${f13_fixture_repo}/src/backend/voice"
@@ -1804,7 +1949,7 @@ f13_delta_for_path() {
   local repo="$1" map="$2" path="$3" row commit source_base source_head
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
-    IFS=$'\t' read -r _ _ commit _ source_base source_head <<<"${row}"
+    IFS=$'\t' read -r _ _ commit _ source_base source_head _ <<<"${row}"
     [[ -n "${commit}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
     git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-current-delta" || return 1
     grep -Fxq -- "${path}" "${TMP_DIR}/f13-current-delta" || return 1
