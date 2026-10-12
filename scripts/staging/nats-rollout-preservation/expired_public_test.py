@@ -94,7 +94,8 @@ class PublicRecoveryTests(unittest.TestCase):
         added={'expired_recovery.py','expired_proof.py','expired_admission.py','expired_transport.py','expired_finish.py',
             'closed_archive.py','closed_durable.py','hub_bridge_identity.py','hub_bridge_unit.py','operator_retirement.py'}
         self.assertTrue(added<=set(bundle.ROLLOUT))
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,77)
+        self.assertIn('nats_active_contract.py',bundle.ROLLOUT)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,78)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
             manifest={}

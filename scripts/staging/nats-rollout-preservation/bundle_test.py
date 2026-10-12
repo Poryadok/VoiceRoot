@@ -54,6 +54,10 @@ class BundleCaptureTest(unittest.TestCase):
         result=self.run_launcher('--install','--upgrade-idle')
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(result.stdout.strip(),'INSTALLER_ARGS=--upgrade-idle')
+    def test_exact_ceccb_idle_upgrade_argument_reaches_captured_installer(self):
+        result=self.run_launcher('--install','--upgrade-idle-ceccb-v1')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),'INSTALLER_ARGS=--upgrade-idle-ceccb-v1')
     def test_exact_retirement_arguments_reach_root_only_captured_entry(self):
         result=self.run_launcher('--retire','/root/reviewed-plan.json','a'*64)
         self.assertEqual(result.returncode,0,result.stderr)

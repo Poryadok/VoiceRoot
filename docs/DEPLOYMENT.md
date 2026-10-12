@@ -740,6 +740,13 @@ credential hard expiry, then retain the retired public key for at least 35 s.
 
 ## NATS JWT and leaf activation
 
+For ordinary non-reset staging releases and rollback, follow the
+[NATS preservation runbook](../scripts/staging/nats-rollout-preservation/README.md).
+It covers the exact installed-helper transition, operation-closure and journal
+prerequisites, current source/native proof gates, and fresh-cut rollback. The
+reset and root-rotation procedures below are separately authorized maintenance
+exceptions; they are not recovery shortcuts for a blocked preservation rollout.
+
 The reviewed grants and issuer contract are in
 [`deploy/nats/README.md`](../deploy/nats/README.md) and
 [`deploy/nats/acl-intent.yaml`](../deploy/nats/acl-intent.yaml). Issue on a

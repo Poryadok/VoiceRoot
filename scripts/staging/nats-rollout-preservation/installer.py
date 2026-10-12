@@ -22,6 +22,7 @@ V2_BINDING='57457481c7af3148f501083f941dfac0f1c17e75d75b879e377d060a7f5fee77'
 V3_BINDING='b0742fec4732b769944e5b849e39229d5f614989c4a439050ec48dd2ed20ab26'
 V4_BINDING='426a6edf16ccb8aba30145cfde458c9b2ca5d468cdf4015ea8bdf525e049f47f'
 V5_BINDING='23b26ad5478e01d4b00abf171d29a5d210c6c2fbf6284826cf9e3a84cfd73a9a'
+CECCB_INSTALLED_BINDING='ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032'
 
 def binding_sha(code):
     return hashlib.sha256(json.dumps(root_cli.code_binding(code),sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -175,7 +176,7 @@ def upgrade(code,version='v4'):
     print('NATS_ROLLOUT_BRIDGE=UPGRADED_'+version.upper()+'_KEYS_POLICY_PRESERVED')
 
 
-def upgrade_idle(code):
+def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
     # The retired operation is historical evidence, never repaired or adopted.
     import operator_retirement as retirement
     import story_witness
@@ -212,13 +213,23 @@ def upgrade_idle(code):
                 protected[str(path)]=retirement.file_sha(path)
             witnesses=story_witness.registry_snapshot()
             if kube.get('configmap','voice-nats-generation')!=marker:raise Blocked('bridge_upgrade_marker_changed')
-            _upgrade_code(code,installed,grp.getgrnam('pmd').gr_gid,retirement.V15_BINDING,'idle','v15')
+            _upgrade_code(code,installed,grp.getgrnam('pmd').gr_gid,predecessor,version,previous_version)
             if story_witness.registry_snapshot()!=witnesses or kube.get('configmap','voice-nats-generation')!=marker:
                 raise Blocked('bridge_upgrade_marker_changed')
             for name,wanted in {**checkpoints,**journals,**protected}.items():
                 if retirement.file_sha(Path(name))!=wanted:raise Blocked('bridge_upgrade_history_changed')
         finally:inbox.chmod(0o1730)
-    print('NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_KEYS_POLICY_HISTORY_PRESERVED')
+    print(result)
+
+def upgrade_idle(code):
+    import operator_retirement as retirement
+    _upgrade_idle_transition(code,retirement.V15_BINDING,'idle','v15',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_KEYS_POLICY_HISTORY_PRESERVED')
+
+def upgrade_idle_ceccb_v1(code):
+    """One exact, separate transition from the reviewed installed ceccb helper."""
+    _upgrade_idle_transition(code,CECCB_INSTALLED_BINDING,'idle-ceccb-v1','ceccb',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_CECCB_V1_KEYS_POLICY_HISTORY_PRESERVED')
 
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
@@ -293,8 +304,9 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8')
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1')
     if sys.argv[1]=='--upgrade-idle':upgrade_idle(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle-ceccb-v1':upgrade_idle_ceccb_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-v4':upgrade(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-v5':upgrade(Path(__file__).resolve().parents[1],version='v5')
     elif sys.argv[1]=='--upgrade-v6':upgrade(Path(__file__).resolve().parents[1],version='v6')

@@ -510,6 +510,76 @@ class IdleUpgradeTests(unittest.TestCase):
                         if failure=='unknown':upgrade.assert_not_called()
                     self.assertEqual((installed/'inbox').stat().st_mode&0o7777,0o1730)
 
+    def test_actual_ceccb_idle_update_reuses_verified_closure_and_all_idle_vetoes(self):
+        import installer
+        from types import SimpleNamespace
+        helper=RetirementActionTests()
+        for failure in (None,'unknown','history'):
+            with self.subTest(failure=failure),tempfile.TemporaryDirectory() as folder:
+                fixture=helper.fixture(folder);kube=FakeKube(fixture[4]);helper.action(fixture,kube)
+                root,base,snapshot,raw,_,binding,_,_=fixture
+                installed=root/'installed';(installed/'recovery').mkdir()
+                for name in ('recovery-key.pem','recovery-cert.pem'):
+                    path=installed/'recovery'/name;path.write_bytes(b'protected existing key material');path.chmod(0o600)
+                policy=installed/'policy.json';policy.write_text('{}');policy.chmod(0o600)
+                if failure=='unknown':
+                    path=installed/'journal'/('d'*64+'.json');path.write_text('{"phase":"STARTED"}');path.chmod(0o600)
+                def swap(*args):
+                    if failure=='history':
+                        state=json.loads((base/'checkpoint.json').read_bytes());state['authorization']={'expires_at':'changed'}
+                        (base/'checkpoint.json').write_text(json.dumps(state))
+                with patch.object(retirement.guard,'ROOT',root),\
+                     patch.object(retirement,'SNAPSHOT_SHA',hashlib.sha256(raw).hexdigest()),\
+                     patch.object(retirement.root_cli,'code_binding',return_value=binding),\
+                     patch.object(installer,'operation_lock',return_value=contextlib.nullcontext()),\
+                     patch.object(installer,'Kube',return_value=kube),\
+                     patch.object(installer.grp,'getgrnam',return_value=SimpleNamespace(gr_gid=1000)),\
+                     patch('story_witness.registry_snapshot',return_value={'fixed':'witness'}),\
+                     patch.object(installer,'_upgrade_code',side_effect=swap) as upgrade:
+                    if failure is None:
+                        installer.upgrade_idle_ceccb_v1(root/'candidate')
+                        upgrade.assert_called_once_with(root/'candidate',installed,1000,
+                            installer.CECCB_INSTALLED_BINDING,'idle-ceccb-v1','ceccb')
+                    else:
+                        with self.assertRaises(Blocked):installer.upgrade_idle_ceccb_v1(root/'candidate')
+                        if failure=='unknown':upgrade.assert_not_called()
+                    self.assertEqual((installed/'inbox').stat().st_mode&0o7777,0o1730)
+
+    def test_ceccb_unclosed_operation_vetoes_despite_old_closure_and_complete_journal(self):
+        import installer
+        from types import SimpleNamespace
+        helper=RetirementActionTests()
+        with tempfile.TemporaryDirectory() as folder:
+            fixture=helper.fixture(folder);kube=FakeKube(fixture[4]);helper.action(fixture,kube)
+            root,_,_,_,_,binding,_,_=fixture;installed=root/'installed'
+            # Keep the historical closure and add a separate unclosed d4-style operation.
+            operation='d4d4d4d4d4d4';base=root/('rollout-'+operation);base.mkdir()
+            checkpoint={'schema':'nats-rollout-root-v1','operation':operation,
+                'phase':'PREPARE','status':'BLOCKED','fence_status':'VERIFIED','events':[]}
+            (base/'checkpoint.json').write_text(json.dumps(checkpoint));(base/'checkpoint.json').chmod(0o600)
+            request_name=operation+'a'*52+'.json'
+            (installed/'journal'/request_name).write_text('{"phase":"COMPLETE"}')
+            (installed/'journal'/request_name).chmod(0o600)
+            (installed/'responses'/request_name).write_text('{"status":"BLOCKED"}')
+            (installed/'responses'/request_name).chmod(0o640)
+            (installed/'recovery').mkdir()
+            for name in ('recovery-key.pem','recovery-cert.pem'):
+                (installed/'recovery'/name).write_bytes(b'protected existing key material')
+                (installed/'recovery'/name).chmod(0o600)
+            policy=installed/'policy.json';policy.write_text('{}');policy.chmod(0o600)
+            with patch.object(retirement.guard,'ROOT',root),\
+                 patch.object(retirement,'SNAPSHOT_SHA',hashlib.sha256(fixture[3]).hexdigest()),\
+                 patch.object(retirement.root_cli,'code_binding',return_value=binding),\
+                 patch.object(installer,'operation_lock',return_value=contextlib.nullcontext()),\
+                 patch.object(installer,'Kube',return_value=kube),\
+                 patch.object(installer.grp,'getgrnam',return_value=SimpleNamespace(gr_gid=1000)),\
+                 patch('story_witness.registry_snapshot',return_value={'fixed':'witness'}),\
+                 patch.object(installer,'_upgrade_code') as upgrade:
+                with self.assertRaises(Blocked):
+                    installer.upgrade_idle_ceccb_v1(root/'candidate')
+            upgrade.assert_not_called()
+            self.assertEqual((installed/'inbox').stat().st_mode&0o7777,0o1730)
+
     def test_actual_isolated_direct_retirement_entry_imports_before_argument_refusal(self):
         import subprocess
         import sys
