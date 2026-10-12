@@ -1,8 +1,8 @@
 import json
 import unittest
 from pathlib import Path
-from nats_contract_actor import Actor
-from nats_contract_plan import ContractError
+from nats_contract_actor import Actor,INFO,WRITE
+from nats_contract_plan import ContractError,DECLARATIONS
 class Runtime:
     base=Path('/root-owned');owned={}
     def __init__(self):self.row={'Id':'owned-id','State':{'Running':True},'HostConfig':{'NetworkMode':'none','PortBindings':{}},'Mounts':[{'Type':'bind','Source':str(Path('/selected-pvc')),'Destination':'/data','RW':True}]};self.calls=[]
@@ -34,4 +34,31 @@ class Tests(unittest.TestCase):
         for metadata in ({'_nats.ver':'2.12.11','_nats.level':'3'},{'_nats.ver':'2.12.12','_nats.level':'4'},{'_nats.ver':'2.12.12'}):
             a=self.actor(Runtime());a._request=lambda *args,**kwargs:{'config':{'name':'chat_events','metadata':metadata}}
             with self.assertRaises(ContractError):a.info_config('chat_events')
+    def test_info_and_create_surfaces_match_all_exact_plan_consumers(self):
+        expected_streams={stream for stream,_ in DECLARATIONS}
+        expected_consumers={(stream,config['durable_name']) for stream,config in DECLARATIONS}
+        self.assertEqual({key for key in INFO if '/' not in key},expected_streams)
+        self.assertEqual({tuple(key.split('/',1)) for key in INFO if '/' in key},expected_consumers)
+        self.assertEqual({(api.split('.INFO.',1)[1].replace('.','/',1)) for api in INFO.values() if '.CONSUMER.INFO.' in api},
+            {stream+'/'+durable for stream,durable in expected_consumers})
+        self.assertEqual({tuple(value.split('/',1)) for value in WRITE.values() if '/' in value},expected_consumers)
+        self.assertEqual({api:value for api,value in WRITE.items() if api.startswith('$JS.API.STREAM.UPDATE.')},
+            {'$JS.API.STREAM.UPDATE.chat_events':'chat_events',
+             '$JS.API.STREAM.UPDATE.social_events':'social_events',
+             '$JS.API.STREAM.UPDATE.role_events':'role_events'})
+        for stream,config in DECLARATIONS:
+            durable=config['durable_name'];api='$JS.API.CONSUMER.CREATE.'+stream+'.'+durable
+            actor=self.actor(Runtime());calls=[];actor._request=lambda *args,**kwargs:calls.append(args)
+            actor.mutate(api,{'stream_name':stream,'action':'create','config':config})
+            self.assertEqual(len(calls),1)
+            with self.subTest(stream=stream),self.assertRaises(ContractError):
+                actor.mutate(api,{'stream_name':stream,'action':'create','config':dict(config,name='other')})
+            self.assertEqual(len(calls),1)
+    def test_consumer_info_identity_is_checked_for_each_declared_stream(self):
+        for stream,config in DECLARATIONS:
+            durable=config['durable_name'];actor=self.actor(Runtime())
+            actor._request=lambda *args,**kwargs:{'stream_name':stream,'name':durable,'config':dict(config)}
+            self.assertEqual(actor.info_config(stream+'/'+durable),config)
+            actor._request=lambda *args,**kwargs:{'stream_name':'wrong','name':durable,'config':dict(config)}
+            with self.subTest(stream=stream),self.assertRaises(ContractError):actor.info_config(stream+'/'+durable)
 if __name__=='__main__':unittest.main()

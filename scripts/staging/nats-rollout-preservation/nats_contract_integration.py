@@ -7,6 +7,21 @@ import base64,copy,hashlib,json,os
 from pathlib import Path
 import shutil,sys,tempfile,time,uuid
 import rollout_census_integration as fixture
+from nats_contract_plan import DECLARATIONS
+
+def fixture_bootstrap_grants(contract):
+    """Exact disposable credentials for baseline resources plus v3 consumers."""
+    streams=contract['streams'];pairs={tuple(pair) for pair in contract['consumer_pairs']}
+    pairs.update((stream,config['durable_name']) for stream,config in DECLARATIONS)
+    if (not isinstance(streams,list) or not streams or len(set(streams))!=len(streams)
+        or any(not isinstance(name,str) or not name for name in streams)
+        or any(len(pair)!=2 or any(not isinstance(value,str) or not value for value in pair) for pair in pairs)):
+        raise ValueError('fixture_bootstrap_contract_invalid')
+    grants=['$JS.API.INFO']+[prefix+name for name in streams for prefix in ('$JS.API.STREAM.CREATE.','$JS.API.STREAM.INFO.')]
+    grants += ['$JS.API.STREAM.UPDATE.'+name for name in ('chat_events','social_events','role_events')]
+    grants += [prefix+stream+'.'+durable for stream,durable in sorted(pairs) for prefix in ('$JS.API.CONSUMER.CREATE.','$JS.API.CONSUMER.INFO.')]
+    if len(grants)!=len(set(grants)):raise ValueError('fixture_bootstrap_grants_duplicate')
+    return grants
 
 def inner(base):
     sys.path[:0]=['/bundle','/source/scripts/staging/nats-known-baseline']
@@ -83,7 +98,7 @@ def inner(base):
             normalized_consumers[(stream,durable)]=normalized
         runtime.stop(normalizer)
         plan=compile_plan('/source',infos,{},normalized_consumers)
-        assert len(plan['actions'])==5
+        assert len(plan['actions'])==6
         from nats_contract_plan import digest
         enrollment={'fixture_authenticated_existing_actor':auth}
         state={'operation':operation,'events':[],'custody':{'verified':True,'scope':'same-host-fixture-only'},
@@ -198,7 +213,7 @@ def inner(base):
         assert records(native) and records(fresh_cut['manifest'])==records(post)
         receipt={'schema':'voice-nats-contract-fixture-v1','messages':proof['messages'],
             'old_consumers_preserved':proof['old_consumers_preserved'],'created_consumers':proof['created_consumers'],
-            'normalized_consumer_sha256':plan['normalized_consumer_sha256'],'native_record_files_equal':True,
+            'normalized_consumers_sha256':digest(plan['consumer_targets']),'native_record_files_equal':True,
             'known_payloads_verified':True,'same_original_store':True,'renewed_existing_actor_auth_verified':True,'normal_migration_phase_and_postapply_proof_verified':True,
             'fresh_rollback_current_cut_records':6,'post_release_record_payload_verified':True,'rollback_retained_additive_contract':True,
             'actual_update_before_info_interruption_recovered':True,
@@ -217,8 +232,7 @@ def main():
         bundle=Path(td)
         helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "fmt"; "os";')
         contract=json.loads((module/'deployed-contract.json').read_text())
-        grants=['$JS.API.INFO']+[prefix+name for name in contract['streams'] for prefix in ('$JS.API.STREAM.CREATE.','$JS.API.STREAM.INFO.')]
-        grants += [prefix+stream+'.'+consumer for stream,consumer in contract['consumer_pairs'] for prefix in ('$JS.API.CONSUMER.CREATE.','$JS.API.CONSUMER.INFO.')]
+        grants=fixture_bootstrap_grants(contract)
         grant_text=json.dumps(grants,separators=(',',':'))
         old_actor='''
  bootstrap,e:=nkeys.CreateUser();must(e);defer bootstrap.Wipe();bootstrapPublic,e:=bootstrap.PublicKey();must(e)

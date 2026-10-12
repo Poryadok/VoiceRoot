@@ -2,11 +2,14 @@ import copy,hashlib,unittest
 from unittest.mock import Mock
 from nats_contract_custody import advance,ANNOTATION
 from controller import Blocked
+from nats_contract_plan import DECLARATIONS,SCHEMA,MIGRATION_ID
 def fixture():
     old='old fixed script\n';new='reviewed target script\n'
     sha=lambda s:hashlib.sha256(s.encode()).hexdigest()
-    state={'operation':'123456abcdef','contract':{'scripts':[],'consumer_pairs':[]},
-        'nats_contract':{'migration_id':'space-chat-social-24h-friend-removed-v1','sources':{}},
+    old_pair=['analytics_events','analytics_v2_telemetry']
+    targets=[{'stream':stream,'name':config['durable_name'],'config_sha256':hashlib.sha256((stream+'/'+config['durable_name']).encode()).hexdigest()} for stream,config in DECLARATIONS]
+    state={'operation':'123456abcdef','contract':{'scripts':[],'consumer_pairs':[old_pair]},
+        'nats_contract':{'schema':SCHEMA,'migration_id':MIGRATION_ID,'sources':{},'consumer_targets':targets},
         'nats_target_scripts':{},'nats_migration':{'verified':True,'old_record_files_verified':True,'proof':{}}}
     rows={}
     for part in ('realtime','analytics-chat'):
@@ -36,7 +39,17 @@ class Tests(unittest.TestCase):
         self.assertEqual(events[-1]['kind'],'nats_contract_cm_intent')
         receipt=advance(k,state,s,events.append)
         self.assertEqual(len(k.calls),2);self.assertEqual(receipt['pvc_uid'],'same-pvc')
-        self.assertIn(['social_events','rt_realtime1_friend_removed'],receipt['contract']['consumer_pairs'])
+        self.assertEqual(receipt['contract']['consumer_pairs'],sorted([['analytics_events','analytics_v2_telemetry']]+[[stream,config['durable_name']] for stream,config in DECLARATIONS]))
+    def test_only_exact_v3_targets_are_added_before_any_configmap_write(self):
+        for mutate in (
+            lambda plan:plan['consumer_targets'].pop(),
+            lambda plan:plan['consumer_targets'][1].update(name='unexpected'),
+            lambda plan:plan['consumer_targets'][2].update(config_sha256='x'),
+        ):
+            k,s,state,rows=fixture();mutate(state['nats_contract'])
+            before=copy.deepcopy(rows)
+            with self.subTest(plan=state['nats_contract']),self.assertRaises(Blocked):advance(k,state,s,lambda e:None)
+            self.assertEqual(k.calls,[]);self.assertEqual(rows,before)
     def test_unowned_same_target_or_new_uid_refused(self):
         for drift in ('owner','uid'):
             k,s,state,rows=fixture();row=rows['voice-nats-realtime-bootstrap']

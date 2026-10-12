@@ -2,9 +2,13 @@
 import copy
 import json
 from pathlib import Path
-from nats_contract_plan import ContractError
-INFO={'chat_events':'$JS.API.STREAM.INFO.chat_events','social_events':'$JS.API.STREAM.INFO.social_events','social_events/rt_realtime1_friend_removed':'$JS.API.CONSUMER.INFO.social_events.rt_realtime1_friend_removed'}
-WRITE={'$JS.API.STREAM.UPDATE.chat_events':'chat_events','$JS.API.STREAM.UPDATE.social_events':'social_events','$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed':'social_events/rt_realtime1_friend_removed'}
+from nats_contract_plan import ContractError,DECLARATIONS
+_STREAMS=tuple(dict.fromkeys(stream for stream,_ in DECLARATIONS))
+_CONSUMERS={(stream,config['durable_name']):config for stream,config in DECLARATIONS}
+INFO={name:'$JS.API.STREAM.INFO.'+name for name in _STREAMS}
+INFO.update({stream+'/'+durable:'$JS.API.CONSUMER.INFO.'+stream+'.'+durable for stream,durable in _CONSUMERS})
+WRITE={'$JS.API.STREAM.UPDATE.'+name:name for name in ('chat_events','social_events','role_events')}
+WRITE.update({'$JS.API.CONSUMER.CREATE.'+stream+'.'+durable:stream+'/'+durable for stream,durable in _CONSUMERS})
 def fail():raise ContractError('nats_contract_actor_refused')
 def persistent_config(config):
     # NATS v2.12.12 setDynamic{Stream,Consumer}Metadata adds exactly these
@@ -54,7 +58,7 @@ class Actor:
                     and type(error['err_code']) is int and error['err_code'] in (10037,10059)
                     and isinstance(error['description'],str) and 0<len(error['description'])<=256):return None
                 fail()
-            if missing and api==INFO['social_events/rt_realtime1_friend_removed'] and row['error'].get('err_code')==10014:return None
+            if missing and api in {INFO[key] for key in _CONSUMERS} and row['error'].get('err_code')==10014:return None
             if missing and api.startswith('$JS.API.STREAM.MSG.GET.') and row['error'].get('err_code')==10037:return None
             fail()
         return row
@@ -86,15 +90,22 @@ class Actor:
         return row['message']
     def info_config(self,obj):
         if obj not in INFO:fail()
-        row=self._request(INFO[obj],None,missing=obj=='social_events/rt_realtime1_friend_removed')
+        row=self._request(INFO[obj],None,missing=obj in _CONSUMERS)
         if row is None:return None
         if not isinstance(row.get('config'),dict):fail()
-        if obj in ('chat_events','social_events'):
+        if '/' not in obj:
             if row['config'].get('name')!=obj:fail()
-        elif row.get('stream_name')!='social_events' or row.get('name')!='rt_realtime1_friend_removed':fail()
+        else:
+            stream,durable=obj.split('/',1)
+            if row.get('stream_name')!=stream or row.get('name')!=durable:fail()
         return persistent_config(row['config'])
     def mutate(self,api,payload):
         if api not in WRITE or not isinstance(payload,dict):fail()
-        if '.STREAM.UPDATE.' in api and payload.get('name')!=WRITE[api]:fail()
-        if '.CONSUMER.CREATE.' in api and (payload.get('stream_name')!='social_events' or payload.get('action')!='create' or payload.get('config',{}).get('durable_name')!='rt_realtime1_friend_removed'):fail()
+        if '.STREAM.UPDATE.' in api:
+            if payload.get('name')!=WRITE[api]:fail()
+        else:
+            stream_durable=WRITE[api]
+            stream,durable=stream_durable.split('/',1)
+            if (set(payload)!={'stream_name','action','config'} or payload.get('stream_name')!=stream
+                or payload.get('action')!='create' or payload.get('config')!=_CONSUMERS[(stream,durable)]):fail()
         self._request(api,payload)

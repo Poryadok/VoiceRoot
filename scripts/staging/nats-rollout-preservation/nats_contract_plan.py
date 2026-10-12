@@ -22,6 +22,11 @@ CHAT_SUBJECTS_15=frozenset({
     'voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left',
     'space.updated','space.deleted','space.deletion_scheduled','space.restored','space.voice_room_access_invalidated',
 })
+CHAT_SUBJECTS_14=frozenset({
+    'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created',
+    'voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left',
+    'space.updated','space.deleted','space.deletion_scheduled','space.restored',
+})
 CHAT_SUBJECTS_17=frozenset({
     'chat.created','chat.updated','chat.deleted','chat.member_changed','chat.dm_peer_deleted','space.tree_changed',
     'space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined',
@@ -29,6 +34,12 @@ CHAT_SUBJECTS_17=frozenset({
     'space.voice_room_access_invalidated',
 })
 CHAT_ADDITIONS=frozenset({'chat.updated','chat.deleted','space.deletion_scheduled','space.restored'})
+ROLE_SUBJECTS_9=frozenset({
+    'role.created','role.updated','role.deleted','role.assigned','role.revoked',
+    'role.chat_override_set','role.chat_override_removed','role.voice_override_set','role.voice_override_removed',
+})
+ROLE_ADDITIONS=frozenset({'role.voice_policy_invalidated'})
+ROLE_SUBJECTS_10=ROLE_SUBJECTS_9|ROLE_ADDITIONS
 DECLARATIONS=(
     ('social_events', {'name':'rt_realtime1_friend_removed','durable_name':'rt_realtime1_friend_removed','filter_subject':'social.friend_removed','deliver_subject':'_INBOX.voice.realtime1.friend_removed','deliver_policy':'new','ack_policy':'explicit'}),
     ('chat_events', {'name':'voice_space_media_chat','durable_name':'voice_space_media_chat','filter_subject':'space.voice_room_access_invalidated','deliver_subject':'_INBOX.voice.voice.space_media_chat','deliver_policy':'new','ack_policy':'explicit'}),
@@ -83,13 +94,13 @@ def compile_plan(source,streams,consumers,normalized_consumers):
     role=role_rows[0].split()
     if role!=analytics_role_rows[0].split():fail()
     if (len(set(chat))!=len(chat) or set(chat)!=CHAT_SUBJECTS_17
-        or len(set(social))!=len(social) or len(set(role))!=len(role)):fail()
+        or len(set(social))!=len(social) or len(set(role))!=len(role) or set(role)!=ROLE_SUBJECTS_10):fail()
     # streams is the complete account discovery, including dynamic resources.
     # Known conflicts must veto while clients still run, never at UPDATE.
     for name,info in streams.items():
         config=info.get('config') if isinstance(info,dict) else None
         if not isinstance(config,dict) or config.get('name')!=name or not isinstance(config.get('subjects'),list):fail()
-        own={'chat_events':CHAT_ADDITIONS|{'space.voice_room_access_invalidated'},'role_events':{'role.voice_policy_invalidated'}}.get(name,set())
+        own={'chat_events':CHAT_ADDITIONS|{'space.voice_room_access_invalidated'},'role_events':ROLE_ADDITIONS}.get(name,set())
         if any(subject_overlap(added,subject) for added in ({*CHAT_ADDITIONS,'space.voice_room_access_invalidated','role.voice_policy_invalidated'}-own) for subject in config['subjects']):fail()
     for stream,config in DECLARATIONS:
         line='    consumer '+stream+' '+config['name']+' '+config['filter_subject']+' '+config['deliver_subject']
@@ -103,11 +114,12 @@ def compile_plan(source,streams,consumers,normalized_consumers):
         if not isinstance(config,dict) or config.get('name')!=name:fail()
         if (config.get('storage')!='file' or config.get('retention')!='limits' or config.get('max_age')!=604800000000000):fail()
         actual=config.get('subjects'); require_sets=[set(expected)]
-        if name=='chat_events':require_sets.extend((CHAT_SUBJECTS_13,CHAT_SUBJECTS_15))
+        if name=='chat_events':require_sets.extend((CHAT_SUBJECTS_13,CHAT_SUBJECTS_14,CHAT_SUBJECTS_15))
+        if name=='role_events':require_sets.append(ROLE_SUBJECTS_9)
         if not isinstance(actual,list) or len(actual)!=len(set(actual)) or set(actual) not in require_sets:fail()
         if name=='social_events' and config.get('duplicate_window') not in (120000000000,86400000000000):fail()
         before=copy.deepcopy(config);after=copy.deepcopy(config)
-        if name=='chat_events' and set(actual)!=set(expected):after['subjects']=list(actual)+[x for x in expected if x not in actual]
+        if name in ('chat_events','role_events') and set(actual)!=set(expected):after['subjects']=list(actual)+[x for x in expected if x not in actual]
         if name=='social_events':after['duplicate_window']=86400000000000
         # Complete mutable delivery/record state belongs to the subsequent
         # authoritative cold cut, rather than the pre-fence config intent.
@@ -134,7 +146,8 @@ def execute(plan,actor,journal):
     not a callable CLI or generic privileged mutation interface.
     """
     if plan.get('schema')!=SCHEMA or plan.get('migration_id')!=MIGRATION_ID:fail()
-    fixed={'$JS.API.STREAM.UPDATE.chat_events':'chat_events','$JS.API.STREAM.UPDATE.social_events':'social_events'}
+    fixed={'$JS.API.STREAM.UPDATE.chat_events':'chat_events','$JS.API.STREAM.UPDATE.social_events':'social_events',
+        '$JS.API.STREAM.UPDATE.role_events':'role_events'}
     for stream,config in DECLARATIONS:
         fixed['$JS.API.CONSUMER.CREATE.'+stream+'.'+config['durable_name']]=stream+'/'+config['durable_name']
     seen=set();receipt=[]
@@ -196,7 +209,8 @@ def verify_census(plan,before,after):
         if (row.get('durable')!=key[1] or row.get('config_sha256')!=target_by_key[key]
             or any(row.get(field)!=0 for field in ('num_ack_pending','num_redelivered','num_pending'))
             or row.get('delivered')!=initial or row.get('ack_floor')!={'consumer_seq':0,'stream_seq':0}):fail()
-    changes={a['object']:a for a in plan['actions'] if a['api'] in ('$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events')}
+    changes={a['object']:a for a in plan['actions'] if a['api'] in (
+        '$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.STREAM.UPDATE.role_events')}
     for name,row in old_streams.items():
         expected=copy.deepcopy(row)
         if name in plan['observed'] and row['config_sha256']!=plan['observed'][name]['config_sha256']:fail()

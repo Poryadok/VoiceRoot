@@ -19,6 +19,7 @@ from root_main import private_json as root_private_json,public_read,save as root
 from runtime_stage import RolloutStage
 from stage_runtime import Kube, HUB
 from controller import Blocked
+from nats_active_contract import validate_identity as validate_active_contract_identity
 
 INSTALLED=guard.ROOT/'installed'
 
@@ -161,12 +162,11 @@ class Actions:
         self._report('image-selection','COMPLETE')
         self._report('contract-selection','STARTED')
         contract=json.loads(public_read(self.code/'nats-known-baseline'/'deployed-contract.json'))
+        baseline_pairs=contract.get('consumer_pairs')
         try:active_contract=private_json(INSTALLED/'active-contract.json')
         except FileNotFoundError:active_contract=None
         if active_contract is not None:
-            if (active_contract.get('schema')!='voice-nats-active-contract-v1' or active_contract.get('migration_id')!='space-chat-social-24h-friend-removed-v1'
-                or active_contract.get('generation')!=stage.expected['generation'] or active_contract.get('namespace_uid')!=stage.expected['namespace_uid']
-                or active_contract.get('pvc_uid')!=stage.expected['source_claim_uid']):raise Blocked('nats_active_contract_identity_changed')
+            validate_active_contract_identity(active_contract,stage.expected,baseline_pairs)
             contract=active_contract['contract']
         parameters={**policy,'registry':source_authority.REGISTRY,'tag':approved['source_sha'],
             'mode':request['mode'],'changed_services':request['changed_services'],'images':images,

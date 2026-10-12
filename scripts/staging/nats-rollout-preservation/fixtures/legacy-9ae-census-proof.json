@@ -1,0 +1,35 @@
+{
+  "provenance": {
+    "producer_commit": "9ae2e0c259e5e039109f7331aaf62b3607e549dd",
+    "plan_path": "scripts/staging/nats-rollout-preservation/nats_contract_plan.py",
+    "plan_blob": "36b4b63d784751cee9a28f97a6f45e54df8d9a2a",
+    "migration_path": "scripts/staging/nats-rollout-preservation/nats_migration.py",
+    "migration_blob": "e2c1e889f2905a4399858a8369acca785032c0e8",
+    "recovery_path": "scripts/staging/nats-rollout-preservation/preserve.py",
+    "recovery_blob": "1eb943885937f7a656d34cdc0a9f72308a516bae"
+  },
+  "proof": {
+    "after_sha256": "d6867e8112f96170f714d63ff18b71496f4df6e0c8c80ef9f9953cb0c49fbc63",
+    "before_sha256": "ae3b2b07ced4415d4ff47906eac4b2f339694390e1919d34d35e5107cb82a7d9",
+    "created_consumers": 1,
+    "ephemeral_recovery_observations": [
+      {
+        "name": "ephemeral_probe",
+        "native_state_file_verified": true,
+        "old_created": "2026-01-01T00:00:00Z",
+        "recovered_created": "2026-10-06T00:00:01Z",
+        "recovery": {
+          "container_id": "fixture-owned-copy",
+          "finished_at": "2026-10-06T00:00:02+00:00",
+          "server_image": "nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb",
+          "started_at": "2026-10-06T00:00:00+00:00"
+        },
+        "stream": "dynamic_ephemeral"
+      }
+    ],
+    "messages": 14,
+    "migration_id": "space-chat-social-24h-friend-removed-v1",
+    "old_consumers_preserved": 2,
+    "schema": "voice-nats-additive-census-proof-v1"
+  }
+}

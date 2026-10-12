@@ -3,14 +3,14 @@
 The original cut remains the independently verified recovery artifact. A new
 post-config ledger becomes the unchanged-data baseline for paused app apply.
 """
-import copy,tempfile,json,os,stat,tarfile,hashlib
+import copy,tempfile,json,os,stat,tarfile,hashlib,re
 import datetime as dt
 from pathlib import Path
 from controller import Blocked,file_sha
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from native_store import archive_closed_store
 from nats_contract_actor import Actor
-from nats_contract_plan import digest,execute,verify_census
+from nats_contract_plan import DECLARATIONS,digest,execute,verify_census
 from preserve import verify_post_apply,isolated_census,canonical,recovered_census
 from scenario import ready
 
@@ -23,7 +23,7 @@ def stream_updates(state,archive,manifest):
         if event.get('kind')!='nats_contract_mutation_issued':continue
         obj=event.get('object');attempt=event.get('migration_attempt')
         action=next((a for a in state['nats_contract']['actions'] if a['api']=='$JS.API.STREAM.UPDATE.'+str(obj)),None)
-        if (obj not in ('chat_events','social_events') or action is None or event.get('api')!=action['api']
+        if (obj not in ('chat_events','social_events','role_events') or action is None or event.get('api')!=action['api']
             or event.get('target_sha256')!=digest(action['after'])):continue
         if attempt not in opened or attempt not in closed:raise Blocked('nats_stream_update_attempt_incomplete')
         start=opened[attempt];end=closed[attempt]
@@ -50,6 +50,44 @@ def stream_updates(state,archive,manifest):
         if wanted:raise Blocked('nats_stream_update_native_metadata_missing')
     finally:os.close(fd)
     return updates
+
+def recovered_consumer_create_actions(plan,consumers,events):
+    """Recognize only issued, closed, exact-target consumer creates on retry."""
+    declarations={(stream,config['durable_name']) for stream,config in DECLARATIONS}
+    rows=plan.get('consumer_targets')
+    if not isinstance(rows,list) or len(rows)!=len(DECLARATIONS):raise Blocked('nats_migration_retry_consumer_targets_invalid')
+    targets={}
+    for row,(stream,config) in zip(rows,DECLARATIONS):
+        if (not isinstance(row,dict) or set(row)!={'stream','name','config_sha256'}
+            or row.get('stream')!=stream or row.get('name')!=config['durable_name']
+            or not isinstance(row.get('config_sha256'),str) or not re.fullmatch('[a-f0-9]{64}',row['config_sha256'])):
+            raise Blocked('nats_migration_retry_consumer_targets_invalid')
+        pair=(stream,config['durable_name'])
+        if pair in targets:raise Blocked('nats_migration_retry_consumer_targets_invalid')
+        targets[pair]=row['config_sha256']
+    if set(targets)!=declarations or not isinstance(consumers,dict) or not isinstance(events,list):raise Blocked('nats_migration_retry_consumer_targets_invalid')
+    opened={event['container_id']:event for event in events if event.get('kind')=='nats_contract_broker_opened'}
+    closed={event['container_id']:event for event in events if event.get('kind')=='nats_contract_broker_closed'}
+    recovered=[]
+    for action in plan['actions']:
+        if not action['api'].startswith('$JS.API.CONSUMER.CREATE.'):continue
+        pair=tuple(action['object'].split('/',1))
+        if len(pair)!=2 or pair not in declarations or action['api']!='$JS.API.CONSUMER.CREATE.'+pair[0]+'.'+pair[1]:
+            raise Blocked('nats_migration_retry_consumer_action_invalid')
+        target_hash=targets[pair]
+        if action.get('normalized_config_sha256')!=target_hash:raise Blocked('nats_migration_retry_consumer_target_changed')
+        current=consumers.get(pair)
+        if current is None:continue
+        if current.get('config_sha256')!=target_hash:raise Blocked('nats_migration_retry_consumer_config_drift')
+        attempts=[event.get('migration_attempt') for event in events
+            if event.get('kind')=='nats_contract_mutation_issued' and event.get('object')==action['object']
+            and event.get('api')==action['api'] and event.get('target_sha256')==target_hash]
+        owned=[attempt for attempt in attempts if attempt in opened and attempt in closed
+            and opened[attempt].get('server_image')==NATS_IMAGE
+            and closed[attempt].get('started_at')==opened[attempt].get('started_at')]
+        if not owned:raise Blocked('nats_migration_retry_consumer_creation_unowned')
+        recovered.append(action)
+    return recovered
 
 def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutation_guard=None):
     plan=state['nats_contract'];binding=state.get('nats_contract_binding',{})
@@ -86,7 +124,7 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
                 value=streams[action['object']]['config_sha256']
                 if value==digest(action['after']):partial['actions'].append(action)
                 elif value!=digest(action['before']):raise Blocked('nats_migration_retry_config_drift')
-            elif ('social_events','rt_realtime1_friend_removed') in consumers:partial['actions'].append(action)
+        partial['actions'].extend(recovered_consumer_create_actions(plan,consumers,state['events']))
         verify_census(partial,state['cut']['census'],current)
     else:
         # Exact unchanged native bytes + full old census before any config write.

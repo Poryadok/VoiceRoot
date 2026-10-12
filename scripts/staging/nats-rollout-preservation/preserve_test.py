@@ -163,27 +163,28 @@ class PreservationTest(unittest.TestCase):
                     self.assertEqual(list(self.base.glob('checked-*')),[])
 
     def test_fixed_updated_stream_creation_requires_native_target_and_original_attempt(self):
-        for bad in (None,'untouched','missing','image','interval','native','config'):
-            before=copy.deepcopy(self.row);old=before['streams'][0]
-            old.update(name='chat_events',created='2026-01-01T00:00:00Z')
-            after=copy.deepcopy(before);after['streams'][0]['created']='2026-10-06T00:00:01Z'
-            evidence={'native_created':after['streams'][0]['created'],'target_config_sha256':old['config_sha256'],
-                'attempt':{'server_image':preserve.NATS_IMAGE,'container_id':'original-owned-attempt',
-                    'started_at':'2026-10-06T00:00:00+00:00','finished_at':'2026-10-06T00:00:02+00:00'}}
-            recovery={'stream_updates':{'chat_events':evidence}}
-            if bad=='untouched':old['name']=after['streams'][0]['name']='message_events'
-            elif bad=='missing':recovery={}
-            elif bad=='image':evidence['attempt']['server_image']='unapproved'
-            elif bad=='interval':evidence['attempt']['started_at']='2026-10-06T00:00:02+00:00'
-            elif bad=='native':evidence['native_created']='2026-10-06T00:00:00Z'
-            elif bad=='config':evidence['target_config_sha256']='0'*64
-            with self.subTest(bad=bad):
-                if bad:
-                    with self.assertRaises(preserve.Blocked):preserve.recovered_census(before,after,recovery,{'files':[]})
-                else:
-                    compared,observed=preserve.recovered_census(before,after,recovery,{'files':[]})
-                    self.assertEqual(compared,before);self.assertEqual(observed[0]['migration_attempt']['container_id'],'original-owned-attempt')
-                    self.assertNotEqual(after,before)
+        for stream_name in ('chat_events','social_events','role_events'):
+            for bad in (None,'untouched','missing','image','interval','native','config'):
+                before=copy.deepcopy(self.row);old=before['streams'][0]
+                old.update(name=stream_name,created='2026-01-01T00:00:00Z')
+                after=copy.deepcopy(before);after['streams'][0]['created']='2026-10-06T00:00:01Z'
+                evidence={'native_created':after['streams'][0]['created'],'target_config_sha256':old['config_sha256'],
+                    'attempt':{'server_image':preserve.NATS_IMAGE,'container_id':'original-owned-attempt',
+                        'started_at':'2026-10-06T00:00:00+00:00','finished_at':'2026-10-06T00:00:02+00:00'}}
+                recovery={'stream_updates':{stream_name:evidence}}
+                if bad=='untouched':old['name']=after['streams'][0]['name']='message_events'
+                elif bad=='missing':recovery={}
+                elif bad=='image':evidence['attempt']['server_image']='unapproved'
+                elif bad=='interval':evidence['attempt']['started_at']='2026-10-06T00:00:02+00:00'
+                elif bad=='native':evidence['native_created']='2026-10-06T00:00:00Z'
+                elif bad=='config':evidence['target_config_sha256']='0'*64
+                with self.subTest(stream=stream_name,bad=bad):
+                    if bad:
+                        with self.assertRaises(preserve.Blocked):preserve.recovered_census(before,after,recovery,{'files':[]})
+                    else:
+                        compared,observed=preserve.recovered_census(before,after,recovery,{'files':[]})
+                        self.assertEqual(compared,before);self.assertEqual(observed[0]['migration_attempt']['container_id'],'original-owned-attempt')
+                        self.assertNotEqual(after,before)
 
 if __name__=='__main__':unittest.main()
 class ColdReleaseAuthorityTests(unittest.TestCase):
