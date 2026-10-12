@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -82,6 +83,17 @@ func joinComposeSpaceVoiceRoom(t *testing.T, client *http.Client, base, accessTo
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		// Decode only the public error fields; never dump credentials or a
+		// successful media response into CI logs.
+		var failure struct {
+			Code    string `json:"error_code"`
+			Message string `json:"message"`
+		}
+		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&failure)
+		require.Equal(t, http.StatusOK, resp.StatusCode,
+			"Space voice join failed: code=%q message=%q error_decode=%v", failure.Code, failure.Message, decodeErr)
+	}
 	var result struct {
 		VoiceSession composeSpaceVoiceRoomJoin `json:"voiceSession"`
 	}
