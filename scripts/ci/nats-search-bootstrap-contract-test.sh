@@ -42,7 +42,7 @@ for stream in \
   'stream user_profile_projection user.search_profile_projection'; do
   require "$stream" "$BOOTSTRAP"
 done
-require 'require_stream_subjects chat_events chat.created chat.member_changed chat.dm_peer_deleted' "$BOOTSTRAP"
+require 'require_stream_subjects chat_events chat.created chat.updated chat.deleted chat.member_changed chat.dm_peer_deleted' "$BOOTSTRAP"
 
 for consumer in \
   "consumer message_events search-indexer-message-v1 'message.>' _INBOX.voice.search.indexer.message" \

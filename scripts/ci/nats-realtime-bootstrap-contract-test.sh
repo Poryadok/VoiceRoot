@@ -33,7 +33,7 @@ cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_BOOTSTRAP" | sed '/^---$/,$d' | sed 
 
 for stream in \
   'stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack' \
-  'stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored space.voice_room_access_invalidated' \
+  'stream chat_events chat.created chat.updated chat.deleted chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored space.voice_room_access_invalidated' \
   'stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded' \
   'stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted' \
   'stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed' \
@@ -79,7 +79,7 @@ require '      REALTIME_INSTANCE_ID: ${REALTIME_INSTANCE_ID:-realtime-1}' "$COMP
 require '  - name: voice_events' "$MANIFEST"
 require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
 require_stream_contract analytics_events '[analytics.>]' 168h
-require_stream_contract chat_events '[chat.created, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted, space.deletion_scheduled, space.restored, space.voice_room_access_invalidated]' 168h
+require_stream_contract chat_events '[chat.created, chat.updated, chat.deleted, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted, space.deletion_scheduled, space.restored, space.voice_room_access_invalidated]' 168h
 require_stream_contract role_events '[role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, role.voice_policy_invalidated]' 168h
 require_stream_contract user_profile_projection '[user.search_profile_projection]' 0s
 require "stream analytics_events 'analytics.>'" "$BOOTSTRAP"
