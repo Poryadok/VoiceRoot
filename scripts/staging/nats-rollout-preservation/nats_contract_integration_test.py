@@ -12,6 +12,55 @@ import nats_contract_integration as integration
 
 
 class HostedTransportTests(unittest.TestCase):
+    def test_postmigration_plan_uses_authoritative_stream_configs_and_only_declared_consumer_info(self):
+        import copy
+        from nats_contract_plan import CHAT_SUBJECTS_17, ROLE_SUBJECTS_10, DECLARATIONS, ContractError, compile_plan
+
+        source = Path(__file__).resolve().parents[3]
+        social = json.loads((Path(__file__).parent / 'testdata/nats-9ae-predecessor.json').read_text(encoding='utf-8'))
+        configs = {
+            'chat_events': {'name':'chat_events','storage':'file','retention':'limits','max_age':604800000000000,
+                'subjects':sorted(CHAT_SUBJECTS_17)},
+            'social_events': {'name':'social_events','storage':'file','retention':'limits','max_age':604800000000000,
+                'duplicate_window':86400000000000,'subjects':social['social_subjects']},
+            'role_events': {'name':'role_events','storage':'file','retention':'limits','max_age':604800000000000,
+                'subjects':sorted(ROLE_SUBJECTS_10)},
+            'rollout_extra': {'name':'rollout_extra','storage':'file','retention':'limits','subjects':['rollout.extra']},
+        }
+        details=[]
+        normalized={}
+        for stream, declaration in DECLARATIONS:
+            durable=declaration['durable_name']
+            config={**copy.deepcopy(declaration),'deliver_policy':'new'}
+            normalized[(stream,durable)]=config
+            details.append({'name':stream,'config':copy.deepcopy(configs[stream]),'state':{},
+                'consumer_detail':[{'name':durable,'durable_name':durable,'config':{'monitor':'raw'}}]})
+        details.append({'name':'rollout_extra','config':copy.deepcopy(configs['rollout_extra']),
+            'state':{},'consumer_detail':[]})
+
+        class DeclaredInfoOnly:
+            def __init__(self,drift=False): self.calls=[];self.drift=drift
+            def info_config(self, obj):
+                self.calls.append(obj)
+                matches=[(stream,config) for stream,config in DECLARATIONS if stream+'/'+config['durable_name']==obj]
+                if len(matches)!=1: raise AssertionError('unexpected Actor.INFO request: '+obj)
+                stream,config=matches[0]
+                result=copy.deepcopy(normalized[(stream,config['durable_name'])])
+                if self.drift:result['ack_wait']=999999999
+                return result
+
+        actor=DeclaredInfoOnly()
+        streams,consumers=integration._postmigration_plan_inputs(actor,details)
+        self.assertEqual(actor.calls,[stream+'/'+config['durable_name'] for stream,config in DECLARATIONS])
+        self.assertEqual(streams['rollout_extra']['config'],configs['rollout_extra'])
+        self.assertEqual(set(consumers),set(normalized))
+        self.assertEqual({key:row['config'] for key,row in consumers.items()},normalized)
+        plan=compile_plan(source,streams,consumers,normalized)
+        self.assertEqual(plan['actions'],[])
+        drift_actor=DeclaredInfoOnly(drift=True)
+        drift_streams,drift_consumers=integration._postmigration_plan_inputs(drift_actor,details)
+        with self.assertRaises(ContractError):compile_plan(source,drift_streams,drift_consumers,normalized)
+
     def test_private_archive_base_uses_required_root_group_and_mode(self):
         base = Path('/synthetic-fixture-base')
         with patch.object(integration.os, 'chown', create=True) as chown, patch.object(Path, 'chmod') as chmod:

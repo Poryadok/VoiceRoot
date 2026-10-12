@@ -52,6 +52,37 @@ def _private_fixture_store_descriptor(base,store,fenced):
     return None
 
 
+def _postmigration_plan_inputs(actor,stream_details):
+    """Combine JSZ stream configs with only the declared Consumer.INFO objects."""
+    streams={};consumer_keys=set()
+    for row in stream_details:
+        name=row.get('name')
+        if not isinstance(name,str) or not name or name in streams:
+            raise RuntimeError('postmigration_stream_census_invalid')
+        config=row.get('config');state=row.get('state');details=row.get('consumer_detail',[])
+        if not isinstance(config,dict) or config.get('name')!=name or not isinstance(state,dict) or not isinstance(details,list):
+            raise RuntimeError('postmigration_stream_census_invalid')
+        streams[name]={'config':copy.deepcopy(config),'state':copy.deepcopy(state),
+            'consumer_detail':copy.deepcopy(details)}
+        for consumer in details:
+            durable=(consumer.get('durable') or consumer.get('name')) if isinstance(consumer,dict) else None
+            if not isinstance(durable,str) or not durable:
+                raise RuntimeError('postmigration_consumer_census_invalid')
+            key=(name,durable)
+            if key in consumer_keys:raise RuntimeError('postmigration_consumer_census_invalid')
+            consumer_keys.add(key)
+    consumers={}
+    for stream,declaration in DECLARATIONS:
+        durable=declaration['durable_name'];key=(stream,durable)
+        if key not in consumer_keys:
+            raise RuntimeError('postmigration_declared_consumer_missing_from_census')
+        config=actor.info_config(stream+'/'+durable)
+        if not isinstance(config,dict):
+            raise RuntimeError('postmigration_declared_consumer_info_missing')
+        consumers[key]={'config':copy.deepcopy(config)}
+    return streams,consumers
+
+
 def inner(base):
     base=Path(base)
     code=base/'scripts/staging'
@@ -256,8 +287,7 @@ def inner(base):
         current_actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,lambda:None)
         current_tree=runtime.monitor_jsz(broker)
         current_details=next(a for a in current_tree['account_details'] if a['id']==account)['stream_detail']
-        current_infos={row['name']:{'config':current_actor.info_config(row['name']),'state':row['state'],'consumer_detail':row.get('consumer_detail',[])} for row in current_details}
-        current_consumers={(stream['name'],consumer.get('durable') or consumer['name']):consumer for stream in current_details for consumer in stream.get('consumer_detail',[])}
+        current_infos,current_consumers=_postmigration_plan_inputs(current_actor,current_details)
         rollback_plan=compile_plan('/source',current_infos,current_consumers,normalized_consumers)
         assert rollback_plan['actions']==[]
         runtime.stop(broker)
@@ -274,8 +304,9 @@ def inner(base):
             'bootstrap_enrollment':enrollment,'nats_contract':rollback_plan,
             'nats_contract_binding':{'plan_sha256':digest(rollback_plan),'server_image':NATS_IMAGE,'enrollment_sha256':digest(enrollment),'sources':rollback_plan['sources']},'cut':fresh_cut}
         # Rollback captures the current postrelease record and retains the
-        # additive contract; it never restores the original five-record cut.
+        # additive contract; it never restores the earlier pre-release cut.
         fresh_migration=apply_contract(fresh_base,fresh,Stage(),fresh['events'].append)
+        assert fresh_migration['verified'] and fresh_migration['applied']==[]
         fresh_proof=verify_post_apply(fresh_runtime,store,fresh_migration['cut'],fenced)
         assert fresh_proof['messages']==8
         for name in list(fresh_runtime.owned):

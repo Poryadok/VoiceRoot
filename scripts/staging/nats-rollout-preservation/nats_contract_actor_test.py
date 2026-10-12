@@ -101,4 +101,8 @@ class Tests(unittest.TestCase):
                 response={'stream_name':stream,'name':durable,'config':dict(config)}
                 runtime=RequestRuntime(response)
                 self.assertEqual(self.actor(runtime).info_config(obj),config)
+    def test_unknown_info_object_remains_outside_exact_actor_allowlist(self):
+        actor=self.actor(Runtime())
+        with self.assertRaises(ContractError):actor.info_config('rollout_extra')
+
 if __name__=='__main__':unittest.main()
