@@ -28,6 +28,10 @@ func TestComposeSpaceVoiceRoomBidirectionalAudio_live(t *testing.T) {
 	n := time.Now().UnixNano()
 	owner := registerComposeUser(t, client, base, formatComposeEmail("space-media-owner", n), "VoiceQaTest1!")
 	member := registerComposeUser(t, client, base, formatComposeEmail("space-media-member", n), "VoiceQaTest1!")
+	// Default invite privacy allows friends, so establish that relationship
+	// before setting up the two-member Space media fixture.
+	sendComposeFriendInvitation(t, client, base, owner.AccessToken, member.ProfileID)
+	acceptComposeFriendInvitation(t, client, base, member.AccessToken, owner.ProfileID)
 
 	spaceID := createComposeSpace(t, client, base, owner.AccessToken, "Space media QA", "two-member bidirectional media")
 	invite := createComposeSpaceInvite(t, client, base, owner.AccessToken, spaceID)
