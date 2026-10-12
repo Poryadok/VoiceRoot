@@ -614,6 +614,115 @@ identity_publisher_path_allowed() {
   return 1
 }
 
+accepted_voice_role_status_checkpoint='5a8976ae968c586ef97a90fc1a6ee6459e93850b'
+voice_role_status_path_authorized_in_delta() {
+  local path="$1" delta="$2" actual_blob="$3" repo="${4:-${ROOT}}" target="${5:-HEAD}"
+  local expected_blob
+  [[ "${path}" == 'src/backend/voice/internal/grpcsvc/role_guard.go' ]] || return 1
+  grep -Fxq -- "${path}" "${delta}" || return 1
+  git -C "${repo}" rev-parse --verify "${accepted_voice_role_status_checkpoint}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" merge-base --is-ancestor "${accepted_voice_role_status_checkpoint}" "${target}" 2>/dev/null || return 1
+  expected_blob="$(git -C "${repo}" ls-tree "${accepted_voice_role_status_checkpoint}" -- "${path}" 2>/dev/null | awk '{print $3}')"
+  [[ -n "${expected_blob}" && "${actual_blob}" == "${expected_blob}" ]]
+}
+
+accepted_account_voice_admission_checkpoint='95bc7468fd98bafe6e3b059d7e4a3fad723e9f24'
+account_voice_admission_path='src/backend/voice/internal/grpcsvc/account_voice_admission.go'
+account_voice_admission_path_authorized_in_delta() {
+  local path="$1" delta="$2" actual_blob="$3" repo="${4:-${ROOT}}" target="${5:-HEAD}"
+  local expected_blob
+  [[ "${path}" == "${account_voice_admission_path}" ]] || return 1
+  grep -Fxq -- "${path}" "${delta}" || return 1
+  git -C "${repo}" rev-parse --verify "${accepted_account_voice_admission_checkpoint}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" merge-base --is-ancestor "${accepted_account_voice_admission_checkpoint}" "${target}" 2>/dev/null || return 1
+  expected_blob="$(git -C "${repo}" ls-tree "${accepted_account_voice_admission_checkpoint}" -- "${path}" 2>/dev/null | awk '{print $3}')"
+  [[ -n "${expected_blob}" && "${actual_blob}" == "${expected_blob}" ]]
+}
+
+account_voice_admission_blob="$(git -C "${ROOT}" rev-parse "${accepted_account_voice_admission_checkpoint}:${account_voice_admission_path}")"
+printf '%s\n' "${account_voice_admission_path}" >"${TMP_DIR}/account-voice-admission-delta"
+account_voice_admission_path_authorized_in_delta "${account_voice_admission_path}" \
+  "${TMP_DIR}/account-voice-admission-delta" "${account_voice_admission_blob}" || {
+  printf '%s\n' 'F13 oracle bug: exact reviewed account admission checkpoint was rejected' >&2
+  exit 2
+}
+if account_voice_admission_path_authorized_in_delta "${account_voice_admission_path}" \
+  "${TMP_DIR}/account-voice-admission-delta" '0000000000000000000000000000000000000000' || \
+  account_voice_admission_path_authorized_in_delta "${account_voice_admission_path}.near-match" \
+    "${TMP_DIR}/account-voice-admission-delta" "${account_voice_admission_blob}"; then
+  printf '%s\n' 'F13 oracle bug: changed blob or near-match account admission path was accepted' >&2
+  exit 2
+fi
+account_voice_admission_nonancestor_repo="${TMP_DIR}/account-admission-nonancestor"
+mkdir -p "${account_voice_admission_nonancestor_repo}"
+git -C "${account_voice_admission_nonancestor_repo}" init -q
+git -C "${account_voice_admission_nonancestor_repo}" config user.name 'Voice CI fixture'
+git -C "${account_voice_admission_nonancestor_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${account_voice_admission_nonancestor_repo}" fetch -q --no-tags "${ROOT}" \
+  "${accepted_account_voice_admission_checkpoint}"
+mkdir -p "${account_voice_admission_nonancestor_repo}/src/backend/voice/internal/grpcsvc"
+git -C "${ROOT}" show "${accepted_account_voice_admission_checkpoint}:${account_voice_admission_path}" > \
+  "${account_voice_admission_nonancestor_repo}/${account_voice_admission_path}"
+git -C "${account_voice_admission_nonancestor_repo}" add "${account_voice_admission_path}"
+git -C "${account_voice_admission_nonancestor_repo}" commit -qm 'F13 unrelated account admission checkpoint fixture'
+if account_voice_admission_path_authorized_in_delta "${account_voice_admission_path}" \
+  "${TMP_DIR}/account-voice-admission-delta" "${account_voice_admission_blob}" \
+  "${account_voice_admission_nonancestor_repo}" HEAD; then
+  printf '%s\n' 'F13 oracle bug: non-ancestor account admission checkpoint was accepted' >&2
+  exit 2
+fi
+
+voice_role_status_path='src/backend/voice/internal/grpcsvc/role_guard.go'
+voice_role_status_blob="$(git -C "${ROOT}" rev-parse "${accepted_voice_role_status_checkpoint}:${voice_role_status_path}")"
+printf '%s\n' "${voice_role_status_path}" >"${TMP_DIR}/voice-role-status-delta"
+voice_role_status_path_authorized_in_delta "${voice_role_status_path}" \
+  "${TMP_DIR}/voice-role-status-delta" "${voice_role_status_blob}" || {
+  printf '%s\n' 'F13 oracle bug: exact reviewed Voice Role status checkpoint was rejected' >&2
+  exit 2
+}
+if voice_role_status_path_authorized_in_delta "${voice_role_status_path}" \
+  "${TMP_DIR}/voice-role-status-delta" '0000000000000000000000000000000000000000' || \
+  voice_role_status_path_authorized_in_delta "${voice_role_status_path}.near-match" \
+    "${TMP_DIR}/voice-role-status-delta" "${voice_role_status_blob}"; then
+  printf '%s\n' 'F13 oracle bug: changed blob or near-match Voice Role path was accepted' >&2
+  exit 2
+fi
+voice_role_status_nonancestor_repo="${TMP_DIR}/voice-role-status-nonancestor"
+git init -q "${voice_role_status_nonancestor_repo}"
+git -C "${voice_role_status_nonancestor_repo}" config user.name 'Voice CI fixture'
+git -C "${voice_role_status_nonancestor_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${voice_role_status_nonancestor_repo}" fetch -q --no-tags "${ROOT}" \
+  "${accepted_voice_role_status_checkpoint}"
+mkdir -p "${voice_role_status_nonancestor_repo}/src/backend/voice/internal/grpcsvc"
+git -C "${voice_role_status_nonancestor_repo}" show \
+  "${accepted_voice_role_status_checkpoint}:${voice_role_status_path}" > \
+  "${voice_role_status_nonancestor_repo}/${voice_role_status_path}"
+git -C "${voice_role_status_nonancestor_repo}" add "${voice_role_status_path}"
+git -C "${voice_role_status_nonancestor_repo}" commit -qm 'F13 unrelated Voice Role checkpoint fixture'
+if voice_role_status_path_authorized_in_delta "${voice_role_status_path}" \
+  "${TMP_DIR}/voice-role-status-delta" "${voice_role_status_blob}" \
+  "${voice_role_status_nonancestor_repo}" HEAD; then
+  printf '%s\n' 'F13 oracle bug: non-ancestor Voice Role checkpoint was accepted' >&2
+  exit 2
+fi
+
+f13_voice_root_source_file() {
+  [[ "${1%/*}" == 'src/backend/voice' && "${1##*.}" == go ]]
+}
+f13_voice_root_source_file 'src/backend/voice/main.go' || {
+  printf '%s\n' 'F13 oracle bug: root Voice production source was not classified' >&2
+  exit 2
+}
+for f13_nested_voice_source in \
+  'src/backend/voice/internal/spaceprincipalruntime/config.go' \
+  'src/backend/voice/pb/voice/bot/v1/bot.pb.go'; do
+  if f13_voice_root_source_file "${f13_nested_voice_source}"; then
+    printf 'F13 oracle bug: nested Voice source was classified as root production: %s\n' \
+      "${f13_nested_voice_source}" >&2
+    exit 2
+  fi
+done
+
 # BE-255 adds the bounded Space voice-room media vertical while R22.2 room
 # lifecycle remains source-disabled. Keep this admission file-by-file: it must
 # not grant neighboring Voice runtime, lifecycle, MatchFound, proto, or data
@@ -1125,11 +1234,13 @@ f13_collect_failure() {
 f13_collect_develop_contributions() {
   local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
   local allow_direct_followup="${6:-false}"
+  local partition_source_history="${7:-false}"
   local commit parent_count first_parent source_head source_base delta first_parent_commits is_direct
-  local path source_entry result_entry target_entry blob trigger
-  local previous_trigger content_base
+  local path source_entry result_entry target_entry blob trigger incremental_merge
+  local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
+  local previous_source_head previous_source_entry base_entry source_lineage
   local -a commit_line
-  local -A owners=() owner_triggers=() owner_content_bases=() guarded_entries=()
+  local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=()
   : >"${output}"
   git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || {
     f13_collect_failure "${diagnostic_file}" base_object
@@ -1172,7 +1283,7 @@ f13_collect_develop_contributions() {
         f13_collect_failure "${diagnostic_file}" source_base
         return 1
       }
-      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta" || {
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${commit}" || {
         f13_collect_failure "${diagnostic_file}" source_delta
         return 1
       }
@@ -1180,12 +1291,19 @@ f13_collect_develop_contributions() {
       is_direct=true
       source_head="${commit}"
       source_base="${first_parent}"
-      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta" || {
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${commit}" || {
         f13_collect_failure "${diagnostic_file}" source_delta
         return 1
       }
     fi
-    delta="${TMP_DIR}/f13-source-delta"
+    delta="${TMP_DIR}/f13-source-delta-${commit}"
+
+    nested_map=""
+    if [[ "${partition_source_history}" == true && "${is_direct}" != true ]]; then
+      nested_map="${TMP_DIR}/f13-nested-map-${commit}"
+      f13_collect_develop_contributions "${repo}" "${source_base}" "${source_head}" \
+        "${nested_map}" "${diagnostic_file}" true false || return 1
+    fi
 
     : >"${TMP_DIR}/f13-unapproved-delta"
     while IFS= read -r path; do
@@ -1221,18 +1339,53 @@ f13_collect_develop_contributions() {
     fi
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue
+      source_entry="$(git -C "${repo}" ls-tree "${source_head}" -- "${path}" 2>/dev/null)" || {
+        f13_collect_failure "${diagnostic_file}" source_tree_entry
+        return 1
+      }
       content_base="${owner_content_bases[${path}]:-${first_parent}}"
+      nested_base="${source_base}"
+      nested_head="${source_head}"
+      source_lineage=false
+      if [[ -n "${nested_map}" ]]; then
+        nested_row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { row = $0 } END { print row }' "${nested_map}")"
+        [[ -n "${nested_row}" ]] || {
+          f13_collect_failure "${diagnostic_file}" nested_contribution_missing
+          return 1
+        }
+        IFS=$'\t' read -r _ nested_trigger _ _ nested_base nested_head _ <<<"${nested_row}"
+        trigger="${nested_trigger}"
+      fi
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
-        # earlier merge. This remains one reviewable PR contribution: retain
-        # the original runtime trigger, but attribute the path delta to the
-        # latest direct commit. A second merge-source owner stays ambiguous.
-        if [[ "${allow_direct_followup}" != true || "${is_direct}" != true ]]; then
+        # earlier merge, or re-import its exact descendant source in a later
+        # merge. The latter is incremental only when the previous owner is an
+        # ancestor of this merge's source base; independent merge owners remain
+        # ambiguous and fail closed.
+        incremental_merge=false
+        previous_source_head="${owner_source_heads[${path}]:-}"
+        previous_source_entry="${owner_source_entries[${path}]:-}"
+        if [[ -n "${previous_source_head}" && -n "${previous_source_entry}" ]] && \
+          git -C "${repo}" merge-base --is-ancestor "${previous_source_head}" "${nested_base}" 2>/dev/null; then
+          base_entry="$(git -C "${repo}" ls-tree "${nested_base}" -- "${path}" 2>/dev/null)" || {
+            f13_collect_failure "${diagnostic_file}" source_tree_entry
+            return 1
+          }
+          [[ "${previous_source_entry}" == "${base_entry}" ]] && source_lineage=true
+        fi
+        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true ]]; then
+          if git -C "${repo}" merge-base --is-ancestor "${owners[${path}]}" "${source_base}" 2>/dev/null; then
+            incremental_merge=true
+          fi
+          [[ "${source_lineage}" == true ]] && incremental_merge=true
+        fi
+        if [[ "${allow_direct_followup}" != true || \
+          ( "${is_direct}" != true && "${incremental_merge}" != true ) ]]; then
           f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
           return 1
         fi
         previous_trigger="${owner_triggers[${path}]:-false}"
-        [[ "${previous_trigger}" == true ]] && trigger=true
+        [[ "${previous_trigger}" == true && "${source_lineage}" == true ]] && trigger=true
         awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-map-rewrite" || {
           f13_collect_failure "${diagnostic_file}" release_pr_map_write
           return 1
@@ -1245,8 +1398,10 @@ f13_collect_develop_contributions() {
       owners["${path}"]="${commit}"
       owner_triggers["${path}"]="${trigger}"
       owner_content_bases["${path}"]="${content_base}"
+      owner_source_heads["${path}"]="${nested_head}"
+      owner_source_entries["${path}"]="${source_entry}"
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "${path}" "${trigger}" "${commit}" "${first_parent}" "${source_base}" "${source_head}" "${content_base}" >>"${output}"
+        "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" >>"${output}"
     done <"${delta}"
   done < <(git -C "${repo}" rev-list --first-parent --reverse "${base}..${target}" 2>/dev/null)
 
@@ -1308,7 +1463,7 @@ f13_collect_master_release_pr_contributions() {
   }
 
   f13_collect_develop_contributions "${repo}" "${base_commit}" "${source_head}" \
-    "${source_map}" "${diagnostic_file}" true || return 1
+    "${source_map}" "${diagnostic_file}" true true || return 1
   git -C "${repo}" diff --name-only "${base_commit}" "${source_head}" 2>/dev/null >"${source_delta}" || {
     f13_collect_failure "${diagnostic_file}" release_pr_source_delta
     return 1
@@ -1791,6 +1946,46 @@ grep -Fq 'NewLifecycleWorker()' "${TMP_DIR}/f13-release-retained-content" && \
   exit 2
 }
 
+# A second merge is incremental only when its exact source base descends from
+# the prior owner. This models a follow-up branch created from the prior merge.
+git -C "${f13_fixture_repo}" checkout -qb f13-release-incremental-source "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
+mkdir -p "${f13_fixture_repo}/src/backend/voice/internal/grpcsvc"
+printf '%s\n' 'FROM scratch' >"${f13_fixture_repo}/src/backend/voice/Dockerfile"
+printf '%s\n' 'package grpcsvc' 'const incremental = "first"' >"${f13_fixture_repo}/src/backend/voice/internal/grpcsvc/incremental.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/Dockerfile src/backend/voice/internal/grpcsvc/incremental.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 incremental merge first contribution'
+f13_incremental_initial_head="$(git -C "${f13_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_fixture_repo}" checkout -qb f13-release-incremental-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 incremental merge first import' f13-release-incremental-source
+f13_incremental_owner="$(git -C "${f13_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_fixture_repo}" checkout -qb f13-release-incremental-followup "${f13_incremental_initial_head}"
+printf '%s\n' 'package grpcsvc' 'const incremental = "corrected"' >"${f13_fixture_repo}/src/backend/voice/internal/grpcsvc/incremental.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/internal/grpcsvc/incremental.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 incremental merge follow-up source'
+f13_incremental_source_head="$(git -C "${f13_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_fixture_repo}" checkout -q f13-release-incremental-integration
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 incremental merge follow-up import' f13-release-incremental-followup
+git -C "${f13_fixture_repo}" checkout -qb f13-release-incremental-pr "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 incremental synthetic release PR merge' f13-release-incremental-integration
+f13_collect_master_release_pr_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD \
+  "${TMP_DIR}/f13-release-incremental-map" "${TMP_DIR}/f13-release-incremental-category" || {
+  printf '%s\n' 'F13 oracle bug: exact descendant-source merge correction was rejected' >&2
+  exit 2
+}
+f13_incremental_row="$(awk -F '\t' '$1 == "src/backend/voice/internal/grpcsvc/incremental.go" { row=$0 } END { print row }' \
+  "${TMP_DIR}/f13-release-incremental-map")"
+IFS=$'\t' read -r _ f13_incremental_trigger f13_incremental_latest _ f13_incremental_source_base \
+  f13_incremental_mapped_head _ _ <<<"${f13_incremental_row}"
+[[ "${f13_incremental_trigger}" == true && \
+  "${f13_incremental_source_base}" == "${f13_incremental_initial_head}" && \
+  "${f13_incremental_mapped_head}" == "${f13_incremental_source_head}" && \
+  "${f13_incremental_latest}" != "${f13_incremental_owner}" ]] || {
+  printf '%s\n' 'F13 oracle bug: incremental merge lost latest source provenance' >&2
+  exit 2
+}
+
 git -C "${f13_fixture_repo}" checkout -qb f13-repeat-source-one "${f13_fixture_base}"
 mkdir -p "${f13_fixture_repo}/src/backend/voice"
 printf '%s\n' 'package voice' >"${f13_fixture_repo}/src/backend/voice/repeated.go"
@@ -2036,6 +2231,8 @@ while IFS= read -r file; do
   case "${file}" in
     src/backend/voice/internal/grpcsvc/*.go|src/backend/voice/internal/store/*.go|src/backend/voice/internal/livekit/*.go|src/backend/voice/internal/s2s/*.go|src/backend/voice/internal/voiceevents/*.go)
       [[ "${file}" == *_test.go ]] || identity_publisher_path_allowed "${file}" || \
+        voice_role_status_path_authorized_in_delta "${file}" "${f13_path_delta}" "${actual_blob}" || \
+        account_voice_admission_path_authorized_in_delta "${file}" "${f13_path_delta}" "${actual_blob}" || \
         fail "F13: handler/Redis/external adapter change activates forbidden scope: ${file}"
       ;;
     src/backend/voice/internal/roomlifecycle/*.go)
@@ -2046,15 +2243,15 @@ while IFS= read -r file; do
         esac
       fi
       ;;
-    src/backend/voice/*.go)
+  esac
+  if f13_voice_root_source_file "${file}"; then
       if [[ "${file}" != *_test.go ]]; then
         case "$(basename "${file}")" in
           main.go|health.go|database.go) ;;
           *) fail "F13: unapproved Voice runtime production file: ${file}" ;;
         esac
       fi
-      ;;
-  esac
+  fi
 done <"${TMP_DIR}/changed-files"
 
 while IFS= read -r file; do
