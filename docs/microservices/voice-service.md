@@ -388,6 +388,15 @@ listeners are enabled, their listen addresses must differ. The combined local/CI
 fixtures retain lifecycle port 9092 and use user-principal port 9093, with
 Gateway's matching private upstream; neither port is published to the host.
 
+Space media admission resolves Role-owned room grants only through Role's
+private mTLS listener, using the Voice workload signer and a fresh
+request-bound principal for each `ResolveVoiceRoomGrants` call. The request
+binds the canonical Space, room, and profile IDs; Role's returned policy epoch
+is retained with the media grant. `VOICE_ROLE_GRPC_ADDR` and its complete
+`VOICE_ROLE_TLS_*` client tuple enable this consumer independently of GIS
+provisioning. Incomplete settings fail startup; there is no ordinary-listener
+fallback.
+
 The user-principal listener validates local TLS configuration and replay Redis
 before startup, but starts with an empty Gateway JWKS cache. Gateway waits for
 this listener before serving its own key endpoint, so requiring an initial key

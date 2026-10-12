@@ -76,8 +76,14 @@ RPC full name and deterministic protobuf request hash; `x-request-id` equals
 the request's operation ID for Apply/Revoke. The distinct Voice caller uses
 exact issuer `voice`, audience `role`, exact `CheckGameSessionGrant` RPC and
 request hash; its request ID is a fresh canonical UUID. Role accepts only
-Apply/Revoke from GIS and only Check from Voice. Each JTI authorizes one
-attempt; retries use a fresh JTI and the same request ID/hash. An apply request binds
+Apply/Revoke from GIS and only Check from Voice on the game-session grant
+surface. Voice also calls the Voice-only `ResolveVoiceRoomGrants` RPC on this
+private listener using the same exact issuer/audience/RPC/request-hash binding
+and a fresh canonical request ID. Role validates the Space, Voice room, and
+profile UUIDs, then returns the existing per-Space fenced permission decision
+and policy epoch. The ordinary listener continues to reject this RPC. For
+game-session Apply/Revoke, each JTI authorizes one attempt; retries use a
+fresh JTI and the same request ID/hash. An apply request binds
 `application_id`, `environment_id`, `session_id`, `voice_room_id`,
 `operation_id`, `roster_revision`, and the complete sorted, unique list of
 canonical `profile_id` UUIDs. It grants only `VOICE_JOIN` for that exact

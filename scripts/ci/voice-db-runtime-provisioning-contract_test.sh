@@ -448,6 +448,53 @@ game_checkpoint_path_allowed() {
   actual_blob="$(git -C "${ROOT}" hash-object --path="${path}" "${ROOT}/${path}")"
   game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${actual_blob}"
 }
+
+# This exact Voice entrypoint wiring is the reviewed consumer for Role's
+# private Voice-only room-grant RPC. Pin both the implementation commit and
+# blob so F13 does not turn into a general main.go runtime exception.
+voice_room_grants_wiring_commit='c758b455103187fd1e40f76eabb35e90f62b7cf3'
+voice_room_grants_main_blob='952368ad43ee5631fe3b7049687f08e85fb93350'
+voice_room_grants_main_authorized_in_delta() {
+  local repo="$1" target="$2" path="$3" delta="$4" actual_blob="$5"
+  [[ "${path}" == 'src/backend/voice/main.go' ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${voice_room_grants_wiring_commit}" "${target}" || return 1
+  grep -Fxq -- "${path}" "${delta}" || return 1
+  [[ "${actual_blob}" == "${voice_room_grants_main_blob}" ]]
+}
+voice_room_grants_main_allowed() {
+  local path="$1" delta="$2" actual_blob
+  [[ -f "${ROOT}/${path}" ]] || return 1
+  actual_blob="$(git -C "${ROOT}" hash-object --path="${path}" "${ROOT}/${path}")"
+  voice_room_grants_main_authorized_in_delta "${ROOT}" HEAD "${path}" "${delta}" "${actual_blob}"
+}
+
+voice_room_grants_main_fixture='src/backend/voice/main.go'
+printf '%s\n' "${voice_room_grants_main_fixture}" >"${TMP_DIR}/voice-room-grants-main-delta"
+: >"${TMP_DIR}/voice-room-grants-empty-delta"
+voice_room_grants_main_fixture_blob="$(git -C "${ROOT}" rev-parse "${voice_room_grants_wiring_commit}:${voice_room_grants_main_fixture}")"
+voice_room_grants_main_authorized_in_delta "${ROOT}" HEAD "${voice_room_grants_main_fixture}" \
+  "${TMP_DIR}/voice-room-grants-main-delta" "${voice_room_grants_main_fixture_blob}" || {
+  printf '%s\n' 'F13 oracle bug: exact Voice room-grant main.go checkpoint was rejected' >&2
+  exit 2
+}
+for rejected_voice_main in changed_blob near_path absent_delta non_ancestor; do
+  rejected_path="${voice_room_grants_main_fixture}"
+  rejected_delta="${TMP_DIR}/voice-room-grants-main-delta"
+  rejected_blob="${voice_room_grants_main_fixture_blob}"
+  rejected_target=HEAD
+  case "${rejected_voice_main}" in
+    changed_blob) rejected_blob='0000000000000000000000000000000000000000' ;;
+    near_path) rejected_path="${voice_room_grants_main_fixture}.extra" ;;
+    absent_delta) rejected_delta="${TMP_DIR}/voice-room-grants-empty-delta" ;;
+    non_ancestor) rejected_target="${voice_room_grants_wiring_commit}^" ;;
+  esac
+  if voice_room_grants_main_authorized_in_delta "${ROOT}" "${rejected_target}" "${rejected_path}" \
+    "${rejected_delta}" "${rejected_blob}"; then
+    printf 'F13 oracle bug: unapproved Voice room-grant checkpoint accepted: %s\n' "${rejected_voice_main}" >&2
+    exit 2
+  fi
+done
+
 game_fixture_path='src/backend/voice/internal/federationmedia/runtime.go'
 printf '%s\n' "${game_fixture_path}" >"${TMP_DIR}/game-fixture-delta"
 game_fixture_blob="$(git -C "${ROOT}" rev-parse "${accepted_game_checkpoint}:${game_fixture_path}")"
@@ -2119,6 +2166,7 @@ while IFS= read -r file; do
   fi
   game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || \
     be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)" || \
+    voice_room_grants_main_allowed "${file}" "${TMP_DIR}/changed-files" || \
     printf '%s\n' "${file}"
 done <"${TMP_DIR}/changed-files" >"${TMP_DIR}/unapproved-runtime-delta"
 if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
@@ -2208,6 +2256,9 @@ while IFS= read -r file; do
     continue
   fi
   actual_blob="$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)"
+  if voice_room_grants_main_authorized_in_delta "${ROOT}" HEAD "${file}" "${f13_path_delta}" "${actual_blob}"; then
+    continue
+  fi
   if be255_checkpoint_path_authorized_in_delta "${file}" "${f13_path_delta}" "${actual_blob}"; then
     continue
   fi
@@ -2256,6 +2307,9 @@ done <"${TMP_DIR}/changed-files"
 
 while IFS= read -r file; do
   if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then
+    continue
+  fi
+  if voice_room_grants_main_allowed "${file}" "${TMP_DIR}/changed-files"; then
     continue
   fi
   if t31_runtime_path_allowed "${file}"; then
