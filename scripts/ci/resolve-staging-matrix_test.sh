@@ -86,6 +86,7 @@ echo "== CI-only config has no deployment matrix or rollout =="
 FILTER_JSON='{"code":"true","ci_global":"true"}' GO_SERVICES_JSON='["analytics","chat","controlledgame"]' run_matrix
 [[ "${build_services}" == "[]" ]] || fail "CI-only change must not build deployment images"
 [[ "${promote_services}" == "[]" ]] || fail "CI-only change must not promote deployment images"
+[[ "${ci_only_change}" == "true" ]] || fail "CI-only change must expose its no-publication classification"
 [[ "${needs_full_rollout}" == "false" ]] || fail "CI-only change must not set full rollout"
 [[ "${needs_user_space_rollout}" == "false" ]] || fail "CI-only change must not set application rollout"
 

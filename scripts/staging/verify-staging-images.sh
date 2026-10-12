@@ -4,8 +4,31 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REGISTRY="${VOICE_IMAGE_REGISTRY:?VOICE_IMAGE_REGISTRY required}"
+EXPECTED_REGISTRY="${REGISTRY}"
 LOCK_FILE="${STACK_LOCK_FILE:-}"
 TAG="${VOICE_IMAGE_TAG:-}"
+CATALOG="${ROOT}/scripts/ci/staging-image-catalog.json"
+
+if [ ! -f "${CATALOG}" ]; then
+  echo "ERROR: staging image catalog is missing: ${CATALOG}" >&2
+  exit 1
+fi
+catalog_names="$(jq -r '.images[].name' "${CATALOG}")" || {
+  echo 'ERROR: staging image catalog could not be read' >&2
+  exit 1
+}
+if [ -z "${catalog_names}" ]; then
+  echo 'ERROR: staging image catalog is empty' >&2
+  exit 1
+fi
+CATALOG_NAMES=()
+while IFS= read -r name; do
+  [[ "${name}" =~ ^[a-z0-9-]+$ ]] || {
+    echo 'ERROR: staging image catalog contains an invalid image name' >&2
+    exit 1
+  }
+  CATALOG_NAMES+=("${name}")
+done <<<"${catalog_names}"
 
 set_output() {
   local key="$1"
@@ -44,25 +67,47 @@ check_image() {
 
 MISSING=()
 
-if [ -n "${LOCK_FILE}" ] && [ -f "${LOCK_FILE}" ]; then
-  REGISTRY="$(grep '^registry:' "${LOCK_FILE}" | awk '{print $2}')"
-  TAG="$(grep '^tag:' "${LOCK_FILE}" | awk '{print $2}')"
+if [ -n "${LOCK_FILE}" ]; then
+  if [ ! -f "${LOCK_FILE}" ]; then
+    echo "ERROR: requested stack lock is missing: ${LOCK_FILE}" >&2
+    exit 1
+  fi
+  REGISTRY="$(sed -n 's/^registry: //p' "${LOCK_FILE}")"
+  lock_tag="$(sed -n 's/^tag: //p' "${LOCK_FILE}")"
+  if [[ "${REGISTRY}" != "${EXPECTED_REGISTRY}" || "${lock_tag}" != "${TAG}" || ! "${lock_tag}" =~ ^[[:xdigit:]]{40}$ ]]; then
+    echo 'ERROR: requested stack lock has invalid registry or tag' >&2
+    exit 1
+  fi
+  expected_names="$(printf '%s\n' "${CATALOG_NAMES[@]}" nats-hub-config-renderer | sort)"
+  actual_names="$(sed -n 's/^  \([a-z0-9-][a-z0-9-]*\): .*/\1/p' "${LOCK_FILE}" | sort)"
+  if [[ "${actual_names}" != "${expected_names}" ]]; then
+    echo 'ERROR: requested stack lock does not contain the complete staging image catalog' >&2
+    exit 1
+  fi
+  TAG="${lock_tag}"
   echo "Verifying stack lock: ${LOCK_FILE} registry=${REGISTRY} tag=${TAG}"
   while IFS= read -r line; do
-    name="$(echo "${line}" | sed 's/:.*//' | xargs)"
-    img_tag="$(echo "${line}" | awk -F: '{print $2}' | xargs)"
-    [ -z "${name}" ] && continue
-    [[ "${name}" == images ]] && continue
+    [[ "${line}" =~ ^\ \ ([a-z0-9-][a-z0-9-]*):\ ([[:xdigit:]]{40})$ ]] || {
+      echo 'ERROR: requested stack lock contains an invalid image row' >&2
+      exit 1
+    }
+    name="${BASH_REMATCH[1]}"
+    img_tag="${BASH_REMATCH[2]}"
+    if [[ "${img_tag}" != "${lock_tag}" ]]; then
+      echo 'ERROR: requested stack lock contains an image tag that differs from its source tag' >&2
+      exit 1
+    fi
     check_image "${name}" "${REGISTRY}/${name}:${img_tag}" || true
-  done < <(grep -E '^  [a-z].*:' "${LOCK_FILE}" || true)
+  done < <(sed -n '/^images:/,$p' "${LOCK_FILE}" | tail -n +2)
 elif [ -n "${TAG}" ]; then
+  if [[ ! "${TAG}" =~ ^[[:xdigit:]]{40}$ ]]; then
+    echo 'ERROR: requested staging image tag must be a full Git SHA' >&2
+    exit 1
+  fi
   echo "Verifying staging images: ${REGISTRY} tag ${TAG}"
-  while IFS= read -r name || [ -n "${name}" ]; do
-    name="${name%%#*}"
-    name="$(echo "${name}" | tr -d '[:space:]')"
-    [ -z "${name}" ] && continue
+  for name in "${CATALOG_NAMES[@]}"; do
     check_image "${name}" "${REGISTRY}/${name}:${TAG}" || true
-  done < <(jq -r '.images[].name' "${ROOT}/scripts/ci/staging-image-catalog.json")
+  done
   check_image "nats-hub-config-renderer" "${REGISTRY}/nats-hub-config-renderer:${TAG}" || true
 else
   echo "ERROR: set STACK_LOCK_FILE or VOICE_IMAGE_TAG" >&2

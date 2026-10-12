@@ -71,6 +71,7 @@ jobs:
       all_services: ${{ steps.stagingmatrix.outputs.all_services }}
       needs_full_rollout: ${{ steps.stagingmatrix.outputs.needs_full_rollout }}
       needs_user_space_rollout: ${{ steps.stagingmatrix.outputs.needs_user_space_rollout }}
+      ci_only_change: ${{ steps.stagingmatrix.outputs.ci_only_change }}
       run_auth: ${{ steps.stagingmatrix.outputs.run_auth }}
       run_web: ${{ steps.stagingmatrix.outputs.run_web }}
       run_admin: ${{ steps.stagingmatrix.outputs.run_admin }}
@@ -736,7 +737,8 @@ jobs:
       needs.nats-hub-config-renderer-image.result != 'cancelled' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
-      needs.changes.outputs.code == 'true'
+      needs.changes.outputs.code == 'true' &&
+      needs.changes.outputs.ci_only_change != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -1934,6 +1936,7 @@ jobs:
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true' &&
+      needs.changes.outputs.ci_only_change != 'true' &&
       vars.STAGING_DEPLOY_ENABLED == 'true' &&
       needs.staging-stack-lock.result == 'success'
     permissions:
