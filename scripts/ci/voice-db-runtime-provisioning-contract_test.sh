@@ -1190,7 +1190,7 @@ f13_collect_develop_contributions() {
         f13_collect_failure "${diagnostic_file}" source_tree_entry
         return 1
       }
-      if ((parent_count == 2)); then
+      if ((parent_count == 2)) && f13_path_is_guarded "${path}"; then
         result_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}" 2>/dev/null)" || {
           f13_collect_failure "${diagnostic_file}" merge_tree_entry
           return 1
@@ -1540,6 +1540,33 @@ if f13_collect_develop_contributions \
   printf '%s\n' 'F13 oracle bug: source/merge blob mismatch was accepted' >&2
   exit 2
 fi
+
+git -C "${f13_fixture_repo}" checkout -qb f13-doc-conflict-source "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/docs"
+printf '%s\n' 'source documentation' >"${f13_fixture_repo}/docs/DEPLOYMENT.md"
+git -C "${f13_fixture_repo}" add docs/DEPLOYMENT.md
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture conflicting unguarded documentation source'
+git -C "${f13_fixture_repo}" checkout -qb f13-doc-conflict-integration "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/docs"
+printf '%s\n' 'target documentation' >"${f13_fixture_repo}/docs/DEPLOYMENT.md"
+git -C "${f13_fixture_repo}" add docs/DEPLOYMENT.md
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture conflicting unguarded documentation target'
+if git -C "${f13_fixture_repo}" merge --no-ff -m 'F13 fixture documentation conflict merge' f13-doc-conflict-source >/dev/null 2>&1; then
+  printf '%s\n' 'F13 oracle bug: documentation conflict fixture unexpectedly merged cleanly' >&2
+  exit 2
+fi
+printf '%s\n' 'target documentation' >"${f13_fixture_repo}/docs/DEPLOYMENT.md"
+git -C "${f13_fixture_repo}" add docs/DEPLOYMENT.md
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture resolved unguarded documentation conflict'
+f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-doc-conflict-map" || {
+  printf '%s\n' 'F13 oracle bug: unguarded documentation merge resolution was rejected' >&2
+  exit 2
+}
+grep -Fqx $'docs/DEPLOYMENT.md\tfalse' <(cut -f1-2 "${TMP_DIR}/f13-doc-conflict-map") || {
+  printf '%s\n' 'F13 oracle bug: unguarded documentation conflict was not recorded' >&2
+  exit 2
+}
 
 # A merge can restore an activation line absent from its first parent when a
 # conflict is resolved with the source tree. Provenance uses the source delta;
