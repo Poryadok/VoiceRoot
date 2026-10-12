@@ -2,7 +2,12 @@
 FROM maven:3.9.11-eclipse-temurin-25 AS build
 WORKDIR /src
 COPY src/backend/auth/pom.xml ./
-RUN mvn -B dependency:go-offline
+# Retry transient repository throttling and server errors during dependency prefetch.
+# Maven 3.9.11's Resolver retries at most three times; persistent failures remain fatal.
+RUN mvn -B \
+    -Daether.connector.http.retryHandler.count=3 \
+    -Daether.connector.http.retryHandler.serviceUnavailable=429,500,502,503,504 \
+    dependency:go-offline
 COPY protos /protos
 COPY src/backend/auth/src ./src
 RUN mvn -B package -DskipTests
