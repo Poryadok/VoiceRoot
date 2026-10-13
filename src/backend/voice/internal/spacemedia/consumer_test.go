@@ -41,8 +41,9 @@ func TestSpaceAccessMessageACKFollowsFullReconciliation(t *testing.T) {
 	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
 	coordinator := &Coordinator{
-		Store:      calls,
-		Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
+		Store:               calls,
+		SessionEpochChecker: currentEpochChecker{},
+		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4},
 		}},
@@ -81,8 +82,9 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 	participant := call.SpaceMedia[profileID]
 	media := &fakeMedia{err: errors.New("remove failed")}
 	coordinator := &Coordinator{
-		Store:      calls,
-		Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
+		Store:               calls,
+		SessionEpochChecker: currentEpochChecker{},
+		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4},
 		}},
