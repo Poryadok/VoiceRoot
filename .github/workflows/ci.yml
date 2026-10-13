@@ -368,6 +368,24 @@ jobs:
             ${{ runner.temp }}/channel-settings-capture/channel-settings-narrow.png
           if-no-files-found: warn
           retention-days: 1
+      - name: Capture AttachMenu and CreateGroup horizontal and vertical views
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/ui-attach-group-reference'
+        working-directory: src/frontend
+        env:
+          VOICE_ATTACH_GROUP_CAPTURE_DIR: ${{ runner.temp }}/attach-group-capture
+        run: timeout 300s flutter test --no-pub --reporter expanded --concurrency=1 test/attach_group_reference_capture_test.dart
+      - name: Upload AttachMenu and CreateGroup reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/ui-attach-group-reference'
+        uses: actions/upload-artifact@v6
+        with:
+          name: attach-group-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/attach-group-capture/attach-menu-h.png
+            ${{ runner.temp }}/attach-group-capture/attach-menu-v.png
+            ${{ runner.temp }}/attach-group-capture/create-group-h.png
+            ${{ runner.temp }}/attach-group-capture/create-group-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6
