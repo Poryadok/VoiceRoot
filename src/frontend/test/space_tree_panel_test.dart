@@ -318,6 +318,150 @@ void main() {
     expect(reorderedIds, ['node-b', 'node-a']);
   });
 
+  for (final language in ['en', 'ru']) {
+    for (final categorized in [false, true]) {
+      for (final failure in ['denied', 'unknown', 'refresh']) {
+        testWidgets('$language reorder hides $failure diagnostics and recovers '
+            '(categorized=$categorized)', (tester) async {
+          const secret = 'private upstream reorder diagnostic';
+          final categoryId = categorized ? 'cat-1' : null;
+          final nodes = [
+            for (final (id, name) in [('a', 'alpha'), ('b', 'beta')])
+              <String, Object?>{
+                'id': 'node-$id',
+                'space_id': 'space-1',
+                'category_id': categoryId,
+                'kind': 'text_chat',
+                'linked_chat': {'id': 'chat-$id', 'type': 'CHAT_TYPE_GROUP'},
+                'sort_order': id == 'a' ? 0 : 1,
+                'display_name': name,
+              },
+          ];
+          final requests = <List<String>>[];
+          var failRefresh = false;
+          final client = MockClient((request) async {
+            if (request.method == 'GET' &&
+                request.url.path == '/api/v1/spaces/space-1/tree') {
+              if (failRefresh) {
+                return http.Response(jsonEncode({'message': secret}), 500);
+              }
+              return http.Response(
+                jsonEncode({
+                  'categories': [
+                    if (categorized)
+                      {
+                        'id': categoryId,
+                        'space_id': 'space-1',
+                        'name': 'General',
+                        'sort_order': 0,
+                      },
+                  ],
+                  'nodes': nodes,
+                  'voice_rooms': [],
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/spaces/space-1/tree/reorder') {
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              expect(body['space_id'], 'space-1');
+              final ordered = (body['ordered_node_ids'] as List).cast<String>();
+              requests.add(ordered);
+              if (requests.length == 1 && failure != 'refresh') {
+                return http.Response(
+                  jsonEncode({'message': secret}),
+                  failure == 'denied' ? 403 : 500,
+                );
+              }
+              nodes.sort(
+                (left, right) => ordered
+                    .indexOf(left['id']! as String)
+                    .compareTo(ordered.indexOf(right['id']! as String)),
+              );
+              for (var i = 0; i < nodes.length; i++) {
+                nodes[i]['sort_order'] = i;
+              }
+              failRefresh = requests.length == 1 && failure == 'refresh';
+              return http.Response('', 204);
+            }
+            return http.Response('unexpected request', 500);
+          });
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                ...voiceAppTestOverrides(client: client),
+                spacePermissionProvider.overrideWith((_, _) async => true),
+              ],
+              child: MaterialApp(
+                theme: voiceTestTheme(),
+                locale: Locale(language),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const Scaffold(
+                  body: SpaceTreePanel(
+                    spaceId: 'space-1',
+                    onTextChatSelected: _noop,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(SpaceTreePanel)),
+          )!;
+          Future<void> drag(String from, String to) async {
+            final gesture = await tester.startGesture(
+              tester.getCenter(find.text(from)),
+            );
+            await tester.pump(kLongPressTimeout);
+            await gesture.moveTo(tester.getCenter(find.text(to)));
+            await tester.pump();
+            await gesture.up();
+            await tester.pumpAndSettle();
+          }
+
+          await drag('beta', 'alpha');
+          expect(requests, [
+            ['node-b', 'node-a'],
+          ]);
+          final expected = failure == 'refresh'
+              ? l10n.spaceTreeCreateRefreshFailed
+              : language == 'en'
+              ? 'Could not reorder channels: Could not complete this action.'
+              : 'Не удалось изменить порядок каналов: Не удалось выполнить действие.';
+          expect(find.text(expected), findsOneWidget);
+          expect(find.textContaining(secret), findsNothing);
+          expect(find.textContaining('tree_refresh_failed'), findsNothing);
+
+          if (failure == 'refresh') {
+            expect(find.byKey(SpaceTreePanel.errorKey), findsOneWidget);
+            failRefresh = false;
+            await tester.tap(find.text(l10n.commonRetry));
+            await tester.pumpAndSettle();
+            expect(find.byKey(SpaceTreePanel.errorKey), findsNothing);
+          }
+          ScaffoldMessenger.of(
+            tester.element(find.byType(SpaceTreePanel)),
+          ).removeCurrentSnackBar();
+          await tester.pumpAndSettle();
+          await drag(
+            failure == 'refresh' ? 'alpha' : 'beta',
+            failure == 'refresh' ? 'beta' : 'alpha',
+          );
+          expect(requests, [
+            ['node-b', 'node-a'],
+            failure == 'refresh' ? ['node-a', 'node-b'] : ['node-b', 'node-a'],
+          ]);
+          expect(find.text(expected), findsNothing);
+          expect(find.byKey(SpaceTreePanel.errorKey), findsNothing);
+          expect(find.textContaining(secret), findsNothing);
+        });
+      }
+    }
+  }
+
   testWidgets('shows partial success when category assignment is denied', (
     tester,
   ) async {

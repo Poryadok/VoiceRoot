@@ -15,6 +15,7 @@ import '../../state/chat_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../a11y/voice_focus_return.dart';
+import '../api_error_messages.dart';
 
 /// Collects slash command option values; supports autocomplete for string options.
 Future<Map<String, dynamic>?> showSlashCommandOptionsSheet({
@@ -472,7 +473,7 @@ class _UserOptionPicker extends ConsumerWidget {
         decoration: InputDecoration(
           labelText: option.name + (option.required ? ' *' : ''),
         ),
-        child: Text(l10n.chatRoomError('$e')),
+        child: Text(spaceMembersErrorMessage(l10n, e)),
       ),
       data: (members) {
         return DropdownButtonFormField<String>(
@@ -538,7 +539,7 @@ class _ChannelOptionPicker extends ConsumerWidget {
         decoration: InputDecoration(
           labelText: option.name + (option.required ? ' *' : ''),
         ),
-        child: Text(l10n.chatRoomError('$e')),
+        child: Text(spaceTreeErrorMessage(l10n, e)),
       ),
       data: (tree) {
         final textChats = tree.nodes
@@ -607,7 +608,7 @@ class _RoleOptionPicker extends ConsumerWidget {
         decoration: InputDecoration(
           labelText: option.name + (option.required ? ' *' : ''),
         ),
-        child: Text(l10n.chatRoomError('$e')),
+        child: Text(spaceRolesErrorMessage(l10n, e)),
       ),
       data: (roles) {
         return DropdownButtonFormField<String>(
