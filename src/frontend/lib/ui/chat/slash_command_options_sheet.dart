@@ -55,7 +55,7 @@ class _SlashCommandOptionsSheetState
   final _attachmentNames = <String, String>{};
   final _debounces = <String, Timer>{};
   final _autocompleteGeneration = <String, int>{};
-  final _autocompleteErrors = <String, String>{};
+  final _autocompleteErrors = <String, BotsApiFailure>{};
   final _attachmentErrors = <String, String>{};
   String? _openedAuthorization;
   var _uploadingAttachment = false;
@@ -94,7 +94,7 @@ class _SlashCommandOptionsSheetState
     const maxAttempts = 12;
     const retryDelay = Duration(milliseconds: 200);
     BotAutocompleteResult? lastResult;
-    String? lastError;
+    BotsApiFailure? lastError;
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       if (!_isCurrentAutocomplete(auth, optionName, generation)) return;
@@ -122,8 +122,8 @@ class _SlashCommandOptionsSheetState
             });
             return;
           }
-        case BotsApiFailure(:final message):
-          lastError = message;
+        case BotsApiFailure():
+          lastError = result;
       }
       if (attempt < maxAttempts - 1) {
         await Future<void>.delayed(retryDelay);
@@ -392,10 +392,10 @@ class _SlashCommandOptionsSheetState
               widget.command.displayName,
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            for (final _ in _autocompleteErrors.values) ...[
+            for (final error in _autocompleteErrors.values) ...[
               const SizedBox(height: 8),
               Text(
-                commonActionErrorMessage(l10n),
+                commonActionErrorMessage(l10n, statusCode: error.statusCode),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],

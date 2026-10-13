@@ -113,9 +113,14 @@ void main() {
     expect(find.text('CS2'), findsOneWidget);
   });
 
-  for (final language in ['en', 'ru']) {
+  for (final (language, statusCode) in [
+    ('en', 500),
+    ('ru', 500),
+    ('en', 503),
+    ('ru', 503),
+  ]) {
     testWidgets(
-      '$language autocomplete hides upstream errors and query edit recovers',
+      '$language $statusCode autocomplete hides upstream errors and query edit recovers',
       (tester) async {
         const secret = 'private upstream autocomplete diagnostic';
         var calls = 0;
@@ -128,7 +133,7 @@ void main() {
           if (!recover) {
             return http.Response(
               jsonEncode({'message': secret}),
-              500,
+              statusCode,
               headers: const {'content-type': 'application/json'},
             );
           }
@@ -189,7 +194,9 @@ void main() {
         await tester.pumpAndSettle();
         final field = find.byType(TextField);
         final l10n = AppLocalizations.of(tester.element(field))!;
-        final safeError = language == 'en'
+        final safeError = statusCode == 503
+            ? l10n.backendUnavailable
+            : language == 'en'
             ? 'Could not complete this action.'
             : 'Не удалось выполнить действие.';
         await tester.enterText(field, 'broken query');
