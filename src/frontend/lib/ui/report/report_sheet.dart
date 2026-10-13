@@ -7,6 +7,7 @@ import '../../state/auth_providers.dart';
 import '../../state/trust_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_metrics.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_primary_button.dart';
 
