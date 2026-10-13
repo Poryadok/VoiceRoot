@@ -5,12 +5,14 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
+import 'package:uuid/uuid.dart';
 
 import '../backend/api_errors.dart';
 import '../backend/auth_session.dart';
 import '../backend/chats_client.dart';
 import '../backend/files_client.dart';
 import '../backend/gateway_request_id.dart';
+import '../backend/gateway_http.dart';
 import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/message_cache/message_cache_store.dart';
@@ -1264,6 +1266,33 @@ class _ScheduledEncryptedAttempt {
       this.requestFingerprint == requestFingerprint;
 }
 
+/// One prepared immediate payload, retained only for an explicit retry.
+/// In particular, an E2E envelope must never be encrypted a second time.
+class _ImmediateSendAttempt {
+  _ImmediateSendAttempt({
+    required this.identity,
+    required this.sessionInstallGeneration,
+    required this.generation,
+    required this.clientMessageId,
+    required this.content,
+    required List<MessageAttachment> attachments,
+    required List<MessageMention> mentions,
+    required this.threadParentId,
+    required this.isE2e,
+  }) : attachments = List.unmodifiable(attachments),
+       mentions = List.unmodifiable(mentions);
+
+  final GatewayRequestIdentity identity;
+  final int sessionInstallGeneration;
+  final int generation;
+  final String clientMessageId;
+  final String content;
+  final List<MessageAttachment> attachments;
+  final List<MessageMention> mentions;
+  final String? threadParentId;
+  final bool isE2e;
+}
+
 class ChatRoomController extends StateNotifier<ChatRoomState> {
   ChatRoomController(this._ref, this.chatId) : super(const ChatRoomState()) {
     _authSub = _ref.listen<AuthState>(authControllerProvider, (previous, next) {
@@ -1277,6 +1306,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       if (!profileChanged && !sessionChanged) {
         return;
       }
+      final authController = _ref.read(authControllerProvider.notifier);
+      if (_immediateSendIdentity != authController.gatewayRequestIdentity ||
+          _immediateSendSessionInstallGeneration !=
+              authController.sessionInstallGeneration) {
+        _cancelImmediateSend();
+      }
       _scheduledEncryptedAttempt = null;
       _authGeneration++;
       _scheduledCreateGeneration++;
@@ -1287,7 +1322,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         _seenScheduledMessagesCursors.clear();
         if (mounted) {
           state = state.copyWith(
-            isSending: false,
+            isSending: _immediateSendInFlight,
             isLoadingOlder: false,
             scheduledMessages: const [],
             isLoadingScheduledMessages: false,
@@ -1500,6 +1535,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       previous,
       next,
     ) {
+      if (previous != next && next != chatId) {
+        _cancelImmediateSend(clearSending: true);
+      }
       if (next == chatId && previous != chatId) {
         _scheduleAutomaticActivation();
       }
@@ -1685,6 +1723,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   @override
   void dispose() {
+    _cancelImmediateSend();
     _scheduledEncryptedAttempt = null;
     _scheduledCreateGeneration++;
     _scheduledCreateInFlight = false;
@@ -2037,70 +2076,168 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return null;
+    if (_immediateSendInFlight) return 'send_in_progress';
     final auth = _ref.read(authorizationHeaderProvider);
-    final profileId = _activeProfileId();
-    final generation = _loadGeneration;
-    if (auth == null || profileId == null) return 'not_authenticated';
+    final authController = _ref.read(authControllerProvider.notifier);
+    final identity = authController.gatewayRequestIdentity;
+    if (auth == null || identity == null) return 'not_authenticated';
     if (_isDeviceOffline()) {
       return kChatOfflineBlockedError;
     }
-
-    var outbound = trimmed;
-    var isE2e = false;
-    if (_isE2eChat()) {
-      final peerId = _dmPeerProfileId();
-      final localId = _activeProfileId();
-      if (peerId != null && localId != null && outbound.isNotEmpty) {
-        try {
+    final generation = ++_immediateSendGeneration;
+    final sessionInstallGeneration = authController.sessionInstallGeneration;
+    _failedImmediateSend = null;
+    _immediateSendIdentity = identity;
+    _immediateSendSessionInstallGeneration = sessionInstallGeneration;
+    _immediateSendInFlight = true;
+    state = state.copyWith(isSending: true, clearError: true);
+    final retainedAttachments = List<MessageAttachment>.unmodifiable(
+      attachments,
+    );
+    final retainedMentions = List<MessageMention>.unmodifiable(mentions);
+    try {
+      var outbound = trimmed;
+      var isE2e = false;
+      if (_isE2eChat()) {
+        final peerId = _dmPeerProfileId();
+        if (peerId != null && outbound.isNotEmpty) {
           outbound = await _ref
               .read(e2eMessageServiceProvider)
               .encryptOutgoing(
-                localProfileId: localId,
+                localProfileId: identity.profileId,
                 peerProfileId: peerId,
                 plaintext: outbound,
                 authorization: auth,
                 chatId: chatId,
               );
-          if (!_isCurrentMutation(
-            profileId: profileId,
-            authorization: auth,
-            generation: generation,
-          )) {
-            return null;
-          }
           isE2e = true;
-        } on E2eEncryptException catch (e) {
-          if (!_isCurrentMutation(
-            profileId: profileId,
-            authorization: auth,
-            generation: generation,
-          )) {
-            return null;
-          }
-          state = state.copyWith(isSending: false, errorMessage: e.message);
-          return e.message;
         }
       }
+      if (!_isCurrentImmediateSend(
+        identity,
+        sessionInstallGeneration,
+        generation,
+      )) {
+        return kChatActionStaleContext;
+      }
+      final attempt = _ImmediateSendAttempt(
+        identity: identity,
+        sessionInstallGeneration: sessionInstallGeneration,
+        generation: generation,
+        clientMessageId: const Uuid().v4(),
+        content: outbound,
+        attachments: retainedAttachments,
+        mentions: retainedMentions,
+        threadParentId: threadParentId,
+        isE2e: isE2e,
+      );
+      _failedImmediateSend = attempt;
+      return await _submitImmediateSend(attempt);
+    } on E2eEncryptException catch (e) {
+      if (!_isCurrentImmediateSend(
+        identity,
+        sessionInstallGeneration,
+        generation,
+      )) {
+        return kChatActionStaleContext;
+      }
+      state = state.copyWith(isSending: false, errorMessage: e.message);
+      return e.message;
+    } finally {
+      if (_isCurrentImmediateSend(
+        identity,
+        sessionInstallGeneration,
+        generation,
+      )) {
+        _immediateSendInFlight = false;
+        if (state.isSending) state = state.copyWith(isSending: false);
+      }
     }
+  }
 
+  _ImmediateSendAttempt? _failedImmediateSend;
+  GatewayRequestIdentity? _immediateSendIdentity;
+  int? _immediateSendSessionInstallGeneration;
+  var _immediateSendGeneration = 0;
+  var _immediateSendInFlight = false;
+
+  bool get canRetryFailedMessage =>
+      _failedImmediateSend != null && !_immediateSendInFlight && mounted;
+
+  bool _isCurrentImmediateSend(
+    GatewayRequestIdentity identity,
+    int install,
+    int generation,
+  ) =>
+      mounted &&
+      _immediateSendGeneration == generation &&
+      _ref.read(authControllerProvider.notifier).gatewayRequestIdentity ==
+          identity &&
+      _ref.read(authControllerProvider.notifier).sessionInstallGeneration ==
+          install;
+
+  void _cancelImmediateSend({bool clearSending = false}) {
+    final wasSending = _immediateSendInFlight;
+    _immediateSendGeneration++;
+    _failedImmediateSend = null;
+    _immediateSendIdentity = null;
+    _immediateSendSessionInstallGeneration = null;
+    _immediateSendInFlight = false;
+    if (clearSending && wasSending && mounted) {
+      state = state.copyWith(isSending: false);
+    }
+  }
+
+  /// Explicitly replays the same prepared body and UUID, with current auth.
+  Future<String?> retryFailedMessage() async {
+    if (!mounted) return kChatActionStaleContext;
+    if (_immediateSendInFlight) return 'send_in_progress';
+    final attempt = _failedImmediateSend;
+    if (attempt == null ||
+        !_isCurrentImmediateSend(
+          attempt.identity,
+          attempt.sessionInstallGeneration,
+          attempt.generation,
+        )) {
+      _cancelImmediateSend();
+      return kChatActionStaleContext;
+    }
+    if (_isDeviceOffline()) return kChatOfflineBlockedError;
+    _immediateSendInFlight = true;
+    try {
+      return await _submitImmediateSend(attempt);
+    } finally {
+      if (_isCurrentImmediateSend(
+        attempt.identity,
+        attempt.sessionInstallGeneration,
+        attempt.generation,
+      )) {
+        _immediateSendInFlight = false;
+        if (state.isSending) state = state.copyWith(isSending: false);
+      }
+    }
+  }
+
+  Future<String?> _submitImmediateSend(_ImmediateSendAttempt attempt) async {
     state = state.copyWith(isSending: true, clearError: true);
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .sendMessage(
-          authorization: auth,
+          authorization: _ref.read(authorizationHeaderProvider)!,
           chatId: chatId,
-          content: outbound,
-          attachments: attachments,
-          mentions: mentions,
-          threadParentId: threadParentId,
-          isE2e: isE2e,
+          clientMessageId: attempt.clientMessageId,
+          content: attempt.content,
+          attachments: attempt.attachments,
+          mentions: attempt.mentions,
+          threadParentId: attempt.threadParentId,
+          isE2e: attempt.isE2e,
         );
-    if (!_isCurrentMutation(
-      profileId: profileId,
-      authorization: auth,
-      generation: generation,
+    if (!_isCurrentImmediateSend(
+      attempt.identity,
+      attempt.sessionInstallGeneration,
+      attempt.generation,
     )) {
-      return null;
+      return kChatActionStaleContext;
     }
     switch (result) {
       case MessagesApiOk(:final data):
@@ -2111,12 +2248,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         final sorted = await _finalizeMessages(
           _sortMessages(_visibleForCurrentBlockPolicy(merged)),
         );
-        if (!_isCurrentMutation(
-          profileId: profileId,
-          authorization: auth,
-          generation: generation,
+        if (!_isCurrentImmediateSend(
+          attempt.identity,
+          attempt.sessionInstallGeneration,
+          attempt.generation,
         )) {
-          return null;
+          return kChatActionStaleContext;
         }
         state = state.copyWith(
           messages: sorted,
@@ -2124,7 +2261,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           isOfflineCache: false,
           clearError: true,
         );
-        unawaited(_writeCache(sorted, profileId: profileId));
+        _failedImmediateSend = null;
+        _immediateSendIdentity = null;
+        _immediateSendSessionInstallGeneration = null;
+        unawaited(_writeCache(sorted, profileId: attempt.identity.profileId));
         unawaited(_markLatestRead());
         _invalidateChatLists(_ref);
         return null;
@@ -2219,9 +2359,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           scheduledMessagesNextCursor: nextCursor,
           clearScheduledMessagesNextCursor: nextCursor == null,
           hasMoreScheduledMessages:
-              page.hasMore &&
-              nextCursor != null &&
-              nextCursor.isNotEmpty,
+              page.hasMore && nextCursor != null && nextCursor.isNotEmpty,
           clearScheduledMessagesError: true,
         );
         _scheduledMessagesWasLoaded = true;
