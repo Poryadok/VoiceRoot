@@ -566,6 +566,7 @@ class IdleUpgradeTests(unittest.TestCase):
                 journal.write_bytes(json.dumps(row,sort_keys=True,separators=(',',':')).encode());journal.chmod(0o600)
                 response=installed/'responses'/journal.name
                 response.write_bytes(b'{"error":"blocked_unclassified","status":"BLOCKED"}');response.chmod(0o440)
+                (installed/'sources').chmod(0o700)
                 (installed/'sources'/spec['operation']).mkdir(mode=0o700)
                 if failure=='unknown':
                     path=installed/'journal'/('e'*64+'.json');path.write_text('{"phase":"STARTED"}');path.chmod(0o600)
