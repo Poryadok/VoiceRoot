@@ -23,6 +23,7 @@ V3_BINDING='b0742fec4732b769944e5b849e39229d5f614989c4a439050ec48dd2ed20ab26'
 V4_BINDING='426a6edf16ccb8aba30145cfde458c9b2ca5d468cdf4015ea8bdf525e049f47f'
 V5_BINDING='23b26ad5478e01d4b00abf171d29a5d210c6c2fbf6284826cf9e3a84cfd73a9a'
 CECCB_INSTALLED_BINDING='ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032'
+SOURCE_CAPTURE_INSTALLED_BINDING='65717bd51213624f7c0890e97b2cdf1ef9149f57fb27f22f3bdbebca5fb963e5'
 
 def binding_sha(code):
     return hashlib.sha256(json.dumps(root_cli.code_binding(code),sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -206,7 +207,10 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
             if any(inbox.iterdir()) or any((installed/'processing').iterdir()):raise Blocked('bridge_upgrade_pending_request')
             journals={str(path):hashlib.sha256(retirement.private_bytes(path,2<<20,group_read=directory=='responses')).hexdigest()
                 for directory in ('journal','responses') for path in (installed/directory).iterdir()}
-            for path in (installed/'journal').iterdir():retirement.pending_request_accepted(installed,path,closure)
+            source_workspaces={}
+            for path in (installed/'journal').iterdir():
+                accepted=retirement.pending_request_accepted(installed,path,closure)
+                if path.name==retirement.SOURCE_CAPTURE_REJECTION['nonce']+'.json':source_workspaces[path.name]=accepted
             protected={str(installed/'policy.json'):hashlib.sha256(retirement.private_bytes(installed/'policy.json',2<<20)).hexdigest()}
             abandonment=installed/retirement.PENDING_ABANDONMENT_NAME
             try:abandonment.lstat()
@@ -227,6 +231,9 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
                     except FileNotFoundError:continue
                     raise Blocked('bridge_upgrade_history_changed')
                 if retirement.file_sha(Path(name))!=wanted:raise Blocked('bridge_upgrade_history_changed')
+            for name,wanted in source_workspaces.items():
+                if retirement._source_capture_rejection_workspace(installed)!=wanted:
+                    raise Blocked('bridge_upgrade_source_workspace_changed')
         finally:inbox.chmod(0o1730)
     print(result)
 
@@ -239,6 +246,11 @@ def upgrade_idle_ceccb_v1(code):
     """One exact, separate transition from the reviewed installed ceccb helper."""
     _upgrade_idle_transition(code,CECCB_INSTALLED_BINDING,'idle-ceccb-v1','ceccb',
         'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_CECCB_V1_KEYS_POLICY_HISTORY_PRESERVED')
+
+def upgrade_idle_source_capture_v1(code):
+    """Exact successor for the installed 65717 helper after source capture failed."""
+    _upgrade_idle_transition(code,SOURCE_CAPTURE_INSTALLED_BINDING,'idle-source-capture-v1','source-65717',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_SOURCE_CAPTURE_V1_KEYS_POLICY_HISTORY_PRESERVED')
 
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
@@ -313,9 +325,10 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1')
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1')
     if sys.argv[1]=='--upgrade-idle':upgrade_idle(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-ceccb-v1':upgrade_idle_ceccb_v1(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle-source-capture-v1':upgrade_idle_source_capture_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-v4':upgrade(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-v5':upgrade(Path(__file__).resolve().parents[1],version='v5')
     elif sys.argv[1]=='--upgrade-v6':upgrade(Path(__file__).resolve().parents[1],version='v6')

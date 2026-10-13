@@ -186,6 +186,24 @@ backup. Both routes retain the same idle, closure, marker, queue, journal,
 policy, recovery-key, witness and history checks; neither permits a changed
 predecessor or replacement of earlier evidence.
 
+The next exact transition, `--upgrade-idle-source-capture-v1`, is limited to
+the captured installed binding
+`65717bd51213624f7c0890e97b2cdf1ef9149f57fb27f22f3bdbebca5fb963e5`. It writes
+its own `upgrade-idle-source-capture-v1.json` receipt and
+`code-source-65717-preserved` backup through the same strict idle transition.
+Its only additional journal admission is the immutable full-prepare request
+from run `38469787490`, whose source-capture step was rejected before a
+checkpoint or source build existed. The disposition binds the exact request,
+journal and response hashes and rechecks that the operation/build are absent
+and its private source workspace is still empty. It does not infer success,
+claim that no external effects occurred, or admit another failed request.
+The smaller GitHub Actions page size preserves the existing complete 10,000
+job/artifact inventory bound after the observed 100-row endpoint failed; every
+page and stable total is still required. The route also retains all existing
+idle, closure, marker, queue, journal, policy, recovery-key, witness and history
+checks. It neither changes the V15 nor CECCB predecessor routes nor rewrites
+the failed request history.
+
 The prepare associated with d4 run `38274239522` is a hard stop until its
 exact journal, matching checkpoint and response are accepted by the existing
 operation-closure checks. Use the `Record exact operation status after failure`
@@ -822,6 +840,13 @@ V15-only `--upgrade-idle` route. After that reviewed helper transition, any new
 deployment must use the ordinary protected fresh-cut, encrypted backup and
 readback, isolated restore, native preservation, and post-apply gates. The
 fence-abort or abandonment receipts alone do not establish those gates.
+
+The separately fixed source-capture rejection from run `38469787490` is not a
+row in that abandonment receipt: `--upgrade-idle-source-capture-v1` checks its
+exact request/journal/response hashes and the still-empty pre-capture workspace
+directly. All other pending rows still require the full inventory disposition,
+and all rollout, marker, key, policy, witness, and closure checks remain in
+force.
 
 Captured public code is hashed through an ordinary protected read-only file
 descriptor so the unprivileged workflow can verify root-owned group-readable

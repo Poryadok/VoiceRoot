@@ -24,6 +24,9 @@ MAX_SOURCE = 4 * 1024 ** 3
 MAX_ARCHIVE = 2 * 1024 ** 3
 MAX_FILE = 512 * 1024 ** 2
 MAX_ITEMS = 100000
+MAX_API_PAGE_SIZE = 20
+MAX_API_ITEMS = 10000
+MAX_API_PAGES = (MAX_API_ITEMS + MAX_API_PAGE_SIZE - 1) // MAX_API_PAGE_SIZE
 SOURCE_CACHE_DIR = Path('/var/lib/voice-nats-preservation/installed/source-archives')
 IMAGE_NAMES = frozenset(('analytics', 'bot', 'chat', 'file', 'gateway', 'matchmaking', 'messaging',
     'moderation', 'notification', 'realtime', 'role', 'search', 'social', 'space', 'story', 'subscription',
@@ -93,13 +96,13 @@ def _head(headers, sha, deadline):
 
 def _pages(url, field, headers, deadline):
     result, total, identifiers = [], None, set()
-    for page in range(1, 101):
-        body = _get(url + '?per_page=100&page=' + str(page), headers, deadline)
+    for page in range(1, MAX_API_PAGES + 1):
+        body = _get(url + '?per_page=' + str(MAX_API_PAGE_SIZE) + '&page=' + str(page), headers, deadline)
         observed = body['total_count']
-        if type(observed) is not int or not 0 <= observed <= 10000 or total is not None and observed != total: _fail()
+        if type(observed) is not int or not 0 <= observed <= MAX_API_ITEMS or total is not None and observed != total: _fail()
         total = observed
         rows = body[field]
-        if not isinstance(rows, list) or len(rows) > 100: _fail()
+        if not isinstance(rows, list) or len(rows) > MAX_API_PAGE_SIZE: _fail()
         for row in rows:
             if type(row['id']) is not int or row['id'] in identifiers: _fail()
             identifiers.add(row['id']); result.append(row)
