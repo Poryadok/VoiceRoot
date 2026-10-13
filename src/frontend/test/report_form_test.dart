@@ -198,16 +198,12 @@ void main() {
         (tester) async {
           await _bindViewport(tester, const Size(390, 844));
           const diagnostic = 'REPORT_PRIVATE_DIAGNOSTIC_SENTINEL';
+          final firstResponse =
+              Completer<ModerationApiResult<ReportSubmission>>();
           final client = _FakeModerationClient(
-            responses: [
-              ModerationApiFailure(
-                message: diagnostic,
-                errorCode: 'private_fixture_code',
-                statusCode: statusCode,
-              ),
-              const ModerationApiOk(
-                ReportSubmission(reportId: 'report-fixture'),
-              ),
+            pending: firstResponse,
+            responses: const [
+              ModerationApiOk(ReportSubmission(reportId: 'report-fixture')),
             ],
           );
           final focusNode = await _pumpReportPage(
@@ -235,6 +231,20 @@ void main() {
           await tester.ensureVisible(find.byKey(ReportSheet.submitButtonKey));
 
           await tester.tap(find.byKey(ReportSheet.submitButtonKey));
+          await tester.pump();
+          expect(client.calls, hasLength(1));
+          final pendingSubmit = tester.widget<VoicePrimaryButton>(
+            find.byKey(ReportSheet.submitButtonKey),
+          );
+          expect(pendingSubmit.isLoading, isTrue);
+          expect(pendingSubmit.onPressed, isNull);
+          firstResponse.complete(
+            ModerationApiFailure(
+              message: diagnostic,
+              errorCode: 'private_fixture_code',
+              statusCode: statusCode,
+            ),
+          );
           await tester.pumpAndSettle();
 
           final expectedError = statusCode == 503
@@ -504,9 +514,13 @@ class _FakeModerationClient implements VoiceModerationClient {
       ),
     );
     final deferred = pending;
-    if (deferred != null) return deferred.future;
+    if (deferred != null && calls.length == 1) return deferred.future;
     final scripted = responses;
-    if (scripted != null) return Future.value(scripted[calls.length - 1]);
+    if (scripted != null) {
+      final responseIndex = calls.length - (deferred == null ? 1 : 2);
+      return Future.value(scripted[responseIndex]);
+    }
+    if (deferred != null) return deferred.future;
     return Future.value(result!);
   }
 
