@@ -23,6 +23,7 @@ void main() {
   Widget testApp({
     required Widget home,
     required http.Client client,
+    Locale locale = const Locale('en'),
     List<Override> extraOverrides = const [],
   }) {
     return ProviderScope(
@@ -44,7 +45,7 @@ void main() {
       ],
       child: MaterialApp(
         theme: voiceTestTheme(),
-        locale: const Locale('en'),
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: home),
@@ -54,7 +55,9 @@ void main() {
 
   http.Response listSpacesResponse() {
     return http.Response(
-      jsonEncode({'space_list': {'spaces': []}}),
+      jsonEncode({
+        'space_list': {'spaces': []},
+      }),
       200,
     );
   }
@@ -83,7 +86,9 @@ void main() {
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/chats') {
             return http.Response(
-              jsonEncode({'chat_list': {'items': []}}),
+              jsonEncode({
+                'chat_list': {'items': []},
+              }),
               200,
             );
           }
@@ -101,6 +106,7 @@ void main() {
   });
 
   testWidgets('CreateSpaceSheet requires name before submit', (tester) async {
+    var requestCount = 0;
     await tester.pumpWidget(
       testApp(
         home: Builder(
@@ -109,7 +115,10 @@ void main() {
             child: const Text('open'),
           ),
         ),
-        client: MockClient((_) async => http.Response('{}', 404)),
+        client: MockClient((_) async {
+          requestCount++;
+          return http.Response('{}', 404);
+        }),
       ),
     );
     await tester.pumpAndSettle();
@@ -121,6 +130,16 @@ void main() {
       find.byKey(CreateSpaceSheet.submitKey),
     );
     expect(submit.onPressed, isNull);
+
+    await tester.enterText(find.byKey(CreateSpaceSheet.nameFieldKey), '   ');
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(CreateSpaceSheet.submitKey))
+          .onPressed,
+      isNull,
+    );
+    expect(requestCount, 0);
 
     await tester.enterText(
       find.byKey(CreateSpaceSheet.nameFieldKey),
@@ -247,6 +266,227 @@ void main() {
     expect(calls.where((c) => c.startsWith('PATCH')), isEmpty);
     expect(find.byKey(CreateSpaceSheet.sheetKey), findsNothing);
   });
+  for (final language in ['en', 'ru']) {
+    for (final statusCode in [500, 503]) {
+      for (final failIconPatch in [false, true]) {
+        final failedStage = failIconPatch ? 'icon PATCH' : 'POST';
+        testWidgets(
+          'CreateSpaceSheet $language $statusCode $failedStage hides diagnostics '
+          'and preserves recovery',
+          (tester) async {
+            const privateMarker = 'private-space-diagnostic-4f2b';
+            const iconUrl = 'https://cdn.voice.gg/spaces/party.webp';
+            final calls = <String>[];
+            final createBodies = <Map<String, dynamic>>[];
+            final patchBodies = <Map<String, dynamic>>[];
+            await tester.pumpWidget(
+              testApp(
+                locale: Locale(language),
+                home: Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => CreateSpaceSheet.show(context),
+                    child: const Text('open'),
+                  ),
+                ),
+                client: MockClient((req) async {
+                  calls.add('${req.method} ${req.url.path}');
+                  if (req.method == 'GET' && req.url.path == '/api/v1/spaces') {
+                    return listSpacesResponse();
+                  }
+                  if (req.method == 'POST' &&
+                      req.url.path == '/api/v1/spaces') {
+                    createBodies.add(
+                      jsonDecode(req.body) as Map<String, dynamic>,
+                    );
+                    if (!failIconPatch && createBodies.length == 1) {
+                      return http.Response(
+                        jsonEncode({'message': privateMarker}),
+                        statusCode,
+                      );
+                    }
+                    return http.Response(
+                      jsonEncode({
+                        'space': spaceJson(id: 'space-new', name: 'Raid HQ'),
+                      }),
+                      200,
+                    );
+                  }
+                  if (req.method == 'PATCH' &&
+                      req.url.path == '/api/v1/spaces/space-new') {
+                    patchBodies.add(
+                      jsonDecode(req.body) as Map<String, dynamic>,
+                    );
+                    if (failIconPatch) {
+                      return http.Response(
+                        jsonEncode({'message': privateMarker}),
+                        statusCode,
+                      );
+                    }
+                    return http.Response(
+                      jsonEncode({
+                        'space': spaceJson(
+                          id: 'space-new',
+                          name: 'Raid HQ',
+                          iconUrl: iconUrl,
+                        ),
+                      }),
+                      200,
+                    );
+                  }
+                  return http.Response('{}', 404);
+                }),
+              ),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('open'));
+            await tester.pumpAndSettle();
+            await tester.enterText(
+              find.byKey(CreateSpaceSheet.nameFieldKey),
+              '  Raid HQ  ',
+            );
+            await tester.enterText(
+              find.byKey(CreateSpaceSheet.descriptionFieldKey),
+              '  We raid on Fridays  ',
+            );
+            await tester.enterText(
+              find.byKey(CreateSpaceSheet.iconFieldKey),
+              '  $iconUrl  ',
+            );
+            await tester.pump();
+            await tester.tap(find.byKey(CreateSpaceSheet.submitKey));
+            await tester.pumpAndSettle();
+
+            final l10n = AppLocalizations.of(
+              tester.element(find.byKey(CreateSpaceSheet.sheetKey)),
+            )!;
+            expect(
+              find.text(l10n.spaceCreateError(l10n.commonActionFailed)),
+              findsOneWidget,
+            );
+            expect(find.textContaining(privateMarker), findsNothing);
+            expect(find.textContaining('Exception'), findsNothing);
+            for (final field in [
+              (CreateSpaceSheet.nameFieldKey, '  Raid HQ  '),
+              (CreateSpaceSheet.descriptionFieldKey, '  We raid on Fridays  '),
+              (CreateSpaceSheet.iconFieldKey, '  $iconUrl  '),
+            ]) {
+              final input = tester.widget<TextField>(find.byKey(field.$1));
+              expect(input.controller!.text, field.$2);
+              expect(input.enabled, isTrue);
+            }
+            expect(
+              tester
+                  .widget<FilledButton>(find.byKey(CreateSpaceSheet.submitKey))
+                  .onPressed,
+              isNotNull,
+            );
+            expect(createBodies, [
+              {
+                'name': 'Raid HQ',
+                'description': 'We raid on Fridays',
+                'visibility': 'private',
+              },
+            ]);
+            expect(
+              patchBodies,
+              failIconPatch
+                  ? [
+                      {'icon_url': iconUrl},
+                    ]
+                  : isEmpty,
+            );
+            final firstAttemptCalls = [
+              'POST /api/v1/spaces',
+              if (failIconPatch) 'PATCH /api/v1/spaces/space-new',
+            ];
+            expect(calls, firstAttemptCalls);
+
+            if (failIconPatch) {
+              // The space already exists: dismiss without retrying creation.
+              Navigator.of(
+                tester.element(find.byKey(CreateSpaceSheet.sheetKey)),
+              ).pop();
+              await tester.pumpAndSettle();
+              expect(calls, firstAttemptCalls);
+            } else {
+              await tester.tap(find.byKey(CreateSpaceSheet.submitKey));
+              await tester.pumpAndSettle();
+              expect(createBodies, [
+                {
+                  'name': 'Raid HQ',
+                  'description': 'We raid on Fridays',
+                  'visibility': 'private',
+                },
+                {
+                  'name': 'Raid HQ',
+                  'description': 'We raid on Fridays',
+                  'visibility': 'private',
+                },
+              ]);
+              expect(patchBodies, [
+                {'icon_url': iconUrl},
+              ]);
+              expect(calls, [
+                'POST /api/v1/spaces',
+                'POST /api/v1/spaces',
+                'PATCH /api/v1/spaces/space-new',
+                'GET /api/v1/spaces',
+              ]);
+            }
+            expect(find.byKey(CreateSpaceSheet.sheetKey), findsNothing);
+          },
+        );
+      }
+    }
+
+    testWidgets('CreateSpaceSheet $language no-session failure is safe', (
+      tester,
+    ) async {
+      var requestCount = 0;
+      await tester.pumpWidget(
+        testApp(
+          locale: Locale(language),
+          home: const CreateSpaceSheet(),
+          extraOverrides: [authorizationHeaderProvider.overrideWithValue(null)],
+          client: MockClient((_) async {
+            requestCount++;
+            return http.Response('{}', 500);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateSpaceSheet.nameFieldKey),
+        'Raid HQ',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(CreateSpaceSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      final l10n = AppLocalizations.of(
+        tester.element(find.byKey(CreateSpaceSheet.sheetKey)),
+      )!;
+      expect(
+        find.text(l10n.spaceCreateError(l10n.commonActionFailed)),
+        findsOneWidget,
+      );
+      expect(find.textContaining('not_authenticated'), findsNothing);
+      expect(requestCount, 0);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(CreateSpaceSheet.nameFieldKey))
+            .controller!
+            .text,
+        'Raid HQ',
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(CreateSpaceSheet.submitKey))
+            .onPressed,
+        isNotNull,
+      );
+    });
+  }
 }
 
 class _NoopRealtimeHub extends RealtimeHub {
