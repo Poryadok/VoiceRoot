@@ -1390,6 +1390,7 @@ f13_collect_develop_contributions() {
   local allow_direct_followup="${6:-false}"
   local partition_source_history="${7:-false}"
   local commit parent_count first_parent source_head source_base delta first_parent_commits is_direct
+  local source_parent_index contribution_id
   local sync_boundary boundary_commit
   local path source_entry result_entry target_entry blob trigger incremental_merge
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
@@ -1433,7 +1434,7 @@ f13_collect_develop_contributions() {
     [[ -n "${commit}" ]] || continue
     read -r -a commit_line <<<"$(git -C "${repo}" rev-list --parents -n 1 "${commit}" 2>/dev/null)"
     parent_count=$((${#commit_line[@]} - 1))
-    ((parent_count == 1 || parent_count == 2)) || {
+    ((parent_count >= 1)) || {
       f13_collect_failure "${diagnostic_file}" parent_count
       return 1
     }
@@ -1445,18 +1446,26 @@ f13_collect_develop_contributions() {
       continue
     fi
     first_parent="${commit_line[1]}"
+    # Every non-first parent is an independent source contribution. Do not
+    # collapse an octopus into its aggregate delta or ignore later parents.
+    for ((source_parent_index = parent_count == 1 ? 1 : 2; source_parent_index <= parent_count; source_parent_index++)); do
+    contribution_id="${commit}-${source_parent_index}"
     is_direct=false
-    if ((parent_count == 2)); then
-      source_head="${commit_line[2]}"
-      source_base="$(git -C "${repo}" merge-base "${first_parent}" "${source_head}" 2>/dev/null)" || {
+    if ((parent_count >= 2)); then
+      source_head="${commit_line[${source_parent_index}]}"
+      source_base="$(git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" 2>/dev/null)" || {
         f13_collect_failure "${diagnostic_file}" source_base
         return 1
       }
-      [[ -n "${source_base}" ]] || {
+      # A crisscross history has no unique source base. Attribution must not
+      # depend on whichever base Git happens to print first.
+      [[ "${source_base}" =~ ^[0-9a-f]{40}$ ]] &&
+        git -C "${repo}" merge-base --is-ancestor "${source_base}" "${first_parent}" 2>/dev/null &&
+        git -C "${repo}" merge-base --is-ancestor "${source_base}" "${source_head}" 2>/dev/null || {
         f13_collect_failure "${diagnostic_file}" source_base
         return 1
       }
-      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${commit}" || {
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${contribution_id}" || {
         f13_collect_failure "${diagnostic_file}" source_delta
         return 1
       }
@@ -1464,16 +1473,16 @@ f13_collect_develop_contributions() {
       is_direct=true
       source_head="${commit}"
       source_base="${first_parent}"
-      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${commit}" || {
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${contribution_id}" || {
         f13_collect_failure "${diagnostic_file}" source_delta
         return 1
       }
     fi
-    delta="${TMP_DIR}/f13-source-delta-${commit}"
+    delta="${TMP_DIR}/f13-source-delta-${contribution_id}"
 
     nested_map=""
     if [[ "${partition_source_history}" == true && "${is_direct}" != true ]]; then
-      nested_map="${TMP_DIR}/f13-nested-map-${commit}"
+      nested_map="${TMP_DIR}/f13-nested-map-${contribution_id}"
       f13_collect_develop_contributions "${repo}" "${source_base}" "${source_head}" \
         "${nested_map}" "${diagnostic_file}" true false || return 1
     fi
@@ -1485,7 +1494,7 @@ f13_collect_develop_contributions() {
         f13_collect_failure "${diagnostic_file}" source_tree_entry
         return 1
       }
-      if ((parent_count == 2)) && f13_path_is_guarded "${path}"; then
+      if ((parent_count >= 2)) && f13_path_is_guarded "${path}"; then
         result_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}" 2>/dev/null)" || {
           f13_collect_failure "${diagnostic_file}" merge_tree_entry
           return 1
@@ -1576,6 +1585,23 @@ f13_collect_develop_contributions() {
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" >>"${output}"
     done <"${delta}"
+    done
+    if ((parent_count > 2)); then
+      # A multi-source merge may not invent a guarded result path that no
+      # source parent contributed. Full-entry checks above cover owned paths.
+      git -C "${repo}" diff --name-only "${first_parent}" "${commit}" \
+        >"${TMP_DIR}/f13-octopus-result-${commit}" || {
+        f13_collect_failure "${diagnostic_file}" merge_tree_entry
+        return 1
+      }
+      while IFS= read -r path; do
+        [[ -n "${path}" ]] || continue
+        if f13_path_is_guarded "${path}" && [[ "${owners[${path}]:-}" != "${commit}" ]]; then
+          f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
+          return 1
+        fi
+      done <"${TMP_DIR}/f13-octopus-result-${commit}"
+    fi
   done < <(git -C "${repo}" rev-list --first-parent --reverse "${base}..${target}" 2>/dev/null)
 
   # Historical source versions may be superseded by later direct commits in
@@ -1711,6 +1737,116 @@ grep -Fqx $'src/backend/voice/main.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-fixture
   printf '%s\n' 'F13 oracle bug: R22 contribution lost its own runtime trigger' >&2
   exit 2
 }
+
+# An ordinary octopus integration retains distinct source contributions. Voice
+# runtime scope must not contaminate another parent's independent Bot delta.
+f13_octopus_repo="${TMP_DIR}/f13-octopus-fixture"
+mkdir -p "${f13_octopus_repo}"
+git -C "${f13_octopus_repo}" init -q
+git -C "${f13_octopus_repo}" config user.name 'Voice CI fixture'
+git -C "${f13_octopus_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${f13_octopus_repo}" config commit.gpgsign false
+printf '%s\n' base >"${f13_octopus_repo}/README.md"
+git -C "${f13_octopus_repo}" add README.md
+git -C "${f13_octopus_repo}" commit -qm 'F13 octopus base'
+f13_octopus_base="$(git -C "${f13_octopus_repo}" rev-parse HEAD)"
+git -C "${f13_octopus_repo}" checkout -qb octopus-voice
+mkdir -p "${f13_octopus_repo}/src/backend/voice"
+printf '%s\n' 'package main' >"${f13_octopus_repo}/src/backend/voice/main.go"
+git -C "${f13_octopus_repo}" add src/backend/voice/main.go
+git -C "${f13_octopus_repo}" commit -qm 'F13 octopus Voice source'
+f13_octopus_voice="$(git -C "${f13_octopus_repo}" rev-parse HEAD)"
+git -C "${f13_octopus_repo}" checkout -qb octopus-bot "${f13_octopus_base}"
+mkdir -p "${f13_octopus_repo}/protos/voice/bot/v1"
+printf '%s\n' 'syntax = "proto3";' >"${f13_octopus_repo}/protos/voice/bot/v1/bot.proto"
+git -C "${f13_octopus_repo}" add protos/voice/bot/v1/bot.proto
+git -C "${f13_octopus_repo}" commit -qm 'F13 octopus independent Bot source'
+f13_octopus_bot="$(git -C "${f13_octopus_repo}" rev-parse HEAD)"
+git -C "${f13_octopus_repo}" checkout -qb octopus-ui "${f13_octopus_base}"
+printf '%s\n' fixture >"${f13_octopus_repo}/ui-fixture.txt"
+git -C "${f13_octopus_repo}" add ui-fixture.txt
+git -C "${f13_octopus_repo}" commit -qm 'F13 octopus independent UI source'
+f13_octopus_ui="$(git -C "${f13_octopus_repo}" rev-parse HEAD)"
+git -C "${f13_octopus_repo}" checkout -qb octopus-integration "${f13_octopus_base}"
+git -C "${f13_octopus_repo}" merge --no-ff -qm 'F13 legitimate three-source octopus' \
+  octopus-voice octopus-bot octopus-ui
+f13_octopus_head="$(git -C "${f13_octopus_repo}" rev-parse HEAD)"
+f13_collect_develop_contributions "${f13_octopus_repo}" "${f13_octopus_base}" \
+  "${f13_octopus_head}" "${TMP_DIR}/f13-octopus-map" "${TMP_DIR}/f13-octopus-category" true true || {
+  printf '%s\n' 'F13 oracle bug: legitimate octopus provenance rejected' >&2
+  exit 2
+}
+for row in \
+  $'src/backend/voice/main.go\ttrue\t'"${f13_octopus_voice}" \
+  $'protos/voice/bot/v1/bot.proto\tfalse\t'"${f13_octopus_bot}" \
+  $'ui-fixture.txt\tfalse\t'"${f13_octopus_ui}"; do
+  grep -Fxq "${row}" <(cut -f1,2,6 "${TMP_DIR}/f13-octopus-map") || {
+    printf '%s\n' 'F13 oracle bug: octopus lost distinct source identity/trigger' >&2
+    exit 2
+  }
+done
+[[ "$(wc -l <"${TMP_DIR}/f13-octopus-map")" -eq 3 ]] || exit 2
+git -C "${f13_octopus_repo}" checkout -qb octopus-release "${f13_octopus_base}"
+git -C "${f13_octopus_repo}" merge --no-ff -qm 'F13 octopus outer release' octopus-integration
+f13_collect_master_release_pr_contributions "${f13_octopus_repo}" "${f13_octopus_base}" \
+  HEAD "${TMP_DIR}/f13-octopus-release-map" || exit 2
+cmp "${TMP_DIR}/f13-octopus-map" "${TMP_DIR}/f13-octopus-release-map" || exit 2
+
+# Forged result trees, independent owners even with identical blobs, unknown
+# objects, unrelated roots, and multiple possible source bases stay fail-closed.
+git -C "${f13_octopus_repo}" checkout -q octopus-integration
+printf '%s\n' 'package main' 'func NewLifecycleWorker() {}' >"${f13_octopus_repo}/src/backend/voice/main.go"
+git -C "${f13_octopus_repo}" add src/backend/voice/main.go
+f13_octopus_bad_tree="$(git -C "${f13_octopus_repo}" write-tree)"
+f13_octopus_tampered="$(printf '%s\n' tampered | git -C "${f13_octopus_repo}" commit-tree \
+  "${f13_octopus_bad_tree}" -p "${f13_octopus_base}" -p "${f13_octopus_voice}" \
+  -p "${f13_octopus_bot}" -p "${f13_octopus_ui}")"
+if f13_collect_develop_contributions "${f13_octopus_repo}" "${f13_octopus_base}" \
+  "${f13_octopus_tampered}" "${TMP_DIR}/f13-octopus-bad-map" "${TMP_DIR}/f13-octopus-bad-category" true true; then exit 2; fi
+[[ "$(<"${TMP_DIR}/f13-octopus-bad-category")" == merge_tree_mismatch ]] || exit 2
+git -C "${f13_octopus_repo}" restore --source=HEAD --staged --worktree src/backend/voice/main.go
+printf '%s\n' 'package main' >"${f13_octopus_repo}/src/backend/voice/rogue.go"
+git -C "${f13_octopus_repo}" add src/backend/voice/rogue.go
+f13_octopus_bad_tree="$(git -C "${f13_octopus_repo}" write-tree)"
+f13_octopus_invented="$(printf '%s\n' invented-guarded-path | git -C "${f13_octopus_repo}" commit-tree \
+  "${f13_octopus_bad_tree}" -p "${f13_octopus_base}" -p "${f13_octopus_voice}" \
+  -p "${f13_octopus_bot}" -p "${f13_octopus_ui}")"
+if f13_collect_develop_contributions "${f13_octopus_repo}" "${f13_octopus_base}" \
+  "${f13_octopus_invented}" "${TMP_DIR}/f13-octopus-bad-map" "${TMP_DIR}/f13-octopus-bad-category" true true; then exit 2; fi
+[[ "$(<"${TMP_DIR}/f13-octopus-bad-category")" == merge_tree_mismatch ]] || exit 2
+git -C "${f13_octopus_repo}" restore --source=HEAD --staged --worktree src/backend/voice/rogue.go
+git -C "${f13_octopus_repo}" checkout -qb octopus-duplicate "${f13_octopus_base}"
+mkdir -p "${f13_octopus_repo}/src/backend/voice"
+printf '%s\n' 'package main' >"${f13_octopus_repo}/src/backend/voice/main.go"
+printf '%s\n' independent >"${f13_octopus_repo}/independent.txt"
+git -C "${f13_octopus_repo}" add src/backend/voice/main.go independent.txt
+git -C "${f13_octopus_repo}" commit -qm 'F13 independent identical guarded owner'
+git -C "${f13_octopus_repo}" checkout -qb octopus-ambiguous "${f13_octopus_base}"
+git -C "${f13_octopus_repo}" merge --no-ff -qm 'F13 ambiguous octopus' octopus-voice octopus-duplicate octopus-bot
+if f13_collect_develop_contributions "${f13_octopus_repo}" "${f13_octopus_base}" \
+  HEAD "${TMP_DIR}/f13-octopus-bad-map" "${TMP_DIR}/f13-octopus-bad-category" true true; then exit 2; fi
+[[ "$(<"${TMP_DIR}/f13-octopus-bad-category")" == duplicate_guarded_owner ]] || exit 2
+f13_octopus_tree="$(git -C "${f13_octopus_repo}" rev-parse "${f13_octopus_head}^{tree}")"
+f13_octopus_orphan="$(printf '%s\n' orphan | git -C "${f13_octopus_repo}" commit-tree "${f13_octopus_tree}")"
+f13_octopus_unrelated="$(printf '%s\n' unrelated | git -C "${f13_octopus_repo}" commit-tree \
+  "${f13_octopus_tree}" -p "${f13_octopus_base}" -p "${f13_octopus_orphan}" -p "${f13_octopus_bot}")"
+if f13_collect_develop_contributions "${f13_octopus_repo}" "${f13_octopus_base}" \
+  "${f13_octopus_unrelated}" "${TMP_DIR}/f13-octopus-bad-map" "${TMP_DIR}/f13-octopus-bad-category" true true; then exit 2; fi
+[[ "$(<"${TMP_DIR}/f13-octopus-bad-category")" == source_base ]] || exit 2
+if f13_collect_develop_contributions "${f13_octopus_repo}" "${f13_octopus_base}" \
+  0000000000000000000000000000000000000000 "${TMP_DIR}/f13-octopus-bad-map" \
+  "${TMP_DIR}/f13-octopus-bad-category" true true; then exit 2; fi
+[[ "$(<"${TMP_DIR}/f13-octopus-bad-category")" == target_object ]] || exit 2
+f13_octopus_left="$(printf '%s\n' left | git -C "${f13_octopus_repo}" commit-tree \
+  "${f13_octopus_tree}" -p "${f13_octopus_voice}" -p "${f13_octopus_bot}")"
+f13_octopus_right="$(printf '%s\n' right | git -C "${f13_octopus_repo}" commit-tree \
+  "${f13_octopus_tree}" -p "${f13_octopus_bot}" -p "${f13_octopus_voice}")"
+f13_octopus_crisscross="$(printf '%s\n' ambiguous-base | git -C "${f13_octopus_repo}" commit-tree \
+  "${f13_octopus_tree}" -p "${f13_octopus_left}" -p "${f13_octopus_right}" -p "${f13_octopus_ui}")"
+if f13_collect_develop_contributions "${f13_octopus_repo}" "${f13_octopus_left}" \
+  "${f13_octopus_crisscross}" "${TMP_DIR}/f13-octopus-bad-map" "${TMP_DIR}/f13-octopus-bad-category" true true; then exit 2; fi
+[[ "$(<"${TMP_DIR}/f13-octopus-bad-category")" == source_base ]] || exit 2
+printf '%s\n' 'F13 octopus distinct-source and rejection fixtures: PASS'
 
 # A quiet exact-line reader must not make rev-list fail with SIGPIPE under
 # pipefail when the valid base is followed by a large first-parent output tail.
