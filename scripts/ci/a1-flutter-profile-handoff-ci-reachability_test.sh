@@ -71,9 +71,8 @@ grep -Fxq 'src/frontend/test/t106_account_soft_delete_e2e_live_test.dart' "$filt
 
 job_block ci-gate >"$gate_file"
 [[ -s "$gate_file" ]] || fail "missing ci-gate workflow block"
-if grep -Fq "$JOB" "$gate_file"; then
-  fail "${JOB} must not become a ci-gate dependency"
-fi
+grep -Fq "      - $JOB" "$gate_file" || fail "${JOB} must be a ci-gate dependency"
+grep -Fq 'JOB_A1_FLUTTER_PROFILE_HANDOFF:' "$gate_file" || fail "ci-gate must receive A1 Flutter result"
 
 awk '/^a1_e2e:[[:space:]]*$/ { inside = 1; next } inside && /^[^[:space:]][^:]*:/ { exit } inside { print }' "$FILTERS" >"$filter_block_file"
 [[ -s "$filter_block_file" ]] || fail "path-filters.yml must define a1_e2e"
