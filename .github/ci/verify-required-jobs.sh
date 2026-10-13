@@ -27,6 +27,14 @@ if [[ "${EVENT_NAME}" != "pull_request" && "${EVENT_NAME}" != "push" ]]; then
   exit 0
 fi
 
+RUN_COMPOSE_E2E="${RUN_COMPOSE_E2E:-false}"
+compose_result="${JOB_COMPOSE_E2E:-skipped}"
+if [[ "${RUN_COMPOSE_E2E}" == "true" ]]; then
+  require_job compose-e2e "${compose_result}"
+elif [[ "${compose_result}" != "success" && "${compose_result}" != "skipped" ]]; then
+  fail "unexpected compose-e2e result=${compose_result}"
+fi
+
 if [[ "${CODE}" != "true" ]]; then
   echo "ci-gate: docs-only change; skip gate"
   exit 0
