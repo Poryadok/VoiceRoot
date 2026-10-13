@@ -288,7 +288,7 @@ class ActualUnreadyImageIdentityTests(unittest.TestCase):
 
 
 class CanonicalHubShutdownTests(unittest.TestCase):
-    def shutdown(self,image):
+    def shutdown(self,image,*,journal_factory=None,on_cas=None,on_scale=None,census_row=None):
         from docker_runtime import NATS_IMAGE
         hub={'metadata':{'uid':'hub'},'spec':{'template':{'spec':{'containers':[{'name':'nats','image':NATS_IMAGE}]}}}}
         pod={'metadata':{'name':'hub-pod','uid':'pod','ownerReferences':[{'name':'hub-rs','uid':'rs','kind':'ReplicaSet','controller':True}]},
@@ -308,18 +308,25 @@ class CanonicalHubShutdownTests(unittest.TestCase):
                 if kind=='pod':return copy.deepcopy(pod)
                 raise AssertionError(kind)
             def cas(self,kind,row,changes):
+                if on_cas is not None:on_cas()
                 if changes[0]['op']=='add':pod['metadata']['finalizers']=changes[0]['value']
                 else:pod['metadata']['finalizers']=[]
                 return copy.deepcopy(pod)
         stage=RolloutStage(Kube(),'123456abcdef',{'source_claim':'selected'},events.append)
         stage.snapshots={runtime_stage.HUB:copy.deepcopy(hub)};stage.runtime_base='/historical'
+        if journal_factory is not None:
+            journal=journal_factory(stage)
+            def save_event(event):
+                journal(event);events.append(copy.deepcopy(event))
+            stage.save=save_event
         def stop(name,replicas):
             self.assertEqual((name,replicas),(runtime_stage.HUB,0))
+            if on_scale is not None:on_scale()
             pod['metadata']['deletionTimestamp']='2026-10-11T03:01:00Z'
             pod['status']['containerStatuses'][0]['state']={'terminated':{'exitCode':0,'signal':0,'reason':'Completed',
                 'startedAt':'2026-10-11T03:00:00Z','finishedAt':'2026-10-11T03:01:00Z'}}
         with patch.object(stage,'owned_marker'),patch.object(stage,'scale',side_effect=stop),\
-             patch('commands.capture',return_value=b'{}'),patch('rollout_census.census',return_value={'verified':True}),\
+             patch('commands.capture',return_value=b'{}'),patch('rollout_census.census',return_value=census_row or {'verified':True}),\
              patch('docker_runtime.DockerRuntime',autospec=True):
             proof=stage.shutdown_original_hub()
         self.assertEqual(proof['exit_code'],0)
@@ -331,6 +338,54 @@ class CanonicalHubShutdownTests(unittest.TestCase):
         suffix=NATS_IMAGE[NATS_IMAGE.index('@'):]
         for image in (NATS_IMAGE,'docker.io/library/nats'+suffix,'docker-pullable://docker.io/library/nats'+suffix):
             with self.subTest(image=image):self.shutdown(image)
+
+    def test_complete_original_census_is_checkpointed_before_finalizer_or_scale(self):
+        import json,tempfile
+        import transaction
+        snapshot={'schema':'voice-nats-census-v1','account':'A'+'B'*55,
+            'streams':[{'name':'chat_events','created':'2026-10-13T00:00:00Z','config_sha256':'a'*64,
+                'state':{'messages':7,'bytes':70,'first_seq':1,'last_seq':7,'consumer_count':0},'observations':{}}],
+            'consumers':[]}
+        with tempfile.TemporaryDirectory() as folder:
+            checkpoint=__import__('pathlib').Path(folder)/'checkpoint.json'
+            state={'operation':'123456abcdef','events':[],'context':{}}
+            def save(path,row):checkpoint.write_text(json.dumps(row),encoding='utf-8')
+            def journal_factory(stage):
+                for name,value in {'expected':{'source_claim':'selected'},'original_snapshots':{},'old_images':{},'marker':{},'service':{},
+                    'final_claim':{},'final_pv':{},'final_path':'/historical'}.items():setattr(stage,name,value)
+                return transaction.checkpoint_journal(folder,state,lambda:stage)
+            def assert_checkpoint_before_kube_mutation():
+                stored=json.loads(checkpoint.read_text(encoding='utf-8'))
+                self.assertEqual(stored['context']['original_live_census'],snapshot)
+                self.assertEqual(stored['events'][0]['live_census_sha256'],transaction.canonical(snapshot))
+            from docker_runtime import NATS_IMAGE
+            pinned_runtime_image='docker-pullable://docker.io/library/nats'+NATS_IMAGE[NATS_IMAGE.index('@'):]
+            with patch.object(transaction,'save',side_effect=save):
+                self.shutdown(pinned_runtime_image,
+                    journal_factory=journal_factory,on_cas=assert_checkpoint_before_kube_mutation,census_row=snapshot)
+
+    def test_failed_census_checkpoint_prevents_finalizer_and_scale(self):
+        import transaction
+        from controller import Blocked
+        mutations=[]
+        from docker_runtime import NATS_IMAGE
+        pinned_runtime_image='docker-pullable://docker.io/library/nats'+NATS_IMAGE[NATS_IMAGE.index('@'):]
+        state={'operation':'123456abcdef','events':[],'context':{}}
+        def journal_factory(stage):
+            for name,value in {'expected':{'source_claim':'selected'},'original_snapshots':{},'old_images':{},
+                'marker':{},'service':{},'final_claim':{},'final_pv':{},'final_path':'/historical'}.items():
+                setattr(stage,name,value)
+            return transaction.checkpoint_journal('/unwritten',state,lambda:stage)
+        with patch.object(transaction,'save',side_effect=Blocked('checkpoint_failed')):
+            with self.assertRaisesRegex(Blocked,'checkpoint_failed'):
+                self.shutdown(pinned_runtime_image,
+                    journal_factory=journal_factory,
+                    on_cas=lambda:mutations.append('cas'),on_scale=lambda:mutations.append('scale'),
+                    census_row={'schema':'voice-nats-census-v1','account':'A'+'B'*55,
+                        'streams':[{'name':'chat_events','created':'2026-10-13T00:00:00Z','config_sha256':'a'*64,
+                            'state':{'messages':7,'bytes':70,'first_seq':1,'last_seq':7,'consumer_count':0},'observations':{}}],
+                        'consumers':[]})
+        self.assertEqual(mutations,[])
 
     def test_same_digest_foreign_repository_or_changed_digest_cannot_shutdown(self):
         from docker_runtime import NATS_IMAGE

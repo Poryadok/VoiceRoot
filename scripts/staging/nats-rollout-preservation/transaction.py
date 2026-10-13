@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import guard
 import migrations
@@ -25,6 +26,7 @@ from preserve import capture_cut, verify_post_apply, canonical
 from normalize import normalize_target,image_only_documents
 from errors import safe_error
 from nats_migration import apply_contract
+import rollout_census
 
 def save(path,row):root_save(path,row,limit=128<<20)
 
@@ -124,7 +126,29 @@ def validate_full_story_rollback_schema(previous,current):
 
 
 def context(stage):
-    return {k:copy.deepcopy(getattr(stage,k)) for k in ('expected','snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv')} | {'final_path':str(stage.final_path)}
+    result={k:copy.deepcopy(getattr(stage,k)) for k in ('expected','snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv')} | {'final_path':str(stage.final_path)}
+    if 'original_live_census' in vars(stage):
+        result['original_live_census']=rollout_census.validate_snapshot(vars(stage)['original_live_census'])
+    return result
+
+
+def _shutdown_census_intent(events):
+    if not isinstance(events,list):raise Blocked('rollout_original_live_census_binding_invalid')
+    intents=[event for event in events if isinstance(event,dict) and event.get('kind')=='original_hub_shutdown_intent']
+    if len(intents)>1:raise Blocked('rollout_original_live_census_binding_invalid')
+    return intents[0] if intents else None
+
+
+def require_original_live_census(stage,events):
+    snapshot=vars(stage).get('original_live_census')
+    intent=_shutdown_census_intent(events)
+    if snapshot is None or intent is None:raise Blocked('rollout_original_live_census_unavailable')
+    try:validated=rollout_census.validate_snapshot(snapshot)
+    except rollout_census.CensusError:raise Blocked('rollout_original_live_census_invalid') from None
+    wanted=intent.get('live_census_sha256')
+    if not isinstance(wanted,str) or not re.fullmatch(r'[a-f0-9]{64}',wanted) or canonical(validated)!=wanted:
+        raise Blocked('rollout_original_live_census_binding_invalid')
+    return validated
 
 
 def reconstruct(kube,state,journal):
@@ -132,6 +156,20 @@ def reconstruct(kube,state,journal):
     for name in ('snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv'):
         setattr(stage,name,copy.deepcopy(ctx[name]))
     stage.final_path=Path(ctx['final_path'])
+    snapshot=ctx.get('original_live_census')
+    intent=_shutdown_census_intent(state.get('events',[]))
+    if snapshot is not None:
+        if intent is None:raise Blocked('rollout_original_live_census_binding_invalid')
+        try:validated=rollout_census.validate_snapshot(snapshot)
+        except rollout_census.CensusError:raise Blocked('rollout_original_live_census_invalid') from None
+        wanted=intent.get('live_census_sha256')
+        if not isinstance(wanted,str) or not re.fullmatch(r'[a-f0-9]{64}',wanted) or canonical(validated)!=wanted:
+            raise Blocked('rollout_original_live_census_binding_invalid')
+        stage.original_live_census=validated
+    elif intent is not None:
+        # Digest-only historical operations remain readable for already-proven
+        # later phases. They fail only if a pre-cut census is required.
+        pass
     if state.get('renderer_authority') is not None:
         stage.renderer_transition=copy.deepcopy(state['renderer_authority']['descriptor'])
         stage.renderer_post_start=lambda current:renderer_root.verify_live(current,state['renderer_authority'])
@@ -140,8 +178,18 @@ def reconstruct(kube,state,journal):
 
 def checkpoint_journal(base,state,stage_getter):
     def journal(event):
-        state['events'].append(copy.deepcopy(event))
         stage=stage_getter()
+        event=copy.deepcopy(event)
+        if isinstance(event,dict) and event.get('kind')=='original_hub_shutdown_intent':
+            if stage is None or 'original_live_census' not in vars(stage):
+                raise Blocked('rollout_original_live_census_unavailable')
+            try:snapshot=rollout_census.validate_snapshot(vars(stage)['original_live_census'])
+            except rollout_census.CensusError:raise Blocked('rollout_original_live_census_invalid') from None
+            wanted=event.get('live_census_sha256')
+            if not isinstance(wanted,str) or not re.fullmatch(r'[a-f0-9]{64}',wanted) or canonical(snapshot)!=wanted:
+                raise Blocked('rollout_original_live_census_binding_invalid')
+            stage.original_live_census=snapshot
+        state['events'].append(event)
         if stage is not None:
             state['context']=context(stage)
         save(Path(base)/'checkpoint.json',state)
@@ -215,8 +263,9 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         save(base/'checkpoint.json',state)
         runtime=DockerRuntime(base,operation)
         state['phase']='COLD_BACKUP';save(base/'checkpoint.json',state)
+        live_catalog=require_original_live_census(stage,state['events'])
         state['cut']=capture_cut(runtime,stage.final_path,stage.verify_final_storage,
-            live_catalog=stage.original_live_census)
+            live_catalog=live_catalog)
         save(base/'rollout-before-manifest.json',state['cut']['manifest'])
         state['cut']['manifest_sha256']=file_sha(base/'rollout-before-manifest.json')
         if state['space_preflight'] is not None:

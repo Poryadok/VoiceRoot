@@ -651,6 +651,17 @@ and records its current matching container termination with exit0 and no OOM
 before removing only its finalizer. Kubernetes1.27 or later and a Ready node are
 required; absent or replaced termination evidence blocks capture.
 
+The complete canonical original census is also written into the root-private
+operation checkpoint at the shutdown-intent journal boundary. Its canonical
+digest must match the intent event before the finalizer CAS or HUB scale can
+proceed; checkpoint size limits remain fail-closed. A reconstructed new-format
+operation validates the snapshot schema and digest before using it for the
+pre-cut native inventory comparison. A historical checkpoint that contains
+only `live_census_sha256` remains readable for phases whose cut and backup were
+already proved, but it cannot continue a pre-cut capture that needs the missing
+original census. Do not substitute a fresh observation or infer the lost census
+from shutdown events or the restored store.
+
 Before any copied broker starts, the closed archive enumerates every stream
 metadata pair and consumer metadata/state triple, rejecting memory storage and
 unknown layouts. Complete offline durable decoding includes ACK floor,
