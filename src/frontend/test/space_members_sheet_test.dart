@@ -226,7 +226,13 @@ void main() {
           await tester.tap(find.byType(FilledButton).last);
           await tester.pumpAndSettle();
 
-          expect(find.text(l10n.commonActionFailed), findsOneWidget);
+          final expected = switch (action.name) {
+            'ban' => l10n.spaceBanError(l10n.commonActionFailed),
+            'timeout' => l10n.spaceTimeoutError(l10n.commonActionFailed),
+            'kick' => l10n.spaceKickError(l10n.commonActionFailed),
+            _ => throw StateError('unexpected member action'),
+          };
+          expect(find.text(expected), findsOneWidget);
           expect(find.textContaining('not_authenticated'), findsNothing);
           expect(requests, 0);
           expect(find.byType(SpaceMembersSheet), findsOneWidget);
