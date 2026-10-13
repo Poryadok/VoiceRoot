@@ -313,6 +313,7 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
   persistence before regular routing or bounded `PROMOTION_PENDING` recovery.
 - R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
   E2E и не активируют handlers, coordinator или Redis bridge.
+- F13 analyzes every non-first parent of an ordinary integration merge as a separate source contribution, including octopus merges. Each source needs one unambiguous ancestor base; guarded source tree entries and ownership must survive the merge and final result. An octopus may not invent guarded result paths. The outer master release merge still requires the exact push-before first parent and two-parent shape. This provenance support does not authorize R22 runtime activation.
 
 ### E2E по фичам
 
