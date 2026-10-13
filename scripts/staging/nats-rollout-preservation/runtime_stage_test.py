@@ -351,24 +351,28 @@ class CanonicalHubShutdownTests(unittest.TestCase):
             state={'operation':'123456abcdef','events':[],'context':{}}
             def save(path,row):checkpoint.write_text(json.dumps(row),encoding='utf-8')
             def journal_factory(stage):
-                for name,value in {'expected':{},'original_snapshots':{},'old_images':{},'marker':{},'service':{},
+                for name,value in {'expected':{'source_claim':'selected'},'original_snapshots':{},'old_images':{},'marker':{},'service':{},
                     'final_claim':{},'final_pv':{},'final_path':'/historical'}.items():setattr(stage,name,value)
                 return transaction.checkpoint_journal(folder,state,lambda:stage)
             def assert_checkpoint_before_kube_mutation():
                 stored=json.loads(checkpoint.read_text(encoding='utf-8'))
                 self.assertEqual(stored['context']['original_live_census'],snapshot)
                 self.assertEqual(stored['events'][0]['live_census_sha256'],transaction.canonical(snapshot))
+            from docker_runtime import NATS_IMAGE
+            pinned_runtime_image='docker-pullable://docker.io/library/nats'+NATS_IMAGE[NATS_IMAGE.index('@'):]
             with patch.object(transaction,'save',side_effect=save):
-                self.shutdown('docker-pullable://docker.io/library/nats@sha256:'+'b'*64,
+                self.shutdown(pinned_runtime_image,
                     journal_factory=journal_factory,on_cas=assert_checkpoint_before_kube_mutation,census_row=snapshot)
 
     def test_failed_census_checkpoint_prevents_finalizer_and_scale(self):
         import transaction
         from controller import Blocked
         mutations=[]
+        from docker_runtime import NATS_IMAGE
+        pinned_runtime_image='docker-pullable://docker.io/library/nats'+NATS_IMAGE[NATS_IMAGE.index('@'):]
         with patch.object(transaction,'save',side_effect=Blocked('checkpoint_failed')):
             with self.assertRaisesRegex(Blocked,'checkpoint_failed'):
-                self.shutdown('docker-pullable://docker.io/library/nats@sha256:'+'b'*64,
+                self.shutdown(pinned_runtime_image,
                     journal_factory=lambda stage:transaction.checkpoint_journal('/unwritten',
                         {'operation':'123456abcdef','events':[]},lambda:stage),
                     on_cas=lambda:mutations.append('cas'),on_scale=lambda:mutations.append('scale'),

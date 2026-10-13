@@ -53,10 +53,21 @@ class Tests(unittest.TestCase):
             stage.snapshots={'voice-story':copy.deepcopy(old)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images={'voice-story/story':old_image}
             stage.marker=marker;stage.service={};stage.final_claim=claim;stage.final_pv={'metadata':{'uid':'pv'},'spec':{'local':{'path':str(store)}}};stage.final_path=store
+            live_census={'schema':'voice-nats-census-v1','account':'A'+'B'*55,
+                'streams':[{'name':'chat_events','created':'2026-10-13T00:00:00Z','config_sha256':'a'*64,
+                    'state':{'messages':5,'bytes':50,'first_seq':1,'last_seq':5,'consumer_count':0},'observations':{}}],
+                'consumers':[]}
             order=[];messages=[5]
             def fence():
                 stage.marker['data'].update(phase='rollout-capturing',knownRolloutOperation=stage.operation)
-                stage.snapshots['voice-story']['spec']['replicas']=0;order.append('closed-fence')
+                stage.snapshots['voice-story']['spec']['replicas']=0
+                stage.original_live_census=copy.deepcopy(live_census)
+                stage.save({'kind':'original_hub_shutdown_intent',
+                    'live_census_sha256':transaction.canonical(live_census)})
+                order.append('closed-fence')
+            def capture_stage(_kube,_operation,save,_extra=()):
+                stage.save=save
+                return stage
             stage.fence.side_effect=fence
             def prepared():stage.marker['data']['phase']='rollout-prepared';order.append('prepared-after-config-proof')
             stage.prepared.side_effect=prepared;stage.verified.side_effect=lambda:order.append('verified-before-restart')
@@ -88,7 +99,7 @@ class Tests(unittest.TestCase):
             with patch.object(root_cli,'ROOT',workspace),patch.object(guard,'ROOT',workspace),patch.object(bridge_root,'INSTALLED',installed),\
                 patch.object(root_cli,'Kube',return_value=kube),patch.object(bridge_root,'Kube',return_value=kube),\
                 patch('grp.getgrnam',return_value=type('Group',(),{'gr_gid':1000})()),\
-                patch.object(transaction.RolloutStage,'capture',return_value=stage),patch.object(transaction,'reconstruct',return_value=stage),\
+                patch.object(transaction.RolloutStage,'capture',side_effect=capture_stage),patch.object(transaction,'reconstruct',return_value=stage),\
                 patch.multiple(transaction,native_preflight=Mock(return_value={}),private_json=Mock(return_value=enrollment)),\
                 patch.object(transaction,'capture_inputs',return_value={}) as capture,\
                 patch.object(transaction.nonnats_runtime,'preflight',return_value={}),patch.object(transaction.nonnats_runtime,'verify',return_value={'verified':True}),\
