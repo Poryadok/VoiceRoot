@@ -49,6 +49,8 @@ type currentEpochChecker struct{ err error }
 
 func (c currentEpochChecker) RequireCurrent(context.Context, string, int64) error { return c.err }
 
+func (c currentEpochChecker) CurrentFloor(context.Context, string) (int64, error) { return 1, c.err }
+
 type fakeAdmissionRecovery struct {
 	released        int
 	cleaned         int
