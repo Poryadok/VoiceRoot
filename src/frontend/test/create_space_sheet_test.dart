@@ -290,6 +290,9 @@ void main() {
                 ),
                 client: MockClient((req) async {
                   calls.add('${req.method} ${req.url.path}');
+                  if (req.method == 'GET' && req.url.path == '/api/v1/spaces') {
+                    return listSpacesResponse();
+                  }
                   if (req.method == 'POST' &&
                       req.url.path == '/api/v1/spaces') {
                     createBodies.add(
@@ -427,6 +430,7 @@ void main() {
                 'POST /api/v1/spaces',
                 'POST /api/v1/spaces',
                 'PATCH /api/v1/spaces/space-new',
+                'GET /api/v1/spaces',
               ]);
             }
             expect(find.byKey(CreateSpaceSheet.sheetKey), findsNothing);
