@@ -11,6 +11,7 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/trust_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
+import 'package:voice_frontend/ui/core/voice_primary_button.dart';
 import 'package:voice_frontend/ui/report/report_sheet.dart';
 
 const _openReportKey = Key('open_report');
@@ -180,11 +181,100 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ReportSheet.sheetKey), findsOneWidget);
-    expect(find.text('Report service unavailable'), findsOneWidget);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(_activePageKey)),
+    )!;
+    expect(find.text(l10n.backendUnavailable), findsOneWidget);
+    expect(find.text('Report service unavailable'), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
     expect(client.calls, hasLength(1));
     expect(find.byKey(ReportSheet.submitButtonKey), findsOneWidget);
   });
+
+  for (final locale in const [Locale('en'), Locale('ru')]) {
+    for (final statusCode in const [403, 503]) {
+      testWidgets(
+        'report $statusCode failure in ${locale.languageCode} keeps form safe and retry succeeds',
+        (tester) async {
+          await _bindViewport(tester, const Size(390, 844));
+          const diagnostic = 'REPORT_PRIVATE_DIAGNOSTIC_SENTINEL';
+          final client = _FakeModerationClient(
+            responses: [
+              ModerationApiFailure(
+                message: diagnostic,
+                errorCode: 'private_fixture_code',
+                statusCode: statusCode,
+              ),
+              const ModerationApiOk(
+                ReportSubmission(reportId: 'report-fixture'),
+              ),
+            ],
+          );
+          final focusNode = await _pumpReportPage(
+            tester,
+            client,
+            locale: locale,
+          );
+          addTearDown(focusNode.dispose);
+
+          await _openReport(tester, focusNode);
+          final l10n = AppLocalizations.of(
+            tester.element(find.byKey(_activePageKey)),
+          )!;
+          await tester.tap(
+            find.widgetWithText(
+              RadioListTile<String>,
+              l10n.reportCategoryOther,
+            ),
+          );
+          await tester.pump();
+          await tester.enterText(
+            find.byKey(ReportSheet.commentFieldKey),
+            'Please review this report',
+          );
+          await tester.ensureVisible(find.byKey(ReportSheet.submitButtonKey));
+
+          await tester.tap(find.byKey(ReportSheet.submitButtonKey));
+          await tester.pumpAndSettle();
+
+          final expectedError = statusCode == 503
+              ? l10n.backendUnavailable
+              : l10n.commonActionFailed;
+          expect(find.byKey(ReportSheet.sheetKey), findsOneWidget);
+          expect(find.byKey(ReportSheet.commentFieldKey), findsOneWidget);
+          expect(
+            tester
+                .widget<TextField>(find.byKey(ReportSheet.commentFieldKey))
+                .controller!
+                .text,
+            'Please review this report',
+          );
+          expect(find.text(expectedError), findsOneWidget);
+          expect(find.text(diagnostic), findsNothing);
+          expect(find.text('private_fixture_code'), findsNothing);
+          expect(client.calls, hasLength(1));
+          expect(client.calls.single.category, ReportCategories.other);
+          expect(client.calls.single.description, 'Please review this report');
+          final submit = tester.widget<VoicePrimaryButton>(
+            find.byKey(ReportSheet.submitButtonKey),
+          );
+          expect(submit.isLoading, isFalse);
+          expect(submit.onPressed, isNotNull);
+
+          await tester.tap(find.byKey(ReportSheet.submitButtonKey));
+          await tester.pumpAndSettle();
+
+          expect(client.calls, hasLength(2));
+          expect(client.calls.last.category, ReportCategories.other);
+          expect(client.calls.last.description, 'Please review this report');
+          expect(find.byKey(ReportSheet.sheetKey), findsNothing);
+          expect(find.text(l10n.reportAcceptedTitle), findsOneWidget);
+          expect(find.text(l10n.reportAcceptedMessage), findsOneWidget);
+          expect(find.text(diagnostic), findsNothing);
+        },
+      );
+    }
+  }
 
   testWidgets('other-category validation blocks API submission', (
     tester,
@@ -254,8 +344,9 @@ Future<void> _bindViewport(WidgetTester tester, Size size) async {
 
 Future<FocusNode> _pumpReportPage(
   WidgetTester tester,
-  _FakeModerationClient client,
-) async {
+  _FakeModerationClient client, {
+  Locale locale = const Locale('ru'),
+}) async {
   final focusNode = FocusNode(debugLabel: 'active report page field');
   await tester.pumpWidget(
     ProviderScope(
@@ -266,7 +357,7 @@ Future<FocusNode> _pumpReportPage(
         ),
       ],
       child: MaterialApp(
-        locale: const Locale('ru'),
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: _appTheme,
@@ -386,10 +477,11 @@ class _ReportCall {
 }
 
 class _FakeModerationClient implements VoiceModerationClient {
-  _FakeModerationClient({this.result, this.pending});
+  _FakeModerationClient({this.result, this.pending, this.responses});
 
   final ModerationApiResult<ReportSubmission>? result;
   final Completer<ModerationApiResult<ReportSubmission>>? pending;
+  final List<ModerationApiResult<ReportSubmission>>? responses;
   final List<_ReportCall> calls = [];
 
   @override
@@ -413,6 +505,8 @@ class _FakeModerationClient implements VoiceModerationClient {
     );
     final deferred = pending;
     if (deferred != null) return deferred.future;
+    final scripted = responses;
+    if (scripted != null) return Future.value(scripted[calls.length - 1]);
     return Future.value(result!);
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -36,15 +37,19 @@ void main() {
   Widget actionErrorTestApp({
     required _FakeE2eClient client,
     required bool enabled,
+    Locale locale = const Locale('en'),
+    StateProvider<String?>? sessionAuthorization,
   }) {
     const chatId = 'dm-chat-test';
+    final authState =
+        sessionAuthorization ?? StateProvider<String?>((ref) => 'Bearer test');
     return ProviderScope(
       overrides: [
         ...voiceThemeTestOverrides(),
         authSessionStorageProvider.overrideWithValue(
           InMemoryAuthSessionStorage(),
         ),
-        authorizationHeaderProvider.overrideWith((ref) => 'Bearer test'),
+        authorizationHeaderProvider.overrideWith((ref) => ref.watch(authState)),
         voiceE2eClientProvider.overrideWith((ref) => client),
         chatE2eEnabledProvider(chatId).overrideWith((ref) => enabled),
         dmPeerProfileByChatIdProvider.overrideWith(
@@ -53,7 +58,7 @@ void main() {
       ],
       child: MaterialApp(
         theme: voiceTestTheme(),
-        locale: const Locale('en'),
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: const Scaffold(body: DmE2eSettingsSection(chatId: chatId)),
@@ -143,15 +148,194 @@ void main() {
     );
   });
 
+  for (final locale in const [Locale('en'), Locale('ru')]) {
+    final statusCode = locale.languageCode == 'en' ? 403 : 503;
+    testWidgets(
+      'E2E key backup save failure in ${locale.languageCode} stays safe and can retry',
+      (tester) async {
+        const diagnostic = 'E2E_BACKUP_PRIVATE_DIAGNOSTIC_SENTINEL';
+        final client = _FakeE2eClient(
+          backupSaveResults: [
+            E2eApiFailure(
+              message: diagnostic,
+              errorCode: 'private_fixture_code',
+              statusCode: statusCode,
+            ),
+            const E2eApiOk<void>(null),
+          ],
+        );
+        await tester.pumpWidget(
+          actionErrorTestApp(client: client, enabled: true, locale: locale),
+        );
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(DmE2eSettingsSection)),
+        )!;
+        await _openKeyBackup(tester, l10n);
+        await tester.enterText(
+          find.byKey(E2eKeyBackupSheet.passwordFieldKey),
+          'user-password',
+        );
+        await tester.tap(find.byKey(E2eKeyBackupSheet.saveButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsOneWidget);
+        expect(find.text(_safeActionError(l10n, statusCode)), findsOneWidget);
+        expect(find.text(diagnostic), findsNothing);
+        expect(find.text('private_fixture_code'), findsNothing);
+        expect(client.backupSaveCalls, 1);
+        expect(
+          tester
+              .widget<FilledButton>(find.byKey(E2eKeyBackupSheet.saveButtonKey))
+              .onPressed,
+          isNotNull,
+        );
+
+        await tester.tap(find.byKey(E2eKeyBackupSheet.saveButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(client.backupSaveCalls, 2);
+        expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsNothing);
+        expect(find.text(diagnostic), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'E2E key backup restore failure in ${locale.languageCode} stays safe and can retry',
+      (tester) async {
+        const diagnostic = 'E2E_RESTORE_PRIVATE_DIAGNOSTIC_SENTINEL';
+        final restoreStatus = statusCode == 503 ? 403 : 503;
+        final client = _FakeE2eClient(
+          backupRestoreResults: [
+            E2eApiFailure(
+              message: diagnostic,
+              errorCode: 'private_restore_code',
+              statusCode: restoreStatus,
+            ),
+            const E2eApiOk<void>(null),
+          ],
+        );
+        await tester.pumpWidget(
+          actionErrorTestApp(client: client, enabled: true, locale: locale),
+        );
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(DmE2eSettingsSection)),
+        )!;
+        await _openKeyBackup(tester, l10n);
+        await tester.enterText(
+          find.byKey(E2eKeyBackupSheet.passwordFieldKey),
+          'user-password',
+        );
+        await tester.tap(find.byKey(E2eKeyBackupSheet.restoreButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsOneWidget);
+        expect(
+          find.text(_safeActionError(l10n, restoreStatus)),
+          findsOneWidget,
+        );
+        expect(find.text(diagnostic), findsNothing);
+        expect(find.text('private_restore_code'), findsNothing);
+        expect(client.backupRestoreCalls, 1);
+        expect(client.restoreAuthorizationChecks, [true]);
+        expect(
+          tester
+              .widget<OutlinedButton>(
+                find.byKey(E2eKeyBackupSheet.restoreButtonKey),
+              )
+              .onPressed,
+          isNotNull,
+        );
+
+        await tester.tap(find.byKey(E2eKeyBackupSheet.restoreButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(client.backupRestoreCalls, 2);
+        expect(client.restoreAuthorizationChecks, [true, true]);
+        expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsNothing);
+        expect(find.text(diagnostic), findsNothing);
+      },
+    );
+  }
+
+  testWidgets('restore refuses a changed session and succeeds after retry', (
+    tester,
+  ) async {
+    const diagnostic = 'session changed; try again';
+    final sessionAuthorization = StateProvider<String?>((ref) => 'Bearer test');
+    final client = _FakeE2eClient(
+      backupRestoreResults: [const E2eApiOk<void>(null)],
+    );
+    await tester.pumpWidget(
+      actionErrorTestApp(
+        client: client,
+        enabled: true,
+        sessionAuthorization: sessionAuthorization,
+      ),
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(DmE2eSettingsSection)),
+    )!;
+    await _openKeyBackup(tester, l10n);
+    await tester.enterText(
+      find.byKey(E2eKeyBackupSheet.passwordFieldKey),
+      'user-password',
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DmE2eSettingsSection)),
+    );
+    container.read(sessionAuthorization.notifier).state = 'Bearer changed';
+    await tester.pump();
+
+    await tester.tap(find.byKey(E2eKeyBackupSheet.restoreButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text(l10n.commonActionFailed), findsOneWidget);
+    expect(find.text(diagnostic), findsNothing);
+    expect(client.restoreAuthorizationChecks, [false]);
+    expect(client.backupRestoreCalls, 0);
+    expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsOneWidget);
+
+    container.read(sessionAuthorization.notifier).state = 'Bearer test';
+    await tester.pump();
+    await tester.tap(find.byKey(E2eKeyBackupSheet.restoreButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(client.restoreAuthorizationChecks, [false, true]);
+    expect(client.backupRestoreAttempts, 2);
+    expect(client.backupRestoreCalls, 1);
+    expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsNothing);
+  });
+
+  testWidgets('late backup failure after sheet disposal is safely ignored', (
+    tester,
+  ) async {
+    const diagnostic = 'DISPOSED_BACKUP_PRIVATE_SENTINEL';
+    final pending = Completer<void>();
+    await tester.pumpWidget(
+      e2eDialogTestApp(
+        child: E2eKeyBackupSheet(
+          onSave: (_, _) => pending.future,
+          onRestore: (_) async {},
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(E2eKeyBackupSheet.saveButtonKey));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    pending.completeError(StateError(diagnostic));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text(diagnostic), findsNothing);
+  });
+
   testWidgets('E2eEnableConfirmDialog shows search limitation warning', (
     tester,
   ) async {
     await tester.pumpWidget(
       e2eDialogTestApp(
-        child: E2eEnableConfirmDialog(
-          chatId: 'dm-chat-1',
-          onConfirmed: () {},
-        ),
+        child: E2eEnableConfirmDialog(chatId: 'dm-chat-1', onConfirmed: () {}),
       ),
     );
     await tester.pumpAndSettle();
@@ -165,10 +349,7 @@ void main() {
       find.textContaining('Global search', findRichText: true),
       findsOneWidget,
     );
-    expect(
-      find.textContaining('server', findRichText: true),
-      findsOneWidget,
-    );
+    expect(find.textContaining('server', findRichText: true), findsOneWidget);
     expect(find.byKey(E2eEnableConfirmDialog.confirmButtonKey), findsOneWidget);
     expect(find.byKey(E2eEnableConfirmDialog.cancelButtonKey), findsOneWidget);
   });
@@ -178,27 +359,15 @@ void main() {
   ) async {
     await tester.pumpWidget(
       e2eDialogTestApp(
-        child: E2eDisableConfirmDialog(
-          chatId: 'dm-chat-1',
-          onConfirmed: () {},
-        ),
+        child: E2eDisableConfirmDialog(chatId: 'dm-chat-1', onConfirmed: () {}),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byKey(E2eDisableConfirmDialog.dialogKey), findsOneWidget);
-    expect(
-      find.textContaining('disable', findRichText: true),
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('plain', findRichText: true),
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('search', findRichText: true),
-      findsOneWidget,
-    );
+    expect(find.textContaining('disable', findRichText: true), findsOneWidget);
+    expect(find.textContaining('plain', findRichText: true), findsOneWidget);
+    expect(find.textContaining('search', findRichText: true), findsOneWidget);
     expect(
       find.byKey(E2eDisableConfirmDialog.confirmButtonKey),
       findsOneWidget,
@@ -250,6 +419,8 @@ class _FakeE2eClient extends VoiceE2eClient {
     int uploadStatus = 204,
     int enableStatus = 204,
     int disableStatus = 204,
+    List<E2eApiResult<void>> backupSaveResults = const [],
+    List<E2eApiResult<void>> backupRestoreResults = const [],
   }) {
     return _FakeE2eClient._(
       _E2eRecordingTransport(
@@ -257,18 +428,55 @@ class _FakeE2eClient extends VoiceE2eClient {
         enableStatus: enableStatus,
         disableStatus: disableStatus,
       ),
+      backupSaveResults: backupSaveResults,
+      backupRestoreResults: backupRestoreResults,
     );
   }
 
-  _FakeE2eClient._(this.transport)
-    : super(
-        gateway: GatewayHttpClient(
-          httpClient: transport.client,
-          config: const GatewayConfig(baseUrl: 'https://voice.test'),
-        ),
-      );
+  _FakeE2eClient._(
+    this.transport, {
+    required this.backupSaveResults,
+    required this.backupRestoreResults,
+  }) : super(
+         gateway: GatewayHttpClient(
+           httpClient: transport.client,
+           config: const GatewayConfig(baseUrl: 'https://voice.test'),
+         ),
+       );
 
   final _E2eRecordingTransport transport;
+  final List<E2eApiResult<void>> backupSaveResults;
+  final List<E2eApiResult<void>> backupRestoreResults;
+  var backupSaveCalls = 0;
+  var backupRestoreAttempts = 0;
+  var backupRestoreCalls = 0;
+  final restoreAuthorizationChecks = <bool>[];
+
+  @override
+  Future<E2eApiResult<void>> putKeyBackup({
+    required String authorization,
+    required String password,
+    String? passwordHint,
+  }) async {
+    backupSaveCalls++;
+    return _backupResult(backupSaveResults, backupSaveCalls - 1);
+  }
+
+  @override
+  Future<E2eApiResult<void>> restoreKeyBackup({
+    required String authorization,
+    required String password,
+    required bool Function() isAuthorizationCurrent,
+  }) async {
+    backupRestoreAttempts++;
+    final current = isAuthorizationCurrent();
+    restoreAuthorizationChecks.add(current);
+    if (!current) {
+      return const E2eApiFailure(message: 'session changed; try again');
+    }
+    backupRestoreCalls++;
+    return _backupResult(backupRestoreResults, backupRestoreCalls - 1);
+  }
 
   @override
   Future<E2eApiResult<void>> uploadPreKeyBundle({
@@ -278,7 +486,21 @@ class _FakeE2eClient extends VoiceE2eClient {
     authorization: authorization,
     bundle: bundle ?? 'test-only-prekey-bundle',
   );
+
+  E2eApiResult<void> _backupResult(
+    List<E2eApiResult<void>> results,
+    int index,
+  ) => index < results.length ? results[index] : const E2eApiOk<void>(null);
 }
+
+Future<void> _openKeyBackup(WidgetTester tester, AppLocalizations l10n) async {
+  await tester.tap(find.text(l10n.e2eChatInfoKeyBackup));
+  await tester.pumpAndSettle();
+  expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsOneWidget);
+}
+
+String _safeActionError(AppLocalizations l10n, int statusCode) =>
+    statusCode == 503 ? l10n.backendUnavailable : l10n.commonActionFailed;
 
 class _E2eRecordingTransport {
   _E2eRecordingTransport({

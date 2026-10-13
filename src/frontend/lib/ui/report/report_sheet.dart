@@ -237,10 +237,11 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
             ),
           ),
         );
-      case ModerationApiFailure(:final message):
+      case ModerationApiFailure(:final statusCode):
+        final l10n = AppLocalizations.of(context)!;
         setState(() {
           _submitting = false;
-          _error = message;
+          _error = commonActionErrorMessage(l10n, statusCode: statusCode);
         });
     }
   }
