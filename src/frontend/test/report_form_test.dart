@@ -228,7 +228,14 @@ void main() {
             find.byKey(ReportSheet.commentFieldKey),
             'Please review this report',
           );
+          await tester.pump();
+          final readySubmit = tester.widget<VoicePrimaryButton>(
+            find.byKey(ReportSheet.submitButtonKey),
+          );
+          expect(readySubmit.isLoading, isFalse);
+          expect(readySubmit.onPressed, isNotNull);
           await tester.ensureVisible(find.byKey(ReportSheet.submitButtonKey));
+          await tester.pump();
 
           await tester.tap(find.byKey(ReportSheet.submitButtonKey));
           await tester.pump();
@@ -271,6 +278,13 @@ void main() {
           expect(submit.isLoading, isFalse);
           expect(submit.onPressed, isNotNull);
 
+          await tester.ensureVisible(find.byKey(ReportSheet.submitButtonKey));
+          await tester.pump();
+          final retrySubmit = tester.widget<VoicePrimaryButton>(
+            find.byKey(ReportSheet.submitButtonKey),
+          );
+          expect(retrySubmit.isLoading, isFalse);
+          expect(retrySubmit.onPressed, isNotNull);
           await tester.tap(find.byKey(ReportSheet.submitButtonKey));
           await tester.pumpAndSettle();
 
