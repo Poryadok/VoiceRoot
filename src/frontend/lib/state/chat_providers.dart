@@ -1032,6 +1032,7 @@ class ChatRoomState {
     this.isSending = false,
     this.isLoadingOlder = false,
     this.errorMessage,
+    this.errorOwnerToken,
     this.realtimeStatus = RealtimeLinkStatus.disconnected,
     this.nextCursor,
     this.hasMore = false,
@@ -1058,6 +1059,10 @@ class ChatRoomState {
   final bool isSending;
   final bool isLoadingOlder;
   final String? errorMessage;
+
+  /// Ephemeral ownership of this error write, even when its text is unchanged.
+  @internal
+  final Object? errorOwnerToken;
   final RealtimeLinkStatus realtimeStatus;
   final String? nextCursor;
   final bool hasMore;
@@ -1123,6 +1128,11 @@ class ChatRoomState {
       isSending: isSending ?? this.isSending,
       isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      errorOwnerToken: clearError
+          ? null
+          : errorMessage != null
+          ? Object()
+          : errorOwnerToken,
       realtimeStatus: realtimeStatus ?? this.realtimeStatus,
       nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
       hasMore: hasMore ?? this.hasMore,
@@ -1310,7 +1320,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       if (_immediateSendIdentity != authController.gatewayRequestIdentity ||
           _immediateSendSessionInstallGeneration !=
               authController.sessionInstallGeneration) {
-        _cancelImmediateSend();
+        _cancelImmediateSend(clearState: true);
       }
       _scheduledEncryptedAttempt = null;
       _authGeneration++;
@@ -1322,7 +1332,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         _seenScheduledMessagesCursors.clear();
         if (mounted) {
           state = state.copyWith(
-            isSending: _immediateSendInFlight,
+            isSending: false,
             isLoadingOlder: false,
             scheduledMessages: const [],
             isLoadingScheduledMessages: false,
@@ -1536,7 +1546,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       next,
     ) {
       if (previous != next && next != chatId) {
-        _cancelImmediateSend(clearSending: true);
+        _cancelImmediateSend(clearState: true);
       }
       if (next == chatId && previous != chatId) {
         _scheduleAutomaticActivation();
@@ -2085,8 +2095,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       return kChatOfflineBlockedError;
     }
     final generation = ++_immediateSendGeneration;
+    final requestGeneration = _loadGeneration;
     final sessionInstallGeneration = authController.sessionInstallGeneration;
     _failedImmediateSend = null;
+    _immediateSendFailureMessage = null;
+    _immediateSendFailureOwnerToken = null;
     _immediateSendIdentity = identity;
     _immediateSendSessionInstallGeneration = sessionInstallGeneration;
     _immediateSendInFlight = true;
@@ -2135,10 +2148,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       return await _submitImmediateSend(attempt);
     } on E2eEncryptException catch (e) {
       if (!_isCurrentImmediateSend(
-        identity,
-        sessionInstallGeneration,
-        generation,
-      )) {
+            identity,
+            sessionInstallGeneration,
+            generation,
+          ) ||
+          _loadGeneration != requestGeneration ||
+          _ref.read(authorizationHeaderProvider) != auth) {
         return kChatActionStaleContext;
       }
       state = state.copyWith(isSending: false, errorMessage: e.message);
@@ -2150,16 +2165,30 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         generation,
       )) {
         _immediateSendInFlight = false;
-        if (state.isSending) state = state.copyWith(isSending: false);
+        if (_loadGeneration == requestGeneration &&
+            _ref.read(authorizationHeaderProvider) == auth &&
+            state.isSending) {
+          state = state.copyWith(isSending: false);
+        }
       }
     }
   }
 
   _ImmediateSendAttempt? _failedImmediateSend;
+  String? _immediateSendFailureMessage;
+  Object? _immediateSendFailureOwnerToken;
   GatewayRequestIdentity? _immediateSendIdentity;
   int? _immediateSendSessionInstallGeneration;
   var _immediateSendGeneration = 0;
   var _immediateSendInFlight = false;
+
+  int get immediateSendGeneration => _immediateSendGeneration;
+
+  String? get failedMessageError => _immediateSendFailureMessage;
+
+  bool get failedMessageOwnsRoomError =>
+      _immediateSendFailureOwnerToken != null &&
+      identical(state.errorOwnerToken, _immediateSendFailureOwnerToken);
 
   bool get canRetryFailedMessage =>
       _failedImmediateSend != null && !_immediateSendInFlight && mounted;
@@ -2176,23 +2205,33 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       _ref.read(authControllerProvider.notifier).sessionInstallGeneration ==
           install;
 
-  void _cancelImmediateSend({bool clearSending = false}) {
+  void _cancelImmediateSend({bool clearState = false}) {
     final wasSending = _immediateSendInFlight;
+    final ownsError = failedMessageOwnsRoomError;
     _immediateSendGeneration++;
     _failedImmediateSend = null;
+    _immediateSendFailureMessage = null;
+    _immediateSendFailureOwnerToken = null;
     _immediateSendIdentity = null;
     _immediateSendSessionInstallGeneration = null;
     _immediateSendInFlight = false;
-    if (clearSending && wasSending && mounted) {
-      state = state.copyWith(isSending: false);
+    if (clearState && (wasSending || ownsError) && mounted) {
+      state = state.copyWith(
+        isSending: wasSending ? false : state.isSending,
+        clearError: ownsError,
+      );
     }
   }
 
   /// Explicitly replays the same prepared body and UUID, with current auth.
-  Future<String?> retryFailedMessage() async {
+  Future<String?> retryFailedMessage({int? expectedGeneration}) async {
     if (!mounted) return kChatActionStaleContext;
     if (_immediateSendInFlight) return 'send_in_progress';
     final attempt = _failedImmediateSend;
+    if (expectedGeneration != null &&
+        expectedGeneration != attempt?.generation) {
+      return kChatActionStaleContext;
+    }
     if (attempt == null ||
         !_isCurrentImmediateSend(
           attempt.identity,
@@ -2203,9 +2242,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       return kChatActionStaleContext;
     }
     if (_isDeviceOffline()) return kChatOfflineBlockedError;
+    final auth = _ref.read(authorizationHeaderProvider);
+    final requestGeneration = _loadGeneration;
     _immediateSendInFlight = true;
     try {
-      return await _submitImmediateSend(attempt);
+      return await _submitImmediateSend(attempt, retry: true);
     } finally {
       if (_isCurrentImmediateSend(
         attempt.identity,
@@ -2213,17 +2254,38 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         attempt.generation,
       )) {
         _immediateSendInFlight = false;
-        if (state.isSending) state = state.copyWith(isSending: false);
+        if (_loadGeneration == requestGeneration &&
+            _ref.read(authorizationHeaderProvider) == auth &&
+            state.isSending) {
+          state = state.copyWith(isSending: false);
+        }
       }
     }
   }
 
-  Future<String?> _submitImmediateSend(_ImmediateSendAttempt attempt) async {
-    state = state.copyWith(isSending: true, clearError: true);
+  Future<String?> _submitImmediateSend(
+    _ImmediateSendAttempt attempt, {
+    bool retry = false,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider)!;
+    final requestGeneration = _loadGeneration;
+    bool isCurrentRequest() =>
+        _isCurrentImmediateSend(
+          attempt.identity,
+          attempt.sessionInstallGeneration,
+          attempt.generation,
+        ) &&
+        _loadGeneration == requestGeneration &&
+        _ref.read(authorizationHeaderProvider) == auth;
+    final preserveHistoryError =
+        retry && state.errorMessage != null && !failedMessageOwnsRoomError;
+    state = state.copyWith(isSending: true, clearError: !preserveHistoryError);
+    _immediateSendFailureMessage = null;
+    _immediateSendFailureOwnerToken = null;
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .sendMessage(
-          authorization: _ref.read(authorizationHeaderProvider)!,
+          authorization: auth,
           chatId: chatId,
           clientMessageId: attempt.clientMessageId,
           content: attempt.content,
@@ -2232,11 +2294,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           threadParentId: attempt.threadParentId,
           isE2e: attempt.isE2e,
         );
-    if (!_isCurrentImmediateSend(
-      attempt.identity,
-      attempt.sessionInstallGeneration,
-      attempt.generation,
-    )) {
+    if (!isCurrentRequest()) {
       return kChatActionStaleContext;
     }
     switch (result) {
@@ -2248,20 +2306,18 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         final sorted = await _finalizeMessages(
           _sortMessages(_visibleForCurrentBlockPolicy(merged)),
         );
-        if (!_isCurrentImmediateSend(
-          attempt.identity,
-          attempt.sessionInstallGeneration,
-          attempt.generation,
-        )) {
+        if (!isCurrentRequest()) {
           return kChatActionStaleContext;
         }
         state = state.copyWith(
           messages: sorted,
           isSending: false,
           isOfflineCache: false,
-          clearError: true,
+          clearError: !preserveHistoryError,
         );
         _failedImmediateSend = null;
+        _immediateSendFailureMessage = null;
+        _immediateSendFailureOwnerToken = null;
         _immediateSendIdentity = null;
         _immediateSendSessionInstallGeneration = null;
         unawaited(_writeCache(sorted, profileId: attempt.identity.profileId));
@@ -2269,7 +2325,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         _invalidateChatLists(_ref);
         return null;
       case MessagesApiFailure(:final message):
-        state = state.copyWith(isSending: false, errorMessage: message);
+        _immediateSendFailureMessage = message;
+        state = preserveHistoryError
+            ? state.copyWith(isSending: false)
+            : state.copyWith(isSending: false, errorMessage: message);
+        _immediateSendFailureOwnerToken = preserveHistoryError
+            ? null
+            : state.errorOwnerToken;
         return message;
     }
   }

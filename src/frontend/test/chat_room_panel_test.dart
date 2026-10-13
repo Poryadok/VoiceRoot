@@ -23,6 +23,7 @@ import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/e2e_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/message_cache_providers.dart';
+import 'package:voice_frontend/state/presence_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/shell/three_column_shell.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -172,6 +173,131 @@ void main() {
         await tester.pump(const Duration(milliseconds: 30));
         expect(harness.bodies, hasLength(1));
         expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+        expect(harness.room.state.errorMessage, isNull);
+        expect(find.textContaining(_sendDiagnostic), findsNothing);
+      },
+    );
+  }
+
+  testWidgets(
+    'token renewal fences an old response while allowing the same explicit Retry',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      final harness = _ImmediateRetryHarness(
+        send: (_, attempt) async =>
+            attempt == 1 ? pending.future : _successfulSendResponse(),
+      );
+      addTearDown(harness.container.dispose);
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Pending text',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pump();
+      harness.container
+          .read(authControllerProvider.notifier)
+          .state = const AuthState(
+        session: AuthSession(
+          accessToken: 'renewed-access',
+          refreshToken: 'renewed-refresh',
+          accountId: 'acc-test',
+          activeProfileId: 'prof-test',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pump();
+      pending.complete(_successfulSendResponse());
+      await tester.pumpAndSettle();
+      expect(harness.room.state.messages, isEmpty);
+      expect(harness.bodies, hasLength(1));
+      expect(harness.composer(tester).text, 'Pending text');
+      await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(2));
+      expect(harness.bodies.last, harness.bodies.first);
+      expect(harness.authorizations.last, 'Bearer renewed-access');
+      expect(harness.room.state.messages.map((m) => m.id), ['accepted-1']);
+      expect(harness.composer(tester).text, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'captured text Retry cannot replay a replacement attachment attempt',
+    (tester) async {
+      final harness = _ImmediateRetryHarness(
+        send: (_, attempt) async =>
+            attempt <= 2 ? _failedSendResponse() : _successfulSendResponse(),
+      );
+      addTearDown(harness.container.dispose);
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Original text',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      final retry = tester
+          .widget<TextButton>(find.byKey(ChatRoomPanel.sendRetryKey))
+          .onPressed!;
+      expect(
+        await harness.room.sendMessage(
+          'Attachment caption',
+          attachments: const [
+            MessageAttachment(fileId: 'file-1', type: 'document'),
+          ],
+        ),
+        isNotNull,
+      );
+      await tester.pumpAndSettle();
+      retry();
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(2));
+      expect(harness.composer(tester).text, 'Original text');
+      expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+      expect(harness.room.canRetryFailedMessage, isTrue);
+      expect(await harness.room.retryFailedMessage(), isNull);
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(3));
+      expect(harness.bodies.last, harness.bodies[1]);
+      expect(harness.bodies.last, isNot(harness.bodies.first));
+    },
+  );
+
+  for (final sameValue in [false, true]) {
+    final historyError = sameValue ? _sendDiagnostic : 'permission_denied';
+    testWidgets(
+      'text Retry preserves unrelated history error with ${sameValue ? 'same' : 'different'} text',
+      (tester) async {
+        final harness = _ImmediateRetryHarness();
+        addTearDown(harness.container.dispose);
+        await harness.pump(tester);
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!;
+        await tester.enterText(
+          find.byKey(ChatRoomPanel.inputKey),
+          'Failed text',
+        );
+        await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+        await tester.pumpAndSettle();
+        harness.room.state = harness.room.state.copyWith(
+          errorMessage: historyError,
+        );
+        await tester.pumpAndSettle();
+        final historyLabel = sameValue
+            ? l10n.chatRoomLoadError
+            : l10n.chatRoomPermissionDenied;
+        expect(find.text(historyLabel), findsOneWidget);
+        expect(find.text(l10n.commonActionFailed), findsOneWidget);
+        await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+        await tester.pumpAndSettle();
+        expect(harness.room.state.errorMessage, historyError);
+        expect(find.text(historyLabel), findsOneWidget);
+        expect(find.textContaining(_sendDiagnostic), findsNothing);
+        expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+        expect(harness.bodies, hasLength(2));
+        expect(harness.bodies.last, harness.bodies.first);
       },
     );
   }
@@ -267,7 +393,10 @@ void main() {
     'immediate encrypted retry preserves payload, mentions and UUID after token renewal',
     () async {
       final harness = _ImmediateRetryHarness(encrypted: true);
-      addTearDown(harness.container.dispose);
+      addTearDown(() async {
+        await pumpEventQueue();
+        harness.container.dispose();
+      });
       final room = harness.room;
       final mentions = <MessageMention>[
         const MessageMention(type: 'user', targetId: 'peer-1'),
@@ -318,7 +447,10 @@ void main() {
         send: (_, attempt) async =>
             attempt == 1 ? pending.future : _successfulSendResponse(),
       );
-      addTearDown(harness.container.dispose);
+      addTearDown(() async {
+        await pumpEventQueue();
+        harness.container.dispose();
+      });
       final room = harness.room;
       final first = room.sendMessage('Old pending text');
       await Future<void>.delayed(Duration.zero);
@@ -328,6 +460,7 @@ void main() {
           'other-chat';
       expect(room.state.isSending, isFalse);
       expect(room.canRetryFailedMessage, isFalse);
+      expect(room.state.errorMessage, isNull);
       harness.container.read(selectedChatIdProvider.notifier).state =
           'chat-abc';
       expect(await room.sendMessage('New text after returning'), isNull);
@@ -338,6 +471,41 @@ void main() {
       expect(room.state.messages.map((m) => m.id), ['accepted-1']);
     },
   );
+
+  for (final historyError in ['history-error', _sendDiagnostic]) {
+    test(
+      'chat invalidation preserves unrelated history error with ${historyError == _sendDiagnostic ? 'same' : 'different'} text',
+      () async {
+        final harness = _ImmediateRetryHarness();
+        addTearDown(harness.container.dispose);
+        expect(await harness.room.sendMessage('Failed text'), isNotNull);
+        harness.room.state = harness.room.state.copyWith(
+          errorMessage: historyError,
+        );
+        harness.container.read(selectedChatIdProvider.notifier).state =
+            'other-chat';
+        expect(harness.room.state.errorMessage, historyError);
+        expect(harness.room.canRetryFailedMessage, isFalse);
+      },
+    );
+
+    test(
+      'new login invalidation preserves unrelated history error with ${historyError == _sendDiagnostic ? 'same' : 'different'} text',
+      () async {
+        final harness = _ImmediateRetryHarness();
+        addTearDown(harness.container.dispose);
+        expect(await harness.room.sendMessage('Failed text'), isNotNull);
+        harness.room.state = harness.room.state.copyWith(
+          errorMessage: historyError,
+        );
+        (harness.container.read(authControllerProvider.notifier)
+                as _ImmediateAuthController)
+            .installSameActorSession();
+        expect(harness.room.state.errorMessage, historyError);
+        expect(harness.room.canRetryFailedMessage, isFalse);
+      },
+    );
+  }
 
   test(
     'immediate failed attempt is released after controller disposal',
@@ -1459,6 +1627,7 @@ class _ImmediateRetryHarness {
         messageCacheStoreProvider.overrideWithValue(
           InMemoryMessageCacheStore(),
         ),
+        presenceProvider.overrideWith((ref, profileId) => null),
         realtimeAutoConnectProvider.overrideWithValue(false),
         realtimeEventProvider.overrideWith(
           (ref) => const Stream<RealtimeFrame>.empty(),

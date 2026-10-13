@@ -359,6 +359,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _liveMessageAnnouncement = '';
   ChatDraftKey? _draftKey;
   _TextSendAttempt? _pendingTextSend;
+  int? _pendingTextSendControllerGeneration;
   var _textSendGeneration = 0;
   var _textSendInFlight = false;
   var _textSendFailed = false;
@@ -643,6 +644,17 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       ref.watch(chatDraftProvider(draftKey));
     }
     final controllerRoom = ref.watch(chatRoomControllerProvider(widget.chatId));
+    final textSendFailed =
+        _textSendFailed &&
+        _pendingTextSendControllerGeneration ==
+            ref
+                .read(chatRoomControllerProvider(widget.chatId).notifier)
+                .immediateSendGeneration;
+    final textSendOwnsRoomError =
+        textSendFailed &&
+        ref
+            .read(chatRoomControllerProvider(widget.chatId).notifier)
+            .failedMessageOwnsRoomError;
     final historyBelongsToActiveProfile =
         controllerRoom.historyProfileId == activeId;
     final room = historyBelongsToActiveProfile
@@ -1369,7 +1381,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         : room.messages.isEmpty &&
                               ephemeralMessages.isEmpty &&
                               !room.isLoading
-                        ? room.errorMessage != null && !_textSendFailed
+                        ? room.errorMessage != null && !textSendOwnsRoomError
                               ? VoiceStatePanel(
                                   title: _roomErrorText(
                                     l10n,
@@ -1460,7 +1472,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               ),
               if (room.errorMessage != null &&
                   room.messages.isNotEmpty &&
-                  !_textSendFailed)
+                  !textSendOwnsRoomError)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
@@ -1498,7 +1510,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ),
                 ),
               _buildScheduledMessagesSection(room, l10n),
-              if (_textSendFailed && _pendingTextSend != null)
+              if (textSendFailed && _pendingTextSend != null)
                 _buildTextSendFailure(
                   l10n,
                   room.isSending || composerBlocked,
@@ -2308,12 +2320,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       draftKey: _draftKey,
     );
     _pendingTextSend = attempt;
+    _pendingTextSendControllerGeneration = null;
     await _submitTextSend(attempt);
   }
 
   void _cancelTextSend() {
     _textSendGeneration++;
     _pendingTextSend = null;
+    _pendingTextSendControllerGeneration = null;
     _textSendInFlight = false;
     _textSendFailed = false;
   }
@@ -2341,7 +2355,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     padding: const EdgeInsets.symmetric(horizontal: 12),
     child: Row(
       children: [
-        Expanded(child: Text(commonActionErrorMessage(l10n))),
+        Expanded(child: Text(_textSendFailureMessage(l10n))),
         TextButton(
           key: ChatRoomPanel.sendRetryKey,
           onPressed: blocked || _textSendInFlight
@@ -2352,6 +2366,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       ],
     ),
   );
+
+  String _textSendFailureMessage(AppLocalizations l10n) {
+    final raw = ref
+        .read(chatRoomControllerProvider(widget.chatId).notifier)
+        .failedMessageError;
+    final mapped = raw == null ? null : _roomErrorText(l10n, raw);
+    return mapped == null || mapped == l10n.chatRoomLoadError
+        ? commonActionErrorMessage(l10n)
+        : mapped;
+  }
 
   Future<void> _submitTextSend(
     _TextSendAttempt attempt, {
@@ -2368,18 +2392,29 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _textSendInFlight = true;
       _textSendFailed = false;
     });
-    final err = retry
-        ? await controller.retryFailedMessage()
-        : await controller.sendMessage(
-            attempt.content,
-            mentions: attempt.mentions,
-            threadParentId: attempt.replyTarget?.id,
-          );
+    final Future<String?> submission;
+    if (retry) {
+      submission = controller.retryFailedMessage(
+        expectedGeneration: _pendingTextSendControllerGeneration,
+      );
+    } else {
+      submission = controller.sendMessage(
+        attempt.content,
+        mentions: attempt.mentions,
+        threadParentId: attempt.replyTarget?.id,
+      );
+      _pendingTextSendControllerGeneration = controller.immediateSendGeneration;
+    }
+    final err = await submission;
     if (!_isCurrentTextSend(attempt)) return;
     setState(() {
       _textSendInFlight = false;
-      _textSendFailed = err != null && controller.canRetryFailedMessage;
-      if (err == null || err == kChatActionStaleContext)
+      _textSendFailed =
+          err != null &&
+          controller.canRetryFailedMessage &&
+          _pendingTextSendControllerGeneration ==
+              controller.immediateSendGeneration;
+      if (err == null || (err == kChatActionStaleContext && !_textSendFailed))
         _pendingTextSend = null;
     });
     if (err == kChatOfflineBlockedError) {
