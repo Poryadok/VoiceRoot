@@ -392,6 +392,11 @@ jobs. A generic `NATS_ROLLOUT_BRIDGE=BLOCKED` response does not identify the
 private journal failure. Keep the failed run/job receipt and use the bounded
 journal correlation procedure above before attributing a root cause.
 
+CI concurrency groups include the event name: scheduled and manual checks must
+not cancel the push workflow that authorizes a release. New pushes on the same
+branch still supersede older push runs; deployment approval remains bound to
+the exact source revision and attempt.
+
 Reusable deployment retains the parent CI run ID. Standalone staging dispatch
 has a separate execution authority bound to its fixed workflow/master/head and
 attempt. The encrypted backup artifact belongs to the current execution run,
