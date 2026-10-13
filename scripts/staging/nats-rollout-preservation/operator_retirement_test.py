@@ -545,6 +545,116 @@ class IdleUpgradeTests(unittest.TestCase):
                         if failure=='unknown':upgrade.assert_not_called()
                     self.assertEqual((installed/'inbox').stat().st_mode&0o7777,0o1730)
 
+    def test_actual_source_capture_idle_update_uses_only_65717_predecessor(self):
+        import installer
+        from types import SimpleNamespace
+        helper=RetirementActionTests()
+        for failure in (None,'unknown','history'):
+            with self.subTest(failure=failure),tempfile.TemporaryDirectory() as folder:
+                fixture=helper.fixture(folder);kube=FakeKube(fixture[4]);helper.action(fixture,kube)
+                root,base,_,_,_,binding,_,_=fixture;installed=root/'installed';(installed/'recovery').mkdir()
+                for name in ('recovery-key.pem','recovery-cert.pem'):
+                    path=installed/'recovery'/name;path.write_bytes(b'protected existing key material');path.chmod(0o600)
+                policy=installed/'policy.json';policy.write_text('{}');policy.chmod(0o600)
+                spec=retirement.SOURCE_CAPTURE_REJECTION
+                request={'action':'prepare','nonce':spec['nonce'],'source_sha':spec['source_sha'],
+                    'run_id':spec['run_id'],'mode':'full','changed_services':[]}
+                row={'schema':'voice-nats-bridge-request-v1','request_sha256':retirement.canonical(request),
+                    'request':request,'phase':'STARTED','prepare_stage':{'name':'source-capture','status':'STARTED'},
+                    'prepare_error':'source_authority_rejected'}
+                journal=installed/'journal'/(spec['nonce']+'.json')
+                journal.write_bytes(json.dumps(row,sort_keys=True,separators=(',',':')).encode());journal.chmod(0o600)
+                response=installed/'responses'/journal.name
+                response.write_bytes(b'{"error":"blocked_unclassified","status":"BLOCKED"}');response.chmod(0o440)
+                (installed/'sources'/spec['operation']).mkdir(mode=0o700)
+                if failure=='unknown':
+                    path=installed/'journal'/('e'*64+'.json');path.write_text('{"phase":"STARTED"}');path.chmod(0o600)
+                def swap(*args):
+                    if failure=='history':
+                        state=json.loads((base/'checkpoint.json').read_bytes());state['authorization']={'expires_at':'changed'}
+                        (base/'checkpoint.json').write_text(json.dumps(state))
+                with patch.object(retirement.guard,'ROOT',root),\
+                     patch.object(retirement,'SNAPSHOT_SHA',hashlib.sha256(fixture[3]).hexdigest()),\
+                     patch.object(retirement.root_cli,'code_binding',return_value=binding),\
+                     patch.object(installer,'operation_lock',return_value=contextlib.nullcontext()),\
+                     patch.object(installer,'Kube',return_value=kube),\
+                     patch.object(installer.grp,'getgrnam',return_value=SimpleNamespace(gr_gid=1000)),\
+                     patch('story_witness.registry_snapshot',return_value={'fixed':'witness'}),\
+                     patch.object(installer,'_upgrade_code',side_effect=swap) as upgrade:
+                    if failure is None:
+                        installer.upgrade_idle_source_capture_v1(root/'candidate')
+                        upgrade.assert_called_once_with(root/'candidate',installed,1000,
+                            installer.SOURCE_CAPTURE_INSTALLED_BINDING,'idle-source-capture-v1','source-65717')
+                    else:
+                        with self.assertRaises(Blocked):installer.upgrade_idle_source_capture_v1(root/'candidate')
+                        if failure=='unknown':upgrade.assert_not_called()
+                    self.assertEqual((installed/'inbox').stat().st_mode&0o7777,0o1730)
+
+
+@unittest.skipUnless(os.name=='posix' and os.geteuid()==0,'owned Linux root fixture')
+class FixedSourceCaptureRejectionTests(unittest.TestCase):
+    def fixture(self,folder):
+        import hashlib,json
+        from pathlib import Path
+        spec=retirement.SOURCE_CAPTURE_REJECTION
+        installed=Path(folder)/'installed';journal_dir=installed/'journal';response_dir=installed/'responses'
+        sources=installed/'sources';workspace=sources/spec['operation']
+        installed.mkdir(mode=0o700)
+        for path in (journal_dir,response_dir,sources,workspace):path.mkdir(mode=0o700)
+        request={'action':'prepare','nonce':spec['nonce'],'source_sha':spec['source_sha'],
+            'run_id':spec['run_id'],'mode':'full','changed_services':[]}
+        row={'schema':'voice-nats-bridge-request-v1','request_sha256':retirement.canonical(request),
+            'request':request,'phase':'STARTED','prepare_stage':{'name':'source-capture','status':'STARTED'},
+            'prepare_error':'source_authority_rejected'}
+        journal_raw=json.dumps(row,sort_keys=True,separators=(',',':')).encode()
+        response={'status':'BLOCKED','error':'blocked_unclassified'}
+        response_raw=json.dumps(response,sort_keys=True,separators=(',',':')).encode()
+        self.assertEqual(hashlib.sha256(journal_raw).hexdigest(),spec['journal_sha256'])
+        self.assertEqual(hashlib.sha256(response_raw).hexdigest(),spec['response_sha256'])
+        path=journal_dir/(spec['nonce']+'.json');path.write_bytes(journal_raw);path.chmod(0o600)
+        response_path=response_dir/path.name;response_path.write_bytes(response_raw);response_path.chmod(0o440)
+        return installed,path,row,journal_raw,response_raw,workspace
+
+    def test_exact_precheckpoint_source_failure_is_admitted_and_excluded_from_old_inventory(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            installed,path,row,journal_raw,response_raw,workspace=self.fixture(folder)
+            root=Path(folder)/'root';root.mkdir()
+            def private(target,*args,**kwargs):
+                target=Path(target)
+                if target==path:return journal_raw
+                if target==installed/'responses'/path.name:return response_raw
+                raise AssertionError(target)
+            with patch.object(retirement,'private_bytes',side_effect=private),\
+                 patch.object(retirement,'document',return_value=row),patch.object(retirement.guard,'ROOT',root):
+                witness=retirement.pending_request_accepted(installed,path,{'journals':{}})
+                self.assertEqual(witness,retirement._source_capture_rejection_workspace(installed))
+                self.assertEqual(retirement.pending_abandonment_names(installed),set())
+
+    def test_source_failure_disposition_rejects_drift_and_new_operation_artifacts(self):
+        from pathlib import Path
+        for drift in ('stage','workspace','checkpoint','build'):
+            with self.subTest(drift=drift),tempfile.TemporaryDirectory() as folder:
+                installed,path,row,journal_raw,response_raw,workspace=self.fixture(folder)
+                root=Path(folder)/'root';root.mkdir()
+                if drift=='workspace':(workspace/'unexpected').write_text('not empty')
+                if drift=='checkpoint':
+                    base=root/('rollout-'+retirement.SOURCE_CAPTURE_REJECTION['operation']);base.mkdir()
+                    (base/'checkpoint.json').write_text('{}')
+                if drift=='build':
+                    (installed/'sources'/(retirement.SOURCE_CAPTURE_REJECTION['operation']+'-build')).mkdir()
+                if drift=='stage':row['prepare_stage']={'name':'target-build','status':'COMPLETE'}
+                changed=json.dumps(row,sort_keys=True,separators=(',',':')).encode()
+                def private(target,*args,**kwargs):
+                    target=Path(target)
+                    if target==path:return changed if drift=='stage' else journal_raw
+                    if target==installed/'responses'/path.name:return response_raw
+                    raise AssertionError(target)
+                with patch.object(retirement,'private_bytes',side_effect=private),\
+                     patch.object(retirement,'document',return_value=row),patch.object(retirement.guard,'ROOT',root):
+                    with self.assertRaises(Blocked):retirement.pending_request_accepted(installed,path,{'journals':{}})
+
+class IdleUpgradeRemainderTests(unittest.TestCase):
     def test_ceccb_unclosed_operation_vetoes_despite_old_closure_and_complete_journal(self):
         import installer
         from types import SimpleNamespace

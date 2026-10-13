@@ -18,6 +18,45 @@ TREE = 'b' * 40
 
 
 class SourceTests(unittest.TestCase):
+    def test_api_pagination_keeps_full_item_limit_with_small_pages(self):
+        requests = []
+
+        def page(url, headers, deadline):
+            requests.append(url)
+            self.assertIn('?per_page=20&page=', url)
+            number = int(url.rsplit('page=', 1)[1])
+            first = (number - 1) * 20
+            return {'total_count': 10000, 'jobs': [{'id': item} for item in range(first + 1, first + 21)]}
+
+        with patch.object(module, '_get', side_effect=page):
+            rows = module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        self.assertEqual(len(rows), 10000)
+        self.assertEqual(len(requests), 500)
+        self.assertEqual(rows[0]['id'], 1)
+        self.assertEqual(rows[-1]['id'], 10000)
+
+    def test_api_pagination_rejects_over_limit_and_inconsistent_pages(self):
+        with patch.object(module, '_get', return_value={'total_count': 10001, 'jobs': []}):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        responses = [
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+            {'total_count': 3, 'jobs': [{'id': 2}]},
+        ]
+        with patch.object(module, '_get', side_effect=responses):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        responses = [
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+        ]
+        with patch.object(module, '_get', side_effect=responses):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
     def test_cached_archive_runs_complete_capture_without_remote_tarball(self):
         private=tempfile.TemporaryDirectory(dir='/home/pmd');self.addCleanup(private.cleanup)
         cache=Path(private.name)/'source-archives';cache.mkdir(mode=0o750)
@@ -160,8 +199,11 @@ class SourceTests(unittest.TestCase):
             self.master_calls+=1
             data={'ref':'refs/heads/master','object':{'type':'commit','sha':'d'*40 if self.master_moved and self.master_calls>1 else SHA}}
         elif url.endswith('/actions/runs/123'): data=self.run
-        elif '/jobs?' in url: data={'total_count':len(self.jobs),'jobs':self.jobs}
-        elif url.endswith('/actions/runs/123/artifacts?per_page=100&page=1'): data={'total_count':1,'artifacts':[self.artifact]}
+        elif '/jobs?' in url:
+            query=dict(part.split('=',1) for part in url.split('?',1)[1].split('&'))
+            page=int(query['page']);per_page=int(query['per_page']);start=(page-1)*per_page
+            data={'total_count':len(self.jobs),'jobs':self.jobs[start:start+per_page]}
+        elif url.endswith('/actions/runs/123/artifacts?per_page=20&page=1'): data={'total_count':1,'artifacts':[self.artifact]}
         elif url.endswith('/actions/artifacts/99'):
             data=copy.deepcopy(self.artifact)
             buffer=io.BytesIO()

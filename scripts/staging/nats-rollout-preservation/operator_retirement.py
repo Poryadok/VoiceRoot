@@ -879,6 +879,52 @@ PREBUILD_RECEIPTS={
     '65607cfc9397':'707e8b70d15f0ead23da0f87ed1aac519b40435ff2774266fc7a0eb553a63594',
     'c8862dbc23a8':'ce3b0e55845c8bc898d02577c9e850f61de0063c435af65cfe4e8ccc1add4110'}
 
+# One known full prepare stopped in source capture before workload capture or
+# checkpoint creation. Its immutable journal/response identity is admitted
+# separately from the ordinary disposable-abandonment inventory.
+SOURCE_CAPTURE_REJECTION={
+    'operation':'fc2e710d33e6',
+    'nonce':'fc2e710d33e6431e6c65158c629e3cc726ebb461e1a16098a322f995984748ec',
+    'source_sha':'fa4198bc54810c6b1d837fee2cd5436d5a690f54',
+    'run_id':38469787490,
+    'journal_sha256':'689c87bf3907f6cf673bccc3cf11b8ed395274803588ed788d232fc3d729de36',
+    'response_sha256':'83fb20c9621d18d737818eb030b72008076d2afff606a37dac0c37ee8daa7a28',
+}
+
+def _source_capture_rejection_workspace(installed):
+    """Require the exact empty workspace left before the first source write."""
+    installed=Path(installed);operation=SOURCE_CAPTURE_REJECTION['operation']
+    sources=installed/'sources';workspace=sources/operation
+    parent=sources.lstat();row=workspace.lstat()
+    if (not stat.S_ISDIR(parent.st_mode) or stat.S_ISLNK(parent.st_mode) or parent.st_uid!=0 or parent.st_gid!=0
+        or stat.S_IMODE(parent.st_mode)!=0o700 or not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+        or row.st_uid!=0 or row.st_gid!=0 or stat.S_IMODE(row.st_mode)!=0o700 or any(workspace.iterdir())):fail()
+    return (parent.st_dev,parent.st_ino,parent.st_uid,parent.st_gid,stat.S_IMODE(parent.st_mode),
+        row.st_dev,row.st_ino,row.st_uid,row.st_gid,stat.S_IMODE(row.st_mode))
+
+def _verify_source_capture_rejection(installed,path,row):
+    spec=SOURCE_CAPTURE_REJECTION;operation=spec['operation'];nonce=spec['nonce']
+    if path.name!=nonce+'.json' or path.stem[:12]!=operation:fail()
+    journal_raw=private_bytes(path,2<<20);response_raw=private_bytes(Path(installed)/'responses'/path.name,2<<20,group_read=True)
+    try:response=json.loads(response_raw)
+    except (TypeError,ValueError):fail()
+    request=row.get('request')
+    expected={'action':'prepare','nonce':nonce,'source_sha':spec['source_sha'],'run_id':spec['run_id'],
+        'mode':'full','changed_services':[]}
+    if (hashlib.sha256(journal_raw).hexdigest()!=spec['journal_sha256']
+        or hashlib.sha256(response_raw).hexdigest()!=spec['response_sha256']
+        or set(row)!={'schema','request_sha256','request','phase','prepare_stage','prepare_error'}
+        or row.get('schema')!='voice-nats-bridge-request-v1' or request!=expected
+        or row.get('request_sha256')!=canonical(request) or row.get('phase')!='STARTED'
+        or row.get('prepare_stage')!={'name':'source-capture','status':'STARTED'}
+        or row.get('prepare_error')!='source_authority_rejected'
+        or response!={'status':'BLOCKED','error':'blocked_unclassified'}):fail()
+    for candidate in (guard.ROOT/('rollout-'+operation),Path(installed)/'sources'/(operation+'-build')):
+        try:candidate.lstat()
+        except FileNotFoundError:continue
+        fail()
+    return _source_capture_rejection_workspace(installed)
+
 def pending_request_accepted(installed,path,closure):
     installed=Path(installed);path=Path(path)
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
@@ -908,6 +954,8 @@ def pending_request_accepted(installed,path,closure):
         journal_binding(installed,{path.name:closure['journals'][path.name]})
         return
     operation=path.stem[:12];wanted=PREBUILD_RECEIPTS.get(operation)
+    if operation==SOURCE_CAPTURE_REJECTION['operation']:
+        return _verify_source_capture_rejection(installed,path,row)
     if wanted is not None:
         raw=private_bytes(installed/('prebuild-disposition-'+operation+'.json'),2<<20)
         if hashlib.sha256(raw).hexdigest()!=wanted:fail()
@@ -1030,7 +1078,10 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
-        if path.name!=FENCE_ABORT_NONCE+'.json':names.add(path.name)
+        # These two requests are independently fixed and verified by the
+        # terminal fence closure / source-capture rejection disposition.
+        if path.name not in (FENCE_ABORT_NONCE+'.json',SOURCE_CAPTURE_REJECTION['nonce']+'.json'):
+            names.add(path.name)
     return names
 
 class RetirementStage(Staging):
