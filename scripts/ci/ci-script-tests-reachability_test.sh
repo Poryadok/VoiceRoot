@@ -262,8 +262,8 @@ PY
 
 compose_e2e_block="$(sed -n '/^  compose-e2e:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 [[ -n "${compose_e2e_block}" ]] || fail "CI workflow must define a compose-e2e job"
-printf '%s\n' "${compose_e2e_block}" | grep -Fq -- "TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*" \
-  || fail "compose-e2e must run the live bidirectional test and bounded join-readiness helper regressions"
+printf '%s\n' "${compose_e2e_block}" | grep -Fq -- "TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*|TestRequestComposeJoinToken.*" \
+  || fail "compose-e2e must run the live bidirectional test and bounded Space media readiness helper regressions"
 for selector in \
   "github.event_name == 'pull_request'" \
   "github.event_name == 'push'" \

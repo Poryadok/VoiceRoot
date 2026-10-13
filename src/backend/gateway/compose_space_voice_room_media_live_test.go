@@ -49,8 +49,8 @@ func TestComposeSpaceVoiceRoomBidirectionalAudio_live(t *testing.T) {
 	require.NotEmpty(t, joinOwner.LivekitRoomName)
 	require.Equal(t, joinOwner.LivekitRoomName, joinMember.LivekitRoomName)
 
-	tokenOwner := getComposeJoinToken(t, client, base, owner.AccessToken, joinOwner.RoomID)
-	tokenMember := getComposeJoinToken(t, client, base, member.AccessToken, joinMember.RoomID)
+	tokenOwner := getComposeSpaceMediaJoinToken(t, client, base, owner.AccessToken, joinOwner.RoomID)
+	tokenMember := getComposeSpaceMediaJoinToken(t, client, base, member.AccessToken, joinMember.RoomID)
 	identityOwner := livekitTokenIdentity(t, tokenOwner.JWT)
 	identityMember := livekitTokenIdentity(t, tokenMember.JWT)
 	require.True(t, strings.HasPrefix(identityOwner, "profile:"+owner.ProfileID+":media:"))
@@ -294,6 +294,116 @@ func TestRequestComposeSpaceVoiceRoomJoinCapsPersistentReadinessRetries(t *testi
 	require.Equal(t, composeSpaceJoinMaxAttempts, calls)
 	require.Len(t, waits, composeSpaceJoinMaxAttempts-1)
 	require.Equal(t, composeSpaceJoinRetryDelays[:], waits)
+	for _, body := range bodies {
+		require.True(t, body.closed, "every retry response body must be closed")
+	}
+}
+
+func TestRequestComposeJoinTokenRetriesOnlyReconciliationReadiness(t *testing.T) {
+	const (
+		roomID = "voice-room-456"
+		token  = "fixture-token"
+	)
+	var requests []*http.Request
+	var responseBodies []*composeJoinResponseBody
+	client := &http.Client{Transport: composeJoinRoundTripper(func(req *http.Request) (*http.Response, error) {
+		requests = append(requests, req)
+		require.Equal(t, http.MethodGet, req.Method)
+		require.Equal(t, "/api/v1/voice/calls/"+roomID+"/token", req.URL.Path)
+		require.Equal(t, "Bearer "+token, req.Header.Get("Authorization"))
+		status, payload := http.StatusServiceUnavailable,
+			`{"error_code":"unavailable","message":"`+composeSpaceTokenReconciliationUnavailable+`"}`
+		if len(requests) == 2 {
+			status, payload = http.StatusOK, `{"jwt":"fixture-jwt","livekit_url":"wss://fixture"}`
+		}
+		body := &composeJoinResponseBody{reader: strings.NewReader(payload)}
+		responseBodies = append(responseBodies, body)
+		return &http.Response{StatusCode: status, Body: body, Header: make(http.Header)}, nil
+	})}
+	var waits []time.Duration
+	wait := func(ctx context.Context, delay time.Duration) error {
+		require.NoError(t, ctx.Err())
+		waits = append(waits, delay)
+		return nil
+	}
+
+	got, err := requestComposeJoinToken(context.Background(), client, "http://fixture", token, roomID, wait)
+	require.NoError(t, err)
+	require.Equal(t, composeJoinToken{JWT: "fixture-jwt", LivekitURL: "wss://fixture"}, got)
+	require.Len(t, requests, 2)
+	require.NotSame(t, requests[0], requests[1])
+	require.Equal(t, []time.Duration{composeSpaceTokenRetryDelays[0]}, waits)
+	require.Len(t, responseBodies, 2)
+	for _, body := range responseBodies {
+		require.True(t, body.closed, "every retry response body must be closed")
+	}
+}
+
+func TestRequestComposeJoinTokenDoesNotRetryOtherFailures(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		payload string
+	}{
+		{name: "wrong status", status: http.StatusBadGateway, payload: `{"error_code":"unavailable","message":"` + composeSpaceTokenReconciliationUnavailable + `"}`},
+		{name: "wrong code", status: http.StatusServiceUnavailable, payload: `{"error_code":"failed_precondition","message":"` + composeSpaceTokenReconciliationUnavailable + `"}`},
+		{name: "wrong message", status: http.StatusServiceUnavailable, payload: `{"error_code":"unavailable","message":"Space media admission journal is not ready"}`},
+		{name: "malformed body", status: http.StatusServiceUnavailable, payload: `{`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calls, waits := 0, 0
+			body := &composeJoinResponseBody{reader: strings.NewReader(tc.payload)}
+			client := &http.Client{Transport: composeJoinRoundTripper(func(*http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{StatusCode: tc.status, Body: body, Header: make(http.Header)}, nil
+				})}
+			_, err := requestComposeJoinToken(context.Background(), client, "http://fixture", "token", "room", func(context.Context, time.Duration) error {
+				waits++
+				return nil
+			})
+			require.Error(t, err)
+			require.Equal(t, 1, calls)
+			require.Zero(t, waits)
+			require.True(t, body.closed)
+		})
+	}
+
+	calls := 0
+	client := &http.Client{Transport: composeJoinRoundTripper(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("fixture transport failure")
+	})}
+	_, err := requestComposeJoinToken(context.Background(), client, "http://fixture", "token", "room", func(context.Context, time.Duration) error {
+		t.Fatal("transport failures must not be retried")
+		return nil
+	})
+	require.Error(t, err)
+	require.Equal(t, 1, calls)
+}
+
+func TestRequestComposeJoinTokenCapsPersistentReadinessRetries(t *testing.T) {
+	calls := 0
+	var bodies []*composeJoinResponseBody
+	client := &http.Client{Transport: composeJoinRoundTripper(func(*http.Request) (*http.Response, error) {
+		calls++
+		body := &composeJoinResponseBody{reader: strings.NewReader(`{"error_code":"unavailable","message":"` + composeSpaceTokenReconciliationUnavailable + `"}`)}
+		bodies = append(bodies, body)
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: body, Header: make(http.Header)}, nil
+	})}
+	var waits []time.Duration
+	_, err := requestComposeJoinToken(context.Background(), client, "http://fixture", "token", "room", func(ctx context.Context, delay time.Duration) error {
+		require.NoError(t, ctx.Err())
+		waits = append(waits, delay)
+		return nil
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "after 6 attempts")
+	require.Contains(t, err.Error(), `code="unavailable"`)
+	require.Contains(t, err.Error(), `message="`+composeSpaceTokenReconciliationUnavailable+`"`)
+	require.Equal(t, composeSpaceTokenRetryMaxAttempts, calls)
+	require.Len(t, waits, composeSpaceTokenRetryMaxAttempts-1)
+	require.Equal(t, composeSpaceTokenRetryDelays[:], waits)
 	for _, body := range bodies {
 		require.True(t, body.closed, "every retry response body must be closed")
 	}
