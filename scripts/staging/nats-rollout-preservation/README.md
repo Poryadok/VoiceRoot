@@ -775,6 +775,20 @@ progress step distinguishes that case. In either case, stop for root operator
 inspection and reconciliation. Do not rerun the one-shot recovery or treat an
 active marker as proof that closure/idle admission completed.
 
+There is one narrowly bound continuation for the observed
+`removing_owned_finalizer` progress step. It is not a retry of the Pod patch:
+the continuation requires the exact unchanged pre-cut snapshot and progress
+record, confirms the original Pod name and UID are absent, rechecks the marker,
+storage identity, zero-replica workloads and absence of PVC writers, then resumes
+at HUB scale. Its v2 closure explicitly records that the patch response metadata
+was unavailable and that the exact Pod UID was observed absent; it leaves both
+pre- and post-patch resourceVersions unknown. It cannot be used if the Pod remains,
+the name is reused, any progress advanced beyond the finalizer step, or any
+precondition changed. On any such mismatch, stop for manual reconciliation.
+The normal patch path treats an omitted empty `metadata.finalizers` field as an
+empty list but still requires the actual returned resourceVersion; no version is
+inferred or fabricated.
+
 The isolated operator container must present the same root-owned evidence
 directory at both `/evidence` and `/var/lib/voice-nats-preservation`, because
 the one-shot driver uses the former while the captured verifier uses its

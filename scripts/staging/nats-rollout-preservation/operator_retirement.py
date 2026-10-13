@@ -33,6 +33,7 @@ FENCE_ABORT_NONCE='32151c4cb4316a31c57949222e0cf69208c8cd82a0bf32e307c371d34c9b2
 FENCE_ABORT_JOURNAL_SHA256='ca6c43b78e57ae5ebf71a9776db320438ee0763b9f94745bda155af0c1264f5e'
 FENCE_ABORT_RESPONSE_SHA256='f823049f6a38c4b7c31cf64a19a65e4a611f4c8905df890e2e9291241c335d92'
 FENCE_ABORT_POD_UID='c8ac408a-ef62-451b-a8c1-5a4393ec271a'
+FENCE_ABORT_POD_NAME='voice-nats-pvc-candidate-cf9757747-dgktg'
 FENCE_ABORT_FINALIZER='voice.io/nats-preservation-32151c4cb431'
 FENCE_ABORT_NAMESPACE_UID='ac7abaf3-241f-483f-ac33-71086e4dfd32'
 PENDING_ABANDONMENT_NAME='operator-pending-abandonment-v1.json'
@@ -297,7 +298,10 @@ def _fence_abort_sequence(names):
 
 def fence_abort_terminal(snapshot,receipt):
     """Construct the one exact ABORTED closure for the retained 32151 incident."""
-    reference={'schema':'voice-operator-fence-abort-reference-v1',
+    receipt_schema=receipt.get('schema')
+    if receipt_schema not in ('voice-operator-fence-abort-closure-v1','voice-operator-fence-abort-closure-v2'):fail()
+    version='v2' if receipt_schema.endswith('-v2') else 'v1'
+    reference={'schema':'voice-operator-fence-abort-reference-'+version,
         'snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':canonical(receipt)}
     result=copy.deepcopy(snapshot)
     result.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',
@@ -340,7 +344,8 @@ def verify_fence_abort_terminal(base,state):
     raw=private_bytes(base/'operator-fence-abort-snapshot.json')
     if hashlib.sha256(raw).hexdigest()!=FENCE_ABORT_CHECKPOINT_SHA256:fail()
     snapshot=json.loads(raw);receipt=document(base/'operator-fence-abort-receipt.json')
-    reference={'schema':'voice-operator-fence-abort-reference-v1',
+    reference_version='v2' if receipt.get('schema')=='voice-operator-fence-abort-closure-v2' else 'v1'
+    reference={'schema':'voice-operator-fence-abort-reference-'+reference_version,
         'snapshot_sha256':FENCE_ABORT_CHECKPOINT_SHA256,'receipt_sha256':canonical(receipt)}
     names=CORE|{'voice-web'}
     context=snapshot.get('context',{});expected=context.get('expected',{})
@@ -393,7 +398,7 @@ def verify_fence_abort_terminal(base,state):
     if (set(receipt)!={'schema','operation','snapshot_sha256','code_binding_sha256','authorization',
         'deployment_pass','rollback_eligible','pod_finalizer','storage','restored','restore_sequence',
         'before_marker','released_marker','events','journals'}
-        or receipt.get('schema')!='voice-operator-fence-abort-closure-v1'
+        or receipt.get('schema') not in ('voice-operator-fence-abort-closure-v1','voice-operator-fence-abort-closure-v2')
         or receipt.get('operation')!=FENCE_ABORT_OPERATION
         or receipt.get('snapshot_sha256')!=FENCE_ABORT_CHECKPOINT_SHA256
         or receipt.get('code_binding_sha256')!=canonical(snapshot.get('code_capture'))
@@ -402,15 +407,29 @@ def verify_fence_abort_terminal(base,state):
         or state.get('operator_fence_abort')!=reference):fail()
     binding=root_cli.code_binding(base/'code')
     if binding!=snapshot.get('code_capture'):fail()
-    pod=receipt.get('pod_finalizer',{});proof=exits[0]['proof'];finals=pod.get('before')
-    if (set(pod)!={'pod_uid','finalizer','container_id','exit_code','before','after','resource_version_before','resource_version_after'}
-        or pod.get('pod_uid')!=FENCE_ABORT_POD_UID or pod.get('finalizer')!=FENCE_ABORT_FINALIZER
-        or pod.get('container_id')!=proof.get('container_id') or pod.get('exit_code')!=0
-        or not isinstance(finals,list) or finals.count(FENCE_ABORT_FINALIZER)!=1
-        or pod.get('after')!=[f for f in finals if f!=FENCE_ABORT_FINALIZER]
-        or not re.fullmatch('[0-9]+',pod.get('resource_version_before',''))
-        or not re.fullmatch('[0-9]+',pod.get('resource_version_after',''))
-        or int(pod['resource_version_after'])<=int(pod['resource_version_before'])):fail()
+    pod=receipt.get('pod_finalizer',{});proof=exits[0]['proof']
+    common={'pod_uid','finalizer','container_id','exit_code','before','after','resource_version_before','resource_version_after'}
+    if (pod.get('pod_uid')!=FENCE_ABORT_POD_UID or pod.get('finalizer')!=FENCE_ABORT_FINALIZER
+        or pod.get('container_id')!=proof.get('container_id') or pod.get('exit_code')!=0):fail()
+    if receipt['schema']=='voice-operator-fence-abort-closure-v1':
+        finals=pod.get('before')
+        if (set(pod)!=common or not isinstance(finals,list) or finals.count(FENCE_ABORT_FINALIZER)!=1
+            or pod.get('after')!=[f for f in finals if f!=FENCE_ABORT_FINALIZER]
+            or not re.fullmatch('[0-9]+',pod.get('resource_version_before',''))
+            or not re.fullmatch('[0-9]+',pod.get('resource_version_after',''))
+            or int(pod['resource_version_after'])<=int(pod['resource_version_before'])):fail()
+        finalizer_event={'kind':'operator_nats_finalizer_removed','pod_uid':FENCE_ABORT_POD_UID,
+            'finalizer':FENCE_ABORT_FINALIZER}
+    else:
+        observation={'namespace_uid':FENCE_ABORT_NAMESPACE_UID,'pod_name':FENCE_ABORT_POD_NAME,
+            'pod_uid':FENCE_ABORT_POD_UID}
+        if (set(pod)!=common|{'outcome','pod_absence_observation'}
+            or pod.get('outcome')!='CAS_RESPONSE_UNAVAILABLE_UID_ABSENT'
+            or pod.get('before') is not None or pod.get('after') is not None
+            or pod.get('resource_version_before') is not None or pod.get('resource_version_after') is not None
+            or pod.get('pod_absence_observation')!=observation):fail()
+        finalizer_event={'kind':'operator_nats_pod_uid_absence_verified','cas_response':'UNAVAILABLE',
+            **observation}
     storage=receipt.get('storage',{});claim=context.get('final_claim',{});pv=context.get('final_pv',{})
     if (storage!={'namespace_uid':FENCE_ABORT_NAMESPACE_UID,'claim_uid':expected.get('source_claim_uid'),
         'pv_uid':expected.get('source_pv_uid'),'claim_spec_sha256':canonical(claim.get('spec')),
@@ -432,7 +451,7 @@ def verify_fence_abort_terminal(base,state):
         'template_sha256':row['template_sha256'],'replicas':1,'ready':True} for n,row in sorted(wanted.items())]
     if (not isinstance(events,list) or len(events)!=len(names)+4
         or events[0]!={'kind':'operator_fence_abort_intent'}
-        or events[1]!={'kind':'operator_nats_finalizer_removed','pod_uid':FENCE_ABORT_POD_UID,'finalizer':FENCE_ABORT_FINALIZER}
+        or events[1]!=finalizer_event
         or workload_events!=expected_events
         or events[-2]!={'kind':'operator_marker_released','uid':before['uid']}
         or events[-1]!={'kind':'operator_fence_abort_completed'}):fail()
@@ -872,7 +891,7 @@ def pending_request_accepted(installed,path,closure):
         if path.name not in verified.get('journals',{}):fail()
         return
     if path.name in closure['journals']:
-        if closure.get('schema')=='voice-operator-fence-abort-closure-v1':
+        if closure.get('schema') in ('voice-operator-fence-abort-closure-v1','voice-operator-fence-abort-closure-v2'):
             request=row.get('request',{});operation=request.get('nonce','')[:12]
             base=guard.ROOT/('rollout-'+operation)
             if verify_fence_abort_terminal(base,document(base/'checkpoint.json'))!=closure:fail()

@@ -963,6 +963,40 @@ class FenceAbortClosureTests(unittest.TestCase):
         self.assertEqual(snapshot['fence_status'],'UNKNOWN');self.assertEqual(state['fence_status'],'RELEASED')
         self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
 
+    def test_unavailable_patch_response_requires_exact_uid_absence_and_never_fabricates_resource_version(self):
+        snapshot,receipt,state,journal,response=self.fixture()
+        receipt['schema']='voice-operator-fence-abort-closure-v2'
+        pod=receipt['pod_finalizer']
+        pod.update(outcome='CAS_RESPONSE_UNAVAILABLE_UID_ABSENT',before=None,after=None,
+            resource_version_before=None,resource_version_after=None,
+            pod_absence_observation={'namespace_uid':'ac7abaf3-241f-483f-ac33-71086e4dfd32',
+                'pod_name':'voice-nats-pvc-candidate-cf9757747-dgktg',
+                'pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a'})
+        receipt['events'][1]={'kind':'operator_nats_pod_uid_absence_verified','cas_response':'UNAVAILABLE',
+            **pod['pod_absence_observation']}
+        state=retirement.fence_abort_terminal(snapshot,receipt)
+        self.assertEqual(state['operator_fence_abort']['schema'],'voice-operator-fence-abort-reference-v2')
+        self.assertEqual(self.verify(snapshot,receipt,state,journal,response)['schema'],'voice-operator-fence-abort-closure-v2')
+        self.assertIsNone(self.admit_pending(snapshot,receipt,state,journal,response))
+        for fault in ('invented_resource_version','wrong_uid','wrong_namespace','wrong_event'):
+            bad_snapshot,bad_receipt,bad_state,journal,response=self.fixture()
+            bad_receipt['schema']='voice-operator-fence-abort-closure-v2'
+            bad_pod=bad_receipt['pod_finalizer']
+            bad_pod.update(outcome='CAS_RESPONSE_UNAVAILABLE_UID_ABSENT',before=None,after=None,
+                resource_version_before=None,resource_version_after=None,
+                pod_absence_observation={'namespace_uid':'ac7abaf3-241f-483f-ac33-71086e4dfd32',
+                    'pod_name':'voice-nats-pvc-candidate-cf9757747-dgktg',
+                    'pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a'})
+            bad_receipt['events'][1]={'kind':'operator_nats_pod_uid_absence_verified','cas_response':'UNAVAILABLE',
+                **bad_pod['pod_absence_observation']}
+            if fault=='invented_resource_version':bad_pod['resource_version_after']='999999'
+            elif fault=='wrong_uid':bad_pod['pod_absence_observation']['pod_uid']='foreign'
+            elif fault=='wrong_namespace':bad_pod['pod_absence_observation']['namespace_uid']='foreign'
+            else:bad_receipt['events'][1]['kind']='operator_nats_finalizer_removed'
+            bad_state=retirement.fence_abort_terminal(bad_snapshot,bad_receipt)
+            with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError,FileNotFoundError)):
+                self.verify(bad_snapshot,bad_receipt,bad_state,journal,response)
+
     def test_pending_request_admission_is_exact_and_closure_drift_is_rejected(self):
         snapshot,receipt,state,journal,response=self.fixture()
         self.assertIsNone(self.admit_pending(snapshot,receipt,state,journal,response))
