@@ -5,8 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
@@ -17,6 +21,30 @@ import 'package:voice_frontend/ui/space/space_members_sheet.dart';
 
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
+
+class _MutableAuthController extends AuthController {
+  _MutableAuthController()
+    : super(
+        authClient: VoiceAuthClient(
+          gateway: GatewayHttpClient(
+            httpClient: MockClient((_) async => http.Response('{}', 200)),
+            config: const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+        ),
+        storage: InMemoryAuthSessionStorage(),
+        guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
+      );
+
+  void setSession(AuthSession? session) => state = AuthState(session: session);
+}
+
+AuthSession _memberTestSession() => const AuthSession(
+  accessToken: 'member-test-token',
+  refreshToken: 'member-test-refresh',
+  accountId: 'account-1',
+  activeProfileId: 'owner',
+  expiresInSeconds: 3600,
+);
 
 void main() {
   final sampleMembers = [
@@ -138,6 +166,81 @@ void main() {
     });
   }
 
+  for (final language in ['en', 'ru']) {
+    for (final action in [
+      (key: SpaceMembersSheet.banMemberKey('member-1'), name: 'ban'),
+      (key: SpaceMembersSheet.timeoutMemberKey('member-1'), name: 'timeout'),
+      (key: SpaceMembersSheet.kickMemberKey('member-1'), name: 'kick'),
+    ]) {
+      testWidgets(
+        '$language ${action.name} local auth sentinel uses safe copy',
+        (tester) async {
+          var requests = 0;
+          final gateway = GatewayHttpClient(
+            httpClient: MockClient((request) async {
+              requests++;
+              return http.Response('{}', 200);
+            }),
+            config: const GatewayConfig(baseUrl: 'http://api.test'),
+          );
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                ...voiceThemeTestOverrides(),
+                gatewayHttpClientProvider.overrideWithValue(gateway),
+                authorizationHeaderProvider.overrideWithValue(null),
+                spaceMembersProvider(
+                  'space-1',
+                ).overrideWith((ref) async => sampleMembers),
+                spacePermissionProvider.overrideWith(
+                  (ref, query) async => true,
+                ),
+                profileProvider('member-1').overrideWith(
+                  (ref) async => const VoiceProfile(
+                    id: 'member-1',
+                    accountId: 'account-1',
+                    username: 'member',
+                    discriminator: '0001',
+                    displayName: 'Member',
+                  ),
+                ),
+              ],
+              child: MaterialApp(
+                theme: voiceTestTheme(),
+                locale: Locale(language),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const Scaffold(
+                  body: SpaceMembersSheet(spaceId: 'space-1'),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(SpaceMembersSheet)),
+          )!;
+
+          await tester.tap(find.byKey(action.key));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byType(FilledButton).last);
+          await tester.pumpAndSettle();
+
+          final expected = switch (action.name) {
+            'ban' => l10n.spaceBanError(l10n.commonActionFailed),
+            'timeout' => l10n.spaceTimeoutError(l10n.commonActionFailed),
+            'kick' => l10n.spaceKickError(l10n.commonActionFailed),
+            _ => throw StateError('unexpected member action'),
+          };
+          expect(find.text(expected), findsOneWidget);
+          expect(find.textContaining('not_authenticated'), findsNothing);
+          expect(requests, 0);
+          expect(find.byType(SpaceMembersSheet), findsOneWidget);
+        },
+      );
+    }
+  }
+
   for (final action in [
     (name: 'assign', revoke: false, path: '/api/v1/roles/assign'),
     (name: 'revoke', revoke: true, path: '/api/v1/roles/revoke'),
@@ -257,5 +360,125 @@ void main() {
       expect(find.textContaining('private_role_backend_detail'), findsNothing);
       expect(find.text(l10n.commonActionFailed), findsOneWidget);
     });
+  }
+
+  for (final language in ['en', 'ru']) {
+    for (final action in [
+      (name: 'assign', revoke: false, path: '/api/v1/roles/assign'),
+      (name: 'revoke', revoke: true, path: '/api/v1/roles/revoke'),
+    ]) {
+      testWidgets(
+        '$language ${action.name} role auth sentinel uses safe copy',
+        (tester) async {
+          final auth = _MutableAuthController()
+            ..setSession(_memberTestSession());
+          final mutations = <String>[];
+          final gateway = GatewayHttpClient(
+            httpClient: MockClient((request) async {
+              if (request.method == 'GET' &&
+                  request.url.path == '/api/v1/roles') {
+                return http.Response(
+                  jsonEncode({
+                    'role_list': {
+                      'roles': [
+                        {
+                          'id': 'role-member',
+                          'space_id': 'space-1',
+                          'name': 'Member',
+                          'position': 1,
+                        },
+                      ],
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (request.method == 'GET' &&
+                  request.url.path == '/api/v1/roles/members') {
+                return http.Response(
+                  jsonEncode({
+                    'role_list': {
+                      'roles': action.revoke
+                          ? [
+                              {
+                                'id': 'role-member',
+                                'space_id': 'space-1',
+                                'name': 'Member',
+                                'position': 1,
+                              },
+                            ]
+                          : <Map<String, Object?>>[],
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (request.method == 'POST') {
+                mutations.add(request.url.path);
+                return http.Response('{}', 200);
+              }
+              return http.Response('{}', 200);
+            }),
+            config: const GatewayConfig(baseUrl: 'http://api.test'),
+          );
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                ...voiceThemeTestOverrides(),
+                authControllerProvider.overrideWith((ref) => auth),
+                gatewayHttpClientProvider.overrideWithValue(gateway),
+                spaceMembersProvider(
+                  'space-1',
+                ).overrideWith((ref) async => sampleMembers),
+                spacePermissionProvider.overrideWith(
+                  (ref, query) async => true,
+                ),
+                profileProvider('member-1').overrideWith(
+                  (ref) async => const VoiceProfile(
+                    id: 'member-1',
+                    accountId: 'account-1',
+                    username: 'member',
+                    discriminator: '0001',
+                    displayName: 'Member',
+                  ),
+                ),
+              ],
+              child: MaterialApp(
+                theme: voiceTestTheme(),
+                locale: Locale(language),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const Scaffold(
+                  body: SpaceMembersSheet(spaceId: 'space-1'),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(SpaceMembersSheet)),
+          )!;
+          await tester.tap(
+            find.byKey(SpaceMembersSheet.assignRoleKey('member-1')),
+          );
+          await tester.pumpAndSettle();
+          final optionText = action.revoke
+              ? '${l10n.spaceRevokeRole}: Member'
+              : '${l10n.spaceAssignRole}: Member';
+          expect(find.text(optionText), findsOneWidget);
+          auth.setSession(null);
+          await tester.pump();
+          await tester.tap(find.text(optionText));
+          await tester.pumpAndSettle();
+
+          final expected = action.revoke
+              ? l10n.spaceRevokeRoleError(l10n.commonActionFailed)
+              : l10n.spaceAssignRoleError(l10n.commonActionFailed);
+          expect(mutations, isEmpty);
+          expect(find.text(expected), findsOneWidget);
+          expect(find.textContaining('not_authenticated'), findsNothing);
+        },
+      );
+    }
   }
 }

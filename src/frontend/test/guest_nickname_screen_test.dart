@@ -14,6 +14,7 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/guest_nickname_screen.dart';
+import 'package:voice_frontend/ui/core/voice_primary_button.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
@@ -216,4 +217,73 @@ void main() {
     expect(find.text('Could not complete this action.'), findsOneWidget);
     expect(find.textContaining(upstreamDiagnostic), findsNothing);
   });
+
+  for (final language in ['en', 'ru']) {
+    testWidgets('$language GuestNicknameScreen localizes missing auth state', (
+      tester,
+    ) async {
+      var patchRequests = 0;
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/users/me' && req.method == 'PATCH') {
+          patchRequests++;
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+            authControllerProvider.overrideWith(_guestAuthController),
+            authorizationHeaderProvider.overrideWithValue(null),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            httpClientProvider.overrideWithValue(client),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: Locale(language),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const GuestNicknameScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byKey(const Key('guest_nickname_screen'))),
+      )!;
+
+      await tester.enterText(
+        find.byKey(const Key('guest_nickname_field')),
+        'PlayerOne',
+      );
+      await tester.pump();
+      expect(
+        tester
+            .widget<VoicePrimaryButton>(
+              find.byKey(const Key('guest_nickname_submit')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.byKey(const Key('guest_nickname_submit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text(l10n.commonActionFailed), findsOneWidget);
+      expect(find.textContaining('not_authenticated'), findsNothing);
+      expect(patchRequests, 0);
+      expect(find.byKey(const Key('guest_nickname_screen')), findsOneWidget);
+    });
+  }
 }

@@ -309,7 +309,7 @@ class _SpaceTreeCreateDialogState extends State<_SpaceTreeCreateDialog> {
       final mustClose = error.kind != SpaceTreeActionErrorKind.rejected;
       if (mustClose) Navigator.of(context).pop();
       final detail = switch (error.message) {
-        'not_authenticated' => error.message,
+        'not_authenticated' => commonActionErrorMessage(widget.l10n),
         'name_required' => error.message,
         _ => widget.l10n.commonActionFailed,
       };
