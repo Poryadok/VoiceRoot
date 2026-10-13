@@ -376,6 +376,27 @@ linux/amd64 GHCR digests; the tag-only artifact does not itself attest digests.
 This assumes authorized project package publishers. Source files are passive
 compiler inputs; their scripts are never executed as root.
 
+Successful gate jobs alone are insufficient: `source_authority.py` also checks
+the parent source CI run and its complete observed attempt. An in-progress
+parent is permitted after the required jobs pass; a completed parent must have
+conclusion `success`, or satisfy the narrowly checked deployment-only `failure`
+exception. A completed `cancelled` run is rejected even when its visible gate
+and lock jobs succeeded. A successful web/images-only deployment does not prove
+that an earlier backend change received a full rollout.
+
+Before a standalone full rollout, check the exact source run's conclusion as
+well as its gate and lock jobs. If it is cancelled, preserve the guard and wait
+for an eligible source-triggered CI run from the next reviewed master change;
+do not blindly retry deployment or manufacture approval from individual green
+jobs. A generic `NATS_ROLLOUT_BRIDGE=BLOCKED` response does not identify the
+private journal failure. Keep the failed run/job receipt and use the bounded
+journal correlation procedure above before attributing a root cause.
+
+CI concurrency groups include the event name: scheduled and manual checks must
+not cancel the push workflow that authorizes a release. New pushes on the same
+branch still supersede older push runs; deployment approval remains bound to
+the exact source revision and attempt.
+
 Reusable deployment retains the parent CI run ID. Standalone staging dispatch
 has a separate execution authority bound to its fixed workflow/master/head and
 attempt. The encrypted backup artifact belongs to the current execution run,
