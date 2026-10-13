@@ -392,10 +392,10 @@ class _SlashCommandOptionsSheetState
               widget.command.displayName,
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            for (final error in _autocompleteErrors.values) ...[
+            for (final _ in _autocompleteErrors.values) ...[
               const SizedBox(height: 8),
               Text(
-                error,
+                commonActionErrorMessage(l10n),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
