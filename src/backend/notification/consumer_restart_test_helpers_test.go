@@ -88,12 +88,32 @@ func TestNotificationJetStreamRestartDrainsBacklogForEachReadyDurable(t *testing
 		voiceMemberJoinedRestartSpec(),
 		matchFoundRestartSpec(),
 		storyMentionRestartSpec(),
+		moderationSanctionRestartSpec(),
 	} {
 		spec := spec
 		t.Run(spec.name, func(t *testing.T) {
 			runNotificationConsumerRestartProof(t, fixture, spec)
 		})
 	}
+}
+
+func startNotificationAcceptanceConsumer(t *testing.T, service string, run func(context.Context) error) *notificationConsumerRun {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	readiness := newNotificationConsumerReadiness(service)
+	runner := &notificationConsumerRun{cancel: cancel, done: make(chan error, 1), exited: make(chan struct{})}
+	go func() {
+		defer close(runner.exited)
+		runner.done <- run(withNotificationConsumerReadiness(ctx, readiness, service))
+	}()
+	t.Cleanup(func() {
+		if _, joined := runner.stop(); !joined {
+			t.Errorf("%s consumer did not stop during cleanup", service)
+		}
+	})
+	require.Eventually(t, readiness.ready, 5*time.Second, 10*time.Millisecond,
+		"%s consumer binds its preprovisioned durable before events publish", service)
+	return runner
 }
 
 func newNotificationConsumerRestartFixture(t *testing.T) *notificationConsumerRestartFixture {
