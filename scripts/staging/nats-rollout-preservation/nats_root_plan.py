@@ -12,7 +12,9 @@ from nats_contract_plan import DECLARATIONS,compile_plan,digest
 from rollout_census import census
 from stage_runtime import HUB
 
-TARGET_FILES={'realtime':'1122d97dca3b185aecb43e0ae41d1c255d0adc46090f9f1c3dd8faf4ee294d31','analytics-chat':'552b9099f0d90424b03cf6fb18ccc9ded76eb58f9a8bfde64405311f8640a738'}
+TARGET_FILES={'realtime':'1122d97dca3b185aecb43e0ae41d1c255d0adc46090f9f1c3dd8faf4ee294d31',
+    'analytics-chat':'552b9099f0d90424b03cf6fb18ccc9ded76eb58f9a8bfde64405311f8640a738',
+    'search':'997b35cc0526eda5bead2a6ecfba95df59423c800fa7e960599466b3ee51334a'}
 def fail():raise Blocked('nats_migration_root_preflight_refused')
 
 _LEGACY_AUTH_KEYS={'verified','server_image','account_sha256','reply_prefix','normalized_consumer','normalized_consumer_sha256'}

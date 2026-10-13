@@ -925,6 +925,97 @@ def _verify_source_capture_rejection(installed,path,row):
         fail()
     return _source_capture_rejection_workspace(installed)
 
+# Explicit dispositions of two reviewed failed prepares. These are abandoned
+# requests, not deployment success or proof that no external effects occurred.
+SEARCH_BOOTSTRAP_REJECTIONS={
+    'cd248d0e3ef8':{
+        'nonce':'cd248d0e3ef8b90b2509c90ec40005467b9bef1a9f07bee3f13ffc78e5adcd87',
+        'source_sha':'8e4aa9d1eb5441cf4ba21f18082a6b71f8564457','run_id':38478016683,
+        'request_sha256':'f282c735b51818f6324114da5b7a51e3bb4ed24f65d0e4ad8e3a6f9e605d10b3',
+        'journal_sha256':'8f75c21377a2aefb913f2b6c74af2fad8af3cfc82037994c89fcf45d1c889326',
+        'response_sha256':'83fb20c9621d18d737818eb030b72008076d2afff606a37dac0c37ee8daa7a28',
+        'stage':'nats-preflight','prepare_error':'unexpected','response_error':'blocked_unclassified',
+        'source_tree':{'files':5590,'bytes':68147962,'sha256':'15dd40b1a71ab05c4ff919f207c0bbd23fcf704f5490b22c59d537d699fd7f11'},
+        'build_tree':None,
+    },
+    'bc0e9541ff37':{
+        'nonce':'bc0e9541ff37d449c225c862d87c87750e24b5b3d815c9774a4f7d4a54663f68',
+        'source_sha':'8e4aa9d1eb5441cf4ba21f18082a6b71f8564457','run_id':38482268019,
+        'request_sha256':'e076e899cfefc493557a2608e5961758d329b95a903390b99438fb591754f0be',
+        'journal_sha256':'0c22603765346fa057a4b2c1469f8b757cfab74b35b8ee5d4f4e9492e56dabd1',
+        'response_sha256':'35afa798fcd405b6568e043d48fedb94aefc41e7ca9fd00eec39a40fe1cec3a5',
+        'stage':'target-build','prepare_error':'guard_rejected','response_error':'exception_Blocked',
+        'source_tree':{'files':5590,'bytes':68147962,'sha256':'15dd40b1a71ab05c4ff919f207c0bbd23fcf704f5490b22c59d537d699fd7f11'},
+        'build_tree':{'files':1,'bytes':11590,'sha256':'8d638dda10ac1af98ce1d682a51ecfb3e7b7062ad9ca63bb37de90d06b80eb5b'},
+    },
+}
+
+def _retained_prepare_tree(path,expected):
+    """Bounded public-source tree census plus custody witness for the swap."""
+    path=Path(path)
+    if expected is None:
+        try:path.lstat()
+        except FileNotFoundError:return None
+        fail()
+    if path.resolve(strict=True)!=path:fail()
+    rows=[];custody=[];size=0;directories=0
+    identity=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    def directory(candidate):
+        st=candidate.lstat()
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid!=0 or st.st_mode&0o022:fail()
+        return identity(st)
+    parent=directory(path.parent)
+    for current,dirs,files in os.walk(path,followlinks=False,onerror=lambda error:fail()):
+        current=Path(current);dirs.sort();files.sort();directories+=1
+        if directories>10000 or len(rows)+len(files)>10000:fail()
+        before=directory(current)
+        # Reject linked directories even though walk would not descend them.
+        for name in dirs:directory(current/name)
+        for name in files:
+            candidate=current/name;observed=candidate.lstat()
+            if not stat.S_ISREG(observed.st_mode):fail()
+            fd=os.open(candidate,READ)
+            try:
+                opened=os.fstat(fd)
+                if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0 or opened.st_mode&0o022
+                    or opened.st_nlink!=1 or not 0<=opened.st_size<=16<<20 or identity(observed)!=identity(opened)):fail()
+                size+=opened.st_size
+                if size>128<<20:fail()
+                digest=hashlib.sha256();count=0
+                while raw:=os.read(fd,1<<20):
+                    count+=len(raw)
+                    if count>opened.st_size:fail()
+                    digest.update(raw)
+                if count!=opened.st_size or identity(opened)!=identity(os.fstat(fd)) or identity(opened)!=identity(candidate.lstat()):fail()
+            finally:os.close(fd)
+            relative=candidate.relative_to(path).as_posix()
+            rows.append({'path':relative,'kind':'file','bytes':count,'sha256':digest.hexdigest()})
+            custody.append((relative,identity(opened)))
+        if directory(current)!=before:fail()
+        custody.append((current.relative_to(path).as_posix(),before))
+    if directory(path.parent)!=parent:fail()
+    tree={'files':len(rows),'bytes':size,'sha256':canonical(rows)}
+    if tree!=expected:fail()
+    return {'tree':tree,'custody_sha256':canonical([parent,custody])}
+
+def _verify_search_bootstrap_rejection(installed,path,row):
+    installed=Path(installed);operation=path.stem[:12];spec=SEARCH_BOOTSTRAP_REJECTIONS[operation]
+    request={'action':'prepare','nonce':spec['nonce'],'source_sha':spec['source_sha'],
+        'run_id':spec['run_id'],'mode':'full','changed_services':[]}
+    journal=private_bytes(path,2<<20);response=private_bytes(installed/'responses'/path.name,2<<20,group_read=True)
+    if (path.name!=spec['nonce']+'.json' or canonical(request)!=spec['request_sha256']
+        or hashlib.sha256(journal).hexdigest()!=spec['journal_sha256']
+        or hashlib.sha256(response).hexdigest()!=spec['response_sha256']
+        or json.loads(journal)!=row or row!={'schema':'voice-nats-bridge-request-v1','request_sha256':spec['request_sha256'],
+            'request':request,'phase':'STARTED','prepare_stage':{'name':spec['stage'],'status':'STARTED'},'prepare_error':spec['prepare_error']}
+        or json.loads(response)!={'status':'BLOCKED','error':spec['response_error']}):fail()
+    try:(guard.ROOT/('rollout-'+operation)).lstat()
+    except FileNotFoundError:pass
+    else:fail()
+    return {'disposition':'ABANDONED_PRECHECKPOINT','operation':operation,
+        'source':_retained_prepare_tree(installed/'sources'/operation,spec['source_tree']),
+        'build':_retained_prepare_tree(installed/'sources'/(operation+'-build'),spec['build_tree'])}
+
 def pending_request_accepted(installed,path,closure):
     installed=Path(installed);path=Path(path)
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
@@ -956,6 +1047,8 @@ def pending_request_accepted(installed,path,closure):
     operation=path.stem[:12];wanted=PREBUILD_RECEIPTS.get(operation)
     if operation==SOURCE_CAPTURE_REJECTION['operation']:
         return _verify_source_capture_rejection(installed,path,row)
+    if operation in SEARCH_BOOTSTRAP_REJECTIONS:
+        return _verify_search_bootstrap_rejection(installed,path,row)
     if wanted is not None:
         raw=private_bytes(installed/('prebuild-disposition-'+operation+'.json'),2<<20)
         if hashlib.sha256(raw).hexdigest()!=wanted:fail()
@@ -1078,9 +1171,10 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
-        # These two requests are independently fixed and verified by the
-        # terminal fence closure / source-capture rejection disposition.
-        if path.name not in (FENCE_ABORT_NONCE+'.json',SOURCE_CAPTURE_REJECTION['nonce']+'.json'):
+        # Separately verified exact dispositions do not rewrite the old inventory.
+        separate={FENCE_ABORT_NONCE+'.json',SOURCE_CAPTURE_REJECTION['nonce']+'.json',
+            *(spec['nonce']+'.json' for spec in SEARCH_BOOTSTRAP_REJECTIONS.values())}
+        if path.name not in separate:
             names.add(path.name)
     return names
 
