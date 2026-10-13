@@ -520,3 +520,60 @@ class ReadOnlyPrepareFailureTests(unittest.TestCase):
             self.assertNotIn('context',saved[-1])
             self.assertTrue((base/'failed-readonly-snapshot.json').is_file())
             self.assertTrue((base/'failed-readonly-receipt.json').is_file())
+
+class OriginalLiveCensusCheckpointTests(unittest.TestCase):
+    def census(self):
+        return {'schema':'voice-nats-census-v1','account':'A'+'B'*55,
+            'streams':[{'name':'chat_events','created':'2026-10-13T00:00:00Z','config_sha256':'a'*64,
+                'state':{'messages':7,'bytes':70,'first_seq':1,'last_seq':7,'consumer_count':0},
+                'observations':{}}], 'consumers':[]}
+
+    def state(self, context=None, events=None):
+        return {'operation':'123456abcdef','events':events or [],
+            'context':context or {'expected':{},'snapshots':{},'original_snapshots':{},'old_images':{},
+                'marker':{},'service':{},'final_claim':{},'final_pv':{},'final_path':'/private/store'}}
+
+    def test_shutdown_intent_checkpoint_carries_complete_census_before_mutation(self):
+        import json, tempfile
+        from types import SimpleNamespace
+        census = self.census()
+        state = self.state()
+        stage = SimpleNamespace(expected={}, snapshots={}, original_snapshots={}, old_images={}, marker={},
+            service={}, final_claim={}, final_pv={}, final_path=Path('/private/store'), original_live_census=census)
+        with tempfile.TemporaryDirectory() as folder:
+            checkpoint = Path(folder) / 'checkpoint.json'
+            persisted = []
+            def save(path, row):
+                payload = copy.deepcopy(row)
+                checkpoint.write_text(json.dumps(payload), encoding='utf-8')
+                persisted.append(payload)
+            journal = transaction.checkpoint_journal(folder, state, lambda: stage)
+            with patch.object(transaction, 'save', side_effect=save):
+                journal({'kind':'original_hub_shutdown_intent',
+                    'live_census_sha256':transaction.canonical(census)})
+                observed = json.loads(checkpoint.read_text(encoding='utf-8'))
+            self.assertEqual(len(persisted), 1)
+            self.assertEqual(observed['context']['original_live_census'], census)
+            self.assertEqual(observed['events'][0]['live_census_sha256'], transaction.canonical(census))
+
+    def test_corrupt_new_snapshot_fails_reconstruction_but_digest_only_old_postcut_reconstructs(self):
+        old = self.state(events=[{'kind':'original_hub_shutdown_intent','live_census_sha256':'a'*64}])
+        old['cut']={'manifest_sha256':'already-proved'}
+        stage = transaction.reconstruct(None, old, lambda event: None)
+        self.assertFalse(hasattr(stage, 'original_live_census'))
+        with self.assertRaisesRegex(transaction.Blocked, 'original_live_census_unavailable'):
+            transaction.require_original_live_census(stage,old['events'])
+
+        snapshot = self.census()
+        event = {'kind':'original_hub_shutdown_intent','live_census_sha256':transaction.canonical(snapshot)}
+        context = self.state()['context']; context['original_live_census'] = snapshot
+        valid = self.state(context=context, events=[event])
+        restored = transaction.reconstruct(None, valid, lambda event: None)
+        self.assertEqual(restored.original_live_census, snapshot)
+        broken = copy.deepcopy(valid); broken['events'][0]['live_census_sha256'] = 'b'*64
+        with self.assertRaisesRegex(transaction.Blocked, 'original_live_census_binding_invalid'):
+            transaction.reconstruct(None, broken, lambda event: None)
+        tampered = copy.deepcopy(valid)
+        tampered['context']['original_live_census']['streams'][0]['state']['messages'] += 1
+        with self.assertRaisesRegex(transaction.Blocked, 'original_live_census_binding_invalid'):
+            transaction.reconstruct(None, tampered, lambda event: None)
