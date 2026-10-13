@@ -184,7 +184,13 @@ class SpaceTreePanel extends ConsumerWidget {
             if (context.mounted && error != null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(l10n.spaceTreeReorderError(error.message)),
+                  content: Text(
+                    error.kind == SpaceTreeActionErrorKind.refreshFailed
+                        ? l10n.spaceTreeCreateRefreshFailed
+                        : l10n.spaceTreeReorderError(
+                            commonActionErrorMessage(l10n),
+                          ),
+                  ),
                 ),
               );
             }
@@ -211,7 +217,13 @@ class SpaceTreePanel extends ConsumerWidget {
             if (context.mounted && error != null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(l10n.spaceTreeReorderError(error.message)),
+                  content: Text(
+                    error.kind == SpaceTreeActionErrorKind.refreshFailed
+                        ? l10n.spaceTreeCreateRefreshFailed
+                        : l10n.spaceTreeReorderError(
+                            commonActionErrorMessage(l10n),
+                          ),
+                  ),
                 ),
               );
             }

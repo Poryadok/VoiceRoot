@@ -6,16 +6,19 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/gateway_request_id.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
+import 'package:voice_frontend/gen/voice/chat/v1/chat.pb.dart' as chat_pb;
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
@@ -37,6 +40,85 @@ import 'support/live_gateway_harness.dart';
 /// transport so the production Hub proves reconnect history catch-up from a
 /// second Gateway `hello` without fabricated frames or link state.
 void main() {
+  test('T055 setup waits for selected Chat ordering projection', () async {
+    var reads = 0;
+    var waits = 0;
+    final gateway = GatewayHttpClient(
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+      httpClient: MockClient((request) async {
+        expect(request.url.queryParameters['inbox'], 'main');
+        expect(request.headers['authorization'], 'Bearer fixture');
+        reads += 1;
+        return http.Response(
+          jsonEncode({
+            'chat_list': {
+              'items': [
+                {
+                  'chat': {
+                    'id': 'selected',
+                    if (reads >= 2)
+                      'last_message_at': reads == 3
+                          ? '2026-10-13T06:01:25Z'
+                          : '1970-01-01T00:00:00Z',
+                  },
+                  // Messaging enrichment is already visible while Chat's sort
+                  // projection is delayed; it must not satisfy readiness.
+                  'last_message_preview': 't055-reconnect-baseline',
+                },
+                {
+                  'chat': {
+                    'id': 'other',
+                    'last_message_at': '2026-10-13T06:01:25Z',
+                  },
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    await _waitForSelectedChatActivity(
+      gateway: gateway,
+      authorization: 'Bearer fixture',
+      chatId: 'selected',
+      delay: (_) async {
+        waits += 1;
+      },
+    );
+    expect(reads, 3);
+    expect(waits, 2);
+  });
+
+  test('T055 setup fails finitely when Chat ordering never projects', () async {
+    var reads = 0;
+    var waits = 0;
+    final gateway = GatewayHttpClient(
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+      httpClient: MockClient((_) async {
+        reads += 1;
+        return http.Response(
+          '{"chat_list":{"items":[{"chat":{"id":"selected"},'
+          '"last_message_preview":"t055-reconnect-baseline"}]}}',
+          200,
+        );
+      }),
+    );
+    await expectLater(
+      _waitForSelectedChatActivity(
+        gateway: gateway,
+        authorization: 'Bearer fixture',
+        chatId: 'selected',
+        delay: (_) async {
+          waits += 1;
+        },
+      ),
+      throwsA(isA<TestFailure>()),
+    );
+    expect(reads, 24);
+    expect(waits, 23);
+  });
+
   test(
     'profile switch accepts real B hello before B inbox REST, then selected history only',
     () async {
@@ -230,6 +312,14 @@ void main() {
       // Validate the public fixture over two actual one-row pages before
       // starting the production-side recorder. Each traversal must consume
       // its own response cursor; later snapshots may have a different boundary.
+      // This fresh DM has only the baseline message. Wait for Chat's async
+      // ordering projection, not merely Messaging's preview enrichment, so
+      // that message cannot move it across a measured keyset boundary.
+      await _waitForSelectedChatActivity(
+        gateway: ctx.gatewayHttp(),
+        authorization: rawB.authorizationHeader,
+        chatId: selectedChatId,
+      );
       await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
@@ -811,6 +901,48 @@ void main() {
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
     timeout: const Timeout(Duration(minutes: 2)),
+  );
+}
+
+Future<void> _waitForSelectedChatActivity({
+  required GatewayHttpClient gateway,
+  required String authorization,
+  required String chatId,
+  Future<void> Function(Duration)? delay,
+}) async {
+  const maxAttempts = 24;
+  GatewayHttpResult<chat_pb.ListChatsResponse>? lastResult;
+  for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+    final result = await gateway.getProto(
+      gateway.replace(
+        path: '/api/v1/chats',
+        queryParameters: {'inbox': 'main', 'page_size': '100'},
+      ),
+      authorization: authorization,
+      createEmpty: chat_pb.ListChatsResponse.create,
+    );
+    lastResult = result;
+    if (result case GatewayHttpOk<chat_pb.ListChatsResponse>(:final data)) {
+      for (final item in data.chatList.items) {
+        final chat = item.chat;
+        if (chat.id == chatId &&
+            chat.hasLastMessageAt() &&
+            chat.lastMessageAt.toDateTime().isAfter(
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+            )) {
+          return;
+        }
+      }
+    }
+    if (attempt + 1 < maxAttempts) {
+      await (delay ?? Future<void>.delayed)(
+        const Duration(milliseconds: 250),
+      );
+    }
+  }
+  fail(
+    'Chat ordering projection missing for $chatId after $maxAttempts reads: '
+    '$lastResult',
   );
 }
 
