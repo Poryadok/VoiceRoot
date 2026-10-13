@@ -304,6 +304,7 @@ go-matrix-test:
 
 verify-required-jobs-test:
 	$(BASH) "$(ROOT)/.github/ci/verify-required-jobs_test.sh"
+	python3 "$(ROOT)/.github/ci/selected-acceptance-gate_test.py"
 
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"

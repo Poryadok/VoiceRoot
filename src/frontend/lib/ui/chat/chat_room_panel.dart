@@ -14,6 +14,7 @@ import '../../e2e/e2e_file_crypto.dart';
 import '../../backend/files_client.dart';
 import '../../backend/mention_parser.dart';
 import '../../backend/messages_client.dart';
+import '../../backend/gateway_http.dart';
 import '../../backend/proto_mappers.dart' show protoTimestampToDateTime;
 import '../../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
 import '../../gen/voice/messaging/v1/messaging.pbenum.dart' as messaging_enums;
@@ -91,6 +92,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   );
   static const Key inputKey = Key('chat_room_input');
   static const Key sendKey = Key('chat_room_send');
+  static const Key sendRetryKey = Key('chat_room_send_retry');
   static const Key attachKey = Key('chat_room_attach');
   static const Key attachmentUploadFailureKey = Key(
     'chat_attachment_upload_failure',
@@ -138,6 +140,28 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
 }
 
 typedef ChatAttachmentPicker = Future<ChatAttachmentFile?> Function();
+
+class _TextSendAttempt {
+  _TextSendAttempt({
+    required this.chatId,
+    required this.identity,
+    required this.sessionInstallGeneration,
+    required this.generation,
+    required this.content,
+    required List<MessageMention> mentions,
+    required this.replyTarget,
+    required this.draftKey,
+  }) : mentions = List.unmodifiable(mentions);
+
+  final String chatId;
+  final GatewayRequestIdentity identity;
+  final int sessionInstallGeneration;
+  final int generation;
+  final String content;
+  final List<MessageMention> mentions;
+  final VoiceMessage? replyTarget;
+  final ChatDraftKey? draftKey;
+}
 
 class _ScheduledSendAttempt {
   const _ScheduledSendAttempt({
@@ -334,6 +358,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _highlightedMessageId = null as String?;
   var _liveMessageAnnouncement = '';
   ChatDraftKey? _draftKey;
+  _TextSendAttempt? _pendingTextSend;
+  int? _pendingTextSendControllerGeneration;
+  var _textSendGeneration = 0;
+  var _textSendInFlight = false;
+  var _textSendFailed = false;
   final _inChatSearchController = TextEditingController();
 
   @override
@@ -344,6 +373,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   @override
   void dispose() {
+    _cancelTextSend();
     _pinnedJumpGeneration++;
     _attachmentOperation++;
     _scheduledAttemptSubmissionGeneration++;
@@ -365,6 +395,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _cancelTextSend();
       _chatInfoSearchHandoffGeneration++;
       _inChatSearchOpen = false;
       _inChatSearchController.clear();
@@ -541,6 +572,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final l10n = AppLocalizations.of(context)!;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      final textAttempt = _pendingTextSend;
+      if (textAttempt != null && !_isTextSendActorCurrent(textAttempt)) {
+        setState(_cancelTextSend);
+      }
       final changed =
           previous?.activeProfileId != next.activeProfileId ||
           previous?.session?.accessToken != next.session?.accessToken;
@@ -564,7 +599,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         );
       }
     });
-    ref.listen<String?>(selectedChatIdProvider, (_, next) {
+    ref.listen<String?>(selectedChatIdProvider, (previous, next) {
+      if (previous != next && next != widget.chatId) {
+        setState(_cancelTextSend);
+      }
       if (next != widget.chatId || _scheduledMessagesRequested) return;
       _scheduledMessagesRequested = true;
       unawaited(
@@ -606,6 +644,17 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       ref.watch(chatDraftProvider(draftKey));
     }
     final controllerRoom = ref.watch(chatRoomControllerProvider(widget.chatId));
+    final textSendFailed =
+        _textSendFailed &&
+        _pendingTextSendControllerGeneration ==
+            ref
+                .read(chatRoomControllerProvider(widget.chatId).notifier)
+                .immediateSendGeneration;
+    final textSendOwnsRoomError =
+        textSendFailed &&
+        ref
+            .read(chatRoomControllerProvider(widget.chatId).notifier)
+            .failedMessageOwnsRoomError;
     final historyBelongsToActiveProfile =
         controllerRoom.historyProfileId == activeId;
     final room = historyBelongsToActiveProfile
@@ -1332,7 +1381,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         : room.messages.isEmpty &&
                               ephemeralMessages.isEmpty &&
                               !room.isLoading
-                        ? room.errorMessage != null
+                        ? room.errorMessage != null && !textSendOwnsRoomError
                               ? VoiceStatePanel(
                                   title: _roomErrorText(
                                     l10n,
@@ -1421,7 +1470,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ],
                 ),
               ),
-              if (room.errorMessage != null && room.messages.isNotEmpty)
+              if (room.errorMessage != null &&
+                  room.messages.isNotEmpty &&
+                  !textSendOwnsRoomError)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
@@ -1459,6 +1510,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ),
                 ),
               _buildScheduledMessagesSection(room, l10n),
+              if (textSendFailed && _pendingTextSend != null)
+                _buildTextSendFailure(
+                  l10n,
+                  room.isSending || composerBlocked,
+                  _pendingTextSend!,
+                ),
               if (_attachmentUploadFailure case final failure?)
                 Padding(
                   key: ChatRoomPanel.attachmentUploadFailureKey,
@@ -1564,7 +1621,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               );
                             }
                           },
-                          onSend: room.isSending || composerBlocked
+                          onSend:
+                              room.isSending ||
+                                  _textSendInFlight ||
+                                  composerBlocked
                               ? null
                               : _send,
                           readOnly: composerBlocked,
@@ -1596,7 +1656,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       const SizedBox(width: 4),
                       VoiceSendButton(
                         key: ChatRoomPanel.sendKey,
-                        onPressed: room.isSending || composerBlocked
+                        onPressed:
+                            room.isSending ||
+                                _textSendInFlight ||
+                                composerBlocked
                             ? null
                             : _send,
                         onLongPress:
@@ -1605,7 +1668,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                                 composerBlocked
                             ? null
                             : _openScheduledSendMenu,
-                        isLoading: room.isSending,
+                        isLoading: room.isSending || _textSendInFlight,
                         tooltip: l10n.chatSendMessage,
                       ),
                     ],
@@ -2226,6 +2289,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   Future<void> _send() async {
+    if (_textSendInFlight) return;
     if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
       return;
     }
@@ -2240,64 +2304,141 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       return;
     }
     final text = _composer.text;
+    if (text.trim().isEmpty) return;
+    final authController = ref.read(authControllerProvider.notifier);
+    final identity = authController.gatewayRequestIdentity;
+    if (identity == null) return;
     ref.read(realtimeHubProvider).typingStop(widget.chatId);
-    final memberIds = ref
-        .read(groupMembersProvider(widget.chatId))
-        .maybeWhen(
-          data: (data) => data.members.map((m) => m.profileId),
-          orElse: () => const <String>[],
-        );
-    final handleToProfileId = <String, String>{};
-    for (final id in memberIds) {
-      final profile = ref.read(profileProvider(id)).valueOrNull;
-      final handle = profile?.handle;
-      if (handle != null && handle.isNotEmpty) {
-        handleToProfileId[handle] = id;
-      }
-    }
-    final mentions = parseMentionsFromContent(
-      text,
-      memberProfileIds: memberIds,
-      handleToProfileId: handleToProfileId,
+    final attempt = _TextSendAttempt(
+      chatId: widget.chatId,
+      identity: identity,
+      sessionInstallGeneration: authController.sessionInstallGeneration,
+      generation: ++_textSendGeneration,
+      content: text,
+      mentions: _mentionsForComposer(text),
+      replyTarget: ref.read(chatReplyTargetProvider(widget.chatId)),
+      draftKey: _draftKey,
     );
-    final chatType = ref
-        .read(chatListProvider)
-        .valueOrNull
-        ?.items
-        .where((item) => item.chatId == widget.chatId)
-        .map((item) => item.chat.type)
-        .firstOrNull;
-    final isDm = chatType == 'CHAT_TYPE_DM';
-    final filteredMentions = isDm
-        ? mentions.where((m) => m.type == 'user').toList()
-        : mentions;
-    final replyTarget = ref.read(chatReplyTargetProvider(widget.chatId));
-    final err = await ref
+    _pendingTextSend = attempt;
+    _pendingTextSendControllerGeneration = null;
+    await _submitTextSend(attempt);
+  }
+
+  void _cancelTextSend() {
+    _textSendGeneration++;
+    _pendingTextSend = null;
+    _pendingTextSendControllerGeneration = null;
+    _textSendInFlight = false;
+    _textSendFailed = false;
+  }
+
+  bool _isTextSendActorCurrent(_TextSendAttempt attempt) =>
+      mounted &&
+      ref.read(authControllerProvider.notifier).gatewayRequestIdentity ==
+          attempt.identity &&
+      ref.read(authControllerProvider.notifier).sessionInstallGeneration ==
+          attempt.sessionInstallGeneration;
+
+  bool _isCurrentTextSend(_TextSendAttempt attempt) {
+    if (!_isTextSendActorCurrent(attempt)) return false;
+    final selected = ref.read(selectedChatIdProvider);
+    return widget.chatId == attempt.chatId &&
+        (selected == null || selected == attempt.chatId) &&
+        _textSendGeneration == attempt.generation;
+  }
+
+  Widget _buildTextSendFailure(
+    AppLocalizations l10n,
+    bool blocked,
+    _TextSendAttempt attempt,
+  ) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    child: Row(
+      children: [
+        Expanded(child: Text(_textSendFailureMessage(l10n))),
+        TextButton(
+          key: ChatRoomPanel.sendRetryKey,
+          onPressed: blocked || _textSendInFlight
+              ? null
+              : () => unawaited(_submitTextSend(attempt, retry: true)),
+          child: Text(l10n.commonRetry),
+        ),
+      ],
+    ),
+  );
+
+  String _textSendFailureMessage(AppLocalizations l10n) {
+    final raw = ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
-        .sendMessage(
-          text,
-          mentions: filteredMentions,
-          threadParentId: replyTarget?.id,
-        );
-    if (!mounted) return;
+        .failedMessageError;
+    final mapped = raw == null ? null : _roomErrorText(l10n, raw);
+    return mapped == null || mapped == l10n.chatRoomLoadError
+        ? commonActionErrorMessage(l10n)
+        : mapped;
+  }
+
+  Future<void> _submitTextSend(
+    _TextSendAttempt attempt, {
+    bool retry = false,
+  }) async {
+    if (_textSendInFlight ||
+        !identical(_pendingTextSend, attempt) ||
+        !_isCurrentTextSend(attempt))
+      return;
+    final controller = ref.read(
+      chatRoomControllerProvider(attempt.chatId).notifier,
+    );
+    setState(() {
+      _textSendInFlight = true;
+      _textSendFailed = false;
+    });
+    final Future<String?> submission;
+    if (retry) {
+      submission = controller.retryFailedMessage(
+        expectedGeneration: _pendingTextSendControllerGeneration,
+      );
+    } else {
+      submission = controller.sendMessage(
+        attempt.content,
+        mentions: attempt.mentions,
+        threadParentId: attempt.replyTarget?.id,
+      );
+      _pendingTextSendControllerGeneration = controller.immediateSendGeneration;
+    }
+    final err = await submission;
+    if (!_isCurrentTextSend(attempt)) return;
+    setState(() {
+      _textSendInFlight = false;
+      _textSendFailed =
+          err != null &&
+          controller.canRetryFailedMessage &&
+          _pendingTextSendControllerGeneration ==
+              controller.immediateSendGeneration;
+      if (err == null || (err == kChatActionStaleContext && !_textSendFailed))
+        _pendingTextSend = null;
+    });
     if (err == kChatOfflineBlockedError) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppLocalizations.of(context)!.chatOfflineSendBlocked),
         ),
       );
     } else if (err == null) {
-      _composer.clear();
-      final key = _draftKey;
-      if (key != null) {
-        await ref.read(chatDraftProvider(key).notifier).clear();
+      if (_composer.text == attempt.content) {
+        _composer.clear();
+        final key = attempt.draftKey;
+        if (key != null)
+          unawaited(ref.read(chatDraftProvider(key).notifier).clear());
       }
-      if (replyTarget != null) {
-        ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
+      if (attempt.replyTarget != null &&
+          ref.read(chatReplyTargetProvider(attempt.chatId))?.id ==
+              attempt.replyTarget!.id) {
+        ref.read(chatReplyTargetProvider(attempt.chatId).notifier).state = null;
       }
     }
-    _refocusComposer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isCurrentTextSend(attempt)) _composerFocus.requestFocus();
+    });
   }
 
   Future<void> _openAttachMenu() async {

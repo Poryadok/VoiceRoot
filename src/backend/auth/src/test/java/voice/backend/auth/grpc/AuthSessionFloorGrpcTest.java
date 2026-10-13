@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import app.voice.auth.v1.AuthServiceGrpc;
@@ -69,6 +70,54 @@ class AuthSessionFloorGrpcTest {
     assertEquals(Status.Code.UNAVAILABLE, unavailable.getStatus().getCode());
   }
 
+  @Test void higherDurableEpochCannotBeLoweredByRedisFloor() throws Exception {
+    UUID accountId = UUID.randomUUID();
+    AccountRepository accounts = mock(AccountRepository.class);
+    SessionEpochFloorStore floors = mock(SessionEpochFloorStore.class);
+    when(accounts.findById(accountId.toString())).thenReturn(java.util.Optional.of(account(accountId, 9)));
+    when(floors.requireFloor(accountId)).thenReturn(4L);
+
+    assertEquals(9L, invoke(accountId, accounts, floors).getSessionEpochFloor());
+  }
+
+  @Test void durableReadFailureCannotAuthorizeFromHealthyRedisAlone() throws Exception {
+    UUID accountId = UUID.randomUUID();
+    AccountRepository accounts = mock(AccountRepository.class);
+    SessionEpochFloorStore floors = mock(SessionEpochFloorStore.class);
+    when(accounts.findById(accountId.toString())).thenThrow(new IllegalStateException("database unavailable"));
+    when(floors.requireFloor(accountId)).thenReturn(9L);
+
+    var unavailable = assertThrows(StatusRuntimeException.class, () -> invoke(accountId, accounts, floors));
+
+    assertEquals(Status.Code.UNAVAILABLE, unavailable.getStatus().getCode());
+    verifyNoInteractions(floors);
+  }
+
+  @Test void nonpositiveDurableEpochCannotAuthorizeFromHealthyRedisAlone() throws Exception {
+    UUID accountId = UUID.randomUUID();
+    AccountRepository accounts = mock(AccountRepository.class);
+    SessionEpochFloorStore floors = mock(SessionEpochFloorStore.class);
+    when(floors.requireFloor(accountId)).thenReturn(9L);
+
+    for (long durableEpoch : new long[] {0L, -1L}) {
+      when(accounts.findById(accountId.toString()))
+          .thenReturn(java.util.Optional.of(account(accountId, durableEpoch)));
+      var unavailable = assertThrows(StatusRuntimeException.class, () -> invoke(accountId, accounts, floors));
+      assertEquals(Status.Code.UNAVAILABLE, unavailable.getStatus().getCode());
+    }
+  }
+
+  @Test void malformedAccountIdIsRejectedBeforeAuthorityAccess() throws Exception {
+    AccountRepository accounts = mock(AccountRepository.class);
+    SessionEpochFloorStore floors = mock(SessionEpochFloorStore.class);
+
+    for (String accountId : new String[] {"", "not-an-account", "8A78BD68-75E9-4F21-9387-3BDC2F6116AB"}) {
+      var malformed = assertThrows(StatusRuntimeException.class, () -> invoke(accountId, accounts, floors));
+      assertEquals(Status.Code.INVALID_ARGUMENT, malformed.getStatus().getCode());
+    }
+    verifyNoInteractions(accounts, floors);
+  }
+
   @Test void absentSourcesAndUnknownAccountFailClosed() throws Exception {
     UUID accountId = UUID.randomUUID();
     var absent = assertThrows(StatusRuntimeException.class, () -> invoke(accountId, null, null));
@@ -88,6 +137,11 @@ class AuthSessionFloorGrpcTest {
 
   private static app.voice.auth.v1.GetVoiceSessionEpochFloorResponse invoke(
       UUID accountId, AccountRepository accounts, SessionEpochFloorStore floors) throws Exception {
+    return invoke(accountId.toString(), accounts, floors);
+  }
+
+  private static app.voice.auth.v1.GetVoiceSessionEpochFloorResponse invoke(
+      String accountId, AccountRepository accounts, SessionEpochFloorStore floors) throws Exception {
     KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
     generator.initialize(2048);
     KeyPair keyPair = generator.generateKeyPair();
@@ -107,7 +161,7 @@ class AuthSessionFloorGrpcTest {
     Server server = NettyServerBuilder.forPort(0).addService(protectedService).build().start();
     ManagedChannel channel = NettyChannelBuilder.forAddress("localhost", server.getPort()).usePlaintext().build();
     try {
-      var request = GetVoiceSessionEpochFloorRequest.newBuilder().setAccountId(accountId.toString()).build();
+      var request = GetVoiceSessionEpochFloorRequest.newBuilder().setAccountId(accountId).build();
       String requestId = UUID.randomUUID().toString();
       String token = token(keyPair, request, requestId, clock.instant());
       Metadata headers = new Metadata();

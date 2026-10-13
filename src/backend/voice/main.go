@@ -153,7 +153,7 @@ func main() {
 		}
 	}
 	var userPrincipalRuntime *voiceuserprincipalruntime.Runtime
-	var sessionEpochChecker grpcsvc.CurrentSessionEpochChecker
+	var sessionEpochChecker *sessionfloor.Client
 	if userPrincipalEnabled {
 		epochClient, epochConn, clientErr := authFloorConfig.Dial(voiceIssuer)
 		if clientErr != nil {

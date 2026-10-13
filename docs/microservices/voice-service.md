@@ -370,10 +370,22 @@ BE255 implementation slice добавляет Space-room join/leave admission, �
 LiveKit grant, durable Space/Role invalidation delivery и Voice reconciliation
 с точным удалением LiveKit incarnation. Каждый подписанный Voice-user RPC до
 вызова handler сверяет epoch делегированного principal с текущим Auth floor;
-epoch также сохраняется в grant. Это не завершает Phase-0: Voice пока не
-проверяет текущий Auth epoch для уже подключённых участников или LiveKit-only
-reconnect, поэтому eligibility повторного подключения после его смены остается
-release gate. SLA удаления 2 s p95 / 5 s max остается ограниченным потерей
+epoch также сохраняется в grant.
+
+Active Space-media reconciliation reads the current signed Auth floor once per
+account in each full `ReconcileAll` sweep across Spaces, then compares every
+profile's own issued session epoch independently. Standalone `ReconcileSpace`
+calls start their own fresh pass. A Space watermark restart discards all shared
+floor values before retrying; a new sweep retains no previous values.
+Retries retain the existing per-Space bound and do not rescan completed Spaces;
+the shared floor values do not form an atomic cross-Space snapshot.
+Unavailable, missing, or nonpositive authority leaves
+reconciliation incomplete and the invalidation unacknowledged; stale epochs or
+an authoritative missing account retain exact-incarnation ejection. Admission
+recovery and signed Voice-user RPCs retain their fresh authority checks.
+
+This does not complete Phase-0: LiveKit-only reconnect eligibility after an
+Auth epoch change remains a release gate. SLA удаления 2 s p95 / 5 s max остается ограниченным потерей
 membership/Role rights и не распространяется на Auth-only epoch change. Roster projection,
 move handlers, Redis v2 encoding и replay deadline bridge semantics (D2/D3)
 также остаются отдельными gates. Hosted Linux proof относится только к явно

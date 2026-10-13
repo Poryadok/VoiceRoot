@@ -7,16 +7,38 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
-	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/notification/internal/push"
+	"voice/backend/notification/internal/store"
 )
 
 type stubAccountProfiles struct {
 	ids []uuid.UUID
 	err error
 	got uuid.UUID
+}
+
+func moderationSanctionRestartSpec() notificationConsumerRestartSpec {
+	accountID, recipientID := uuid.New(), uuid.New()
+	sanctionID := uuid.NewString()
+	return notificationConsumerRestartSpec{
+		name: "moderation_sanction", service: "moderation", stream: jsStreamModerationEvents, filter: "moderation.>",
+		deliverSubject: "_INBOX.voice.notification.moderation", subject: "moderation.sanction_applied",
+		recipientID: recipientID,
+		event: &eventsv1.ModerationStreamEvent{Payload: &eventsv1.ModerationStreamEvent_SanctionApplied{SanctionApplied: &eventsv1.SanctionApplied{
+			SanctionId: sanctionID, TargetAccountId: accountID.String(), Type: "warning",
+		}}},
+		expected: push.Payload{Title: "Moderation notice", Body: "You received a warning from moderation", Data: map[string]string{
+			"type": "system", "sanction_id": sanctionID, "sanction_type": "warning",
+		}},
+		run: func(ctx context.Context, natsURL string, tokens *store.DeviceTokenStore, pusher *dispatch.PushDispatcher) error {
+			return runModerationEventsConsumer(ctx, natsURL, tokens, pusher, nil, nil,
+				&stubAccountProfiles{ids: []uuid.UUID{recipientID}}, nil)
+		},
+	}
 }
 
 func (s *stubAccountProfiles) ProfileIDsForAccount(_ context.Context, accountID uuid.UUID) ([]uuid.UUID, error) {
