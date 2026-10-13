@@ -192,7 +192,8 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
             state=private_json(base/'checkpoint.json')
             retirement.idle_state(base,state)
             checkpoints[str(base/'checkpoint.json')]=hashlib.sha256(retirement.private_bytes(base/'checkpoint.json')).hexdigest()
-            if state.get('operator_retirement') is not None:closure=retirement.verify_terminal(base,state)
+            if any(state.get(key) is not None for key in ('operator_retirement','operator_fence_abort')):
+                closure=retirement.verify_terminal(base,state)
         if closure is None:raise Blocked('bridge_upgrade_retirement_required')
         for path in (installed,installed/'inbox',installed/'processing',installed/'journal',installed/'responses',installed/'recovery'):
             row=path.lstat()
@@ -207,6 +208,10 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
                 for directory in ('journal','responses') for path in (installed/directory).iterdir()}
             for path in (installed/'journal').iterdir():retirement.pending_request_accepted(installed,path,closure)
             protected={str(installed/'policy.json'):hashlib.sha256(retirement.private_bytes(installed/'policy.json',2<<20)).hexdigest()}
+            abandonment=installed/retirement.PENDING_ABANDONMENT_NAME
+            try:abandonment.lstat()
+            except FileNotFoundError:protected[str(abandonment)]=None
+            else:protected[str(abandonment)]=hashlib.sha256(retirement.private_bytes(abandonment,2<<20)).hexdigest()
             for name in ('recovery-key.pem','recovery-cert.pem'):
                 path=installed/'recovery'/name
                 fd,_=encrypted_cut.regular(path,private=name=='recovery-key.pem');os.close(fd)
@@ -217,6 +222,10 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
             if story_witness.registry_snapshot()!=witnesses or kube.get('configmap','voice-nats-generation')!=marker:
                 raise Blocked('bridge_upgrade_marker_changed')
             for name,wanted in {**checkpoints,**journals,**protected}.items():
+                if wanted is None:
+                    try:Path(name).lstat()
+                    except FileNotFoundError:continue
+                    raise Blocked('bridge_upgrade_history_changed')
                 if retirement.file_sha(Path(name))!=wanted:raise Blocked('bridge_upgrade_history_changed')
         finally:inbox.chmod(0o1730)
     print(result)
