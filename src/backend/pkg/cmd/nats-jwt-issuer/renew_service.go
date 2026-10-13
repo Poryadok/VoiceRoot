@@ -34,6 +34,27 @@ func sameServiceSubjects(a, b []string) bool {
 	return slices.Equal(left, right) && len(slices.Compact(left)) == len(a) && len(slices.Compact(right)) == len(b)
 }
 
+// Source may list concrete inboxes already covered by the same existing owned
+// tail. Compare that authority without adding the redundant claims to the JWT.
+// Other differences (including a missing tail or unrelated allow) still veto.
+func sameServiceSubscriptions(a, b []string, service string) bool {
+	compact := func(subjects []string) []string {
+		prefix := "_INBOX.voice." + service + "."
+		if !slices.Contains(subjects, prefix+">") {
+			return subjects
+		}
+		out := make([]string, 0, len(subjects))
+		for _, subject := range subjects {
+			if strings.HasPrefix(subject, prefix) && len(subject) > len(prefix) && !strings.ContainsAny(subject, "*>") {
+				continue
+			}
+			out = append(out, subject)
+		}
+		return out
+	}
+	return sameServiceSubjects(a, a) && sameServiceSubjects(b, b) && sameServiceSubjects(compact(a), compact(b))
+}
+
 // NATS > consumes at least one token. A concrete deny inside an allowed ACK
 // tail is an overlap too; matching a deny against the literal ">" is unsafe.
 func serviceSubjectsOverlap(a, b string) bool {
@@ -59,8 +80,15 @@ func renewExistingService(old []byte, accountToken, operatorToken string, signer
 	}
 	token, _ := jwt.ParseDecoratedJWT(old)
 	u, err := jwt.DecodeUserClaims(token)
-	if err != nil || u.Name != "voice-"+service || len(u.Pub.Allow) == 0 || !sameServiceSubjects(u.Sub.Allow, target.Subscribe) {
+	if err != nil || u.Name != "voice-"+service || len(u.Pub.Allow) == 0 || !sameServiceSubscriptions(u.Sub.Allow, target.Subscribe, service) {
 		return nil, renewalFailure()
+	}
+	for _, subject := range target.Subscribe {
+		for _, deny := range u.Sub.Deny {
+			if serviceSubjectsOverlap(deny, subject) {
+				return nil, renewalFailure()
+			}
+		}
 	}
 	result := slices.Clone([]string(u.Pub.Allow))
 	for _, subject := range subjects {
