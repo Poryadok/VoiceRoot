@@ -59,14 +59,17 @@ func TestSubscriptionEventsJetStreamRestartDrainsBacklogAndAcks(t *testing.T) {
 	var recorded subscriptionConsumptionLog
 	logger := slog.New(slog.NewJSONHandler(&recorded, nil))
 	start := func() *notificationConsumerRun {
-		return startNotificationAcceptanceConsumer(t, "subscription", func(ctx context.Context) error {
+		runner := startNotificationAcceptanceConsumer(t, "subscription", func(ctx context.Context) error {
 			return runSubscriptionEventsConsumer(ctx, server.ClientURL(), logger)
 		})
+		waitNotificationConsumerPushBound(t, js, jsStreamSubscriptionEvents, durable, true)
+		return runner
 	}
 	first := start()
 	err, joined := first.stop()
 	require.True(t, joined, "subscription consumer is joined before publishing backlog")
 	require.ErrorIs(t, err, context.Canceled)
+	waitNotificationConsumerPushBound(t, js, jsStreamSubscriptionEvents, durable, false)
 	before, err := js.ConsumerInfo(jsStreamSubscriptionEvents, durable)
 	require.NoError(t, err)
 
