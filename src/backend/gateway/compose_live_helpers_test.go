@@ -1076,89 +1076,6 @@ type composeJoinToken struct {
 	LivekitURL string `json:"livekit_url"`
 }
 
-const (
-	composeSpaceTokenReconciliationUnavailable = "Space media reconciliation is not ready"
-	composeSpaceTokenRetryMaxAttempts           = 6
-	composeSpaceTokenRetryWindow                = 6 * time.Second
-)
-
-var composeSpaceTokenRetryDelays = [...]time.Duration{
-	100 * time.Millisecond,
-	200 * time.Millisecond,
-	400 * time.Millisecond,
-	800 * time.Millisecond,
-	800 * time.Millisecond,
-}
-
-type composeJoinTokenFailure struct {
-	Code    string `json:"error_code"`
-	Message string `json:"message"`
-}
-
-func requestComposeJoinToken(
-	ctx context.Context,
-	client *http.Client,
-	base, accessToken, roomID string,
-	wait func(context.Context, time.Duration) error,
-) (composeJoinToken, error) {
-	ctx, cancel := context.WithTimeout(ctx, composeSpaceTokenRetryWindow)
-	defer cancel()
-	url := fmt.Sprintf("%s/api/v1/voice/calls/%s/token", base, roomID)
-	var last composeJoinTokenFailure
-	var lastStatus int
-
-	for attempt := 1; attempt <= composeSpaceTokenRetryMaxAttempts; attempt++ {
-		// Every attempt is a new GET. A rejected readiness response has not issued a token.
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return composeJoinToken{}, fmt.Errorf("build Space voice token request: %w", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+accessToken)
-		resp, err := client.Do(req)
-		if err != nil {
-			return composeJoinToken{}, fmt.Errorf("send Space voice token request: %w", err)
-		}
-		if resp.StatusCode == http.StatusOK {
-			var result composeJoinToken
-			decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result)
-			_ = resp.Body.Close()
-			if decodeErr != nil {
-				return composeJoinToken{}, fmt.Errorf("decode successful Space voice token response: %w", decodeErr)
-			}
-			return result, nil
-		}
-
-		lastStatus = resp.StatusCode
-		last = composeJoinTokenFailure{}
-		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&last)
-		_ = resp.Body.Close()
-		if decodeErr != nil {
-			return composeJoinToken{}, fmt.Errorf("Space voice token failed: HTTP %d response did not contain a valid public error", lastStatus)
-		}
-		if lastStatus != http.StatusServiceUnavailable || last.Code != "unavailable" || last.Message != composeSpaceTokenReconciliationUnavailable {
-			return composeJoinToken{}, fmt.Errorf("Space voice token failed: HTTP %d code=%q message=%q", lastStatus, last.Code, last.Message)
-		}
-		if attempt == composeSpaceTokenRetryMaxAttempts {
-			break
-		}
-		if err := wait(ctx, composeSpaceTokenRetryDelays[attempt-1]); err != nil {
-			return composeJoinToken{}, fmt.Errorf("Space media reconciliation remained unavailable after %d attempts: code=%q message=%q: %w", attempt, last.Code, last.Message, err)
-		}
-	}
-	return composeJoinToken{}, fmt.Errorf("Space media reconciliation remained unavailable after %d attempts: code=%q message=%q", composeSpaceTokenRetryMaxAttempts, last.Code, last.Message)
-}
-
-func waitComposeSpaceTokenRetry(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
 func startComposeCall(
 	t *testing.T,
 	client *http.Client,
@@ -1206,14 +1123,6 @@ func acceptComposeCall(t *testing.T, client *http.Client, base, accessToken, roo
 	}
 	require.NoError(t, json.Unmarshal(body, &parsed))
 	return parsed.CallSession
-}
-
-func getComposeSpaceMediaJoinToken(t *testing.T, client *http.Client, base, accessToken, roomID string) composeJoinToken {
-	t.Helper()
-	parsed, err := requestComposeJoinToken(context.Background(), client, base, accessToken, roomID, waitComposeSpaceTokenRetry)
-	require.NoError(t, err)
-	require.NotEmpty(t, parsed.JWT)
-	return parsed
 }
 
 func getComposeJoinToken(t *testing.T, client *http.Client, base, accessToken, roomID string) composeJoinToken {
