@@ -25,6 +25,18 @@ CONFIGMAPS={'voice-app-config','voice-nats-analytics-chat-bootstrap','voice-nats
     'voice-nats-leaf-config','voice-nats-realtime-bootstrap'}
 CORE={HUB,'voice-gateway',*('voice-'+s for s in LEAVES)}
 WAIVER='CURRENT_STAGING_MESSAGES_AND_CONSUMERS_MAY_BE_LOST_SETUP_RETAINED'
+FENCE_ABORT_OPERATION='32151c4cb431'
+FENCE_ABORT_CHECKPOINT_SHA256='94b78d2ede79b1a899817aef34eee5c1001f75212e0d5b15e1c1cdc722f3e994'
+FENCE_ABORT_SOURCE_SHA='e2af6b043b9afa44ea00fb8e564b04ed84e9627a'
+FENCE_ABORT_RUN_ID=38380518143
+FENCE_ABORT_NONCE='32151c4cb4316a31c57949222e0cf69208c8cd82a0bf32e307c371d34c9b2a59'
+FENCE_ABORT_JOURNAL_SHA256='ca6c43b78e57ae5ebf71a9776db320438ee0763b9f94745bda155af0c1264f5e'
+FENCE_ABORT_RESPONSE_SHA256='f823049f6a38c4b7c31cf64a19a65e4a611f4c8905df890e2e9291241c335d92'
+FENCE_ABORT_POD_UID='c8ac408a-ef62-451b-a8c1-5a4393ec271a'
+FENCE_ABORT_POD_NAME='voice-nats-pvc-candidate-cf9757747-dgktg'
+FENCE_ABORT_FINALIZER='voice.io/nats-preservation-32151c4cb431'
+FENCE_ABORT_NAMESPACE_UID='ac7abaf3-241f-483f-ac33-71086e4dfd32'
+PENDING_ABANDONMENT_NAME='operator-pending-abandonment-v1.json'
 
 def fail():raise Blocked('operator_retirement_binding_invalid')
 def canonical(row):return hashlib.sha256(json.dumps(row,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -231,6 +243,7 @@ def verify_readonly_terminal(base,state):
 def verify_terminal(base,state):
     if 'operator_applied_abort' in state:return verify_applied_terminal(base,state)
     if 'operator_postmigration_abort' in state:return verify_postmigration_terminal(base,state)
+    if 'operator_fence_abort' in state:return verify_fence_abort_terminal(base,state)
     if 'failed_readonly' in state:return verify_readonly_terminal(base,state)
     if 'operator_captured_abort' in state:return verify_captured_terminal(base,state)
     if 'operator_precut_abort' in state:return verify_precut_terminal(base,state)
@@ -275,6 +288,195 @@ def verify_terminal(base,state):
         or receipt.get('user_cycle_restored') is not True):fail()
     journal_binding(guard.ROOT/'installed',receipt['journals'])
     return receipt
+
+
+def _fence_abort_sequence(names):
+    return [HUB,'voice-user-space-cycle','voice-user-template-restored',
+        *sorted(names-{HUB,'voice-user','voice-space','voice-web','voice-gateway'}),
+        'voice-web','voice-gateway']
+
+
+def fence_abort_terminal(snapshot,receipt):
+    """Construct the one exact ABORTED closure for the retained 32151 incident."""
+    receipt_schema=receipt.get('schema')
+    if receipt_schema not in ('voice-operator-fence-abort-closure-v1','voice-operator-fence-abort-closure-v2'):fail()
+    version='v2' if receipt_schema.endswith('-v2') else 'v1'
+    reference={'schema':'voice-operator-fence-abort-reference-'+version,
+        'snapshot_sha256':receipt['snapshot_sha256'],'receipt_sha256':canonical(receipt)}
+    result=copy.deepcopy(snapshot)
+    result.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',
+        events=copy.deepcopy(snapshot['events']+receipt['events']),operator_fence_abort=reference)
+    return result
+
+
+def _fence_abort_journal(installed,receipt):
+    rows=receipt.get('journals')
+    name=FENCE_ABORT_NONCE+'.json'
+    wanted={'journal_sha256':FENCE_ABORT_JOURNAL_SHA256,
+        'request_sha256':None,'response_sha256':FENCE_ABORT_RESPONSE_SHA256}
+    if not isinstance(rows,dict) or set(rows)!={name} or set(rows[name])!=set(wanted):fail()
+    raw=private_bytes(Path(installed)/'journal'/name,2<<20)
+    row=json.loads(raw);request=row.get('request',{})
+    expected={'action':'prepare','changed_services':['web'],'mode':'images-only',
+        'nonce':FENCE_ABORT_NONCE,'run_id':FENCE_ABORT_RUN_ID,'source_sha':FENCE_ABORT_SOURCE_SHA}
+    import bridge
+    try:bridge.validate(dict(request,token='fixed-noncredential-validation-placeholder'))
+    except bridge.BridgeError:fail()
+    response_raw=private_bytes(Path(installed)/'responses'/name,2<<20,group_read=True)
+    if (hashlib.sha256(raw).hexdigest()!=wanted['journal_sha256']
+        or set(row)!={'schema','request_sha256','request','phase','prepare_stage','prepare_error'}
+        or row.get('schema')!='voice-nats-bridge-request-v1' or request!=expected
+        or row.get('request_sha256')!=canonical(request) or row.get('phase')!='STARTED'
+        or row.get('prepare_stage')!={'name':'target-build','status':'COMPLETE'}
+        or row.get('prepare_error')!='guard_rejected'
+        or hashlib.sha256(response_raw).hexdigest()!=wanted['response_sha256']
+        or json.loads(response_raw)!={'status':'BLOCKED','error':'command_failed'}
+        or rows[name]['request_sha256']!=canonical(request)
+        or rows[name]['response_sha256']!=wanted['response_sha256']):fail()
+    return {name:{'journal_sha256':wanted['journal_sha256'],
+        'request_sha256':canonical(request),'response_sha256':wanted['response_sha256']}}
+
+
+def verify_fence_abort_terminal(base,state):
+    """Verify the exact restored 32151 pre-cut abort; this is never rollout PASS."""
+    base=Path(base)
+    if base.name!='rollout-'+FENCE_ABORT_OPERATION or state.get('operation')!=FENCE_ABORT_OPERATION:fail()
+    raw=private_bytes(base/'operator-fence-abort-snapshot.json')
+    if hashlib.sha256(raw).hexdigest()!=FENCE_ABORT_CHECKPOINT_SHA256:fail()
+    snapshot=json.loads(raw);receipt=document(base/'operator-fence-abort-receipt.json')
+    reference_version='v2' if receipt.get('schema')=='voice-operator-fence-abort-closure-v2' else 'v1'
+    reference={'schema':'voice-operator-fence-abort-reference-'+reference_version,
+        'snapshot_sha256':FENCE_ABORT_CHECKPOINT_SHA256,'receipt_sha256':canonical(receipt)}
+    names=CORE|{'voice-web'}
+    context=snapshot.get('context',{});expected=context.get('expected',{})
+    original=context.get('original_snapshots',{});captured=context.get('snapshots',{})
+    marker=context.get('marker',{});marker_data=marker.get('data',{})
+    if (snapshot.get('schema')!='nats-rollout-root-v1' or snapshot.get('phase')!='FENCE'
+        or snapshot.get('status')!='BLOCKED' or snapshot.get('fence_status')!='UNKNOWN'
+        or snapshot.get('target',{}).get('mode')!='images-only'
+        or snapshot.get('target',{}).get('tag')!=FENCE_ABORT_SOURCE_SHA
+        or set(snapshot)&{'cut','custody','authorization','apply','restart','preservation','closed_preservation'}
+        or set(original)!=names or set(captured)!=names
+        or expected.get('namespace_uid')!=FENCE_ABORT_NAMESPACE_UID
+        or not isinstance(expected.get('source_claim'),str) or not re.fullmatch(r'[a-z0-9-]{1,63}',expected.get('source_claim',''))
+        or expected.get('source_claim')!=context.get('final_claim',{}).get('metadata',{}).get('name')
+        or expected.get('source_claim_uid')!=context.get('final_claim',{}).get('metadata',{}).get('uid')
+        or expected.get('source_pv_uid')!=context.get('final_pv',{}).get('metadata',{}).get('uid')
+        or expected.get('deployment_uids')!={n:r.get('metadata',{}).get('uid') for n,r in original.items()}
+        or marker_data.get('phase')!='rollout-capturing'
+        or marker_data.get('knownRolloutOperation')!=FENCE_ABORT_OPERATION
+        or marker_data.get('dataPVC')!=expected.get('source_claim')):fail()
+    history=snapshot.get('events')
+    if not isinstance(history,list):fail()
+    intents=[e for e in history if e.get('kind')=='original_hub_shutdown_intent']
+    exits=[e for e in history if e.get('kind')=='original_hub_orderly_exit_verified']
+    removals=[e for e in history if e.get('kind')=='original_hub_owned_finalizer_removed']
+    allowed_history={'staging_preflight','rollout_original_capture','rollout_maintenance_owned',
+        'workload_scaled','workload_fenced','original_hub_shutdown_intent','original_hub_orderly_exit_verified'}
+    scaled=[e for e in history if e.get('kind')=='workload_scaled']
+    if (any(not isinstance(e,dict) or e.get('kind') not in allowed_history for e in history)
+        or len(intents)!=1 or len(exits)!=1 or removals
+        or {e.get('name') for e in scaled}!=names or any(e.get('replicas')!=0 for e in scaled)
+        or intents[0].get('pod_uid')!=FENCE_ABORT_POD_UID
+        or intents[0].get('finalizer')!=FENCE_ABORT_FINALIZER
+        or not re.fullmatch(r'containerd://[a-f0-9]{64}',intents[0].get('container_id',''))
+        or not re.fullmatch('[a-f0-9]{64}',intents[0].get('live_census_sha256',''))
+        or exits[0].get('proof',{}).get('pod_uid')!=FENCE_ABORT_POD_UID
+        or exits[0].get('proof',{}).get('schema')!='voice-original-hub-orderly-exit-v1'
+        or exits[0].get('proof',{}).get('source')!='KUBELET_CURRENT_TERMINATED_RETAINED_POD'
+        or exits[0].get('proof',{}).get('exit_code')!=0
+        or exits[0].get('proof',{}).get('container_id')!=intents[0].get('container_id')
+        or type(exits[0].get('proof',{}).get('restart_count')) is not int
+        or not isinstance(exits[0].get('proof',{}).get('started_at'),str)
+        or not isinstance(exits[0].get('proof',{}).get('finished_at'),str)):fail()
+    for name,row in original.items():
+        current=captured[name]
+        if (row.get('metadata',{}).get('uid')!=current.get('metadata',{}).get('uid')
+            or row.get('spec',{}).get('replicas',1)!=1
+            or current.get('spec',{}).get('replicas')!=0
+            or row.get('spec',{}).get('template')!=current.get('spec',{}).get('template')):fail()
+    if (set(receipt)!={'schema','operation','snapshot_sha256','code_binding_sha256','authorization',
+        'deployment_pass','rollback_eligible','pod_finalizer','storage','restored','restore_sequence',
+        'before_marker','released_marker','events','journals'}
+        or receipt.get('schema') not in ('voice-operator-fence-abort-closure-v1','voice-operator-fence-abort-closure-v2')
+        or receipt.get('operation')!=FENCE_ABORT_OPERATION
+        or receipt.get('snapshot_sha256')!=FENCE_ABORT_CHECKPOINT_SHA256
+        or receipt.get('code_binding_sha256')!=canonical(snapshot.get('code_capture'))
+        or receipt.get('authorization')!='EXPLICIT_USER_AUTHORIZED_DISPOSABLE_STAGING_RECOVERY'
+        or receipt.get('deployment_pass') is not False or receipt.get('rollback_eligible') is not False
+        or state.get('operator_fence_abort')!=reference):fail()
+    binding=root_cli.code_binding(base/'code')
+    if binding!=snapshot.get('code_capture'):fail()
+    pod=receipt.get('pod_finalizer',{});proof=exits[0]['proof']
+    common={'pod_uid','finalizer','container_id','exit_code','before','after','resource_version_before','resource_version_after'}
+    if (pod.get('pod_uid')!=FENCE_ABORT_POD_UID or pod.get('finalizer')!=FENCE_ABORT_FINALIZER
+        or pod.get('container_id')!=proof.get('container_id') or pod.get('exit_code')!=0):fail()
+    if receipt['schema']=='voice-operator-fence-abort-closure-v1':
+        finals=pod.get('before')
+        if (set(pod)!=common or not isinstance(finals,list) or finals.count(FENCE_ABORT_FINALIZER)!=1
+            or pod.get('after')!=[f for f in finals if f!=FENCE_ABORT_FINALIZER]
+            or not re.fullmatch('[0-9]+',pod.get('resource_version_before',''))
+            or not re.fullmatch('[0-9]+',pod.get('resource_version_after',''))
+            or int(pod['resource_version_after'])<=int(pod['resource_version_before'])):fail()
+        finalizer_event={'kind':'operator_nats_finalizer_removed','pod_uid':FENCE_ABORT_POD_UID,
+            'finalizer':FENCE_ABORT_FINALIZER}
+    else:
+        observation={'namespace_uid':FENCE_ABORT_NAMESPACE_UID,'pod_name':FENCE_ABORT_POD_NAME,
+            'pod_uid':FENCE_ABORT_POD_UID}
+        if (set(pod)!=common|{'outcome','pod_absence_observation'}
+            or pod.get('outcome')!='CAS_RESPONSE_UNAVAILABLE_UID_ABSENT'
+            or pod.get('before') is not None or pod.get('after') is not None
+            or pod.get('resource_version_before') is not None or pod.get('resource_version_after') is not None
+            or pod.get('pod_absence_observation')!=observation):fail()
+        finalizer_event={'kind':'operator_nats_pod_uid_absence_verified','cas_response':'UNAVAILABLE',
+            **observation}
+    storage=receipt.get('storage',{});claim=context.get('final_claim',{});pv=context.get('final_pv',{})
+    if (storage!={'namespace_uid':FENCE_ABORT_NAMESPACE_UID,'claim_uid':expected.get('source_claim_uid'),
+        'pv_uid':expected.get('source_pv_uid'),'claim_spec_sha256':canonical(claim.get('spec')),
+        'pv_spec_sha256':canonical(pv.get('spec')),'path':context.get('final_path')}):fail()
+    restored=receipt.get('restored',{})
+    wanted={name:{'uid':row['metadata']['uid'],'template_sha256':canonical(row['spec']['template']),
+        'replicas':1,'ready':True} for name,row in original.items()}
+    if restored!=wanted or receipt.get('restore_sequence')!=_fence_abort_sequence(names):fail()
+    before=receipt.get('before_marker',{});released=receipt.get('released_marker',{})
+    active=copy.deepcopy(marker_data);active['phase']='active';active.pop('knownRolloutOperation',None)
+    rv=marker.get('metadata',{}).get('resourceVersion','')
+    if (before!={'uid':marker.get('metadata',{}).get('uid'),'resourceVersion':rv,'data':marker_data}
+        or set(released)!={'uid','resourceVersion','data'} or released.get('uid')!=before['uid']
+        or released.get('data')!=active or not re.fullmatch('[0-9]+',rv)
+        or not re.fullmatch('[0-9]+',released.get('resourceVersion',''))
+        or int(released['resourceVersion'])<=int(rv)):fail()
+    events=receipt.get('events');workload_events=[e for e in events[2:-2] if e.get('kind')=='operator_workload_restored'] if isinstance(events,list) else []
+    expected_events=[{'kind':'operator_workload_restored','name':n,'uid':row['uid'],
+        'template_sha256':row['template_sha256'],'replicas':1,'ready':True} for n,row in sorted(wanted.items())]
+    if (not isinstance(events,list) or len(events)!=len(names)+4
+        or events[0]!={'kind':'operator_fence_abort_intent'}
+        or events[1]!=finalizer_event
+        or workload_events!=expected_events
+        or events[-2]!={'kind':'operator_marker_released','uid':before['uid']}
+        or events[-1]!={'kind':'operator_fence_abort_completed'}):fail()
+    journals=_fence_abort_journal(guard.ROOT/'installed',receipt)
+    if state!=fence_abort_terminal(snapshot,dict(receipt,journals=journals)):fail()
+    # Return the exact accepted closure augmented with journal pins for the idle installer.
+    return dict(receipt,journals=journals)
+
+
+def write_fence_abort_closure(base,snapshot_raw,receipt):
+    """Persist the reviewed operation-specific root closure after observed recovery."""
+    if os.geteuid()!=0 or sys.platform!='linux':fail()
+    base=Path(base)
+    if base.name!='rollout-'+FENCE_ABORT_OPERATION or not isinstance(snapshot_raw,bytes):fail()
+    checkpoint_raw=private_bytes(base/'checkpoint.json')
+    if (hashlib.sha256(checkpoint_raw).hexdigest()!=FENCE_ABORT_CHECKPOINT_SHA256
+        or checkpoint_raw!=snapshot_raw):fail()
+    snapshot=json.loads(snapshot_raw)
+    receipt_raw=json.dumps(receipt,sort_keys=True,separators=(',',':')).encode()
+    exclusive(base/'operator-fence-abort-snapshot.json',snapshot_raw)
+    exclusive(base/'operator-fence-abort-receipt.json',receipt_raw)
+    terminal=fence_abort_terminal(snapshot,receipt)
+    verify_fence_abort_terminal(base,terminal)
+    save(base/'checkpoint.json',terminal,limit=128<<20)
+    return terminal
 
 def precut_retained_setup(snapshot):
     ctx=snapshot['context'];expected=ctx['expected']
@@ -682,7 +884,18 @@ def pending_request_accepted(installed,path,closure):
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
     row=document(path)
     if row.get('phase')=='COMPLETE':return
+    if path.name==FENCE_ABORT_NONCE+'.json':
+        base=guard.ROOT/('rollout-'+FENCE_ABORT_OPERATION)
+        state=document(base/'checkpoint.json')
+        verified=verify_fence_abort_terminal(base,state)
+        if path.name not in verified.get('journals',{}):fail()
+        return
     if path.name in closure['journals']:
+        if closure.get('schema') in ('voice-operator-fence-abort-closure-v1','voice-operator-fence-abort-closure-v2'):
+            request=row.get('request',{});operation=request.get('nonce','')[:12]
+            base=guard.ROOT/('rollout-'+operation)
+            if verify_fence_abort_terminal(base,document(base/'checkpoint.json'))!=closure:fail()
+            return
         if closure.get('schema')=='voice-failed-readonly-closure-v1':
             base=guard.ROOT/('rollout-'+path.stem[:12])
             if verify_readonly_terminal(base,document(base/'checkpoint.json'))!=closure:fail()
@@ -695,18 +908,130 @@ def pending_request_accepted(installed,path,closure):
         journal_binding(installed,{path.name:closure['journals'][path.name]})
         return
     operation=path.stem[:12];wanted=PREBUILD_RECEIPTS.get(operation)
-    if wanted is None:raise Blocked('bridge_upgrade_interrupted_request')
-    raw=private_bytes(installed/('prebuild-disposition-'+operation+'.json'),2<<20)
-    if hashlib.sha256(raw).hexdigest()!=wanted:fail()
-    receipt=json.loads(raw)
-    if (receipt.get('operation')!=operation or receipt.get('original_journal')!=row
-        or receipt.get('journal_sha256')!=hashlib.sha256(private_bytes(path,2<<20)).hexdigest()
-        or receipt.get('response_sha256')!=hashlib.sha256(private_bytes(installed/'responses'/path.name,2<<20,group_read=True)).hexdigest()
-        or receipt.get('operation_absent') is not True or receipt.get('build_absent') is not True):fail()
-    for candidate in (guard.ROOT/('rollout-'+operation),installed/'sources'/(operation+'-build')):
-        try:candidate.lstat()
-        except FileNotFoundError:continue
-        fail()
+    if wanted is not None:
+        raw=private_bytes(installed/('prebuild-disposition-'+operation+'.json'),2<<20)
+        if hashlib.sha256(raw).hexdigest()!=wanted:fail()
+        receipt=json.loads(raw)
+        if (receipt.get('operation')!=operation or receipt.get('original_journal')!=row
+            or receipt.get('journal_sha256')!=hashlib.sha256(private_bytes(path,2<<20)).hexdigest()
+            or receipt.get('response_sha256')!=hashlib.sha256(private_bytes(installed/'responses'/path.name,2<<20,group_read=True)).hexdigest()
+            or receipt.get('operation_absent') is not True or receipt.get('build_absent') is not True):fail()
+        for candidate in (guard.ROOT/('rollout-'+operation),installed/'sources'/(operation+'-build')):
+            try:candidate.lstat()
+            except FileNotFoundError:continue
+            fail()
+        return
+    verify_pending_abandonment(installed,path)
+
+
+def verify_pending_abandonment(installed,path):
+    """Admit only this exact root-attested abandonment, never a new pending nonce."""
+    installed=Path(installed);path=Path(path)
+    try:
+        raw=private_bytes(installed/PENDING_ABANDONMENT_NAME,2<<20)
+        receipt=json.loads(raw)
+    except (OSError,ValueError):fail()
+    if (type(receipt) is not dict or set(receipt)!={'schema','authorization','fence_abort','entries','inventory_sha256'}
+        or receipt.get('schema')!='voice-nats-pending-abandonment-v1'
+        or receipt.get('authorization')!='EXPLICIT_USER_AUTHORIZED_DISPOSABLE_STAGING_RECOVERY'
+        or not isinstance(receipt.get('entries'),dict) or not 1<=len(receipt['entries'])<=100
+        or receipt.get('inventory_sha256')!=canonical(receipt['entries'])
+        or FENCE_ABORT_NONCE+'.json' in receipt['entries']):fail()
+    if set(receipt['entries'])!=pending_abandonment_names(installed):fail()
+    fence_base=guard.ROOT/('rollout-'+FENCE_ABORT_OPERATION)
+    fence_state=document(fence_base/'checkpoint.json')
+    fence=verify_fence_abort_terminal(fence_base,fence_state)
+    if receipt.get('fence_abort')!={'operation':FENCE_ABORT_OPERATION,
+        'checkpoint_sha256':FENCE_ABORT_CHECKPOINT_SHA256,
+        'receipt_sha256':canonical(document(fence_base/'operator-fence-abort-receipt.json'))}:fail()
+    name=path.name
+    if name not in receipt['entries']:raise Blocked('bridge_upgrade_interrupted_request')
+    pins=receipt['entries'][name]
+    if (not re.fullmatch(r'[a-f0-9]{64}\.json',name)
+        or set(pins)!={'journal_sha256','request_sha256','response_sha256','operation','build_key',
+            'checkpoint_sha256','checkpoint_phase','checkpoint_status','operation_state','build_present',
+            'build_fingerprint','disposition'}
+        or pins.get('disposition')!='ABANDONED_BY_EXPLICIT_USER_AUTHORIZATION'
+        or pins.get('operation_state') not in ('TERMINAL_CHECKPOINT','CHECKPOINT_ABSENT','PREBUILD_ONLY')
+        or type(pins.get('build_present')) is not bool):fail()
+    try:
+        journal_raw=private_bytes(path,2<<20)
+        response_raw=private_bytes(installed/'responses'/name,2<<20,group_read=True)
+        journal=json.loads(journal_raw);response=json.loads(response_raw)
+    except (OSError,ValueError):fail()
+    request=journal.get('request',{})
+    if (journal.get('phase')!='STARTED' or journal.get('request_sha256')!=pins['request_sha256']
+        or canonical(request)!=pins['request_sha256'] or request.get('nonce')!=path.stem
+        or hashlib.sha256(journal_raw).hexdigest()!=pins['journal_sha256']
+        or hashlib.sha256(response_raw).hexdigest()!=pins['response_sha256']
+        or response.get('status')!='BLOCKED' or set(response)-{'status','error','operation'}
+        or response.get('error') not in PUBLIC_CODES|{'exception_'+kind for kind in PUBLIC_TYPES}|{'blocked_unclassified'}):fail()
+    import bridge
+    validated=dict(request)
+    if 'token' in bridge.FIELDS.get(request.get('action'),set()) and 'token' not in validated:
+        validated['token']='disposition-schema-check'
+    try:bridge.validate(validated)
+    except bridge.BridgeError:fail()
+    request_operation=request.get('operation');response_operation=response.get('operation');prefix=path.stem[:12]
+    if (request_operation is not None and not re.fullmatch('[a-f0-9]{12}',request_operation)
+        or response_operation is not None and not re.fullmatch('[a-f0-9]{12}',response_operation)
+        or request_operation is not None and response_operation is not None and request_operation!=response_operation):fail()
+    requested=request_operation if request_operation is not None else response_operation
+    build_key=requested if isinstance(requested,str) else prefix
+    candidate=requested if isinstance(requested,str) else prefix
+    if not re.fullmatch('[a-f0-9]{12}',candidate):fail()
+    operation_path=guard.ROOT/('rollout-'+candidate) if candidate else None
+    checkpoint_sha=checkpoint_phase=checkpoint_status=None
+    operation_present=False
+    if operation_path is not None:
+        try:operation_stat=operation_path.lstat()
+        except FileNotFoundError:pass
+        else:
+            if not stat.S_ISDIR(operation_stat.st_mode) or stat.S_ISLNK(operation_stat.st_mode):fail()
+            operation_present=True
+    if operation_present:
+        state=document(operation_path/'checkpoint.json')
+        if state.get('operation')!=candidate:fail()
+        idle_state(operation_path,state)
+        checkpoint_sha=hashlib.sha256(private_bytes(operation_path/'checkpoint.json')).hexdigest()
+        checkpoint_phase=state.get('phase');checkpoint_status=state.get('status')
+    build_path=installed/'sources'/(build_key+'-build') if re.fullmatch('[a-f0-9]{12}',build_key) else None
+    build_present=False;build_fingerprint=None
+    if build_path is not None:
+        try:build_stat=build_path.lstat()
+        except FileNotFoundError:pass
+        else:
+            if (not stat.S_ISDIR(build_stat.st_mode) or stat.S_ISLNK(build_stat.st_mode)
+                or build_stat.st_uid!=0):fail()
+            build_present=True
+            build_fingerprint={'device':build_stat.st_dev,'inode':build_stat.st_ino,
+                'mode':stat.S_IMODE(build_stat.st_mode),'uid':build_stat.st_uid,'gid':build_stat.st_gid,
+                'bytes':build_stat.st_size,'mtime_ns':build_stat.st_mtime_ns,'ctime_ns':build_stat.st_ctime_ns}
+    operation_state=('TERMINAL_CHECKPOINT' if operation_present else
+        'PREBUILD_ONLY' if build_present else 'CHECKPOINT_ABSENT')
+    if (pins.get('operation')!=candidate or pins.get('build_key')!=build_key or pins.get('checkpoint_sha256')!=checkpoint_sha
+        or pins.get('checkpoint_phase')!=checkpoint_phase or pins.get('checkpoint_status')!=checkpoint_status
+        or pins.get('operation_state')!=operation_state or pins.get('build_present') is not build_present
+        or pins.get('build_fingerprint')!=build_fingerprint):fail()
+    return {'receipt_sha256':hashlib.sha256(raw).hexdigest(),'fence':fence['schema'],'name':name}
+
+
+def pending_abandonment_names(installed):
+    """Bind the administrative receipt to the complete current STARTED set."""
+    directory=Path(installed)/'journal'
+    rows=sorted(directory.iterdir(),key=lambda item:item.name)
+    if len(rows)>100:fail()
+    names=set()
+    for path in rows:
+        if not re.fullmatch(r'[a-f0-9]{64}\.json',path.name):fail()
+        try:row=json.loads(private_bytes(path,2<<20))
+        except (OSError,ValueError):fail()
+        if type(row) is not dict:fail()
+        phase=row.get('phase')
+        if phase=='COMPLETE':continue
+        if phase!='STARTED':fail()
+        if path.name!=FENCE_ABORT_NONCE+'.json':names.add(path.name)
+    return names
 
 class RetirementStage(Staging):
     def __init__(self,kube,snapshot,plan,journal):

@@ -759,6 +759,64 @@ the fixed installed V15 predecessor after that closure and preserves all old
 operation code, keys, policy, receipts and request history. Unknown pending
 requests still block. Neither action is exposed through the bridge or workflow.
 
+The exact blocked pre-cut fence at operation `32151c4cb431` has a separate
+root-only recovery path. Its checkpoint is `FENCE/BLOCKED/UNKNOWN` and contains
+no cut or cipher, so restoring the captured workloads after the retained HUB
+pod's orderly exit is an explicitly authorized disposable-staging recovery,
+not a preservation PASS and not a rollback source. The recovery is pinned to
+that checkpoint, journal/response hashes, namespace, selected PVC/PV, workload
+UIDs/templates, marker, and the retained pod UID/container/finalizer. It removes
+only that owned pod finalizer with UID/resourceVersion tests, restores the
+captured workloads in the recorded dependency order, and releases the marker
+only after readiness checks. A failure during restoration leaves the marker
+fenced and a private progress step. If the marker-release patch succeeds but
+closure persistence then fails, the marker can already be active; the private
+progress step distinguishes that case. In either case, stop for root operator
+inspection and reconciliation. Do not rerun the one-shot recovery or treat an
+active marker as proof that closure/idle admission completed.
+
+There is one narrowly bound continuation for the observed
+`removing_owned_finalizer` progress step. It is not a retry of the Pod patch:
+the continuation requires the exact unchanged pre-cut snapshot and progress
+record, confirms the original Pod name and UID are absent, rechecks the marker,
+storage identity, zero-replica workloads and absence of PVC writers, then resumes
+at HUB scale. Its v2 closure explicitly records that the patch response metadata
+was unavailable and that the exact Pod UID was observed absent; it leaves both
+pre- and post-patch resourceVersions unknown. It cannot be used if the Pod remains,
+the name is reused, any progress advanced beyond the finalizer step, or any
+precondition changed. On any such mismatch, stop for manual reconciliation.
+The normal patch path treats an omitted empty `metadata.finalizers` field as an
+empty list but still requires the actual returned resourceVersion; no version is
+inferred or fabricated.
+
+The isolated operator container must present the same root-owned evidence
+directory at both `/evidence` and `/var/lib/voice-nats-preservation`, because
+the one-shot driver uses the former while the captured verifier uses its
+canonical latter path. The paths must resolve to the same device and inode;
+root:gid1000 mode `0750` is accepted, while group-write and all other-user access
+are rejected. The captured manifest root contains `nats-known-baseline/` and
+`nats-rollout-preservation/` directly beneath its `code/` directory.
+
+The historical `STARTED` request rows are handled by a separate, root-owned
+administrative abandonment receipt after the exact fence recovery closes. The
+receipt binds the complete pending-row inventory and each unchanged journal,
+response, request, operation checkpoint, and source-build state. It records the
+explicit disposable-staging authorization; it does not claim those requests had
+no effects or succeeded. Each row records whether a terminal checkpoint exists,
+only a source-build directory exists, or the referenced checkpoint is absent;
+absence is an observed filesystem state, never a no-effects claim. The request
+and response operation IDs must agree, and checkpoint/build presence is
+rechecked when the receipt is consumed. Journal and response files remain
+immutable. A new, unknown, changed, or nonterminal row blocks admission, as does
+any unreferenced nonterminal rollout directory. This disposition is
+separate from the 321 fence closure and is required before the exact installed
+`ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032` helper
+predecessor can use `--upgrade-idle-ceccb-v1`; it does not broaden the existing
+V15-only `--upgrade-idle` route. After that reviewed helper transition, any new
+deployment must use the ordinary protected fresh-cut, encrypted backup and
+readback, isolated restore, native preservation, and post-apply gates. The
+fence-abort or abandonment receipts alone do not establish those gates.
+
 Captured public code is hashed through an ordinary protected read-only file
 descriptor so the unprivileged workflow can verify root-owned group-readable
 source. Its complete manifest, ownership, mode, single-link, size, hash and

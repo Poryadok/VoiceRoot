@@ -845,3 +845,289 @@ class AppliedRestartClosureTests(unittest.TestCase):
         self.assertEqual(state['authorization']['expires_at'],snapshot['authorization']['expires_at'])
         self.assertEqual(state['nats_contract_expires_at'],snapshot['nats_contract_expires_at'])
         self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
+
+
+class FenceAbortClosureTests(unittest.TestCase):
+    def fixture(self):
+        import hashlib,json
+        helper=PrecutClosureTests();snapshot,_,_=helper.fixture()
+        op='32151c4cb431';names=retirement.CORE|{'voice-web'}
+        original=snapshot['context']['original_snapshots'];captured=snapshot['context']['snapshots']
+        original={n:r for n,r in original.items() if n in names};captured={n:r for n,r in captured.items() if n in names}
+        for row in captured.values():row['spec']['replicas']=0
+        marker=snapshot['context']['marker'];marker['data'].update(phase='rollout-capturing',knownRolloutOperation=op,
+            generation='generation-1',dataPVC='voice-nats-pvc-candidate')
+        snapshot.update(operation=op,phase='FENCE',status='BLOCKED',fence_status='UNKNOWN',
+            code_capture={'capture-manifest.json':'b'*64},target={'mode':'images-only','tag':'e2af6b043b9afa44ea00fb8e564b04ed84e9627a'},
+            events=[{'kind':'staging_preflight'},{'kind':'rollout_original_capture'},{'kind':'rollout_maintenance_owned'}]+
+                [{'kind':'workload_scaled','name':n,'replicas':0} for n in sorted(names)]+
+                [{'kind':'original_hub_shutdown_intent','pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a',
+                  'container_id':'containerd://'+'1'*64,'finalizer':'voice.io/nats-preservation-32151c4cb431',
+                  'live_census_sha256':'2'*64},
+                 {'kind':'original_hub_orderly_exit_verified','proof':{'pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a',
+                    'schema':'voice-original-hub-orderly-exit-v1','container_id':'containerd://'+'1'*64,
+                    'restart_count':0,'started_at':'2026-10-13T10:00:00Z','finished_at':'2026-10-13T10:01:00Z',
+                    'exit_code':0,'source':'KUBELET_CURRENT_TERMINATED_RETAINED_POD'} }])
+        snapshot['context']['original_snapshots']=original;snapshot['context']['snapshots']=captured
+        claim_name='voice-nats-jsdata-d202610040049430b'
+        expected=snapshot['context']['expected'];expected.update(namespace_uid='ac7abaf3-241f-483f-ac33-71086e4dfd32',
+            source_claim=claim_name,source_claim_uid='claim-uid',source_pv_uid='pv-uid',generation='generation-1')
+        expected['deployment_uids']={n:r['metadata']['uid'] for n,r in original.items()}
+        marker['data']['dataPVC']=expected['source_claim']
+        snapshot['context']['final_claim'].setdefault('metadata',{}).update(name=claim_name,uid='claim-uid')
+        snapshot['context']['final_pv'].setdefault('metadata',{})['uid']='pv-uid'
+        snapshot_raw=json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode();snapshot_sha=hashlib.sha256(snapshot_raw).hexdigest()
+        nonce='32151c4cb4316a31c57949222e0cf69208c8cd82a0bf32e307c371d34c9b2a59'
+        request={'action':'prepare','changed_services':['web'],'mode':'images-only','nonce':nonce,
+            'run_id':38380518143,'source_sha':'e2af6b043b9afa44ea00fb8e564b04ed84e9627a'}
+        journal={'schema':'voice-nats-bridge-request-v1','request_sha256':retirement.canonical(request),'request':request,
+            'phase':'STARTED','prepare_stage':{'name':'target-build','status':'COMPLETE'},'prepare_error':'guard_rejected'}
+        response={'status':'BLOCKED','error':'command_failed'}
+        jname=nonce+'.json';jraw=json.dumps(journal,sort_keys=True,separators=(',',':')).encode()
+        rraw=json.dumps(response,sort_keys=True,separators=(',',':')).encode()
+        jsha=hashlib.sha256(jraw).hexdigest();rsha=hashlib.sha256(rraw).hexdigest()
+        finals=['kubernetes.io/pvc-protection','voice.io/nats-preservation-32151c4cb431']
+        receipt={'schema':'voice-operator-fence-abort-closure-v1','operation':op,'snapshot_sha256':snapshot_sha,
+            'code_binding_sha256':retirement.canonical(snapshot['code_capture']),'deployment_pass':False,'rollback_eligible':False,
+            'authorization':'EXPLICIT_USER_AUTHORIZED_DISPOSABLE_STAGING_RECOVERY',
+            'pod_finalizer':{'pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a','finalizer':finals[-1],
+                'container_id':'containerd://'+'1'*64,'exit_code':0,'before':finals,'after':finals[:-1],
+                'resource_version_before':'301','resource_version_after':'302'},
+            'storage':{'namespace_uid':expected['namespace_uid'],'claim_uid':'claim-uid','pv_uid':'pv-uid',
+                'claim_spec_sha256':retirement.canonical(snapshot['context']['final_claim']['spec']),
+                'pv_spec_sha256':retirement.canonical(snapshot['context']['final_pv']['spec']),
+                'path':snapshot['context']['final_path']},
+            'restored':{n:{'uid':r['metadata']['uid'],'template_sha256':retirement.canonical(r['spec']['template']),
+                'replicas':1,'ready':True} for n,r in original.items()},
+            'restore_sequence':['voice-nats-pvc-candidate','voice-user-space-cycle','voice-user-template-restored',
+                *sorted(names-{'voice-nats-pvc-candidate','voice-user','voice-space','voice-web','voice-gateway'}),
+                'voice-web','voice-gateway'],
+            'before_marker':{'uid':marker['metadata']['uid'],'resourceVersion':marker['metadata']['resourceVersion'],'data':marker['data']},
+            'released_marker':{'uid':marker['metadata']['uid'],'resourceVersion':'124',
+                'data':{k:v for k,v in dict(marker['data'],phase='active').items() if k!='knownRolloutOperation'}},
+            'events':[{'kind':'operator_fence_abort_intent'},
+                {'kind':'operator_nats_finalizer_removed','pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a','finalizer':finals[-1]},
+                *[{'kind':'operator_workload_restored','name':n,'uid':r['metadata']['uid'],
+                    'template_sha256':retirement.canonical(r['spec']['template']),'replicas':1,'ready':True}
+                    for n,r in sorted(original.items())],
+                {'kind':'operator_marker_released','uid':marker['metadata']['uid']},
+                {'kind':'operator_fence_abort_completed'}],
+            'journals':{jname:{'journal_sha256':jsha,'request_sha256':journal['request_sha256'],'response_sha256':rsha}}}
+        state=copy.deepcopy(snapshot);state.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED',
+            events=snapshot['events']+receipt['events'],operator_fence_abort={'schema':'voice-operator-fence-abort-reference-v1',
+                'snapshot_sha256':snapshot_sha,'receipt_sha256':retirement.canonical(receipt)})
+        return snapshot,receipt,state,journal,response
+
+    def verify(self,snapshot,receipt,state,journal,response):
+        import hashlib,json
+        base=Path('/private/rollout-'+snapshot['operation'])
+        jname=next(iter(receipt['journals']))
+        def private(path,*args,**kwargs):
+            path=Path(path)
+            if path.name=='operator-fence-abort-snapshot.json':return json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+            if path.parent.name=='journal':return json.dumps(journal,sort_keys=True,separators=(',',':')).encode()
+            if path.parent.name=='responses':return json.dumps(response,sort_keys=True,separators=(',',':')).encode()
+            raise AssertionError(path)
+        with patch.object(retirement,'private_bytes',side_effect=private),patch.object(retirement,'document',return_value=receipt),\
+             patch.object(retirement.root_cli,'code_binding',return_value=snapshot['code_capture']),\
+             patch.object(retirement,'FENCE_ABORT_CHECKPOINT_SHA256',hashlib.sha256(json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()).hexdigest()),\
+             patch.object(retirement,'FENCE_ABORT_JOURNAL_SHA256',hashlib.sha256(json.dumps(journal,sort_keys=True,separators=(',',':')).encode()).hexdigest()),\
+             patch.object(retirement,'FENCE_ABORT_RESPONSE_SHA256',hashlib.sha256(json.dumps(response,sort_keys=True,separators=(',',':')).encode()).hexdigest()):
+            return retirement.verify_fence_abort_terminal(base,state)
+
+    def admit_pending(self,snapshot,receipt,state,journal,response):
+        import hashlib,json
+        installed=Path('/private/installed');name=retirement.FENCE_ABORT_NONCE+'.json'
+        def document(path):
+            path=Path(path)
+            if path.name==name:return journal
+            if path.name=='checkpoint.json':return state
+            if path.name=='operator-fence-abort-receipt.json':return receipt
+            raise AssertionError(path)
+        def private(path,*args,**kwargs):
+            path=Path(path)
+            if path.name=='operator-fence-abort-snapshot.json':return json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()
+            if path.parent.name=='journal':return json.dumps(journal,sort_keys=True,separators=(',',':')).encode()
+            if path.parent.name=='responses':return json.dumps(response,sort_keys=True,separators=(',',':')).encode()
+            raise AssertionError(path)
+        with patch.object(retirement,'private_bytes',side_effect=private),patch.object(retirement,'document',side_effect=document),\
+             patch.object(retirement,'FENCE_ABORT_CHECKPOINT_SHA256',hashlib.sha256(json.dumps(snapshot,sort_keys=True,separators=(',',':')).encode()).hexdigest()),\
+             patch.object(retirement,'FENCE_ABORT_JOURNAL_SHA256',hashlib.sha256(json.dumps(journal,sort_keys=True,separators=(',',':')).encode()).hexdigest()),\
+             patch.object(retirement,'FENCE_ABORT_RESPONSE_SHA256',hashlib.sha256(json.dumps(response,sort_keys=True,separators=(',',':')).encode()).hexdigest()),\
+             patch.object(retirement.guard,'ROOT',Path('/private')),patch.object(retirement.root_cli,'code_binding',return_value=snapshot['code_capture']):
+            return retirement.pending_request_accepted(installed,installed/'journal'/name,receipt)
+
+    def test_exact_fence_abort_closure_is_idle_and_preserves_unknown_historical_fence(self):
+        snapshot,receipt,state,journal,response=self.fixture()
+        self.assertEqual(self.verify(snapshot,receipt,state,journal,response)['schema'],'voice-operator-fence-abort-closure-v1')
+        self.assertEqual(snapshot['fence_status'],'UNKNOWN');self.assertEqual(state['fence_status'],'RELEASED')
+        self.assertFalse(receipt['deployment_pass']);self.assertFalse(receipt['rollback_eligible'])
+
+    def test_unavailable_patch_response_requires_exact_uid_absence_and_never_fabricates_resource_version(self):
+        snapshot,receipt,state,journal,response=self.fixture()
+        receipt['schema']='voice-operator-fence-abort-closure-v2'
+        pod=receipt['pod_finalizer']
+        pod.update(outcome='CAS_RESPONSE_UNAVAILABLE_UID_ABSENT',before=None,after=None,
+            resource_version_before=None,resource_version_after=None,
+            pod_absence_observation={'namespace_uid':'ac7abaf3-241f-483f-ac33-71086e4dfd32',
+                'pod_name':'voice-nats-pvc-candidate-cf9757747-dgktg',
+                'pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a'})
+        receipt['events'][1]={'kind':'operator_nats_pod_uid_absence_verified','cas_response':'UNAVAILABLE',
+            **pod['pod_absence_observation']}
+        state=retirement.fence_abort_terminal(snapshot,receipt)
+        self.assertEqual(state['operator_fence_abort']['schema'],'voice-operator-fence-abort-reference-v2')
+        self.assertEqual(self.verify(snapshot,receipt,state,journal,response)['schema'],'voice-operator-fence-abort-closure-v2')
+        self.assertIsNone(self.admit_pending(snapshot,receipt,state,journal,response))
+        for fault in ('invented_resource_version','wrong_uid','wrong_namespace','wrong_event'):
+            bad_snapshot,bad_receipt,bad_state,journal,response=self.fixture()
+            bad_receipt['schema']='voice-operator-fence-abort-closure-v2'
+            bad_pod=bad_receipt['pod_finalizer']
+            bad_pod.update(outcome='CAS_RESPONSE_UNAVAILABLE_UID_ABSENT',before=None,after=None,
+                resource_version_before=None,resource_version_after=None,
+                pod_absence_observation={'namespace_uid':'ac7abaf3-241f-483f-ac33-71086e4dfd32',
+                    'pod_name':'voice-nats-pvc-candidate-cf9757747-dgktg',
+                    'pod_uid':'c8ac408a-ef62-451b-a8c1-5a4393ec271a'})
+            bad_receipt['events'][1]={'kind':'operator_nats_pod_uid_absence_verified','cas_response':'UNAVAILABLE',
+                **bad_pod['pod_absence_observation']}
+            if fault=='invented_resource_version':bad_pod['resource_version_after']='999999'
+            elif fault=='wrong_uid':bad_pod['pod_absence_observation']['pod_uid']='foreign'
+            elif fault=='wrong_namespace':bad_pod['pod_absence_observation']['namespace_uid']='foreign'
+            else:bad_receipt['events'][1]['kind']='operator_nats_finalizer_removed'
+            bad_state=retirement.fence_abort_terminal(bad_snapshot,bad_receipt)
+            with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError,FileNotFoundError)):
+                self.verify(bad_snapshot,bad_receipt,bad_state,journal,response)
+
+    def test_pending_request_admission_is_exact_and_closure_drift_is_rejected(self):
+        snapshot,receipt,state,journal,response=self.fixture()
+        self.assertIsNone(self.admit_pending(snapshot,receipt,state,journal,response))
+        for fault in ('pass','pod','restored','marker','sequence','journal','response','request','fence'):
+            snapshot,receipt,state,journal,response=self.fixture()
+            if fault=='pass':receipt['deployment_pass']=True
+            elif fault=='pod':receipt['pod_finalizer']['pod_uid']='foreign'
+            elif fault=='restored':receipt['restored']['voice-user']['ready']=False
+            elif fault=='marker':receipt['released_marker']['data']['knownRolloutOperation']=snapshot['operation']
+            elif fault=='sequence':receipt['restore_sequence'][-1]='gateway-before-web'
+            elif fault=='journal':journal['prepare_error']='unexpected'
+            elif fault=='response':response['error']='different'
+            elif fault=='request':journal['request']['changed_services']=['gateway']
+            else:state['fence_status']='VERIFIED'
+            receipt['snapshot_sha256']=retirement.canonical(snapshot)
+            state['operator_fence_abort'].update(snapshot_sha256=receipt['snapshot_sha256'],receipt_sha256=retirement.canonical(receipt))
+            with self.subTest(fault=fault),self.assertRaises((Blocked,KeyError,FileNotFoundError)):
+                self.verify(snapshot,receipt,state,journal,response)
+
+
+class PendingAbandonmentTests(unittest.TestCase):
+    def fixture(self):
+        import hashlib,json
+        nonce='a'*64;name=nonce+'.json';operation='85e0b83bb353'
+        request={'action':'status','nonce':nonce,'operation':operation}
+        journal={'schema':'voice-nats-bridge-request-v1','request_sha256':retirement.canonical(request),
+            'request':request,'phase':'STARTED','prepare_error':'guard_rejected'}
+        response={'status':'BLOCKED','error':'exception_Blocked'}
+        jraw=json.dumps(journal,sort_keys=True,separators=(',',':')).encode()
+        rraw=json.dumps(response,sort_keys=True,separators=(',',':')).encode()
+        fence_receipt={'schema':'voice-operator-fence-abort-closure-v1','operation':retirement.FENCE_ABORT_OPERATION}
+        fence={'schema':'voice-operator-fence-abort-closure-v1'}
+        pins={'journal_sha256':hashlib.sha256(jraw).hexdigest(),'request_sha256':retirement.canonical(request),
+            'response_sha256':hashlib.sha256(rraw).hexdigest(),'operation':operation,'build_key':operation,'checkpoint_sha256':None,
+            'checkpoint_phase':None,'checkpoint_status':None,'operation_state':'CHECKPOINT_ABSENT',
+            'build_present':False,'build_fingerprint':None,
+            'disposition':'ABANDONED_BY_EXPLICIT_USER_AUTHORIZATION'}
+        receipt={'schema':'voice-nats-pending-abandonment-v1',
+            'authorization':'EXPLICIT_USER_AUTHORIZED_DISPOSABLE_STAGING_RECOVERY',
+            'fence_abort':{'operation':retirement.FENCE_ABORT_OPERATION,
+                'checkpoint_sha256':retirement.FENCE_ABORT_CHECKPOINT_SHA256,
+                'receipt_sha256':retirement.canonical(fence_receipt)},'entries':{name:pins}}
+        receipt['inventory_sha256']=retirement.canonical(receipt['entries'])
+        state={'operation':retirement.FENCE_ABORT_OPERATION,'operator_fence_abort':{'schema':'reference'}}
+        return name,journal,response,jraw,rraw,receipt,fence_receipt,fence,state
+
+    def check(self,fixture,path_name=None,*,root=None,installed_root=None,changed=None,idle_failure=False,inventory_drift=False):
+        import json
+        from pathlib import Path
+        from unittest.mock import patch
+        name,journal,response,jraw,rraw,receipt,fence_receipt,fence,state=fixture
+        installed=Path(installed_root) if installed_root is not None else Path('/private/installed')
+        path=installed/'journal'/(path_name or name)
+        def private(target,*args,**kwargs):
+            target=Path(target)
+            if target.name==retirement.PENDING_ABANDONMENT_NAME:
+                return json.dumps(receipt,sort_keys=True,separators=(',',':')).encode()
+            if target.name=='checkpoint.json':return b'{}'
+            if target.parent.name=='journal':return changed if changed is not None else jraw
+            if target.parent.name=='responses':return rraw
+            raise AssertionError(target)
+        def document(target):
+            target=Path(target)
+            if target.name=='checkpoint.json' and target.parent.name.startswith('rollout-'):
+                operation=journal['request']['operation']
+                if target.parent.name=='rollout-'+operation:
+                    return {'operation':operation,'phase':'FENCE','status':'BLOCKED'}
+            if target.name=='checkpoint.json':return state
+            if target.name=='operator-fence-abort-receipt.json':return fence_receipt
+            raise AssertionError(target)
+        root=root or Path('/private')
+        with patch.object(retirement,'private_bytes',side_effect=private),patch.object(retirement,'document',side_effect=document),\
+             patch.object(retirement.guard,'ROOT',root),patch.object(retirement,'verify_fence_abort_terminal',return_value=fence),\
+             patch.object(retirement,'pending_abandonment_names',return_value=set(receipt['entries'])|({'c'*64+'.json'} if inventory_drift else set())),\
+             patch.object(retirement,'idle_state',side_effect=Blocked('operation_not_idle') if idle_failure else None,return_value=True):
+            return retirement.verify_pending_abandonment(installed,path)
+
+    def test_exact_user_disposition_is_bound_to_321_closure_and_current_request_bytes(self):
+        fixture=self.fixture();result=self.check(fixture)
+        self.assertEqual(result['fence'],'voice-operator-fence-abort-closure-v1')
+        self.assertEqual(result['name'],'a'*64+'.json')
+
+    def test_unknown_request_hash_change_and_nonterminal_operation_fail_closed(self):
+        fixture=self.fixture();_,_,_,jraw,_,_,_,_,_=fixture
+        changed=bytearray(jraw);changed[-2]^=1
+        with self.assertRaises(Blocked):self.check(fixture,changed=bytes(changed))
+        with self.assertRaises(Blocked):self.check(fixture,path_name='b'*64+'.json')
+        with self.assertRaises(Blocked):self.check(self.fixture(),inventory_drift=True)
+        import tempfile
+        from pathlib import Path
+        fixture=self.fixture();name,journal=fixture[:2];pins=fixture[5]['entries'][name]
+        operation=journal['request']['operation']
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);base=root/('rollout-'+operation);base.mkdir()
+            checkpoint=base/'checkpoint.json';checkpoint.write_text('{}',encoding='utf-8')
+            pins.update(checkpoint_sha256=__import__('hashlib').sha256(b'{}').hexdigest(),
+                checkpoint_phase='FENCE',checkpoint_status='BLOCKED')
+            with self.assertRaises(Blocked):self.check(fixture,root=root,idle_failure=True)
+
+    def test_conflicting_request_and_response_operation_ids_are_rejected(self):
+        import hashlib,json
+        fixture=list(self.fixture());name=fixture[0];response=fixture[2]
+        response['operation']='c'*12
+        raw=json.dumps(response,sort_keys=True,separators=(',',':')).encode();fixture[4]=raw
+        pins=fixture[5]['entries'][name];pins['response_sha256']=hashlib.sha256(raw).hexdigest()
+        fixture[5]['inventory_sha256']=retirement.canonical(fixture[5]['entries'])
+        with self.assertRaises(Blocked):self.check(tuple(fixture))
+
+    def test_prebuild_only_disposition_binds_source_directory_identity(self):
+        import stat,tempfile
+        from pathlib import Path
+        fixture=self.fixture();name,journal=fixture[:2];pins=fixture[5]['entries'][name]
+        with tempfile.TemporaryDirectory() as directory:
+            installed=Path(directory)/'installed';build=installed/'sources'/(journal['request']['operation']+'-build')
+            build.mkdir(parents=True)
+            st=build.lstat()
+            fingerprint={'device':st.st_dev,'inode':st.st_ino,'mode':stat.S_IMODE(st.st_mode),
+                'uid':st.st_uid,'gid':st.st_gid,'bytes':st.st_size,'mtime_ns':st.st_mtime_ns,'ctime_ns':st.st_ctime_ns}
+            pins.update(operation_state='PREBUILD_ONLY',build_present=True,build_fingerprint=fingerprint)
+            fixture[5]['inventory_sha256']=retirement.canonical(fixture[5]['entries'])
+            self.assertEqual(self.check(fixture,installed_root=installed)['name'],name)
+            (build/'changed').write_text('preserved source build state',encoding='utf-8')
+            with self.assertRaises(Blocked):self.check(fixture,installed_root=installed)
+
+    def test_absent_checkpoint_disposition_rejects_a_checkpoint_that_appears(self):
+        import tempfile
+        from pathlib import Path
+        fixture=self.fixture();operation=fixture[1]['request']['operation']
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            self.assertEqual(self.check(fixture,root=root)['name'],'a'*64+'.json')
+            base=root/('rollout-'+operation);base.mkdir()
+            (base/'checkpoint.json').write_text(json.dumps({'operation':operation,'phase':'FENCE','status':'BLOCKED'}),encoding='utf-8')
+            with self.assertRaises(Blocked):self.check(fixture,root=root,idle_failure=True)

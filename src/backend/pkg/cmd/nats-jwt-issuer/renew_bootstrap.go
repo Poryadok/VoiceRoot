@@ -41,6 +41,10 @@ func renewalSubjectMatch(pattern, subject string) bool {
 // renewExistingBootstrap never creates keys, changes the account JWT or removes
 // denies. The human-root CLI must first validate protected input/source custody.
 func renewExistingBootstrap(old []byte, accountToken, operatorToken string, signerSeed []byte, actorHash, accountHash string) ([]byte, error) {
+	return renewExistingSubjects(old, accountToken, operatorToken, signerSeed, actorHash, accountHash, bootstrapRenewSubjects)
+}
+
+func renewExistingSubjects(old []byte, accountToken, operatorToken string, signerSeed []byte, actorHash, accountHash string, subjects []string) ([]byte, error) {
 	if len(old) == 0 || len(old) > 262144 || len(accountToken) > 262144 || len(operatorToken) > 262144 || len(signerSeed) > 60 {
 		return nil, renewalFailure()
 	}
@@ -98,7 +102,7 @@ func renewExistingBootstrap(old []byte, accountToken, operatorToken string, sign
 	if len(u.Pub.Allow) == 0 {
 		return nil, renewalFailure()
 	}
-	for _, subject := range bootstrapRenewSubjects {
+	for _, subject := range subjects {
 		for _, deny := range u.Pub.Deny {
 			if renewalSubjectMatch(deny, subject) {
 				return nil, renewalFailure()

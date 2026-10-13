@@ -53,6 +53,14 @@ type secretMetadata struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--renew-existing-service" {
+		if runPrivateRenewalPipe(os.Args[2], renewServicePipe) != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS service renewal refused; no credentials printed")
+			os.Exit(1)
+		}
+		fmt.Println("Existing NATS service renewed through private controller pipe")
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--authenticate-existing-actor" {
 		if authenticateExistingActor() != nil {
 			fmt.Fprintln(os.Stderr, "Existing NATS actor scratch authentication refused")
