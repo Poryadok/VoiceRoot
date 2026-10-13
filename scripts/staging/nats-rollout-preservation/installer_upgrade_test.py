@@ -2,7 +2,10 @@
 import json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
+import stat
+from types import SimpleNamespace
 import installer
+import root_main
 
 class Tests(unittest.TestCase):
     def test_ceccb_idle_transition_uses_exact_receipt_stage_backup_and_is_idempotent(self):
@@ -161,6 +164,22 @@ class Tests(unittest.TestCase):
             rename.assert_not_called()
 
 class ActualUpgradeDispatchTests(unittest.TestCase):
+    def test_idle_checkpoint_reader_accepts_payload_above_generic_json_limit_and_keeps_128m_cap(self):
+        payload={'fixture':'x'*((2<<20)+1)}
+        raw=(json.dumps(payload,sort_keys=True,indent=2)+'\n').encode()
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'checkpoint.json';root_main.save_checkpoint(path,payload)
+            self.assertEqual(path.stat().st_size,len(raw));self.assertGreater(len(raw),2<<20)
+            def file_stat(_fd,size=len(raw)):
+                return SimpleNamespace(st_mode=stat.S_IFREG|0o600,st_uid=0,st_size=size)
+            with patch.object(installer.os,'fstat',side_effect=file_stat):
+                self.assertEqual(installer.checkpoint_json(path),payload)
+                with self.assertRaisesRegex(installer.Blocked,'checkpoint_custody_invalid'):
+                    installer.private_json(path)
+            with patch.object(installer.os,'fstat',return_value=file_stat(None,(128<<20)+1)):
+                with self.assertRaisesRegex(installer.Blocked,'checkpoint_custody_invalid'):
+                    installer.checkpoint_json(path)
+
     def test_actual_v13_upgrade_reaches_expired_helper_and_restores_ingress(self):
         self.exercise_upgrade('v13')
 

@@ -128,6 +128,45 @@ func TestRenewServiceRejectsAuthorityChanges(t *testing.T) {
 	}
 }
 
+func TestRenewServicePreservesWildcardCoveredSubscriptions(t *testing.T) {
+	old, at, ot, signer, actor, account, g, u, ap := serviceRenewalFixture(t, "voice")
+	u.Sub.Allow = []string{"_INBOX.voice.voice.>"}
+	old = serviceReencode(t, old, u, ap)
+	out, err := renewExistingService(old, at, ot, signer, actor, account, "voice", g)
+	if err != nil {
+		t.Fatal("existing wildcard already covers source inboxes:", err)
+	}
+	beforeToken, _ := jwt.ParseDecoratedJWT(old)
+	afterToken, _ := jwt.ParseDecoratedJWT(out)
+	before, _ := jwt.DecodeUserClaims(beforeToken)
+	after, _ := jwt.DecodeUserClaims(afterToken)
+	if !sameServiceSubjects(after.Pub.Allow, g.Publish) {
+		t.Fatal("canonical publish grant not reached")
+	}
+	after.Pub.Allow = before.Pub.Allow
+	after.ID, after.IssuedAt = before.ID, before.IssuedAt
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("covered source inboxes changed existing signed claims")
+	}
+	for _, scenario := range []string{"missing_wildcard", "unrelated_allow", "denied_inbox"} {
+		t.Run(scenario, func(t *testing.T) {
+			claims := *before
+			switch scenario {
+			case "missing_wildcard":
+				claims.Sub.Allow = []string{"_INBOX.voice.voice.space_media_chat", "_INBOX.voice.voice.space_media_role"}
+			case "unrelated_allow":
+				claims.Sub.Allow = append(append([]string(nil), before.Sub.Allow...), "other.events")
+			case "denied_inbox":
+				claims.Sub.Deny = []string{"_INBOX.voice.voice.space_media_chat"}
+			}
+			invalid := serviceReencode(t, old, &claims, ap)
+			if result, err := renewExistingService(invalid, at, ot, signer, actor, account, "voice", g); err == nil || len(result) != 0 {
+				t.Fatal("incompatible subscription authority emitted credentials")
+			}
+		})
+	}
+}
+
 func TestRenewServicePrivatePipe(t *testing.T) {
 	old, at, ot, signer, actor, account, g, _, _ := serviceRenewalFixture(t, "role")
 	request := map[string]any{"schema": "voice-nats-existing-service-renewal-v1", "old_creds": string(old), "account_jwt": at, "operator_jwt": ot, "signer_seed": string(signer), "actor_sha256": actor, "account_sha256": account, "service": "role", "publish": g.Publish, "subscribe": g.Subscribe, "no_response": true}

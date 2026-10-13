@@ -118,8 +118,12 @@ The only permitted additions are `role.voice_policy_invalidated` for Role,
 `space.voice_room_access_invalidated` for Space, and the exact INFO and ACK
 subjects for `chat_events/voice_space_media_chat` and
 `role_events/voice_space_media_role` for Voice. The target publish set must
-equal the original set plus those additions, and subscriptions must match
-unchanged. A concrete deny inside an ACK tail vetoes renewal, as does a wildcard
+equal the original set plus those additions, and subscription authority must
+match unchanged. Concrete source inboxes already covered by the same existing
+owned `_INBOX.voice.<service>.>` tail do not require extra JWT entries; the
+original subscription claims remain intact. Missing inbox coverage or any
+subscription deny overlap vetoes renewal. A concrete deny inside an ACK tail
+vetoes renewal, as does a wildcard
 deny. Other services, wrong actor names, signer changes, scoped signers,
 unsupported effective claims, expired/revoked actors and unrelated grant changes
 are refused. Existing identity, user seed, account, deny lists, expiry and all

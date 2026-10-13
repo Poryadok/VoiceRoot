@@ -94,9 +94,13 @@ review evidence contract. Code upgrades preserve every approved/revoked record.
 The runner cannot register evidence or supply a compatibility boolean, and
 schema, PostgreSQL identity, mounted actor and target-contract checks remain.
 
-Build the probe once on Linux with Go 1.26.8 and `CGO_ENABLED=0` from
-`src/backend/story/cmd/owned-story-probe`, then bundle it with the existing kernel
-and renewer: `python bundle.py KERNEL OUTPUT LINUX_BOOTSTRAP_RENEWER LINUX_STORY_PROBE`.
+Build the probe once on Linux with Go 1.26.8 from
+`src/backend/story/cmd/owned-story-probe`, using
+`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o LINUX_STORY_PROBE .`,
+then bundle it with the existing kernel and renewer:
+`python bundle.py KERNEL OUTPUT LINUX_BOOTSTRAP_RENEWER LINUX_STORY_PROBE`.
+The captured-file limit for a probe is 16 MiB; these build flags keep the
+executable within that bound without changing the limit.
 The launcher admits at most64MiB total with each member still bounded to32MiB;
 exact archive bytes/hash, complete manifest membership and root custody remain
 mandatory. Subsequent ordinary FULL and rollback releases require no manual
@@ -458,8 +462,10 @@ Rollout archives stream bounded chunks and support PVC capacity up to 48 GiB and
 their defaults. Before fencing, capacity, existing native entries/types, free
 space for archives/restored copies/encryption/readback and available inodes are
 checked. Active-write growth may still exhaust capacity after this preflight;
-such failures retain the fence with an explicit recovery status. Checkpoints
-are bounded 128 MiB and monitoring 64 MiB; supported capacities are finite.
+such failures retain the fence with an explicit recovery status. Operation
+checkpoints have a 128 MiB read/write bound; ancillary private JSON inputs retain
+their 2 MiB bound, and monitoring remains bounded at 64 MiB. Supported capacities
+are finite.
 
 ## Evidence
 
