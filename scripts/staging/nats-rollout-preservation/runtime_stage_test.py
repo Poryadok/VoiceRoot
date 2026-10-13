@@ -370,11 +370,16 @@ class CanonicalHubShutdownTests(unittest.TestCase):
         mutations=[]
         from docker_runtime import NATS_IMAGE
         pinned_runtime_image='docker-pullable://docker.io/library/nats'+NATS_IMAGE[NATS_IMAGE.index('@'):]
+        state={'operation':'123456abcdef','events':[],'context':{}}
+        def journal_factory(stage):
+            for name,value in {'expected':{'source_claim':'selected'},'original_snapshots':{},'old_images':{},
+                'marker':{},'service':{},'final_claim':{},'final_pv':{},'final_path':'/historical'}.items():
+                setattr(stage,name,value)
+            return transaction.checkpoint_journal('/unwritten',state,lambda:stage)
         with patch.object(transaction,'save',side_effect=Blocked('checkpoint_failed')):
             with self.assertRaisesRegex(Blocked,'checkpoint_failed'):
                 self.shutdown(pinned_runtime_image,
-                    journal_factory=lambda stage:transaction.checkpoint_journal('/unwritten',
-                        {'operation':'123456abcdef','events':[]},lambda:stage),
+                    journal_factory=journal_factory,
                     on_cas=lambda:mutations.append('cas'),on_scale=lambda:mutations.append('scale'),
                     census_row={'schema':'voice-nats-census-v1','account':'A'+'B'*55,
                         'streams':[{'name':'chat_events','created':'2026-10-13T00:00:00Z','config_sha256':'a'*64,
