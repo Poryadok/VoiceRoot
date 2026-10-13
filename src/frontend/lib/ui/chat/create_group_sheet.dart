@@ -301,7 +301,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
 
   void _showSafeError(AppLocalizations l10n, String error) {
     final errorMessage = error == 'not_authenticated'
-        ? l10n.chatCreateGroupError(error)
+        ? l10n.chatCreateGroupError(commonActionErrorMessage(l10n))
         : commonActionErrorMessage(l10n);
     ScaffoldMessenger.of(
       context,

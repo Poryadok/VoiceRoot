@@ -312,7 +312,7 @@ class _MemberTile extends ConsumerWidget {
         SnackBar(
           content: Text(
             err == 'not_authenticated'
-                ? l10n.spaceBanError(err)
+                ? l10n.spaceBanError(commonActionErrorMessage(l10n))
                 : commonActionErrorMessage(l10n),
           ),
         ),
@@ -361,7 +361,7 @@ class _MemberTile extends ConsumerWidget {
         SnackBar(
           content: Text(
             err == 'not_authenticated'
-                ? l10n.spaceTimeoutError(err)
+                ? l10n.spaceTimeoutError(commonActionErrorMessage(l10n))
                 : commonActionErrorMessage(l10n),
           ),
         ),
@@ -405,7 +405,7 @@ class _MemberTile extends ConsumerWidget {
         SnackBar(
           content: Text(
             err == 'not_authenticated'
-                ? l10n.spaceKickError(err)
+                ? l10n.spaceKickError(commonActionErrorMessage(l10n))
                 : commonActionErrorMessage(l10n),
           ),
         ),
@@ -487,8 +487,8 @@ class _MemberTile extends ConsumerWidget {
     if (err != null) {
       final message = err == 'not_authenticated'
           ? action.revoke
-                ? l10n.spaceRevokeRoleError(err)
-                : l10n.spaceAssignRoleError(err)
+                ? l10n.spaceRevokeRoleError(commonActionErrorMessage(l10n))
+                : l10n.spaceAssignRoleError(commonActionErrorMessage(l10n))
           : commonActionErrorMessage(l10n);
       ScaffoldMessenger.of(
         context,

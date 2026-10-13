@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/space_permissions.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/state/voice_room_providers.dart';
 import 'package:voice_frontend/ui/space/space_tree_panel.dart';
@@ -78,6 +79,130 @@ void main() {
     expect(find.byKey(SpaceTreePanel.createCategoryButtonKey), findsNothing);
     expect(find.byKey(SpaceTreePanel.createTextChatButtonKey), findsNothing);
   });
+
+  for (final language in ['en', 'ru']) {
+    testWidgets('$language tree creation localizes missing authentication', (
+      tester,
+    ) async {
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        return http.Response('unexpected request', 500);
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceAppTestOverrides(client: client),
+            authorizationHeaderProvider.overrideWithValue(null),
+            spaceTreeProvider(
+              'space-1',
+            ).overrideWith((_) async => _sampleTree()),
+            spacePermissionProvider.overrideWith((ref, query) async => true),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: Locale(language),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(
+              body: SpaceTreePanel(
+                spaceId: 'space-1',
+                onTextChatSelected: _noop,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(SpaceTreePanel.createCategoryButtonKey));
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(SpaceTreePanel)),
+      )!;
+      final nameField = find.byKey(SpaceTreePanel.createNameFieldKey);
+      await tester.enterText(nameField, 'Updates');
+      await tester.pump();
+      final submit = find.byKey(SpaceTreePanel.createSubmitButtonKey);
+      expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+      expect(submit.hitTestable(), findsOneWidget);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(l10n.spaceTreeCreateError(l10n.commonActionFailed)),
+        findsOneWidget,
+      );
+      expect(find.textContaining('not_authenticated'), findsNothing);
+      expect(requests, 0);
+      expect(find.text(l10n.spaceTreeCreateCategory), findsOneWidget);
+      expect(tester.widget<TextField>(nameField).controller!.text, 'Updates');
+      expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+    });
+
+    testWidgets(
+      '$language text chat creation localizes missing authentication',
+      (tester) async {
+        var requests = 0;
+        final client = MockClient((request) async {
+          requests++;
+          return http.Response('unexpected request', 500);
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              ...voiceAppTestOverrides(client: client),
+              authorizationHeaderProvider.overrideWithValue(null),
+              spaceTreeProvider(
+                'space-1',
+              ).overrideWith((_) async => _sampleTree()),
+              spacePermissionProvider.overrideWith((ref, query) async => true),
+            ],
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              locale: Locale(language),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const Scaffold(
+                body: SpaceTreePanel(
+                  spaceId: 'space-1',
+                  onTextChatSelected: _noop,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(SpaceTreePanel.createTextChatButtonKey));
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(SpaceTreePanel)),
+        )!;
+        await tester.tap(find.byKey(SpaceTreePanel.createCategoryDropdownKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('General').last);
+        await tester.pumpAndSettle();
+
+        final nameField = find.byKey(SpaceTreePanel.createNameFieldKey);
+        await tester.enterText(nameField, 'Updates');
+        await tester.pump();
+        final submit = find.byKey(SpaceTreePanel.createSubmitButtonKey);
+        expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+        expect(submit.hitTestable(), findsOneWidget);
+        await tester.tap(submit);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(l10n.spaceTreeCreateError(l10n.commonActionFailed)),
+          findsOneWidget,
+        );
+        expect(find.textContaining('not_authenticated'), findsNothing);
+        expect(requests, 0);
+        expect(find.text(l10n.spaceTreeCreateTextChat), findsOneWidget);
+        expect(tester.widget<TextField>(nameField).controller!.text, 'Updates');
+        expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+      },
+    );
+  }
 
   testWidgets('permitted member can create a category and channel', (
     tester,

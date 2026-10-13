@@ -30,6 +30,7 @@ void main() {
   Widget testApp({
     required Widget home,
     required http.Client client,
+    Locale locale = const Locale('en'),
     bool useApiFriendPages = false,
     List<Override> extraOverrides = const [],
   }) {
@@ -64,7 +65,7 @@ void main() {
       ],
       child: MaterialApp(
         theme: voiceTestTheme(),
-        locale: const Locale('en'),
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: home),
@@ -1560,50 +1561,72 @@ void main() {
     expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
   });
 
-  testWidgets('CreateGroupSheet retains the local not-authenticated message', (
-    tester,
-  ) async {
-    final calls = <String>[];
-    await tester.pumpWidget(
-      testApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => CreateGroupSheet.show(context),
-            child: const Text('open'),
+  for (final language in ['en', 'ru']) {
+    testWidgets('$language CreateGroupSheet localizes missing authentication', (
+      tester,
+    ) async {
+      final calls = <String>[];
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CreateGroupSheet.show(context),
+              child: const Text('open'),
+            ),
           ),
+          client: MockClient((req) async {
+            calls.add('${req.method} ${req.url.path}');
+            return http.Response('{}', 500);
+          }),
+          locale: Locale(language),
+          extraOverrides: [authorizationHeaderProvider.overrideWithValue(null)],
         ),
-        client: MockClient((req) async {
-          calls.add('${req.method} ${req.url.path}');
-          return http.Response('{}', 500);
-        }),
-        extraOverrides: [authorizationHeaderProvider.overrideWithValue(null)],
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
-    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
-    await tester.pump();
-    final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
-    await tester.ensureVisible(friendB);
-    await tester.pump();
-    await tester.tap(friendB);
-    await tester.pump();
-    await tester.tap(find.byKey(CreateGroupSheet.submitKey));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Squad',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+      await tester.ensureVisible(friendB);
+      await tester.pump();
+      await tester.tap(friendB);
+      await tester.pump();
+      final submit = find.byKey(CreateGroupSheet.submitKey);
+      expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+      expect(submit.hitTestable(), findsOneWidget);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byKey(CreateGroupSheet.sheetKey)),
+      )!;
 
-    expect(
-      find.text('Could not create group: not_authenticated'),
-      findsOneWidget,
-    );
-    expect(
-      calls.where((call) => call.startsWith('POST /api/v1/chats')),
-      isEmpty,
-    );
-    expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
-  });
+      expect(
+        find.text(l10n.chatCreateGroupError(l10n.commonActionFailed)),
+        findsOneWidget,
+      );
+      expect(find.textContaining('not_authenticated'), findsNothing);
+      expect(
+        calls.where((call) => call.startsWith('POST /api/v1/chats')),
+        isEmpty,
+      );
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(CreateGroupSheet.nameFieldKey))
+            .controller!
+            .text,
+        'Squad',
+      );
+      expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+    });
+  }
 }
 
 final _testProfiles = <String, VoiceProfile>{
