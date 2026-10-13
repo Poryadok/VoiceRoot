@@ -80,6 +80,14 @@ func floorPassFixture(t *testing.T, participants ...floorParticipant) (*Coordina
 	require.NoError(t, err)
 	call, err := calls.GetCall(ctx, roomID)
 	require.NoError(t, err)
+	// MemoryCallStore returns a Call whose participant map can change during
+	// reconciliation. Keep independent evidence of each exact incarnation and
+	// of the roster that authority-failure tests require to remain unchanged.
+	snapshot := make(map[string]store.SpaceMediaParticipant, len(call.SpaceMedia))
+	for profileID, participant := range call.SpaceMedia {
+		snapshot[profileID] = participant
+	}
+	call.SpaceMedia = snapshot
 	media := &fakeMedia{}
 	c := &Coordinator{Store: calls, Calls: calls, Access: access, Grants: grants, Media: media,
 		Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID), SessionEpochChecker: floors}
