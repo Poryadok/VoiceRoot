@@ -91,6 +91,19 @@ def run_gate(values, job=None, result=None):
 
 
 class SelectedAcceptanceGateTests(unittest.TestCase):
+    def test_changed_t055_path_selects_live_handoff_and_gate(self):
+        filters = (ROOT / '.github/ci/path-filters.yml').read_text(encoding='utf-8')
+        selected = re.search(r'^a1_t106_live:\n(.*?)(?=^\S)', filters,
+                             re.M | re.S).group(1)
+        paths = re.findall(r'^  - (\S+)$', selected, re.M)
+        t055 = 'src/frontend/test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
+        self.assertIn(t055, paths)
+        values = context('pull_request', code='true', frontend='true',
+                         ci_global='true', a1_t106_live='true' if t055 in paths else 'false')
+        self.assertTrue(evaluate(job_condition('a1-flutter-profile-handoff'), values))
+        self.assertEqual(run_gate(values).returncode, 0)
+        self.assertNotEqual(run_gate(values, 'a1-flutter-profile-handoff', 'skipped').returncode, 0)
+
     def test_actual_selection_matches_gate_across_filters_and_events(self):
         flags = ('code', 'frontend', 'protos', 'global', 'ci_global',
                  'run_flutter_tier2', 'a1_e2e', 'a1_t106_live', 'svc_analytics',
