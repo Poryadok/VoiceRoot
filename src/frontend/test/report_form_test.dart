@@ -244,7 +244,7 @@ void main() {
           expect(find.byKey(ReportSheet.commentFieldKey), findsOneWidget);
           expect(
             tester
-                .widget<TextField>(find.byKey(ReportSheet.commentFieldKey))
+                .widget<TextFormField>(find.byKey(ReportSheet.commentFieldKey))
                 .controller!
                 .text,
             'Please review this report',
