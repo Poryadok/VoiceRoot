@@ -14,7 +14,7 @@ import guard
 import root_cli
 import hub_bridge_identity
 import hub_bridge_unit
-from root_main import operation_lock,private_json,save
+from root_main import checkpoint_json,operation_lock,private_json,save
 from controller import Blocked
 from stage_runtime import Kube
 
@@ -130,7 +130,7 @@ def upgrade(code,version='v4'):
         if marker['data'].get('phase')!='active':raise Blocked('bridge_upgrade_live_operation_present')
         for base in guard.ROOT.glob('rollout-*'):
             if root_cli.rollout_directory_kind(base)=='capture':continue
-            if private_json(base/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):raise Blocked('bridge_upgrade_live_operation_present')
+            if checkpoint_json(base/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):raise Blocked('bridge_upgrade_live_operation_present')
         for path in (installed,installed/'inbox',installed/'processing',installed/'journal',installed/'responses',installed/'recovery'):
             row=path.lstat()
             if not path.is_dir() or path.is_symlink() or row.st_uid!=0 or row.st_mode&0o002 or path.name!='inbox' and row.st_mode&0o020:raise Blocked('bridge_upgrade_directory_untrusted')
@@ -189,7 +189,7 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
         closure=None;checkpoints={}
         for base in guard.ROOT.glob('rollout-*'):
             if root_cli.rollout_directory_kind(base)=='capture':continue
-            state=private_json(base/'checkpoint.json')
+            state=checkpoint_json(base/'checkpoint.json')
             retirement.idle_state(base,state)
             checkpoints[str(base/'checkpoint.json')]=hashlib.sha256(retirement.private_bytes(base/'checkpoint.json')).hexdigest()
             if any(state.get(key) is not None for key in ('operator_retirement','operator_fence_abort')):
@@ -289,7 +289,7 @@ def install(code,policy_path):
         if marker['data'].get('phase')!='active':raise Blocked('bridge_install_live_operation_present')
         for base in guard.ROOT.glob('rollout-*'):
             if root_cli.rollout_directory_kind(base)=='capture':continue
-            if not (base/'checkpoint.json').exists() or private_json(base/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):raise Blocked('bridge_install_live_operation_present')
+            if not (base/'checkpoint.json').exists() or checkpoint_json(base/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):raise Blocked('bridge_install_live_operation_present')
         installed=guard.ROOT/'installed'
         if installed.exists():raise Blocked('bridge_already_installed_no_replacement')
         installed.mkdir(mode=0o750);gid=grp.getgrnam('pmd').gr_gid;os.chown(installed,0,gid)
