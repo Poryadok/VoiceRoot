@@ -69,11 +69,20 @@ func TestT30ComposeChatProvisionLostResponseRetriesRealReceipt(t *testing.T) {
 
 	_, err = orchestrator.AdvanceOne(ctx, accepted.OperationID)
 	require.Error(t, err, "the real Chat RPC committed before the test wrapper dropped its first successful response")
+	require.Equal(t, codes.Unavailable, status.Code(err), "the test wrapper must return its simulated response-loss status")
 	require.Len(t, chatClient.requests, 1)
+	require.Len(t, chatClient.responses, 1,
+		"the underlying Chat RPC must succeed before the wrapper injects response loss; actual gRPC status=%s",
+		chatClient.firstRPCErrorCode)
 	firstRequest := chatClient.requests[0]
+	firstResponse := chatClient.responses[0]
+	require.NotEmpty(t, firstResponse.GetChatId())
+	require.Equal(t, firstRequest.GetOperationId(), firstResponse.GetReceiptId())
 	firstHash, err := principal.RequestHash(firstRequest)
 	require.NoError(t, err)
 	require.NotEmpty(t, firstHash)
+	require.Equal(t, firstHash, firstResponse.GetRequestHash())
+	require.False(t, firstResponse.GetReplayed())
 
 	chatID, chatReceiptID, chatRequestHash := assertCommittedChatReceipt(t, ctx, chatPool, applicationID, environmentID, externalKey, firstRequest.GetOperationId())
 	var mappingCount, mappingOperationCount, ownerReceiptCount, outboxCount int
@@ -141,14 +150,18 @@ func TestT30ComposeChatProvisionLostResponseRetriesRealReceipt(t *testing.T) {
 
 type dropFirstProvisionResponse struct {
 	chatv1.GameIntegrationChatServiceClient
-	requests  []*chatv1.ProvisionManagedChatRequest
-	responses []*chatv1.ProvisionManagedChatResponse
+	requests          []*chatv1.ProvisionManagedChatRequest
+	responses         []*chatv1.ProvisionManagedChatResponse
+	firstRPCErrorCode string
 }
 
 func (c *dropFirstProvisionResponse) ProvisionManagedChat(ctx context.Context, request *chatv1.ProvisionManagedChatRequest, options ...grpc.CallOption) (*chatv1.ProvisionManagedChatResponse, error) {
 	c.requests = append(c.requests, proto.Clone(request).(*chatv1.ProvisionManagedChatRequest))
 	response, err := c.GameIntegrationChatServiceClient.ProvisionManagedChat(ctx, request, options...)
 	if err != nil {
+		if len(c.requests) == 1 {
+			c.firstRPCErrorCode = status.Code(err).String()
+		}
 		return nil, err
 	}
 	c.responses = append(c.responses, proto.Clone(response).(*chatv1.ProvisionManagedChatResponse))
