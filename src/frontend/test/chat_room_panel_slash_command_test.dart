@@ -49,6 +49,79 @@ const _command = BotSlashCommand(
 var _captureFontsLoaded = false;
 
 void main() {
+  for (final leftInset in [376.0, 900.0]) {
+    testWidgets(
+      'wide slash menu anchors above the actual composer and stays on screen at inset $leftInset',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final executions = <_RecordedExecution>[];
+        final container = await _pumpChatRoom(
+          tester,
+          executions: executions,
+          onRequest: (_) async => http.Response('{}', 404),
+          roomPadding: EdgeInsets.only(left: leftInset),
+        );
+        addTearDown(container.dispose);
+
+        await _openComposerMenu(tester);
+        final composer = tester.getRect(find.byKey(ChatRoomPanel.inputKey));
+        final menu = tester.getRect(find.byKey(SlashCommandMenuSheet.sheetKey));
+        expect(menu.width, closeTo(430, 0.1));
+        expect(menu.bottom, closeTo(composer.top - 8, 0.1));
+        expect(menu.left, closeTo(composer.left.clamp(8.0, 842.0), 0.1));
+        expect(menu.top, greaterThanOrEqualTo(8));
+        expect(menu.right, lessThanOrEqualTo(1272));
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: find.byKey(SlashCommandMenuSheet.searchFieldKey),
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.tapAt(const Offset(20, 20));
+        await tester.pumpAndSettle();
+        expect(find.byKey(SlashCommandMenuSheet.sheetKey), findsNothing);
+        expect(executions, isEmpty);
+        _expectComposer(tester, '$_draftPrefix /');
+        expect(_composerHasFocus(tester), isTrue);
+      },
+    );
+  }
+
+  testWidgets('narrow slash menu retains its keyboard-height sheet', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = await _pumpChatRoom(
+      tester,
+      executions: <_RecordedExecution>[],
+      onRequest: (_) async => http.Response('{}', 404),
+    );
+    addTearDown(container.dispose);
+    await _openComposerMenu(tester);
+    final menu = tester.getRect(find.byKey(SlashCommandMenuSheet.sheetKey));
+    expect(menu.width, 390);
+    expect(menu.bottom, 844);
+    expect(menu.height, lessThan(844));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(_composerHasFocus(tester), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'composer slash entry runs a selected command with its typed option and restores the draft',
     (tester) async {
@@ -225,6 +298,7 @@ Future<ProviderContainer> _pumpChatRoom(
   required List<_RecordedExecution> executions,
   required Future<http.Response> Function(http.Request) onRequest,
   ThemeData? theme,
+  EdgeInsets roomPadding = EdgeInsets.zero,
 }) async {
   final container = ProviderContainer(
     overrides: [
@@ -282,7 +356,12 @@ Future<ProviderContainer> _pumpChatRoom(
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: const Scaffold(body: ChatRoomPanel(chatId: _chatId)),
+        home: Scaffold(
+          body: Padding(
+            padding: roomPadding,
+            child: const ChatRoomPanel(chatId: _chatId),
+          ),
+        ),
       ),
     ),
   );

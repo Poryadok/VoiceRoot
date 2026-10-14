@@ -221,6 +221,74 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+    testWidgets('slash options use a full-height responsive form at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await pumpOptionsSheet(
+        tester,
+        command: _commandWithOptions(const [
+          BotSlashCommandOption(name: 'reason', type: 'string', required: true),
+        ]),
+      );
+      final form = tester.getRect(
+        find
+            .ancestor(of: find.text('/assign'), matching: find.byType(SafeArea))
+            .first,
+      );
+      expect(form.top, 0);
+      expect(form.bottom, size.height);
+      expect(form.width, size.width < 600 ? size.width : 320);
+      expect(form.right, size.width);
+      expect(find.byTooltip('Close'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.text('Run command'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'long mobile options scroll while actions stay above the keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      Map<String, dynamic>? submitted;
+      await pumpOptionsSheet(
+        tester,
+        command: _commandWithOptions([
+          for (var i = 0; i < 14; i++)
+            BotSlashCommandOption(name: 'value$i', type: 'string'),
+        ]),
+        onResult: (result) => submitted = result,
+      );
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+      final run = find.widgetWithText(FilledButton, 'Run command');
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(544));
+      final lastField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'value13',
+      );
+      await tester.ensureVisible(lastField);
+      await tester.pumpAndSettle();
+      await tester.enterText(lastField, 'last value');
+      await tester.pumpAndSettle();
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(544));
+      expect(tester.takeException(), isNull);
+      await tester.tap(run);
+      await tester.pumpAndSettle();
+      expect(submitted, {'value13': 'last value'});
+    },
+  );
+
   testWidgets(
     'slash options sheet shows user picker for type=user (BOT-B P2)',
     (tester) async {
