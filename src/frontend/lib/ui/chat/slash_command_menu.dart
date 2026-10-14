@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/bot_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_layout.dart';
+import '../core/voice_avatar.dart';
 import '../core/voice_state_panel.dart';
 import '../a11y/focus_trap.dart';
 import '../a11y/voice_focus_return.dart';
@@ -145,14 +146,29 @@ class _SlashCommandMenuSheetState extends ConsumerState<SlashCommandMenuSheet> {
                         if (entry is _SlashMenuHeader) {
                           return Padding(
                             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                            child: Text(
-                              entry.label,
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
+                            child: Semantics(
+                              header: true,
+                              label: entry.label,
+                              excludeSemantics: true,
+                              child: Row(
+                                children: [
+                                  VoiceAvatar(label: entry.botName, radius: 10),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      entry.label,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                          ),
+                                    ),
                                   ),
+                                ],
+                              ),
                             ),
                           );
                         }
@@ -232,7 +248,7 @@ class _SlashCommandMenuSheetState extends ConsumerState<SlashCommandMenuSheet> {
           ? '${cmd.botName} / ${cmd.groupName}'
           : cmd.botName;
       if (header != lastHeader) {
-        out.add(_SlashMenuHeader(header));
+        out.add(_SlashMenuHeader(header, cmd.botName));
         lastHeader = header;
       }
       out.add(_SlashMenuItem(cmd));
@@ -244,8 +260,9 @@ class _SlashCommandMenuSheetState extends ConsumerState<SlashCommandMenuSheet> {
 sealed class _SlashMenuEntry {}
 
 class _SlashMenuHeader extends _SlashMenuEntry {
-  _SlashMenuHeader(this.label);
+  _SlashMenuHeader(this.label, this.botName);
   final String label;
+  final String botName;
 }
 
 class _SlashMenuItem extends _SlashMenuEntry {

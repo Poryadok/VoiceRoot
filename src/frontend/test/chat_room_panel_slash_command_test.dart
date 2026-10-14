@@ -354,6 +354,8 @@ void main() {
           addTearDown(container.dispose);
 
           await _openComposerMenu(tester);
+          expect(find.text('S'), findsOneWidget);
+          expect(find.text('G'), findsOneWidget);
           await _capture(
             tester,
             captureDirectory,
