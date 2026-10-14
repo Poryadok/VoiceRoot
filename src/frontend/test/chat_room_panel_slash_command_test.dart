@@ -329,6 +329,8 @@ void main() {
     (tester) async {
       final captureDirectory = Platform.environment[_captureDirectoryKey];
       if (captureDirectory == null || captureDirectory.isEmpty) return;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final theme = await _loadCaptureTheme(tester);
       final scenarios = [
         (size: const Size(1280, 800), suffix: 'h'),
@@ -380,8 +382,6 @@ void main() {
         expect(tester.takeException(), isNull);
         await container.dispose();
       }
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
     },
   );
 
