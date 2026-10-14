@@ -85,6 +85,9 @@ def _proof_matches(proof,migration_id):
     return True
 
 def validate_identity(active_contract,expected,baseline_pairs):
+    if isinstance(active_contract,dict) and active_contract.get('schema')=='voice-nats-reset-active-contract-v1':
+        from operator_reset import validate_active
+        return validate_active(active_contract,expected,baseline_pairs)
     if (not isinstance(active_contract,dict) or active_contract.get('schema')!='voice-nats-active-contract-v1'
         or active_contract.get('migration_id') not in (LEGACY_NATS_MIGRATION_ID,CURRENT_NATS_MIGRATION_ID)
         or active_contract.get('generation')!=expected['generation']
