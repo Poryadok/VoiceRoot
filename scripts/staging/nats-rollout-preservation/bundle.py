@@ -20,6 +20,7 @@ ROLLOUT+=('preserved_upload.py',)
 ROLLOUT+=('expired_recovery.py','expired_proof.py','expired_admission.py','expired_transport.py','expired_finish.py')
 ROLLOUT+=('hub_bridge_identity.py','hub_bridge_unit.py','operator_retirement.py')
 ROLLOUT+=('closed_archive.py','closed_durable.py','closed-seal-source-policies.json')
+ROLLOUT+=('operator_reset.py',)
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
