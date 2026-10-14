@@ -250,76 +250,79 @@ void main() {
         tester,
       ) async {
         final semantics = tester.ensureSemantics();
-        addTearDown(semantics.dispose);
-        final unexpectedRequests = <String>[];
-        final client = _noNetworkClient(unexpectedRequests);
-        final container = _appearanceContainer(client, isPlus: isPlus);
-        addTearDown(container.dispose);
-        addTearDown(client.close);
-        container.read(selectedChatIdProvider.notifier).state = 'chat-a';
-        await tester.pumpWidget(_settingsLauncher(container, locale: locale));
-        await _openAppearance(tester);
-        _expectPlusDestinations(tester);
+        try {
+          final unexpectedRequests = <String>[];
+          final client = _noNetworkClient(unexpectedRequests);
+          final container = _appearanceContainer(client, isPlus: isPlus);
+          addTearDown(container.dispose);
+          addTearDown(client.close);
+          container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+          await tester.pumpWidget(_settingsLauncher(container, locale: locale));
+          await _openAppearance(tester);
+          _expectPlusDestinations(tester);
 
-        final l10n = AppLocalizations.of(
-          tester.element(find.byKey(AppearanceSettingsScreen.screenKey)),
-        )!;
-        for (final entry in [
-          (
-            AppearanceSettingsScreen.chatThemesKey,
-            l10n.settingsChatThemes,
-            ChatThemesSettingsScreen.screenKey,
-            const Key('chat_themes_back'),
-          ),
-          (
-            AppearanceSettingsScreen.appIconKey,
-            l10n.appIconTitle,
-            AppIconSettingsScreen.screenKey,
-            const Key('app_icon_back'),
-          ),
-        ]) {
-          final tile = find.byKey(entry.$1);
-          await tester.ensureVisible(tile);
-          await tester.pumpAndSettle();
-          final label = tester.getSemantics(tile).label;
-          expect(label, contains(entry.$2));
-          expect(label, contains(l10n.chatThemesPlusLabel));
-          final title = find.descendant(
-            of: tile,
-            matching: find.text(entry.$2),
-          );
-          final focus = Focus.of(tester.element(title));
-          focus.requestFocus();
-          await tester.pump();
-          expect(focus.hasFocus, isTrue);
-          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-          await tester.pumpAndSettle();
-          expect(find.byKey(entry.$3), findsOneWidget);
-          if (entry.$3 == ChatThemesSettingsScreen.screenKey) {
-            expect(
-              tester
-                  .widget<ChatThemesSettingsScreen>(
-                    find.byType(ChatThemesSettingsScreen),
-                  )
-                  .chatId,
-              'chat-a',
+          final l10n = AppLocalizations.of(
+            tester.element(find.byKey(AppearanceSettingsScreen.screenKey)),
+          )!;
+          for (final entry in [
+            (
+              AppearanceSettingsScreen.chatThemesKey,
+              l10n.settingsChatThemes,
+              ChatThemesSettingsScreen.screenKey,
+              const Key('chat_themes_back'),
+            ),
+            (
+              AppearanceSettingsScreen.appIconKey,
+              l10n.appIconTitle,
+              AppIconSettingsScreen.screenKey,
+              const Key('app_icon_back'),
+            ),
+          ]) {
+            final tile = find.byKey(entry.$1);
+            await tester.ensureVisible(tile);
+            await tester.pumpAndSettle();
+            final label = tester.getSemantics(tile).label;
+            expect(label, contains(entry.$2));
+            expect(label, contains(l10n.chatThemesPlusLabel));
+            final title = find.descendant(
+              of: tile,
+              matching: find.text(entry.$2),
             );
+            final focus = Focus.of(tester.element(title));
+            focus.requestFocus();
+            await tester.pump();
+            expect(focus.hasFocus, isTrue);
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+            expect(find.byKey(entry.$3), findsOneWidget);
+            if (entry.$3 == ChatThemesSettingsScreen.screenKey) {
+              expect(
+                tester
+                    .widget<ChatThemesSettingsScreen>(
+                      find.byType(ChatThemesSettingsScreen),
+                    )
+                    .chatId,
+                'chat-a',
+              );
+              expect(
+                find.text(l10n.chatThemesPlusNotice),
+                isPlus ? findsNothing : findsOneWidget,
+              );
+            }
+            await tester.tap(find.byKey(entry.$4));
+            await tester.pumpAndSettle();
             expect(
-              find.text(l10n.chatThemesPlusNotice),
-              isPlus ? findsNothing : findsOneWidget,
+              find.byKey(AppearanceSettingsScreen.screenKey),
+              findsOneWidget,
             );
           }
-          await tester.tap(find.byKey(entry.$4));
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
           await tester.pumpAndSettle();
-          expect(
-            find.byKey(AppearanceSettingsScreen.screenKey),
-            findsOneWidget,
-          );
+          expect(unexpectedRequests, isEmpty);
+        } finally {
+          semantics.dispose();
         }
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pumpAndSettle();
-        expect(unexpectedRequests, isEmpty);
       });
     }
   }
