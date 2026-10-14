@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -22,6 +23,15 @@ void main() {
       testWidgets(
         '$language gateway $failure is safe and recovers on refresh',
         (tester) async {
+          const voipChannel = MethodChannel('voice/voip');
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(voipChannel, (_) async => null);
+          addTearDown(
+            () => TestDefaultBinaryMessengerBinding
+                .instance
+                .defaultBinaryMessenger
+                .setMockMethodCallHandler(voipChannel, null),
+          );
           final requests = <http.Request>[];
           var failed = true;
           final privateMarker = 'private_health_${language}_$failure';
