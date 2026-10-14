@@ -241,6 +241,9 @@ def verify_readonly_terminal(base,state):
 
 
 def verify_terminal(base,state):
+    if 'operator_reset' in state:
+        from operator_reset import verify_terminal as verify_reset
+        return verify_reset(base,state)
     if 'operator_applied_abort' in state:return verify_applied_terminal(base,state)
     if 'operator_postmigration_abort' in state:return verify_postmigration_terminal(base,state)
     if 'operator_fence_abort' in state:return verify_fence_abort_terminal(base,state)
@@ -1021,6 +1024,14 @@ def pending_request_accepted(installed,path,closure):
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
     row=document(path)
     if row.get('phase')=='COMPLETE':return
+    request=row.get('request',{})
+    if request.get('operation')=='a83c5bdb26f1':
+        from operator_reset import verify_terminal as verify_reset,verify_journals
+        base=guard.ROOT/'rollout-a83c5bdb26f1'
+        receipt=verify_reset(base,document(base/'checkpoint.json'))
+        verify_journals(installed,receipt['journals'])
+        if path.name not in receipt['journals']:fail()
+        return
     if path.name==FENCE_ABORT_NONCE+'.json':
         base=guard.ROOT/('rollout-'+FENCE_ABORT_OPERATION)
         state=document(base/'checkpoint.json')
