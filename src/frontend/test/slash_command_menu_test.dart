@@ -149,6 +149,82 @@ void main() {
     expect(find.text('/ping'), findsNothing);
   });
 
+  for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+    testWidgets(
+      'bot headers show distinct identity and heading semantics at $size',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final semantics = tester.ensureSemantics();
+        try {
+          await tester.pumpWidget(
+            slashMenuApp(
+              overrides: [
+                slashCommandsForChatProvider('chat-1').overrideWith(
+                  (ref) async => const [
+                    BotSlashCommand(
+                      botId: 'voice',
+                      botName: 'Voice Bot',
+                      groupName: 'moderation',
+                      name: 'ban',
+                      description: 'Ban a member',
+                    ),
+                    BotSlashCommand(
+                      botId: 'voice',
+                      botName: 'Voice Bot',
+                      groupName: 'moderation',
+                      name: 'kick',
+                      description: 'Remove a member',
+                    ),
+                    BotSlashCommand(
+                      botId: 'game',
+                      botName: 'Game Stats',
+                      name: 'score',
+                      description: 'Show score',
+                      online: false,
+                    ),
+                  ],
+                ),
+              ],
+              onSelected: (_) {},
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.text('V'), findsOneWidget);
+          expect(find.text('G'), findsOneWidget);
+          expect(find.text('Voice Bot / moderation'), findsOneWidget);
+          for (final label in ['Voice Bot / moderation', 'Game Stats']) {
+            expect(
+              tester.getSemantics(find.bySemanticsLabel(label)),
+              matchesSemantics(label: label, isHeader: true),
+              reason:
+                  'announce each bot group once without its decorative initial',
+            );
+          }
+
+          await tester.enterText(find.byType(TextField), 'game');
+          await tester.pumpAndSettle();
+          expect(find.text('V'), findsNothing);
+          expect(find.text('G'), findsOneWidget);
+          expect(
+            tester
+                .widget<ListTile>(
+                  find.byKey(const ValueKey('slash_command_game_score')),
+                )
+                .enabled,
+            isFalse,
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+  }
+
   testWidgets(
     'keyboard menu search selects options and returns focus through Cancel',
     (tester) async {
@@ -247,6 +323,15 @@ void main() {
             .hasFocus,
         isTrue,
         reason: 'reverse traversal returns to the command parameter field',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<TextButton>()
+            ?.child,
+        isA<Text>().having((text) => text.data, 'label', 'Cancel'),
+        reason: 'desktop footer visits Cancel before Run in reference order',
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();

@@ -323,6 +323,7 @@ class _PendingAttachmentUpload {
 
 class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composer = TextEditingController();
+  final _slashComposerAnchor = GlobalKey();
   final _composerFocus = FocusNode();
   final _selectedMessageFocus = FocusNode(
     debugLabel: 'chat-room-selected-message',
@@ -1583,6 +1584,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         ),
                       ),
                       Expanded(
+                        key: _slashComposerAnchor,
                         child: ChatComposerTextField(
                           key: ChatRoomPanel.inputKey,
                           controller: _composer,
@@ -1715,6 +1717,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
     await showSlashCommandMenu(
       context: context,
+      anchorContext: _slashComposerAnchor.currentContext,
       ref: ref,
       chatId: widget.chatId,
       filter: filter,

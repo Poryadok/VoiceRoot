@@ -402,6 +402,30 @@ jobs:
             ${{ runner.temp }}/attach-group-capture/create-group-v.png
           if-no-files-found: error
           retention-days: 7
+      - name: Capture Slash composer horizontal and vertical views
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/slash-responsive-geometry'
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_SLASH_COMPOSER_CAPTURE_DIR: ${{ runner.temp }}/slash-composer-capture
+        run: |
+          flutter test --no-pub --reporter expanded --concurrency=1 test/chat_room_panel_slash_command_test.dart
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/menu-h.png"
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/menu-v.png"
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/options-h.png"
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/options-v.png"
+      - name: Upload Slash composer reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/slash-responsive-geometry'
+        uses: actions/upload-artifact@v6
+        with:
+          name: slash-composer-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/slash-composer-capture/menu-h.png
+            ${{ runner.temp }}/slash-composer-capture/menu-v.png
+            ${{ runner.temp }}/slash-composer-capture/options-h.png
+            ${{ runner.temp }}/slash-composer-capture/options-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6

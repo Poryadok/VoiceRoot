@@ -5,7 +5,10 @@ import '../../backend/bots_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/bot_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
+import '../core/voice_avatar.dart';
 import '../core/voice_state_panel.dart';
+import '../a11y/focus_trap.dart';
 import '../a11y/voice_focus_return.dart';
 
 class SlashCommandMenuSheet extends ConsumerStatefulWidget {
@@ -26,7 +29,6 @@ class SlashCommandMenuSheet extends ConsumerStatefulWidget {
   final ValueChanged<BotSlashCommand> onSelected;
   final String filter;
 
-  @override
   @override
   ConsumerState<SlashCommandMenuSheet> createState() =>
       _SlashCommandMenuSheetState();
@@ -59,146 +61,166 @@ class _SlashCommandMenuSheetState extends ConsumerState<SlashCommandMenuSheet> {
 
     return SafeArea(
       key: SlashCommandMenuSheet.sheetKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Text(
-              l10n.slashCommandsTitle,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            child: TextField(
-              key: SlashCommandMenuSheet.searchFieldKey,
-              controller: _searchController,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: l10n.socialTabSearch,
-                prefixIcon: const Icon(Icons.search),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                l10n.slashCommandsTitle,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              onChanged: (_) => setState(() {}),
             ),
-          ),
-          const Divider(height: 1),
-          commandsAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: TextField(
+                key: SlashCommandMenuSheet.searchFieldKey,
+                controller: _searchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: l10n.socialTabSearch,
+                  prefixIcon: const Icon(Icons.search),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
             ),
-            error: (error, _) => VoiceStatePanel(
-              title: l10n.slashCommandsTitle,
-              message: l10n.slashCommandsLoadError,
-              icon: Icons.cloud_off_outlined,
-              actionLabel: l10n.commonRetry,
-              onAction: () =>
-                  ref.invalidate(slashCommandsForChatProvider(widget.chatId)),
-            ),
-            data: (commands) {
-              final filtered = normalizedFilter.isEmpty
-                  ? commands
-                  : commands
-                        .where(
-                          (cmd) =>
-                              cmd.fullCommandName.toLowerCase().contains(
-                                normalizedFilter,
-                              ) ||
-                              cmd.botName.toLowerCase().contains(
-                                normalizedFilter,
-                              ),
-                        )
-                        .toList(growable: false);
-              if (filtered.isEmpty) {
-                final isFilterMiss =
-                    normalizedFilter.isNotEmpty && commands.isNotEmpty;
-                return VoiceStatePanel(
-                  key: isFilterMiss
-                      ? SlashCommandMenuSheet.noMatchStateKey
-                      : SlashCommandMenuSheet.emptyStateKey,
-                  title: isFilterMiss
-                      ? l10n.slashCommandsNoMatch
-                      : l10n.slashCommandsEmpty,
-                  message: isFilterMiss
-                      ? l10n.slashCommandsNoMatchHint
-                      : _emptyHint(l10n, spaceId),
-                  icon: isFilterMiss
-                      ? Icons.search_off_outlined
-                      : Icons.smart_toy_outlined,
-                );
-              }
-              final grouped = _groupCommands(filtered);
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: grouped.length,
-                    itemBuilder: (context, index) {
-                      final entry = grouped[index];
-                      if (entry is _SlashMenuHeader) {
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                          child: Text(
-                            entry.label,
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+            const Divider(height: 1),
+            commandsAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => VoiceStatePanel(
+                title: l10n.slashCommandsTitle,
+                message: l10n.slashCommandsLoadError,
+                icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: () =>
+                    ref.invalidate(slashCommandsForChatProvider(widget.chatId)),
+              ),
+              data: (commands) {
+                final filtered = normalizedFilter.isEmpty
+                    ? commands
+                    : commands
+                          .where(
+                            (cmd) =>
+                                cmd.fullCommandName.toLowerCase().contains(
+                                  normalizedFilter,
+                                ) ||
+                                cmd.botName.toLowerCase().contains(
+                                  normalizedFilter,
                                 ),
+                          )
+                          .toList(growable: false);
+                if (filtered.isEmpty) {
+                  final isFilterMiss =
+                      normalizedFilter.isNotEmpty && commands.isNotEmpty;
+                  return VoiceStatePanel(
+                    key: isFilterMiss
+                        ? SlashCommandMenuSheet.noMatchStateKey
+                        : SlashCommandMenuSheet.emptyStateKey,
+                    title: isFilterMiss
+                        ? l10n.slashCommandsNoMatch
+                        : l10n.slashCommandsEmpty,
+                    message: isFilterMiss
+                        ? l10n.slashCommandsNoMatchHint
+                        : _emptyHint(l10n, spaceId),
+                    icon: isFilterMiss
+                        ? Icons.search_off_outlined
+                        : Icons.smart_toy_outlined,
+                  );
+                }
+                final grouped = _groupCommands(filtered);
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: grouped.length,
+                      itemBuilder: (context, index) {
+                        final entry = grouped[index];
+                        if (entry is _SlashMenuHeader) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: Semantics(
+                              header: true,
+                              label: entry.label,
+                              excludeSemantics: true,
+                              child: Row(
+                                children: [
+                                  VoiceAvatar(label: entry.botName, radius: 10),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      entry.label,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        final cmd = (entry as _SlashMenuItem).command;
+                        final offline = !cmd.online;
+                        return Tooltip(
+                          message: offline ? l10n.botUnavailableTooltip : '',
+                          child: ListTile(
+                            key: ValueKey(
+                              'slash_command_${cmd.botId}_${cmd.fullCommandName}',
+                            ),
+                            enabled: !offline,
+                            leading: Icon(
+                              Icons.terminal,
+                              color: offline
+                                  ? voice.textDisabled
+                                  : voice.profileAccent,
+                            ),
+                            title: Text(
+                              cmd.displayName,
+                              style: offline
+                                  ? TextStyle(color: voice.textDisabled)
+                                  : null,
+                            ),
+                            subtitle: Text(
+                              cmd.description.isEmpty
+                                  ? cmd.botName
+                                  : cmd.description,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: offline
+                                  ? TextStyle(color: voice.textDisabled)
+                                  : null,
+                            ),
+                            onTap: offline
+                                ? null
+                                : () => widget.onSelected(cmd),
                           ),
                         );
-                      }
-                      final cmd = (entry as _SlashMenuItem).command;
-                      final offline = !cmd.online;
-                      return Tooltip(
-                        message: offline ? l10n.botUnavailableTooltip : '',
-                        child: ListTile(
-                          key: ValueKey(
-                            'slash_command_${cmd.botId}_${cmd.fullCommandName}',
-                          ),
-                          enabled: !offline,
-                          leading: Icon(
-                            Icons.terminal,
-                            color: offline
-                                ? voice.textDisabled
-                                : voice.profileAccent,
-                          ),
-                          title: Text(
-                            cmd.displayName,
-                            style: offline
-                                ? TextStyle(color: voice.textDisabled)
-                                : null,
-                          ),
-                          subtitle: Text(
-                            cmd.description.isEmpty
-                                ? cmd.botName
-                                : cmd.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: offline
-                                ? TextStyle(color: voice.textDisabled)
-                                : null,
-                          ),
-                          onTap: offline ? null : () => widget.onSelected(cmd),
-                        ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1),
-                  _SlashCommandsHelpFooter(
-                    key: SlashCommandMenuSheet.helpFooterKey,
-                    message: l10n.slashCommandsHelp,
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _SlashCommandsHelpFooter(
+                      key: SlashCommandMenuSheet.helpFooterKey,
+                      message: l10n.slashCommandsHelp,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -226,7 +248,7 @@ class _SlashCommandMenuSheetState extends ConsumerState<SlashCommandMenuSheet> {
           ? '${cmd.botName} / ${cmd.groupName}'
           : cmd.botName;
       if (header != lastHeader) {
-        out.add(_SlashMenuHeader(header));
+        out.add(_SlashMenuHeader(header, cmd.botName));
         lastHeader = header;
       }
       out.add(_SlashMenuItem(cmd));
@@ -238,8 +260,9 @@ class _SlashCommandMenuSheetState extends ConsumerState<SlashCommandMenuSheet> {
 sealed class _SlashMenuEntry {}
 
 class _SlashMenuHeader extends _SlashMenuEntry {
-  _SlashMenuHeader(this.label);
+  _SlashMenuHeader(this.label, this.botName);
   final String label;
+  final String botName;
 }
 
 class _SlashMenuItem extends _SlashMenuEntry {
@@ -272,24 +295,114 @@ Future<void> showSlashCommandMenu({
   required BuildContext context,
   required WidgetRef ref,
   required String chatId,
+  BuildContext? anchorContext,
   String filter = '',
   required Future<void> Function(BotSlashCommand command) onSelected,
-}) {
+}) async {
   final focusReturn = VoiceFocusReturn.capture();
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (ctx) => Consumer(
-      builder: (context, ref, _) {
-        return SlashCommandMenuSheet(
-          chatId: chatId,
-          filter: filter,
-          onSelected: (command) async {
-            Navigator.pop(ctx);
-            await onSelected(command);
-          },
-        );
-      },
+  Widget menu(BuildContext routeContext) => SlashCommandMenuSheet(
+    chatId: chatId,
+    filter: filter,
+    onSelected: (command) => Navigator.of(routeContext).pop(command),
+  );
+  try {
+    final BotSlashCommand? selected;
+    if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+      selected = await showModalBottomSheet<BotSlashCommand>(
+        context: context,
+        isScrollControlled: true,
+        builder: (routeContext) {
+          final media = MediaQuery.of(routeContext);
+          return Padding(
+            padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: (media.size.height - media.viewInsets.bottom) * 0.7,
+              ),
+              child: menu(routeContext),
+            ),
+          );
+        },
+      );
+    } else {
+      // Typing the slash may wrap the composer and move its top edge.
+      // Measure after that layout, rather than inside the onChanged callback.
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final triggerContext = anchorContext ?? context;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!navigator.mounted) return;
+      if (!triggerContext.mounted) return;
+      final overlay =
+          navigator.overlay!.context.findRenderObject()! as RenderBox;
+      final trigger = triggerContext.findRenderObject()! as RenderBox;
+      final anchor =
+          trigger.localToGlobal(Offset.zero, ancestor: overlay) & trigger.size;
+      if (!context.mounted) return;
+      selected = await showDialog<BotSlashCommand>(
+        context: context,
+        useSafeArea: false,
+        barrierColor: Colors.transparent,
+        builder: (routeContext) => CustomSingleChildLayout(
+          delegate: _SlashMenuLayout(
+            anchor,
+            MediaQuery.paddingOf(routeContext),
+          ),
+          child: Material(
+            color:
+                Theme.of(routeContext).dialogTheme.backgroundColor ??
+                Theme.of(routeContext).colorScheme.surface,
+            elevation: 8,
+            borderRadius: BorderRadius.circular(8),
+            clipBehavior: Clip.antiAlias,
+            child: VoiceFocusTrap(
+              onEscape: () => Navigator.of(routeContext).pop(),
+              child: menu(routeContext),
+            ),
+          ),
+        ),
+      );
+    }
+    if (selected != null) await onSelected(selected);
+  } finally {
+    focusReturn.restore();
+  }
+}
+
+/// Reference desktop popup:430px wide,8px above the actual composer.
+class _SlashMenuLayout extends SingleChildLayoutDelegate {
+  const _SlashMenuLayout(this.anchor, this.padding);
+
+  final Rect anchor;
+  final EdgeInsets padding;
+  static const margin = 8.0;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final width = (constraints.maxWidth - padding.horizontal - margin * 2)
+        .clamp(0.0, 430.0);
+    final screenHeight = (constraints.maxHeight - padding.vertical - margin * 2)
+        .clamp(0.0, double.infinity);
+    final above = anchor.top - padding.top - margin * 2;
+    return BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: above >= 160 ? above.clamp(0.0, screenHeight) : screenHeight,
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    anchor.left.clamp(
+      padding.left + margin,
+      size.width - padding.right - margin - childSize.width,
     ),
-  ).whenComplete(focusReturn.restore);
+    (anchor.top - margin - childSize.height).clamp(
+      padding.top + margin,
+      size.height - padding.bottom - margin - childSize.height,
+    ),
+  );
+
+  @override
+  bool shouldRelayout(_SlashMenuLayout oldDelegate) =>
+      anchor != oldDelegate.anchor || padding != oldDelegate.padding;
 }

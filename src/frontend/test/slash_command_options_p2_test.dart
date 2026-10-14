@@ -24,6 +24,7 @@ import 'package:voice_frontend/state/bot_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/theme/voice_colors.dart';
 import 'package:voice_frontend/ui/chat/slash_command_options_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -220,6 +221,127 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
   }
+
+  for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+    testWidgets('slash options use a full-height responsive form at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await pumpOptionsSheet(
+        tester,
+        command: _commandWithOptions(const [
+          BotSlashCommandOption(name: 'reason', type: 'string', required: true),
+        ]),
+      );
+      final form = tester.getRect(
+        find
+            .ancestor(of: find.text('/assign'), matching: find.byType(SafeArea))
+            .first,
+      );
+      expect(form.top, 0);
+      expect(form.bottom, size.height);
+      expect(form.width, size.width < 600 ? size.width : 320);
+      expect(form.right, size.width);
+      expect(
+        tester.widget<ModalBarrier>(find.byType(ModalBarrier).last).color,
+        VoiceColors.of(tester.element(find.text('/assign'))).overlay,
+      );
+      if (size.width >= 600) {
+        expect(
+          tester.getRect(find.text('Cancel')).right,
+          lessThan(tester.getRect(find.text('Run command')).left),
+        );
+      }
+      expect(find.byTooltip('Close'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.text('Run command'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'Russian desktop footer stays inside its panel with larger text',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      Map<String, dynamic>? result;
+      await pumpOptionsSheet(
+        tester,
+        locale: const Locale('ru'),
+        command: _commandWithOptions(const [
+          BotSlashCommandOption(name: 'reason', type: 'string', required: true),
+        ]),
+        onResult: (value) => result = value,
+      );
+      final field = find.byType(TextField);
+      await tester.enterText(field, 'reason');
+      await tester.pumpAndSettle();
+      final run = find.byType(FilledButton);
+      final cancel = find.byType(TextButton);
+      final panel = tester.getRect(
+        find
+            .ancestor(of: find.text('/assign'), matching: find.byType(SafeArea))
+            .first,
+      );
+      expect(panel.width, 320);
+      expect(
+        tester.getRect(cancel).left,
+        greaterThanOrEqualTo(panel.left + 16),
+      );
+      expect(tester.getRect(cancel).right, lessThan(tester.getRect(run).left));
+      expect(tester.getRect(run).right, lessThanOrEqualTo(panel.right - 16));
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(panel.bottom));
+      expect(tester.takeException(), isNull);
+      await tester.tap(run);
+      await tester.pumpAndSettle();
+      expect(result, {'reason': 'reason'});
+    },
+  );
+
+  testWidgets(
+    'long mobile options scroll while actions stay above the keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      Map<String, dynamic>? submitted;
+      await pumpOptionsSheet(
+        tester,
+        command: _commandWithOptions([
+          for (var i = 0; i < 14; i++)
+            BotSlashCommandOption(name: 'value$i', type: 'string'),
+        ]),
+        onResult: (result) => submitted = result,
+      );
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+      final run = find.widgetWithText(FilledButton, 'Run command');
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(544));
+      final lastField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'value13',
+      );
+      await tester.ensureVisible(lastField);
+      await tester.pumpAndSettle();
+      await tester.enterText(lastField, 'last value');
+      await tester.pumpAndSettle();
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(544));
+      expect(tester.takeException(), isNull);
+      await tester.tap(run);
+      await tester.pumpAndSettle();
+      expect(submitted, {'value13': 'last value'});
+    },
+  );
 
   testWidgets(
     'slash options sheet shows user picker for type=user (BOT-B P2)',
