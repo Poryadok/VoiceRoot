@@ -24,6 +24,7 @@ import 'package:voice_frontend/state/bot_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/theme/voice_colors.dart';
 import 'package:voice_frontend/ui/chat/slash_command_options_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -244,6 +245,16 @@ void main() {
       expect(form.bottom, size.height);
       expect(form.width, size.width < 600 ? size.width : 320);
       expect(form.right, size.width);
+      expect(
+        tester.widget<ModalBarrier>(find.byType(ModalBarrier).last).color,
+        VoiceColors.of(tester.element(find.text('/assign'))).overlay,
+      );
+      if (size.width >= 600) {
+        expect(
+          tester.getRect(find.text('Cancel')).right,
+          lessThan(tester.getRect(find.text('Run command')).left),
+        );
+      }
       expect(find.byTooltip('Close'), findsOneWidget);
       await tester.tap(find.byTooltip('Close'));
       await tester.pumpAndSettle();

@@ -250,6 +250,15 @@ void main() {
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<TextButton>()
+            ?.child,
+        isA<Text>().having((text) => text.data, 'label', 'Cancel'),
+        reason: 'desktop footer visits Cancel before Run in reference order',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 

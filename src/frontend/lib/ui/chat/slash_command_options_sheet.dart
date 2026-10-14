@@ -30,7 +30,7 @@ Future<Map<String, dynamic>?> showSlashCommandOptionsSheet({
   return showDialog<Map<String, dynamic>>(
     context: context,
     useSafeArea: false,
-    barrierColor: Colors.transparent,
+    barrierColor: VoiceColors.of(context).overlay,
     builder: (routeContext) => Align(
       alignment: Alignment.centerRight,
       child: SizedBox(
@@ -395,6 +395,18 @@ class _SlashCommandOptionsSheetState
     final sessionMatches =
         _openedAuthorization != null &&
         ref.watch(authorizationHeaderProvider) == _openedAuthorization;
+    final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final run = FilledButton(
+      style: FilledButton.styleFrom(backgroundColor: voice.profileAccent),
+      onPressed: _canSubmit && sessionMatches
+          ? () => Navigator.pop(context, _typedValues())
+          : null,
+      child: Text(l10n.slashCommandRun),
+    );
+    final cancel = TextButton(
+      onPressed: () => Navigator.pop(context),
+      child: Text(l10n.commonCancel),
+    );
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -462,23 +474,11 @@ class _SlashCommandOptionsSheetState
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: voice.profileAccent,
-                      ),
-                      onPressed: _canSubmit && sessionMatches
-                          ? () => Navigator.pop(context, _typedValues())
-                          : null,
-                      child: Text(l10n.slashCommandRun),
-                    ),
-                  ),
+                  if (narrow) Expanded(child: run) else cancel,
                   const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(l10n.commonCancel),
-                  ),
+                  if (narrow) cancel else run,
                 ],
               ),
             ),

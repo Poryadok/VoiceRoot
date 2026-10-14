@@ -10,19 +10,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/gateway_proto_json.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/gen/voice/common/v1/common.pb.dart' as common_pb;
+import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart'
+    as messaging_pb;
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/bot_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
+import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -70,6 +78,17 @@ const _offlineCommand = BotSlashCommand(
 var _captureFontsLoaded = false;
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+  test('slash fixture scheduled response preserves the terminal page', () {
+    final decoded = decodeGatewayProto(
+      messaging_pb.ListScheduledMessagesResponse.create,
+      _emptyScheduledResponse(),
+    );
+    expect(decoded.hasPage(), isTrue);
+    expect(decoded.page.hasMore, isFalse);
+    expect(decoded.page.nextCursor, isEmpty);
+    expect(decoded.scheduledMessages, isEmpty);
+  });
   for (final leftInset in [376.0, 900.0]) {
     testWidgets(
       'wide slash menu anchors above the actual composer and stays on screen at inset $leftInset',
@@ -327,6 +346,7 @@ void main() {
           commands: const [_typedCommand, _offlineCommand],
           extraOverrides: _typedOptionOverrides(),
         );
+        addTearDown(container.dispose);
 
         await _openComposerMenu(tester);
         await _capture(tester, captureDirectory, 'menu-${scenario.suffix}.png');
@@ -352,8 +372,13 @@ void main() {
           'options-${scenario.suffix}.png',
         );
 
-        await tester.pumpWidget(const SizedBox.shrink());
-        container.dispose();
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+        expect(find.text('Run command'), findsNothing);
+        _expectComposer(tester, _draftPrefix);
+        expect(_composerHasFocus(tester), isTrue);
+        expect(tester.takeException(), isNull);
+        await container.dispose();
       }
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
@@ -476,7 +501,20 @@ Future<void> _fillTypedOptions(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Future<ProviderContainer> _pumpChatRoom(
+String _emptyScheduledResponse() => encodeGatewayProto(
+  messaging_pb.ListScheduledMessagesResponse(
+    page: common_pb.CursorPageResponse(hasMore: false, nextCursor: ''),
+  ),
+);
+
+class _ChatRoomFixture {
+  _ChatRoomFixture(this.container, this.dispose);
+  final ProviderContainer container;
+  final Future<void> Function() dispose;
+  T read<T>(ProviderListenable<T> provider) => container.read(provider);
+}
+
+Future<_ChatRoomFixture> _pumpChatRoom(
   WidgetTester tester, {
   required List<_RecordedExecution> executions,
   required Future<http.Response> Function(http.Request) onRequest,
@@ -485,6 +523,20 @@ Future<ProviderContainer> _pumpChatRoom(
   List<BotSlashCommand> commands = const [_command],
   List<Override> extraOverrides = const [],
 }) async {
+  final scheduledRequests = <http.Request>[];
+  final unexpectedRequests = <String>[];
+  final client = MockClient((request) async {
+    if (request.method == 'GET' &&
+        request.url.path == '/api/v1/messages/scheduled') {
+      scheduledRequests.add(request);
+      expect(request.url.queryParameters['chat_id'], _chatId);
+      expect(request.headers['authorization'], 'Bearer test-access');
+      return http.Response(_emptyScheduledResponse(), 200);
+    }
+    unexpectedRequests.add('${request.method} ${request.url}');
+    return onRequest(request);
+  });
+  _NoopRealtimeHub? hub;
   final container = ProviderContainer(
     overrides: [
       ...voiceThemeTestOverrides(),
@@ -492,14 +544,22 @@ Future<ProviderContainer> _pumpChatRoom(
       authSessionStorageProvider.overrideWithValue(
         InMemoryAuthSessionStorage(),
       ),
+      guestCredentialsStorageProvider.overrideWithValue(
+        InMemoryGuestCredentialsStorage(),
+      ),
       authControllerProvider.overrideWith(authenticatedAuthController),
       gatewayConfigProvider.overrideWithValue(
         const GatewayConfig(baseUrl: 'http://api.test'),
       ),
-      httpClientProvider.overrideWithValue(MockClient(onRequest)),
-      realtimeHubProvider.overrideWith(_NoopRealtimeHub.new),
+      httpClientProvider.overrideWithValue(client),
+      realtimeHubProvider.overrideWith((ref) => hub = _NoopRealtimeHub(ref)),
       realtimeAutoConnectProvider.overrideWithValue(false),
+      realtimeLinkStatusProvider.overrideWith(
+        (ref) => RealtimeLinkStatus.connected,
+      ),
       isDeviceOfflineProvider.overrideWith((ref) => false),
+      groupActiveCallProvider(_chatId).overrideWith((ref) async => null),
+      subscriptionProvider.overrideWith((ref) async => null),
       chatListControllerProvider.overrideWith(_TestChatListController.new),
       chatListProvider.overrideWith(
         (ref) async => const ChatListData(
@@ -531,6 +591,24 @@ Future<ProviderContainer> _pumpChatRoom(
       ...extraOverrides,
     ],
   );
+  var disposed = false;
+  Future<void> disposeFixture() async {
+    if (disposed) return;
+    disposed = true;
+    try {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    } finally {
+      container.dispose();
+      await hub?.dispose();
+      client.close();
+    }
+    expect(unexpectedRequests, isEmpty);
+  }
+
+  addTearDown(disposeFixture);
+
+  container.read(selectedChatIdProvider.notifier).state = _chatId;
 
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -552,7 +630,15 @@ Future<ProviderContainer> _pumpChatRoom(
     ),
   );
   await tester.pumpAndSettle();
-  return container;
+  final room = container.read(chatRoomControllerProvider(_chatId));
+  expect(scheduledRequests, hasLength(1));
+  expect(unexpectedRequests, isEmpty);
+  expect(room.isLoadingScheduledMessages, isFalse);
+  expect(room.scheduledMessagesError, isNull);
+  expect(room.realtimeStatus, RealtimeLinkStatus.connected);
+  expect(container.read(callControllerProvider).isActive, isFalse);
+  expect(find.byKey(ChatRoomPanel.scheduledMessagesKey), findsNothing);
+  return _ChatRoomFixture(container, disposeFixture);
 }
 
 Future<ThemeData> _loadCaptureTheme(WidgetTester tester) async {
@@ -696,7 +782,11 @@ class _RecordingSlashInteractionExecutor extends SlashInteractionExecutor {
 
 class _TestChatRoomController extends ChatRoomController {
   _TestChatRoomController(super.ref, super.chatId) : super() {
-    state = ChatRoomState(messages: [], historyProfileId: 'prof-test');
+    state = ChatRoomState(
+      messages: [],
+      historyProfileId: 'prof-test',
+      realtimeStatus: RealtimeLinkStatus.connected,
+    );
   }
 
   @override
