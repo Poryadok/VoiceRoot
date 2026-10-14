@@ -611,10 +611,10 @@ class _GatewayStatusBar extends StatelessWidget {
         GatewayHealthFailure(:final message) =>
           message == kGatewayMissingBaseUrlDetail
               ? l10n.gatewayMissingBaseUrl
-              : l10n.gatewayStatusFailure(message),
+              : l10n.gatewayStatusFailure(l10n.backendUnavailable),
       },
       loading: () => l10n.gatewayStatusChecking,
-      error: (e, _) => l10n.gatewayStatusError(e.toString()),
+      error: (_, _) => l10n.gatewayStatusFailure(l10n.backendUnavailable),
     );
     return Material(
       color: voice.elevated,

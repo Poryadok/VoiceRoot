@@ -5,6 +5,37 @@ the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.
 The selected PVC/PV UID and physical path remain bound throughout the operation.
 
+### Explicit reset after retained records expire
+
+The native `/msgs/` boundary includes `index.db`. A retention expiry can change
+its message count, first sequence and subject counts while payload block files
+remain byte-identical. That is a real preservation failure; neither index-file
+exclusion nor rewriting record timestamps is an acceptable repair.
+
+The exact `a83c5bdb26f1` operator reset is separate from FULL recovery. It retains
+the failed checkpoint and original/off-node and post-migration archives. It
+records and rechecks the old PVC inventory during reset; this is an at-reset
+observation, not an ongoing preservation guarantee. A root-reviewed runner
+creates a separate UID-bound empty PVC,
+bootstraps the retained 15-stream/43-consumer contract with existing identities,
+and proves exact configuration, zero records/consumer floors, cold native bytes
+and isolated restore before the off-node copy checkpoint. The original workload
+templates are restored with only the hub `jsdata` claim changed by CAS.
+
+`voice-nats-reset-active-contract-v1` binds that new baseline and PVC explicitly;
+the old migration receipt remains an unchanged historical predecessor. The old
+active-release record is retained privately and invalidated, and the failed FULL
+ends `ABORTED`, never deployment PASS or rollback eligibility. The exact helper
+successor is installed with `--install --upgrade-idle-expiry-reset-v1` only after
+the verified reset closure. The reviewed runner is a recovery artifact, not a
+permanent installed CLI.
+
+The zero-baseline proof describes creation, not a restriction on subsequent
+application writes. Create recent application data after reset, then run ordinary
+FULL: its new cut must preserve those records while the canonical target contract
+reaches 45 consumers. Verify the same application message/file after deployment
+and restart; the empty reset proof alone does not establish new-build quality.
+
 The workflow prepares the cut, proves an isolated restored copy, uploads only
 an authenticated encrypted CMS backup to GitHub, independently reads the entire
 artifact back through root, authorizes one paused apply, proves the original

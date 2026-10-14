@@ -262,6 +262,12 @@ def upgrade_idle_search_bootstrap_v1(code):
     _upgrade_idle_transition(code,SEARCH_BOOTSTRAP_INSTALLED_BINDING,'idle-search-bootstrap-v1','search-a025',
         'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_SEARCH_BOOTSTRAP_V1_KEYS_POLICY_HISTORY_PRESERVED')
 
+def upgrade_idle_expiry_reset_v1(code):
+    """Exact 43f904 successor after the explicit failed-migration reset closure."""
+    from operator_reset import CODE_SHA
+    _upgrade_idle_transition(code,CODE_SHA,'idle-expiry-reset-v1','expiry-43f904',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_EXPIRY_RESET_V1_KEYS_POLICY_HISTORY_PRESERVED')
+
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
 After=docker.service k3s.service
@@ -335,8 +341,9 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1')
-    if sys.argv[1]=='--upgrade-idle':upgrade_idle(Path(__file__).resolve().parents[1])
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1 | --upgrade-idle-expiry-reset-v1')
+    if sys.argv[1]=='--upgrade-idle-expiry-reset-v1':upgrade_idle_expiry_reset_v1(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle':upgrade_idle(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-ceccb-v1':upgrade_idle_ceccb_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-source-capture-v1':upgrade_idle_source_capture_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-search-bootstrap-v1':upgrade_idle_search_bootstrap_v1(Path(__file__).resolve().parents[1])
