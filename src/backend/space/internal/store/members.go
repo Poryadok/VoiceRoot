@@ -2,13 +2,72 @@ package store
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 var ErrMemberNotFound = errors.New("member not found")
+
+const effectiveSpaceMembersQuery = `
+WITH effective_members AS (
+  SELECT space_id,profile_id,joined_at,nickname FROM space_members WHERE space_id=$1
+  UNION ALL
+  SELECT m.space_id,m.profile_id,o.created_at,NULL::text FROM community_roster_members m
+  JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+  JOIN community_roster_operations o ON o.space_id=m.space_id AND o.owner_generation=m.owner_generation AND o.source_revision=m.source_revision
+  WHERE m.space_id=$1 AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp()
+    AND a.roster_lease_expires_at>clock_timestamp()
+    AND NOT EXISTS (SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.profile_id=m.profile_id)
+)
+`
+
+type listMemberCursorPayload struct {
+	JoinedAt  string `json:"joined_at"`
+	ProfileID string `json:"profile_id"`
+}
+
+func encodeListMemberCursor(row *MembershipRow) string {
+	payload := listMemberCursorPayload{
+		JoinedAt: row.JoinedAt.UTC().Format(time.RFC3339Nano), ProfileID: row.ProfileID.String(),
+	}
+	raw, _ := json.Marshal(payload)
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+func (s *SpaceStore) memberPageBoundary(ctx context.Context, spaceID uuid.UUID, cursor string) (time.Time, uuid.UUID, error) {
+	// Resolve previously issued UUID-only cursors using the same eligible roster.
+	if profileID, err := uuid.Parse(cursor); err == nil {
+		var joinedAt time.Time
+		err := s.db().QueryRow(ctx, effectiveSpaceMembersQuery+`
+SELECT joined_at FROM effective_members WHERE profile_id=$2`, spaceID, profileID).Scan(&joinedAt)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return time.Time{}, uuid.Nil, ErrInvalidListCursor
+		}
+		return joinedAt, profileID, err
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, uuid.Nil, ErrInvalidListCursor
+	}
+	var payload listMemberCursorPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return time.Time{}, uuid.Nil, ErrInvalidListCursor
+	}
+	joinedAt, err := time.Parse(time.RFC3339Nano, payload.JoinedAt)
+	if err != nil {
+		return time.Time{}, uuid.Nil, ErrInvalidListCursor
+	}
+	profileID, err := uuid.Parse(payload.ProfileID)
+	if err != nil {
+		return time.Time{}, uuid.Nil, ErrInvalidListCursor
+	}
+	return joinedAt.UTC(), profileID, nil
+}
 
 // ListSpaceMembersPage lists members of a space with cursor pagination.
 func (s *SpaceStore) ListSpaceMembersPage(ctx context.Context, spaceID uuid.UUID, pageSize int32, cursor string) ([]*MembershipRow, string, error) {
@@ -36,39 +95,20 @@ func (s *SpaceStore) ListSpaceMembersPage(ctx context.Context, spaceID uuid.UUID
 	var rows pgx.Rows
 	var err error
 	if cursor == "" {
-		rows, err = s.db().Query(ctx, `
-WITH effective_members AS (
-  SELECT space_id,profile_id,joined_at,nickname FROM space_members WHERE space_id=$1
-  UNION ALL
-  SELECT m.space_id,m.profile_id,o.created_at,NULL::text FROM community_roster_members m
-  JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
-  JOIN community_roster_operations o ON o.space_id=m.space_id AND o.owner_generation=m.owner_generation AND o.source_revision=m.source_revision
-  WHERE m.space_id=$1 AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp()
-    AND a.roster_lease_expires_at>clock_timestamp()
-    AND NOT EXISTS (SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.profile_id=m.profile_id)
-)
+		rows, err = s.db().Query(ctx, effectiveSpaceMembersQuery+`
 SELECT space_id,profile_id,joined_at,nickname FROM effective_members
 ORDER BY joined_at ASC,profile_id ASC LIMIT $2
 `, spaceID, pageSize+1)
 	} else {
-		cursorProfile, parseErr := uuid.Parse(cursor)
+		cursorJoinedAt, cursorProfile, parseErr := s.memberPageBoundary(ctx, spaceID, cursor)
 		if parseErr != nil {
-			return nil, "", ErrInvalidListCursor
+			return nil, "", parseErr
 		}
-		rows, err = s.db().Query(ctx, `
-WITH effective_members AS (
-  SELECT space_id,profile_id,joined_at,nickname FROM space_members WHERE space_id=$1
-  UNION ALL
-  SELECT m.space_id,m.profile_id,o.created_at,NULL::text FROM community_roster_members m
-  JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
-  JOIN community_roster_operations o ON o.space_id=m.space_id AND o.owner_generation=m.owner_generation AND o.source_revision=m.source_revision
-  WHERE m.space_id=$1 AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp()
-    AND a.roster_lease_expires_at>clock_timestamp()
-    AND NOT EXISTS (SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.profile_id=m.profile_id)
-)
-SELECT space_id,profile_id,joined_at,nickname FROM effective_members WHERE profile_id>$2
-ORDER BY joined_at ASC,profile_id ASC LIMIT $3
-`, spaceID, cursorProfile, pageSize+1)
+		rows, err = s.db().Query(ctx, effectiveSpaceMembersQuery+`
+SELECT space_id,profile_id,joined_at,nickname FROM effective_members
+WHERE (joined_at,profile_id)>($2,$3)
+ORDER BY joined_at ASC,profile_id ASC LIMIT $4
+`, spaceID, cursorJoinedAt, cursorProfile, pageSize+1)
 	}
 	if err != nil {
 		return nil, "", err
@@ -88,7 +128,7 @@ ORDER BY joined_at ASC,profile_id ASC LIMIT $3
 	}
 	var next string
 	if len(out) > int(pageSize) {
-		next = out[pageSize-1].ProfileID.String()
+		next = encodeListMemberCursor(out[pageSize-1])
 		out = out[:pageSize]
 	}
 	return out, next, nil
