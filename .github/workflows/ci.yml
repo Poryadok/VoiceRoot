@@ -352,6 +352,22 @@ jobs:
             ${{ runner.temp }}/network-offline-captures/network-offline-light-v.png
           if-no-files-found: error
           retention-days: 7
+      - name: Capture Appearance horizontal and vertical views
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/ui-appearance-plus-affordance'
+        working-directory: src/frontend
+        env:
+          VOICE_APPEARANCE_CAPTURE_DIR: ${{ runner.temp }}/appearance-capture
+        run: timeout 300s flutter test --no-pub --reporter expanded --concurrency=1 test/appearance_settings_screen_test.dart
+      - name: Upload Appearance reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/ui-appearance-plus-affordance'
+        uses: actions/upload-artifact@v6
+        with:
+          name: appearance-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/appearance-capture/appearance-h.png
+            ${{ runner.temp }}/appearance-capture/appearance-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Capture Channel Settings horizontal and vertical views
         if: github.event_name == 'pull_request' && github.head_ref == 'codex/channel-policy-settings'
         working-directory: src/frontend
