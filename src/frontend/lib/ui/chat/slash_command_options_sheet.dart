@@ -14,6 +14,8 @@ import '../../state/bot_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
+import '../a11y/focus_trap.dart';
 import '../a11y/voice_focus_return.dart';
 import '../api_error_messages.dart';
 
@@ -25,11 +27,28 @@ Future<Map<String, dynamic>?> showSlashCommandOptionsSheet({
   required BotSlashCommand command,
 }) {
   final focusReturn = VoiceFocusReturn.capture();
-  return showModalBottomSheet<Map<String, dynamic>>(
+  return showDialog<Map<String, dynamic>>(
     context: context,
-    isScrollControlled: true,
-    builder: (ctx) =>
-        _SlashCommandOptionsSheet(chatId: chatId, command: command),
+    useSafeArea: false,
+    barrierColor: Colors.transparent,
+    builder: (routeContext) => Align(
+      alignment: Alignment.centerRight,
+      child: SizedBox(
+        width: VoiceLayout.isNarrow(MediaQuery.sizeOf(routeContext).width)
+            ? MediaQuery.sizeOf(routeContext).width
+            : 320,
+        height: double.infinity,
+        child: Material(
+          color:
+              Theme.of(routeContext).dialogTheme.backgroundColor ??
+              Theme.of(routeContext).colorScheme.surface,
+          child: VoiceFocusTrap(
+            onEscape: () => Navigator.of(routeContext).pop(),
+            child: _SlashCommandOptionsSheet(chatId: chatId, command: command),
+          ),
+        ),
+      ),
+    ),
   ).whenComplete(focusReturn.restore);
 }
 
@@ -379,51 +398,89 @@ class _SlashCommandOptionsSheetState
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 16,
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              widget.command.displayName,
-              style: Theme.of(context).textTheme.titleMedium,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.command.displayName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).closeButtonTooltip,
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
             ),
-            for (final error in _autocompleteErrors.values) ...[
-              const SizedBox(height: 8),
-              Text(
-                commonActionErrorMessage(l10n, statusCode: error.statusCode),
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final error in _autocompleteErrors.values) ...[
+                      Text(
+                        commonActionErrorMessage(
+                          l10n,
+                          statusCode: error.statusCode,
+                        ),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    for (
+                      var index = 0;
+                      index < widget.command.options.length;
+                      index++
+                    ) ...[
+                      _buildOptionField(
+                        widget.command.options[index],
+                        l10n,
+                        autofocus: index == 0,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                ),
               ),
-            ],
-            const SizedBox(height: 12),
-            for (
-              var index = 0;
-              index < widget.command.options.length;
-              index++
-            ) ...[
-              _buildOptionField(
-                widget.command.options[index],
-                l10n,
-                autofocus: index == 0,
-              ),
-              const SizedBox(height: 8),
-            ],
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: voice.profileAccent,
-              ),
-              onPressed: _canSubmit && sessionMatches
-                  ? () => Navigator.pop(context, _typedValues())
-                  : null,
-              child: Text(l10n.slashCommandRun),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l10n.commonCancel),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: voice.profileAccent,
+                      ),
+                      onPressed: _canSubmit && sessionMatches
+                          ? () => Navigator.pop(context, _typedValues())
+                          : null,
+                      child: Text(l10n.slashCommandRun),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l10n.commonCancel),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
