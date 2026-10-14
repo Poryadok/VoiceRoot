@@ -7,10 +7,7 @@ import '../a11y/focus_trap.dart';
 import '../core/voice_bottom_sheet.dart';
 
 /// Attach menu actions per [screen-controls.md] §3.6a (subset shipped in client).
-enum ComposerAttachAction {
-  photoOrVideo,
-  document,
-}
+enum ComposerAttachAction { photoOrVideo, document }
 
 /// Transient emoji panel (§3.6b) — not SideHost.
 Future<void> showComposerEmojiPanel(
@@ -33,18 +30,87 @@ Future<void> showComposerEmojiPanel(
 /// Attach popup (§3.6a) with focus trap (§3.6e).
 Future<ComposerAttachAction?> showComposerAttachMenu(
   BuildContext context, {
+  BuildContext? anchorContext,
   VoidCallback? onDismiss,
 }) async {
   final l10n = AppLocalizations.of(context)!;
-  return _showComposerOverlay<ComposerAttachAction>(
-    context: context,
-    onDismiss: onDismiss,
-    child: ComposerAttachMenuBody(
-      onSelected: (action) => Navigator.of(context).pop(action),
-      photoOrVideoLabel: l10n.composerAttachPhotoOrVideo,
-      documentLabel: l10n.composerAttachDocument,
+  Widget body(BuildContext routeContext) => ComposerAttachMenuBody(
+    onSelected: (action) => Navigator.of(routeContext).pop(action),
+    photoOrVideoLabel: l10n.composerAttachPhotoOrVideo,
+    documentLabel: l10n.composerAttachDocument,
+  );
+  if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+    return _showComposerOverlay<ComposerAttachAction>(
+      context: context,
+      onDismiss: onDismiss,
+      child: Builder(builder: body),
+    );
+  }
+
+  final overlay =
+      Navigator.of(
+            context,
+            rootNavigator: true,
+          ).overlay!.context.findRenderObject()!
+          as RenderBox;
+  final trigger = (anchorContext ?? context).findRenderObject()! as RenderBox;
+  final anchor =
+      trigger.localToGlobal(Offset.zero, ancestor: overlay) & trigger.size;
+  try {
+    return await showDialog<ComposerAttachAction>(
+      context: context,
+      useSafeArea: false,
+      barrierColor: Colors.transparent,
+      builder: (routeContext) => CustomSingleChildLayout(
+        delegate: _AttachMenuLayout(anchor, MediaQuery.paddingOf(routeContext)),
+        child: VoiceFocusTrap(
+          onEscape: () => Navigator.of(routeContext).pop(),
+          child: SingleChildScrollView(child: body(routeContext)),
+        ),
+      ),
+    );
+  } finally {
+    onDismiss?.call();
+  }
+}
+
+/// The reference popup is 260 px wide, 8 px above the actual Attach button.
+class _AttachMenuLayout extends SingleChildLayoutDelegate {
+  const _AttachMenuLayout(this.anchor, this.padding);
+
+  final Rect anchor;
+  final EdgeInsets padding;
+  static const margin = 8.0;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final width = (constraints.maxWidth - padding.horizontal - margin * 2)
+        .clamp(0.0, 260.0);
+    return BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: (constraints.maxHeight - padding.vertical - margin * 2).clamp(
+        0.0,
+        double.infinity,
+      ),
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    anchor.left.clamp(
+      padding.left + margin,
+      size.width - padding.right - margin - childSize.width,
+    ),
+    (anchor.top - margin - childSize.height).clamp(
+      padding.top + margin,
+      size.height - padding.bottom - margin - childSize.height,
     ),
   );
+
+  @override
+  bool shouldRelayout(_AttachMenuLayout oldDelegate) =>
+      anchor != oldDelegate.anchor || padding != oldDelegate.padding;
 }
 
 Future<T?> _showComposerOverlay<T>({
@@ -72,10 +138,7 @@ Future<T?> _showComposerOverlay<T>({
 
   return showDialog<T>(
     context: context,
-    builder: (ctx) => VoiceFocusTrap(
-      onEscape: () => dismiss(),
-      child: child,
-    ),
+    builder: (ctx) => VoiceFocusTrap(onEscape: () => dismiss(), child: child),
   );
 }
 
@@ -149,7 +212,8 @@ class ComposerAttachMenuBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).dialogTheme.backgroundColor ??
+      color:
+          Theme.of(context).dialogTheme.backgroundColor ??
           Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: Semantics(
@@ -162,6 +226,7 @@ class ComposerAttachMenuBody extends StatelessWidget {
             children: [
               ListTile(
                 key: const Key('composer_attach_photo_or_video'),
+                autofocus: true,
                 leading: const Icon(Icons.photo_outlined),
                 title: Text(photoOrVideoLabel),
                 onTap: () => onSelected(ComposerAttachAction.photoOrVideo),

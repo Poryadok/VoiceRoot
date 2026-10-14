@@ -2444,6 +2444,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Future<void> _openAttachMenu() async {
     final action = await showComposerAttachMenu(
       context,
+      anchorContext: _attachFocus.context,
       onDismiss: () => _attachFocus.requestFocus(),
     );
     if (!mounted || action == null) return;
