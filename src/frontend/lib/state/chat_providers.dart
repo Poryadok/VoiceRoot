@@ -4051,6 +4051,9 @@ class ChatActions {
   Future<String?> openDmWithProfile(String otherProfileId) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null) return 'not_authenticated';
+    if (_ref.read(profileSwitchInProgressProvider)) {
+      return kChatActionStaleContext;
+    }
     final result = await _ref
         .read(voiceChatsClientProvider)
         .createDm(
@@ -4058,7 +4061,9 @@ class ChatActions {
           otherProfileId: otherProfileId,
         );
     final current = _ref.read(authControllerProvider).session;
-    if (current?.activeProfileId != session.activeProfileId ||
+    if (_ref.read(profileSwitchInProgressProvider) ||
+        current?.accountId != session.accountId ||
+        current?.activeProfileId != session.activeProfileId ||
         current?.authorizationHeader != session.authorizationHeader) {
       return kChatActionStaleContext;
     }

@@ -957,6 +957,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileMessage => 'Написать';
 
   @override
+  String get profileOpenAvatar => 'Открыть аватар на весь экран';
+
+  @override
+  String get profileAvatarUnavailable => 'Аватар недоступен';
+
+  @override
+  String get profileCommonSpaces => 'Общие пространства';
+
+  @override
+  String get profileCommonSpacesLoadError =>
+      'Не удалось загрузить общие пространства';
+
+  @override
   String get profileEditTitle => 'Редактировать профиль';
 
   @override

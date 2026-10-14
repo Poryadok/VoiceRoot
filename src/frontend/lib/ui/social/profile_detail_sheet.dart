@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,7 +10,12 @@ import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/call_providers.dart';
+import '../../state/contact_profile_providers.dart';
 import '../../state/dm_permission_provider.dart';
+import '../../state/gateway_providers.dart';
+import '../../state/shell_providers.dart';
+import '../../state/space_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
@@ -16,6 +23,7 @@ import '../../state/stories_providers.dart';
 import '../../routing/deep_link_urls.dart';
 import '../api_error_messages.dart';
 import '../core/chat_author_label.dart';
+import '../core/voice_avatar.dart';
 import '../core/voice_share_link.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
@@ -24,6 +32,7 @@ import '../stories/highlights_section.dart';
 import '../stories/story_ring_avatar.dart';
 import '../../routing/stories_routes.dart';
 import 'presence_indicator.dart';
+import 'profile_avatar_viewer.dart';
 
 /// Resolves contact membership across every page, scoped to the current session.
 /// A partial list or a session switch is never interpreted as "not a contact".
@@ -102,6 +111,8 @@ class ProfileDetailSheet extends ConsumerWidget {
   static const Key addFriendKey = Key('profile_add_friend');
   static const Key removeFriendKey = Key('profile_remove_friend');
   static const Key messageKey = Key('profile_message');
+  static const Key avatarKey = Key('profile_avatar');
+  static const Key callKey = Key('profile_call');
   static const Key blockKey = Key('profile_block');
 
   final String profileId;
@@ -201,23 +212,37 @@ class ProfileDetailSheet extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      StoryRingAvatar(
-                        displayName: profile.displayName,
-                        imageUrl: profile.avatarUrl,
-                        hasActiveStory: hasActiveStory,
-                        size: 56,
-                        onTap: hasActiveStory
-                            ? () {
-                                final stories = profileStoriesAsync.valueOrNull;
-                                if (stories == null || stories.isEmpty) return;
-                                Navigator.of(context).pop();
-                                StoriesRoutes.openViewer(
-                                  context,
-                                  storyIds: stories.map((s) => s.id).toList(),
-                                  profileId: profileId,
-                                );
-                              }
-                            : null,
+                      Semantics(
+                        key: avatarKey,
+                        label: hasActiveStory ? null : l10n.profileOpenAvatar,
+                        button: hasActiveStory ? null : true,
+                        child: StoryRingAvatar(
+                          displayName: profile.displayName,
+                          imageUrl: profile.avatarUrl,
+                          hasActiveStory: hasActiveStory,
+                          size: 56,
+                          onTap: hasActiveStory
+                              ? () {
+                                  final stories =
+                                      profileStoriesAsync.valueOrNull;
+                                  if (stories == null || stories.isEmpty) {
+                                    return;
+                                  }
+                                  Navigator.of(context).pop();
+                                  StoriesRoutes.openViewer(
+                                    context,
+                                    storyIds: stories.map((s) => s.id).toList(),
+                                    profileId: profileId,
+                                  );
+                                }
+                              : () => Navigator.of(context).push<void>(
+                                  MaterialPageRoute(
+                                    builder: (_) => ProfileAvatarViewer(
+                                      profileId: profileId,
+                                    ),
+                                  ),
+                                ),
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -346,6 +371,8 @@ class ProfileDetailSheet extends ConsumerWidget {
                       );
                     },
                   ),
+                  if (!isGuest && !isSelf)
+                    _ProfileCommonSpaces(profileId: profileId),
                   if (!isSelf) ...[
                     const SizedBox(height: 20),
                     if (isGuest)
@@ -374,6 +401,11 @@ class ProfileDetailSheet extends ConsumerWidget {
                               )
                             : const SizedBox.shrink(),
                       ),
+                    const SizedBox(height: 8),
+                    _ProfileCallAction(
+                      key: ValueKey((profileId, session, isProfileSwitching)),
+                      profileId: profileId,
+                    ),
                     const SizedBox(height: 8),
                     _FriendActionButton(
                       profileId: profileId,
@@ -501,6 +533,156 @@ class ProfileDetailSheet extends ConsumerWidget {
     final date = material.formatShortDate(local);
     final time = TimeOfDay.fromDateTime(local).format(context);
     return '$date $time';
+  }
+}
+
+class _ProfileCommonSpaces extends ConsumerWidget {
+  const _ProfileCommonSpaces({required this.profileId});
+
+  final String profileId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final session = ref.watch(authControllerProvider).session;
+    final switching = ref.watch(profileSwitchInProgressProvider);
+    if (switching) return const SizedBox.shrink();
+    return ref
+        .watch(contactCommonSpacesProvider(profileId))
+        .when(
+          skipLoadingOnRefresh: false,
+          loading: () => const Padding(
+            padding: EdgeInsets.only(top: 16),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (_, _) => VoiceStatePanel(
+            key: const Key('profile_common_spaces_error'),
+            title: l10n.profileCommonSpacesLoadError,
+            icon: Icons.cloud_off_outlined,
+            actionLabel: l10n.commonRetry,
+            onAction: () =>
+                ref.invalidate(contactCommonSpacesProvider(profileId)),
+          ),
+          data: (spaces) => spaces.isEmpty
+              ? const SizedBox.shrink()
+              : Column(
+                  key: const Key('profile_common_spaces'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.profileCommonSpaces,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    for (final space in spaces)
+                      ListTile(
+                        key: ValueKey('profile_common_space_${space.id}'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: VoiceAvatar(
+                          imageUrl: space.iconUrl,
+                          label: space.name,
+                        ),
+                        title: Text(space.name),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          final current = ref
+                              .read(authControllerProvider)
+                              .session;
+                          if (session == null ||
+                              current?.accountId != session.accountId ||
+                              current?.activeProfileId !=
+                                  session.activeProfileId ||
+                              current?.authorizationHeader !=
+                                  session.authorizationHeader ||
+                              ref.read(profileSwitchInProgressProvider)) {
+                            return;
+                          }
+                          if (ref.read(selectedSpaceIdProvider) != space.id) {
+                            ref
+                                .read(shellNavigationProvider)
+                                .selectSpace(space.id);
+                          }
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                  ],
+                ),
+        );
+  }
+}
+
+class _ProfileCallAction extends ConsumerStatefulWidget {
+  const _ProfileCallAction({super.key, required this.profileId});
+
+  final String profileId;
+
+  @override
+  ConsumerState<_ProfileCallAction> createState() => _ProfileCallActionState();
+}
+
+class _ProfileCallActionState extends ConsumerState<_ProfileCallAction> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = ref.watch(authControllerProvider);
+    final enabled =
+        !_busy &&
+        !auth.isGuest &&
+        !auth.isRestoring &&
+        auth.session != null &&
+        !ref.watch(profileSwitchInProgressProvider) &&
+        ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
+    return OutlinedButton.icon(
+      key: ProfileDetailSheet.callKey,
+      onPressed: enabled ? _startCall : null,
+      icon: const Icon(Icons.call_outlined),
+      label: Text(AppLocalizations.of(context)!.callStartAudio),
+    );
+  }
+
+  Future<void> _startCall() async {
+    final session = ref.read(authControllerProvider).session;
+    if (session == null || _busy) return;
+    final l10n = AppLocalizations.of(context)!;
+    setState(() => _busy = true);
+    String? error;
+    try {
+      error = await ref
+          .read(chatActionsProvider)
+          .openDmWithProfile(widget.profileId);
+    } catch (_) {
+      error = 'unknown';
+    }
+    if (!mounted) return;
+    final current = ref.read(authControllerProvider).session;
+    if (current?.accountId != session.accountId ||
+        current?.activeProfileId != session.activeProfileId ||
+        current?.authorizationHeader != session.authorizationHeader ||
+        ref.read(profileSwitchInProgressProvider)) {
+      return;
+    }
+    setState(() => _busy = false);
+    if (error != null) {
+      if (error != kChatActionStaleContext) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(chatActionErrorMessage(l10n, error))),
+        );
+      }
+      return;
+    }
+    final chatId = ref.read(selectedChatIdProvider);
+    if (chatId == null ||
+        ref.read(dmPeerProfileByChatIdProvider)[chatId] != widget.profileId) {
+      return;
+    }
+    // The existing controller owns privacy errors, conflicts and call overlays.
+    unawaited(
+      ref
+          .read(callControllerProvider.notifier)
+          .startCall(chatId: chatId, calleeProfileId: widget.profileId),
+    );
+    Navigator.of(context).pop();
   }
 }
 

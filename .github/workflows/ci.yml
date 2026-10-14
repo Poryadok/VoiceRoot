@@ -426,6 +426,25 @@ jobs:
             ${{ runner.temp }}/slash-composer-capture/options-v.png
           if-no-files-found: error
           retention-days: 7
+      - name: Capture ContactProfile controls and fullscreen avatar in H/V
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/contact-profile-controls'
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_CONTACT_PROFILE_CAPTURE_DIR: ${{ runner.temp }}/contact-profile-capture
+        run: flutter test --no-pub --reporter expanded --concurrency=1 test/contact_common_spaces_test.dart test/contact_profile_controls_test.dart
+      - name: Upload ContactProfile and fullscreen avatar reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/contact-profile-controls'
+        uses: actions/upload-artifact@v6
+        with:
+          name: contact-profile-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/contact-profile-capture/contact-profile-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-profile-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-avatar-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-avatar-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6
