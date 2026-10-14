@@ -24,7 +24,6 @@ import 'package:voice_frontend/ui/settings/app_icon_settings_screen.dart';
 import 'package:voice_frontend/ui/settings/chat_themes_settings_screen.dart';
 import 'package:voice_frontend/ui/settings/settings_sheet.dart';
 import 'package:voice_frontend/ui/core/voice_bottom_sheet.dart';
-import 'package:voice_frontend/ui/core/premium_badge.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
@@ -403,10 +402,10 @@ void _expectPlusDestinations(WidgetTester tester) {
   ]) {
     final tile = find.byKey(key);
     expect(tile, findsOneWidget);
-    expect(
-      find.descendant(of: tile, matching: find.byType(PremiumBadge)),
-      findsOneWidget,
-    );
+    final star = find.descendant(of: tile, matching: find.byIcon(Icons.star));
+    expect(star, findsOneWidget);
+    expect(tester.widget<Icon>(star).icon!.fontFamily, 'MaterialIcons');
+    expect(find.descendant(of: tile, matching: find.text('★')), findsNothing);
     expect(
       find.descendant(of: tile, matching: find.byIcon(Icons.chevron_right)),
       findsOneWidget,

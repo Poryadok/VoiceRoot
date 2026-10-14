@@ -8,7 +8,6 @@ import '../../state/chat_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme.dart';
 import '../../theme/voice_theme_providers.dart';
-import '../core/premium_badge.dart';
 import 'profile_language_picker.dart';
 import 'app_icon_settings_screen.dart';
 import 'chat_themes_settings_screen.dart';
@@ -160,7 +159,10 @@ class _PlusDestination extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          PremiumBadge(
+          Icon(
+            Icons.star,
+            size: 18,
+            color: VoiceColors.of(context).profileAccent,
             semanticLabel: AppLocalizations.of(context)!.chatThemesPlusLabel,
           ),
           const SizedBox(width: 8),
