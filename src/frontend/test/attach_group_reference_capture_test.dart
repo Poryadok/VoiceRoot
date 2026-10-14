@@ -12,14 +12,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/gateway_proto_json.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/gen/voice/common/v1/common.pb.dart' as common_pb;
+import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart'
+    as messaging_pb;
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/call_providers.dart';
+import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/create_group_friends_provider.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
+import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
@@ -33,6 +41,14 @@ import 'support/voice_test_theme.dart';
 
 const _rootKey = Key('attach_group_capture_root');
 const _chatId = 'attach-reference';
+
+// Exercise the real Gateway parser and controller with a complete terminal page.
+// The controller rejects a response without page presence even for an empty list.
+String _emptyScheduledResponse() => encodeGatewayProto(
+  messaging_pb.ListScheduledMessagesResponse(
+    page: common_pb.CursorPageResponse(hasMore: false, nextCursor: ''),
+  ),
+);
 
 Future<ThemeData> _captureTheme(WidgetTester tester, bool capturing) async {
   if (!capturing) return voiceTestTheme();
@@ -91,6 +107,16 @@ Future<void> _capture(
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  test('capture scheduled response preserves the required terminal page', () {
+    final decoded = decodeGatewayProto(
+      messaging_pb.ListScheduledMessagesResponse.create,
+      _emptyScheduledResponse(),
+    );
+    expect(decoded.hasPage(), isTrue);
+    expect(decoded.page.hasMore, isFalse);
+    expect(decoded.page.nextCursor, isEmpty);
+    expect(decoded.scheduledMessages, isEmpty);
+  });
   for (final wide in [true, false]) {
     testWidgets(
       'AttachMenu and CreateGroup reference states ${wide ? 'H' : 'V'}',
@@ -107,6 +133,20 @@ void main() {
           tester,
           directory != null && directory.isNotEmpty,
         );
+        final scheduledRequests = <http.Request>[];
+        final unexpectedRequests = <String>[];
+        final client = MockClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/api/v1/messages/scheduled') {
+            scheduledRequests.add(request);
+            expect(request.url.queryParameters['chat_id'], _chatId);
+            expect(request.headers['authorization'], 'Bearer test-access');
+            return http.Response(_emptyScheduledResponse(), 200);
+          }
+          unexpectedRequests.add('${request.method} ${request.url}');
+          return http.Response('{}', 404);
+        });
+        _CaptureRealtime? hub;
         final container = ProviderContainer(
           overrides: [
             ...voiceThemeTestOverrides(),
@@ -116,20 +156,24 @@ void main() {
             authSessionStorageProvider.overrideWithValue(
               InMemoryAuthSessionStorage(),
             ),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
             authControllerProvider.overrideWith(authenticatedAuthController),
             gatewayConfigProvider.overrideWithValue(
               const GatewayConfig(baseUrl: 'http://api.test'),
             ),
-            httpClientProvider.overrideWithValue(
-              MockClient((request) async {
-                if (request.method == 'GET' &&
-                    request.url.path == '/api/v1/messages/scheduled') {
-                  return http.Response('{"scheduledMessages":[]}', 200);
-                }
-                return http.Response('{}', 404);
-              }),
+            httpClientProvider.overrideWithValue(client),
+            realtimeHubProvider.overrideWith(
+              (ref) => hub = _CaptureRealtime(ref),
             ),
-            realtimeHubProvider.overrideWith(_CaptureRealtime.new),
+            realtimeAutoConnectProvider.overrideWithValue(false),
+            realtimeLinkStatusProvider.overrideWith(
+              (ref) => RealtimeLinkStatus.connected,
+            ),
+            isDeviceOfflineProvider.overrideWith((ref) => false),
+            groupActiveCallProvider(_chatId).overrideWith((ref) async => null),
+            subscriptionProvider.overrideWith((ref) async => null),
             chatListControllerProvider.overrideWith(_CaptureChatList.new),
             chatRoomControllerProvider(
               _chatId,
@@ -152,7 +196,13 @@ void main() {
             ),
           ],
         );
-        addTearDown(container.dispose);
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+          container.dispose();
+          await hub?.dispose();
+          client.close();
+        });
         container.read(selectedChatIdProvider.notifier).state = _chatId;
         Widget app(Widget home) => RepaintBoundary(
           key: _rootKey,
@@ -172,6 +222,11 @@ void main() {
           app(const Scaffold(body: ChatRoomPanel(chatId: _chatId))),
         );
         await tester.pumpAndSettle();
+        final room = container.read(chatRoomControllerProvider(_chatId));
+        expect(scheduledRequests, hasLength(1));
+        expect(unexpectedRequests, isEmpty);
+        expect(room.isLoadingScheduledMessages, isFalse);
+        expect(room.scheduledMessagesError, isNull);
         expect(
           find.byKey(ChatRoomPanel.scheduledMessagesKey),
           findsNothing,
@@ -200,6 +255,9 @@ void main() {
         }
         expect(tester.takeException(), isNull);
         await _capture(tester, directory, 'attach-menu-${wide ? 'h' : 'v'}');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byKey(ComposerAttachMenuBody.menuKey), findsNothing);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
         await tester.pumpWidget(
@@ -240,6 +298,10 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         await _capture(tester, directory, 'create-group-${wide ? 'h' : 'v'}');
+        expect(unexpectedRequests, isEmpty);
+        await tester.tap(find.byKey(CreateGroupSheet.closeKey));
+        await tester.pumpAndSettle();
+        expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
       },
