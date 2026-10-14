@@ -174,6 +174,16 @@ seed, saved enrollment and its legacy proof are retained; the v3 scratch proof
 is validated separately and bound into the new plan. This source change does
 not issue credentials or rewrite installed enrollment or recovery receipts.
 
+Root preflight also pins the exact reviewed Search bootstrap template, whose
+required Chat inputs include `chat.updated` and `chat.deleted`. Its extracted
+script hash joins the Realtime/Analytics target authority passed to the compiler;
+the legacy contract remains unchanged. Modified Search bytes fail root preflight,
+and Notification still requires its unchanged legacy script hash. This source
+binding authorizes target compilation. After the existing native preservation
+proof, the same Search script may advance through the existing UID/resourceVersion
+ConfigMap CAS and active-contract receipt, alongside Realtime and Analytics.
+No bootstrap Job is executed, and Notification gains no new script authority.
+
 The already-installed idle helper requires its own separately reviewed,
 versioned predecessor transition. First compare the installed captured helper
 binding and manifest with the reviewed candidate; a release label or prior
@@ -203,6 +213,23 @@ page and stable total is still required. The route also retains all existing
 idle, closure, marker, queue, journal, policy, recovery-key, witness and history
 checks. It neither changes the V15 nor CECCB predecessor routes nor rewrites
 the failed request history.
+
+The next captured-launcher route, `--install --upgrade-idle-search-bootstrap-v1`,
+accepts only installed binding
+`a025ffb62b4c0716a44611c4ac00fe9cae60b8bcb5e8b48204b44a62dc541749`.
+It preserves the predecessor as `code-search-a025-preserved` and records its own
+`upgrade-idle-search-bootstrap-v1.json` receipt. All existing idle, terminal
+closure, policy, key, marker, queue and history guards still apply. Its two
+additional dispositions are exact failed FULL prepares from runs `38478016683`
+and `38482268019`: respectively rejected at NATS preflight and target build,
+with no rollout directory/checkpoint. Both are explicitly abandoned before a
+checkpoint, never classified as successful, effect-free or terminal releases.
+Admission binds their complete request, journal and response bytes plus the
+retained source/build tree hashes and custody; these are checked again after
+the code swap. Original request history and workspaces remain intact. Any
+different request, added rollout directory, changed tree or replaced custody
+refuses this transition. Use only the reviewed captured bundle and launcher;
+this route does not renew credentials or alter existing grant receipts.
 
 The prepare associated with d4 run `38274239522` is a hard stop until its
 exact journal, matching checkpoint and response are accepted by the existing
@@ -251,9 +278,61 @@ and `role_events/voice_space_media_role` against the approved service source.
 The existing `_INBOX.voice.voice.>` subscription scope already covers their
 delivery subjects. This bootstrap-renewer change does not modify those service
 actors; any service-actor renewal must retain its existing identity and use its
-own reviewed exact grant transition. The earlier hosted admission failure did
-not identify which service actor check failed, so do not treat this note as a
-diagnosed cause or inferred successful renewal.
+own reviewed exact grant transition.
+
+### Grant drift and prepare-failure diagnosis
+
+Updating `deploy/nats/acl-intent.yaml`, deploying a new application image or
+installing a new preservation helper does not change already signed user JWTs.
+Staging has encountered both service-actor grant drift and, after its correction,
+separate enrolled-bootstrap grant drift. A valid signed chain and successful
+authentication alone do not prove that a credential permits the current source
+contract. Check the credentials actually selected by the current generation and
+mounts or enrollment, not newly generated fixture credentials.
+
+| Credential authority | Required comparison |
+| --- | --- |
+| Service actors | Signed effective publish/subscribe grants against the canonical service ACL: this includes Role/Space invalidation publications and Voice consumer INFO/ACK rights. Existing owned inbox wildcards may already cover concrete delivery subjects; do not add redundant authority solely to equalize lists. |
+| Enrolled bootstrap | Signed grants against the canonical bootstrap ACL and the fixed migration plan: stream UPDATE and consumer INFO/CREATE for every declared migration pair. Service-actor acceptance does not prove bootstrap authority, or vice versa. |
+
+Ordinary deployment does not renew either credential class. An explicit reviewed
+operator transition must retain the account, user identity and seed, all denies,
+expiry and limits; add only the bounded missing subjects supported by the issuer.
+Use the existing protected signer and private pipe interface, never wildcard
+widening or root rotation to make preflight pass. Immutable service Secret changes
+need their own exact identity/CAS, protected original-byte backup and affected
+workload stop/readback procedure. Bootstrap enrollment uses a create-only immutable
+candidate Secret and an atomic protected receipt switch after proof; retain the
+old enrollment evidence, original draft and Secrets. A saved draft is bound to its
+original issuer and inputs: blindly replaying the initial enrollment command can
+refuse or reuse stale credentials. A reviewed incident wrapper is not a permanent
+installed CLI or permission to rewrite historical receipts.
+
+Before retrying, verify the complete proposed grant set and unchanged signed
+claims, including deny overlap. Then prove the actual candidate credentials with
+the pinned, isolated broker: service authentication and effective ACL compatibility,
+or the complete bootstrap consumer-declaration proof as applicable. Read back the
+selected credentials/enrollment and repeat the normal source preflight. These
+checks do not attest live business delivery, a successful FULL deployment or its
+preservation gates; those require the ensuing operation's own evidence.
+
+For any failed prepare, first correlate the exact workflow run/source/attempt
+with its request journal and response using the bounded procedure above. Record
+the failing stage and whether a matching checkpoint exists. A `target-build`
+failure before checkpoint creation is a prepare/build failure; do not call it a
+fenced rollout or run rollback based on the workflow label alone. Conversely,
+when a checkpoint exists, its `phase/status/fence_status` and journal determine
+the required recovery and closure. Absence of a checkpoint alone does not prove
+that no external effects occurred or make the request safe to discard.
+
+Keep raw JWTs, seeds, credential bytes, Secret bodies and encoded backups out of
+terminal/CI logs and public receipts. Report only the correlated finite stage,
+safe error category, reviewed subject differences, hashes and resource identities.
+`unexpected` or empty CLI stdout is not a root cause, even with exit code zero;
+inspect bounded private stderr and signed permissions before deciding whether the
+failure is authorization, parsing, build or another class. Track missing safe
+stage/error reporting under `CI-A1-DEPLOY-DIAGNOSTICS`; that follow-up neither
+waives a failed gate nor authorizes a blind retry.
 
 Increasing the social duplicate window does not establish retroactive 24-hour
 deduplication history. Fresh rollback captures current post-release records and

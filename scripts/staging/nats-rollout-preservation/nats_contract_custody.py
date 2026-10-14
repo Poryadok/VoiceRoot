@@ -33,7 +33,7 @@ def advance(kube,state,stage,journal,*,mutation_guard=None):
         raise Blocked('nats_contract_existing_pairs_invalid')
     complete_pairs=sorted({tuple(pair) for pair in existing_pairs}|{tuple(pair) for pair in target_pairs})
     for part,target in wanted.items():
-        if part not in ('realtime','analytics-chat') or hashlib.sha256(target['script'].encode()).hexdigest()!=target['sha256']:raise Blocked('nats_contract_script_unbound')
+        if part not in ('realtime','analytics-chat','search') or hashlib.sha256(target['script'].encode()).hexdigest()!=target['sha256']:raise Blocked('nats_contract_script_unbound')
         expected=next(r for r in contract['scripts'] if r['part']==part)
         stage.verify_final_storage();name='voice-nats-'+part+'-bootstrap';row=kube.get('configmap',name)
         raw=row['data']['bootstrap.sh'].encode();sha=hashlib.sha256(raw).hexdigest()

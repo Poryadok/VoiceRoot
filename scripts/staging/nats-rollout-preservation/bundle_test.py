@@ -62,6 +62,10 @@ class BundleCaptureTest(unittest.TestCase):
         result=self.run_launcher('--install','--upgrade-idle-source-capture-v1')
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(result.stdout.strip(),'INSTALLER_ARGS=--upgrade-idle-source-capture-v1')
+    def test_exact_search_bootstrap_idle_upgrade_argument_reaches_captured_installer(self):
+        result=self.run_launcher('--install','--upgrade-idle-search-bootstrap-v1')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),'INSTALLER_ARGS=--upgrade-idle-search-bootstrap-v1')
     def test_exact_retirement_arguments_reach_root_only_captured_entry(self):
         result=self.run_launcher('--retire','/root/reviewed-plan.json','a'*64)
         self.assertEqual(result.returncode,0,result.stderr)
