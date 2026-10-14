@@ -241,6 +241,7 @@ def verify_readonly_terminal(base,state):
 
 
 def verify_terminal(base,state):
+    if 'operator_media_abort' in state:return verify_media_abort_terminal(base,state)
     if 'operator_reset' in state:
         from operator_reset import verify_terminal as verify_reset
         return verify_reset(base,state)
@@ -871,6 +872,125 @@ def verify_applied_terminal(base,state):
     return receipt
 
 
+MEDIA_ABORT_OPERATION='0e2be62a3326'
+MEDIA_ABORT_CHECKPOINT='157ae4eb5f7b78ded15a2caf5e9eea27f335e3d72a38be0c173f69297a632c56'
+MEDIA_ABORT_COMPATIBILITY='36d7e663535c86ff3624b559596db58e5f692d767d5357440d24366f8b58d8a4'
+MEDIA_ABORT_ACTIVE='e9d46f0aa438cc5142fb48a363aa0286d3ff71e09736c431665133a36fa54fbf'
+MEDIA_ABORT_FINISH='b708d69b20bb6401f628ab9adb6cf4d4cb68cbc1e8d0f360e55475856a62264f.json'
+MEDIA_ABORT_JOURNAL='c820f48bb7c2cfcd5b4199fde2584f7ada103e1c51655e7805d5260758a6f7af'
+MEDIA_ABORT_PREFIX='operator-media-abort'
+
+
+def media_abort_snapshot(raw):
+    """Only the independently inspected, refenced failed FULL may be restored."""
+    if hashlib.sha256(raw).hexdigest()!=MEDIA_ABORT_CHECKPOINT:fail()
+    value=json.loads(raw)
+    if (value.get('operation')!=MEDIA_ABORT_OPERATION or value.get('phase')!='RESTART'
+        or value.get('status')!='BLOCKED' or value.get('fence_status')!='VERIFIED'
+        or value.get('error')!='restart_readiness_timeout' or len(value.get('migration_jobs',[]))!=16
+        or canonical(value.get('active_contract'))!=MEDIA_ABORT_ACTIVE
+        or value.get('preservation',{}).get('native_files_verified') is not True
+        or value.get('nats_migration',{}).get('verified') is not True):fail()
+    return value
+
+
+def media_abort_templates(snapshot):
+    """Restore reviewed application images; retain the already proved HUB target."""
+    result={}
+    for name,row in snapshot['context']['original_snapshots'].items():
+        template=copy.deepcopy((snapshot['context']['snapshots'][name] if name==HUB else row)['spec']['template'])
+        if name!=HUB:
+            for container in template['spec'].get('initContainers',[])+template['spec']['containers']:
+                image=snapshot['context']['old_images'].get(name+'/'+container['name'],'')
+                if not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):fail()
+                container['image']=image
+        result[name]=template
+    if len(result)!=22 or HUB not in result:fail()
+    return result
+
+
+def media_abort_journal(installed):
+    path=Path(installed)/'journal'/MEDIA_ABORT_FINISH
+    raw=private_bytes(path,2<<20);row=json.loads(raw);request=row.get('request',{})
+    if (hashlib.sha256(raw).hexdigest()!=MEDIA_ABORT_JOURNAL or row.get('phase')!='STARTED'
+        or request.get('action')!='finish' or request.get('operation')!=MEDIA_ABORT_OPERATION
+        or request.get('nonce')+'.json'!=MEDIA_ABORT_FINISH or canonical(request)!=row.get('request_sha256')):fail()
+    # The root-direct continuation wrote no public response. Preserve that fact.
+    try:(Path(installed)/'responses'/MEDIA_ABORT_FINISH).lstat()
+    except FileNotFoundError:pass
+    else:fail()
+    return {'name':MEDIA_ABORT_FINISH,'journal_sha256':MEDIA_ABORT_JOURNAL,'response_absent':True}
+
+
+def media_abort_terminal(snapshot,receipt):
+    state=copy.deepcopy(snapshot)
+    state.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED')
+    state['operator_media_abort']={'schema':'voice-media-original-restore-reference-v1',
+        'snapshot_sha256':MEDIA_ABORT_CHECKPOINT,'receipt_sha256':canonical(receipt)}
+    state['events']=snapshot['events']+[{'kind':'operator_media_abort_completed',
+        'deployment_pass':False,'rollback_eligible':False,'forward_migrations_retained':True}]
+    return state
+
+
+def verify_media_abort_terminal(base,state):
+    """Exact operator abort, not successful deployment or generic rollback authority."""
+    base=Path(base);prefix=MEDIA_ABORT_PREFIX
+    if base!=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION):fail()
+    snapshot=media_abort_snapshot(private_bytes(base/(prefix+'-snapshot.json')))
+    receipt=document(base/(prefix+'-receipt.json'))
+    if (set(receipt)!={'schema','operation','waiver','snapshot_sha256','compatibility_sha256',
+        'deployment_pass','rollback_eligible','configuration_basis','migration_jobs_sha256',
+        'active_contract_sha256','setup','released_marker','retained_files','journal'}
+        or receipt.get('schema')!='voice-media-original-restore-closure-v1'
+        or receipt.get('operation')!=MEDIA_ABORT_OPERATION or receipt.get('waiver')!=WAIVER
+        or receipt.get('snapshot_sha256')!=MEDIA_ABORT_CHECKPOINT
+        or receipt.get('compatibility_sha256')!=MEDIA_ABORT_COMPATIBILITY
+        or receipt.get('deployment_pass') is not False or receipt.get('rollback_eligible') is not False
+        or receipt.get('configuration_basis')!='ORIGINAL_APPLICATION_IMAGES_RETAIN_MIGRATED_NATS_AND_DATABASES'
+        or receipt.get('migration_jobs_sha256')!=canonical(snapshot['migration_jobs'])
+        or receipt.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
+        or root_cli.code_binding(base/'code')!=snapshot['code_capture']
+        or receipt.get('journal')!=media_abort_journal(guard.ROOT/'installed')
+        or state!=media_abort_terminal(snapshot,receipt)):fail()
+    templates=media_abort_templates(snapshot)
+    expected={name:{'uid':snapshot['context']['original_snapshots'][name]['metadata']['uid'],
+        'template_sha256':canonical(template),'replicas':1,'ready':True} for name,template in templates.items()}
+    if receipt.get('setup')!=expected:fail()
+    marker=snapshot['context']['marker'];after=receipt.get('released_marker',{})
+    data=dict(marker['data'],phase='active');data.pop('knownRolloutOperation')
+    if (set(after)!={'uid','resourceVersion','data'} or after.get('uid')!=marker['metadata']['uid']
+        or after.get('data')!=data or not re.fullmatch('[0-9]+',after.get('resourceVersion',''))
+        or after['resourceVersion']==marker['metadata']['resourceVersion']):fail()
+    required={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json','rollout-backup.cms',
+        'decrypted-restore.json','apply-manifests.json','apply-authorization.json',
+        prefix+'-compatibility.md',prefix+'-active-contract.json',prefix+'-verified.json',snapshot['preservation']['archive']}
+    files=receipt.get('retained_files',{})
+    if set(files)!=required:fail()
+    for name,pin in files.items():
+        path=base/name
+        if path.resolve()!=path or not path.is_relative_to(base):fail()
+        raw=private_bytes(path,128<<20,group_read=True)
+        if pin!={'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}:fail()
+    if files[prefix+'-compatibility.md']['sha256']!=MEDIA_ABORT_COMPATIBILITY:fail()
+    if canonical(document(base/(prefix+'-active-contract.json')))!=MEDIA_ABORT_ACTIVE:fail()
+    proof=document(base/(prefix+'-verified.json'))
+    if (proof.get('setup')!=expected or proof.get('storage')!=precut_retained_setup(snapshot)
+        or proof.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
+        or proof.get('migration_jobs_sha256')!=receipt['migration_jobs_sha256']
+        or proof.get('no_migration_replay') is not True):fail()
+    actors=proof.get('actors',{});connections=proof.get('leaf_connections',{})
+    roles=set(LEAVES)|{'gateway'}
+    if actors.get('roles')!=sorted(roles) or set(actors.get('proofs',{}))!=roles or set(connections)!=set(LEAVES):fail()
+    for role in roles:
+        actor=actors['proofs'][role].get('proof',{})
+        if (any(actor.get(key) is not True for key in ('signed_chain_verified','server_authentication_verified',
+                'signed_effective_permissions_verified','broker_grant_compatibility_verified'))):fail()
+    for role in LEAVES:
+        if (connections[role].get('connected') is not True
+            or not re.fullmatch('[a-f0-9]{64}',connections[role].get('remote_server_sha256',''))):fail()
+    return receipt
+
+
 def idle_state(base,state):
     if state.get('status') in ('PASS','ROLLED_BACK'):return True
     verify_terminal(base,state)
@@ -1025,6 +1145,11 @@ def pending_request_accepted(installed,path,closure):
     row=document(path)
     if row.get('phase')=='COMPLETE':return
     request=row.get('request',{})
+    if request.get('operation')==MEDIA_ABORT_OPERATION:
+        base=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION)
+        verify_media_abort_terminal(base,document(base/'checkpoint.json'))
+        if path.name!=MEDIA_ABORT_FINISH:fail()
+        return
     if request.get('operation')=='a83c5bdb26f1':
         from operator_reset import verify_terminal as verify_reset,verify_journals
         base=guard.ROOT/'rollout-a83c5bdb26f1'
@@ -1182,7 +1307,7 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
-        if row.get('request',{}).get('operation')=='a83c5bdb26f1':
+        if row.get('request',{}).get('operation') in ('a83c5bdb26f1',MEDIA_ABORT_OPERATION):
             pending_request_accepted(installed,path,{'journals':{}})
             continue
         # Separately verified exact dispositions do not rewrite the old inventory.

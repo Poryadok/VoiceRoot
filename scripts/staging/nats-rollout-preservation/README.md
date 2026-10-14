@@ -5,6 +5,25 @@ the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.
 The selected PVC/PV UID and physical path remain bound throughout the operation.
 
+### Explicit original-application restoration after media startup failure
+
+The separate, exact `0e2be62a3326` media-startup abort restores the reviewed
+original application templates and digest-pinned images while retaining the
+already migrated Hub, 45-consumer contract and all 16 database Job receipts.
+Its private compatibility note, original failed checkpoint and absent finish
+response remain unchanged evidence. Before release, the reviewed root runner
+proves current signed credential compatibility, isolated authentication, actual
+leaf connections and readiness of all restored workloads, including restoration
+of the temporary User/Space startup override. This is an explicit operator
+`ABORTED` disposition: it grants neither deployment PASS nor rollback eligibility.
+Only that verified terminal admits `--install --upgrade-idle-media-v1` from the
+exact retained 1295 helper. Provision the dedicated
+[media principal material](../../../deploy/staging/media-principal.md) before a
+fresh ordinary FULL; the ignored recovery runner is not a permanent installed CLI.
+Any nonzero recovery result after mutation requires stopping and reconciling the
+saved private progress manually. Do not rerun it: the exact checkpoint admission
+refuses a changed or partially restored state.
+
 ### Explicit reset after retained records expire
 
 The native `/msgs/` boundary includes `index.db`. A retention expiry can change

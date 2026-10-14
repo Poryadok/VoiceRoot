@@ -2,6 +2,8 @@
 
 Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legacy; use the full stack for product smoke.
 
+The Voice media startup contract requires the dedicated [media principal credentials and trust projection](media-principal.md) before ordinary FULL/app-only preparation. Missing keys are a preflight failure; do not disable the application guards to deploy.
+
 ## Prerequisites
 
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
