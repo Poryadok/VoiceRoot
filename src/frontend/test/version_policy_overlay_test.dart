@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -9,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/backend/gateway_http.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/services/desktop_updater_service.dart';
 import 'package:voice_frontend/state/version_policy_providers.dart';
 import 'package:voice_frontend/state/version_update_launcher.dart';
@@ -22,6 +25,7 @@ import 'support/voice_test_theme.dart';
 class _RecordingLauncher implements VersionUpdateLauncher {
   int launchCount = 0;
   bool? lastImmediate;
+  String? lastUpdateUrl;
 
   @override
   Future<void> launchUpdate({
@@ -30,6 +34,7 @@ class _RecordingLauncher implements VersionUpdateLauncher {
   }) async {
     launchCount++;
     lastImmediate = immediate;
+    lastUpdateUrl = updateUrl;
   }
 }
 
@@ -142,6 +147,111 @@ Future<void> _captureIfRequested(WidgetTester tester, String filename) async {
 }
 
 void main() {
+  for (final language in ['en', 'ru']) {
+    for (final responseKind in ['426 diagnostic', 'version release notes']) {
+      testWidgets('$language $responseKind preserves safe update action', (
+        tester,
+      ) async {
+        const updateUrl = 'https://updates.voice.example/mobile';
+        final privateMarker = 'private_upgrade_$language';
+        final releaseNotes = 'Published changelog $language';
+        final requests = <http.Request>[];
+        final launcher = _RecordingLauncher();
+        final container = ProviderContainer(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((request) async {
+                requests.add(request);
+                return http.Response(
+                  jsonEncode(
+                    responseKind == '426 diagnostic'
+                        ? {
+                            'error': 'client_outdated',
+                            'message': privateMarker,
+                            'update_url': updateUrl,
+                          }
+                        : {
+                            'force_update': true,
+                            'update_url': updateUrl,
+                            'release_notes': releaseNotes,
+                          },
+                  ),
+                  responseKind == '426 diagnostic' ? 426 : 200,
+                );
+              }),
+            ),
+            versionUpdateLauncherProvider.overrideWithValue(launcher),
+          ],
+        );
+        addTearDown(container.dispose);
+        if (responseKind == '426 diagnostic') {
+          final gateway = container.read(gatewayHttpClientProvider);
+          final result = await gateway.getJson(
+            gateway.resolve('/api/v1/profiles'),
+          );
+          expect(result, isA<GatewayHttpFailure>());
+          expect((result as GatewayHttpFailure).error.message, privateMarker);
+          expect(result.error.statusCode, 426);
+        } else {
+          await container.read(versionPolicyProvider.notifier).refresh();
+        }
+        final policy = container.read(versionPolicyProvider);
+        expect(policy.phase, VersionPolicyPhase.forceUpdate);
+        expect(policy.updateUrl, updateUrl);
+        expect(
+          policy.releaseNotes,
+          responseKind == '426 diagnostic' ? isNull : releaseNotes,
+        );
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              locale: Locale(language),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const VersionPolicyOverlay(
+                child: Scaffold(body: Text('App body')),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final barrier = find.byKey(const Key('version_force_update_barrier'));
+        final l10n = AppLocalizations.of(tester.element(barrier))!;
+        expect(find.text(l10n.versionUpdateRequired), findsOneWidget);
+        expect(find.text(l10n.versionUpdateNow), findsOneWidget);
+        expect(find.textContaining(privateMarker), findsNothing);
+        expect(
+          find.text(releaseNotes),
+          responseKind == '426 diagnostic' ? findsNothing : findsOneWidget,
+        );
+        expect(requests, hasLength(1));
+        expect(requests.single.method, 'GET');
+        expect(
+          requests.single.url.path,
+          responseKind == '426 diagnostic'
+              ? '/api/v1/profiles'
+              : '/api/v1/version',
+        );
+        expect(
+          requests.single.headers['Authorization'],
+          responseKind == '426 diagnostic' ? 'Bearer test-access' : isNull,
+        );
+        expect(launcher.launchCount, 0);
+        await tester.pump(const Duration(seconds: 1));
+        expect(requests, hasLength(1), reason: 'no automatic retry');
+        await tester.tap(find.byKey(const Key('version_force_update_button')));
+        await tester.pump();
+        expect(launcher.launchCount, 1);
+        expect(launcher.lastUpdateUrl, updateUrl);
+        expect(launcher.lastImmediate, isTrue);
+        expect(requests, hasLength(1));
+        expect(barrier, findsOneWidget);
+      });
+    }
+  }
+
   testWidgets('force update blocks interaction', (tester) async {
     final container = ProviderContainer(
       overrides: [
