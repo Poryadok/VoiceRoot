@@ -1182,6 +1182,9 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
+        if row.get('request',{}).get('operation')=='a83c5bdb26f1':
+            pending_request_accepted(installed,path,{'journals':{}})
+            continue
         # Separately verified exact dispositions do not rewrite the old inventory.
         separate={FENCE_ABORT_NONCE+'.json',SOURCE_CAPTURE_REJECTION['nonce']+'.json',
             *(spec['nonce']+'.json' for spec in SEARCH_BOOTSTRAP_REJECTIONS.values())}

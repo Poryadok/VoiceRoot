@@ -1129,6 +1129,50 @@ class FenceAbortClosureTests(unittest.TestCase):
 
 
 class PendingAbandonmentTests(unittest.TestCase):
+    def test_verified_reset_authorization_preserves_legacy_pending_inventory(self):
+        import hashlib,json,tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        import operator_reset
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);installed=root/'installed'
+            (installed/'journal').mkdir(parents=True);(installed/'responses').mkdir()
+            base=root/('rollout-'+operator_reset.OPERATION);base.mkdir()
+            (base/'checkpoint.json').write_text('{}',encoding='utf-8')
+            (base/'checkpoint.json').chmod(0o600)
+            legacy={format(n,'064x')+'.json' for n in range(29)}
+            def write(path,value):
+                raw=json.dumps(value,sort_keys=True,separators=(',',':')).encode()
+                path.write_bytes(raw);path.chmod(0o600)
+                return raw
+            for name in legacy:
+                write(installed/'journal'/name,{'phase':'STARTED','request':{'operation':'legacy'}})
+            nonce='4c708f1c8fc76c129fa8088d0f08284bda7fa2283ceb9b176b9847d8f7058006'
+            request={'action':'authorize','nonce':nonce,'operation':operator_reset.OPERATION}
+            journal={'phase':'STARTED','request':request,'request_sha256':retirement.canonical(request),'prepare_error':'guard_rejected'}
+            raw=write(installed/'journal'/(nonce+'.json'),journal)
+            response=write(installed/'responses'/(nonce+'.json'),{'status':'BLOCKED','error':'exception_Blocked'})
+            receipt={'journals':{nonce+'.json':{'journal_sha256':hashlib.sha256(raw).hexdigest(),
+                'request_sha256':retirement.canonical(request),'response_sha256':hashlib.sha256(response).hexdigest()}}}
+            before={p:p.read_bytes() for p in (installed/'journal').iterdir()}
+            with patch.object(retirement.guard,'ROOT',root),patch.object(operator_reset,'verify_terminal',return_value=receipt) as verify:
+                self.assertEqual(retirement.pending_abandonment_names(installed),legacy)
+                verify.assert_called_once_with(base,{})
+                self.assertEqual({p:p.read_bytes() for p in before},before)
+                # A new unrelated request still changes the legacy inventory.
+                unknown=installed/'journal'/('f'*64+'.json')
+                write(unknown,{'phase':'STARTED','request':{'operation':'foreign'}})
+                self.assertEqual(retirement.pending_abandonment_names(installed),legacy|{unknown.name})
+                # Claiming the reset operation does not bind a new nonce to it.
+                write(unknown,{'phase':'STARTED','request':{'operation':operator_reset.OPERATION}})
+                with self.assertRaises(Blocked):retirement.pending_abandonment_names(installed)
+                unknown.unlink()
+                # Real journal/response verification remains active after closure lookup.
+                write(installed/'responses'/(nonce+'.json'),{'status':'BLOCKED','error':'changed'})
+                with self.assertRaises(Blocked):retirement.pending_abandonment_names(installed)
+            with patch.object(retirement.guard,'ROOT',root),patch.object(operator_reset,'verify_terminal',side_effect=Blocked('invalid_reset_closure')):
+                with self.assertRaises(Blocked):retirement.pending_abandonment_names(installed)
+
     def fixture(self):
         import hashlib,json
         nonce='a'*64;name=nonce+'.json';operation='85e0b83bb353'
