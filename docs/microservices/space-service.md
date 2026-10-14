@@ -125,6 +125,15 @@ service SpaceService {
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
+`ListMembers` retains current-member authorization and returns the existing member
+list with an opaque `next_cursor` (empty on the last page). Ordering is
+`joined_at ASC, profile_id ASC`; continuation uses both fields. Page size defaults
+to 50 and is capped at 100. Previously issued UUID-only cursors remain accepted
+when their boundary resolves in the same eligible Space roster; an unresolvable
+or malformed cursor returns `INVALID_ARGUMENT`, rather than a false complete
+empty result. Newly issued tuple cursors do not require the boundary row to remain
+present. Pagination does not create a roster snapshot or bypass eligibility checks.
+
 ### Migration runbook -- fail-closed guest admission
 
 `000016_allow_guests_fail_closed` is a forward-only security correction. It sets
