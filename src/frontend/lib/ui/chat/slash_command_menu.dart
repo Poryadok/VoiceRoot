@@ -308,16 +308,19 @@ Future<void> showSlashCommandMenu({
         },
       );
     } else {
+      // Typing the slash may wrap the composer and move its top edge.
+      // Measure after that layout, rather than inside the onChanged callback.
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final triggerContext = anchorContext ?? context;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!navigator.mounted) return;
+      if (!triggerContext.mounted) return;
       final overlay =
-          Navigator.of(
-                context,
-                rootNavigator: true,
-              ).overlay!.context.findRenderObject()!
-              as RenderBox;
-      final trigger =
-          (anchorContext ?? context).findRenderObject()! as RenderBox;
+          navigator.overlay!.context.findRenderObject()! as RenderBox;
+      final trigger = triggerContext.findRenderObject()! as RenderBox;
       final anchor =
           trigger.localToGlobal(Offset.zero, ancestor: overlay) & trigger.size;
+      if (!context.mounted) return;
       selected = await showDialog<BotSlashCommand>(
         context: context,
         useSafeArea: false,
