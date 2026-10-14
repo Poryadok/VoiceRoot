@@ -1052,6 +1052,36 @@ Source bootstrap43/deployed42durable compatibility remains an explicit
 pre-fence backend release prerequisite; the runtime inventory itself is dynamic.
 
 
+## NATS operation checkpoints and reset boundaries
+
+Ordinary rollout and rollback remain **nonreset** and follow the [preservation runbook](../scripts/staging/nats-rollout-preservation/README.md). A disposable reset is a separate maintenance operation within an explicitly established environment and data-loss scope. That authorization remains valid for reviewed continuations of the same operation; recheck its source, resource identities and saved phase instead of repeatedly requesting the same permission. Do not infer namespace clean-install, production reset or root-rotation authority from a NATS-only reset scope.
+
+Record what the operation actually reached:
+
+| Checkpoint | What its evidence establishes |
+| --- | --- |
+| Prepare/build/capture | Exact source and input checks, or a finite preparation failure. Use the matching request journal/response and checkpoint; a workflow label or `COMPLETE` journal alone does not establish a fence or apply. |
+| Fence | Writers are stopped under the recorded ownership and resource identities. A fenced operation can still be blocked before contract migration or apply. |
+| Native contract/migration | The retained native records and complete account census meet the operation's checks and planned contract changes. Backup upload or isolated restore alone does not establish this phase passed. |
+| Apply | The recorded paused apply and required migrations reached their actual outcomes. This is distinct from application restart/readiness. |
+| Readiness and application acceptance | Temporary maintenance changes have been reverted; intended workloads are ready on their verified target templates and selected image/source/stack-lock identity; smoke and authenticated application evidence establish the claimed behavior. CI or a ready broker alone is insufficient. |
+
+The `/msgs/` preservation boundary includes `index.db`. Retention expiry can change message count, first sequence and subject counts while payload block files remain byte-identical. This is real record loss. Do not exclude the index, rewrite timestamps, adopt a changed post-migration archive as the original cut, or turn the failed preservation operation into PASS. Retain its checkpoint, journals and archives. Follow the [explicit-reset boundary](../scripts/staging/nats-rollout-preservation/README.md#explicit-reset-after-retained-records-expire) only when that maintenance scope is already authorized.
+
+For the reviewed root adapter, retain both `FOWNER` and `FSETID` capabilities where the scoped store-custody procedure needs them: setting mode `2770` can otherwise produce `0770`. Verify the resulting owner, group and setgid mode; do not weaken the custody check or compensate with broad writable mounts/capabilities. Preserve the adapter's reviewed read-only boundaries and exact writable scope. After a failed allocation, inspect the saved phase and bound PVC/PV identity; use only the reviewed continuation that recognizes that state, not a repeated allocation or baseline replay.
+
+When restoring applications, reuse the existing owned User→Space startup choreography described under [NATS JWT and leaf activation](#nats-jwt-and-leaf-activation): temporarily clear only User's operation-owned `SPACE_GRPC_ADDR`, wait for User and then Space, restore the exact original User template, and verify restored User plus all required workload readiness. Recognize only the operation's own interrupted empty override; refuse foreign changes and retain cleanup on failure. Do not change Services, remove dependency checks, or waive readiness to break the cycle.
+
+A terminal reset closure is **not deployment acceptance**. Preserve its original failed FULL, reset authority, completed authorization journals, receipt and old-store evidence. Retirement/idle inventory must authenticate the exact terminal reset admission before classifying its authorization journal as settled; never delete history or treat every `STARTED` journal as abandoned. The reset receipt retains `deployment_pass=false` and `rollback_eligible=false`.
+
+After independent terminal-reset readback, install the reviewed helper successor through its existing exact-predecessor upgrade path. Verify all installed manifest members/code binding, terminal receipt and parsed active-contract equality. Compare canonical JSON mappings for semantic equality and record raw-file hashes separately. Only after installation/readback succeeds, start the existing `voice-nats-preservation.path` and `.timer` units; these trigger the existing service. Do not start the triggers against the predecessor helper or substitute a new scheduler. These systemd units are separate from Codex recurring automation.
+
+To accept the new build after reset, create recent application message/file data, run an ordinary nonreset FULL with its required source/image/stack-lock gates, then verify the same data after fresh login and again after a deliberate restart with recorded workload identity/readiness. Bind the final FULL checkpoint to its adopted target templates, not the old rollback templates. A rollout restart changes its restart annotation: record the exact owned annotation and require all other template fields and images to remain unchanged. Prove replacement through Pod owner chains and old/new UIDs. The empty baseline proves baseline creation, not application quality or preservation of later writes.
+
+Safe agent-visible deployment diagnostics remain follow-up work under `CI-A1-DEPLOY-DIAGNOSTICS`; do not describe them as implemented. Use the existing bounded journal/checkpoint correlation and protected evidence. Empty output or a wrapper exception is not a root cause and does not authorize a blind retry; keep credentials, Secret bodies and backups out of public diagnostics.
+
+For application smoke, use the existing truthful smoke `User-Agent` consistently for API/object/WebSocket transport where applicable. Pace login attempts against the existing five-attempts-per-IP/15-minute limit and honor rate-limit responses; shared runner attempts count against the same budget. See [testing guidance](TESTING.md) and [authentication limits](features/auth-and-contacts.md#сессии-и-безопасность). Do not spoof a browser, rotate identities to evade limits, or weaken WAF/auth/rate-limit policy to obtain a passing smoke.
+
 ## Production host inotify prerequisite
 
 Before installing the rollout-preservation root bridge in **production**, ensure
