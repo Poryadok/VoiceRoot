@@ -18,6 +18,7 @@ docker run --rm --network none --entrypoint tar \
     mkdir -m 700 /fixture
     export TMPDIR=/fixture
     cp -R /work/scripts /work/deploy /work/.github /tmp/repo/
+    cp /work/docker-compose.voice-space-media.yml /tmp/repo/
     cp -R /work/src/backend/migrations /tmp/repo/src/backend/
     cp -R /work/src/backend/auth/src/main/resources/db/migration /tmp/repo/src/backend/auth/src/main/resources/db/
     cp -R /work/docker/clickhouse/init /tmp/repo/docker/clickhouse/
