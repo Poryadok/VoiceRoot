@@ -746,6 +746,9 @@ It covers the exact installed-helper transition, operation-closure and journal
 prerequisites, current source/native proof gates, and fresh-cut rollback. The
 reset and root-rotation procedures below are separately authorized maintenance
 exceptions; they are not recovery shortcuts for a blocked preservation rollout.
+For permission failures with existing credentials, use the runbook's
+[grant drift and prepare-failure diagnosis](../scripts/staging/nats-rollout-preservation/README.md#grant-drift-and-prepare-failure-diagnosis)
+before retrying or changing enrollment.
 
 The reviewed grants and issuer contract are in
 [`deploy/nats/README.md`](../deploy/nats/README.md) and

@@ -1,4 +1,4 @@
-import copy,hashlib,tempfile,unittest
+import copy,hashlib,json,shutil,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import bootstrap_selection
@@ -86,4 +86,95 @@ class Tests(unittest.TestCase):
         self.assertEqual(result['binding']['enrollment_sha256'],digest(self.enrollment))
         changed=copy.deepcopy(self.fresh_auth);changed['normalized_consumers'][2]['config']['ack_policy']='all'
         with self.assertRaises(Blocked):self.run_plan(changed)
+class CanonicalBootstrapTests(unittest.TestCase):
+    def setUp(self):
+        # Reuse only the external root/enrollment/broker fixture. Keep production
+        # TARGET_FILES and the actual historical contract so a missing pin fails.
+        Tests.setUp(self)
+        repo=Path(__file__).resolve().parents[3]
+        self.contract=json.loads((repo/'scripts/staging/nats-known-baseline/deployed-contract.json').read_bytes())
+        for part in ('realtime','analytics-chat','notification','search'):
+            relative='deploy/templates/nats-'+part+'-bootstrap.yaml'
+            shutil.copyfile(repo/relative,self.source/relative)
+    def run_plan(self):
+        import yaml
+        with patch.object(module,'monitor',return_value=self.tree),patch.object(module,'census',return_value={'fixture_census':True}),\
+             patch.object(bootstrap_selection,'ACCOUNT_SHA',self.sha),\
+             patch('bootstrap_auth.prove',return_value=copy.deepcopy(self.fresh_auth)):
+            return module.preflight(self.kube,self.source,self.enrollment,self.contract,yaml.safe_load)
+    def compatible(self,authority):
+        import compiler,yaml
+        return compiler.compatible_bootstrap(self.source,self.contract,yaml.safe_load,
+            {part:row['sha256'] for part,row in authority['scripts'].items()})
+    def mutate(self,part):
+        path=self.source/('deploy/templates/nats-'+part+'-bootstrap.yaml')
+        path.write_bytes(path.read_bytes().replace(b'    set -eu',b'    set -eu\n    echo unreviewed-change'))
+    def test_canonical_search_authorized_by_root_then_accepted_by_compiler(self):
+        authority=self.run_plan()
+        paths=self.compatible(authority)
+        self.assertIn('deploy/templates/nats-search-bootstrap.yaml',paths)
+        self.assertEqual(set(authority['scripts']),{'realtime','analytics-chat','search'})
+        script=authority['scripts']['search']
+        self.assertIn('require_stream_subjects chat_events chat.created chat.updated chat.deleted',script['script'])
+        legacy=next(row['sha256'] for row in self.contract['scripts'] if row['part']=='search')
+        self.assertNotEqual(script['sha256'],legacy)
+        self.assertEqual(script['sha256'],hashlib.sha256(script['script'].encode()).hexdigest())
+    def test_mutated_search_refused_by_root_before_compiler(self):
+        self.mutate('search')
+        with self.assertRaisesRegex(Blocked,'nats_migration_root_preflight_refused'):
+            self.run_plan()
+    def test_canonical_authority_survives_custody_and_next_rollout_readback(self):
+        from unittest.mock import Mock
+        import nats_contract_custody,nats_active_contract
+        from nats_contract_custody_test import fixture
+        authority=self.run_plan();self.compatible(authority)
+        baseline_pairs=copy.deepcopy(self.contract['consumer_pairs'])
+        kube,stage,_,rows=fixture();rows.clear()
+        contract=copy.deepcopy(self.contract)
+        # Mock only the prior ConfigMap bytes and Kubernetes CAS. Source pins,
+        # extracted target scripts, plan and historical compiler check are real.
+        for expected in contract['scripts']:
+            part=expected['part']
+            if part not in authority['scripts']:continue
+            old='previous fixture '+part+' script\n'
+            expected.update(sha256=hashlib.sha256(old.encode()).hexdigest(),bytes=len(old))
+            name='voice-nats-'+part+'-bootstrap'
+            rows[name]={'metadata':{'name':name,'uid':expected['configMapUID'],
+                'resourceVersion':expected['configMapResourceVersion']},'data':{'bootstrap.sh':old}}
+        state={'operation':'123456abcdef','contract':contract,
+            'nats_contract':copy.deepcopy(authority['plan']),
+            'nats_target_scripts':copy.deepcopy(authority['scripts']),
+            'nats_migration':{'verified':True,'old_record_files_verified':True,'proof':{
+                'schema':'voice-nats-additive-census-proof-v2','migration_id':authority['plan']['migration_id'],
+                'before_sha256':'a'*64,'after_sha256':'b'*64,'messages':14,
+                'old_consumers_preserved':len(baseline_pairs),'created_consumers':3}}}
+        # These proof flags stand for the isolated native proof, not staging evidence.
+        events=[];guard=Mock()
+        active=nats_contract_custody.advance(kube,state,stage,events.append,mutation_guard=guard)
+        self.assertEqual(set(kube.calls),{'voice-nats-'+part+'-bootstrap' for part in authority['scripts']})
+        self.assertEqual(guard.call_count,3)
+        self.assertEqual([row['part'] for row in events if row['kind']=='nats_contract_cm_applied'],list(authority['scripts']))
+        # Round-trip the same persisted receipt consumed by the next prepare.
+        active=json.loads(json.dumps(active));nats_active_contract.validate_identity(active,stage.expected,baseline_pairs)
+        for expected in active['contract']['scripts']:
+            if expected['part'] not in authority['scripts']:continue
+            row=kube.get('configmap','voice-nats-'+expected['part']+'-bootstrap')
+            self.assertEqual(expected['configMapUID'],row['metadata']['uid'])
+            self.assertEqual(expected['configMapResourceVersion'],row['metadata']['resourceVersion'])
+            self.assertEqual(expected['sha256'],hashlib.sha256(row['data']['bootstrap.sh'].encode()).hexdigest())
+        self.contract=active['contract']
+        next_authority=self.run_plan();self.compatible(next_authority)
+        self.assertEqual(next_authority['scripts'],authority['scripts'])
+    def test_unrelated_notification_change_still_refused_by_compiler(self):
+        self.mutate('notification')
+        authority=self.run_plan()
+        self.assertNotIn('notification',authority['scripts'])
+        with self.assertRaisesRegex(Blocked,'rollout_bootstrap_contract_unsupported'):
+            self.compatible(authority)
+    def test_search_change_after_root_authority_refused_by_compiler(self):
+        authority=self.run_plan()
+        self.mutate('search')
+        with self.assertRaisesRegex(Blocked,'rollout_bootstrap_contract_unsupported'):
+            self.compatible(authority)
+
 if __name__=='__main__':unittest.main()

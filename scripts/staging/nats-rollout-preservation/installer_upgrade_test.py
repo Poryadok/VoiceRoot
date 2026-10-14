@@ -8,6 +8,37 @@ import installer
 import root_main
 
 class Tests(unittest.TestCase):
+    def test_search_bootstrap_idle_route_uses_exact_a025_predecessor(self):
+        with patch.object(installer,'_upgrade_idle_transition') as transition:
+            installer.upgrade_idle_search_bootstrap_v1(Path('/candidate'))
+        transition.assert_called_once_with(Path('/candidate'),
+            'a025ffb62b4c0716a44611c4ac00fe9cae60b8bcb5e8b48204b44a62dc541749',
+            'idle-search-bootstrap-v1','search-a025',
+            'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_SEARCH_BOOTSTRAP_V1_KEYS_POLICY_HISTORY_PRESERVED')
+
+    def test_search_bootstrap_swap_preserves_history_and_rejects_other_predecessor(self):
+        predecessor='a025ffb62b4c0716a44611c4ac00fe9cae60b8bcb5e8b48204b44a62dc541749'
+        for actual in (predecessor,'f'*64):
+            with self.subTest(actual=actual),tempfile.TemporaryDirectory() as td:
+                source,installed=self.fixture(Path(td))
+                prior=b'preserved earlier upgrade receipt'
+                (installed/'upgrade-idle-source-capture-v1.json').write_bytes(prior)
+                def binding(path):return actual if (Path(path)/'binding').read_text()=='old' else 'd'*64
+                with patch.object(installer,'binding_sha',side_effect=binding),patch.object(installer.os,'chown'),\
+                     patch.object(installer,'private_json',side_effect=lambda p:json.loads(Path(p).read_text())):
+                    args=(source,installed,1000,predecessor,'idle-search-bootstrap-v1','search-a025')
+                    if actual!=predecessor:
+                        with self.assertRaisesRegex(installer.Blocked,'predecessor_unapproved'):installer._upgrade_code(*args)
+                        self.assertFalse((installed/'code-search-a025-preserved').exists())
+                    else:
+                        installer._upgrade_code(*args);installer._upgrade_code(*args)
+                        self.assertEqual((installed/'code-search-a025-preserved/binding').read_text(),'old')
+                        self.assertEqual(json.loads((installed/'upgrade-idle-search-bootstrap-v1.json').read_bytes()),
+                            {'schema':'voice-nats-code-upgrade-idle-search-bootstrap-v1','from':predecessor,'to':'d'*64})
+                self.assertEqual((installed/'upgrade-idle-source-capture-v1.json').read_bytes(),prior)
+                self.assertEqual((installed/'policy.json').read_bytes(),b'fixture-policy')
+                self.assertEqual((installed/'recovery/recovery-key.pem').read_bytes(),b'fixture-private-key')
+
     def test_ceccb_idle_transition_uses_exact_receipt_stage_backup_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as td:
             source,installed=self.fixture(Path(td))

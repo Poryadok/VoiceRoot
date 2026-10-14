@@ -29,6 +29,26 @@ def fixture():
     kube=Kube();kube.calls=[];stage=Mock();stage.expected={'generation':'r20260930a4','namespace_uid':'ns','source_claim_uid':'same-pvc'}
     return kube,stage,state,rows
 class Tests(unittest.TestCase):
+    def test_reviewed_search_script_advances_with_same_proof_and_cas(self):
+        k,s,state,rows=fixture();events=[]
+        old=copy.deepcopy(rows['voice-nats-realtime-bootstrap'])
+        old['metadata'].update(name='voice-nats-search-bootstrap',uid='search-uid')
+        rows['voice-nats-search-bootstrap']=old
+        contract=copy.deepcopy(state['contract']['scripts'][0]);contract.update(part='search',configMapUID='search-uid')
+        state['contract']['scripts'].append(contract)
+        state['nats_target_scripts']['search']=copy.deepcopy(state['nats_target_scripts']['realtime'])
+        receipt=advance(k,state,s,events.append)
+        self.assertIn('voice-nats-search-bootstrap',k.calls)
+        selected=next(row for row in receipt['contract']['scripts'] if row['part']=='search')
+        self.assertEqual(selected['configMapUID'],'search-uid')
+        self.assertEqual(selected['configMapResourceVersion'],'2')
+        self.assertEqual(selected['sha256'],state['nats_target_scripts']['search']['sha256'])
+        self.assertEqual([e['kind'] for e in events if e['part']=='search'],['nats_contract_cm_intent','nats_contract_cm_applied'])
+    def test_unrelated_notification_script_is_not_authorized(self):
+        k,s,state,rows=fixture()
+        state['nats_target_scripts']={'notification':copy.deepcopy(state['nats_target_scripts']['realtime'])}
+        with self.assertRaisesRegex(Blocked,'nats_contract_script_unbound'):advance(k,state,s,lambda e:None)
+        self.assertEqual(k.calls,[])
     def test_requires_native_semantic_proof_before_cm_write(self):
         k,s,state,rows=fixture();state['nats_migration']['verified']=False
         with self.assertRaises(Blocked):advance(k,state,s,lambda e:None)
