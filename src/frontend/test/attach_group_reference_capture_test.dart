@@ -174,7 +174,13 @@ void main() {
           );
           expect(popup.width, 260);
           expect(popup.bottom, closeTo(trigger.top - 8, .01));
-          expect(popup.left, closeTo(trigger.left, .01));
+          expect(popup.left, lessThanOrEqualTo(trigger.left));
+          expect(
+            popup.right,
+            1272,
+            reason:
+                'The actual room trigger is near the right viewport edge; the popup must clamp inside its 8 px margin.',
+          );
         } else {
           expect(find.byType(BottomSheet), findsOneWidget);
         }

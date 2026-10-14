@@ -225,8 +225,11 @@ void main() {
         find.byKey(CreateGroupSheet.submitKey).hitTestable(),
         findsOneWidget,
       );
+      final deleteLabel = MaterialLocalizations.of(
+        tester.element(last),
+      ).deleteButtonTooltip;
       await tester.tap(
-        find.descendant(of: last, matching: find.byIcon(Icons.cancel)),
+        find.byTooltip('$deleteLabel: Selected friend friend-11'),
       );
       await tester.pumpAndSettle();
       expect(last, findsNothing);
