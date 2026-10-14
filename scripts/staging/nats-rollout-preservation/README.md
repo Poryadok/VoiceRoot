@@ -80,6 +80,9 @@ default postconditions gate restart. Already-applied16 does not repeat its
 backfill or erase later opt-ins. Bot004 duplicate non-NULL interaction tokens
 (including empty strings) are rechecked under the writer fence before any
 native contract mutation or database Job; conflicting data is not rewritten.
+The same read-only prerequisite accepts clean Bot schema versions1 through6,
+including the canonical `000006_bot_chat_create_requests` target after migration;
+newer versions, dirty state and duplicate token groups still refuse admission.
 
 The hub renderer is a separately bound root-only init image transition; the
 runner cannot apply arbitrary hub changes. Exact captured inputs and private
