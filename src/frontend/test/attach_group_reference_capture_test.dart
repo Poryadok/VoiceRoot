@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
@@ -89,6 +90,7 @@ Future<void> _capture(
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   for (final wide in [true, false]) {
     testWidgets(
       'AttachMenu and CreateGroup reference states ${wide ? 'H' : 'V'}',
@@ -119,7 +121,13 @@ void main() {
               const GatewayConfig(baseUrl: 'http://api.test'),
             ),
             httpClientProvider.overrideWithValue(
-              MockClient((_) async => http.Response('{}', 404)),
+              MockClient((request) async {
+                if (request.method == 'GET' &&
+                    request.url.path == '/api/v1/messages/scheduled') {
+                  return http.Response('{"scheduledMessages":[]}', 200);
+                }
+                return http.Response('{}', 404);
+              }),
             ),
             realtimeHubProvider.overrideWith(_CaptureRealtime.new),
             chatListControllerProvider.overrideWith(_CaptureChatList.new),
@@ -164,6 +172,12 @@ void main() {
           app(const Scaffold(body: ChatRoomPanel(chatId: _chatId))),
         );
         await tester.pumpAndSettle();
+        expect(
+          find.byKey(ChatRoomPanel.scheduledMessagesKey),
+          findsNothing,
+          reason:
+              'The normal reference room has no scheduled-message error banner.',
+        );
         final trigger = tester.getRect(find.byKey(ChatRoomPanel.attachKey));
         await tester.tap(find.byKey(ChatRoomPanel.attachKey));
         await tester.pumpAndSettle();
@@ -265,6 +279,7 @@ class _CaptureRoom extends ChatRoomController {
   _CaptureRoom(super.ref, super.chatId) : super() {
     state = ChatRoomState(
       historyProfileId: 'prof-test',
+      realtimeStatus: RealtimeLinkStatus.connected,
       messages: [
         VoiceMessage(
           id: 'reference-message',
