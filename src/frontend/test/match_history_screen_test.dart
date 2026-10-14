@@ -12,6 +12,96 @@ import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final language in ['en', 'ru']) {
+    for (final statusCode in [500, 503]) {
+      testWidgets(
+        'MatchHistoryScreen $language $statusCode has a localized failure and recovers on Retry',
+        (tester) async {
+          final requests = <http.Request>[];
+          final diagnostic = 'private_match_history_${language}_$statusCode';
+          final client = MockClient((request) async {
+            if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+              requests.add(request);
+              if (requests.length == 1) {
+                return http.Response(
+                  jsonEncode({'error': 'internal', 'message': diagnostic}),
+                  statusCode,
+                );
+              }
+              return http.Response(
+                jsonEncode({
+                  'matchList': {'matches': [], 'nextCursor': ''},
+                }),
+                200,
+              );
+            }
+            if (request.url.path == '/api/v1/matchmaking/games') {
+              return http.Response(
+                jsonEncode({
+                  'gameList': {'games': [], 'nextCursor': ''},
+                }),
+                200,
+              );
+            }
+            return http.Response('{}', 404);
+          });
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: voiceAppTestOverrides(client: client),
+              child: MaterialApp(
+                theme: voiceTestTheme(),
+                locale: Locale(language),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const MatchHistoryScreen(),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final panel = find.byKey(MatchHistoryScreen.errorKey);
+          expect(panel, findsOneWidget);
+          final l10n = AppLocalizations.of(tester.element(panel))!;
+          final title = language == 'ru'
+              ? 'Не удалось загрузить историю матчей'
+              : 'Could not load match history';
+          expect(find.text(title), findsOneWidget);
+          if (language == 'ru') {
+            expect(find.text('Could not load match history'), findsNothing);
+          }
+          expect(
+            find.text(l10n.backendUnavailable),
+            statusCode == 503 ? findsOneWidget : findsNothing,
+          );
+          expect(find.textContaining(diagnostic), findsNothing);
+          final retry = find.widgetWithText(OutlinedButton, l10n.commonRetry);
+          expect(retry, findsOneWidget);
+          expect(tester.widget<OutlinedButton>(retry).onPressed, isNotNull);
+          expect(requests, hasLength(1));
+          await tester.pump(const Duration(seconds: 1));
+          expect(requests, hasLength(1), reason: 'no automatic retry');
+
+          await tester.tap(retry);
+          await tester.pumpAndSettle();
+          expect(requests, hasLength(2));
+          for (final request in requests) {
+            expect(request.method, 'GET');
+            expect(
+              request.url.toString(),
+              'http://localhost:9999/api/v1/matchmaking/profile/me/matches?page_size=20',
+            );
+            expect(request.headers['Authorization'], 'Bearer test-access');
+            expect(request.body, isEmpty);
+          }
+          expect(find.byKey(MatchHistoryScreen.errorKey), findsNothing);
+          expect(find.byKey(MatchHistoryScreen.emptyKey), findsOneWidget);
+          expect(find.textContaining(diagnostic), findsNothing);
+          expect(retry, findsNothing);
+        },
+      );
+    }
+  }
+
   testWidgets('MatchHistoryScreen shows empty state when no matches', (
     tester,
   ) async {
