@@ -476,9 +476,9 @@ class _SlashCommandOptionsSheetState
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (narrow) Expanded(child: run) else cancel,
+                  if (narrow) Expanded(child: run) else Flexible(child: cancel),
                   const SizedBox(width: 8),
-                  if (narrow) cancel else run,
+                  if (narrow) cancel else Flexible(child: run),
                 ],
               ),
             ),

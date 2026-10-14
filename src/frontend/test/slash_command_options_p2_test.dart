@@ -264,6 +264,49 @@ void main() {
   }
 
   testWidgets(
+    'Russian desktop footer stays inside its panel with larger text',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      Map<String, dynamic>? result;
+      await pumpOptionsSheet(
+        tester,
+        locale: const Locale('ru'),
+        command: _commandWithOptions(const [
+          BotSlashCommandOption(name: 'reason', type: 'string', required: true),
+        ]),
+        onResult: (value) => result = value,
+      );
+      final field = find.byType(TextField);
+      await tester.enterText(field, 'reason');
+      await tester.pumpAndSettle();
+      final run = find.byType(FilledButton);
+      final cancel = find.byType(TextButton);
+      final panel = tester.getRect(
+        find
+            .ancestor(of: find.text('/assign'), matching: find.byType(SafeArea))
+            .first,
+      );
+      expect(panel.width, 320);
+      expect(
+        tester.getRect(cancel).left,
+        greaterThanOrEqualTo(panel.left + 16),
+      );
+      expect(tester.getRect(cancel).right, lessThan(tester.getRect(run).left));
+      expect(tester.getRect(run).right, lessThanOrEqualTo(panel.right - 16));
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(panel.bottom));
+      expect(tester.takeException(), isNull);
+      await tester.tap(run);
+      await tester.pumpAndSettle();
+      expect(result, {'reason': 'reason'});
+    },
+  );
+
+  testWidgets(
     'long mobile options scroll while actions stay above the keyboard',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);

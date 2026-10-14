@@ -329,58 +329,68 @@ void main() {
     (tester) async {
       final captureDirectory = Platform.environment[_captureDirectoryKey];
       if (captureDirectory == null || captureDirectory.isEmpty) return;
+      final previousDisableShadows = debugDisableShadows;
+      debugDisableShadows = false;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final theme = await _loadCaptureTheme(tester);
-      final scenarios = [
-        (size: const Size(1280, 800), suffix: 'h'),
-        (size: const Size(390, 844), suffix: 'v'),
-      ];
+      try {
+        final theme = await _loadCaptureTheme(tester);
+        final scenarios = [
+          (size: const Size(1280, 800), suffix: 'h'),
+          (size: const Size(390, 844), suffix: 'v'),
+        ];
 
-      for (final scenario in scenarios) {
-        tester.view.physicalSize = scenario.size;
-        tester.view.devicePixelRatio = 1;
-        final container = await _pumpChatRoom(
-          tester,
-          executions: <_RecordedExecution>[],
-          onRequest: (_) async => http.Response('{}', 404),
-          theme: theme,
-          commands: const [_typedCommand, _offlineCommand],
-          extraOverrides: _typedOptionOverrides(),
-        );
-        addTearDown(container.dispose);
+        for (final scenario in scenarios) {
+          tester.view.physicalSize = scenario.size;
+          tester.view.devicePixelRatio = 1;
+          final container = await _pumpChatRoom(
+            tester,
+            executions: <_RecordedExecution>[],
+            onRequest: (_) async => http.Response('{}', 404),
+            theme: theme,
+            commands: const [_typedCommand, _offlineCommand],
+            extraOverrides: _typedOptionOverrides(),
+          );
+          addTearDown(container.dispose);
 
-        await _openComposerMenu(tester);
-        await _capture(tester, captureDirectory, 'menu-${scenario.suffix}.png');
-        await tester.enterText(
-          find.byKey(SlashCommandMenuSheet.searchFieldKey),
-          'assign',
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('/assign'));
-        await tester.pumpAndSettle();
-        await _fillTypedOptions(tester);
-        expect(
-          tester
-              .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Run command'),
-              )
-              .onPressed,
-          isNotNull,
-        );
-        await _capture(
-          tester,
-          captureDirectory,
-          'options-${scenario.suffix}.png',
-        );
+          await _openComposerMenu(tester);
+          await _capture(
+            tester,
+            captureDirectory,
+            'menu-${scenario.suffix}.png',
+          );
+          await tester.enterText(
+            find.byKey(SlashCommandMenuSheet.searchFieldKey),
+            'assign',
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('/assign'));
+          await tester.pumpAndSettle();
+          await _fillTypedOptions(tester);
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, 'Run command'),
+                )
+                .onPressed,
+            isNotNull,
+          );
+          await _capture(
+            tester,
+            captureDirectory,
+            'options-${scenario.suffix}.png',
+          );
 
-        await tester.tap(find.byTooltip('Close'));
-        await tester.pumpAndSettle();
-        expect(find.text('Run command'), findsNothing);
-        _expectComposer(tester, _draftPrefix);
-        expect(_composerHasFocus(tester), isTrue);
-        expect(tester.takeException(), isNull);
-        await container.dispose();
+          await tester.tap(find.byTooltip('Close'));
+          await tester.pumpAndSettle();
+          expect(find.text('Run command'), findsNothing);
+          _expectComposer(tester, _draftPrefix);
+          expect(_composerHasFocus(tester), isTrue);
+          expect(tester.takeException(), isNull);
+          await container.dispose();
+        }
+      } finally {
+        debugDisableShadows = previousDisableShadows;
       }
     },
   );
