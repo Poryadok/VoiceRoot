@@ -71,6 +71,50 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_realtime_dual_leaf_monitor_ports(self):
+        obj = decoder((SOURCE / 'deploy/templates/nats-realtime-acl-proof.yaml').read_bytes())
+        regular, proof = obj['spec']['template']['spec']['initContainers']
+        self.assertEqual(regular['args'], ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222'])
+        self.assertIn("s/^listen: 127.0.0.1:4222$/listen: 127.0.0.1:4223/", proof['args'][0])
+        self.assertIn('exec nats-server -c /tmp/leaf-proof.conf -a 127.0.0.1 -m 8223', proof['args'][0])
+
+    def test_rendered_leaf_monitoring_contract(self):
+        kube, params = self.canonical_fixture()
+        plan = source_plan.compile_plan(SOURCE, params, decoder, kube)
+        leaves = {}
+        for descriptor in (o for check in plan['checks'] for o in check['objects']):
+            if descriptor['kind'] != 'Deployment': continue
+            obj = descriptor['desired']
+            spec = obj['spec']['template']['spec']
+            for c in spec.get('initContainers', []) + spec.get('containers', []):
+                if c['name'] == 'nats-leaf': leaves[descriptor['name']] = c
+        self.assertEqual(set(leaves), {'voice-' + s for s in (
+            'analytics', 'auth', 'bot', 'chat', 'file', 'matchmaking', 'messaging',
+            'moderation', 'notification', 'realtime', 'role', 'search', 'social',
+            'space', 'story', 'subscription', 'user', 'voice')})
+        for leaf in leaves.values():
+            self.assertEqual(leaf['args'], ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222'])
+
+    def test_invalid_rendered_leaf_monitoring_rejected(self):
+        for change in ('missing-monitor', 'public-host', 'duplicate-port', 'config-mount', 'missing-leaf'):
+            with self.subTest(change=change):
+                kube, params = self.canonical_fixture()
+                def invalid(raw):
+                    obj = decoder(raw)
+                    if obj['kind'] == 'Deployment' and obj['metadata']['name'] == 'voice-analytics':
+                        spec = obj['spec']['template']['spec']
+                        entries = spec.get('initContainers', []) + spec['containers']
+                        leaf = next(c for c in entries if c['name'] == 'nats-leaf')
+                        leaf['args'] = ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222']
+                        if change == 'missing-monitor': leaf['args'] = ['-c', '/etc/nats/leaf.conf']
+                        if change == 'public-host': leaf['args'][3] = '0.0.0.0'
+                        if change == 'duplicate-port': leaf['args'] += ['-m', '8223']
+                        if change == 'config-mount': leaf['volumeMounts'] = []
+                        if change == 'missing-leaf': leaf['name'] = 'other-leaf'
+                    return obj
+                with self.assertRaisesRegex(nonnats_plan.PlanError, 'canonical_leaf_monitor_invalid'):
+                    source_plan.compile_plan(SOURCE, params, invalid, kube)
+
     def test_rendered_gateway_requires_strict_delegated_identity(self):
         kube, params = self.canonical_fixture()
         plan = source_plan.compile_plan(SOURCE, params, decoder, kube)

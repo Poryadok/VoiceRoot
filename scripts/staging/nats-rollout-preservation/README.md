@@ -1065,3 +1065,43 @@ the application is not Ready: a current container attempt and unique immutable
 runtime imageID must match its owned ReplicaSet and current deployment template.
 Missing or ambiguous attempts, foreign ownership and changed templates refuse
 capture. HUB live census and graceful shutdown health requirements are unchanged.
+
+
+Leaf readiness and monitoring are separate checks. The October 15 recovery
+reached Ready for all 22 workloads but its leaf monitoring request failed because
+the shared leaf configuration did not enable HTTP monitoring. Staging leaf
+Deployment arguments now bind both the client and monitor to 127.0.0.1, with
+monitor port 8222; the shared ConfigMap is preserved. The Realtime dual-leaf proof
+uses client/monitor ports 4222/8222 and 4223/8223. Canonical target preflight rejects
+missing, duplicate, public-host, or alternate leaf-monitor arguments and changed
+config mounts before applying a target. An isolated pinned-image linked-Hub/two-
+leaf proof verifies the actual listener addresses and the leafz response contract.
+
+The fixed media_monitor helper identifies the Hub varz or allowlisted leaf leafz
+request in command failure diagnostics. Command failures retain exit/timeout,
+a fixed stderr reason, and the hash/length of bounded stderr, never its contents
+in public output. Recovery consumers must retain that diagnostic with the current
+failure and update the current checkpoint error; copied historical checkpoint
+errors are not the cause of a newer failure. The ready-baseline-proof failure at
+checkpoint cf937 must be read from its retained progress/failure records (the
+historical error field still names the earlier Gateway timeout). Preserve those
+bytes. Neither all-ready snapshots nor this monitoring correction authorizes
+replaying an old runner or claims terminal deployment acceptance.
+
+
+The exact cf937 monitoring-failure successor uses the separate
+operator-media-target-monitor namespace and voice-media-target-monitor-closure-v1
+receipt. Admission binds all 30 retained members, including the prior 21-member
+history, cf937 bytes, gateway source/prepared/normalized/progress artifacts, the
+202e runner and current command_failed record. It reconstructs the failed state
+from the prior boundary plus progress, requires verified refence, all 46 resources
+at the prior target with unchanged UIDs, and all 22 paused workload snapshots
+including Hub separately. User bootstrap overrides, foreign rows, changed history,
+old terminal namespaces and source/CI mismatch refuse admission. A fresh accepted
+source capture and full normalized digest are required; only the new Deployment
+templates enable monitoring. Existing ConfigMaps, storage, migrations and prior
+runner/artifact bytes are retained. The new runner records current failure error
+and safe monitor diagnostics without altering historical checkpoints. Independent
+terminal readback and live Admin preservation remain mandatory before and after
+helper installation; this closure still does not mean ordinary FULL or product
+acceptance passed.
