@@ -399,7 +399,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                             spacing: context.voiceMetrics.spacing('12', fallback: 12),
                             runSpacing: context.voiceMetrics.spacing('8', fallback: 8),
                             children: [
-                              if (messageAction != null) messageAction,
+                              ?messageAction,
                               _ProfileCallAction(
                                 key: ValueKey((profileId, session, isProfileSwitching)),
                                 profileId: profileId,
