@@ -1135,3 +1135,12 @@ strict retained-evidence verifier succeeds; the legacy 29-entry receipt stays
 byte-identical. An isolated new-request test misses this interaction: regression
 coverage must include both inventories, corrupt Story evidence and an unknown
 STARTED nonce, plus the complete installer admission path.
+
+Check the reviewed ACL proof digest and generation before costly preparation.
+When the source ACL changes, retain the reviewed delta and its signed-grant,
+server-authentication and bootstrap API evidence before updating proof variables;
+ACL compatibility does not establish business publication, ACK or product acceptance.
+After full apply, preserved Services may have new resource versions from kubectl
+bookkeeping. Finish still requires their original UID and complete desired
+semantics, including labels, annotations, selectors and ports. Pre-apply version
+checks and Secret preservation remain strict; this is not a general version waiver.

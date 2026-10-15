@@ -27,6 +27,16 @@ def verify(kube,plan,binding,stage,applied=False):
             # after our scale CAS; identity and complete semantics stay strict.
             if owned['metadata']['uid']!=descriptor['uid'] or current['metadata']['uid']!=owned['metadata']['uid'] or owned_deployment_semantic(current)!=owned_deployment_semantic(owned):
                 raise Blocked('rollout_nonnats_owned_workload_changed')
+        elif applied and descriptor['kind']=='Service' and descriptor['disposition']=='preserve':
+            # Full apply can update kubectl bookkeeping on an unchanged Service.
+            # UID and complete semantics remain bound; pre-apply RVs stay strict.
+            try:
+                current=plan_api._read(kube,descriptor)
+                if (current['metadata']['uid']!=descriptor['uid']
+                    or plan_api.semantic(current)!=descriptor['desired']
+                    or plan_api.semantic(current)!=desired[key]):
+                    raise plan_api.PlanError('preserved_service_changed')
+            except plan_api.PlanError as error:raise Blocked('rollout_nonnats_'+str(error)) from None
         elif applied and descriptor['disposition']=='action':
             current=kube.get(*key)
             if current['metadata']['uid']!=descriptor['uid'] or plan_api.semantic(current)!=desired[key]:
