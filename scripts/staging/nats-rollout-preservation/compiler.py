@@ -58,6 +58,15 @@ def rendered_source(source,parameters,decoder):
         path=Path(source)/relative
         if path.is_symlink() or not path.is_file() or path.stat().st_size>2<<20:raise Blocked('rollout_compile_manifest_invalid')
         text=path.read_bytes().decode('utf-8')
+        if '__GATEWAY_INGRESS_HOST__' in text:
+            host=parameters.get('gateway_host')
+            if host is None:
+                defaults=(Path(source)/'deploy/staging/domains.defaults').read_text(encoding='utf-8')
+                match=re.search(r'^VOICE_GATEWAY_INGRESS_HOST=([a-zA-Z0-9.-]+)$',defaults,re.M)
+                host=match.group(1) if match else ''
+            if not isinstance(host,str) or not re.fullmatch(r'[a-zA-Z0-9.-]+',host):
+                raise Blocked('rollout_compile_gateway_jwks_host_invalid')
+            text=text.replace('__GATEWAY_INGRESS_HOST__',host)
         for key,value in replacements.items():text=text.replace(key,value)
         if re.search(r'__[A-Z0-9_]+__|IMAGE_PLACEHOLDER',text):raise Blocked('rollout_compile_placeholder_unresolved')
         # One object per invocation: kubectl printers do not guarantee one

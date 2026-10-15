@@ -28,15 +28,17 @@ class Tests(unittest.TestCase):
                 exec(code,{'os':os,'action':'--bridge-prepare'})
 
     def test_actual_client_full_nonce_and_exact_run_identity(self):
-        env={'GITHUB_RUN_ID':'123','GITHUB_RUN_ATTEMPT':'1','GITHUB_JOB':'deploy','GITHUB_TOKEN':'synthetic-token'}
+        env={'GITHUB_RUN_ID':'123','GITHUB_RUN_ATTEMPT':'1','GITHUB_JOB':'deploy','GITHUB_TOKEN':'synthetic-token','GITHUB_SHA':'a'*40}
         args=['resume-cold-backup',paused_recovery.OPERATION,'123']
         first=bridge_client.request(args,env)
         self.assertEqual(first,bridge_client.request(args,env))
-        self.assertEqual(set(first),{'action','operation','run_id','nonce','token'})
+        self.assertEqual(set(first),{'action','operation','run_id','nonce','token','run_attempt','report_run_id','report_source_sha'})
+        self.assertEqual((first['run_attempt'],first['report_run_id'],first['report_source_sha']),(1,123,'a'*40))
         self.assertEqual(len(first['nonce']),64)
         self.assertNotEqual(first['nonce'][:12],paused_recovery.OPERATION)
         second=bridge_client.request(args,{**env,'GITHUB_RUN_ATTEMPT':'2'})
         self.assertNotEqual(first['nonce'],second['nonce'])
+        self.assertNotEqual(first['nonce'],bridge_client.request(args,{**env,'GITHUB_SHA':'b'*40})['nonce'])
         with self.assertRaises(bridge_client.bridge.BridgeError):bridge_client.request([*args[:2],'124'],env)
 
 if __name__=='__main__':unittest.main()

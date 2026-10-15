@@ -5,6 +5,64 @@ the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.
 The selected PVC/PV UID and physical path remain bound throughout the operation.
 
+### Explicit baseline restoration after media startup failure
+
+The separate, exact `0e2be62a3326` original-application restoration failed during
+startup and was refenced. Its original checkpoint, failed restoration checkpoint,
+private progress, compatibility note and absent finish response remain unchanged
+evidence. The frozen original-image runner must not be rerun.
+
+The reviewed alternative establishes a `VERIFIED_GATED_TARGET_BASELINE` using
+current master source captured through the existing CI/image-lock authority,
+canonical rendered manifests and dedicated
+[media principal material](../../../deploy/staging/media-principal.md). It retains
+the existing Hub/PVC, 45-consumer contract and all 16 completed database Jobs;
+neither NATS nor database migrations are replayed. Before releasing the marker,
+it proves the exact 22 target templates/UIDs and readiness, all 19 signed service
+actors and 18 live leaf connections, and restores the owned User/Space startup
+override. A bounded private error/status/container-log capture precedes refencing
+if startup fails; public output contains only fixed stage and safe error fields.
+The immutable prepare record binds the canonical full normalized resource set;
+both apply admission and terminal verification reject any subsequent change,
+including non-Deployment configuration, even if closure hashes are recomputed.
+
+The single terminal remains `ABORTED`, with deployment PASS and rollback
+eligibility both false. It admits the existing `--install --upgrade-idle-media-v1`
+transition from the exact retained 1295 helper. A fresh ordinary populated FULL
+and actual application/principal checks provide new-build acceptance separately;
+the ignored recovery runner is not a permanent installed CLI.
+Any nonzero recovery result after mutation requires stopping and reconciling the
+saved private progress manually. Do not rerun it: the exact checkpoint admission
+refuses a changed or partially restored state.
+
+A request reported as `BLOCKED` may already have completed migrations or other
+side effects. Correlate its journal, checkpoint and resource identities before
+choosing recovery; retain private failure evidence before cleanup or refencing.
+Passing source/image gates does not prove runtime readiness or product usability.
+Revalidate current source authority and the one-hour prepared binding at execution;
+never reuse expired authority. The [deployment diagnostics runbook](../../../docs/DEPLOYMENT.md)
+provides the bounded status/report commands for that investigation.
+
+The subsequent target apply stopped after 22 Service/NetworkPolicy responses and
+an Auth Deployment CAS: Kubernetes added its controller-owned
+`deployment.kubernetes.io/revision` annotation after the template changed.
+Canonical resource semantics exclude that top-level annotation only on
+Deployments; application annotations and the complete Pod template remain bound.
+An absent completion event does not prove that its preceding CAS had no effect.
+
+The exact failed-apply successor uses the distinct
+`operator-media-target-reconciled` evidence namespace. It preserves the original
+target files, failed checkpoint and frozen runner, reconciles every resource
+against the retained before/target inventory, and obtains fresh source/CI
+authority. The canonical terminal verifier checks this fixed boundary and rejects
+cross-schema replay, mixed partial states and changed retained evidence. Admin's
+three outside-owned objects remain preserved; their updated semantic digests are
+derived from retained descriptors, never repinned from live state. Ordinary FULL
+still includes Admin normally. Capture, cleanup and refence outcomes are recorded
+separately: a cleanup error cannot discard a completed refence proof, and zero
+replicas alone cannot establish that proof. Historical UNKNOWN is not rewritten
+merely because a later read-only physical fence check succeeds.
+
 ### Explicit reset after retained records expire
 
 The native `/msgs/` boundary includes `index.db`. A retention expiry can change
