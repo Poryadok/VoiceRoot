@@ -1594,6 +1594,43 @@ def _verify_search_bootstrap_rejection(installed,path,row):
         'source':_retained_prepare_tree(installed/'sources'/operation,spec['source_tree']),
         'build':_retained_prepare_tree(installed/'sources'/(operation+'-build'),spec['build_tree'])}
 
+STORY_PREFENCE_NONCE='8d65ee47ce1bb71bbe325eb9b020749ec015fdf5c920270b54ecb0cdd5bc4cf0'
+STORY_PREFENCE_FILES={
+    'journal':('bfafa1fcaaaa787f21ae1d6f46fd4c5c67f25f78cd87650e1277cf680c5f0a5b',563),
+    'responses':('35afa798fcd405b6568e043d48fedb94aefc41e7ca9fd00eec39a40fe1cec3a5',48),
+    'reports':('79d0eeae729d92906f55cfee786c083a2e4de63343169d4ba7b85d2fb63f9c2f',928)}
+STORY_PREFENCE_SOURCE={'files':5607,'bytes':68552714,'sha256':'298f19aedec66b164f2408ae40598736c259496ec662d9c152a5f934e0b30e90'}
+STORY_PREFENCE_CUSTODY='4fae73c6dbd74980ff694cc1e596072c94a143414cc44937eb7f20792c3ce9e9'
+STORY_PREFENCE_CHECKPOINT='bfa1426b858a4cb9c367dc7ec81a3418b194a75985542899b6e932d2056f86c2'
+STORY_PREFENCE_RECEIPT='f951ce8711b383a9e7c2bb9da33869b79798b5b447225d5e31779e503d20bd4b'
+
+def _verify_story_prefence_rejection(installed,path,row):
+    """One failed pre-fence request remains BLOCKED evidence, never a rollout."""
+    if path.name!=STORY_PREFENCE_NONCE+'.json':fail()
+    for directory,(wanted,length) in STORY_PREFENCE_FILES.items():
+        member=installed/'responses'/(STORY_PREFENCE_NONCE+'.report.json') if directory=='reports' else installed/directory/path.name
+        raw=private_bytes(member,2<<20,group_read=directory!='journal')
+        if len(raw)!=length or hashlib.sha256(raw).hexdigest()!=wanted:fail()
+    sha='b25087c728cdfeb40b9e4f8cb37cb8e441e122fa'
+    request={'action':'prepare','nonce':STORY_PREFENCE_NONCE,'source_sha':sha,'run_id':38798032967,
+        'run_attempt':1,'report_run_id':38798032967,'report_source_sha':sha,'mode':'full','changed_services':[]}
+    if row!={'schema':'voice-nats-bridge-request-v1','request_sha256':'4f69074c5bbf08f05a327f7e3e00fd69a8c6fbdbb631271a8c02e8755d673311',
+        'request':request,'phase':'STARTED','prepare_stage':{'name':'nats-preflight','status':'STARTED'},'prepare_error':'guard_rejected'}:fail()
+    operation=STORY_PREFENCE_NONCE[:12]
+    for candidate in (guard.ROOT/('rollout-'+operation),installed/'sources'/(operation+'-build')):
+        try:candidate.lstat()
+        except FileNotFoundError:continue
+        fail()
+    source=_retained_prepare_tree(installed/'sources'/operation,STORY_PREFENCE_SOURCE)
+    if source['custody_sha256']!=STORY_PREFENCE_CUSTODY:fail()
+    base=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION)
+    if (hashlib.sha256(private_bytes(base/'checkpoint.json')).hexdigest()!=STORY_PREFENCE_CHECKPOINT
+        or hashlib.sha256(private_bytes(base/(MEDIA_MONITOR_PREFIX+'-receipt.json'))).hexdigest()!=STORY_PREFENCE_RECEIPT):fail()
+    verify_media_abort_terminal(base,document(base/'checkpoint.json'))
+    return {'disposition':'ABANDONED_PRECHECKPOINT','status':'BLOCKED','operation':operation,
+        'files':STORY_PREFENCE_FILES,'source':source,'checkpoint_sha256':STORY_PREFENCE_CHECKPOINT,
+        'receipt_sha256':STORY_PREFENCE_RECEIPT}
+
 def pending_request_accepted(installed,path,closure):
     installed=Path(installed);path=Path(path)
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
@@ -1636,6 +1673,8 @@ def pending_request_accepted(installed,path,closure):
         journal_binding(installed,{path.name:closure['journals'][path.name]})
         return
     operation=path.stem[:12];wanted=PREBUILD_RECEIPTS.get(operation)
+    if operation==STORY_PREFENCE_NONCE[:12]:
+        return _verify_story_prefence_rejection(installed,path,row)
     if operation==SOURCE_CAPTURE_REJECTION['operation']:
         return _verify_source_capture_rejection(installed,path,row)
     if operation in SEARCH_BOOTSTRAP_REJECTIONS:
