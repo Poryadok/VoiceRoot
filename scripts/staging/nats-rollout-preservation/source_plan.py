@@ -245,6 +245,26 @@ def _gateway_delegated_config(obj):
         _fail('canonical_gateway_delegated_config_invalid')
 
 
+def _leaf_monitor_config(obj):
+    # These staging roles use the shared leaf config; monitor only inside the Pod.
+    roles = {'analytics', 'auth', 'bot', 'chat', 'file', 'matchmaking', 'messaging',
+             'moderation', 'notification', 'realtime', 'role', 'search', 'social',
+             'space', 'story', 'subscription', 'user', 'voice'}
+    if obj['metadata']['name'].removeprefix('voice-') not in roles:
+        return
+    spec = obj['spec']['template']['spec']
+    leaves = [c for c in spec.get('initContainers', []) + spec.get('containers', []) if c['name'] == 'nats-leaf']
+    if len(leaves) != 1:
+        _fail('canonical_leaf_monitor_invalid')
+    leaf = leaves[0]
+    mounts = [m for m in leaf.get('volumeMounts', []) if m.get('mountPath') == '/etc/nats/leaf.conf']
+    volumes = [v for v in spec.get('volumes', []) if len(mounts) == 1 and v.get('name') == mounts[0].get('name')]
+    if (leaf.get('command') or leaf.get('args') != ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222']
+            or len(mounts) != 1 or mounts[0].get('subPath') != 'leaf.conf' or mounts[0].get('readOnly') is not True
+            or len(volumes) != 1 or volumes[0].get('configMap') != {'name': 'voice-nats-leaf-config'}):
+        _fail('canonical_leaf_monitor_invalid')
+
+
 def _application(builder):
     p = builder.p
     apps = []
@@ -252,6 +272,7 @@ def _application(builder):
         for obj in builder.documents(path, 'app-restart'):
             if obj['kind'] == 'Deployment':
                 _gateway_delegated_config(obj)
+                _leaf_monitor_config(obj)
                 spec = obj['spec']['template']['spec']
                 pull = p.get('image_pull_secret', '')
                 if pull:
