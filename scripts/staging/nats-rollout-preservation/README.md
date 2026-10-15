@@ -35,6 +35,14 @@ Any nonzero recovery result after mutation requires stopping and reconciling the
 saved private progress manually. Do not rerun it: the exact checkpoint admission
 refuses a changed or partially restored state.
 
+A request reported as `BLOCKED` may already have completed migrations or other
+side effects. Correlate its journal, checkpoint and resource identities before
+choosing recovery; retain private failure evidence before cleanup or refencing.
+Passing source/image gates does not prove runtime readiness or product usability.
+Revalidate current source authority and the one-hour prepared binding at execution;
+never reuse expired authority. The [deployment diagnostics runbook](../../../docs/DEPLOYMENT.md)
+provides the bounded status/report commands for that investigation.
+
 ### Explicit reset after retained records expire
 
 The native `/msgs/` boundary includes `index.db`. A retention expiry can change
