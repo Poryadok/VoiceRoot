@@ -44,6 +44,131 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  for (final variant in [
+    (name: 'h', size: const Size(1280, 800), scale: 1.0, locale: 'en'),
+    (name: 'v', size: const Size(390, 844), scale: 1.0, locale: 'en'),
+    (name: 'narrow', size: const Size(280, 844), scale: 1.0, locale: 'en'),
+    (name: 'large-text', size: const Size(390, 844), scale: 2.0, locale: 'ru'),
+  ]) {
+    testWidgets('communication band precedes profile collections at ${variant.name}', (
+      tester,
+    ) async {
+      final client = MockClient(
+        (request) async => throw StateError('Unexpected $request'),
+      );
+      final populatedHighlights = variant.scale == 1;
+      final container = _container(client, overrides: [
+        profileProvider.overrideWith((ref, id) async => const VoiceProfile(
+          id: 'p-target', accountId: 'a-target', username: 'alex',
+          discriminator: '0001', displayName: 'Alex', bio: 'Co-op and design.',
+          verificationType: 'personal',
+        )),
+        contactCommonSpacesProvider.overrideWith((ref, id) async => [_commonSpace]),
+        profileHighlightsProvider.overrideWith((ref, id) async => [
+          if (populatedHighlights)
+            const HighlightData(id: 'co-op', name: 'Co-op', profileId: 'p-target'),
+        ]),
+      ]);
+      final theme = await _captureTheme(tester);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        tester.view.physicalSize = variant.size;
+        tester.view.devicePixelRatio = 1;
+        await tester.binding.setSurfaceSize(variant.size);
+        await tester.pumpWidget(_app(
+          container, theme: theme, locale: Locale(variant.locale),
+          textScale: variant.scale, plainModal: true,
+        ));
+        await tester.tap(find.byKey(const Key('open_contact_profile')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final message = find.byKey(ProfileDetailSheet.messageKey);
+        final call = find.byKey(ProfileDetailSheet.callKey);
+        await tester.ensureVisible(message);
+        await tester.pumpAndSettle();
+        final messageRect = tester.getRect(message);
+        final callRect = tester.getRect(call);
+        final bioRect = tester.getRect(find.text('Co-op and design.'));
+        final commonRect = tester.getRect(
+          find.byKey(const Key('profile_common_spaces')),
+        );
+        expect(bioRect.bottom, lessThanOrEqualTo(messageRect.top));
+        expect(messageRect.bottom, lessThanOrEqualTo(commonRect.top));
+        expect(callRect.bottom, lessThanOrEqualTo(commonRect.top));
+        if (populatedHighlights) {
+          final highlightsRect = tester.getRect(
+            find.byKey(const Key('highlights_section')),
+          );
+          expect(messageRect.bottom, lessThanOrEqualTo(highlightsRect.top));
+          expect(callRect.bottom, lessThanOrEqualTo(highlightsRect.top));
+          expect(highlightsRect.bottom, lessThanOrEqualTo(commonRect.top));
+        }
+        if (variant.name == 'h' || variant.name == 'v') {
+          expect(messageRect.top, closeTo(callRect.top, 1));
+          expect(messageRect.right, lessThan(callRect.left));
+        } else {
+          expect(messageRect.bottom, lessThanOrEqualTo(callRect.top));
+        }
+        for (final rect in [messageRect, callRect]) {
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(variant.size.width));
+        }
+        await _capture(tester, 'contact-communication-${variant.name}.png');
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  for (final state in ['loading', 'denied', 'error']) {
+    testWidgets('communication band preserves $state DM permission state', (
+      tester,
+    ) async {
+      final pending = Completer<bool>();
+      var reads = 0;
+      final client = MockClient(
+        (request) async => throw StateError('Unexpected $request'),
+      );
+      final container = _container(client, overrides: [
+        dmPermissionProvider.overrideWith((ref, request) async {
+          reads++;
+          if (state == 'loading') return pending.future;
+          if (state == 'error' && reads == 1) throw StateError('private-diagnostic');
+          return state != 'denied';
+        }),
+        contactCommonSpacesProvider.overrideWith((ref, id) async => [_commonSpace]),
+      ]);
+      try {
+        await _open(tester, container);
+        expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
+        expect(find.byKey(ProfileDetailSheet.callKey), findsOneWidget);
+        expect(find.textContaining('private-diagnostic'), findsNothing);
+        if (state == 'error') {
+          final l10n = AppLocalizations.of(
+            tester.element(find.byKey(ProfileDetailSheet.callKey)),
+          )!;
+          await tester.ensureVisible(find.text(l10n.commonRetry));
+          await tester.tap(find.text(l10n.commonRetry));
+          await tester.pumpAndSettle();
+          expect(find.byKey(ProfileDetailSheet.messageKey), findsOneWidget);
+          expect(reads, 2);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        if (!pending.isCompleted) pending.complete(false);
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
   for (final locale in [const Locale('en'), const Locale('ru')]) {
     for (final size in [const Size(1280, 800), const Size(390, 844)]) {
       testWidgets('visible profile dismissal is localized and keyboard accessible '
@@ -1171,6 +1296,7 @@ Widget _app(
   ThemeData? theme,
   Locale? locale,
   bool plainModal = false,
+  double textScale = 1,
 }) =>
     RepaintBoundary(
       key: const Key('contact_profile_capture_root'),
@@ -1182,6 +1308,12 @@ Widget _app(
           debugShowCheckedModeBanner: false,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: child!,
+          ),
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(

@@ -247,6 +247,34 @@ class ProfileDetailSheet extends ConsumerWidget {
                             ),
                     ),
                   );
+                  final messageAction = isGuest
+                      ? OutlinedButton(
+                          key: ProfileDetailSheet.messageKey,
+                          onPressed: null,
+                          child: Text(l10n.profileMessage),
+                        )
+                      : dmPermission?.when<Widget?>(
+                          loading: () => null,
+                          error: (error, stackTrace) => SizedBox(
+                            width: double.infinity,
+                            child: VoiceStatePanel(
+                              title: l10n.chatListLoadError,
+                              icon: Icons.cloud_off_outlined,
+                              actionLabel: l10n.commonRetry,
+                              onAction: () => ref.invalidate(
+                                dmPermissionProvider(dmPermissionRequest!),
+                              ),
+                            ),
+                          ),
+                          data: (allowed) => allowed
+                              ? OutlinedButton(
+                                  key: ProfileDetailSheet.messageKey,
+                                  onPressed: () =>
+                                      _openDm(context, ref, profileId),
+                                  child: Text(l10n.profileMessage),
+                                )
+                              : null,
+                        );
                   return SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -364,6 +392,21 @@ class ProfileDetailSheet extends ConsumerWidget {
                           const SizedBox(height: 16),
                           Text(profile.bio!),
                         ],
+                        if (!isSelf) ...[
+                          const SizedBox(height: 20),
+                          Wrap(
+                            key: const Key('profile_communication_actions'),
+                            spacing: context.voiceMetrics.spacing('12', fallback: 12),
+                            runSpacing: context.voiceMetrics.spacing('8', fallback: 8),
+                            children: [
+                              if (messageAction != null) messageAction,
+                              _ProfileCallAction(
+                                key: ValueKey((profileId, session, isProfileSwitching)),
+                                profileId: profileId,
+                              ),
+                            ],
+                          ),
+                        ],
                         HighlightsSection(profileId: profileId),
                         mmProfileAsync.when(
                           loading: () => const SizedBox.shrink(),
@@ -394,38 +437,6 @@ class ProfileDetailSheet extends ConsumerWidget {
                           _ProfileCommonSpaces(profileId: profileId),
                         if (!isSelf) ...[
                           const SizedBox(height: 20),
-                          if (isGuest)
-                            OutlinedButton(
-                              key: ProfileDetailSheet.messageKey,
-                              onPressed: null,
-                              child: Text(l10n.profileMessage),
-                            )
-                          else if (dmPermission != null)
-                            dmPermission.when(
-                              loading: () => const SizedBox.shrink(),
-                              error: (error, stackTrace) => VoiceStatePanel(
-                                title: l10n.chatListLoadError,
-                                icon: Icons.cloud_off_outlined,
-                                actionLabel: l10n.commonRetry,
-                                onAction: () => ref.invalidate(
-                                  dmPermissionProvider(dmPermissionRequest!),
-                                ),
-                              ),
-                              data: (allowed) => allowed
-                                  ? OutlinedButton(
-                                      key: ProfileDetailSheet.messageKey,
-                                      onPressed: () =>
-                                          _openDm(context, ref, profileId),
-                                      child: Text(l10n.profileMessage),
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                          const SizedBox(height: 8),
-                          _ProfileCallAction(
-                            key: ValueKey((profileId, session, isProfileSwitching)),
-                            profileId: profileId,
-                          ),
-                          const SizedBox(height: 8),
                           _FriendActionButton(
                             profileId: profileId,
                             pendingOutgoing: pendingOutgoing,
