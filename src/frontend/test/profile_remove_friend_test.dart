@@ -130,14 +130,18 @@ void main() {
     expect(find.byKey(ProfileDetailSheet.sheetKey), findsNothing);
   });
 
-  for (final change in ['account', 'profile', 'token', 'switch']) {
+  for (final change in ['account', 'profile', 'token', 'switch', 'failed-switch']) {
     testWidgets('$change change while confirming cannot remove friend', (
       tester,
     ) async {
       final harness = _RemovalHarness();
       await harness.open(tester);
       await _askToRemove(tester);
-      harness.changeContext(tester, change);
+      if (change == 'failed-switch') {
+        await harness.failProfileSwitch(tester);
+      } else {
+        harness.changeContext(tester, change);
+      }
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(_confirmKey));
       await tester.pumpAndSettle();
@@ -147,28 +151,37 @@ void main() {
     });
   }
 
-  for (final status in [204, 500]) {
-    testWidgets('stale $status removal completion keeps current profile open', (
-      tester,
-    ) async {
-      final response = Completer<http.Response>();
-      final harness = _RemovalHarness()..response = response.future;
-      await harness.open(tester);
-      await _askToRemove(tester);
-      await tester.tap(find.byKey(_confirmKey));
-      await tester.pumpAndSettle();
-      harness.changeContext(tester, 'token');
-      await tester.pumpAndSettle();
-      response.complete(
-        http.Response('{"message":"stale-remove-private-diagnostic"}', status),
-      );
-      await tester.pumpAndSettle();
-      expect(harness.removals, hasLength(1));
-      expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
-      expect(find.text('Could not complete this action.'), findsNothing);
-      expect(find.textContaining('stale-remove-private-diagnostic'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
+  for (final change in ['token', 'failed-switch']) {
+    for (final status in [204, 500]) {
+      testWidgets('$change fences stale $status removal completion', (
+        tester,
+      ) async {
+        final response = Completer<http.Response>();
+        final harness = _RemovalHarness()..response = response.future;
+        await harness.open(tester);
+        await _askToRemove(tester);
+        await tester.tap(find.byKey(_confirmKey));
+        await tester.pumpAndSettle();
+        if (change == 'failed-switch') {
+          await harness.failProfileSwitch(tester);
+        } else {
+          harness.changeContext(tester, change);
+        }
+        await tester.pumpAndSettle();
+        response.complete(
+          http.Response('{"message":"stale-remove-private-diagnostic"}', status),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.removals, hasLength(1));
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+        expect(find.text('Could not complete this action.'), findsNothing);
+        expect(
+          find.textContaining('stale-remove-private-diagnostic'),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 }
 
@@ -183,6 +196,21 @@ class _RemovalHarness {
   final removals = <http.Request>[];
   Future<http.Response> response = Future.value(http.Response('', 204));
   late AuthController authController;
+  int switchRequests = 0;
+
+  Future<void> failProfileSwitch(WidgetTester tester) async {
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(ProfileDetailSheet.sheetKey)),
+    );
+    final session = authController.state.session;
+    final generation = authController.sessionInstallGeneration;
+    container.read(profileSwitchInProgressProvider.notifier).state = true;
+    expect(await authController.switchActiveProfile('other-profile'), isNotNull);
+    container.read(profileSwitchInProgressProvider.notifier).state = false;
+    expect(authController.state.session, same(session));
+    expect(authController.sessionInstallGeneration, greaterThan(generation));
+    expect(switchRequests, 1);
+  }
 
   void changeContext(WidgetTester tester, String change) {
     if (change == 'switch') {
@@ -208,6 +236,10 @@ class _RemovalHarness {
     Locale locale = const Locale('en'),
   }) async {
     final client = MockClient((request) async {
+      if (request.method == 'POST') {
+        switchRequests++;
+        return http.Response('{"message":"switch-unavailable"}', 503);
+      }
       if (request.method == 'DELETE') {
         removals.add(request);
         return response;

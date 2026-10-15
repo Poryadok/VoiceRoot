@@ -908,6 +908,8 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
 
   Future<void> _removeFriend() async {
     if (_busy || widget.isGuest || !widget.isFriend) return;
+    final controller = ref.read(authControllerProvider.notifier);
+    final generation = controller.sessionInstallGeneration;
     final session = ref.read(authControllerProvider).session;
     if (session == null || ref.read(profileSwitchInProgressProvider)) return;
     final profileId = widget.profileId;
@@ -917,6 +919,8 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
       }
       final current = ref.read(authControllerProvider).session;
       return !widget.isGuest &&
+          identical(ref.read(authControllerProvider.notifier), controller) &&
+          controller.sessionInstallGeneration == generation &&
           !ref.read(profileSwitchInProgressProvider) &&
           current?.accountId == session.accountId &&
           current?.activeProfileId == session.activeProfileId &&
