@@ -1622,7 +1622,9 @@ def _verify_story_prefence_rejection(installed,path,row):
         except FileNotFoundError:continue
         fail()
     source=_retained_prepare_tree(installed/'sources'/operation,STORY_PREFENCE_SOURCE)
-    if source['custody_sha256']!=STORY_PREFENCE_CUSTODY:fail()
+    # The shared sources parent's timestamps change when later operations add
+    # siblings. Content/policy are historical invariants; this full metadata
+    # fingerprint is transient and the installer compares it across the swap.
     base=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION)
     if (hashlib.sha256(private_bytes(base/'checkpoint.json')).hexdigest()!=STORY_PREFENCE_CHECKPOINT
         or hashlib.sha256(private_bytes(base/(MEDIA_MONITOR_PREFIX+'-receipt.json'))).hexdigest()!=STORY_PREFENCE_RECEIPT):fail()

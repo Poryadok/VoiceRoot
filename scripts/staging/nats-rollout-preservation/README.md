@@ -1160,3 +1160,13 @@ pending census and per-journal admission verify this disposition, and the existi
 idle upgrade transaction rechecks it after the code swap. Use that internal
 transaction with reviewed exact predecessor/destination bindings and fresh immutable
 receipt names; no new public upgrade command or failed-nonce exception is needed.
+
+Historical source admission pins content and enforces safe live custody. Its
+full metadata fingerprint is valid only within a read or across the locked
+helper swap: `installed/sources` is shared, so a later operation legitimately
+changes that parent's timestamps and link count. Do not persist that mutable
+parent fingerprint as a permanent historical equality or repin it after each
+operation. The Story boundary retains exact content, ownership/mode/link checks
+and per-read race checks; the installer still refuses metadata changes during
+its swap. Original per-entry metadata was not retained, so this does not claim
+historical inode/timestamp equality.
