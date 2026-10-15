@@ -966,6 +966,114 @@ def media_failed_admin(base):
     return result
 
 
+MEDIA_GATEWAY_PREFIX='operator-media-target-gateway'
+MEDIA_GATEWAY_SCHEMA='voice-media-target-gateway-closure-v1'
+MEDIA_GATEWAY_REFERENCE='voice-media-target-gateway-reference-v1'
+# Exact successfully refenced Gateway startup failure; never retry authority.
+MEDIA_FAILED_RESTART={'operator-media-target-failure-1792085273718754214/failure.json': {'bytes': 351,
+                                                                    'sha256': 'a49d22e4be642440d7f66cec26bcb7e73f94cd6d5602296dce807dff97b0f667'},
+ 'operator-media-target-failure-1792085273718754214/voice-gateway-gateway-previous.log': {'bytes': 215,
+                                                                                          'sha256': '9df31641e38dca808133933fc5228856f70ca46fae73ab67cf53ce739fdb0da8'},
+ 'operator-media-target-failure-1792085273718754214/voice-gateway-gateway.log': {'bytes': 215,
+                                                                                 'sha256': '9df31641e38dca808133933fc5228856f70ca46fae73ab67cf53ce739fdb0da8'},
+ 'operator-media-target-gateway-blocked.json': {'bytes': 3385477,
+                                                'sha256': 'b3077aef17197008868e7225a0aa42a2a8c247c82bed765a4dee10caae17cae9'},
+ 'operator-media-target-gateway-origin-runner.py': {'bytes': 32624,
+                                                    'sha256': '5ab5a024c19c9250174474f6692aba0a9de21e3a84877efb97188d6350656b82'},
+ 'operator-media-target-reconciled-blocked.json': {'bytes': 3352567,
+                                                   'sha256': 'ab06554cf7f8f39d2c6c347129910c13911c00e94b2ef91acb8b863a6a16500b'},
+ 'operator-media-target-reconciled-compiled.json': {'bytes': 1076311,
+                                                    'sha256': 'cc3650d4cb199c952e88cb33ac7ed20783a76b52af182a82f68b02b62552e794'},
+ 'operator-media-target-reconciled-normalized.json': {'bytes': 214040,
+                                                      'sha256': '122f004a44d03133037d7f9d890224e359ecb5a28832a30c62cda36ac6cdbb21'},
+ 'operator-media-target-reconciled-origin-runner.py': {'bytes': 30352,
+                                                       'sha256': '1fd0fd44572e5dcaea938e6f694d04d32fb5f09982d61ddc06f44dd3be786fb0'},
+ 'operator-media-target-reconciled-parameters.json': {'bytes': 9099,
+                                                      'sha256': 'd8f32cf76f6e966692fa44cddd1651a548db8c904d6f2f512109985766fc090a'},
+ 'operator-media-target-reconciled-prepared.json': {'bytes': 329800,
+                                                    'sha256': '5b8ab75c1fa7fe068db7cb890f6527e9963f3d21d112df8dd0b49804b29f6f5d'},
+ 'operator-media-target-reconciled-progress.json': {'bytes': 637774,
+                                                    'sha256': 'a4157129ea0b1c06a18ed545cb018bbb36a7d24c0dedc615a2c491eaa30fca2f'},
+ 'operator-media-target-reconciled-source-authority.json': {'bytes': 704276,
+                                                            'sha256': '5b7a45c1647bde55d75f8fb4da407d4ade2884fd2513f9afdd221b04034a8ae1'}}
+
+
+def media_restart_pins():
+    result=dict(MEDIA_FAILED_APPLY)
+    for name,pin in MEDIA_FAILED_RESTART.items():
+        if name in result and result[name]!=pin:fail()
+        result[name]=pin
+    return result
+
+
+def media_restart_failed(base):
+    base=Path(base)
+    for name,pin in media_restart_pins().items():
+        value=private_bytes(base/name,128<<20)
+        if {'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()}!=pin:fail()
+    old=media_failed_apply(base)
+    state=document(base/(MEDIA_GATEWAY_PREFIX+'-blocked.json'))
+    progress=document(base/(MEDIA_RECONCILED_PREFIX+'-progress.json'))
+    prepared=document(base/(MEDIA_RECONCILED_PREFIX+'-prepared.json'))
+    normalized=document(base/(MEDIA_RECONCILED_PREFIX+'-normalized.json'))
+    authority=document(base/(MEDIA_RECONCILED_PREFIX+'-source-authority.json'))
+    media_target_prepared(normalized,prepared)
+    expected=copy.deepcopy(old)
+    expected.update(context=progress.get('context'),fence_status='VERIFIED',events=old['events']+progress.get('events',[]))
+    final={'kind':'target_baseline_blocked','stage':'target-restart','class':'Blocked',
+        'failure':'MEDIA_TARGET_BLOCKED stage=target-restart error=restart_readiness_timeout',
+        'refence':{'verified':True,'hub_zero_pods':True,'recovery_failures':[]}}
+    if (state!=expected or progress.get('phase')!='BLOCKED' or not progress.get('events')
+        or progress['events'][-1]!=final or prepared.get('failed_apply')!=MEDIA_FAILED_APPLY
+        or prepared.get('reconciliation')!=media_failed_reconciliation(base,prepared.get('before',{}))
+        or prepared.get('outside_owned')!=media_failed_admin(base)
+        or prepared.get('source_sha')!='ca7304dcaa613bba4d1e7d08087de2839e0a3b66'
+        or prepared.get('binding_sha256')!='8fae034af1c05abed5373f17beba4633e6922ad389e8d7ccb68353a2d3ebaa4e'
+        or authority.get('source_sha')!=prepared['source_sha'] or authority.get('run_id')!=38698269484):fail()
+    for suffix in ('receipt','verified'):
+        if (base/(MEDIA_RECONCILED_PREFIX+'-'+suffix+'.json')).exists():fail()
+    snapshots=state['context']['snapshots'];original=state['context']['original_snapshots']
+    names=CORE|{'voice-web','voice-developer-portal'}
+    if (set(snapshots)!=names or set(original)!=names
+        or snapshots[HUB]['metadata']['uid']!=original[HUB]['metadata']['uid']
+        or snapshots[HUB]['spec']['template']!=old['context']['snapshots'][HUB]['spec']['template']):fail()
+    targets={row['metadata']['name']:row for row in normalized if row['kind']=='Deployment'}
+    if set(targets)!=names-{HUB}:fail()
+    for name,row in snapshots.items():
+        if row['spec'].get('replicas')!=0 or row['metadata']['uid']!=original[name]['metadata']['uid']:fail()
+        if name!=HUB and row['spec']['template']!=targets[name]['spec']['template']:fail()
+    if 'voice.io/nats-user-space-bootstrap' in snapshots['voice-user']['spec']['template'].get('metadata',{}).get('annotations',{}):fail()
+    return state
+
+
+def media_restart_reconciliation(base,observed):
+    from nonnats_plan import semantic
+    media_restart_failed(base)
+    normalized=document(Path(base)/(MEDIA_RECONCILED_PREFIX+'-normalized.json'))
+    prepared=document(Path(base)/(MEDIA_RECONCILED_PREFIX+'-prepared.json'))
+    media_target_prepared(normalized,prepared)
+    keys=[row['kind']+'/'+row['metadata']['name'] for row in normalized]
+    if len(keys)!=46 or len(set(keys))!=46 or set(keys)!=set(prepared['before']) or set(keys)!=set(observed):fail()
+    result={}
+    for key,row in zip(keys,normalized):
+        target=copy.deepcopy(row)
+        if target['kind']=='Deployment':target['spec']['replicas']=0
+        live=observed[key];uid=prepared['before'][key]['metadata']['uid']
+        if live['metadata']['uid']!=uid or target['metadata']['uid']!=uid or semantic(live)!=semantic(target):fail()
+        result[key]={'uid':uid,'semantic_sha256':canonical(semantic(live))}
+    if len({row['uid'] for row in result.values()})!=46:fail()
+    return result
+
+
+def media_restart_workloads(base,observed):
+    state=media_restart_failed(base);expected=state['context']['snapshots']
+    if set(observed)!=set(expected) or len(observed)!=22:fail()
+    for name,row in observed.items():
+        if (row['metadata']['uid']!=expected[name]['metadata']['uid'] or row['spec'].get('replicas')!=0
+            or row['spec']['template']!=expected[name]['spec']['template']):fail()
+    return {name:{'uid':row['metadata']['uid'],'template_sha256':canonical(row['spec']['template'])} for name,row in observed.items()}
+
+
 def media_target_failed(base):
     """The failed original-image attempt remains immutable, not a retry token."""
     raw=private_bytes(Path(base)/(MEDIA_TARGET_PREFIX+'-blocked.json'))
@@ -1107,6 +1215,10 @@ def media_abort_terminal(snapshot,receipt):
             state['operator_media_abort'].update(schema=MEDIA_RECONCILED_REFERENCE,
                 blocked_sha256=MEDIA_FAILED_APPLY[MEDIA_RECONCILED_PREFIX+'-blocked.json']['sha256'],
                 progress_sha256=MEDIA_FAILED_APPLY[MEDIA_TARGET_PREFIX+'-progress.json']['sha256'])
+        if receipt.get('schema')==MEDIA_GATEWAY_SCHEMA:
+            state['operator_media_abort'].update(schema=MEDIA_GATEWAY_REFERENCE,
+                blocked_sha256=MEDIA_FAILED_RESTART[MEDIA_GATEWAY_PREFIX+'-blocked.json']['sha256'],
+                progress_sha256=MEDIA_FAILED_RESTART[MEDIA_RECONCILED_PREFIX+'-progress.json']['sha256'])
     state['events']=snapshot['events']+[{'kind':'operator_media_abort_completed',
         'deployment_pass':False,'rollback_eligible':False,'forward_migrations_retained':True}]
     return state
@@ -1116,16 +1228,17 @@ def verify_media_abort_terminal(base,state):
     """Exact operator abort, not successful deployment or generic rollback authority."""
     base=Path(base);reference=state.get('operator_media_abort',{}).get('schema')
     reconciled=reference==MEDIA_RECONCILED_REFERENCE
-    target_baseline=reconciled or reference=='voice-media-target-baseline-reference-v1'
-    prefix=MEDIA_RECONCILED_PREFIX if reconciled else MEDIA_TARGET_PREFIX if target_baseline else MEDIA_ABORT_PREFIX
+    gateway=reference==MEDIA_GATEWAY_REFERENCE
+    target_baseline=gateway or reconciled or reference=='voice-media-target-baseline-reference-v1'
+    prefix=MEDIA_GATEWAY_PREFIX if gateway else MEDIA_RECONCILED_PREFIX if reconciled else MEDIA_TARGET_PREFIX if target_baseline else MEDIA_ABORT_PREFIX
     if base!=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION):fail()
     snapshot=media_abort_snapshot(private_bytes(base/(MEDIA_ABORT_PREFIX+'-snapshot.json')))
-    blocked=media_failed_apply(base) if reconciled else media_target_failed(base) if target_baseline else snapshot
+    blocked=media_restart_failed(base) if gateway else media_failed_apply(base) if reconciled else media_target_failed(base) if target_baseline else snapshot
     receipt=document(base/(prefix+'-receipt.json'))
     if (set(receipt)!={'schema','operation','waiver','snapshot_sha256','compatibility_sha256',
         'deployment_pass','rollback_eligible','configuration_basis','migration_jobs_sha256',
         'active_contract_sha256','setup','released_marker','retained_files','journal'}
-        or receipt.get('schema')!=(MEDIA_RECONCILED_SCHEMA if reconciled else 'voice-media-target-baseline-closure-v1' if target_baseline else 'voice-media-original-restore-closure-v1')
+        or receipt.get('schema')!=(MEDIA_GATEWAY_SCHEMA if gateway else MEDIA_RECONCILED_SCHEMA if reconciled else 'voice-media-target-baseline-closure-v1' if target_baseline else 'voice-media-original-restore-closure-v1')
         or receipt.get('operation')!=MEDIA_ABORT_OPERATION or receipt.get('waiver')!=WAIVER
         or receipt.get('snapshot_sha256')!=MEDIA_ABORT_CHECKPOINT
         or receipt.get('compatibility_sha256')!=MEDIA_ABORT_COMPATIBILITY
@@ -1145,6 +1258,10 @@ def verify_media_abort_terminal(base,state):
         if reconciled:
             if (prepared.get('failed_apply')!=MEDIA_FAILED_APPLY
                 or prepared.get('reconciliation')!=media_failed_reconciliation(base,prepared.get('before',{}))
+                or prepared.get('outside_owned')!=media_failed_admin(base)):fail()
+        if gateway:
+            if (prepared.get('failed_restart')!=media_restart_pins()
+                or prepared.get('reconciliation')!=media_restart_reconciliation(base,prepared.get('before',{}))
                 or prepared.get('outside_owned')!=media_failed_admin(base)):fail()
         if (blocked.get('migrations')!=snapshot.get('migrations') or blocked.get('migration_jobs')!=snapshot.get('migration_jobs')
             or blocked.get('active_contract')!=snapshot.get('active_contract')
@@ -1166,6 +1283,7 @@ def verify_media_abort_terminal(base,state):
         required|={prefix+'-blocked.json',MEDIA_ABORT_PREFIX+'-progress.json',MEDIA_ABORT_PREFIX+'-snapshot.json',
             prefix+'-source-authority.json',prefix+'-compiled.json',prefix+'-normalized.json',prefix+'-parameters.json',prefix+'-prepared.json'}
     if reconciled:required|=set(MEDIA_FAILED_APPLY)
+    if gateway:required|=set(media_restart_pins())
     files=receipt.get('retained_files',{})
     if set(files)!=required:fail()
     for name,pin in files.items():
@@ -1176,7 +1294,7 @@ def verify_media_abort_terminal(base,state):
     if files[prefix+'-compatibility.md']['sha256']!=MEDIA_ABORT_COMPATIBILITY:fail()
     if canonical(document(base/(prefix+'-active-contract.json')))!=MEDIA_ABORT_ACTIVE:fail()
     proof=document(base/(prefix+'-verified.json'))
-    if reconciled and proof.get('outside_owned')!=media_failed_admin(base):fail()
+    if (reconciled or gateway) and proof.get('outside_owned')!=media_failed_admin(base):fail()
     if target_baseline and proof.get('resources')!=media_target_resources(normalized):fail()
     if (proof.get('setup')!=expected or proof.get('storage')!=precut_retained_setup(snapshot)
         or proof.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
