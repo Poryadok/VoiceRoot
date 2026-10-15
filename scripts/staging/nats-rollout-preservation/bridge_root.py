@@ -533,6 +533,8 @@ class Actions:
                 'source_sha256':preserved_upload.digest(source)})
             return slot,state,cipher
         except Exception as error:
+            import deployment_report
+            deployment_report.capture_failure(error)
             state['status']='BLOCKED';state['error']=transaction.safe_error(error)
             try:
                 state['fence_status']='VERIFIED' if stage.refence().get('verified') else 'UNKNOWN'

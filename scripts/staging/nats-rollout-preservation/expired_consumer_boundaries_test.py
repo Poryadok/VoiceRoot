@@ -447,7 +447,8 @@ class RealStageFinishProducerTests(unittest.TestCase):
                     received=bridge_client.submit(request,installed,timeout=1)
                     client_tree=ast.parse(Path(bridge_client.__file__).read_text())
                     main=next(row for row in client_tree.body if isinstance(row,ast.If))
-                    output_if=next(row for row in main.body[0].body if isinstance(row,ast.If))
+                    output_if=next(row for row in main.body[0].body if isinstance(row,ast.If)
+                        and ast.unparse(row.test)=="os.environ.get('GITHUB_OUTPUT')")
                     output=Path(folder)/'github-output'
                     with patch.dict(os.environ,{'GITHUB_OUTPUT':str(output)}):
                         exec(compile(ast.Module(body=[output_if],type_ignores=[]),'<actual-client-output>','exec'),{'os':os,'result':received})
