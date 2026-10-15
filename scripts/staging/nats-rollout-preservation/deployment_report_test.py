@@ -9,6 +9,20 @@ import sys
 
 
 class ReportTests(unittest.TestCase):
+    def test_collect_cli_selects_read_only_collection_without_submit(self):
+        import ast
+        import os
+        import bridge_client
+        from unittest.mock import Mock,patch
+        tree=ast.parse(Path(bridge_client.__file__).read_text())
+        main=next(node for node in tree.body if isinstance(node,ast.If) and ast.unparse(node.test)=="__name__ == '__main__'")
+        collect=next(node for node in main.body[0].body if isinstance(node,ast.If) and ast.unparse(node.test)=="sys.argv[1:] == ['collect-reports']")
+        collector=Mock();submit=Mock(side_effect=AssertionError('collection submitted mutation'))
+        with patch.object(sys,'argv',['bridge_client.py','collect-reports']),self.assertRaises(SystemExit) as stopped:
+            exec(compile(ast.Module(body=[collect],type_ignores=[]),'<actual-collect-cli>','exec'),{'sys':sys,'os':os,'collect_all':collector,'submit':submit})
+        self.assertEqual(stopped.exception.code,0)
+        collector.assert_called_once_with(os.environ);submit.assert_not_called()
+
     def test_historical_export_keeps_private_evidence_bytes_and_unknown_cause(self):
         import contextlib
         import root_main
