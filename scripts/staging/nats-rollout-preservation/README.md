@@ -84,6 +84,18 @@ The failed restart was refenced successfully. Preserve its checkpoint, progress,
 private failure captures and all earlier evidence; the existing reconciliation
 runner cannot be replayed against that new boundary.
 
+The fixed `operator-media-target-gateway` successor separately retains the exact
+successfully refenced restart checkpoint, prior prepared/normalized/source and
+progress bytes, original runner and both Gateway failure logs. Its canonical
+verifier retains the earlier failure chain, requires all 46 resources to match
+the previous target while fenced (21 Deployment targets, 19 Services and six
+NetworkPolicies), and checks all 22 workloads including the independently
+retained Hub. UID drift, an old/target mixture or a residual User bootstrap
+override blocks admission. A fresh accepted source capture and exclusive build
+directory bind the corrected Gateway configuration; the old authority is never
+reused. Its distinct terminal schema retains the same full readiness, signed
+actor, storage, resource and migration checks and does not claim deployment PASS.
+
 ### Explicit reset after retained records expire
 
 The native `/msgs/` boundary includes `index.db`. A retention expiry can change
