@@ -62,12 +62,18 @@ func main() {
 	defer func() { _ = conn.Close() }()
 	client := storyv1.NewStoryServiceClient(conn)
 	account, author := uuid.New(), uuid.New()
+	privacy, closePrivacy, e := startPrivacyFixture(author)
+	if e != nil {
+		stop("privacy_fixture_listen", e)
+	}
+	defer closePrivacy()
 	rpcctx := metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-user-id", account.String(), "x-voice-profile-id", author.String()))
 	text := "stories live"
 	response, e := client.CreateStory(rpcctx, &storyv1.CreateStoryRequest{Type: "text", TextContent: &text, Visibility: "friends"})
 	if e != nil {
 		stop("create_story", e)
 	}
+	check(privacy.calls.Load() > 0, "privacy_rpc_observed")
 	story := response.GetStory()
 	id, e := uuid.Parse(story.GetId())
 	if e != nil {

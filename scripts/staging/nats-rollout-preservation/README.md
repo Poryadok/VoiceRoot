@@ -1105,3 +1105,33 @@ and safe monitor diagnostics without altering historical checkpoints. Independen
 terminal readback and live Admin preservation remain mandatory before and after
 helper installation; this closure still does not mean ordinary FULL or product
 acceptance passed.
+
+The subsequent ordinary FULL request `8d65ee47ce1b` failed before fencing: its
+isolated Story writer called the real `CreateStory` RPC without a User privacy
+provider and received `Unavailable`. HTTP health did not prove writer readiness.
+The disposable probe now supplies `GetPrivacySettings` only for its generated
+author and the `story` caller on loopback port 9091; the fixture sets
+`USER_GRPC_ADDR` to that endpoint. The production Story privacy check remains
+fail-closed. A successful writer must observe that RPC, preserve SQL/schema
+assertions, and pass the independent wrong-count negative control (exit 17).
+Rebuild `story-current4-probe` when changing this fixture; replacing Python alone
+does not activate the dependency. Safe fixed writer failure labels and the
+original command action are captured before Docker cleanup.
+
+After reviewing the new bundle, `installer.py --upgrade-idle-story-fixture-v1`
+accepts only installed binding `7f5b901d8429f2d560bb7f71481baabfd90ad2303cfd1b06c8569d94ff87920b`.
+It requires the successful monitor checkpoint `bfa1426b` / receipt `f951ce87`
+and the exact failed pre-fence request, source tree/custody, journal, response and
+public report bytes. The request is classified `ABANDONED_PRECHECKPOINT` with
+`BLOCKED` status; its STARTED journal and all retained evidence remain unchanged.
+Any operation/build directory, changed source, request or terminal evidence
+refuses admission. This upgrade authorizes no rollback or replay and makes no
+ordinary FULL acceptance claim. Root must submit a fresh ordinary request and
+complete deployment and product acceptance after installation.
+
+Before swapping helpers, validate every installed journal together. The exact
+Story disposition is excluded from the legacy abandonment census only after its
+strict retained-evidence verifier succeeds; the legacy 29-entry receipt stays
+byte-identical. An isolated new-request test misses this interaction: regression
+coverage must include both inventories, corrupt Story evidence and an unknown
+STARTED nonce, plus the complete installer admission path.
