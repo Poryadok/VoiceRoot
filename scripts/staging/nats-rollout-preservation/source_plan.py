@@ -72,6 +72,8 @@ class _Source:
 
     def secret(self, row, name, keys, predicates=None, secret_type=None):
         desired = {'required_keys': sorted(keys)}
+        if name == 'voice-media-jvm-trust' and 'truststore.p12' in keys:
+            desired['binary_keys'] = ['truststore.p12']
         if predicates:
             desired['predicates'] = predicates
         if secret_type:
@@ -81,6 +83,8 @@ class _Source:
         for existing in self.rows[row]['objects']:
             if existing['kind'] == 'Secret' and existing['name'] == name:
                 existing['desired']['required_keys'] = sorted(set(existing['desired']['required_keys']) | set(keys))
+                if 'binary_keys' in desired:
+                    existing['desired']['binary_keys'] = desired['binary_keys']
                 existing['desired'].setdefault('predicates', {}).update(predicates or {})
                 return live
         self.rows[row]['objects'].append({'kind': 'Secret', 'name': name, 'namespace': NS, 'desired': desired})
