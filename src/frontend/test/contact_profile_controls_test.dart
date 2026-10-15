@@ -45,6 +45,179 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   for (final locale in [const Locale('en'), const Locale('ru')]) {
+    for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+      testWidgets('visible profile dismissal is localized and keyboard accessible '
+          'in ${locale.languageCode} at ${size.width}', (tester) async {
+        final semantics = tester.ensureSemantics();
+        final client = MockClient(
+          (request) async => throw StateError('Unexpected $request'),
+        );
+        final container = _container(client);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        try {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          await tester.binding.setSurfaceSize(size);
+          await tester.pumpWidget(
+            _app(container, locale: locale, plainModal: true),
+          );
+          final triggerFocus = Focus.of(tester.element(find.text('Open profile')));
+          triggerFocus.requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await tester.pumpAndSettle();
+          final dismiss = find.byKey(const Key('profile_dismiss'));
+          expect(dismiss, findsOneWidget);
+          final narrow = size.width < 600;
+          expect(
+            narrow ? find.byType(BackButton) : find.byType(CloseButton),
+            findsOneWidget,
+          );
+          final material = MaterialLocalizations.of(tester.element(dismiss));
+          final label = narrow
+              ? material.backButtonTooltip
+              : material.closeButtonTooltip;
+          expect(tester.getSemantics(dismiss).label, contains(label));
+          expect(tester.getSemantics(dismiss).flagsCollection.isButton, isTrue);
+          final rect = tester.getRect(dismiss);
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(size.width));
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await tester.pumpAndSettle();
+          expect(find.byKey(ProfileDetailSheet.sheetKey), findsNothing);
+          expect(triggerFocus.hasFocus, isTrue);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        } finally {
+          semantics.dispose();
+          container.dispose();
+          client.close();
+        }
+      });
+    }
+  }
+
+  for (final state in ['loading', 'error', 'unavailable']) {
+    testWidgets('profile $state keeps a visible dismissal control in H/V', (
+      tester,
+    ) async {
+      final theme = await _captureTheme(tester);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+        final pending = Completer<http.Response>();
+        final methods = <String>[];
+        final client = MockClient((request) async {
+          methods.add(request.method);
+          expect(request.url.path, '/api/v1/users/profiles/p-target');
+          expect(request.headers['authorization'], 'Bearer test-access');
+          if (state == 'loading') return pending.future;
+          return _json(
+            {'code': state == 'error' ? 13 : 5, 'message': 'private-diagnostic'},
+            status: state == 'error' ? 500 : 404,
+          );
+        });
+        final container = _container(client, realProfile: true);
+        try {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          await tester.binding.setSurfaceSize(size);
+          await tester.pumpWidget(
+            _app(container, theme: theme, plainModal: true),
+          );
+          await tester.tap(find.byKey(const Key('open_contact_profile')));
+          if (state == 'loading') {
+            await tester.pump(const Duration(milliseconds: 350));
+          } else {
+            await tester.pumpAndSettle();
+          }
+          final dismiss = find.byKey(const Key('profile_dismiss'));
+          expect(dismiss.hitTestable(), findsOneWidget);
+          expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
+          expect(find.textContaining('private-diagnostic'), findsNothing);
+          final orientation = size.width > size.height ? 'h' : 'v';
+          await _capture(tester, 'contact-dismiss-$state-$orientation.png');
+          await tester.tap(dismiss);
+          await tester.pumpAndSettle();
+          expect(find.byKey(ProfileDetailSheet.sheetKey), findsNothing);
+          expect(methods, ['GET']);
+          expect(tester.takeException(), isNull);
+          if (!pending.isCompleted) {
+            pending.complete(_json({'profile': {}}));
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        } finally {
+          if (!pending.isCompleted) {
+            pending.complete(_json({'profile': {}}));
+          }
+          container.dispose();
+          client.close();
+        }
+      }
+    });
+  }
+
+  for (final plainModal in [true, false]) {
+    testWidgets('long profile content preserves dismissal in '
+        '${plainModal ? 'plain' : 'shared'} modal', (tester) async {
+      final client = MockClient(
+        (request) async => throw StateError('Unexpected $request'),
+      );
+      final container = _container(
+        client,
+        overrides: [
+          profileProvider.overrideWith(
+            (ref, id) async => VoiceProfile(
+              id: 'p-target',
+              accountId: 'a-target',
+              username: 'alex',
+              discriminator: '0001',
+              displayName: 'Alex',
+              bio: List.filled(40, 'About Alex. ').join(),
+            ),
+          ),
+        ],
+      );
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        tester.view.physicalSize = const Size(390, 400);
+        tester.view.devicePixelRatio = 1;
+        await tester.binding.setSurfaceSize(const Size(390, 400));
+        await tester.pumpWidget(_app(container, plainModal: plainModal));
+        await tester.tap(find.byKey(const Key('open_contact_profile')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.byKey(ProfileDetailSheet.blockKey));
+        await tester.pumpAndSettle();
+        final dismiss = find.byKey(const Key('profile_dismiss'));
+        if (!plainModal) {
+          await tester.ensureVisible(dismiss);
+          await tester.pumpAndSettle();
+        }
+        expect(dismiss.hitTestable(), findsOneWidget);
+        await tester.tap(dismiss);
+        await tester.pumpAndSettle();
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  for (final locale in [const Locale('en'), const Locale('ru')]) {
     testWidgets(
       'no-story avatar semantics, keyboard and Close focus in ${locale.languageCode}',
       (tester) async {
@@ -978,7 +1151,12 @@ const _profile = VoiceProfile(
   isPrimary: true,
 );
 
-Widget _app(ProviderContainer container, {ThemeData? theme, Locale? locale}) =>
+Widget _app(
+  ProviderContainer container, {
+  ThemeData? theme,
+  Locale? locale,
+  bool plainModal = false,
+}) =>
     RepaintBoundary(
       key: const Key('contact_profile_capture_root'),
       child: UncontrolledProviderScope(
@@ -993,10 +1171,18 @@ Widget _app(ProviderContainer container, {ThemeData? theme, Locale? locale}) =>
             builder: (context) => Scaffold(
               body: TextButton(
                 key: const Key('open_contact_profile'),
-                onPressed: () => showVoiceBottomSheet<void>(
-                  context: context,
-                  child: const ProfileDetailSheet(profileId: 'p-target'),
-                ),
+                onPressed: () {
+                  const sheet = ProfileDetailSheet(profileId: 'p-target');
+                  if (plainModal) {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => sheet,
+                    );
+                  } else {
+                    showVoiceBottomSheet<void>(context: context, child: sheet);
+                  }
+                },
                 child: const Text('Open profile'),
               ),
             ),

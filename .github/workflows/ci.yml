@@ -430,7 +430,8 @@ jobs:
         if: >-
           github.event_name == 'pull_request' &&
           (github.head_ref == 'codex/contact-profile-controls' ||
-           github.head_ref == 'codex/contact-profile-banner')
+           github.head_ref == 'codex/contact-profile-banner' ||
+           github.head_ref == 'codex/contact-profile-close-controls')
         timeout-minutes: 5
         working-directory: src/frontend
         env:
@@ -440,7 +441,8 @@ jobs:
         if: >-
           always() && github.event_name == 'pull_request' &&
           (github.head_ref == 'codex/contact-profile-controls' ||
-           github.head_ref == 'codex/contact-profile-banner')
+           github.head_ref == 'codex/contact-profile-banner' ||
+           github.head_ref == 'codex/contact-profile-close-controls')
         uses: actions/upload-artifact@v6
         with:
           name: contact-profile-hv-${{ github.run_id }}
@@ -455,6 +457,12 @@ jobs:
             ${{ runner.temp }}/contact-profile-capture/contact-banner-absent-v.png
             ${{ runner.temp }}/contact-profile-capture/contact-banner-failed-h.png
             ${{ runner.temp }}/contact-profile-capture/contact-banner-failed-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-loading-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-loading-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-error-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-error-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-unavailable-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-unavailable-v.png
           if-no-files-found: error
           retention-days: 7
       - name: Retain incoming overlay golden diffs on failure

@@ -183,281 +183,289 @@ class ProfileDetailSheet extends ConsumerWidget {
       child: Padding(
         key: sheetKey,
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        child: profileAsync.when(
-          loading: () => const VoiceListSkeleton(rowCount: 3),
-          error: (e, st) {
-            if (e is ProfileUnavailableException) {
-              return VoiceStatePanel(
-                title: l10n.socialProfileUnavailable,
-                icon: Icons.person_off_outlined,
-              );
-            }
-            return VoiceStatePanel(
-              title: l10n.socialProfileLoadError,
-              message: socialProfileErrorMessage(l10n, e),
-              icon: Icons.person_off_outlined,
-              actionLabel: l10n.commonRetry,
-              onAction: () => ref.invalidate(profileProvider(profileId)),
-            );
-          },
-          data: (profile) {
-            if (profile == null) {
-              return VoiceStatePanel(
-                title: l10n.socialProfileUnavailable,
-                icon: Icons.person_off_outlined,
-              );
-            }
-            final bannerUrl = profile.bannerUrl;
-            final hasBanner = bannerUrl != null && bannerUrl.isNotEmpty;
-            final avatar = Semantics(
-              key: avatarKey,
-              label: hasActiveStory ? null : l10n.profileOpenAvatar,
-              button: hasActiveStory ? null : true,
-              child: StoryRingAvatar(
-                displayName: profile.displayName,
-                imageUrl: profile.avatarUrl,
-                hasActiveStory: hasActiveStory,
-                size: hasBanner
-                    ? context.voiceMetrics.layoutSize('avatarLg', fallback: 80)
-                    : 56,
-                onTap: hasActiveStory
-                    ? () {
-                        final stories = profileStoriesAsync.valueOrNull;
-                        if (stories == null || stories.isEmpty) {
-                          return;
-                        }
-                        Navigator.of(context).pop();
-                        StoriesRoutes.openViewer(
-                          context,
-                          storyIds: stories.map((s) => s.id).toList(),
-                          profileId: profileId,
-                        );
-                      }
-                    : () => Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => ProfileAvatarViewer(
-                            profileId: profileId,
-                          ),
-                        ),
-                      ),
-              ),
-            );
-            return SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (bannerUrl != null && bannerUrl.isNotEmpty) ...[
-                    _ProfileBannerHeader(bannerUrl: bannerUrl, avatar: avatar),
-                    SizedBox(
-                      height: context.voiceMetrics.spacing('12', fallback: 12),
-                    ),
-                  ],
-                  Row(
-                    children: [
-                      if (!hasBanner) ...[
-                        avatar,
-                        const SizedBox(width: 16),
-                      ],
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ChatAuthorLabel(
-                              displayName: profile.displayName,
-                              verificationType: profile.verificationType,
-                              style: Theme.of(context).textTheme.titleLarge,
-                              verifiedBadgeSemanticLabel:
-                                  switch (profile.verificationType) {
-                                    'personal' => l10n.verifiedBadgePersonal,
-                                    'organization' =>
-                                      l10n.verifiedBadgeOrganization,
-                                    _ => null,
-                                  },
-                            ),
-                            Text(profile.handle),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                PresenceIndicator(
-                                  key: onlineIndicatorKey,
-                                  presence: presence,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _ProfileDismissControl(),
+            Flexible(
+              child: profileAsync.when(
+                loading: () => const VoiceListSkeleton(rowCount: 3),
+                error: (e, st) {
+                  if (e is ProfileUnavailableException) {
+                    return VoiceStatePanel(
+                      title: l10n.socialProfileUnavailable,
+                      icon: Icons.person_off_outlined,
+                    );
+                  }
+                  return VoiceStatePanel(
+                    title: l10n.socialProfileLoadError,
+                    message: socialProfileErrorMessage(l10n, e),
+                    icon: Icons.person_off_outlined,
+                    actionLabel: l10n.commonRetry,
+                    onAction: () => ref.invalidate(profileProvider(profileId)),
+                  );
+                },
+                data: (profile) {
+                  if (profile == null) {
+                    return VoiceStatePanel(
+                      title: l10n.socialProfileUnavailable,
+                      icon: Icons.person_off_outlined,
+                    );
+                  }
+                  final bannerUrl = profile.bannerUrl;
+                  final hasBanner = bannerUrl != null && bannerUrl.isNotEmpty;
+                  final avatar = Semantics(
+                    key: avatarKey,
+                    label: hasActiveStory ? null : l10n.profileOpenAvatar,
+                    button: hasActiveStory ? null : true,
+                    child: StoryRingAvatar(
+                      displayName: profile.displayName,
+                      imageUrl: profile.avatarUrl,
+                      hasActiveStory: hasActiveStory,
+                      size: hasBanner
+                          ? context.voiceMetrics.layoutSize('avatarLg', fallback: 80)
+                          : 56,
+                      onTap: hasActiveStory
+                          ? () {
+                              final stories = profileStoriesAsync.valueOrNull;
+                              if (stories == null || stories.isEmpty) {
+                                return;
+                              }
+                              Navigator.of(context).pop();
+                              StoriesRoutes.openViewer(
+                                context,
+                                storyIds: stories.map((s) => s.id).toList(),
+                                profileId: profileId,
+                              );
+                            }
+                          : () => Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) => ProfileAvatarViewer(
+                                  profileId: profileId,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(_presenceLabel(context, l10n, presence)),
-                              ],
-                            ),
-                            if (presence?.customStatus case final status?
-                                when status.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                status,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
                               ),
-                            ],
-                            mmRatingAsync.when(
-                              loading: () => const SizedBox.shrink(),
-                              error: (error, stackTrace) =>
-                                  const SizedBox.shrink(),
-                              data: (rating) {
-                                if (rating == null) {
-                                  return const SizedBox.shrink();
-                                }
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    l10n.profileMmRating(
-                                      rating.ratingValue.toStringAsFixed(1),
-                                    ),
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
-                                  ),
-                                );
-                              },
                             ),
+                    ),
+                  );
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (bannerUrl != null && bannerUrl.isNotEmpty) ...[
+                          _ProfileBannerHeader(bannerUrl: bannerUrl, avatar: avatar),
+                          SizedBox(
+                            height: context.voiceMetrics.spacing('12', fallback: 12),
+                          ),
+                        ],
+                        Row(
+                          children: [
+                            if (!hasBanner) ...[
+                              avatar,
+                              const SizedBox(width: 16),
+                            ],
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ChatAuthorLabel(
+                                    displayName: profile.displayName,
+                                    verificationType: profile.verificationType,
+                                    style: Theme.of(context).textTheme.titleLarge,
+                                    verifiedBadgeSemanticLabel:
+                                        switch (profile.verificationType) {
+                                          'personal' => l10n.verifiedBadgePersonal,
+                                          'organization' =>
+                                            l10n.verifiedBadgeOrganization,
+                                          _ => null,
+                                        },
+                                  ),
+                                  Text(profile.handle),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      PresenceIndicator(
+                                        key: onlineIndicatorKey,
+                                        presence: presence,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(_presenceLabel(context, l10n, presence)),
+                                    ],
+                                  ),
+                                  if (presence?.customStatus case final status?
+                                      when status.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      status,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                  mmRatingAsync.when(
+                                    loading: () => const SizedBox.shrink(),
+                                    error: (error, stackTrace) =>
+                                        const SizedBox.shrink(),
+                                    data: (rating) {
+                                      if (rating == null) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          l10n.profileMmRating(
+                                            rating.ratingValue.toStringAsFixed(1),
+                                          ),
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!isGuest && profile.username.isNotEmpty && !isSelf)
+                              VoiceShareLinkButton(
+                                link: profileShareUrl(profile.username),
+                                tooltip: l10n.shareLinkAction,
+                              ),
                           ],
                         ),
-                      ),
-                      if (!isGuest && profile.username.isNotEmpty && !isSelf)
-                        VoiceShareLinkButton(
-                          link: profileShareUrl(profile.username),
-                          tooltip: l10n.shareLinkAction,
-                        ),
-                    ],
-                  ),
-                  if (showNotInContactsWarning) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      key: const Key('profile_not_in_contacts_warning'),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: Theme.of(context).colorScheme.onSurface,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(l10n.profileNotInContactsWarning),
+                        if (showNotInContactsWarning) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            key: const Key('profile_not_in_contacts_warning'),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(l10n.profileNotInContactsWarning),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                  if (profile.bio != null && profile.bio!.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(profile.bio!),
-                  ],
-                  HighlightsSection(profileId: profileId),
-                  mmProfileAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (error, stackTrace) => const SizedBox.shrink(),
-                    data: (mmProfile) {
-                      if (mmProfile.entries.isEmpty) {
-                        return const SizedBox.shrink();
-                      }
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+                        if (profile.bio != null && profile.bio!.isNotEmpty) ...[
                           const SizedBox(height: 16),
-                          Text(
-                            l10n.playerProfileSection,
-                            style: Theme.of(context).textTheme.titleSmall,
+                          Text(profile.bio!),
+                        ],
+                        HighlightsSection(profileId: profileId),
+                        mmProfileAsync.when(
+                          loading: () => const SizedBox.shrink(),
+                          error: (error, stackTrace) => const SizedBox.shrink(),
+                          data: (mmProfile) {
+                            if (mmProfile.entries.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: 16),
+                                Text(
+                                  l10n.playerProfileSection,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 8),
+                                for (final entry in mmProfile.entries)
+                                  Text(
+                                    _mmEntryLabel(catalogAsync, entry),
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                        if (!isGuest && !isSelf)
+                          _ProfileCommonSpaces(profileId: profileId),
+                        if (!isSelf) ...[
+                          const SizedBox(height: 20),
+                          if (isGuest)
+                            OutlinedButton(
+                              key: ProfileDetailSheet.messageKey,
+                              onPressed: null,
+                              child: Text(l10n.profileMessage),
+                            )
+                          else if (dmPermission != null)
+                            dmPermission.when(
+                              loading: () => const SizedBox.shrink(),
+                              error: (error, stackTrace) => VoiceStatePanel(
+                                title: l10n.chatListLoadError,
+                                icon: Icons.cloud_off_outlined,
+                                actionLabel: l10n.commonRetry,
+                                onAction: () => ref.invalidate(
+                                  dmPermissionProvider(dmPermissionRequest!),
+                                ),
+                              ),
+                              data: (allowed) => allowed
+                                  ? OutlinedButton(
+                                      key: ProfileDetailSheet.messageKey,
+                                      onPressed: () =>
+                                          _openDm(context, ref, profileId),
+                                      child: Text(l10n.profileMessage),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          const SizedBox(height: 8),
+                          _ProfileCallAction(
+                            key: ValueKey((profileId, session, isProfileSwitching)),
+                            profileId: profileId,
                           ),
                           const SizedBox(height: 8),
-                          for (final entry in mmProfile.entries)
-                            Text(
-                              _mmEntryLabel(catalogAsync, entry),
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                  if (!isGuest && !isSelf)
-                    _ProfileCommonSpaces(profileId: profileId),
-                  if (!isSelf) ...[
-                    const SizedBox(height: 20),
-                    if (isGuest)
-                      OutlinedButton(
-                        key: ProfileDetailSheet.messageKey,
-                        onPressed: null,
-                        child: Text(l10n.profileMessage),
-                      )
-                    else if (dmPermission != null)
-                      dmPermission.when(
-                        loading: () => const SizedBox.shrink(),
-                        error: (error, stackTrace) => VoiceStatePanel(
-                          title: l10n.chatListLoadError,
-                          icon: Icons.cloud_off_outlined,
-                          actionLabel: l10n.commonRetry,
-                          onAction: () => ref.invalidate(
-                            dmPermissionProvider(dmPermissionRequest!),
+                          _FriendActionButton(
+                            profileId: profileId,
+                            pendingOutgoing: pendingOutgoing,
+                            pendingIncoming: pendingIncoming,
+                            isFriend: isFriend,
+                            isGuest: isGuest,
                           ),
-                        ),
-                        data: (allowed) => allowed
-                            ? OutlinedButton(
-                                key: ProfileDetailSheet.messageKey,
-                                onPressed: () =>
-                                    _openDm(context, ref, profileId),
-                                child: Text(l10n.profileMessage),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    const SizedBox(height: 8),
-                    _ProfileCallAction(
-                      key: ValueKey((profileId, session, isProfileSwitching)),
-                      profileId: profileId,
+                          if (isFriend) ...[
+                            const SizedBox(height: 8),
+                            _ProfileFavoriteAction(profileId: profileId),
+                          ],
+                          const SizedBox(height: 8),
+                          TextButton(
+                            key: ProfileDetailSheet.blockKey,
+                            onPressed: () => _confirmBlock(context, ref, profile),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Theme.of(context).colorScheme.error,
+                            ),
+                            child: Text(l10n.profileBlock),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            key: const Key('profile_report'),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              ReportSheet.show(
+                                context,
+                                target: ReportUserTarget(profileId: profileId),
+                              );
+                            },
+                            child: Text(l10n.reportAction),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    _FriendActionButton(
-                      profileId: profileId,
-                      pendingOutgoing: pendingOutgoing,
-                      pendingIncoming: pendingIncoming,
-                      isFriend: isFriend,
-                      isGuest: isGuest,
-                    ),
-                    if (isFriend) ...[
-                      const SizedBox(height: 8),
-                      _ProfileFavoriteAction(profileId: profileId),
-                    ],
-                    const SizedBox(height: 8),
-                    TextButton(
-                      key: ProfileDetailSheet.blockKey,
-                      onPressed: () => _confirmBlock(context, ref, profile),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                      child: Text(l10n.profileBlock),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      key: const Key('profile_report'),
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        ReportSheet.show(
-                          context,
-                          target: ReportUserTarget(profileId: profileId),
-                        );
-                      },
-                      child: Text(l10n.reportAction),
-                    ),
-                  ],
-                ],
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
@@ -547,6 +555,35 @@ class ProfileDetailSheet extends ConsumerWidget {
     final date = material.formatShortDate(local);
     final time = TimeOfDay.fromDateTime(local).format(context);
     return '$date $time';
+  }
+}
+
+class _ProfileDismissControl extends StatelessWidget {
+  const _ProfileDismissControl();
+
+  @override
+  Widget build(BuildContext context) {
+    final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    return SizedBox(
+      key: const Key('profile_header_controls'),
+      height: context.voiceMetrics.layoutSize('headerHeight', fallback: 56),
+      child: IconTheme(
+        data: IconThemeData(
+          size: context.voiceMetrics.layoutSize('iconMd', fallback: 20),
+        ),
+        child: Row(
+          mainAxisAlignment: narrow
+              ? MainAxisAlignment.start
+              : MainAxisAlignment.end,
+          children: [
+            if (narrow)
+              const BackButton(key: Key('profile_dismiss'))
+            else
+              const CloseButton(key: Key('profile_dismiss')),
+          ],
+        ),
+      ),
+    );
   }
 }
 
