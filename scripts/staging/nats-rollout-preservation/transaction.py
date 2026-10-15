@@ -28,7 +28,11 @@ from errors import safe_error
 from nats_migration import apply_contract
 import rollout_census
 
-def save(path,row):root_save(path,row,limit=128<<20)
+def save(path,row):
+    root_save(path,row,limit=128<<20)
+    if Path(path).name=='checkpoint.json':
+        import deployment_report
+        deployment_report.checkpoint(row)
 
 
 def rollback_services(previous,*,story_only=False):
@@ -250,6 +254,8 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
         state['kernel_sha256']=file_sha(base/'kernel')
     except Exception as error:
+        import deployment_report
+        deployment_report.capture_failure(error)
         from operator_retirement import record_readonly_failure
         failed=record_readonly_failure(base,state,error)
         save(base/'checkpoint.json',failed)
@@ -277,6 +283,8 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         state['context']=context(stage);save(base/'checkpoint.json',state)
         return state
     except Exception as error:
+        import deployment_report
+        deployment_report.capture_failure(error)
         state['context']=context(stage);state['status']='BLOCKED';state['fence_status']='UNKNOWN'
         state['error']=safe_error(error)
         try:
@@ -428,6 +436,8 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         save(Path(base)/'checkpoint.json',state)
         return receipt
     except Exception as error:
+        import deployment_report
+        deployment_report.capture_failure(error)
         state['status']='BLOCKED';state['fence_status']='UNKNOWN'
         state['error']=safe_error(error)
         try:
@@ -485,6 +495,8 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
         save(Path(base)/'checkpoint.json',state)
         return state
     except Exception as error:
+        import deployment_report
+        deployment_report.capture_failure(error)
         state['status']='BLOCKED';state['fence_status']='UNKNOWN'
         state['error']=safe_error(error)
         # refence itself rechecks exact marker ownership before every mutation.
@@ -571,6 +583,8 @@ def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
         save(Path(base)/'checkpoint.json',state)
         return state
     except Exception as error:
+        import deployment_report
+        deployment_report.capture_failure(error)
         state['status']='BLOCKED';state['fence_status']='UNKNOWN';state['error']=safe_error(error)
         try:
             if stage.refence().get('verified') is True:
@@ -643,6 +657,8 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
         save(Path(base)/'checkpoint.json',state)
         return state
     except Exception as error:
+        import deployment_report
+        deployment_report.capture_failure(error)
         state['status']='BLOCKED';state['fence_status']='UNKNOWN';state['error']=safe_error(error)
         try:
             if stage.refence().get('verified') is True:state['fence_status']='VERIFIED'

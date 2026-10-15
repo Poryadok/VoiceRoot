@@ -440,6 +440,7 @@ jobs:
               arguments=(['finish-expired-native',op,os.environ['ROLLOUT_CLAIM_RV'],os.environ['GITHUB_RUN_ID']]
                   if os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION') else ['finish',op,os.environ['ROLLOUT_CLAIM_RV']])
           elif action=='--bridge-status':arguments=['status',op]
+          elif action=='--bridge-collect':arguments=['collect-reports']
           elif bridge_action:raise SystemExit('NATS_ROLLOUT=ACTION_INVALID')
           else:arguments=[action]
           sys.argv=[str(code/entry),*arguments]
@@ -631,6 +632,25 @@ jobs:
           ROLLOUT_CLAIM_RV: ${{ steps.paused_apply.outputs.claim_rv }}
           ROLLOUT_ACTION: --bridge-status
         run: *protected_rollout_runner
+
+      - name: Collect durable deployment reports without replaying requests
+        id: deployment_diagnostics
+        if: always()
+        continue-on-error: true
+        env:
+          ROLLOUT_ACTION: --bridge-collect
+          ROLLOUT_CHANGED_JSON: '[]'
+        run: *protected_rollout_runner
+
+      - name: Upload safe deployment diagnostics
+        if: always() && steps.deployment_diagnostics.outputs.report_directory != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.deployment_diagnostics.outputs.report_directory }}/*.deployment-report.json
+          if-no-files-found: warn
+          retention-days: 30
 
   nats-search-jetstream-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true && inputs.validate_app_secret_only != true && inputs.mail_only != true
