@@ -41,10 +41,19 @@ void main() {
       expect(find.text(l10n.profileRemoveFriendConfirmTitle), findsOneWidget);
       expect(find.text(l10n.profileRemoveFriendConfirmMessage), findsOneWidget);
       expect(
-        find.bySemanticsLabel(l10n.socialRemoveFriend),
+        find.descendant(
+          of: find.byKey(_dialogKey),
+          matching: find.bySemanticsLabel(l10n.socialRemoveFriend),
+        ),
         findsOneWidget,
       );
-      expect(find.bySemanticsLabel(l10n.commonCancel), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(_dialogKey),
+          matching: find.bySemanticsLabel(l10n.commonCancel),
+        ),
+        findsOneWidget,
+      );
       expect(harness.removals, isEmpty);
 
       await tester.tap(find.byKey(_cancelKey));
@@ -237,7 +246,8 @@ class _RemovalHarness {
     Locale locale = const Locale('en'),
   }) async {
     final client = MockClient((request) async {
-      if (request.method == 'POST') {
+      if (request.method == 'POST' &&
+          request.url.path == '/api/v1/auth/switch-profile') {
         switchRequests++;
         return http.Response('{"message":"switch-unavailable"}', 503);
       }
