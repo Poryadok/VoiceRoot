@@ -1631,11 +1631,139 @@ def _verify_story_prefence_rejection(installed,path,row):
         'files':STORY_PREFENCE_FILES,'source':source,'checkpoint_sha256':STORY_PREFENCE_CHECKPOINT,
         'receipt_sha256':STORY_PREFENCE_RECEIPT}
 
+def terminal_finish_disposition(installed,path):
+    """Read-only admission of a failed finish superseded by the same completed finish.
+
+    A root-attested, closed file map preserves both transport outcomes. PASS alone
+    never admits a pending request, and this receipt grants no replay authority.
+    """
+    import bridge
+    installed=Path(installed);path=Path(path)
+    receipt_path=installed/('terminal-finish-disposition-'+path.stem+'.json')
+    try:receipt_path.lstat()
+    except FileNotFoundError:return None
+    try:return _terminal_finish_disposition(installed,path,receipt_path)
+    except (KeyError,IndexError,TypeError,ValueError,OSError,bridge.BridgeError):fail()
+
+
+def _terminal_finish_disposition(installed,path,receipt_path):
+    import bridge
+    receipt_raw=private_bytes(receipt_path,2<<20);receipt=json.loads(receipt_raw)
+    if set(receipt)!={'schema','operation','failed_nonce','completed_nonce','code_binding_sha256','files'}:fail()
+    if receipt['schema']!='voice-terminal-finish-disposition-v1':fail()
+    operation=receipt['operation'];failed=receipt['failed_nonce'];completed=receipt['completed_nonce']
+    if (not re.fullmatch('[a-f0-9]{12}',operation) or not re.fullmatch('[a-f0-9]{64}',completed)
+        or failed!=path.stem or failed==completed or path!=installed/'journal'/(failed+'.json')):fail()
+    base=guard.ROOT/('rollout-'+operation)
+    paths={'checkpoint':base/'checkpoint.json','authorization':base/'apply-authorization.json'}
+    for label,nonce in (('failed',failed),('completed',completed)):
+        paths[label+'_journal']=installed/'journal'/(nonce+'.json')
+        paths[label+'_response']=installed/'responses'/(nonce+'.json')
+        paths[label+'_report']=installed/'responses'/(nonce+'.report.json')
+    repair_names={'repair_before':base/'operator-service-rv-before.json','repair_receipt':base/'operator-service-rv-reconciliation.json'}
+    pins=receipt['files']
+    if set(pins) not in (set(paths),set(paths)|set(repair_names)):fail()
+    paths.update({k:v for k,v in repair_names.items() if k in pins})
+    raw={};values={}
+    for name,member in paths.items():
+        raw[name]=private_bytes(member,group_read=name=='authorization' or member.parent==installed/'responses')
+        if pins[name]!={'sha256':hashlib.sha256(raw[name]).hexdigest(),'bytes':len(raw[name])}:fail()
+        values[name]=json.loads(raw[name])
+    old=values['failed_journal'];new=values['completed_journal']
+    if (set(old)!={'schema','request','request_sha256','phase','prepare_error'} or old['phase']!='STARTED'
+        or old['prepare_error']!='guard_rejected' or set(new)!={'schema','request','request_sha256','phase','result'}
+        or new['phase']!='COMPLETE'):fail()
+    request=old['request']
+    for row,nonce in ((old,failed),(new,completed)):
+        bridge.validate(row['request'])
+        if (row['schema']!='voice-nats-bridge-request-v1' or row['request_sha256']!=canonical(row['request'])
+            or row['request']!={**request,'nonce':nonce}):fail()
+    if set(request)!={'action','nonce','operation','claim_rv','report_run_id','report_source_sha','run_attempt'} or request['action']!='finish' or request['operation']!=operation:fail()
+    state=values['checkpoint'];auth=values['authorization']
+    result={'operation':operation,'phase':'POST_RESTART','status':'PASS','fence_status':'RELEASED'}
+    if (state.get('schema')!='nats-rollout-root-v1' or any(state.get(k)!=v for k,v in result.items())
+        or state.get('error') is not None or new['result']!=result or values['completed_response']!=result
+        or values['failed_response']!={'status':'BLOCKED','error':'exception_Blocked'}):fail()
+    binding=root_cli.code_binding(base/'code')
+    if state['code_capture']!=binding or receipt['code_binding_sha256']!=canonical(binding):fail()
+    execution=state['execution_authority'];source=state['source_authority']
+    if (execution['dispatcher_run_id']!=request['report_run_id'] or execution['run_attempt']!=request['run_attempt']
+        or execution['head_sha']!=request['report_source_sha'] or source['source_sha']!=request['report_source_sha']
+        or source.get('verified') is not True or state['authorization']!=auth
+        or auth['schema']!='nats-rollout-preservation-v1' or auth['operation']!=operation or auth['target']!=state['target']):fail()
+    observed=[e['marker'] for e in state['events'] if e.get('kind')=='rollout_target_observed']
+    verified=[e['marker'] for e in state['events'] if e.get('kind')=='rollout_verified']
+    if not observed or not verified:fail()
+    for marker in observed:
+        if (marker['metadata']['uid']!=auth['marker']['uid'] or marker['metadata']['resourceVersion']!=request['claim_rv']
+            or marker['data'].get('phase')!='rollout-applying' or marker['data'].get('knownRolloutOperation')!=operation):fail()
+    for marker in verified:
+        if marker['metadata']['uid']!=auth['marker']['uid'] or marker['data'].get('phase')!='rollout-verified' or marker['data'].get('knownRolloutOperation')!=operation:fail()
+    released=state['context']['marker']
+    if (released['metadata']['uid']!=auth['marker']['uid'] or released['data'].get('phase')!='active'
+        or any(k in released['data'] for k in ('knownRolloutOperation','knownBaselineOperation'))
+        or any(released['data'].get(k)!=auth['marker'][k] for k in ('generation','previousGeneration','dataPVC'))):fail()
+    if not state.get('preservation') or not state.get('restart'):fail()
+    for label,nonce,status in (('failed',failed,'BLOCKED'),('completed',completed,'COMPLETE')):
+        report=values[label+'_report']
+        expected={'schema':'voice-deployment-report-v1','request_action':'finish','request_nonce':nonce,'request_status':status,
+            'operation':operation,'run_id':request['report_run_id'],'run_attempt':request['run_attempt'],
+            'source_sha':request['report_source_sha'],'helper_binding':canonical(binding)}
+        if any(report.get(k)!=v for k,v in expected.items()) or report['effects']['apply']!='RECORDED':fail()
+    if (values['completed_report']['operation_status']!='PASS' or values['completed_report']['stage']!='POST_RESTART'
+        or values['completed_report']['error_code']!='none'
+        or any(values['completed_report']['effects'].get(k)!=v for k,v in {'release':'RECORDED','preservation':'PRESENT','restart':'PRESENT','fence':'RELEASED'}.items())
+        or values['failed_report']['operation_status']!='WAITING' or values['failed_report']['stage']!='PAUSED_APPLY'
+        or values['failed_report']['effects'].get('fence')!='VERIFIED'):fail()
+    repairs=[e for e in state['events'] if e.get('kind')=='operator_preserved_service_rv_reconciled']
+    if bool(repairs)!=('repair_before' in pins) or len(repairs)>1:fail()
+    if repairs:_terminal_finish_service_repair(values,raw,repairs[0],request,receipt)
+    if private_bytes(receipt_path,2<<20)!=receipt_raw:fail()
+    return {'disposition':'SUPERSEDED_FAILED_FINISH','status':'BLOCKED','operation':operation,
+        'receipt_sha256':hashlib.sha256(receipt_raw).hexdigest(),'files':pins}
+
+
+def _terminal_finish_service_repair(values,raw,event,request,disposition):
+    before=values['repair_before'];repair=values['repair_receipt'];after=copy.deepcopy(before)
+    versions={'voice-auth':('3310867','3320022'),'voice-role':('3310882','3320032'),'voice-voice':('3310907','3320048')}
+    if (repair.get('schema')!='voice-exact-5e-service-rv-reconciliation-v1' or repair.get('operation')!=request['operation']
+        or request['operation']!='5e48553f3105' or before.get('operation')!=request['operation']
+        or repair.get('before_checkpoint_sha256')!=hashlib.sha256(raw['repair_before']).hexdigest()
+        or repair.get('authorization_sha256')!=hashlib.sha256(raw['authorization']).hexdigest()
+        or repair.get('code_binding_sha256')!=disposition['code_binding_sha256'] or repair.get('claim_rv')!=request['claim_rv']
+        or repair.get('workload_writes') is not False or repair.get('deployment_pass') is not False
+        or before.get('phase')!='PAUSED_APPLY' or before.get('status')!='WAITING'
+        or before.get('authorization')!=values['authorization'] or before.get('target')!=values['authorization']['target']
+        or before.get('code_capture')!=values['checkpoint']['code_capture']):fail()
+    wanted={'kind':'operator_preserved_service_rv_reconciled','before_checkpoint_sha256':repair['before_checkpoint_sha256'],
+        'authorization_sha256':repair['authorization_sha256'],'claim_rv':repair['claim_rv'],'changes':repair['changes'],
+        'reason':'FULL_APPLY_BOOKKEEPING_ONLY_FULL_SERVICE_SEMANTICS_UNCHANGED'}
+    if event!=wanted or not repair['changes']:fail()
+    seen=set()
+    for change in repair['changes']:
+        if set(change)!={'index','name','uid','before_rv','after_rv','semantic_sha256'} or type(change['index']) is not int or change['index'] in seen:fail()
+        seen.add(change['index']);obj=after['nonnats_binding']['objects'][change['index']]
+        if (change['index']<0 or obj['kind']!='Service' or obj['disposition']!='preserve' or obj['name']!=change['name']
+            or versions.get(change['name'])!=(change['before_rv'],change['after_rv'])
+            or obj['uid']!=change['uid'] or obj['resourceVersion']!=change['before_rv']
+            or canonical(obj['desired'])!=change['semantic_sha256'] or not re.fullmatch('[0-9]{1,20}',change['after_rv'])):fail()
+        obj['resourceVersion']=change['after_rv']
+    required={i for i,obj in enumerate(before['nonnats_binding']['objects']) if obj['kind']=='Service' and obj['name'] in versions}
+    if seen!=required or {change['name'] for change in repair['changes']}!=set(versions):fail()
+    after['events'].append(event)
+    deterministic=json.dumps(after,sort_keys=True,indent=2).encode()+b'\n'
+    if hashlib.sha256(deterministic).hexdigest()!=repair['after_checkpoint_sha256']:fail()
+    if after['nonnats_binding']!=values['checkpoint']['nonnats_binding'] or after['nonnats']!=values['checkpoint']['nonnats']:fail()
+    if values['checkpoint']['events'][:len(after['events'])]!=after['events']:fail()
+
+
 def pending_request_accepted(installed,path,closure):
     installed=Path(installed);path=Path(path)
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
     row=document(path)
     if row.get('phase')=='COMPLETE':return
+    terminal=terminal_finish_disposition(installed,path)
+    if terminal is not None:return terminal
     request=row.get('request',{})
     if request.get('operation')==MEDIA_ABORT_OPERATION:
         base=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION)
@@ -1801,6 +1929,7 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
+        if terminal_finish_disposition(installed,path) is not None:continue
         if path.name==STORY_PREFENCE_NONCE+'.json':
             _verify_story_prefence_rejection(installed,path,row)
             continue

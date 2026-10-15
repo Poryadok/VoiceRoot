@@ -1144,3 +1144,19 @@ After full apply, preserved Services may have new resource versions from kubectl
 bookkeeping. Finish still requires their original UID and complete desired
 semantics, including labels, annotations, selectors and ports. Pre-apply version
 checks and Secret preservation remain strict; this is not a general version waiver.
+
+A failed finish request can remain STARTED after a separate finish completes the
+same operation. Do not rewrite its journal, response or public report to make an
+idle helper upgrade pass. Root may retain a private immutable
+`terminal-finish-disposition-<failed-nonce>.json` with schema
+`voice-terminal-finish-disposition-v1`. Its closed file map pins both finish
+journals/responses/reports, terminal checkpoint and apply authorization; it binds
+the operation and captured helper. Admission requires the same source, dispatcher
+run, attempt and apply claim, a successful completion and released terminal marker.
+The failed request remains BLOCKED. This grants no replay or new deployment authority.
+Any retained Service RV reconciliation must include its original checkpoint and
+receipt and reproduce the exact recorded metadata-only change. Both the legacy
+pending census and per-journal admission verify this disposition, and the existing
+idle upgrade transaction rechecks it after the code swap. Use that internal
+transaction with reviewed exact predecessor/destination bindings and fresh immutable
+receipt names; no new public upgrade command or failed-nonce exception is needed.
