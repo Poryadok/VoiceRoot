@@ -72,6 +72,18 @@ missing-prefix aliases and reordered events. That admission refusal created only
 the byte-identical retained checkpoint and original-runner copies; these files
 are preserved and accepted only when `retain()` confirms exact existing bytes.
 
+The subsequent target restart reached readiness for 21 workloads, but Gateway
+refused startup because its staging manifest omitted
+`GATEWAY_SESSION_EPOCH_STRICT=true`. Compose's wiring test already required this
+flag; it did not cover the staging rendered target. Canonical staging compilation
+now requires the explicit strict value, existing Redis ConfigMap reference and
+Gateway signer Secret references/mount before planning application changes.
+This static check does not prove runtime readiness or authenticated product flows;
+acceptance still needs fresh Auth tokens carrying the required session epoch.
+The failed restart was refenced successfully. Preserve its checkpoint, progress,
+private failure captures and all earlier evidence; the existing reconciliation
+runner cannot be replayed against that new boundary.
+
 ### Explicit reset after retained records expire
 
 The native `/msgs/` boundary includes `index.db`. A retention expiry can change
