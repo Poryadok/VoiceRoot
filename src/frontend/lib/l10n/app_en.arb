@@ -1246,6 +1246,8 @@
   "versionRestartToUpdate": "Restart and update",
   "profileBlock": "Block user",
   "profileBlockConfirmTitle": "Block this user?",
+  "profileRemoveFriendConfirmTitle": "Remove this friend?",
+  "profileRemoveFriendConfirmMessage": "Remove this user from your friends list?",
   "profileBlockConfirmMessage": "They will not be able to message you.",
   "callVideoPlaceholder": "Video preview",
   "screenShareStart": "Share screen",

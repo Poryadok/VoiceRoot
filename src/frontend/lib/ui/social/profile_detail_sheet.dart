@@ -907,19 +907,64 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
   }
 
   Future<void> _removeFriend() async {
+    if (_busy || widget.isGuest || !widget.isFriend) return;
+    final session = ref.read(authControllerProvider).session;
+    if (session == null || ref.read(profileSwitchInProgressProvider)) return;
+    final profileId = widget.profileId;
+    bool isCurrent() {
+      if (!mounted || widget.profileId != profileId || !widget.isFriend) {
+        return false;
+      }
+      final current = ref.read(authControllerProvider).session;
+      return !widget.isGuest &&
+          !ref.read(profileSwitchInProgressProvider) &&
+          current?.accountId == session.accountId &&
+          current?.activeProfileId == session.activeProfileId &&
+          current?.authorizationHeader == session.authorizationHeader;
+    }
+
     setState(() {
       _busy = true;
       _error = null;
     });
-    final err = await ref
-        .read(socialActionsProvider)
-        .removeFriend(widget.profileId);
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _error = err;
-    });
-    if (err == null) Navigator.of(context).pop();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          final l10n = AppLocalizations.of(dialogContext)!;
+          return AlertDialog(
+            key: const Key('profile_remove_friend_dialog'),
+            title: Text(l10n.profileRemoveFriendConfirmTitle),
+            content: Text(l10n.profileRemoveFriendConfirmMessage),
+            actions: [
+              TextButton(
+                key: const Key('profile_remove_friend_cancel'),
+                autofocus: true,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.commonCancel),
+              ),
+              FilledButton(
+                key: const Key('profile_remove_friend_confirm'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.socialRemoveFriend),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true || !mounted || !isCurrent()) return;
+      String? error;
+      try {
+        error = await ref.read(socialActionsProvider).removeFriend(profileId);
+      } catch (_) {
+        error = 'unknown';
+      }
+      if (!mounted || !isCurrent()) return;
+      setState(() => _error = error);
+      if (error == null) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _accept(AppLocalizations l10n) async {

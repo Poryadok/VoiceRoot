@@ -1178,6 +1178,8 @@
   "versionRestartToUpdate": "Перезапустить и обновить",
   "profileBlock": "Заблокировать",
   "profileBlockConfirmTitle": "Заблокировать пользователя?",
+  "profileRemoveFriendConfirmTitle": "Удалить из друзей?",
+  "profileRemoveFriendConfirmMessage": "Удалить этого пользователя из списка друзей?",
   "profileBlockConfirmMessage": "Он не сможет писать вам сообщения.",
   "callVideoPlaceholder": "Видео",
   "screenShareStart": "Демонстрация экрана",
