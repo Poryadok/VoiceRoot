@@ -900,7 +900,7 @@ MEDIA_FAILED_APPLY={
     'operator-media-target-source-authority.json':{'bytes':704136,'sha256':'eb763ba5a03be9e60796e10ec5541a50ec63fc73fb9f706db4374c320758797b'}}
 MEDIA_FAILED_APPLIED=tuple('Service/voice-'+name for name in (
     'social','user','space','chat','file','messaging','matchmaking','search','notification','realtime','bot',
-    'subscription','moderation','story','analytics','gateway'))+tuple('NetworkPolicy/'+name for name in (
+    'subscription','moderation','story','analytics','gateway'))+tuple('NetworkPolicy/voice-'+name for name in (
     'social-privacy-consumers','social-principal-jwks','file-user-principal-listener','file-principal-jwks',
     'search-user-projection','search-projection-jwks'))
 MEDIA_FAILED_ADMIN={
