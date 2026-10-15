@@ -67,6 +67,10 @@ def semantic(obj):
     # kubectl's bookkeeping is not desired application configuration.
     annotations = result['metadata'].get('annotations', {})
     annotations.pop('kubectl.kubernetes.io/last-applied-configuration', None)
+    # The Deployment controller advances this after a Pod template change;
+    # client-side normalization cannot predict its runtime value.
+    if result.get('kind') == 'Deployment':
+        annotations.pop('deployment.kubernetes.io/revision', None)
     if not annotations:
         result['metadata'].pop('annotations', None)
     return result

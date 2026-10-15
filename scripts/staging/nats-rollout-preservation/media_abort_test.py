@@ -151,6 +151,7 @@ class MediaAbortTest(unittest.TestCase):
                     write(new+'-receipt.json',encoded(receipt));terminal=retirement.media_abort_terminal(blocked,receipt)
                     self.assertEqual(retirement.verify_media_abort_terminal(base,terminal),receipt)
                     self.assertEqual(terminal['status'],'ABORTED')
+                    self.check_reconciled_terminal(base,blocked,documents,receipt,proof,authority,pack,encoded,write)
                     # Rehashing the changed normalized data and its live proof
                     # into a closure cannot replace the prepare-time authority.
                     changed_rows=copy.deepcopy(documents);changed_rows[-1]['data']['safe']='tampered'
@@ -174,6 +175,63 @@ class MediaAbortTest(unittest.TestCase):
                         write(name,prior)
                     write(prefix+'-receipt.json',b'{}')
                     with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,terminal)
+
+    def check_reconciled_terminal(self,base,blocked,documents,receipt,proof,authority,pack,encoded,write):
+        old=retirement.MEDIA_TARGET_PREFIX;new=retirement.MEDIA_RECONCILED_PREFIX
+        restore={path.name:path.read_bytes() for path in base.iterdir() if path.is_file()}
+        try:
+            # Represent the actual partial boundary: Auth CAS succeeded before
+            # its event, other Deployment templates remain at their old values.
+            ordered=sorted(copy.deepcopy(documents),key=lambda row:row['metadata']['name']!='voice-auth')
+            before={row['kind']+'/'+row['metadata']['name']:copy.deepcopy(row) for row in ordered}
+            for key,row in before.items():
+                if row['kind']=='Deployment':row['spec']=copy.deepcopy(blocked['context']['snapshots'][row['metadata']['name']]['spec'])
+            observed=copy.deepcopy(before);auth=ordered[0];self.assertEqual(auth['metadata']['name'],'voice-auth')
+            observed['Deployment/voice-auth']=copy.deepcopy(auth)
+            observed['Deployment/voice-auth']['metadata']['annotations']={'deployment.kubernetes.io/revision':'42'}
+            failed=copy.deepcopy(blocked);failed['fence_status']='UNKNOWN'
+            failed['context']['snapshots']['voice-auth']=copy.deepcopy(observed['Deployment/voice-auth'])
+            progress={'phase':'BLOCKED','context':failed['context'],'events':[]}
+            historical={new+'-blocked.json':encoded(failed),old+'-progress.json':encoded(progress),
+                old+'-normalized.json':encoded(ordered),old+'-prepared.json':encoded({'before':before,
+                    'normalized_sha256':retirement.canonical(ordered),'outside_owned':{},'preflight':{'objects':[]}})}
+            for name,value in historical.items():write(name,value)
+            for suffix in ('receipt','verified'):(base/(old+'-'+suffix+'.json')).unlink()
+            pins={name:{'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()} for name,value in historical.items()}
+            with patch.object(retirement,'MEDIA_FAILED_APPLY',pins),patch.object(retirement,'MEDIA_FAILED_APPLIED',()),\
+                 patch.object(retirement,'MEDIA_FAILED_ADMIN',{}):
+                reconciliation=retirement.media_failed_reconciliation(base,observed)
+                prepared={'normalized_sha256':retirement.canonical(documents),'before':observed,
+                    'failed_apply':pins,'reconciliation':reconciliation,'outside_owned':{}}
+                newproof=dict(proof,outside_owned={})
+                values={name:raw for name,raw in restore.items() if name in receipt['retained_files'] and not name.startswith(old+'-')}
+                values.update(historical)
+                values.update({new+'-compatibility.md':restore[old+'-compatibility.md'],
+                    new+'-active-contract.json':restore[old+'-active-contract.json'],new+'-verified.json':encoded(newproof),
+                    new+'-source-authority.json':encoded(authority),new+'-compiled.json':encoded(pack),
+                    new+'-normalized.json':encoded(documents),new+'-parameters.json':b'{}',new+'-prepared.json':encoded(prepared)})
+                # Archive paths may be nested, so use the existing canonical
+                # receipt inventory rather than just the flat fixture files.
+                for name in receipt['retained_files']:
+                    if not name.startswith(old+'-') and name not in values:values[name]=(base/name).read_bytes()
+                for name,value in values.items():write(name,value)
+                closure=copy.deepcopy(receipt);closure.update(schema=retirement.MEDIA_RECONCILED_SCHEMA,
+                    retained_files={name:{'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()} for name,value in values.items()})
+                write(new+'-receipt.json',encoded(closure))
+                terminal=retirement.media_abort_terminal(failed,closure)
+                self.assertEqual(retirement.verify_media_abort_terminal(base,terminal),closure)
+                self.assertEqual(terminal['operator_media_abort']['schema'],retirement.MEDIA_RECONCILED_REFERENCE)
+                for schema in ('voice-media-target-baseline-reference-v1','voice-media-original-restore-reference-v1'):
+                    forged=copy.deepcopy(terminal);forged['operator_media_abort']['schema']=schema
+                    with self.subTest(schema=schema),self.assertRaises((Blocked,FileNotFoundError)):
+                        retirement.verify_media_abort_terminal(base,forged)
+                tampered=copy.deepcopy(prepared);tampered['reconciliation']={}
+                raw=encoded(tampered);write(new+'-prepared.json',raw)
+                forged=copy.deepcopy(closure);forged['retained_files'][new+'-prepared.json']={'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+                write(new+'-receipt.json',encoded(forged))
+                with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,retirement.media_abort_terminal(failed,forged))
+        finally:
+            for name,value in restore.items():write(name,value)
 
     def test_exact_snapshot_hash_is_required_before_any_structural_authority(self):
         for raw in (b'{}', b'{"operation":"0e2be62a3326","status":"BLOCKED"}'):

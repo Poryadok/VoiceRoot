@@ -883,6 +883,87 @@ MEDIA_TARGET_PREFIX='operator-media-target'
 MEDIA_TARGET_BLOCKED='790a980a0f53a031ca1688f7e9f7535661d9b2fb66fc3efe16feda332d5f2fbd'
 MEDIA_TARGET_PROGRESS='96965ef71b1f0e787caa20646e9023d804e4736184fd3dd1a84bddc43973c3a9'
 MEDIA_TARGET_BASIS='VERIFIED_GATED_TARGET_BASELINE'
+MEDIA_RECONCILED_PREFIX='operator-media-target-reconciled'
+MEDIA_RECONCILED_SCHEMA='voice-media-target-reconciled-closure-v1'
+MEDIA_RECONCILED_REFERENCE='voice-media-target-reconciled-reference-v1'
+# Exact failed target apply, not a generic resume or alternative checkpoint.
+MEDIA_FAILED_APPLY={
+    'operator-media-target-reconciled-origin-runner.py':{'bytes':30352,'sha256':'1fd0fd44572e5dcaea938e6f694d04d32fb5f09982d61ddc06f44dd3be786fb0'},
+    'operator-media-target-reconciled-blocked.json':{'bytes':3352567,'sha256':'ab06554cf7f8f39d2c6c347129910c13911c00e94b2ef91acb8b863a6a16500b'},
+    'operator-media-target-blocked.json':{'bytes':3342669,'sha256':'790a980a0f53a031ca1688f7e9f7535661d9b2fb66fc3efe16feda332d5f2fbd'},
+    'operator-media-target-compiled.json':{'bytes':1076345,'sha256':'aab7efac28191be56b95768e13f2995467360a97af4c38a7f124658760698c83'},
+    'operator-media-target-failure-1792043444801386280/failure.json':{'bytes':123,'sha256':'915f5c4237ddffb3f68fd7ad995cfb2ec1c424fb1361907f43f32f88e3f245ba'},
+    'operator-media-target-normalized.json':{'bytes':213957,'sha256':'3e873536b81a61a1a9c8310d0a0ec4f9d7f3849b9b5e4828ef24985beeff221b'},
+    'operator-media-target-parameters.json':{'bytes':9099,'sha256':'c9dc098d59c8860ff222c87f02458d6fe5bb474e9d185fa65417b31c0cfdc259'},
+    'operator-media-target-prepared.json':{'bytes':317635,'sha256':'88025c41c1ca94caf4ab9ed948ecd2b12627c6cde54d946490c9dc2162a26277'},
+    'operator-media-target-progress.json':{'bytes':609487,'sha256':'90ffab5b4850d88665116c9094447945d054914daf030914285cd76e30d6024a'},
+    'operator-media-target-source-authority.json':{'bytes':704136,'sha256':'eb763ba5a03be9e60796e10ec5541a50ec63fc73fb9f706db4374c320758797b'}}
+MEDIA_FAILED_APPLIED=tuple('Service/voice-'+name for name in (
+    'social','user','space','chat','file','messaging','matchmaking','search','notification','realtime','bot',
+    'subscription','moderation','story','analytics','gateway'))+tuple('NetworkPolicy/'+name for name in (
+    'social-privacy-consumers','social-principal-jwks','file-user-principal-listener','file-principal-jwks',
+    'search-user-projection','search-projection-jwks'))
+MEDIA_FAILED_ADMIN={
+    'Deployment/voice-admin':{'uid':'e84f2e89-22e6-4d49-a665-9753131935d8','semantic_sha256':'9bd121c2f96316b8cf56a1ab94267f1ae683e193f909c590de7caf0f985bd11e'},
+    'Service/voice-admin':{'uid':'603a3855-f197-4026-b50f-561a95cd0974','semantic_sha256':'9a26a59631e494097267463b98601c5322786681f21f3f4a32dd2477722cb958'},
+    'Ingress/voice-admin-http':{'uid':'5fc523bb-106e-45df-8499-0ac6327ba64a','semantic_sha256':'3121a166f08535e241687610eee69a7faf4c49cfa4d95dc57a8daec6b2804f56'}}
+
+
+def media_failed_apply(base):
+    """Validate immutable failed bytes; UNKNOWN is history, never fence authority."""
+    base=Path(base)
+    for name,pin in MEDIA_FAILED_APPLY.items():
+        value=private_bytes(base/name,128<<20)
+        if {'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()}!=pin:fail()
+    old=media_target_failed(base)
+    state=document(base/(MEDIA_RECONCILED_PREFIX+'-blocked.json'))
+    progress=document(base/(MEDIA_TARGET_PREFIX+'-progress.json'))
+    if (state.get('operation')!=MEDIA_ABORT_OPERATION or state.get('status')!='BLOCKED'
+        or state.get('phase')!='OPERATOR_RETIRING' or state.get('fence_status')!='UNKNOWN'
+        or progress.get('phase')!='BLOCKED' or progress.get('context')!=state.get('context')
+        or tuple(e.get('resource') for e in progress.get('events',[]) if e.get('kind')=='target_resource_applied')!=MEDIA_FAILED_APPLIED
+        or any(state.get(k)!=old.get(k) for k in ('migrations','migration_jobs','active_contract'))):fail()
+    for name in ('receipt','verified'):
+        if (base/(MEDIA_TARGET_PREFIX+'-'+name+'.json')).exists():fail()
+    return state
+
+
+def media_failed_reconciliation(base,observed):
+    """Exact historical partial apply: 22 recorded effects, Auth CAS, untouched rest."""
+    from nonnats_plan import semantic
+    media_failed_apply(base)
+    normalized=document(Path(base)/(MEDIA_TARGET_PREFIX+'-normalized.json'))
+    prepared=document(Path(base)/(MEDIA_TARGET_PREFIX+'-prepared.json'))
+    media_target_prepared(normalized,prepared)
+    keys=[row['kind']+'/'+row['metadata']['name'] for row in normalized]
+    if len(keys)!=len(set(keys)) or set(keys)!=set(prepared['before']) or set(keys)!=set(observed):fail()
+    if set(MEDIA_FAILED_APPLIED)-set(keys) or keys[len(MEDIA_FAILED_APPLIED)]!='Deployment/voice-auth':fail()
+    result={}
+    for key,target in zip(keys,normalized):
+        before=prepared['before'][key];live=observed[key]
+        expected=target if key in MEDIA_FAILED_APPLIED or key=='Deployment/voice-auth' else before
+        if (live['metadata']['uid']!=before['metadata']['uid'] or target['metadata']['uid']!=before['metadata']['uid']
+            or semantic(live)!=semantic(expected)):fail()
+        result[key]={'uid':live['metadata']['uid'],'semantic_sha256':canonical(semantic(live))}
+    if len({row['uid'] for row in result.values()})!=len(result):fail()
+    return result
+
+
+def media_failed_admin(base):
+    """Derive new semantics only from the hash-bound old preserve descriptors."""
+    from nonnats_plan import semantic
+    media_failed_apply(base)
+    prepared=document(Path(base)/(MEDIA_TARGET_PREFIX+'-prepared.json'))
+    if prepared.get('outside_owned')!=MEDIA_FAILED_ADMIN:fail()
+    result={}
+    for row in prepared['preflight']['objects']:
+        key=row['kind']+'/'+row['name']
+        if key not in MEDIA_FAILED_ADMIN:continue
+        old={'uid':row['uid'],'semantic_sha256':canonical(row['desired'])}
+        if key in result or row.get('disposition')!='preserve' or old!=MEDIA_FAILED_ADMIN[key]:fail()
+        result[key]={'uid':row['uid'],'semantic_sha256':canonical(semantic(row['desired']))}
+    if set(result)!=set(MEDIA_FAILED_ADMIN):fail()
+    return result
 
 
 def media_target_failed(base):
@@ -1022,6 +1103,10 @@ def media_abort_terminal(snapshot,receipt):
     if receipt.get('configuration_basis')==MEDIA_TARGET_BASIS:
         state['operator_media_abort'].update(schema='voice-media-target-baseline-reference-v1',
             blocked_sha256=MEDIA_TARGET_BLOCKED,progress_sha256=MEDIA_TARGET_PROGRESS)
+        if receipt.get('schema')==MEDIA_RECONCILED_SCHEMA:
+            state['operator_media_abort'].update(schema=MEDIA_RECONCILED_REFERENCE,
+                blocked_sha256=MEDIA_FAILED_APPLY[MEDIA_RECONCILED_PREFIX+'-blocked.json']['sha256'],
+                progress_sha256=MEDIA_FAILED_APPLY[MEDIA_TARGET_PREFIX+'-progress.json']['sha256'])
     state['events']=snapshot['events']+[{'kind':'operator_media_abort_completed',
         'deployment_pass':False,'rollback_eligible':False,'forward_migrations_retained':True}]
     return state
@@ -1029,16 +1114,18 @@ def media_abort_terminal(snapshot,receipt):
 
 def verify_media_abort_terminal(base,state):
     """Exact operator abort, not successful deployment or generic rollback authority."""
-    base=Path(base);target_baseline=state.get('operator_media_abort',{}).get('schema')=='voice-media-target-baseline-reference-v1'
-    prefix=MEDIA_TARGET_PREFIX if target_baseline else MEDIA_ABORT_PREFIX
+    base=Path(base);reference=state.get('operator_media_abort',{}).get('schema')
+    reconciled=reference==MEDIA_RECONCILED_REFERENCE
+    target_baseline=reconciled or reference=='voice-media-target-baseline-reference-v1'
+    prefix=MEDIA_RECONCILED_PREFIX if reconciled else MEDIA_TARGET_PREFIX if target_baseline else MEDIA_ABORT_PREFIX
     if base!=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION):fail()
     snapshot=media_abort_snapshot(private_bytes(base/(MEDIA_ABORT_PREFIX+'-snapshot.json')))
-    blocked=media_target_failed(base) if target_baseline else snapshot
+    blocked=media_failed_apply(base) if reconciled else media_target_failed(base) if target_baseline else snapshot
     receipt=document(base/(prefix+'-receipt.json'))
     if (set(receipt)!={'schema','operation','waiver','snapshot_sha256','compatibility_sha256',
         'deployment_pass','rollback_eligible','configuration_basis','migration_jobs_sha256',
         'active_contract_sha256','setup','released_marker','retained_files','journal'}
-        or receipt.get('schema')!=('voice-media-target-baseline-closure-v1' if target_baseline else 'voice-media-original-restore-closure-v1')
+        or receipt.get('schema')!=(MEDIA_RECONCILED_SCHEMA if reconciled else 'voice-media-target-baseline-closure-v1' if target_baseline else 'voice-media-original-restore-closure-v1')
         or receipt.get('operation')!=MEDIA_ABORT_OPERATION or receipt.get('waiver')!=WAIVER
         or receipt.get('snapshot_sha256')!=MEDIA_ABORT_CHECKPOINT
         or receipt.get('compatibility_sha256')!=MEDIA_ABORT_COMPATIBILITY
@@ -1053,7 +1140,12 @@ def verify_media_abort_terminal(base,state):
         authority=document(base/(prefix+'-source-authority.json'))
         pack=document(base/(prefix+'-compiled.json'))
         normalized=document(base/(prefix+'-normalized.json'))
-        media_target_prepared(normalized,document(base/(prefix+'-prepared.json')))
+        prepared=document(base/(prefix+'-prepared.json'))
+        media_target_prepared(normalized,prepared)
+        if reconciled:
+            if (prepared.get('failed_apply')!=MEDIA_FAILED_APPLY
+                or prepared.get('reconciliation')!=media_failed_reconciliation(base,prepared.get('before',{}))
+                or prepared.get('outside_owned')!=media_failed_admin(base)):fail()
         if (blocked.get('migrations')!=snapshot.get('migrations') or blocked.get('migration_jobs')!=snapshot.get('migration_jobs')
             or blocked.get('active_contract')!=snapshot.get('active_contract')
             or precut_retained_setup(blocked)!=precut_retained_setup(snapshot)):fail()
@@ -1073,6 +1165,7 @@ def verify_media_abort_terminal(base,state):
     if target_baseline:
         required|={prefix+'-blocked.json',MEDIA_ABORT_PREFIX+'-progress.json',MEDIA_ABORT_PREFIX+'-snapshot.json',
             prefix+'-source-authority.json',prefix+'-compiled.json',prefix+'-normalized.json',prefix+'-parameters.json',prefix+'-prepared.json'}
+    if reconciled:required|=set(MEDIA_FAILED_APPLY)
     files=receipt.get('retained_files',{})
     if set(files)!=required:fail()
     for name,pin in files.items():
@@ -1083,6 +1176,7 @@ def verify_media_abort_terminal(base,state):
     if files[prefix+'-compatibility.md']['sha256']!=MEDIA_ABORT_COMPATIBILITY:fail()
     if canonical(document(base/(prefix+'-active-contract.json')))!=MEDIA_ABORT_ACTIVE:fail()
     proof=document(base/(prefix+'-verified.json'))
+    if reconciled and proof.get('outside_owned')!=media_failed_admin(base):fail()
     if target_baseline and proof.get('resources')!=media_target_resources(normalized):fail()
     if (proof.get('setup')!=expected or proof.get('storage')!=precut_retained_setup(snapshot)
         or proof.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
