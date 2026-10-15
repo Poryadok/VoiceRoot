@@ -387,6 +387,7 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     discriminator: profile.discriminator,
     displayName: profile.displayName,
     avatarUrl: profile.hasAvatarUrl() ? emptyToNull(profile.avatarUrl) : null,
+    bannerUrl: profile.hasBannerUrl() ? emptyToNull(profile.bannerUrl) : null,
     bio: profile.hasBio() ? emptyToNull(profile.bio) : null,
     customStatus: profile.hasCustomStatus()
         ? emptyToNull(profile.customStatus)

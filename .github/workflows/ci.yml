@@ -427,14 +427,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Capture ContactProfile controls and fullscreen avatar in H/V
-        if: github.event_name == 'pull_request' && github.head_ref == 'codex/contact-profile-controls'
+        if: >-
+          github.event_name == 'pull_request' &&
+          (github.head_ref == 'codex/contact-profile-controls' ||
+           github.head_ref == 'codex/contact-profile-banner')
         timeout-minutes: 5
         working-directory: src/frontend
         env:
           VOICE_CONTACT_PROFILE_CAPTURE_DIR: ${{ runner.temp }}/contact-profile-capture
         run: flutter test --no-pub --reporter expanded --concurrency=1 test/contact_common_spaces_test.dart test/contact_profile_controls_test.dart
       - name: Upload ContactProfile and fullscreen avatar reference captures
-        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/contact-profile-controls'
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          (github.head_ref == 'codex/contact-profile-controls' ||
+           github.head_ref == 'codex/contact-profile-banner')
         uses: actions/upload-artifact@v6
         with:
           name: contact-profile-hv-${{ github.run_id }}
@@ -443,6 +449,12 @@ jobs:
             ${{ runner.temp }}/contact-profile-capture/contact-profile-v.png
             ${{ runner.temp }}/contact-profile-capture/contact-avatar-h.png
             ${{ runner.temp }}/contact-profile-capture/contact-avatar-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-populated-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-populated-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-absent-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-absent-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-failed-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-failed-v.png
           if-no-files-found: error
           retention-days: 7
       - name: Retain incoming overlay golden diffs on failure

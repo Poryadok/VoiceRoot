@@ -340,7 +340,7 @@ void main() {
     },
   );
 
-  testWidgets('active story avatar keeps the existing viewer route and ids', (
+  testWidgets('active story avatar on banner keeps existing viewer route and ids', (
     tester,
   ) async {
     final client = MockClient(
@@ -349,6 +349,16 @@ void main() {
     final container = _container(
       client,
       overrides: [
+        profileProvider.overrideWith(
+          (ref, id) async => const VoiceProfile(
+            id: 'p-target',
+            accountId: 'a-target',
+            username: 'alex',
+            discriminator: '0001',
+            displayName: 'Alex',
+            bannerUrl: _bannerUrl,
+          ),
+        ),
         activeStoryAuthorIdsProvider.overrideWith((ref) => const {'p-target'}),
         profileStoriesProvider.overrideWith(
           (ref, id) async => const [
@@ -362,6 +372,12 @@ void main() {
         ),
       ],
     );
+    final imageClient = _ImageClient(
+      await _avatarBytes(tester),
+      expectedUrl: _bannerUrl,
+    );
+    final previousImageClient = debugNetworkImageHttpClientProvider;
+    debugNetworkImageHttpClientProvider = () => imageClient;
     Uri? destination;
     final router = GoRouter(
       routes: [
@@ -412,6 +428,9 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     } finally {
+      debugNetworkImageHttpClientProvider = previousImageClient;
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
       router.dispose();
       container.dispose();
       client.close();
@@ -736,6 +755,124 @@ void main() {
       }
     },
   );
+
+  for (final state in ['populated', 'absent', 'failed']) {
+    testWidgets('public $state banner keeps profile and avatar usable in H/V', (
+      tester,
+    ) async {
+      final apiRequests = <String>[];
+      final client = MockClient((request) async {
+        apiRequests.add(request.url.path);
+        expect(request.headers['authorization'], 'Bearer test-access');
+        expect(request.url.path, '/api/v1/users/profiles/p-target');
+        return _json({
+          'profile': {
+            'id': 'p-target',
+            'account_id': 'a-target',
+            'username': 'alex',
+            'discriminator': '0001',
+            'display_name': 'Alex',
+            if (state != 'absent') 'banner_url': _bannerUrl,
+          },
+        });
+      });
+      final container = _container(client, realProfile: true);
+      final imageClient = _ImageClient(
+        await _avatarBytes(tester),
+        expectedUrl: _bannerUrl,
+      )..fail = state == 'failed';
+      final previousImageClient = debugNetworkImageHttpClientProvider;
+      final theme = await _captureTheme(tester);
+      debugNetworkImageHttpClientProvider = () => imageClient;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          await tester.binding.setSurfaceSize(size);
+          await tester.pumpWidget(_app(container, theme: theme));
+          if (state == 'populated') {
+            await tester.runAsync(
+              () => precacheImage(
+                const NetworkImage(_bannerUrl),
+                tester.element(find.byKey(const Key('open_contact_profile'))),
+              ),
+            );
+          }
+          await tester.tap(find.byKey(const Key('open_contact_profile')));
+          await tester.pumpAndSettle();
+          final banner = find.byKey(const Key('profile_banner'));
+          final avatar = find.byKey(ProfileDetailSheet.avatarKey);
+          if (state == 'absent') {
+            expect(banner, findsNothing);
+            expect(imageClient.requests, isEmpty);
+          } else {
+            expect(banner, findsOneWidget);
+            final bannerRect = tester.getRect(banner);
+            final avatarRect = tester.getRect(avatar);
+            expect(bannerRect.height, size.width > size.height ? 96 : 112);
+            expect(avatarRect.size, const Size(80, 80));
+            expect(avatarRect.top, lessThan(bannerRect.bottom));
+            expect(avatarRect.bottom - bannerRect.bottom, closeTo(32, 0.01));
+            expect(avatarRect.left - bannerRect.left, closeTo(20, 0.01));
+            final image = find.descendant(
+              of: banner,
+              matching: find.byType(RawImage),
+            );
+            if (state == 'populated') {
+              expect(tester.widget<RawImage>(image).image?.width, 256);
+              expect(tester.widget<RawImage>(image).fit, BoxFit.cover);
+            } else {
+              expect(
+                find.byKey(const Key('profile_banner_unavailable')),
+                findsOneWidget,
+              );
+            }
+            expect(bannerRect.left, greaterThanOrEqualTo(0));
+            expect(bannerRect.right, lessThanOrEqualTo(size.width));
+          }
+          expect(find.text('Alex'), findsOneWidget);
+          expect(
+            tester.widget<OutlinedButton>(
+              find.byKey(ProfileDetailSheet.messageKey),
+            ).onPressed,
+            isNotNull,
+          );
+          expect(
+            tester.widget<OutlinedButton>(
+              find.byKey(ProfileDetailSheet.callKey),
+            ).onPressed,
+            isNotNull,
+          );
+          final orientation = size.width > size.height ? 'h' : 'v';
+          await _capture(tester, 'contact-banner-$state-$orientation.png');
+          await tester.tap(avatar);
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('profile_avatar_missing')),
+            findsOneWidget,
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }
+        expect(apiRequests, isNotEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        debugNetworkImageHttpClientProvider = previousImageClient;
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+        container.dispose();
+        client.close();
+      }
+    });
+  }
 }
 
 ProviderContainer _container(
@@ -869,6 +1006,7 @@ Widget _app(ProviderContainer container, {ThemeData? theme, Locale? locale}) =>
     );
 
 const _avatarUrl = 'https://public-images.test/alex.png';
+const _bannerUrl = 'https://public-images.test/alex-banner.png';
 const _captureDirectory = 'VOICE_CONTACT_PROFILE_CAPTURE_DIR';
 var _captureFontsLoaded = false;
 
@@ -905,14 +1043,15 @@ Future<Uint8List> _avatarBytes(WidgetTester tester) async {
 }
 
 class _ImageClient implements HttpClient {
-  _ImageClient(this.bytes);
+  _ImageClient(this.bytes, {this.expectedUrl = _avatarUrl});
   final Uint8List bytes;
+  final String expectedUrl;
   final requests = <Uri>[];
   bool fail = false;
 
   @override
   Future<HttpClientRequest> getUrl(Uri url) async {
-    expect(url.toString(), _avatarUrl);
+    expect(url.toString(), expectedUrl);
     requests.add(url);
     return _ImageRequest(this);
   }

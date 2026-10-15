@@ -20,6 +20,8 @@ import '../../state/presence_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
+import '../../theme/voice_layout.dart';
+import '../../theme/voice_metrics.dart';
 import '../../routing/deep_link_urls.dart';
 import '../api_error_messages.dart';
 import '../core/chat_author_label.dart';
@@ -205,46 +207,58 @@ class ProfileDetailSheet extends ConsumerWidget {
                 icon: Icons.person_off_outlined,
               );
             }
+            final bannerUrl = profile.bannerUrl;
+            final hasBanner = bannerUrl != null && bannerUrl.isNotEmpty;
+            final avatar = Semantics(
+              key: avatarKey,
+              label: hasActiveStory ? null : l10n.profileOpenAvatar,
+              button: hasActiveStory ? null : true,
+              child: StoryRingAvatar(
+                displayName: profile.displayName,
+                imageUrl: profile.avatarUrl,
+                hasActiveStory: hasActiveStory,
+                size: hasBanner
+                    ? context.voiceMetrics.layoutSize('avatarLg', fallback: 80)
+                    : 56,
+                onTap: hasActiveStory
+                    ? () {
+                        final stories = profileStoriesAsync.valueOrNull;
+                        if (stories == null || stories.isEmpty) {
+                          return;
+                        }
+                        Navigator.of(context).pop();
+                        StoriesRoutes.openViewer(
+                          context,
+                          storyIds: stories.map((s) => s.id).toList(),
+                          profileId: profileId,
+                        );
+                      }
+                    : () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => ProfileAvatarViewer(
+                            profileId: profileId,
+                          ),
+                        ),
+                      ),
+              ),
+            );
             return SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (bannerUrl != null && bannerUrl.isNotEmpty) ...[
+                    _ProfileBannerHeader(bannerUrl: bannerUrl, avatar: avatar),
+                    SizedBox(
+                      height: context.voiceMetrics.spacing('12', fallback: 12),
+                    ),
+                  ],
                   Row(
                     children: [
-                      Semantics(
-                        key: avatarKey,
-                        label: hasActiveStory ? null : l10n.profileOpenAvatar,
-                        button: hasActiveStory ? null : true,
-                        child: StoryRingAvatar(
-                          displayName: profile.displayName,
-                          imageUrl: profile.avatarUrl,
-                          hasActiveStory: hasActiveStory,
-                          size: 56,
-                          onTap: hasActiveStory
-                              ? () {
-                                  final stories =
-                                      profileStoriesAsync.valueOrNull;
-                                  if (stories == null || stories.isEmpty) {
-                                    return;
-                                  }
-                                  Navigator.of(context).pop();
-                                  StoriesRoutes.openViewer(
-                                    context,
-                                    storyIds: stories.map((s) => s.id).toList(),
-                                    profileId: profileId,
-                                  );
-                                }
-                              : () => Navigator.of(context).push<void>(
-                                  MaterialPageRoute(
-                                    builder: (_) => ProfileAvatarViewer(
-                                      profileId: profileId,
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
+                      if (!hasBanner) ...[
+                        avatar,
+                        const SizedBox(width: 16),
+                      ],
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,6 +547,79 @@ class ProfileDetailSheet extends ConsumerWidget {
     final date = material.formatShortDate(local);
     final time = TimeOfDay.fromDateTime(local).format(context);
     return '$date $time';
+  }
+}
+
+class _ProfileBannerHeader extends StatelessWidget {
+  const _ProfileBannerHeader({required this.bannerUrl, required this.avatar});
+
+  final String bannerUrl;
+  final Widget avatar;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = context.voiceMetrics;
+    final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final avatarSize = metrics.layoutSize('avatarLg', fallback: 80);
+    final overlap = metrics.spacing('32', fallback: 32);
+    final bannerHeight =
+        avatarSize + (narrow ? overlap : metrics.spacing('16', fallback: 16));
+    final surface = Theme.of(context).colorScheme.surface;
+    return SizedBox(
+      height: bannerHeight + overlap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: bannerHeight,
+            child: IgnorePointer(
+              child: ExcludeSemantics(
+                child: ClipRRect(
+                  key: const Key('profile_banner'),
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(
+                      narrow ? 0 : metrics.corner('lg', fallback: 8),
+                    ),
+                  ),
+                  child: ColoredBox(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: Image.network(
+                      bannerUrl,
+                      key: ValueKey(bannerUrl),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: bannerHeight,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.expand(
+                            key: Key('profile_banner_unavailable'),
+                          ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: metrics.spacing('20', fallback: 20),
+            top: bannerHeight + overlap - avatarSize,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: surface,
+                  width: metrics.spacing('4', fallback: 4),
+                  strokeAlign: BorderSide.strokeAlignOutside,
+                ),
+              ),
+              child: avatar,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
