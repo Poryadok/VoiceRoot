@@ -1128,3 +1128,10 @@ Any operation/build directory, changed source, request or terminal evidence
 refuses admission. This upgrade authorizes no rollback or replay and makes no
 ordinary FULL acceptance claim. Root must submit a fresh ordinary request and
 complete deployment and product acceptance after installation.
+
+Before swapping helpers, validate every installed journal together. The exact
+Story disposition is excluded from the legacy abandonment census only after its
+strict retained-evidence verifier succeeds; the legacy 29-entry receipt stays
+byte-identical. An isolated new-request test misses this interaction: regression
+coverage must include both inventories, corrupt Story evidence and an unknown
+STARTED nonce, plus the complete installer admission path.

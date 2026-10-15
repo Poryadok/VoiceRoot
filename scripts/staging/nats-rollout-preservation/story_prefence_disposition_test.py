@@ -40,6 +40,36 @@ class Tests(unittest.TestCase):
         verify=stack.enter_context(patch.object(r,'verify_media_abort_terminal',return_value={'verified':True}))
         return installed,installed/'journal'/(nonce+'.json'),source,verify
 
+    def legacy_fixture(self,root,installed,stack):
+        from operator_retirement_test import PendingAbandonmentTests
+        name,row,response,jraw,rraw,receipt,fence_receipt,fence,state=PendingAbandonmentTests().fixture()
+        base=root/('rollout-'+r.FENCE_ABORT_OPERATION);base.mkdir(mode=0o700)
+        values={installed/'journal'/name:jraw,installed/'responses'/name:rraw,
+            installed/r.PENDING_ABANDONMENT_NAME:json.dumps(receipt,sort_keys=True,separators=(',',':')).encode(),
+            base/'checkpoint.json':json.dumps(state).encode(),
+            base/'operator-fence-abort-receipt.json':json.dumps(fence_receipt).encode()}
+        for path,raw in values.items():path.write_bytes(raw);path.chmod(0o600)
+        stack.enter_context(patch.object(r,'verify_fence_abort_terminal',return_value=fence))
+        return installed/'journal'/name
+
+    def test_all_journals_preserve_legacy_receipt_and_validate_story_before_exclusion(self):
+        for drift in (None,'story','unknown'):
+            with self.subTest(drift=drift),tempfile.TemporaryDirectory() as td,contextlib.ExitStack() as stack:
+                root=Path(td);installed,path,source,_=self.fixture(root,stack)
+                legacy=self.legacy_fixture(root,installed,stack)
+                if drift=='story':path.write_bytes(path.read_bytes()+b' ')
+                if drift=='unknown':
+                    unknown=installed/'journal'/('f'*64+'.json')
+                    unknown.write_bytes(json.dumps({'phase':'STARTED','request':{}}).encode());unknown.chmod(0o600)
+                before={p:p.read_bytes() for p in root.rglob('*') if p.is_file()}
+                if drift is None:
+                    self.assertEqual(r.pending_abandonment_names(installed),{legacy.name})
+                    for member in sorted((installed/'journal').iterdir()):
+                        r.pending_request_accepted(installed,member,{'journals':{}})
+                else:
+                    with self.assertRaises(Blocked):r.pending_request_accepted(installed,legacy,{'journals':{}})
+                self.assertEqual(before,{p:p.read_bytes() for p in before})
+
     def test_exact_request_is_blocked_abandonment_without_writes(self):
         with tempfile.TemporaryDirectory() as td,contextlib.ExitStack() as stack:
             root=Path(td);installed,path,source,verify=self.fixture(root,stack)
@@ -79,6 +109,7 @@ class Tests(unittest.TestCase):
         for drift in (None,'reports','source'):
             with self.subTest(drift=drift),tempfile.TemporaryDirectory() as td,contextlib.ExitStack() as stack:
                 root=Path(td);installed,path,source,_=self.fixture(root,stack)
+                self.legacy_fixture(root,installed,stack)
                 for name in ('inbox','processing','recovery'):(installed/name).mkdir(mode=0o700)
                 (installed/'inbox').chmod(0o1730)
                 for name in ('recovery-key.pem','recovery-cert.pem'):

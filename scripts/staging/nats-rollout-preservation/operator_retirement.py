@@ -1801,6 +1801,9 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
+        if path.name==STORY_PREFENCE_NONCE+'.json':
+            _verify_story_prefence_rejection(installed,path,row)
+            continue
         if row.get('request',{}).get('operation') in ('a83c5bdb26f1',MEDIA_ABORT_OPERATION):
             pending_request_accepted(installed,path,{'journals':{}})
             continue
