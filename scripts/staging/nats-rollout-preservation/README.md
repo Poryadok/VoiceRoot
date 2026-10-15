@@ -1135,3 +1135,38 @@ strict retained-evidence verifier succeeds; the legacy 29-entry receipt stays
 byte-identical. An isolated new-request test misses this interaction: regression
 coverage must include both inventories, corrupt Story evidence and an unknown
 STARTED nonce, plus the complete installer admission path.
+
+Check the reviewed ACL proof digest and generation before costly preparation.
+When the source ACL changes, retain the reviewed delta and its signed-grant,
+server-authentication and bootstrap API evidence before updating proof variables;
+ACL compatibility does not establish business publication, ACK or product acceptance.
+After full apply, preserved Services may have new resource versions from kubectl
+bookkeeping. Finish still requires their original UID and complete desired
+semantics, including labels, annotations, selectors and ports. Pre-apply version
+checks and Secret preservation remain strict; this is not a general version waiver.
+
+A failed finish request can remain STARTED after a separate finish completes the
+same operation. Do not rewrite its journal, response or public report to make an
+idle helper upgrade pass. Root may retain a private immutable
+`terminal-finish-disposition-<failed-nonce>.json` with schema
+`voice-terminal-finish-disposition-v1`. Its closed file map pins both finish
+journals/responses/reports, terminal checkpoint and apply authorization; it binds
+the operation and captured helper. Admission requires the same source, dispatcher
+run, attempt and apply claim, a successful completion and released terminal marker.
+The failed request remains BLOCKED. This grants no replay or new deployment authority.
+Any retained Service RV reconciliation must include its original checkpoint and
+receipt and reproduce the exact recorded metadata-only change. Both the legacy
+pending census and per-journal admission verify this disposition, and the existing
+idle upgrade transaction rechecks it after the code swap. Use that internal
+transaction with reviewed exact predecessor/destination bindings and fresh immutable
+receipt names; no new public upgrade command or failed-nonce exception is needed.
+
+Historical source admission pins content and enforces safe live custody. Its
+full metadata fingerprint is valid only within a read or across the locked
+helper swap: `installed/sources` is shared, so a later operation legitimately
+changes that parent's timestamps and link count. Do not persist that mutable
+parent fingerprint as a permanent historical equality or repin it after each
+operation. The Story boundary retains exact content, ownership/mode/link checks
+and per-read race checks; the installer still refuses metadata changes during
+its swap. Original per-entry metadata was not retained, so this does not claim
+historical inode/timestamp equality.

@@ -79,8 +79,17 @@ class Tests(unittest.TestCase):
             verify.assert_called_once()
             self.assertEqual(before,{str(p):p.read_bytes() for p in root.rglob('*') if p.is_file()})
 
+    def test_later_source_sibling_does_not_invalidate_historical_content(self):
+        with tempfile.TemporaryDirectory() as td,contextlib.ExitStack() as stack:
+            root=Path(td);installed,path,source,_=self.fixture(root,stack)
+            before=r.pending_request_accepted(installed,path,{'journals':{}})
+            (source.parent/'5e48553f3105').mkdir(mode=0o700)
+            after=r.pending_request_accepted(installed,path,{'journals':{}})
+            self.assertEqual(before['source']['tree'],after['source']['tree'])
+            self.assertNotEqual(before['source']['custody_sha256'],after['source']['custody_sha256'])
+
     def test_history_source_custody_or_side_effect_drift_is_rejected(self):
-        for drift in ('journal','responses','reports','source','custody','build','operation','checkpoint','receipt'):
+        for drift in ('journal','responses','reports','source','custody','link','build','operation','checkpoint','receipt'):
             with self.subTest(drift=drift),tempfile.TemporaryDirectory() as td,contextlib.ExitStack() as stack:
                 root=Path(td);installed,path,source,_=self.fixture(root,stack)
                 if drift in ('journal','responses','reports'):
@@ -88,7 +97,9 @@ class Tests(unittest.TestCase):
                     p.chmod(0o600);p.write_bytes(p.read_bytes()+b' ')
                 elif drift=='source':(source/'input.txt').write_bytes(b'changed')
                 elif drift=='custody':
-                    p=source/'input.txt';p.rename(source/'old');p.write_bytes(b'public source');(source/'old').unlink()
+                    (source/'input.txt').chmod(0o666)
+                elif drift=='link':
+                    p=source/'input.txt';p.rename(source/'old');p.symlink_to(source/'old')
                 elif drift=='build':(installed/'sources'/(r.STORY_PREFENCE_NONCE[:12]+'-build')).mkdir()
                 elif drift=='operation':(root/('rollout-'+r.STORY_PREFENCE_NONCE[:12])).mkdir()
                 else:
@@ -106,7 +117,7 @@ class Tests(unittest.TestCase):
     def test_idle_upgrade_rechecks_history_after_swap_and_restores_inbox(self):
         import installer
         from types import SimpleNamespace
-        for drift in (None,'reports','source'):
+        for drift in (None,'reports','source','custody'):
             with self.subTest(drift=drift),tempfile.TemporaryDirectory() as td,contextlib.ExitStack() as stack:
                 root=Path(td);installed,path,source,_=self.fixture(root,stack)
                 self.legacy_fixture(root,installed,stack)
@@ -129,6 +140,8 @@ class Tests(unittest.TestCase):
                 stack.enter_context(patch('story_witness.registry_snapshot',return_value=None))
                 def swap(*args):
                     if drift=='source':(source/'input.txt').write_bytes(b'changed')
+                    elif drift=='custody':
+                        p=source/'input.txt';p.rename(source/'old');p.write_bytes(b'public source');p.chmod(0o644);(source/'old').unlink()
                     elif drift=='reports':
                         p=installed/'responses'/(r.STORY_PREFENCE_NONCE+'.report.json');p.chmod(0o600);p.write_bytes(b'changed')
                 upgrade=stack.enter_context(patch.object(installer,'_upgrade_code',side_effect=swap))
