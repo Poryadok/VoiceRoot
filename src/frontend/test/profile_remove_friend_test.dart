@@ -31,37 +31,40 @@ void main() {
       tester,
     ) async {
       final semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
-      final harness = _RemovalHarness();
-      await harness.open(tester, locale: Locale(locale));
-      await _askToRemove(tester);
+      try {
+        final harness = _RemovalHarness();
+        await harness.open(tester, locale: Locale(locale));
+        await _askToRemove(tester);
 
-      final context = tester.element(find.byKey(_dialogKey));
-      final l10n = AppLocalizations.of(context)!;
-      expect(find.text(l10n.profileRemoveFriendConfirmTitle), findsOneWidget);
-      expect(find.text(l10n.profileRemoveFriendConfirmMessage), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byKey(_dialogKey),
-          matching: find.bySemanticsLabel(l10n.socialRemoveFriend),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byKey(_dialogKey),
-          matching: find.bySemanticsLabel(l10n.commonCancel),
-        ),
-        findsOneWidget,
-      );
-      expect(harness.removals, isEmpty);
+        final context = tester.element(find.byKey(_dialogKey));
+        final l10n = AppLocalizations.of(context)!;
+        expect(find.text(l10n.profileRemoveFriendConfirmTitle), findsOneWidget);
+        expect(find.text(l10n.profileRemoveFriendConfirmMessage), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(_dialogKey),
+            matching: find.bySemanticsLabel(l10n.socialRemoveFriend),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(_dialogKey),
+            matching: find.bySemanticsLabel(l10n.commonCancel),
+          ),
+          findsOneWidget,
+        );
+        expect(harness.removals, isEmpty);
 
-      await tester.tap(find.byKey(_cancelKey));
-      await tester.pumpAndSettle();
-      expect(harness.removals, isEmpty);
-      expect(find.byKey(_dialogKey), findsNothing);
-      expect(find.byKey(ProfileDetailSheet.removeFriendKey), findsOneWidget);
-      expect(tester.takeException(), isNull);
+        await tester.tap(find.byKey(_cancelKey));
+        await tester.pumpAndSettle();
+        expect(harness.removals, isEmpty);
+        expect(find.byKey(_dialogKey), findsNothing);
+        expect(find.byKey(ProfileDetailSheet.removeFriendKey), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
+      }
     });
   }
 
