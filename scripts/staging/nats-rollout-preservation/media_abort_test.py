@@ -11,6 +11,48 @@ from controller import Blocked
 
 
 class MediaAbortTest(unittest.TestCase):
+    def test_prepared_normalized_configmap_cannot_be_replaced(self):
+        rows=[{'kind':'ConfigMap','metadata':{'name':'voice-app-config'},'data':{'safe':'true'}}]
+        prepared={'normalized_sha256':retirement.canonical(rows)}
+        retirement.media_target_prepared(rows,prepared)
+        changed=copy.deepcopy(rows);changed[0]['data']['safe']='tampered'
+        with self.assertRaises(Blocked):retirement.media_target_prepared(changed,prepared)
+        with self.assertRaises(Blocked):retirement.media_target_prepared(rows,{})
+
+    def test_target_baseline_binds_source_images_migrations_and_retained_hub(self):
+        import source_authority
+        names=retirement.CORE|{'voice-web','voice-admin'}
+        source='b'*40
+        images={name:source_authority.REGISTRY+'/'+name+'@sha256:'+'c'*64 for name in source_authority.IMAGE_NAMES}
+        snapshots={n:{'metadata':{'uid':n},'spec':{'template':{'spec':{'containers':[
+            {'name':n.removeprefix('voice-'),'image':images.get(n.removeprefix('voice-'),'hub@sha256:'+'d'*64)}]}}}} for n in names}
+        snapshot={'context':{'snapshots':snapshots},'migrations':[{'kept':True}], 'active_contract':{'contract':{'kept':True}}}
+        documents=[{'kind':'Deployment','metadata':{'name':n,'namespace':'voice-staging'},'spec':row['spec']}
+                   for n,row in snapshots.items() if n!=retirement.HUB]
+        used={r['metadata']['name']+'/'+c['name']:c['image'] for r in documents for c in r['spec']['template']['spec']['containers']}
+        source_files={'deploy/staging/services.yaml':'e'*64}
+        target={'tag':source,'mode':'app-only','changed_services':[],'images':used,'source_hashes':source_files,
+            'template_hashes':{r['metadata']['name']:retirement.canonical(r['spec']['template']) for r in documents},
+            'manifest_sha256':retirement.canonical(documents),'migration_sha256':retirement.canonical(snapshot['migrations'])}
+        pack={'target':target,'manifests':documents,'migrations':snapshot['migrations'],'contract':snapshot['active_contract']['contract']}
+        authority={'schema':'voice-source-authority-v1','repository':source_authority.REPO,'source_sha':source,
+            'workflow_id':source_authority.WORKFLOW,'run_id':123,'run_attempt':1,'tree_sha':'f'*40,
+            'source_files':source_files,'images':images,'lock_artifact_id':456,'lock_sha256':'a'*64,
+            'image_provenance':'independently resolved trusted CI tag','verified':True}
+        normalized=copy.deepcopy(documents)
+        result=retirement.media_target_templates(snapshot,authority,pack,normalized)
+        self.assertEqual(set(result),names)
+        self.assertEqual(result[retirement.HUB],snapshots[retirement.HUB]['spec']['template'])
+        for what in ('source','image','migration','hub','normalized_image','missing_deployment'):
+            a,p,n=copy.deepcopy(authority),copy.deepcopy(pack),copy.deepcopy(normalized)
+            if what=='source':a['source_files']['deploy/staging/services.yaml']='0'*64
+            if what=='image':a['images']['voice']=images['auth']
+            if what=='migration':p['migrations'].append({'unexpected':True})
+            if what=='hub':n.append({'kind':'Deployment','metadata':{'name':retirement.HUB},'spec':snapshots[retirement.HUB]['spec']})
+            if what=='normalized_image':n[0]['spec']['template']['spec']['containers'][0]['image']='floating:tag'
+            if what=='missing_deployment':n.pop()
+            with self.subTest(what=what),self.assertRaises(Blocked):retirement.media_target_templates(snapshot,a,p,n)
+
     def test_complete_receipt_and_retained_bytes_are_required_for_idle_admission(self):
         def encoded(value):return json.dumps(value,sort_keys=True,separators=(',',':')).encode()
         with tempfile.TemporaryDirectory() as td:
@@ -60,6 +102,78 @@ class MediaAbortTest(unittest.TestCase):
                     with self.subTest(field=field),self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,retirement.media_abort_terminal(snapshot,changed))
                 write(prefix+'-receipt.json',encoded(receipt));write('apply-manifests.json',b'drift')
                 with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,terminal)
+                # The failed old-image attempt cannot be relabeled. A new target
+                # closure binds both failures and its own independent source proof.
+                import source_authority
+                write('apply-manifests.json',values['apply-manifests.json'])
+                (base/(prefix+'-receipt.json')).unlink();(base/(prefix+'-verified.json')).unlink()
+                snapshot['migrations']=[{'database':'already-applied'}]
+                snapshot['active_contract']={'contract':{'retained':True}}
+                original=encoded(snapshot);write(prefix+'-snapshot.json',original)
+                retirement.MEDIA_ABORT_CHECKPOINT=hashlib.sha256(original).hexdigest()
+                retirement.MEDIA_ABORT_ACTIVE=retirement.canonical(snapshot['active_contract'])
+                blocked=copy.deepcopy(snapshot);blocked['phase']='OPERATOR_RETIRING'
+                blocked_raw=encoded(blocked)
+                progress={'phase':'BLOCKED','snapshot_sha256':retirement.MEDIA_ABORT_CHECKPOINT,'context':context}
+                progress_raw=encoded(progress);new=retirement.MEDIA_TARGET_PREFIX
+                write(new+'-blocked.json',blocked_raw);write(prefix+'-progress.json',progress_raw)
+                source='b'*40
+                images={n:source_authority.REGISTRY+'/'+n+'@sha256:'+'c'*64 for n in source_authority.IMAGE_NAMES}
+                documents=[]
+                for n,row in originals.items():
+                    if n==retirement.HUB:continue
+                    obj={'kind':'Deployment','metadata':{'name':n,'uid':n,'namespace':'voice-staging'},'spec':copy.deepcopy(row['spec'])}
+                    obj['spec']['template']['spec']['containers'][0]['image']=images[n.removeprefix('voice-')];documents.append(obj)
+                documents.append({'kind':'ConfigMap','metadata':{'name':'voice-app-config','uid':'config','namespace':'voice-staging'},'data':{'safe':'true'}})
+                hashes={'deploy/staging/services.yaml':'e'*64}
+                authority={'schema':'voice-source-authority-v1','repository':source_authority.REPO,'source_sha':source,
+                    'workflow_id':source_authority.WORKFLOW,'run_id':123,'run_attempt':1,'tree_sha':'f'*40,'source_files':hashes,
+                    'images':images,'lock_artifact_id':456,'lock_sha256':'a'*64,'image_provenance':'independently resolved trusted CI tag','verified':True}
+                target={'tag':source,'mode':'app-only','changed_services':[],'source_hashes':hashes,
+                    'images':{d['metadata']['name']+'/app':d['spec']['template']['spec']['containers'][0]['image'] for d in documents if d['kind']=='Deployment'},
+                    'template_hashes':{d['metadata']['name']:retirement.canonical(d['spec']['template']) for d in documents if d['kind']=='Deployment'},
+                    'manifest_sha256':retirement.canonical(documents),'migration_sha256':retirement.canonical(snapshot['migrations'])}
+                pack={'target':target,'manifests':documents,'migrations':snapshot['migrations'],'contract':snapshot['active_contract']['contract']}
+                templates=retirement.media_target_templates(blocked,authority,pack,documents)
+                setup={n:{'uid':n,'template_sha256':retirement.canonical(t),'replicas':1,'ready':True} for n,t in templates.items()}
+                proof.update(setup=setup,active_contract_sha256=retirement.MEDIA_ABORT_ACTIVE,resources=retirement.media_target_resources(documents))
+                new_values={n:v for n,v in values.items() if not n.startswith(prefix+'-')}
+                new_values.update({new+'-compatibility.md':note,new+'-active-contract.json':encoded(snapshot['active_contract']),
+                    new+'-verified.json':encoded(proof),new+'-blocked.json':blocked_raw,prefix+'-progress.json':progress_raw,
+                    prefix+'-snapshot.json':original,new+'-source-authority.json':encoded(authority),new+'-compiled.json':encoded(pack),
+                    new+'-normalized.json':encoded(documents),new+'-parameters.json':encoded({'tag':source}),new+'-prepared.json':encoded({'normalized_sha256':retirement.canonical(documents)})})
+                for name,value in new_values.items():write(name,value)
+                receipt.update(schema='voice-media-target-baseline-closure-v1',configuration_basis=retirement.MEDIA_TARGET_BASIS,
+                    snapshot_sha256=retirement.MEDIA_ABORT_CHECKPOINT,active_contract_sha256=retirement.MEDIA_ABORT_ACTIVE,setup=setup,
+                    retained_files={n:{'sha256':hashlib.sha256(v).hexdigest(),'bytes':len(v)} for n,v in new_values.items()})
+                with patch.object(retirement,'MEDIA_TARGET_BLOCKED',hashlib.sha256(blocked_raw).hexdigest()),\
+                     patch.object(retirement,'MEDIA_TARGET_PROGRESS',hashlib.sha256(progress_raw).hexdigest()):
+                    write(new+'-receipt.json',encoded(receipt));terminal=retirement.media_abort_terminal(blocked,receipt)
+                    self.assertEqual(retirement.verify_media_abort_terminal(base,terminal),receipt)
+                    self.assertEqual(terminal['status'],'ABORTED')
+                    # Rehashing the changed normalized data and its live proof
+                    # into a closure cannot replace the prepare-time authority.
+                    changed_rows=copy.deepcopy(documents);changed_rows[-1]['data']['safe']='tampered'
+                    changed_proof=copy.deepcopy(proof);changed_proof['resources']=retirement.media_target_resources(changed_rows)
+                    changed=copy.deepcopy(receipt)
+                    for name,value in ((new+'-normalized.json',changed_rows),(new+'-verified.json',changed_proof)):
+                        value_raw=encoded(value);write(name,value_raw)
+                        changed['retained_files'][name]={'sha256':hashlib.sha256(value_raw).hexdigest(),'bytes':len(value_raw)}
+                    write(new+'-receipt.json',encoded(changed))
+                    with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,retirement.media_abort_terminal(blocked,changed))
+                    write(new+'-normalized.json',encoded(documents));write(new+'-verified.json',encoded(proof));write(new+'-receipt.json',encoded(receipt))
+                    bad=copy.deepcopy(proof);bad['resources'][next(iter(bad['resources']))]['semantic_sha256']='0'*64
+                    bad_raw=encoded(bad);write(new+'-verified.json',bad_raw)
+                    changed=copy.deepcopy(receipt);changed['retained_files'][new+'-verified.json']={'sha256':hashlib.sha256(bad_raw).hexdigest(),'bytes':len(bad_raw)}
+                    write(new+'-receipt.json',encoded(changed))
+                    with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,retirement.media_abort_terminal(blocked,changed))
+                    write(new+'-verified.json',encoded(proof));write(new+'-receipt.json',encoded(receipt))
+                    for name in (new+'-blocked.json',prefix+'-progress.json',new+'-source-authority.json',new+'-normalized.json'):
+                        prior=(base/name).read_bytes();write(name,b'{}')
+                        with self.subTest(retained=name),self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,terminal)
+                        write(name,prior)
+                    write(prefix+'-receipt.json',b'{}')
+                    with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,terminal)
 
     def test_exact_snapshot_hash_is_required_before_any_structural_authority(self):
         for raw in (b'{}', b'{"operation":"0e2be62a3326","status":"BLOCKED"}'):

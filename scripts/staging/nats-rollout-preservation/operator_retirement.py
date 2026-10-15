@@ -879,6 +879,98 @@ MEDIA_ABORT_ACTIVE='e9d46f0aa438cc5142fb48a363aa0286d3ff71e09736c431665133a36fa5
 MEDIA_ABORT_FINISH='b708d69b20bb6401f628ab9adb6cf4d4cb68cbc1e8d0f360e55475856a62264f.json'
 MEDIA_ABORT_JOURNAL='c820f48bb7c2cfcd5b4199fde2584f7ada103e1c51655e7805d5260758a6f7af'
 MEDIA_ABORT_PREFIX='operator-media-abort'
+MEDIA_TARGET_PREFIX='operator-media-target'
+MEDIA_TARGET_BLOCKED='790a980a0f53a031ca1688f7e9f7535661d9b2fb66fc3efe16feda332d5f2fbd'
+MEDIA_TARGET_PROGRESS='96965ef71b1f0e787caa20646e9023d804e4736184fd3dd1a84bddc43973c3a9'
+MEDIA_TARGET_BASIS='VERIFIED_GATED_TARGET_BASELINE'
+
+
+def media_target_failed(base):
+    """The failed original-image attempt remains immutable, not a retry token."""
+    raw=private_bytes(Path(base)/(MEDIA_TARGET_PREFIX+'-blocked.json'))
+    progress=private_bytes(Path(base)/(MEDIA_ABORT_PREFIX+'-progress.json'))
+    if hashlib.sha256(raw).hexdigest()!=MEDIA_TARGET_BLOCKED or hashlib.sha256(progress).hexdigest()!=MEDIA_TARGET_PROGRESS:fail()
+    state=json.loads(raw);row=json.loads(progress)
+    if (state.get('operation')!=MEDIA_ABORT_OPERATION or state.get('phase')!='OPERATOR_RETIRING'
+        or state.get('status')!='BLOCKED' or state.get('fence_status')!='VERIFIED'
+        or row.get('phase')!='BLOCKED' or row.get('context')!=state.get('context')
+        or row.get('snapshot_sha256')!=MEDIA_ABORT_CHECKPOINT):fail()
+    for name in ('receipt.json','verified.json'):
+        try:(Path(base)/(MEDIA_ABORT_PREFIX+'-'+name)).lstat()
+        except FileNotFoundError:pass
+        else:fail()
+    return state
+
+
+def media_target_templates(snapshot,authority,pack,normalized):
+    """Bind the manual baseline to independently captured master CI and images."""
+    import source_authority
+    try:
+        target=pack['target'];source=authority['source_sha'];snapshots=snapshot['context']['snapshots']
+        if (authority.get('schema')!='voice-source-authority-v1' or authority.get('verified') is not True
+            or authority.get('repository')!=source_authority.REPO or authority.get('workflow_id')!=source_authority.WORKFLOW
+            or any(type(authority.get(k)) is not int or authority[k]<=0 for k in ('run_id','run_attempt','lock_artifact_id'))
+            or not re.fullmatch('[a-f0-9]{40}',source) or not re.fullmatch('[a-f0-9]{40}',authority.get('tree_sha',''))
+            or not re.fullmatch('[a-f0-9]{64}',authority.get('lock_sha256',''))
+            or authority.get('image_provenance')!='independently resolved trusted CI tag'
+            or set(authority['images'])!=set(source_authority.IMAGE_NAMES)
+            or target.get('tag')!=source or target.get('mode')!='app-only' or target.get('changed_services')!=[]
+            or target.get('manifest_sha256')!=canonical(pack['manifests'])
+            or target.get('migration_sha256')!=canonical(pack['migrations'])
+            or pack['migrations']!=snapshot['migrations'] or pack['contract']!=snapshot['active_contract']['contract']
+            or not target.get('source_hashes')
+            or any(authority['source_files'].get(k)!=v for k,v in target['source_hashes'].items())):fail()
+        for name,image in authority['images'].items():
+            if not re.fullmatch(re.escape(source_authority.REGISTRY+'/'+name)+r'@sha256:[a-f0-9]{64}',image):fail()
+        def inventory(rows):
+            result={}
+            for row in rows:
+                key=(row.get('kind'),row.get('metadata',{}).get('name'))
+                if (key in result or key[0] not in ('Deployment','Service','ConfigMap','NetworkPolicy','Ingress')
+                    or not isinstance(key[1],str) or key[1].startswith('voice-nats')
+                    or row.get('metadata',{}).get('namespace')!=guard.NS):fail()
+                result[key]=row
+            return result
+        source_rows=inventory(pack['manifests']);actual_rows=inventory(normalized)
+        if source_rows.keys()!=actual_rows.keys():fail()
+        result={HUB:copy.deepcopy(snapshots[HUB]['spec']['template'])};used={}
+        for (kind,name),row in actual_rows.items():
+            if kind!='Deployment':continue
+            if name not in snapshots or name==HUB:fail()
+            original=source_rows[(kind,name)]['spec']['template'];template=row['spec']['template']
+            if target['template_hashes'].get(name)!=canonical(original):fail()
+            old={c['name']:c['image'] for c in snapshots[name]['spec']['template']['spec'].get('initContainers',[])+snapshots[name]['spec']['template']['spec']['containers']}
+            expected={c['name']:c['image'] for c in original['spec'].get('initContainers',[])+original['spec']['containers']}
+            actual={c['name']:c['image'] for c in template['spec'].get('initContainers',[])+template['spec']['containers']}
+            if actual!=expected:fail()
+            service=name.removeprefix('voice-')
+            for container,image in actual.items():
+                wanted=authority['images'][service] if image.split('@')[0]==source_authority.REGISTRY+'/'+service else old.get(container)
+                if image!=wanted or not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):fail()
+                used[name+'/'+container]=image
+            if authority['images'][service] not in actual.values():fail()
+            result[name]=template
+        if len(result)!=22 or set(result)!=set(snapshots) or used!=target['images']:fail()
+        return result
+    except (KeyError,TypeError,AttributeError):fail()
+
+
+def media_target_prepared(normalized,prepared):
+    """Bind every normalized resource to the immutable prepare-time capture."""
+    if prepared.get('normalized_sha256')!=canonical(normalized):fail()
+
+
+def media_target_resources(normalized):
+    """Every applied resource, including service/configuration semantics, at release."""
+    from nonnats_plan import semantic
+    result={}
+    for row in normalized:
+        wanted=copy.deepcopy(row);metadata=wanted.get('metadata',{})
+        key=wanted.get('kind','')+'/'+metadata.get('name','');uid=metadata.get('uid')
+        if key in result or not isinstance(uid,str) or not uid:fail()
+        if wanted.get('kind')=='Deployment':wanted['spec']['replicas']=1
+        result[key]={'uid':uid,'semantic_sha256':canonical(semantic(wanted))}
+    return result
 
 
 def media_abort_snapshot(raw):
@@ -927,6 +1019,9 @@ def media_abort_terminal(snapshot,receipt):
     state.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED')
     state['operator_media_abort']={'schema':'voice-media-original-restore-reference-v1',
         'snapshot_sha256':MEDIA_ABORT_CHECKPOINT,'receipt_sha256':canonical(receipt)}
+    if receipt.get('configuration_basis')==MEDIA_TARGET_BASIS:
+        state['operator_media_abort'].update(schema='voice-media-target-baseline-reference-v1',
+            blocked_sha256=MEDIA_TARGET_BLOCKED,progress_sha256=MEDIA_TARGET_PROGRESS)
     state['events']=snapshot['events']+[{'kind':'operator_media_abort_completed',
         'deployment_pass':False,'rollback_eligible':False,'forward_migrations_retained':True}]
     return state
@@ -934,25 +1029,36 @@ def media_abort_terminal(snapshot,receipt):
 
 def verify_media_abort_terminal(base,state):
     """Exact operator abort, not successful deployment or generic rollback authority."""
-    base=Path(base);prefix=MEDIA_ABORT_PREFIX
+    base=Path(base);target_baseline=state.get('operator_media_abort',{}).get('schema')=='voice-media-target-baseline-reference-v1'
+    prefix=MEDIA_TARGET_PREFIX if target_baseline else MEDIA_ABORT_PREFIX
     if base!=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION):fail()
-    snapshot=media_abort_snapshot(private_bytes(base/(prefix+'-snapshot.json')))
+    snapshot=media_abort_snapshot(private_bytes(base/(MEDIA_ABORT_PREFIX+'-snapshot.json')))
+    blocked=media_target_failed(base) if target_baseline else snapshot
     receipt=document(base/(prefix+'-receipt.json'))
     if (set(receipt)!={'schema','operation','waiver','snapshot_sha256','compatibility_sha256',
         'deployment_pass','rollback_eligible','configuration_basis','migration_jobs_sha256',
         'active_contract_sha256','setup','released_marker','retained_files','journal'}
-        or receipt.get('schema')!='voice-media-original-restore-closure-v1'
+        or receipt.get('schema')!=('voice-media-target-baseline-closure-v1' if target_baseline else 'voice-media-original-restore-closure-v1')
         or receipt.get('operation')!=MEDIA_ABORT_OPERATION or receipt.get('waiver')!=WAIVER
         or receipt.get('snapshot_sha256')!=MEDIA_ABORT_CHECKPOINT
         or receipt.get('compatibility_sha256')!=MEDIA_ABORT_COMPATIBILITY
         or receipt.get('deployment_pass') is not False or receipt.get('rollback_eligible') is not False
-        or receipt.get('configuration_basis')!='ORIGINAL_APPLICATION_IMAGES_RETAIN_MIGRATED_NATS_AND_DATABASES'
+        or receipt.get('configuration_basis')!=(MEDIA_TARGET_BASIS if target_baseline else 'ORIGINAL_APPLICATION_IMAGES_RETAIN_MIGRATED_NATS_AND_DATABASES')
         or receipt.get('migration_jobs_sha256')!=canonical(snapshot['migration_jobs'])
         or receipt.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
         or root_cli.code_binding(base/'code')!=snapshot['code_capture']
         or receipt.get('journal')!=media_abort_journal(guard.ROOT/'installed')
-        or state!=media_abort_terminal(snapshot,receipt)):fail()
-    templates=media_abort_templates(snapshot)
+        or state!=media_abort_terminal(blocked,receipt)):fail()
+    if target_baseline:
+        authority=document(base/(prefix+'-source-authority.json'))
+        pack=document(base/(prefix+'-compiled.json'))
+        normalized=document(base/(prefix+'-normalized.json'))
+        media_target_prepared(normalized,document(base/(prefix+'-prepared.json')))
+        if (blocked.get('migrations')!=snapshot.get('migrations') or blocked.get('migration_jobs')!=snapshot.get('migration_jobs')
+            or blocked.get('active_contract')!=snapshot.get('active_contract')
+            or precut_retained_setup(blocked)!=precut_retained_setup(snapshot)):fail()
+        templates=media_target_templates(blocked,authority,pack,normalized)
+    else:templates=media_abort_templates(snapshot)
     expected={name:{'uid':snapshot['context']['original_snapshots'][name]['metadata']['uid'],
         'template_sha256':canonical(template),'replicas':1,'ready':True} for name,template in templates.items()}
     if receipt.get('setup')!=expected:fail()
@@ -964,6 +1070,9 @@ def verify_media_abort_terminal(base,state):
     required={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json','rollout-backup.cms',
         'decrypted-restore.json','apply-manifests.json','apply-authorization.json',
         prefix+'-compatibility.md',prefix+'-active-contract.json',prefix+'-verified.json',snapshot['preservation']['archive']}
+    if target_baseline:
+        required|={prefix+'-blocked.json',MEDIA_ABORT_PREFIX+'-progress.json',MEDIA_ABORT_PREFIX+'-snapshot.json',
+            prefix+'-source-authority.json',prefix+'-compiled.json',prefix+'-normalized.json',prefix+'-parameters.json',prefix+'-prepared.json'}
     files=receipt.get('retained_files',{})
     if set(files)!=required:fail()
     for name,pin in files.items():
@@ -974,6 +1083,7 @@ def verify_media_abort_terminal(base,state):
     if files[prefix+'-compatibility.md']['sha256']!=MEDIA_ABORT_COMPATIBILITY:fail()
     if canonical(document(base/(prefix+'-active-contract.json')))!=MEDIA_ABORT_ACTIVE:fail()
     proof=document(base/(prefix+'-verified.json'))
+    if target_baseline and proof.get('resources')!=media_target_resources(normalized):fail()
     if (proof.get('setup')!=expected or proof.get('storage')!=precut_retained_setup(snapshot)
         or proof.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
         or proof.get('migration_jobs_sha256')!=receipt['migration_jobs_sha256']

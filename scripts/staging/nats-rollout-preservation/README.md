@@ -5,21 +5,32 @@ the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.
 The selected PVC/PV UID and physical path remain bound throughout the operation.
 
-### Explicit original-application restoration after media startup failure
+### Explicit baseline restoration after media startup failure
 
-The separate, exact `0e2be62a3326` media-startup abort restores the reviewed
-original application templates and digest-pinned images while retaining the
-already migrated Hub, 45-consumer contract and all 16 database Job receipts.
-Its private compatibility note, original failed checkpoint and absent finish
-response remain unchanged evidence. Before release, the reviewed root runner
-proves current signed credential compatibility, isolated authentication, actual
-leaf connections and readiness of all restored workloads, including restoration
-of the temporary User/Space startup override. This is an explicit operator
-`ABORTED` disposition: it grants neither deployment PASS nor rollback eligibility.
-Only that verified terminal admits `--install --upgrade-idle-media-v1` from the
-exact retained 1295 helper. Provision the dedicated
-[media principal material](../../../deploy/staging/media-principal.md) before a
-fresh ordinary FULL; the ignored recovery runner is not a permanent installed CLI.
+The separate, exact `0e2be62a3326` original-application restoration failed during
+startup and was refenced. Its original checkpoint, failed restoration checkpoint,
+private progress, compatibility note and absent finish response remain unchanged
+evidence. The frozen original-image runner must not be rerun.
+
+The reviewed alternative establishes a `VERIFIED_GATED_TARGET_BASELINE` using
+current master source captured through the existing CI/image-lock authority,
+canonical rendered manifests and dedicated
+[media principal material](../../../deploy/staging/media-principal.md). It retains
+the existing Hub/PVC, 45-consumer contract and all 16 completed database Jobs;
+neither NATS nor database migrations are replayed. Before releasing the marker,
+it proves the exact 22 target templates/UIDs and readiness, all 19 signed service
+actors and 18 live leaf connections, and restores the owned User/Space startup
+override. A bounded private error/status/container-log capture precedes refencing
+if startup fails; public output contains only fixed stage and exception-class fields.
+The immutable prepare record binds the canonical full normalized resource set;
+both apply admission and terminal verification reject any subsequent change,
+including non-Deployment configuration, even if closure hashes are recomputed.
+
+The single terminal remains `ABORTED`, with deployment PASS and rollback
+eligibility both false. It admits the existing `--install --upgrade-idle-media-v1`
+transition from the exact retained 1295 helper. A fresh ordinary populated FULL
+and actual application/principal checks provide new-build acceptance separately;
+the ignored recovery runner is not a permanent installed CLI.
 Any nonzero recovery result after mutation requires stopping and reconciling the
 saved private progress manually. Do not rerun it: the exact checkpoint admission
 refuses a changed or partially restored state.
