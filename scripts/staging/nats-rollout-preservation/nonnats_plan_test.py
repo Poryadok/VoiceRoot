@@ -30,6 +30,29 @@ class Fake:
         return copy.deepcopy(self.objects[(kind.lower(), name)])
 
 class PlanTests(unittest.TestCase):
+    def test_deployment_controller_revision_is_not_desired_configuration(self):
+        desired = {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': 'voice-auth'},
+                   'spec': {'replicas': 0, 'template': {'metadata': {'annotations': {'app.example/config': 'pinned'}},
+                            'spec': {'containers': [{'name': 'auth', 'image': 'example/auth@sha256:123'}]}}}}
+        live = copy.deepcopy(desired)
+        live['metadata']['annotations'] = {'deployment.kubernetes.io/revision': '42',
+                                         'kubectl.kubernetes.io/last-applied-configuration': 'bookkeeping'}
+        original = copy.deepcopy(live)
+        self.assertEqual(subject.semantic(live), subject.semantic(desired))
+        self.assertEqual(live, original)
+        for mutate in (
+            lambda obj: obj['metadata']['annotations'].update({'app.example/owner': 'changed'}),
+            lambda obj: obj['spec']['template']['metadata']['annotations'].update({'deployment.kubernetes.io/revision': '42'}),
+            lambda obj: obj['spec']['template']['spec']['containers'][0].update(image='other'),
+            lambda obj: obj['spec'].update(replicas=1),
+        ):
+            changed = copy.deepcopy(live); mutate(changed)
+            self.assertNotEqual(subject.semantic(changed), subject.semantic(desired))
+        for kind in ('Service', 'ConfigMap', 'StatefulSet'):
+            target = copy.deepcopy(desired); target['kind'] = kind
+            current = copy.deepcopy(live); current['kind'] = kind
+            self.assertNotEqual(subject.semantic(current), subject.semantic(target))
+
     def test_private_semantic_hash_rejects_forgery_without_serializing_data(self):
         kube, plan = fixture()
         obj = kube.objects[('configmap', 'voice-app-config')]
