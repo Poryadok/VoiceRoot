@@ -29,6 +29,7 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - {name: GATEWAY_SESSION_EPOCH_STRICT, value: "true"}
             - name: LISTEN_ADDR
               value: ":8080"
             - {name: GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR, value: /etc/voice/media/keys}

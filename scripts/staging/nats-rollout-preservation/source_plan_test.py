@@ -71,6 +71,40 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_rendered_gateway_requires_strict_delegated_identity(self):
+        kube, params = self.canonical_fixture()
+        plan = source_plan.compile_plan(SOURCE, params, decoder, kube)
+        gateway = next(o for r in plan['checks'] for o in r['objects']
+                       if o['kind'] == 'Deployment' and o['name'] == 'voice-gateway')
+        container = gateway['desired']['spec']['template']['spec']['containers'][0]
+        env = {e['name']: e for e in container['env']}
+        self.assertEqual(env['GATEWAY_SESSION_EPOCH_STRICT'],
+                         {'name': 'GATEWAY_SESSION_EPOCH_STRICT', 'value': 'true'})
+        self.assertEqual(env['GATEWAY_REDIS_ADDR']['valueFrom']['configMapKeyRef'],
+                         {'name': 'voice-app-config', 'key': 'REDIS_ADDR'})
+        self.assertEqual(env['GATEWAY_PRINCIPAL_ACTIVE_KID']['valueFrom']['secretKeyRef'],
+                         {'name': 'voice-gateway-principal-signing', 'key': 'active-kid'})
+
+    def test_invalid_rendered_gateway_delegation_is_rejected(self):
+        for field in ('GATEWAY_SESSION_EPOCH_STRICT', 'GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR',
+                      'GATEWAY_PRINCIPAL_ACTIVE_KID', 'GATEWAY_REDIS_ADDR', 'false-strict', 'signer-volume'):
+            with self.subTest(field=field):
+                kube, params = self.canonical_fixture()
+                def invalid(raw):
+                    obj = decoder(raw)
+                    if obj['kind'] == 'Deployment' and obj['metadata']['name'] == 'voice-gateway':
+                        spec = obj['spec']['template']['spec']
+                        env = spec['containers'][0]['env']
+                        env[:] = [e for e in env if e['name'] != field]
+                        if field == 'false-strict':
+                            env[:] = [e for e in env if e['name'] != 'GATEWAY_SESSION_EPOCH_STRICT']
+                            env.append({'name': 'GATEWAY_SESSION_EPOCH_STRICT', 'value': 'false'})
+                        if field == 'signer-volume':
+                            spec['volumes'] = [v for v in spec['volumes'] if v['name'] != 'media-signing']
+                    return obj
+                with self.assertRaisesRegex(nonnats_plan.PlanError, 'canonical_gateway_delegated_config_invalid'):
+                    source_plan.compile_plan(SOURCE, params, invalid, kube)
+
     def canonical_fixture(self, mode='app-only'):
         kube, params = fixture()
         params.update(mode=mode, gateway_host='voice.comrade.click', livekit_host='livekit.comrade.click', web_host='app.comrade.click',

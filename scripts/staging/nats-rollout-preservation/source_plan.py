@@ -215,12 +215,43 @@ def _ingress(builder, app_secret, row='ingress'):
             builder.add(row, obj, action=True)
 
 
+def _gateway_delegated_config(obj):
+    """Validate the canonical staging delegation prerequisites before planning writes."""
+    if obj['metadata']['name'] != 'voice-gateway':
+        return
+    spec = obj['spec']['template']['spec']
+    containers = [c for c in spec['containers'] if c['name'] == 'gateway']
+    if len(containers) != 1:
+        _fail('canonical_gateway_delegated_config_invalid')
+    container = containers[0]
+    entries = container.get('env', [])
+    env = {e['name']: e for e in entries}
+    required = {
+        'GATEWAY_SESSION_EPOCH_STRICT': {'value': 'true'},
+        'GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR': {'value': '/etc/voice/media/keys'},
+        'GATEWAY_PRINCIPAL_ACTIVE_KID': {'valueFrom': {'secretKeyRef':
+            {'name': 'voice-gateway-principal-signing', 'key': 'active-kid'}}},
+        'GATEWAY_REDIS_ADDR': {'valueFrom': {'configMapKeyRef':
+            {'name': 'voice-app-config', 'key': 'REDIS_ADDR'}}},
+    }
+    mounts = [m for m in container.get('volumeMounts', []) if m.get('mountPath') == '/etc/voice/media/keys']
+    volumes = [v for v in spec.get('volumes', []) if len(mounts) == 1 and v.get('name') == mounts[0].get('name')]
+    if (len(env) != len(entries) or any(env.get(k) != dict(name=k, **v) for k, v in required.items())
+            or len(mounts) != 1 or mounts[0].get('readOnly') is not True or len(volumes) != 1):
+        _fail('canonical_gateway_delegated_config_invalid')
+    secret = volumes[0].get('secret', {})
+    if (secret.get('secretName') != 'voice-gateway-principal-signing' or secret.get('optional', False)
+            or secret.get('items') != [{'key': 'current.pem', 'path': 'current.pem'}, {'key': 'next.pem', 'path': 'next.pem'}]):
+        _fail('canonical_gateway_delegated_config_invalid')
+
+
 def _application(builder):
     p = builder.p
     apps = []
     for path in APP_SOURCES:
         for obj in builder.documents(path, 'app-restart'):
             if obj['kind'] == 'Deployment':
+                _gateway_delegated_config(obj)
                 spec = obj['spec']['template']['spec']
                 pull = p.get('image_pull_secret', '')
                 if pull:
