@@ -133,6 +133,7 @@ void main() {
           );
           await tester.tap(find.byKey(const Key('open_contact_profile')));
           if (state == 'loading') {
+            await tester.pump();
             await tester.pump(const Duration(milliseconds: 350));
           } else {
             await tester.pumpAndSettle();
