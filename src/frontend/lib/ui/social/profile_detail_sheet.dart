@@ -567,7 +567,7 @@ class _ProfileDismissControl extends StatelessWidget {
     return SizedBox(
       key: const Key('profile_header_controls'),
       height: context.voiceMetrics.layoutSize('headerHeight', fallback: 56),
-      child: IconTheme(
+      child: IconTheme.merge(
         data: IconThemeData(
           size: context.voiceMetrics.layoutSize('iconMd', fallback: 20),
         ),

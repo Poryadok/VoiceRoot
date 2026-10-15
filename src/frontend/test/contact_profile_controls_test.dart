@@ -140,6 +140,20 @@ void main() {
           }
           final dismiss = find.byKey(const Key('profile_dismiss'));
           expect(dismiss.hitTestable(), findsOneWidget);
+          final icon = find.descendant(of: dismiss, matching: find.byType(Icon));
+          final iconContext = tester.element(icon);
+          final foreground = tester.widget<Icon>(icon).color ??
+              IconTheme.of(iconContext).color!;
+          final background = Theme.of(iconContext).colorScheme.surface;
+          final foregroundLuminance = foreground.computeLuminance();
+          final backgroundLuminance = background.computeLuminance();
+          final lighter = foregroundLuminance > backgroundLuminance
+              ? foregroundLuminance
+              : backgroundLuminance;
+          final darker = foregroundLuminance < backgroundLuminance
+              ? foregroundLuminance
+              : backgroundLuminance;
+          expect((lighter + 0.05) / (darker + 0.05), greaterThanOrEqualTo(3));
           expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
           expect(find.textContaining('private-diagnostic'), findsNothing);
           final orientation = size.width > size.height ? 'h' : 'v';
