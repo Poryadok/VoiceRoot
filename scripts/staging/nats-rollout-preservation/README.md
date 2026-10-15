@@ -63,6 +63,15 @@ separately: a cleanup error cannot discard a completed refence proof, and zero
 replicas alone cannot establish that proof. Historical UNKNOWN is not rewritten
 merely because a later read-only physical fence check succeeds.
 
+Recovery inventory fixtures must use independently recorded literal resource
+names. A successor admission initially omitted `voice-` from six NetworkPolicy
+names; tests generated their inventory from that same incorrect constant and
+therefore missed the mismatch. The corrected regression uses all 22 names from
+the retained failed progress, including their prefixes and order, and rejects
+missing-prefix aliases and reordered events. That admission refusal created only
+the byte-identical retained checkpoint and original-runner copies; these files
+are preserved and accepted only when `retain()` confirms exact existing bytes.
+
 ### Explicit reset after retained records expire
 
 The native `/msgs/` boundary includes `index.db`. A retention expiry can change
