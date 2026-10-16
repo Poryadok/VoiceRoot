@@ -297,7 +297,7 @@ head's actual artifacts and independent review.
 | `actions/setup-node` | `node-version: '24'` |
 | Admin / Developer Portal `package.json` | `"engines": { "node": ">=24.0.0" }` |
 | Docker build (admin, portal) | `FROM node:24-alpine` |
-| Артефакты CI | `actions/upload-artifact@v6`, `actions/download-artifact@v6` (node24) |
+| Артефакты CI | `actions/upload-artifact@v6`, `actions/download-artifact@v7` (node24) |
 
 Self-hosted runner на staging: версия runner **≥ 2.327.1** для node24 actions ([setup-github-runner.sh](../scripts/staging/setup-github-runner.sh)).
 
