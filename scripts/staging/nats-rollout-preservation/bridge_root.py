@@ -192,6 +192,7 @@ class Actions:
         if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
             try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
             except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
+            if not isinstance(enrollment,dict):raise Blocked('enrolled_bootstrap_selection_refused')
             if enrollment is not None:
                 from nats_contract_plan import digest as enrollment_digest
                 previous_enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')

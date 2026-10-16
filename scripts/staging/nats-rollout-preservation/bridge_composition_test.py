@@ -151,6 +151,17 @@ class CompositionTests(unittest.TestCase):
                 execution={'dispatcher_run_id':123,'head_sha':p['tag']}
                 with patch.object(bridge_root,'INSTALLED',installed),patch.object(bridge_root.guard,'ROOT',base),patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(123,execution)),patch.object(bridge_root.source_authority,'capture_source',capture_source),patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})),patch.object(bridge_root.RolloutStage,'capture',return_value=stage),patch('commands.capture',side_effect=capture),patch.object(compiler,'capture',side_effect=capture),patch.object(renderer_root,'prove',side_effect=renderer_proof),patch.object(actor_root,'preflight',return_value=None),patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}),patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value),patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state):
                     result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
+                    # Required v4 admission cannot be bypassed by a private
+                    # but malformed JSON file. Stop before compilation/fencing.
+                    real_read=bridge_root.private_json
+                    for digit,invalid in (('b',None),('c',[]),('d','invalid')):
+                        with self.subTest(enrollment=invalid):
+                            def read(path):
+                                return invalid if path.name=='bootstrap-enrollment-v4.json' else real_read(path)
+                            with patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root.compiler,'main') as build,patch.object(bridge_root.root_cli,'prepare_value') as prepare:
+                                with self.assertRaisesRegex(bridge_root.Blocked,'enrolled_bootstrap_selection_refused'):
+                                    actions._prepare({'nonce':digit*64,'token':'private','mode':mode,'changed_services':[]})
+                                build.assert_not_called();prepare.assert_not_called()
                 self.assertEqual(result['target']['mode'],mode);self.assertEqual(len(reached[0]['nonnats']['checks']),16)
                 self.assertEqual(any(key.startswith(bridge_root.HUB+'/') for key in result['target']['images']),mode=='full')
                 self.assertFalse(any(row['metadata']['name']==bridge_root.HUB for row in reached[0]['manifests']))
