@@ -1899,7 +1899,9 @@ void main() {
         expect(container.read(chatInboxProvider), 'main');
 
         await tester.tap(find.byKey(const Key('test_open_message_requests')));
-        await tester.pumpAndSettle();
+        // The pending mutation keeps its busy indicator animating, so pump only
+        // the navigation frame while the controlled response is unresolved.
+        await tester.pump();
         expect(
           find.text(action == 'accept' ? 'Accept' : 'Decline'),
           findsOneWidget,
