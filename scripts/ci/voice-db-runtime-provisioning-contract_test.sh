@@ -1580,7 +1580,7 @@ f13_collect_develop_contributions() {
           f13_collect_failure "${diagnostic_file}" nested_contribution_missing
           return 1
         }
-        IFS=$'\t' read -r _ nested_trigger _ _ nested_base nested_head _ <<<"${nested_row}"
+        IFS=$'\t' read -r _ nested_trigger _ _ nested_base nested_head _ _ <<<"${nested_row}"
         trigger="${nested_trigger}"
       fi
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
@@ -2403,7 +2403,7 @@ f13_changed_content() {
   local repo="$1" map="$2" path="$3" commit first_parent source_base source_head content_base row
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
-    IFS=$'\t' read -r _ _ commit first_parent source_base source_head content_base <<<"${row}"
+    IFS=$'\t' read -r _ _ commit first_parent source_base source_head content_base _ <<<"${row}"
     [[ -n "${commit}" && -n "${first_parent}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
     git -C "${repo}" diff --unified=0 "${content_base:-${first_parent}}" "${commit}" -- "${path}" | sed -n '/^+++ /d; /^+/s/^+//p'
   else
@@ -2469,7 +2469,7 @@ grep -Fqx $'src/backend/voice/followup_test.go\ttrue\t'"${f13_followup_head}" <(
 }
 f13_new_direct_row="$(awk -F '\t' '$1 == "src/backend/voice/z_new_direct.go" { row=$0 } END { print row }' \
   "${TMP_DIR}/f13-release-followup-map")"
-IFS=$'\t' read -r _ _ _ f13_new_direct_parent _ _ f13_new_direct_content_base <<<"${f13_new_direct_row}"
+IFS=$'\t' read -r _ _ _ f13_new_direct_parent _ _ f13_new_direct_content_base _ <<<"${f13_new_direct_row}"
 [[ -n "${f13_new_direct_parent}" && \
   "${f13_new_direct_content_base}" == "${f13_new_direct_parent}" ]] || {
   printf '%s\n' 'F13 oracle bug: new path in mixed direct follow-up inherited another path content history' >&2
@@ -2484,7 +2484,7 @@ grep -Fq 'NewLifecycleWorker()' "${TMP_DIR}/f13-release-followup-content" && \
 }
 f13_followup_row="$(awk -F '\t' '$1 == "src/backend/voice/followup_test.go" { row=$0 } END { print row }' \
   "${TMP_DIR}/f13-release-followup-map")"
-IFS=$'\t' read -r _ _ _ _ f13_followup_source_base f13_followup_source_head _ <<<"${f13_followup_row}"
+IFS=$'\t' read -r _ _ _ _ f13_followup_source_base f13_followup_source_head _ _ <<<"${f13_followup_row}"
 [[ "${f13_followup_source_base}" == "${f13_followup_activation_commit}" && \
   "${f13_followup_source_head}" == "${f13_followup_head}" ]] && \
   git -C "${f13_fixture_repo}" diff --name-only \
@@ -2627,8 +2627,8 @@ f13_sync_pre_row="$(awk -F '\t' '$1 == "src/backend/voice/sync_pre.go" { row=$0 
   "${TMP_DIR}/f13-sync-boundary-map")"
 f13_sync_post_row="$(awk -F '\t' '$1 == "src/backend/voice/sync_post.go" { row=$0 } END { print row }' \
   "${TMP_DIR}/f13-sync-boundary-map")"
-IFS=$'\t' read -r _ _ f13_sync_pre_owner _ _ f13_sync_pre_head _ <<<"${f13_sync_pre_row}"
-IFS=$'\t' read -r _ _ f13_sync_post_owner _ _ f13_sync_post_head _ <<<"${f13_sync_post_row}"
+IFS=$'\t' read -r _ _ f13_sync_pre_owner _ _ f13_sync_pre_head _ _ <<<"${f13_sync_pre_row}"
+IFS=$'\t' read -r _ _ f13_sync_post_owner _ _ f13_sync_post_head _ _ <<<"${f13_sync_post_row}"
 [[ "${f13_sync_pre_owner}" == "${f13_sync_pre_commit}" && \
   "${f13_sync_pre_head}" == "${f13_sync_pre_commit}" && \
   "${f13_sync_post_owner}" == "${f13_sync_post_commit}" && \
@@ -2854,7 +2854,7 @@ f13_delta_for_path() {
   local repo="$1" map="$2" path="$3" row commit source_base source_head
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
-    IFS=$'\t' read -r _ _ commit _ source_base source_head _ <<<"${row}"
+    IFS=$'\t' read -r _ _ commit _ source_base source_head _ _ <<<"${row}"
     [[ -n "${commit}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
     git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-current-delta" || return 1
     grep -Fxq -- "${path}" "${TMP_DIR}/f13-current-delta" || return 1
@@ -2868,7 +2868,7 @@ f13_source_head_for_path() {
   local repo="$1" map="$2" path="$3" row source_head
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
-    IFS=$'\t' read -r _ _ _ _ _ source_head _ <<<"${row}"
+    IFS=$'\t' read -r _ _ _ _ _ source_head _ _ <<<"${row}"
     [[ -n "${source_head}" ]] || return 1
     printf '%s\n' "${source_head}"
   else
