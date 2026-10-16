@@ -84,6 +84,12 @@ class PullMusicPlayback extends MusicPlayback {
     }
     final activation = ++_activation;
     final nativeFlacTags = nativeFlacMusicTags(bytes);
+    // Native FLAC comments are parsed from the admitted plaintext bytes. The
+    // pinned decoder does not consistently emit them through its streaming
+    // metadata callback, so expose these tags independently of that callback.
+    _title = _tag(nativeFlacTags['title']);
+    _artist = _tag(nativeFlacTags['artist']);
+    _album = _tag(nativeFlacTags['album']);
     final previous = _active;
     if (previous != null && previous != this) await previous.close();
     if (_closed || activation != _activation) {
