@@ -40,6 +40,12 @@ SECRET_CONTRACTS = {
         'voice-media-jvm-trust': {'truststore.p12'},
         'voice-media-resolver': {'token'},
         'voice-voice-principal-signing': {'current.pem', 'next.pem'},
+        'voice-gameintegration-workload-credentials': {
+            'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64',
+            'GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64',
+        },
+        'voice-gameintegration-principal-signing': {'current.pem', 'next.pem'},
+        'voice-gameintegration-jwks-tls': {'tls.crt', 'tls.key'},
         'voice-gateway-principal-signing': {'current.pem', 'next.pem', 'active-kid'},
         **{'voice-' + name + '-tls': {'tls.crt', 'tls.key'} for name in
            ('auth-media-server', 'role-media-server', 'voice-media-server',
