@@ -432,7 +432,8 @@ jobs:
           (github.head_ref == 'codex/contact-profile-controls' ||
            github.head_ref == 'codex/contact-profile-banner' ||
            github.head_ref == 'codex/contact-profile-close-controls' ||
-           github.head_ref == 'codex/contact-profile-communication-actions')
+           github.head_ref == 'codex/contact-profile-communication-actions' ||
+           github.head_ref == 'codex/contact-profile-favorite-band')
         timeout-minutes: 5
         working-directory: src/frontend
         env:
@@ -444,7 +445,8 @@ jobs:
           (github.head_ref == 'codex/contact-profile-controls' ||
            github.head_ref == 'codex/contact-profile-banner' ||
            github.head_ref == 'codex/contact-profile-close-controls' ||
-           github.head_ref == 'codex/contact-profile-communication-actions')
+           github.head_ref == 'codex/contact-profile-communication-actions' ||
+           github.head_ref == 'codex/contact-profile-favorite-band')
         uses: actions/upload-artifact@v6
         with:
           name: contact-profile-hv-${{ github.run_id }}
@@ -469,6 +471,10 @@ jobs:
             ${{ runner.temp }}/contact-profile-capture/contact-communication-v.png
             ${{ runner.temp }}/contact-profile-capture/contact-communication-narrow.png
             ${{ runner.temp }}/contact-profile-capture/contact-communication-large-text.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-off-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-off-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-on-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-on-v.png
           if-no-files-found: error
           retention-days: 7
       - name: Capture Deep Links error reference views
