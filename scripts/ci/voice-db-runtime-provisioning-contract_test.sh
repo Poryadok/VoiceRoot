@@ -427,6 +427,18 @@ base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
 # and Git blobs; the original R22.2 oracle still checks every remaining delta.
 accepted_game_checkpoint='5ff441e04422e3ff1a4c0e1e7e81e3d17b8470eb'
+# Empty until a separately accepted, immutable source snapshot is reviewed and
+# activated. These are source constants, never environment-provided proof.
+game_checkpoint_snapshot_base=''
+game_checkpoint_snapshot_head=''
+game_checkpoint_snapshot_record=''
+game_checkpoint_aggregate_active=false
+game_checkpoint_aggregate_base=''
+game_checkpoint_aggregate_head=''
+game_checkpoint_aggregate_target=''
+game_checkpoint_aggregate_paths=''
+game_checkpoint_aggregate_map=''
+game_checkpoint_aggregate_record=''
 game_checkpoint_enabled=false
 if git -C "${ROOT}" merge-base --is-ancestor "${accepted_game_checkpoint}" HEAD; then
   game_checkpoint_enabled=true
@@ -447,6 +459,93 @@ game_checkpoint_path_allowed() {
   [[ "${game_checkpoint_enabled}" == true && -f "${ROOT}/${path}" ]] || return 1
   actual_blob="$(git -C "${ROOT}" hash-object --path="${path}" "${ROOT}/${path}")"
   game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${actual_blob}"
+}
+
+# A later owner-approved Game snapshot is admitted as one immutable projection,
+# never as a per-file union with the legacy 5ff checkpoint. Callers supply the
+# actual F13 row base/head plus a fixed approved snapshot tuple (base, head,
+# record commit); no environment value can select or construct a proof.
+game_checkpoint_domain_path() {
+  case "$1" in
+    protos/*|src/backend/voice/*|src/backend/role/*|src/backend/space/*|src/backend/*/pb/*|src/backend/migrations/voice_db/*)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+game_checkpoint_projection_authorized_in_delta() {
+  local repo="$1" target="$2" source_base="$3" source_head="$4"
+  local checkpoint_base="$5" checkpoint_head="$6" checkpoint_commit="$7" delta="$8"
+  local expected="${TMP_DIR}/game-projection-expected" actual="${TMP_DIR}/game-projection-actual"
+  local path checkpoint_entry target_entry
+
+  git -C "${repo}" rev-parse --verify "${checkpoint_base}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" rev-parse --verify "${checkpoint_head}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" rev-parse --verify "${checkpoint_commit}^{commit}" >/dev/null 2>&1 || return 1
+  [[ "${checkpoint_base}" != "${checkpoint_head}" &&
+    "${source_base}" != "${source_head}" &&
+    "${source_head}" != "${target}" && "${source_base}" != "${target}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_base}" "${source_base}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_base}" "${checkpoint_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${source_base}" "${source_head}" 2>/dev/null || return 1
+  [[ "${checkpoint_head}" != "${checkpoint_commit}" && "${checkpoint_commit}" != "${source_head}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_head}" "${checkpoint_commit}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_commit}" "${source_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${source_head}" "${target}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${source_base}" "${target}" 2>/dev/null || return 1
+
+  : >"${expected}"
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    game_checkpoint_domain_path "${path}" && printf '%s\n' "${path}" >>"${expected}"
+  done < <(git -C "${repo}" diff --name-only --no-renames "${checkpoint_base}" "${checkpoint_head}")
+  LC_ALL=C sort -u -o "${expected}" "${expected}"
+  : >"${actual}"
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    game_checkpoint_domain_path "${path}" && printf '%s\n' "${path}" >>"${actual}"
+  done <"${delta}"
+  LC_ALL=C sort -u -o "${actual}" "${actual}"
+  cmp -s "${expected}" "${actual}" || return 1
+
+  # P is exactly the Game-family contribution captured at H. Compare complete
+  # literal entries only for P; later base-owned Game paths remain subject to
+  # their own provenance gates and are not claimed by this snapshot.
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    checkpoint_entry="$(git -C "${repo}" ls-tree -r "${checkpoint_head}" -- ":(literal)${path}")" || return 1
+    target_entry="$(git -C "${repo}" ls-tree -r "${target}" -- ":(literal)${path}")" || return 1
+    [[ "${checkpoint_entry}" == "${target_entry}" ]] || return 1
+  done <"${expected}"
+  return 0
+}
+
+game_checkpoint_contribution_allowed() {
+  local repo="$1" target="$2" source_base="$3" source_head="$4" delta="$5"
+  [[ -n "${game_checkpoint_snapshot_base}" && -n "${game_checkpoint_snapshot_head}" &&
+    -n "${game_checkpoint_snapshot_record}" ]] || return 1
+  game_checkpoint_projection_authorized_in_delta "${repo}" "${target}" \
+    "${source_base}" "${source_head}" "${game_checkpoint_snapshot_base}" \
+    "${game_checkpoint_snapshot_head}" "${game_checkpoint_snapshot_record}" "${delta}"
+}
+
+game_checkpoint_aggregate_path_allowed() {
+  local repo="$1" commit="$2" path="$3" source_entry="$4" checkpoint_entry
+  [[ "${game_checkpoint_aggregate_active}" == true && -s "${game_checkpoint_aggregate_paths}" ]] || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  git -C "${repo}" merge-base --is-ancestor "${commit}" "${game_checkpoint_aggregate_head}" 2>/dev/null || return 1
+  checkpoint_entry="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_head}" -- ":(literal)${path}")" || return 1
+  [[ "${source_entry}" == "${checkpoint_entry}" ]]
+}
+
+game_checkpoint_aggregate_authorized() {
+  local repo="$1" event_base="$2" source_head="$3" target="$4" delta="$5" paths="$6"
+  [[ -n "${game_checkpoint_snapshot_base}" && -n "${game_checkpoint_snapshot_head}" &&
+    -n "${game_checkpoint_snapshot_record}" ]] || return 1
+  game_checkpoint_projection_authorized_in_delta "${repo}" "${target}" "${event_base}" \
+    "${source_head}" "${game_checkpoint_snapshot_base}" "${game_checkpoint_snapshot_head}" \
+    "${game_checkpoint_snapshot_record}" "${delta}" || return 1
+  cp "${TMP_DIR}/game-projection-expected" "${paths}"
 }
 
 # These exact paths are the reviewed Role private room-grant handler and its
@@ -588,6 +687,290 @@ done
 if game_checkpoint_path_authorized_in_delta "${game_fixture_path}" "${TMP_DIR}/game-fixture-delta" '0000000000000000000000000000000000000000' ||
   game_checkpoint_path_authorized_in_delta "${game_fixture_path}" "${TMP_DIR}/game-forbidden-delta" "${game_fixture_blob}"; then
   printf '%s\n' 'F13 oracle bug: changed Game blob or absent delta was accepted' >&2
+  exit 2
+fi
+
+# Exercise the later whole-snapshot verifier against a producer-shaped nested
+# merge. The immutable record binds source base B0, snapshot H, and source A;
+# event base B may equal B0 or add separately governed paths before result T.
+game_projection_repo="${TMP_DIR}/game-coherent-projection-fixture"
+mkdir -p "${game_projection_repo}"
+git -C "${game_projection_repo}" init -q
+git -C "${game_projection_repo}" config user.name 'Voice CI fixture'
+git -C "${game_projection_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${game_projection_repo}" config commit.gpgsign false
+mkdir -p "${game_projection_repo}/protos/voice/fixture/v1" \
+  "${game_projection_repo}/src/backend/voice/internal/fixture" \
+  "${game_projection_repo}/src/backend/role/internal/fixture"
+printf '%s\n' 'baseline proto' >"${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+printf '%s\n' 'baseline voice' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+printf '%s\n' 'removed by accepted source' >"${game_projection_repo}/src/backend/role/internal/fixture/obsolete.go"
+printf '%s\n' 'fixture base' >"${game_projection_repo}/README.md"
+git -C "${game_projection_repo}" add .
+git -C "${game_projection_repo}" commit -qm 'F13 coherent Game base'
+game_projection_base="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -qb game-source
+printf '%s\n' 'accepted proto' >"${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+printf '%s\n' 'accepted voice' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+rm "${game_projection_repo}/src/backend/role/internal/fixture/obsolete.go"
+git -C "${game_projection_repo}" add -A
+git -C "${game_projection_repo}" commit -qm 'F13 coherent Game source contribution'
+game_projection_head="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -qb game-current-base "${game_projection_base}"
+mkdir -p "${game_projection_repo}/docs" "${game_projection_repo}/src/backend/space/internal/fixture"
+printf '%s\n' '718 non-Game base advance' >"${game_projection_repo}/docs/base-advance.md"
+printf '%s\n' 'base-owned Space path' >"${game_projection_repo}/src/backend/space/internal/fixture/base-owned.go"
+git -C "${game_projection_repo}" add docs/base-advance.md src/backend/space/internal/fixture/base-owned.go
+git -C "${game_projection_repo}" commit -qm 'F13 unrelated 718 base advance'
+game_projection_actual_base="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -q game-source
+mkdir -p "${game_projection_repo}/scripts/ci"
+printf '%s\n' 'approved snapshot tuple metadata' >"${game_projection_repo}/scripts/ci/game-checkpoint-record.fixture"
+git -C "${game_projection_repo}" add scripts/ci/game-checkpoint-record.fixture
+git -C "${game_projection_repo}" commit -qm 'F13 record immutable Game snapshot H'
+game_projection_record="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+printf '%s\n' 'ordinary metadata-only follow-up A' >"${game_projection_repo}/scripts/ci/follow-up.fixture"
+git -C "${game_projection_repo}" add scripts/ci/follow-up.fixture
+git -C "${game_projection_repo}" commit -qm 'F13 ordinary metadata-only follow-up A'
+game_projection_actual_head="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+game_projection_equal_source_head="${game_projection_actual_head}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 source lane syncs exact advanced master base' game-current-base
+game_projection_actual_head="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -qb game-integrate "${game_projection_actual_base}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 nested merge of accepted Game source' game-source
+game_projection_target="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" diff --name-only "${game_projection_actual_base}" "${game_projection_actual_head}" >"${TMP_DIR}/game-projection-delta"
+game_checkpoint_snapshot_base="${game_projection_base}"
+game_checkpoint_snapshot_head="${game_projection_head}"
+game_checkpoint_snapshot_record="${game_projection_record}"
+f13_collect_master_push_contributions "${game_projection_repo}" push refs/heads/master \
+  "${game_projection_actual_base}" "${game_projection_actual_base}" "${game_projection_target}" \
+  "${TMP_DIR}/game-projection-map" || {
+  printf '%s\n' 'F13 oracle bug: real contribution collector rejected the approved snapshot fixture' >&2
+  exit 2
+}
+game_projection_row="$(awk -F '\t' '$1 == "protos/voice/fixture/v1/fixture.proto" { row = $0 } END { print row }' \
+  "${TMP_DIR}/game-projection-map")"
+IFS=$'\t' read -r _ game_projection_trigger game_projection_row_target _ \
+  game_projection_row_base game_projection_row_head _ _ <<<"${game_projection_row}"
+[[ "${game_projection_trigger}" == false && \
+  -n "${game_projection_row_target}" && \
+  "${game_projection_row_base}" == "${game_projection_base}" && \
+  "${game_projection_row_head}" == "${game_projection_head}" ]] || {
+  printf '%s\n' 'F13 oracle bug: master-push partition did not preserve the nested approved owner' >&2
+  exit 2
+}
+game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" "${TMP_DIR}/game-projection-map" \
+  'protos/voice/fixture/v1/fixture.proto' || {
+  printf '%s\n' 'F13 oracle bug: exact coherent Game source projection was rejected' >&2
+  exit 2
+}
+game_projection_approval_map="${TMP_DIR}/game-projection-map.game-snapshot-approvals"
+cp "${game_projection_approval_map}" "${TMP_DIR}/game-projection-approval-saved"
+: >"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: missing aggregate sidecar was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-approval-saved" "${game_projection_approval_map}"
+cat "${TMP_DIR}/game-projection-approval-saved" >>"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: ambiguous aggregate sidecar row was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-approval-saved" "${game_projection_approval_map}"
+awk -F '\t' -v OFS='\t' '{$5="0000000000000000000000000000000000000000"; print}' \
+  "${TMP_DIR}/game-projection-approval-saved" >"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: stale aggregate target binding was accepted' >&2
+  exit 2
+fi
+awk -F '\t' -v OFS='\t' '{$8="0000000000000000000000000000000000000000"; print}' \
+  "${TMP_DIR}/game-projection-approval-saved" >"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: mixed snapshot record binding was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-approval-saved" "${game_projection_approval_map}"
+cp "${TMP_DIR}/game-projection-map" "${TMP_DIR}/game-projection-map-saved"
+awk -F '\t' '$1 == "protos/voice/fixture/v1/fixture.proto" { print }' \
+  "${TMP_DIR}/game-projection-map-saved" >>"${TMP_DIR}/game-projection-map"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: ambiguous partition owner row was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-map-saved" "${TMP_DIR}/game-projection-map"
+awk -F '\t' -v OFS='\t' '$1 == "protos/voice/fixture/v1/fixture.proto" {$6="0000000000000000000000000000000000000000"} {print}' \
+  "${TMP_DIR}/game-projection-map-saved" >"${TMP_DIR}/game-projection-map"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: sidecar accepted a changed nested owner row' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-map-saved" "${TMP_DIR}/game-projection-map"
+game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'src/backend/role/internal/fixture/obsolete.go' || {
+  printf '%s\n' 'F13 oracle bug: exact checkpoint deletion with its unique owner row was rejected' >&2
+  exit 2
+}
+game_projection_metadata_row="$(awk -F '\t' '$1 == "scripts/ci/follow-up.fixture" { row = $0 } END { print row }' \
+  "${TMP_DIR}/game-projection-map")"
+IFS=$'\t' read -r _ game_projection_metadata_trigger game_projection_metadata_target _ \
+  game_projection_metadata_base game_projection_metadata_head _ _ <<<"${game_projection_metadata_row}"
+[[ "${game_projection_metadata_trigger}" == false && \
+  -n "${game_projection_metadata_target}" && \
+  "${game_projection_metadata_base}" == "${game_projection_base}" && \
+  "${game_projection_metadata_head}" == "${game_projection_equal_source_head}" ]] || {
+  printf '%s\n' 'F13 oracle bug: metadata-only path lost its ordinary contribution provenance' >&2
+  exit 2
+}
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'scripts/ci/follow-up.fixture'; then
+  printf '%s\n' 'F13 oracle bug: Game snapshot authorization bypassed ordinary metadata policy' >&2
+  exit 2
+fi
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'src/backend/space/internal/fixture/base-owned.go'; then
+  printf '%s\n' 'F13 oracle bug: Game snapshot claimed an out-of-P Space path from the current base' >&2
+  exit 2
+fi
+[[ "$(git -C "${game_projection_repo}" rev-parse "${game_projection_target}:src/backend/space/internal/fixture/base-owned.go")" == \
+  "$(git -C "${game_projection_repo}" rev-parse "${game_projection_actual_base}:src/backend/space/internal/fixture/base-owned.go")" ]] || {
+  printf '%s\n' 'F13 oracle bug: accepted snapshot projection failed to preserve current-base Space path' >&2
+  exit 2
+}
+git -C "${game_projection_repo}" checkout -qb game-equal-source "${game_projection_base}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 equal-base source contribution' "${game_projection_equal_source_head}"
+git -C "${game_projection_repo}" checkout -qb game-integrate-equal-base "${game_projection_base}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 snapshot contribution on unchanged base' game-equal-source
+game_projection_equal_target="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+f13_collect_master_push_contributions "${game_projection_repo}" push refs/heads/master \
+  "${game_projection_base}" "${game_projection_base}" "${game_projection_equal_target}" \
+  "${TMP_DIR}/game-projection-equal-map" || {
+  printf '%s\n' 'F13 oracle bug: coherent snapshot on B == B0 was rejected by the producer' >&2
+  exit 2
+}
+game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-equal-map" 'protos/voice/fixture/v1/fixture.proto' || {
+  printf '%s\n' 'F13 oracle bug: coherent snapshot on B == B0 was rejected' >&2
+  exit 2
+}
+game_checkpoint_snapshot_base=''
+game_checkpoint_snapshot_head=''
+game_checkpoint_snapshot_record=''
+if game_checkpoint_contribution_allowed "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: missing trusted snapshot record was accepted' >&2
+  exit 2
+fi
+printf '%s\n' 'src/backend/voice/internal/fixture/unapproved.go' >>"${TMP_DIR}/game-projection-delta"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: extra Game-domain delta path was accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-drift "${game_projection_target}"
+printf '%s\n' 'drifted after checkpoint' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+git -C "${game_projection_repo}" add src/backend/voice/internal/fixture/runtime.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject Game snapshot drift'
+game_projection_drift="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" diff --name-only "${game_projection_base}" "${game_projection_actual_head}" >"${TMP_DIR}/game-projection-delta"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_drift}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: changed Game tree entry was accepted after checkpoint' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-extra "${game_projection_target}"
+printf '%s\n' 'extra file' >"${game_projection_repo}/src/backend/space/internal/fixture/extra.go"
+git -C "${game_projection_repo}" add src/backend/space/internal/fixture/extra.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject extra Game snapshot path'
+game_projection_extra="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+game_projection_extra_target="$(git -C "${game_projection_repo}" commit-tree \
+  "${game_projection_extra}^{tree}" -p "${game_projection_actual_base}" -p "${game_projection_actual_head}" \
+  <<< 'F13 reject target-only Game path')"
+if f13_collect_master_push_contributions "${game_projection_repo}" push refs/heads/master \
+  "${game_projection_actual_base}" "${game_projection_actual_base}" "${game_projection_extra_target}" \
+  "${TMP_DIR}/game-projection-extra-map" "${TMP_DIR}/game-projection-extra-category"; then
+  printf '%s\n' 'F13 oracle bug: master-push wrapper accepted a target-only Game path' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/game-projection-extra-category")" == release_pr_delta_mismatch ]] || {
+  printf '%s\n' 'F13 oracle bug: target-only Game path failed outside synthetic merge parity' >&2
+  exit 2
+}
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-restored-deletion "${game_projection_target}"
+mkdir -p "${game_projection_repo}/src/backend/role/internal/fixture"
+printf '%s\n' 'unexpected restoration' >"${game_projection_repo}/src/backend/role/internal/fixture/obsolete.go"
+git -C "${game_projection_repo}" add src/backend/role/internal/fixture/obsolete.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject restoration of checkpoint deletion'
+game_projection_restored="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_restored}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: restored checkpoint deletion was accepted' >&2
+  exit 2
+fi
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-forbidden-delta"; then
+  printf '%s\n' 'F13 oracle bug: mixed or wrong delta checkpoint projection was accepted' >&2
+  exit 2
+fi
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: snapshot head without a later record commit was accepted' >&2
+  exit 2
+fi
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_actual_base}" "${game_projection_actual_head}" "${game_projection_head}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta" ||
+  game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+    "${game_projection_actual_base}" "${game_projection_record}" "${game_projection_base}" \
+    "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: wrong base or source identity was accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-mixed "${game_projection_target}"
+printf '%s\n' 'mixed checkpoint source' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+git -C "${game_projection_repo}" add src/backend/voice/internal/fixture/runtime.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject mixed checkpoint projection'
+game_projection_mixed="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_mixed}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: mixed snapshot entries from checkpoints were accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-mode "${game_projection_target}"
+chmod +x "${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+git -C "${game_projection_repo}" add src/backend/voice/internal/fixture/runtime.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject mode drift'
+game_projection_mode="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_mode}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: changed Game entry mode was accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-type "${game_projection_target}"
+rm "${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+rm "${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+ln -s fixture.proto.link-target "${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+git -C "${game_projection_repo}" add -A
+git -C "${game_projection_repo}" commit -qm 'F13 reject entry type drift'
+game_projection_type="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_type}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: changed Game entry type/path was accepted' >&2
   exit 2
 fi
 accepted_r23_base='edc52d46406d97283f81dfbdfc916660f50dcc69'
@@ -1444,6 +1827,7 @@ f13_collect_develop_contributions() {
   local path source_entry result_entry target_entry blob trigger incremental_merge
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
   local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates
+  local game_snapshot_contribution_allowed
   local -a commit_line
   local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=()
   : >"${output}"
@@ -1525,6 +1909,11 @@ f13_collect_develop_contributions() {
     fi
     delta="${TMP_DIR}/f13-source-delta-${contribution_id}"
 
+    game_snapshot_contribution_allowed=false
+    if game_checkpoint_contribution_allowed "${repo}" "${commit}" "${source_base}" "${source_head}" "${delta}"; then
+      game_snapshot_contribution_allowed=true
+    fi
+
     nested_map=""
     if [[ "${partition_source_history}" == true && "${is_direct}" != true ]]; then
       nested_map="${TMP_DIR}/f13-nested-map-${contribution_id}"
@@ -1548,6 +1937,12 @@ f13_collect_develop_contributions() {
           f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
           return 1
         }
+      fi
+      if game_checkpoint_aggregate_path_allowed "${repo}" "${commit}" "${path}" "${source_entry}"; then
+        continue
+      fi
+      if [[ "${game_snapshot_contribution_allowed}" == true ]] && game_checkpoint_domain_path "${path}"; then
+        continue
       fi
       if f13_path_is_guarded "${path}"; then
         guarded_entries["${path}"]="${source_entry}"
@@ -1671,8 +2066,19 @@ f13_collect_master_release_pr_contributions() {
   local target_line base_commit target_first_parent source_head
   local source_delta="${output}.source-delta" result_delta="${output}.result-delta"
   local source_map="${output}.source-map" path source_entry result_entry
+  local aggregate_paths="${output}.game-snapshot-paths" approval_map="${output}.game-snapshot-approvals"
+  local row row_count row_hash
   local -a target_line_fields
   : >"${output}"
+  : >"${approval_map}"
+  : >"${aggregate_paths}"
+  game_checkpoint_aggregate_active=false
+  game_checkpoint_aggregate_base=''
+  game_checkpoint_aggregate_head=''
+  game_checkpoint_aggregate_target=''
+  game_checkpoint_aggregate_paths=''
+  game_checkpoint_aggregate_map=''
+  game_checkpoint_aggregate_record=''
 
   [[ -n "${base}" ]] || {
     f13_collect_failure "${diagnostic_file}" release_pr_missing_base
@@ -1706,8 +2112,6 @@ f13_collect_master_release_pr_contributions() {
     return 1
   }
 
-  f13_collect_develop_contributions "${repo}" "${base_commit}" "${source_head}" \
-    "${source_map}" "${diagnostic_file}" true true || return 1
   git -C "${repo}" diff --name-only "${base_commit}" "${source_head}" 2>/dev/null >"${source_delta}" || {
     f13_collect_failure "${diagnostic_file}" release_pr_source_delta
     return 1
@@ -1735,10 +2139,56 @@ f13_collect_master_release_pr_contributions() {
       return 1
     }
   done <"${source_delta}"
+  if game_checkpoint_aggregate_authorized "${repo}" "${base_commit}" "${source_head}" \
+    "${target}" "${source_delta}" "${aggregate_paths}"; then
+    game_checkpoint_aggregate_active=true
+    game_checkpoint_aggregate_base="${base_commit}"
+    game_checkpoint_aggregate_head="${source_head}"
+    game_checkpoint_aggregate_target="${target}"
+    game_checkpoint_aggregate_paths="${aggregate_paths}"
+    game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
+  fi
+  f13_collect_develop_contributions "${repo}" "${base_commit}" "${source_head}" \
+    "${source_map}" "${diagnostic_file}" true true || {
+    game_checkpoint_aggregate_active=false
+    return 1
+  }
+  game_checkpoint_aggregate_active=false
   cat "${source_map}" >"${output}" || {
     f13_collect_failure "${diagnostic_file}" release_pr_map_write
     return 1
   }
+  if [[ -s "${aggregate_paths}" ]]; then
+    while IFS= read -r path; do
+      [[ -n "${path}" ]] || continue
+      row_count="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { count++ } END { print count+0 }' "${output}")"
+      [[ "${row_count}" == 1 ]] || {
+        f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
+        : >"${approval_map}"
+        return 1
+      }
+      row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { value=$0 } END { print value }' "${output}")"
+      row_hash="$(printf '%s\n' "${row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || {
+        f13_collect_failure "${diagnostic_file}" release_pr_map_write
+        : >"${approval_map}"
+        return 1
+      }
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${path}" "${row_hash}" "${base_commit}" "${source_head}" "${target}" \
+        "${game_checkpoint_snapshot_base}" "${game_checkpoint_snapshot_head}" \
+        "${game_checkpoint_snapshot_record}" >>"${approval_map}" || {
+        f13_collect_failure "${diagnostic_file}" release_pr_map_write
+        : >"${approval_map}"
+        return 1
+      }
+    done <"${aggregate_paths}"
+    game_checkpoint_aggregate_base="${base_commit}"
+    game_checkpoint_aggregate_head="${source_head}"
+    game_checkpoint_aggregate_target="${target}"
+    game_checkpoint_aggregate_paths="${aggregate_paths}"
+    game_checkpoint_aggregate_map="${output}"
+    game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
+  fi
 }
 
 # Share the full push-event gate with producer-shaped fixtures so master-push
@@ -2876,6 +3326,48 @@ f13_source_head_for_path() {
   fi
 }
 
+game_checkpoint_path_allowed_for_provenance() {
+  local repo="$1" map="$2" path="$3" row approval_map approval_row row_count approval_count
+  local row_hash approved_hash approved_path approved_base approved_head approved_target
+  local approved_snapshot_base approved_snapshot_head approved_record checkpoint_entry target_entry
+  local owner_commit owner_base owner_head
+  game_checkpoint_domain_path "${path}" || return 1
+  [[ -s "${map}" ]] || return 1
+  [[ "${game_checkpoint_aggregate_map}" == "${map}" &&
+    -n "${game_checkpoint_aggregate_base}" && -n "${game_checkpoint_aggregate_head}" &&
+    -n "${game_checkpoint_aggregate_target}" && -n "${game_checkpoint_aggregate_record}" &&
+    -s "${game_checkpoint_aggregate_paths}" ]] || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  row="$(awk -F '\t' -v path="${path}" '$1 == path { value = $0 } END { if (value != "") print value }' "${map}")"
+  [[ -n "${row}" ]] || return 1
+  row_count="$(awk -F '\t' -v path="${path}" '$1 == path { count++ } END { print count+0 }' "${map}")"
+  [[ "${row_count}" == 1 ]] || return 1
+  IFS=$'\t' read -r _ _ owner_commit _ owner_base owner_head _ _ <<<"${row}"
+  [[ -n "${owner_commit}" && -n "${owner_base}" && -n "${owner_head}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${owner_commit}" "${game_checkpoint_aggregate_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${owner_base}" "${owner_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${owner_head}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  row_hash="$(printf '%s\n' "${row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || return 1
+  approval_map="${map}.game-snapshot-approvals"
+  [[ -s "${approval_map}" ]] || return 1
+  approval_row="$(awk -F '\t' -v path="${path}" '$1 == path { value = $0 } END { if (value != "") print value }' "${approval_map}")"
+  approval_count="$(awk -F '\t' -v path="${path}" '$1 == path { count++ } END { print count+0 }' "${approval_map}")"
+  [[ "${approval_count}" == 1 && -n "${approval_row}" ]] || return 1
+  IFS=$'\t' read -r approved_path approved_hash approved_base approved_head approved_target \
+    approved_snapshot_base approved_snapshot_head approved_record <<<"${approval_row}"
+  [[ "${approved_path}" == "${path}" && "${approved_hash}" == "${row_hash}" &&
+    "${approved_base}" == "${game_checkpoint_aggregate_base}" &&
+    "${approved_head}" == "${game_checkpoint_aggregate_head}" &&
+    "${approved_target}" == "${game_checkpoint_aggregate_target}" &&
+    "${approved_snapshot_base}" == "${game_checkpoint_snapshot_base}" &&
+    "${approved_snapshot_head}" == "${game_checkpoint_snapshot_head}" &&
+    "${approved_record}" == "${game_checkpoint_aggregate_record}" &&
+    "${approved_record}" == "${game_checkpoint_snapshot_record}" ]] || return 1
+  checkpoint_entry="$(git -C "${repo}" ls-tree "${approved_snapshot_head}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  target_entry="$(git -C "${repo}" ls-tree "${approved_target}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  [[ "${checkpoint_entry}" == "${target_entry}" ]]
+}
+
 git -C "${f13_fixture_repo}" checkout -qb f13-bot-only-integration "${f13_fixture_base}"
 git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture unrelated-only merge' f13-bot-source
 f13_collect_develop_contributions \
@@ -2925,6 +3417,9 @@ while IFS= read -r file; do
       fi
       f13_path_target=HEAD
     }
+  fi
+  if game_checkpoint_path_allowed_for_provenance "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    continue
   fi
   file_r22_runtime_delta="${r22_runtime_delta}"
   if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
