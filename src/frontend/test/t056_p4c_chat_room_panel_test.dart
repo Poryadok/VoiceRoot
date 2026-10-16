@@ -101,6 +101,8 @@ void main() {
         expect(playback.opens, pending ? 0 : 1);
         if (!pending) expect(playback.closed, isTrue);
         expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        harness.container.dispose();
       });
     }
   }

@@ -29,9 +29,7 @@ class _LateHeadersClient extends http.BaseClient {
 }
 
 void main() {
-  testWidgets('header timeout aborts transport and cancels late response', (
-    tester,
-  ) async {
+  test('header timeout aborts transport and cancels late response', () async {
     final transport = _LateHeadersClient();
     final client = GatewayHttpClient(
       httpClient: transport,
@@ -41,13 +39,15 @@ void main() {
       uri: Uri.parse('https://storage.example/signed'),
       maxBytes: 100,
     );
-    await tester.pump(const Duration(seconds: 31));
+    // Future.timeout uses a real timer here; advancing a widget test's fake
+    // clock leaves the request pending and makes this test hang.
+    await Future<void>.delayed(const Duration(seconds: 31));
     expect(await result, isA<GatewayHttpFailure>());
     expect(transport.aborted, isTrue);
     var cancelled = false;
     final body = StreamController<List<int>>(onCancel: () => cancelled = true);
     transport.headers.complete(http.StreamedResponse(body.stream, 200));
-    await tester.pump();
+    await Future<void>.delayed(Duration.zero);
     expect(cancelled, isTrue);
     await body.close();
   });
