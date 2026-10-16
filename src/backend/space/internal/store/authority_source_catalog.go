@@ -3,7 +3,7 @@ package store
 
 import "voice/backend/pkg/authoritysource"
 
-var spaceAuthorityCatalog = authoritysource.Catalog{Version: 24, Tables: []string{"spaces", "space_members", "voice_rooms", "space_bans", "space_member_timeouts", "space_lifecycle_aggregates", "space_deletion_tombstones", "ownership_journal", "space_subscriptions", "community_owner_authority", "community_owner_recovery_operations", "community_roster_members", "space_tree_nodes", "categories", "space_voice_access_epochs", "space_voice_access_outbox"}, Triggers: []authoritysource.CatalogTrigger{
+var spaceAuthorityCatalog = authoritysource.Catalog{Version: 25, Tables: []string{"spaces", "space_members", "voice_rooms", "space_bans", "space_member_timeouts", "space_lifecycle_aggregates", "space_deletion_tombstones", "ownership_journal", "space_subscriptions", "community_owner_authority", "community_owner_recovery_operations", "community_roster_members", "space_tree_nodes", "categories", "space_voice_access_epochs", "space_voice_access_outbox"}, Triggers: []authoritysource.CatalogTrigger{
 	{Table: "spaces", Name: "space_authority_revision_spaces", Function: "space_authority_revision_changed", Type: 29, Argument: "id"},
 	{Table: "spaces", Name: "space_authority_revision_spaces_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
 	{Table: "space_members", Name: "space_authority_revision_space_members", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
