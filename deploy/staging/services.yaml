@@ -1,5 +1,5 @@
 # Voice application services (full app stack). Image placeholders substituted by render-and-apply.sh.
-# Services: auth, social, user, chat, messaging, file, matchmaking, search, notification, realtime, space, role, voice, gateway
+# Services: auth, social, user, chat, messaging, file, matchmaking, search, notification, realtime, space, role, voice, gameintegration, gateway
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -706,6 +706,64 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: voice-gameintegration
+  namespace: voice-staging
+  labels: {app: voice-gameintegration}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-gameintegration}
+  template:
+    metadata:
+      labels: {app: voice-gameintegration}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext: {fsGroup: 65532}
+      containers:
+        - name: gameintegration
+          image: __IMAGE_REGISTRY__/gameintegration:__IMAGE_TAG__
+          ports: [{containerPort: 8080, name: http}, {containerPort: 8443, name: principal-jwks}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: GAME_INTEGRATION_DATABASE_URL}}}
+            - {name: GAME_INTEGRATION_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: GAME_INTEGRATION_JWKS_URL, value: "http://voice-auth:8080/api/v1/auth/.well-known/jwks.json"}
+            - {name: GAME_INTEGRATION_JWT_ISSUER, value: "voice-auth"}
+            - {name: GAME_INTEGRATION_JWT_AUDIENCE, value: "voice-client"}
+            - {name: GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE, value: /etc/voice/principal/keys/current.pem}
+            - {name: GAME_INTEGRATION_PRINCIPAL_KID, value: current}
+            - {name: GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE, value: /etc/voice/principal/keys/next.pem}
+            - {name: GAME_INTEGRATION_PRINCIPAL_NEXT_KID, value: next}
+            - {name: GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE, value: /etc/voice/principal/tls/tls.crt}
+            - {name: GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE, value: /etc/voice/principal/tls/tls.key}
+            - {name: GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR, value: ":8443"}
+            - {name: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64}}}
+            - {name: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
+          volumeMounts:
+            - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
+            - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
+      volumes:
+        - name: principal-signing
+          secret: {secretName: voice-gameintegration-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: principal-tls
+          secret: {secretName: voice-gameintegration-jwks-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-gameintegration
+  namespace: voice-staging
+spec:
+  selector: {app: voice-gameintegration}
+  ports: [{name: http, port: 8080}, {name: principal-jwks, port: 8443}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: voice-matchmaking
   namespace: voice-staging
   labels: {app: voice-matchmaking}
@@ -871,6 +929,8 @@ spec:
             - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
             - {name: CHAT_GRPC_ADDR, value: "voice-chat:9090"}
             - {name: MESSAGING_GRPC_ADDR, value: "voice-messaging:9090"}
+            - {name: GAME_INTEGRATION_CONSENT_URL, value: "http://voice-gameintegration:8080"}
+            - {name: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64}}}
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
@@ -927,6 +987,8 @@ spec:
             - {name: REALTIME_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - name: REALTIME_INSTANCE_ID
               value: realtime-1
+            - {name: GAME_INTEGRATION_CONSENT_URL, value: "http://voice-gameintegration:8080"}
+            - {name: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64}}}
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}

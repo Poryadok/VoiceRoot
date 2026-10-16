@@ -56,6 +56,75 @@ require_migration_target space_db voice-migrate-space-db SPACE_DATABASE_URL
 require_migration_target role_db voice-migrate-role-db ROLE_DATABASE_URL
 require_migration_target notification_db voice-migrate-notification-db NOTIFICATION_DATABASE_URL
 require_migration_target matchmaking_db voice-migrate-matchmaking-db MATCHMAKING_DATABASE_URL
+
+# GIS has a deliberately different SQL directory, and its restricted runtime
+# login must exist before the privileged migration creates runtime grants.
+GIS_MIGRATION_SCRIPT="${ROOT}/scripts/staging/apply-migrate-jobs.sh"
+GIS_MIGRATION_TEMPLATE="${ROOT}/deploy/templates/migrate-game-integration-db-job.yaml"
+GIS_ROLE_TEMPLATE="${ROOT}/deploy/templates/provision-gameintegration-runtime-role-job.yaml"
+grep -Fq 'apply_migrate game_integration_db' "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: staging migration runner omits the exact GIS database name' >&2
+  exit 1
+}
+grep -Fq '${ROOT}/src/backend/migrations/game_integration_db' "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: GIS migrations must use the game_integration_db SQL directory' >&2
+  exit 1
+}
+grep -Fq 'voice-migrate-gameintegration-db' "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: staging migration runner omits the GIS migration Job' >&2
+  exit 1
+}
+grep -Fq 'voice-gameintegration-db-migrations' "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: staging migration runner omits the GIS migration ConfigMap' >&2
+  exit 1
+}
+grep -Fq 'name: POSTGRES_USER' "${GIS_MIGRATION_TEMPLATE}" || {
+  echo 'FAIL: GIS migration must use the existing privileged Postgres username' >&2
+  exit 1
+}
+grep -Fq 'key: POSTGRES_PASSWORD' "${GIS_MIGRATION_TEMPLATE}" || {
+  echo 'FAIL: GIS migration must use the existing privileged Postgres SecretRef' >&2
+  exit 1
+}
+grep -Fq 'value: game_integration_db' "${GIS_MIGRATION_TEMPLATE}" || {
+  echo 'FAIL: GIS migration must target the exact special database name' >&2
+  exit 1
+}
+grep -Fq 'rfc3986_encode_component' "${GIS_MIGRATION_TEMPLATE}" || {
+  echo 'FAIL: GIS migration must safely encode the privileged DSN inside the Job' >&2
+  exit 1
+}
+if grep -Fq 'GAME_INTEGRATION_DATABASE_URL' "${GIS_MIGRATION_TEMPLATE}"; then
+  echo 'FAIL: GIS migration must not use the restricted application runtime URL' >&2
+  exit 1
+fi
+if grep -Fq '__DATABASE_URL__' "${GIS_MIGRATION_TEMPLATE}"; then
+  echo 'FAIL: GIS privileged database URL must not be rendered into the Job manifest' >&2
+  exit 1
+fi
+grep -Fq 'voice-provision-gameintegration-runtime-role' "${GIS_ROLE_TEMPLATE}" || {
+  echo 'FAIL: GIS runtime role provision Job template is missing' >&2
+  exit 1
+}
+grep -Fq 'key: POSTGRES_PASSWORD' "${GIS_ROLE_TEMPLATE}" || {
+  echo 'FAIL: GIS role provisioner must use the admin SecretRef' >&2
+  exit 1
+}
+grep -Fq 'key: GAME_INTEGRATION_DB_PASSWORD' "${GIS_ROLE_TEMPLATE}" || {
+  echo 'FAIL: GIS role provisioner must use the dedicated password SecretRef' >&2
+  exit 1
+}
+role_call_line="$(grep -n -m1 '^[[:space:]]*provision_gameintegration_runtime_role$' "${GIS_MIGRATION_SCRIPT}" | cut -d: -f1 || true)"
+migration_call_line="$(grep -n -m1 '^[[:space:]]*apply_migrate game_integration_db' "${GIS_MIGRATION_SCRIPT}" | cut -d: -f1 || true)"
+if [[ -z "${role_call_line}" || -z "${migration_call_line}" || "${role_call_line}" -ge "${migration_call_line}" ]]; then
+  echo 'FAIL: restricted GIS runtime role must be provisioned before GIS migrations' >&2
+  exit 1
+fi
+if grep -Fq 'GAME_INTEGRATION_DB_PASSWORD=' "${GIS_MIGRATION_SCRIPT}"; then
+  echo 'FAIL: staging script must not embed or print a GIS database password' >&2
+  exit 1
+fi
+python3 "${ROOT}/scripts/staging/gameintegration-deployment-contract_test.py"
 TEST_TMP="$(mktemp -d)"
 trap 'rm -rf "${TEST_TMP}"' EXIT
 

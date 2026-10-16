@@ -40,6 +40,9 @@ class UpdateTests(unittest.TestCase):
         for service in ('nats','postgres','livekit','federation','../user'):
             with self.assertRaises(ValueError):
                 update.parse_images([service+'=registry/x@sha256:'+'a'*64])
+        self.assertEqual(update.SERVICES['gameintegration'], 'gameintegration')
+        self.assertEqual(update.parse_images(['gameintegration=registry/gameintegration@sha256:'+'a'*64]),
+                         {'gameintegration':'registry/gameintegration@sha256:'+'a'*64})
 
     def test_immutable_image_requirement(self):
         for image in ('registry/user:latest','registry/user:main','registry/user:abc123','https://registry/user:'+ 'a'*40,
@@ -65,6 +68,16 @@ class UpdateTests(unittest.TestCase):
         self.assertTrue(any(x['path']=='/metadata/resourceVersion' and x['op']=='test' for x in patch))
         broken=deployment();broken['spec']['template']['spec']['containers'][1]['name']='different'
         with self.assertRaises(ValueError): update.plan_patch('user',target,broken)
+
+    def test_gameintegration_patch_selects_only_its_main_container(self):
+        before=deployment()
+        before['metadata']['name']='voice-gameintegration'
+        before['spec']['template']['spec']['containers']=[
+            {'name':'gameintegration','image':'registry/gameintegration@sha256:'+'b'*64}]
+        target='registry/gameintegration@sha256:'+'c'*64
+        patch,expected=update.plan_patch('gameintegration',target,before)
+        self.assertEqual(patch[-1],{'op':'replace','path':'/spec/template/spec/containers/0/image','value':target})
+        self.assertEqual(expected['spec']['template']['spec']['containers'][0]['image'],target)
 
     def test_lock_creation_conflict_is_not_bypassed_and_release_is_conditional(self):
         class Fake:

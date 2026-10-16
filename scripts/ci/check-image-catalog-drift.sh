@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Verify staging-image-catalog.json deployments exist in referenced k8s manifests
-# and that prod manifests include the same deployment names.
+# Verify catalog environments against staging and production manifests. GIS is
+# intentionally internal-only in DEV/STAGE; all other catalog entries default
+# to the existing DEV/STAGE/PROD contract.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CATALOG="${ROOT}/scripts/ci/staging-image-catalog.json"
+CATALOG="${VOICE_IMAGE_CATALOG:-${ROOT}/scripts/ci/staging-image-catalog.json}"
 
 failures=0
 
@@ -50,12 +51,29 @@ check_prod_contains_deployment() {
   return 1
 }
 
-while IFS=$'\t' read -r name deployment manifest_rel; do
+if ! jq -e '
+  (.images | map(select(.name == "gameintegration")) | length) == 1 and
+  all(.images[];
+    if has("environments") then
+      .name == "gameintegration" and .environments == ["dev", "staging"]
+    else
+      .name != "gameintegration"
+    end)
+' "${CATALOG}" >/dev/null; then
+  echo "ERROR: only Game Integration may declare the exact internal environments [dev, staging]" >&2
+  failures=$((failures + 1))
+fi
+
+while IFS=$'\t' read -r name deployment manifest_rel staging_enabled prod_enabled; do
   [ -z "${name}" ] && continue
   [ -z "${deployment}" ] || [ "${deployment}" = "null" ] && continue
-  check_manifest_contains_deployment "${manifest_rel}" "${deployment}"
-  check_prod_contains_deployment "${deployment}" "${name}"
-done < <(jq -r '.images[] | [.name, .deployment, .k8s_manifest] | @tsv' "${CATALOG}")
+  if [ "${staging_enabled}" = "true" ]; then
+    check_manifest_contains_deployment "${manifest_rel}" "${deployment}"
+  fi
+  if [ "${prod_enabled}" = "true" ]; then
+    check_prod_contains_deployment "${deployment}" "${name}"
+  fi
+done < <(jq -r '.images[] | [(.name // ""), (.deployment // ""), (.k8s_manifest // ""), (((.environments // ["dev", "staging", "prod"]) | index("staging")) != null), (((.environments // ["dev", "staging", "prod"]) | index("prod")) != null)] | @tsv' "${CATALOG}")
 
 if [ "${failures}" -gt 0 ]; then
   echo "ERROR: ${failures} image-catalog drift issue(s)" >&2

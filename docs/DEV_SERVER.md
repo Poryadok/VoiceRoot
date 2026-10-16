@@ -133,7 +133,9 @@ kubectl -n voice-dev get deployments -o custom-columns='NAME:.metadata.name,IMAG
 python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex>
 ```
 
-4. После проверки результата применить тот же набор:
+4. После проверки результата применить тот же набор (для GIS используйте
+`--image gameintegration=...`, после проверки что соответствующий Deployment
+создан из актуальных staging workload inputs и dev credentials):
 
 ```sh
 python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply
