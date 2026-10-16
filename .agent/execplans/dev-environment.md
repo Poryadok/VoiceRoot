@@ -32,7 +32,7 @@ copying staging data/private keys, changing host firewall or other projects.
 - [x] Implement independently generated bootstrap and dev deployment.
 - [x] Deploy and prove namespace/data/credentials/network isolation.
 - [x] Verify frontend API target and authenticated basic flow via direct Gateway.
-- [ ] Review, document outcome, commit/push and open PR.
+- [x] Review, document outcome, commit/push and open PR.
 
 ## Detailed Steps
 
@@ -127,4 +127,16 @@ from storage correctness. Public TCP31081 reachable.
 Final focused checks:26 dev Python tests,4 storage tests, independent bounded
 review with no blocking findings before the final LAN/HTTP1 runtime adjustments.
 Image updater actual-change smoke caught kubectl --patch-file=- unsupported;
-fix and real rollout validation pending before commit.
+fixed via subprocess --patch JSON argument plus a regression test. Actual three
+frontend digest rollouts subsequently passed and the lock was released.
+
+## Final outcome
+
+Implemented and live. All27 dev Deployments and3 StatefulSets ready after actual
+frontend digest rollouts; original staging workloads and TTenrec remain ready.
+30 focused Python tests pass (26dev+4storage). Independent reviewers found no
+remaining blockers in the tooling. PR: https://github.com/Poryadok/VoiceRoot/pull/810.
+Known limitations remain: public Go HTTP2 response stalls (HTTP1 dev workaround),
+failed bidirectional RTP test, test-only email, local frontend image custody, no
+full host reboot/off-host backup test. Shared-host storage move and TTenrec
+container-restart persistence are verified independently of application audio.
