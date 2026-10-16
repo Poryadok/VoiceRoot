@@ -1487,6 +1487,13 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(json.loads(matchmaking["S2S_JWKS_URLS_JSON"]), {
             "space": "https://phase0-jwks:8443/space/jwks.json",
         })
+        auth = combined["auth"]["environment"]
+        self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), {
+            "gateway": "https://phase0-jwks:8443/gateway/jwks.json",
+            "space": "https://phase0-jwks:8443/space/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        self.assertEqual(auth["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         listeners = [voice[name] for name in (
             "VOICE_GAME_PRINCIPAL_GRPC_LISTEN", "VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN",
             "VOICE_USER_PRINCIPAL_GRPC_LISTEN")]
