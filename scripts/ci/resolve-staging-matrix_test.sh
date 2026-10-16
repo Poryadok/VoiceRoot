@@ -115,7 +115,12 @@ unset FILTER_JSON GO_SERVICES_JSON
 echo "== FORCE_FULL builds all =="
 FORCE_FULL=true GO_SERVICES_JSON='[]' run_matrix
 count="$(echo "${build_services}" | jq 'length')"
-[[ "${count}" -eq 22 ]] || fail "expected 22 release image services, got ${count}"
+[[ "${count}" -eq 23 ]] || fail "expected 23 staging image services, got ${count}"
+assert_contains "${build_services}" gameintegration
+prod_count="$(jq '[.images[] | select((.environments // ["dev", "staging", "prod"]) | index("prod"))] | length' "${ROOT}/scripts/ci/staging-image-catalog.json")"
+[[ "${prod_count}" -eq 22 ]] || fail "expected 22 production image services, got ${prod_count}"
+gis_environments="$(jq -c '.images[] | select(.name == "gameintegration") | .environments' "${ROOT}/scripts/ci/staging-image-catalog.json")"
+[[ "${gis_environments}" == '["dev","staging"]' ]] || fail "GIS must remain excluded from production, got ${gis_environments}"
 
 echo "== staging_infra sets needs_full_rollout =="
 FILTER_JSON='{"code":"true","staging_infra":"true"}' GO_SERVICES_JSON='[]' run_matrix
