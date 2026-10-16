@@ -42,6 +42,66 @@ import 'support/gateway_test_client.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final locale in [const Locale('en'), const Locale('ru')]) {
+    testWidgets('filtered game activity is localized, revocable and accessible in ${locale.languageCode}', (tester) async {
+      const game = 'A deliberately long game title with several words and expansions';
+      final gameState = StateProvider<VoicePresence?>((ref) => const VoicePresence(
+        profileId: 'p-target', status: 'online', gameTitle: game,
+      ));
+      final client = MockClient((request) async => http.Response('{}', 404));
+      final container = _container(client, overrides: [
+        presenceProvider.overrideWith((ref, id) => ref.watch(gameState)),
+      ]);
+      final semantics = tester.ensureSemantics();
+      final theme = await _captureTheme(tester, forceProduction: true);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        for (final variant in [
+          (name: 'h', size: const Size(1280, 800), scale: 1.0),
+          (name: 'v', size: const Size(390, 844), scale: 1.0),
+          (name: 'narrow', size: const Size(280, 844), scale: 1.0),
+          (name: 'scaled', size: const Size(390, 844), scale: 2.0),
+        ]) {
+          container.read(gameState.notifier).state = const VoicePresence(
+            profileId: 'p-target', status: 'online', gameTitle: game,
+          );
+          tester.view.physicalSize = variant.size;
+          tester.view.devicePixelRatio = 1;
+          await tester.binding.setSurfaceSize(variant.size);
+          await tester.pumpWidget(_app(container, theme: theme, locale: locale, textScale: variant.scale, plainModal: true));
+          await tester.tap(find.byKey(const Key('open_contact_profile')));
+          await tester.pumpAndSettle();
+          final activity = find.byKey(const Key('profile_game_activity'));
+          final label = locale.languageCode == 'ru' ? 'Играет в $game' : 'Playing $game';
+          expect(find.text(label), findsOneWidget);
+          expect(tester.getSemantics(activity).label, contains(label));
+          expect(tester.takeException(), isNull);
+          await _capture(tester, 'contact-game-${locale.languageCode}-${variant.name}.png');
+          for (final revoked in [
+            const VoicePresence(profileId: 'p-target', status: 'online'),
+            const VoicePresence(profileId: 'p-target', status: 'invisible', gameTitle: game),
+            const VoicePresence(profileId: 'p-target', status: 'offline', gameTitle: game),
+          ]) {
+            container.read(gameState.notifier).state = revoked;
+            await tester.pump();
+            expect(container.read(presenceProvider('p-target')), same(revoked));
+            await tester.pumpAndSettle();
+            expect(activity, findsNothing);
+            expect(find.text(label), findsNothing);
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        }
+      } finally {
+        semantics.dispose();
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 

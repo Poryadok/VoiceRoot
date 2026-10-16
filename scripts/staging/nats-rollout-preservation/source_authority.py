@@ -167,6 +167,48 @@ def _ci(headers, run_id, sha, repo, deadline):
     return run, required
 
 
+def _provisional_ci(headers, run_id, sha, repo, deadline):
+    """Explicit staging only: exact immutable images, no known failed job."""
+    run = _get(API + '/actions/runs/' + str(run_id), headers, deadline)
+    if (run['id'] != run_id or run['workflow_id'] != WORKFLOW or run['head_sha'] != sha
+            or run['head_branch'] != 'master' or run['event'] != 'push'
+            or run['repository']['full_name'] != REPO or run['head_repository']['full_name'] != REPO
+            or run['repository']['id'] != repo['id'] or run['head_repository']['id'] != repo['id']
+            or run['path'].split('@', 1)[0] != '.github/workflows/ci.yml'
+            or run['status'] not in ('in_progress', 'completed')
+            or run['status'] == 'in_progress' and run['conclusion'] is not None
+            or run['status'] == 'completed' and run['conclusion'] != 'success'): _fail()
+    attempt = run['run_attempt']
+    if type(attempt) is not int or attempt <= 0: _fail()
+    jobs = _pages(API + '/actions/runs/' + str(run_id) + '/attempts/' + str(attempt) + '/jobs', 'jobs', headers, deadline)
+    named = {}
+    for job in jobs:
+        name = job['name']
+        if (job['run_id'] != run_id or job['head_sha'] != sha or job.get('run_attempt') != attempt
+                or not isinstance(name, str) or not name or name in named
+                or job['status'] not in ('queued', 'in_progress', 'completed')): _fail()
+        if job['status'] == 'completed':
+            if job['conclusion'] not in ('success', 'skipped'): _fail()
+        elif job['conclusion'] is not None or run['status'] == 'completed': _fail()
+        named[name] = job
+    lock = named.get('staging-stack-lock'); gate = named.get('ci-gate')
+    if lock is None or lock['status'] != 'completed' or lock['conclusion'] != 'success': _fail()
+    # GitHub does not list a dependency-blocked job until it is scheduled.
+    if gate is None and run['status']!='in_progress': _fail()
+    if gate is not None and gate['status'] == 'completed' and gate['conclusion'] != 'success': _fail()
+    return run, {'staging-stack-lock': lock, 'ci-gate': gate}
+
+
+def revalidate_ci(token, authority, *, final=False):
+    """Never choose a new run or attempt when revalidating bound admission."""
+    headers = _headers(token); deadline = time.monotonic() + 60
+    repo = _head(headers, authority['source_sha'], deadline)
+    check = _provisional_ci if authority.get('provisional_staging') is True and not final else _ci
+    run, _ = check(headers, authority['run_id'], authority['source_sha'], repo, deadline)
+    if run['run_attempt'] != authority['run_attempt']: _fail()
+    return run
+
+
 def _path(value):
     if not isinstance(value, str) or '\\' in value or '\x00' in value or ':' in value: _fail()
     path = PurePosixPath(value)
@@ -358,7 +400,7 @@ def same_image_content(actual, target, deadline):
     return a['manifest_image']==b['manifest_image'] and a['config_sha256']==b['config_sha256']
 
 
-def capture_source(token, run_id, source_sha, destination):
+def capture_source(token, run_id, source_sha, destination, *, provisional_staging=False):
     """Capture current master passive bytes; resolve authorized same-CI tags.
 
     Digests are independently resolved at capture, not recorded by the CI tag
@@ -369,7 +411,8 @@ def capture_source(token, run_id, source_sha, destination):
         if type(run_id) is not int or run_id <= 0 or not isinstance(source_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', source_sha): _fail()
         destination = _destination(destination); headers = _headers(token); deadline = time.monotonic() + 600
         repo = _head(headers, source_sha, deadline)
-        run, jobs = _ci(headers, run_id, source_sha, repo, deadline)
+        if type(provisional_staging) is not bool: _fail()
+        run, jobs = (_provisional_ci if provisional_staging else _ci)(headers, run_id, source_sha, repo, deadline)
         commit = _get(API + '/git/commits/' + source_sha, headers, deadline)
         if commit['sha'] != source_sha or not re.fullmatch(r'[a-f0-9]{40}', commit['tree']['sha']): _fail()
         tree = _get(API + '/git/trees/' + commit['tree']['sha'] + '?recursive=1', headers, deadline)
@@ -405,10 +448,14 @@ def capture_source(token, run_id, source_sha, destination):
         tags = _lock(lock, source_sha, destination)
         images = {name: _resolve_image(name, tag, deadline) for name, tag in sorted(tags.items())}
         _head(headers, source_sha, deadline)
-        return {'schema': 'voice-source-authority-v1', 'repository': REPO, 'source_sha': source_sha,
+        result = {'schema': 'voice-source-authority-v1', 'repository': REPO, 'source_sha': source_sha,
             'workflow_id': WORKFLOW, 'run_id': run_id, 'run_attempt': run['run_attempt'], 'tree_sha': tree['sha'],
             'source_files': dict(sorted(files.items())), 'images': images, 'lock_artifact_id': artifact_id,
             'lock_sha256': hashlib.sha256(lock).hexdigest(), 'image_provenance': 'independently resolved trusted CI tag',
             'verified': True}
+        if provisional_staging:
+            result['provisional_staging'] = True
+            revalidate_ci(token, result)
+        return result
     except Exception:
         raise SourceError('source_authority_rejected') from None
