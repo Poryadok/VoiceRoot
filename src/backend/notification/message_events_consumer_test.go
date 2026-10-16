@@ -571,12 +571,17 @@ func TestMessageEventsJetStreamNakRestartRecoversOrdinaryScopeWithoutDebugCaptur
 			pendingState = fmt.Sprintf("consumer info error type=%T", infoErr)
 			return false
 		}
-		pendingState = fmt.Sprintf("push_bound=%t num_pending=%d num_ack_pending=%d redelivered=%d delivered=%d",
-			info.PushBound, info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Consumer)
-		return info.NumPending == 1 && info.NumAckPending == 0
+		pendingState = fmt.Sprintf("push_bound=%t num_pending=%d num_ack_pending=%d redelivered=%d delivered_stream=%d ack_floor_stream=%d published_stream=%d same_durable=%t",
+			info.PushBound, info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Stream,
+			info.AckFloor.Stream, published.Sequence, info.Created.Equal(created.Created))
+		knownEventUnacked := (info.NumPending == 1 && info.NumAckPending == 0) ||
+			(info.NumPending == 0 && info.NumAckPending == 1)
+		return !info.PushBound && knownEventUnacked && info.NumRedelivered >= 1 &&
+			info.Delivered.Stream >= published.Sequence && info.AckFloor.Stream < published.Sequence &&
+			info.Created.Equal(created.Created)
 	}, 5*time.Second, 20*time.Millisecond)
 	if !pendingObserved {
-		t.Fatalf("failed authority leaves the NAKed event pending on the same durable; last observation: %s", pendingState)
+		t.Fatalf("failed authority leaves the NAKed event unacknowledged on the same unbound durable; last observation: %s", pendingState)
 	}
 	select {
 	case got := <-failedDeliveries:
