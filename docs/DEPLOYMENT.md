@@ -1252,3 +1252,47 @@ This is a **production prerequisite to apply during production provisioning**,
 not evidence that the production host has already been changed. Host recovery
 and enablement precede the populated version-transition and fresh-rollback proof;
 automatic staging deployment remains disabled until that proof succeeds.
+
+### Compiler rejection before an operation exists
+
+A failed images-only prepare at `target-build` with the fixed cause
+`rollout_compile_image_inventory_changed` remains a failed request. It must not
+be marked COMPLETE/PASS or replayed. If it blocks an idle helper upgrade, root
+may append a separately reviewed `voice-compiler-inventory-rejection-v1` receipt
+using `operator_retirement.attest_compiler_inventory_rejection(path, sha256)`
+from reviewed captured code. The private reviewed document binds the exact nonce,
+original journal/response/public-report hashes and sizes, historical helper
+binding, retained source/build tree hashes and unchanged historical abandonment
+receipt hash. This is not an automatic disposition of arbitrary failed requests.
+
+Admission requires the exact rejected images-only request and matching safe
+report, no operation directory, and a build directory containing only
+`parameters.json`. Root custody and retained bytes are checked again during the
+helper swap. A separate receipt excludes only that verified nonce from the old
+pending inventory; the old receipt and original evidence remain unchanged.
+Existing operations, unknown causes, partial target output or evidence drift
+still block. No workload, NATS, source authority, or recovery permission is granted.
+
+The reviewed private JSON has exactly these fields:
+`schema`, `nonce`, `disposition` (`ABANDONED_PRECHECKPOINT`),
+`deployment_pass` (false), `recovery_authorized` (false), `helper_binding`,
+`old_receipt_sha256`, `files` (journal/response/report, each with sha256 and bytes),
+`source_tree`, and `build_tree` (each with files, bytes, sha256 using the retained
+prepare-tree census). The helper binding is the historical report's binding,
+not the replacement helper. It is not an arbitrary source/tree cleanup request.
+
+After independent review and root capture of the new helper, root uses the
+existing adapter with the verified captured helper on the Python import path:
+
+```python
+import operator_retirement
+operator_retirement.attest_compiler_inventory_rejection(
+    "/root/REVIEWED_PRIVATE_DOCUMENT.json", "REVIEWED_DOCUMENT_SHA256")
+```
+
+This one-shot call requires empty inbox/processing under the operation lock and
+creates `installed/compiler-inventory-rejection-<nonce>.json` exclusively. An
+existing destination is an error, not permission to replace or retry a receipt.
+The replacement installer must contain this verifier before the ordinary guarded
+idle upgrade can use it. Preserve the earlier rejected upgrade and failure
+evidence; revalidate current terminal state and queue custody before activation.
