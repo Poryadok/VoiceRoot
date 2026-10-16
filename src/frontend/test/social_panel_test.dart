@@ -30,6 +30,7 @@ void main() {
     required Widget home,
     required http.Client client,
     AuthController Function(Ref ref)? authControllerFactory,
+    Locale locale = const Locale('en'),
   }) {
     return ProviderScope(
       overrides: [
@@ -56,7 +57,7 @@ void main() {
       ],
       child: MaterialApp(
         theme: voiceTestTheme(),
-        locale: const Locale('en'),
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: home),
@@ -171,8 +172,9 @@ void main() {
                     200,
                   );
                 }
-                if (req.url.path.endsWith('/pending/cancel'))
+                if (req.url.path.endsWith('/pending/cancel')) {
                   return pending.future;
+                }
                 return http.Response('{}', 200);
               }),
             ),
@@ -216,8 +218,9 @@ void main() {
           await tester.pumpAndSettle();
           expect(requestReads, reads);
           expect(find.text('Could not complete this action.'), findsNothing);
-          if (!failedSwitch)
+          if (!failedSwitch) {
             expect(find.text('No friend requests'), findsOneWidget);
+          }
         },
       );
     }
@@ -895,6 +898,324 @@ void main() {
     expect(find.textContaining('favorite-private-diagnostic'), findsNothing);
     expect(find.text('Could not complete this action.'), findsOneWidget);
     expect(find.byIcon(Icons.star_border), findsOneWidget);
+  });
+
+  for (final profileStatus in [503, 404, 403]) {
+    testWidgets('incoming actions survive profile lookup $profileStatus', (
+      tester,
+    ) async {
+      final handled = <String>{};
+      final actions = <String>[];
+      var declineAttempts = 0;
+      await tester.pumpWidget(
+        socialTestApp(
+          home: const SocialPanel(initialTabIndex: 4),
+          client: MockClient((request) async {
+            if (request.url.path == '/api/v1/friends/requests') {
+              return http.Response(
+                jsonEncode({
+                  'friend_request_list': {
+                    'incoming': [
+                      for (final id in ['unknown-accept', 'unknown-decline'])
+                        if (!handled.contains(id)) {'profile_id': id},
+                    ],
+                    'outgoing': [],
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.url.path.startsWith('/api/v1/users/profiles/')) {
+              return http.Response(
+                '{"message":"private profile diagnostic"}',
+                profileStatus,
+              );
+            }
+            if (request.url.path.endsWith('/unknown-accept/accept')) {
+              actions.add('${request.method} accept');
+              handled.add('unknown-accept');
+              return http.Response('{}', 200);
+            }
+            if (request.url.path.endsWith('/unknown-decline/decline')) {
+              actions.add('${request.method} decline');
+              declineAttempts++;
+              if (declineAttempts == 1) {
+                return http.Response(
+                  '{"message":"private action diagnostic"}',
+                  503,
+                );
+              }
+              handled.add('unknown-decline');
+              return http.Response('{}', 200);
+            }
+            return http.Response('{}', 200);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('User unavailable'), findsNWidgets(2));
+      expect(find.textContaining('unknown-'), findsNothing);
+      expect(find.textContaining('private profile diagnostic'), findsNothing);
+      for (final id in ['unknown-accept', 'unknown-decline']) {
+        expect(
+          tester.widget<IconButton>(
+            find.byKey(SocialPanel.requestAcceptKey(id)),
+          ).onPressed,
+          isNotNull,
+        );
+        expect(
+          tester.widget<IconButton>(
+            find.byKey(SocialPanel.requestDeclineKey(id)),
+          ).onPressed,
+          isNotNull,
+        );
+      }
+      await tester.tap(find.byKey(SocialPanel.requestAcceptKey('unknown-accept')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(SocialPanel.requestAcceptKey('unknown-accept')),
+        findsNothing,
+      );
+      final decline = find.byKey(SocialPanel.requestDeclineKey('unknown-decline'));
+      await tester.tap(decline);
+      await tester.pumpAndSettle();
+      expect(find.text('Could not complete this action.'), findsOneWidget);
+      expect(find.textContaining('private action diagnostic'), findsNothing);
+      expect(tester.widget<IconButton>(decline).onPressed, isNotNull);
+      await tester.tap(decline);
+      await tester.pumpAndSettle();
+      expect(actions, ['POST accept', 'POST decline', 'POST decline']);
+      expect(find.text('No friend requests'), findsOneWidget);
+      expect(find.textContaining('unknown-'), findsNothing);
+    });
+  }
+
+  testWidgets('incoming actions remain usable while the profile is loading', (
+    tester,
+  ) async {
+    final profile = Completer<http.Response>();
+    final actions = <String>[];
+    var removed = false;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': [if (!removed) {'profile_id': 'loading-peer'}],
+                  'outgoing': [],
+                },
+              }),
+              200,
+            );
+          }
+          if (request.url.path == '/api/v1/users/profiles/loading-peer') {
+            return profile.future;
+          }
+          if (request.url.path.endsWith('/loading-peer/accept')) {
+            actions.add('${request.method} accept');
+            return http.Response('{}', 503);
+          }
+          if (request.url.path.endsWith('/loading-peer/decline')) {
+            actions.add('${request.method} decline');
+            removed = true;
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(SocialPanel.panelKey)),
+    )!;
+    expect(find.text(l10n.commonLoading), findsOneWidget);
+    expect(find.text('loading-peer'), findsNothing);
+    final accept = find.byKey(SocialPanel.requestAcceptKey('loading-peer'));
+    final decline = find.byKey(SocialPanel.requestDeclineKey('loading-peer'));
+    expect(tester.widget<IconButton>(accept).onPressed, isNotNull);
+    expect(tester.widget<IconButton>(decline).onPressed, isNotNull);
+    await tester.tap(accept);
+    await tester.pumpAndSettle();
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(tester.widget<IconButton>(decline).onPressed, isNotNull);
+    await tester.tap(decline);
+    await tester.pumpAndSettle();
+    expect(actions, ['POST accept', 'POST decline']);
+    expect(find.text('No friend requests'), findsOneWidget);
+    profile.complete(
+      http.Response('{"profile":{"display_name":"Late name"}}', 200),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Late name'), findsNothing);
+    expect(find.text('No friend requests'), findsOneWidget);
+  });
+
+  for (final locale in ['en', 'ru']) {
+    testWidgets('incoming request action names are localized in $locale', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(
+          socialTestApp(
+            home: const SocialPanel(initialTabIndex: 4),
+            locale: Locale(locale),
+            client: MockClient((request) async {
+              if (request.url.path == '/api/v1/friends/requests') {
+                return http.Response(
+                  '{"friend_request_list":{"incoming":[{"profile_id":"p-in"}],"outgoing":[]}}',
+                  200,
+                );
+              }
+              return http.Response('{}', 200);
+            }),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byKey(SocialPanel.panelKey)),
+        )!;
+        for (final action in [
+          (
+            key: SocialPanel.requestAcceptKey('p-in'),
+            label: l10n.socialAcceptRequest,
+          ),
+          (
+            key: SocialPanel.requestDeclineKey('p-in'),
+            label: l10n.socialDeclineRequest,
+          ),
+        ]) {
+          expect(
+            tester.widget<IconButton>(find.byKey(action.key)).tooltip,
+            action.label,
+          );
+          expect(
+            tester.getSemantics(find.byKey(action.key)),
+            matchesSemantics(
+              label: action.label,
+              isButton: true,
+              hasEnabledState: true,
+              isEnabled: true,
+              hasTapAction: true,
+              isFocusable: true,
+              hasFocusAction: true,
+            ),
+          );
+        }
+      } finally {
+        semantics.dispose();
+      }
+    });
+  }
+
+  testWidgets('requests loading and failed load recover through retry', (
+    tester,
+  ) async {
+    final loading = Completer<http.Response>();
+    var reads = 0;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/friends/requests') {
+            reads++;
+            if (reads == 1) return loading.future;
+            return http.Response(
+              '{"friend_request_list":{"incoming":[],"outgoing":[]}}',
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(VoiceListSkeleton), findsOneWidget);
+    expect(find.text('No friend requests'), findsNothing);
+    loading.complete(
+      http.Response('{"message":"private load diagnostic"}', 503),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(SocialPanel.requestsUnavailableKey), findsOneWidget);
+    expect(find.textContaining('private load diagnostic'), findsNothing);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(reads, 2);
+    expect(find.byKey(SocialPanel.requestsUnavailableKey), findsNothing);
+    expect(find.text('No friend requests'), findsOneWidget);
+  });
+
+  testWidgets('incoming decline is single flight and retryable after failure', (
+    tester,
+  ) async {
+    final pending = Completer<http.Response>();
+    final declineMethods = <String>[];
+    var acceptCalls = 0;
+    var calls = 0;
+    var declined = false;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': [if (!declined) {'profile_id': 'p-in'}],
+                  'outgoing': [],
+                },
+              }),
+              200,
+            );
+          }
+          if (request.url.path == '/api/v1/friends/invitations/p-in/decline') {
+            declineMethods.add(request.method);
+            calls++;
+            if (calls == 1) return pending.future;
+            declined = true;
+            return http.Response('{}', 200);
+          }
+          if (request.url.path.endsWith('/accept')) {
+            acceptCalls++;
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final decline = find.byKey(SocialPanel.requestDeclineKey('p-in'));
+    final staleTap = tester.widget<IconButton>(decline).onPressed!;
+    staleTap();
+    staleTap();
+    await tester.pump();
+    expect(calls, 1);
+    expect(declineMethods, ['POST']);
+    expect(acceptCalls, 0);
+    expect(tester.widget<IconButton>(decline).onPressed, isNull);
+    expect(
+      tester.widget<IconButton>(
+        find.byKey(SocialPanel.requestAcceptKey('p-in')),
+      ).onPressed,
+      isNull,
+    );
+    expect(find.byKey(SocialPanel.requestActionProgressKey('p-in')), findsOneWidget);
+    pending.complete(
+      http.Response('{"message":"private decline diagnostic"}', 503),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining('private decline diagnostic'), findsNothing);
+    expect(tester.widget<IconButton>(decline).onPressed, isNotNull);
+    await tester.tap(decline);
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(declineMethods, ['POST', 'POST']);
+    expect(acceptCalls, 0);
+    expect(decline, findsNothing);
+    expect(find.text('No friend requests'), findsOneWidget);
   });
 
   testWidgets('incoming request accept calls gateway', (tester) async {

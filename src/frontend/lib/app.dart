@@ -318,6 +318,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final selectedChatId = ref.watch(selectedChatIdProvider);
     final selectedSpaceId = ref.watch(selectedSpaceIdProvider);
     final navigationSection = ref.watch(navigationSectionProvider);
+    final chatInbox = ref.watch(chatInboxProvider);
     final sidePanel = ref.watch(shellSidePanelProvider);
     final profileAsync = ref.watch(activeProfileProvider);
     final voice = VoiceColors.of(context);
@@ -442,7 +443,15 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                                   )
                                 : null,
                             mainChild: selectedChatId == null
-                                ? Center(child: Text(l10n.chatRoomSelectPrompt))
+                                ? chatInbox == 'requests' && !inSpace &&
+                                      navigationSection == NavigationSection.chats
+                                    ? VoiceStatePanel(
+                                        key: const Key('message_requests_detail_hint'),
+                                        title: l10n.chatMessageRequestsTitle,
+                                        message: l10n.chatMessageRequestsEmptyHint,
+                                        icon: Icons.mark_email_unread_outlined,
+                                      )
+                                    : Center(child: Text(l10n.chatRoomSelectPrompt))
                                 : ChatRoomPanel(
                                     chatId: selectedChatId,
                                     onBack: narrow ? onBackToChats : null,
