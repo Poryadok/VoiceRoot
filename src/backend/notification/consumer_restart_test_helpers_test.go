@@ -549,7 +549,7 @@ func messageSentRestartSpec() notificationConsumerRestartSpec {
 			tokenProbe = &notificationRestartTokenProbe{store: tokens, expectedProfile: recipientID}
 			pusher := &dispatch.MessagePusher{
 				Presence: presence.OfflineChecker{},
-				Tokens:   tokenProbe, Pusher: dispatcher, Grouping: grouping.NewMemoryStore(),
+				Tokens:   tokenProbe, Pusher: dispatcher, Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 			}
 			return runMessageEventsConsumer(ctx, natsURL, tokens, memberLister, pusher, pushenrich.NoopResolver{}, nil)
 		},

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -117,6 +119,28 @@ type recordingGameChatScope struct {
 	calls             int
 }
 
+// ordinaryGameChatScope models the authenticated GIS answer for an ordinary
+// chat: it is not game-scoped, and no game consent is required for delivery.
+type ordinaryGameChatScope struct{}
+
+func (ordinaryGameChatScope) ResolveGamePushChat(context.Context, uuid.UUID, uuid.UUID, string) (bool, bool, error) {
+	return false, true, nil
+}
+
+type unavailableGameChatScope struct {
+	calls    atomic.Int32
+	attempts chan struct{}
+}
+
+func (s *unavailableGameChatScope) ResolveGamePushChat(context.Context, uuid.UUID, uuid.UUID, string) (bool, bool, error) {
+	s.calls.Add(1)
+	select {
+	case s.attempts <- struct{}{}:
+	default:
+	}
+	return false, false, errors.New("GIS chat scope authority unavailable")
+}
+
 func (r *recordingGameChatScope) ResolveGamePushChat(_ context.Context, profileID, chatID uuid.UUID, category string) (bool, bool, error) {
 	r.profileID, r.chatID, r.category = profileID, chatID, category
 	r.calls++
@@ -200,7 +224,7 @@ func TestRouteMessageNotificationPolicyFailureRetriesAllRecipientsBeforeSending(
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
 		}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy, GameChatScope: ordinaryGameChatScope{},
 	}
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
 	members := stubChatMembers{rows: []chatmembers.Member{
@@ -234,7 +258,7 @@ func TestRouteMessageNotificationDoesNotReloadPoliciesDuringDispatch(t *testing.
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
 		}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy, GameChatScope: ordinaryGameChatScope{},
 	}
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
 	members := stubChatMembers{rows: []chatmembers.Member{
@@ -262,7 +286,7 @@ func TestRouteMessageNotificationPresenceOutageDoesNotBecomeOfflinePushAndRetrie
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
 		}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: presence, Grouping: grouping.NewMemoryStore(),
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: presence, Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
 	members := stubChatMembers{rows: []chatmembers.Member{
@@ -467,6 +491,128 @@ func TestMessageEventsJetStreamRedeliveryRechecksQueuedGameConsentAndSuppressesE
 	}
 }
 
+func TestMessageEventsJetStreamNakRestartRecoversOrdinaryScopeWithoutDebugCapture(t *testing.T) {
+	server, err := natsserver.NewServer(&natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1})
+	require.NoError(t, err)
+	go server.Start()
+	defer server.Shutdown()
+	require.True(t, server.ReadyForConnections(10*time.Second))
+
+	provisioner, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	defer provisioner.Close()
+	js, err := provisioner.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: jsStreamMessageEvents, Subjects: []string{jsSubjectMessageEvents}})
+	require.NoError(t, err)
+	durable := consumer.SharedDurable("message")
+	created, err := js.AddConsumer(jsStreamMessageEvents, &nats.ConsumerConfig{
+		Durable: durable, FilterSubject: jsSubjectMessageEvents,
+		DeliverSubject: "_INBOX.voice.notification.message", AckPolicy: nats.AckExplicitPolicy,
+		DeliverPolicy: nats.DeliverNewPolicy,
+	})
+	require.NoError(t, err)
+
+	senderID, recipientID := uuid.New(), uuid.New()
+	members := stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}
+	tokens := messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+		recipientID: {{Token: "ordinary-retry-device", PushService: "fcm"}},
+	}}
+	failedAuthority := &unavailableGameChatScope{attempts: make(chan struct{}, 8)}
+	failedDeliveries := make(chan notificationRestartPush, 2)
+	failedPusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{}, Tokens: tokens, Grouping: grouping.NewMemoryStore(),
+		GameChatScope: failedAuthority,
+		Pusher:        &dispatch.PushDispatcher{FCM: notificationRestartFCM{sent: failedDeliveries}},
+	}
+
+	start := func(pusher *dispatch.MessagePusher) (context.CancelFunc, <-chan error, *notificationConsumerReadiness) {
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		readiness := newNotificationConsumerReadiness("message")
+		done := make(chan error, 1)
+		go func() {
+			done <- runMessageEventsConsumer(withNotificationConsumerReadiness(ctx, readiness, "message"), server.ClientURL(), &store.DeviceTokenStore{}, members, pusher, pushenrich.NoopResolver{}, nil)
+		}()
+		require.Eventually(t, readiness.ready, 5*time.Second, 10*time.Millisecond, "message durable binds before publication")
+		return cancel, done, readiness
+	}
+	stop := func(cancel context.CancelFunc, done <-chan error) {
+		t.Helper()
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("message consumer did not stop after cancellation")
+		}
+	}
+
+	firstCancel, firstDone, _ := start(failedPusher)
+	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+	encoded, err := proto.Marshal(event)
+	require.NoError(t, err)
+	published, err := js.Publish("message.sent", encoded)
+	require.NoError(t, err)
+	for attempt := 0; attempt < 2; attempt++ {
+		select {
+		case <-failedAuthority.attempts:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("GIS authority failure did not NAK and redeliver the message (attempt %d)", attempt+1)
+		}
+	}
+	stop(firstCancel, firstDone)
+	require.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		return infoErr == nil && !info.PushBound && info.NumPending == 1 && info.NumAckPending == 0 && info.NumRedelivered > 0
+	}, 5*time.Second, 20*time.Millisecond, "failed authority leaves the published event pending on the same durable")
+	select {
+	case got := <-failedDeliveries:
+		t.Fatalf("authority failure must not send a preview before recovery: %#v", got)
+	default:
+	}
+
+	ordinaryAuthority := &recordingGameChatScope{gameScoped: false, allowed: true}
+	deliveries := make(chan notificationRestartPush, 2)
+	var sender fcm.Sender = notificationRestartFCM{sent: deliveries}
+	sender = maybeRecordFCMSender(sender, false)
+	recoveredPusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{}, Tokens: tokens, Grouping: grouping.NewMemoryStore(),
+		GameChatScope: ordinaryAuthority, Pusher: &dispatch.PushDispatcher{FCM: sender},
+	}
+	secondCancel, secondDone, _ := start(recoveredPusher)
+	select {
+	case got := <-deliveries:
+		require.Equal(t, recipientID, got.profileID)
+		require.Equal(t, "new_message", got.payload.Data["type"])
+	case <-time.After(5 * time.Second):
+		t.Fatal("recovered authenticated ordinary scope did not deliver the pending message")
+	}
+	require.Equal(t, 1, ordinaryAuthority.calls, "the successful retry uses the current ordinary GIS scope result")
+	require.False(t, ordinaryAuthority.gameScoped, "ordinary control is explicitly unmapped from a game")
+	require.True(t, ordinaryAuthority.allowed, "ordinary control is an authenticated authority response, not missing GIS")
+	require.Equal(t, recipientID, ordinaryAuthority.profileID)
+	require.Equal(t, event.GetMessageSent().GetChatId(), ordinaryAuthority.chatID.String())
+	require.Equal(t, "game_activity", ordinaryAuthority.category)
+	require.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0 &&
+			info.AckFloor.Stream >= published.Sequence && info.NumRedelivered > 0 && info.Created.Equal(created.Created)
+	}, 5*time.Second, 20*time.Millisecond, "recovered delivery ACKs the redelivered event and drains the durable")
+	select {
+	case duplicate := <-deliveries:
+		t.Fatalf("redelivered event produced more than one FCM attempt: %#v", duplicate)
+	default:
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/debug/recorded-pushes?profile_id="+recipientID.String(), nil)
+	response := httptest.NewRecorder()
+	notificationHTTPHandlerWithReadinessAndDebug(serviceName, nil, false).ServeHTTP(response, request)
+	require.Equal(t, http.StatusNotFound, response.Code, "disabled private capture keeps the debug route absent")
+	stop(secondCancel, secondDone)
+}
+
 func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T) {
 	options := &natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1}
 	server, err := natsserver.NewServer(options)
@@ -495,7 +641,7 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	pusher := &dispatch.MessagePusher{
 		Presence: offlineMessagePresence{},
 		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher:   &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(),
+		Pusher:   &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}
 	members := stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}
 
@@ -655,7 +801,7 @@ func TestRouteMessageNotification_SendSilentMarksPushWithoutSuppressingIt(t *tes
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
 		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-		Grouping: grouping.NewMemoryStore(),
+		Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
 		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(), SendSilent: true},
 	}})
@@ -675,7 +821,7 @@ func TestRouteMessageNotification_SilentMentionDoesNotIntroduceAudiblePush(t *te
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
 		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-		Grouping: grouping.NewMemoryStore(),
+		Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{
 		MentionAdded: &eventsv1.MentionAdded{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(), MentionedProfileIds: []string{recipientID.String()}, SendSilent: true},
 	}})
@@ -740,7 +886,7 @@ func TestRouteMessageNotification_ArchivedRecipientGetsNoPush(t *testing.T) {
 					recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 				}},
 				Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-				Grouping: grouping.NewMemoryStore(),
+				Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 			}, pushenrich.NoopResolver{}, env)
 
 			require.NoError(t, err)
@@ -781,7 +927,7 @@ func TestRouteMessageNotification_ArchivedReplyAndMentionSuppressNotificationDel
 					uuid.MustParse(recipientID): {{Token: "recipient-token", PushService: "fcm"}},
 				}},
 				Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-				Grouping: grouping.NewMemoryStore(),
+				Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 			}
 			members := stubChatMembers{rows: []chatmembers.Member{
 				{ProfileID: senderID, InboxBucket: "main"},
