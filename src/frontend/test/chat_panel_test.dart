@@ -1882,7 +1882,9 @@ void main() {
         );
 
         await tester.tap(find.byKey(const Key('test_open_message_requests')));
-        await tester.pumpAndSettle();
+        // The in-flight request keeps its busy indicator animating until the
+        // delayed response is completed, so only pump the navigation frame.
+        await tester.pump();
         expect(
           find.text(action == 'accept' ? 'Accept' : 'Decline'),
           findsOneWidget,
