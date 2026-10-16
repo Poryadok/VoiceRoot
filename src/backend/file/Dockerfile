@@ -31,6 +31,7 @@ WORKDIR /src/file
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
 FROM alpine:3.20
+RUN apk add --no-cache ffmpeg
 RUN adduser -D -H -u 65532 nonroot
 USER nonroot:nonroot
 WORKDIR /

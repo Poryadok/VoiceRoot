@@ -48,6 +48,8 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!-- Install the audio module readiness promise before Flutter can start. -->
+  <script src="assets/packages/flutter_soloud/web/init_soloud.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

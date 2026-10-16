@@ -45,6 +45,16 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
     """
     assert_idle()
     root=Path('/var/lib/voice-nats-preservation')
+    # The v3 enrollment remains immutable evidence. Music renews the same
+    # enrolled actor into a separate create-only Secret and v4 receipt.
+    from bootstrap_selection import select
+    from nats_contract_plan import digest
+    previous_enrollment=private_read(root/'bootstrap-enrollment.json')
+    if previous_enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v1':fail()
+    from nats_root_plan import _V3_AUTH_KEYS
+    if set(previous_enrollment.get('auth_proof',{}))!=_V3_AUTH_KEYS:fail()
+    previous_name=select(kube,previous_enrollment,GENERATION)
+    previous_secret=kube.get('secret',previous_name)
     marker=kube.get('configmap','voice-nats-generation')
     if (marker['metadata']['uid']!='cbafb90c-6974-4642-86d6-09b2eef1c843'
         or marker['data'].get('generation')!=GENERATION or marker['data'].get('phase')!='active'
@@ -55,21 +65,24 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
     operator=kube.get('secret','voice-nats-operator-'+GENERATION)
     account=secret_bytes(operator,'account.public').decode().strip()
     if hash_bytes(account.encode())!=ACCOUNT_SHA:fail()
-    previous=secret_bytes(old,'bootstrap.creds')
+    previous=secret_bytes(previous_secret,'bootstrap.creds')
     binding={'generation':GENERATION,'marker_uid':marker['metadata']['uid'],'marker_rv':marker['metadata']['resourceVersion'],
-        'old_secret':{k:old['metadata'][k] for k in ('name','uid','resourceVersion')}|{'credential_sha256':hash_bytes(previous)},
+        'old_secret':{k:old['metadata'][k] for k in ('name','uid','resourceVersion')}|{'credential_sha256':hash_bytes(secret_bytes(old,'bootstrap.creds'))},
         'operator_secret':{k:operator['metadata'][k] for k in ('name','uid','resourceVersion')},
-        'actor_sha256':ACTOR_SHA,'account_sha256':ACCOUNT_SHA}
+        'actor_sha256':ACTOR_SHA,'account_sha256':ACCOUNT_SHA,
+        'previous_enrollment_sha256':digest(previous_enrollment)}
     def unchanged():
         assert_idle()
         if kube.get('configmap','voice-nats-generation')!=marker or kube.get('secret',binding['old_secret']['name'])!=old or kube.get('secret',binding['operator_secret']['name'])!=operator:fail()
+        if private_read(root/'bootstrap-enrollment.json')!=previous_enrollment or kube.get('secret',previous_name)!=previous_secret:fail()
+        select(kube,previous_enrollment,GENERATION)
     binary=Path(code)/'nats-rollout-preservation'/'bootstrap-renewer'
     relative='nats-rollout-preservation/bootstrap-renewer'
     if relative not in code_binding or hash_bytes(binary.read_bytes())!=code_binding[relative]:fail()
     unchanged()
     # No credentials are returned to a runner, copied to an operation archive,
     # or printed. A durable private draft makes create/crash retries identical.
-    draft_path=root/'bootstrap-renewal-draft.json'
+    draft_path=root/'bootstrap-renewal-draft-v4.json'
     try:draft=private_read(draft_path)
     except FileNotFoundError:draft=None
     request={'schema':'voice-nats-existing-bootstrap-renewal-v1','old_creds':previous.decode(),
@@ -78,10 +91,10 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
         'signer_seed':protected_seed().decode(),'actor_sha256':ACTOR_SHA,'account_sha256':ACCOUNT_SHA}
     fresh=invoke(binary,request)
     if draft is None:
-        draft={'schema':'voice-nats-bootstrap-renewal-draft-v1','binding':binding,'code_sha256':code_binding[relative],
+        draft={'schema':'voice-nats-bootstrap-renewal-draft-v4','binding':binding,'code_sha256':code_binding[relative],
             'credentials':base64.b64encode(fresh).decode(),'credential_sha256':hash_bytes(fresh)}
         private_save(draft_path,draft)
-    if (draft.get('schema')!='voice-nats-bootstrap-renewal-draft-v1' or draft.get('binding')!=binding
+    if (draft.get('schema')!='voice-nats-bootstrap-renewal-draft-v4' or draft.get('binding')!=binding
         or draft.get('code_sha256')!=code_binding[relative]):fail()
     renewed=base64.b64decode(draft['credentials'],validate=True)
     if hash_bytes(renewed)!=draft.get('credential_sha256'):fail()
@@ -90,9 +103,19 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
     def authenticated(creds):
         result=prove_auth(creds,operator,unchanged)
         if not isinstance(result,dict) or result.get('verified') is not True:fail()
+        from nats_root_plan import _validated_normalized_consumers
+        _validated_normalized_consumers(result,previous_enrollment['auth_proof'])
         auth.update(result);return True
+    committed={}
     def commit(receipt):
-        receipt=dict(receipt,auth_proof=auth)
-        private_save(root/'bootstrap-enrollment.json',receipt)
-    return enroll(EnrollmentKube(kube),binding,renewed,unchanged,authenticated,
-        commit)
+        receipt=dict(receipt,schema='voice-nats-bootstrap-enrollment-v4',auth_proof=auth,
+            previous_enrollment=previous_enrollment,previous_enrollment_sha256=digest(previous_enrollment))
+        select(kube,receipt,GENERATION)
+        path=root/'bootstrap-enrollment-v4.json'
+        try:existing=private_read(path)
+        except FileNotFoundError:existing=None
+        if existing is not None and existing!=receipt:fail()
+        if existing is None:private_save(path,receipt)
+        committed.update(receipt)
+    enroll(EnrollmentKube(kube),binding,renewed,unchanged,authenticated,commit)
+    return committed

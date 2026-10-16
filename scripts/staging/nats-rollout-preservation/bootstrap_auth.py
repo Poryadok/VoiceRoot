@@ -60,7 +60,7 @@ def prove(credentials,operator,unchanged,required_get_streams=None):
                     raise Blocked('bootstrap_auth_get_scratch_changed')
             runtime.stop(broker);unchanged()
             legacy=next(row['config'] for row in normalized_consumers if row['stream']=='social_events')
-            result={'verified':True,'server_image':NATS_IMAGE,'account_sha256':ACCOUNT_SHA,
+            result={'schema':'voice-bootstrap-auth-v4','verified':True,'server_image':NATS_IMAGE,'account_sha256':ACCOUNT_SHA,
                 'reply_prefix':'_INBOX.voice.bootstrap.reply','normalized_consumer':legacy,
                 'normalized_consumer_sha256':digest(legacy),'normalized_consumers':normalized_consumers,
                 'normalized_consumers_sha256':digest(normalized_consumers)}

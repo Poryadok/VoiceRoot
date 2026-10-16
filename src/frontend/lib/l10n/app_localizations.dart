@@ -2330,6 +2330,30 @@ abstract class AppLocalizations {
   /// **'Music'**
   String get chatPinnedTypeMusic;
 
+  /// No description provided for @chatMusicInvalidFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a non-empty audio file up to 10 MB. Encryption overhead counts toward the limit.'**
+  String get chatMusicInvalidFile;
+
+  /// No description provided for @chatMusicPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play music'**
+  String get chatMusicPlay;
+
+  /// No description provided for @chatMusicPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause music'**
+  String get chatMusicPause;
+
+  /// No description provided for @chatMusicSeek.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback position'**
+  String get chatMusicSeek;
+
   /// No description provided for @chatPinnedTypeVideoMessage.
   ///
   /// In en, this message translates to:
@@ -5101,6 +5125,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Block this user?'**
   String get profileBlockConfirmTitle;
+
+  /// No description provided for @profileRemoveFriendConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this friend?'**
+  String get profileRemoveFriendConfirmTitle;
+
+  /// No description provided for @profileRemoveFriendConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this user from your friends list?'**
+  String get profileRemoveFriendConfirmMessage;
 
   /// No description provided for @profileBlockConfirmMessage.
   ///

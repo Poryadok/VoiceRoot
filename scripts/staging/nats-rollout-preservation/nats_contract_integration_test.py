@@ -12,6 +12,14 @@ import nats_contract_integration as integration
 
 
 class HostedTransportTests(unittest.TestCase):
+    def test_existing_fixture_credentials_do_not_already_grant_music_consumer(self):
+        contract=json.loads((Path(__file__).parents[1]/'nats-known-baseline/deployed-contract.json').read_text())
+        grants=integration.fixture_bootstrap_grants(contract)
+        self.assertNotIn('$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata',grants)
+        self.assertNotIn('$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata',grants)
+        self.assertIn('$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',grants)
+        self.assertIn('$JS.API.STREAM.CREATE.file_events',grants)
+
     def test_postmigration_plan_uses_authoritative_stream_configs_and_only_declared_consumer_info(self):
         import copy
         from nats_contract_plan import CHAT_SUBJECTS_17, ROLE_SUBJECTS_10, DECLARATIONS, ContractError, compile_plan
@@ -25,6 +33,8 @@ class HostedTransportTests(unittest.TestCase):
                 'duplicate_window':86400000000000,'subjects':social['social_subjects']},
             'role_events': {'name':'role_events','storage':'file','retention':'limits','max_age':604800000000000,
                 'subjects':sorted(ROLE_SUBJECTS_10)},
+            'file_events': {'name':'file_events','storage':'file','retention':'limits','max_age':604800000000000,
+                'subjects':['file.processed']},
             'rollout_extra': {'name':'rollout_extra','storage':'file','retention':'limits','subjects':['rollout.extra']},
         }
         details=[]

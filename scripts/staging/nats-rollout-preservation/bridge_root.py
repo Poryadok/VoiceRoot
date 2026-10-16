@@ -190,9 +190,15 @@ class Actions:
         if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
         nats_authority=None
         if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
-            try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
-            except FileNotFoundError:enrollment=None
+            try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
+            except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
             if enrollment is not None:
+                from nats_contract_plan import digest as enrollment_digest
+                previous_enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
+                if (enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v4'
+                    or enrollment.get('previous_enrollment')!=previous_enrollment
+                    or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous_enrollment)):
+                    raise Blocked('enrolled_bootstrap_selection_refused')
                 import nats_root_plan
                 nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
                 parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}

@@ -1262,6 +1262,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatPinnedTypeMusic => 'Музыка';
 
   @override
+  String get chatMusicInvalidFile =>
+      'Выберите непустой аудиофайл до 10 МБ. Данные шифрования входят в лимит.';
+
+  @override
+  String get chatMusicPlay => 'Воспроизвести музыку';
+
+  @override
+  String get chatMusicPause => 'Приостановить музыку';
+
+  @override
+  String get chatMusicSeek => 'Позиция воспроизведения';
+
+  @override
   String get chatPinnedTypeVideoMessage => 'Видеосообщение';
 
   @override
@@ -2810,6 +2823,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get profileBlockConfirmTitle => 'Заблокировать пользователя?';
+
+  @override
+  String get profileRemoveFriendConfirmTitle => 'Удалить из друзей?';
+
+  @override
+  String get profileRemoveFriendConfirmMessage =>
+      'Удалить этого пользователя из списка друзей?';
 
   @override
   String get profileBlockConfirmMessage => 'Он не сможет писать вам сообщения.';

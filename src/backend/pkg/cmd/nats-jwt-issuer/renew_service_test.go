@@ -52,7 +52,7 @@ func serviceReencode(t *testing.T, old []byte, u *jwt.UserClaims, signer nkeys.K
 }
 
 func TestRenewServicePreservesClaimsSeedAndExactGrant(t *testing.T) {
-	for _, role := range []string{"role", "space", "voice"} {
+	for _, role := range []string{"role", "space", "voice", "messaging"} {
 		t.Run(role, func(t *testing.T) {
 			old, at, ot, signer, actor, account, g, _, _ := serviceRenewalFixture(t, role)
 			out, err := renewExistingService(old, at, ot, signer, actor, account, role, g)
@@ -83,6 +83,37 @@ func TestRenewServicePreservesClaimsSeedAndExactGrant(t *testing.T) {
 				t.Fatal("already current actor was reissued")
 			}
 		})
+	}
+}
+
+func TestMusicRenewalAddsOnlyInfoAndAckAndRetainsExistingInbox(t *testing.T) {
+	old, at, ot, signer, actor, account, g, u, ap := serviceRenewalFixture(t, "messaging")
+	u.Sub.Allow = []string{"_INBOX.voice.messaging.>"}
+	old = serviceReencode(t, old, u, ap)
+	out, err := renewExistingService(old, at, ot, signer, actor, account, "messaging", g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldToken, _ := jwt.ParseDecoratedJWT(old)
+	newToken, _ := jwt.ParseDecoratedJWT(out)
+	before, _ := jwt.DecodeUserClaims(oldToken)
+	after, _ := jwt.DecodeUserClaims(newToken)
+	var delta []string
+	for _, subject := range after.Pub.Allow {
+		if !containsServiceSubject(before.Pub.Allow, subject) {
+			delta = append(delta, subject)
+		}
+	}
+	if !sameServiceSubjects(delta, []string{"$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata", "$JS.ACK.file_events.messaging_music_metadata.>"}) || !reflect.DeepEqual(before.Sub, after.Sub) {
+		t.Fatal("Music renewal changed consumer ownership or subscription authority")
+	}
+	for _, deny := range []string{"$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata", "$JS.ACK.file_events.messaging_music_metadata.1.2.3"} {
+		claims := *before
+		claims.Pub.Deny = []string{deny}
+		invalid := serviceReencode(t, old, &claims, ap)
+		if result, err := renewExistingService(invalid, at, ot, signer, actor, account, "messaging", g); err == nil || len(result) != 0 {
+			t.Fatal("Music deny bypassed")
+		}
 	}
 }
 

@@ -752,6 +752,7 @@ func startFilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000001_init.up.sql"))
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000002_premium_upload_limit.up.sql"))
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000003_story_context.up.sql"))
+	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000006_music_metadata.up.sql"))
 	return pool
 }
 

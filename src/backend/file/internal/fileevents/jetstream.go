@@ -117,7 +117,11 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
 	natslog.SetRequestIDHeader(msg.Header, requestID)
-	if _, err := p.js.PublishMsg(msg); err != nil {
+	var options []nats.PubOpt
+	if _, bounded := ctx.Deadline(); bounded {
+		options = append(options, nats.Context(ctx))
+	}
+	if _, err := p.js.PublishMsg(msg, options...); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
 	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}

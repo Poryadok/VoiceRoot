@@ -1256,6 +1256,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatPinnedTypeMusic => 'Music';
 
   @override
+  String get chatMusicInvalidFile =>
+      'Choose a non-empty audio file up to 10 MB. Encryption overhead counts toward the limit.';
+
+  @override
+  String get chatMusicPlay => 'Play music';
+
+  @override
+  String get chatMusicPause => 'Pause music';
+
+  @override
+  String get chatMusicSeek => 'Playback position';
+
+  @override
   String get chatPinnedTypeVideoMessage => 'Video message';
 
   @override
@@ -2787,6 +2800,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileBlockConfirmTitle => 'Block this user?';
+
+  @override
+  String get profileRemoveFriendConfirmTitle => 'Remove this friend?';
+
+  @override
+  String get profileRemoveFriendConfirmMessage =>
+      'Remove this user from your friends list?';
 
   @override
   String get profileBlockConfirmMessage =>

@@ -273,6 +273,10 @@ class MessageAttachment {
     this.name,
     this.sizeBytes,
     this.e2eKeyWire,
+    this.musicTitle,
+    this.musicArtist,
+    this.musicAlbum,
+    this.durationSeconds,
   });
 
   final String fileId;
@@ -282,9 +286,14 @@ class MessageAttachment {
   final String? name;
   final int? sizeBytes;
   final String? e2eKeyWire;
+  final String? musicTitle;
+  final String? musicArtist;
+  final String? musicAlbum;
+  final int? durationSeconds;
 
   bool get isImage => type == 'image';
   bool get isVideo => type == 'video';
+  bool get isMusic => type == 'music';
   bool get isE2eEncrypted => e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 
   Map<String, dynamic> toJson() {
@@ -298,6 +307,11 @@ class MessageAttachment {
       if (sizeBytes != null) 'size_bytes': sizeBytes,
       if (e2eKeyWire != null && e2eKeyWire!.isNotEmpty)
         'e2e_key_wire': e2eKeyWire,
+      if (!isE2eEncrypted && musicTitle != null) 'title': musicTitle,
+      if (!isE2eEncrypted && musicArtist != null) 'artist': musicArtist,
+      if (!isE2eEncrypted && musicAlbum != null) 'album': musicAlbum,
+      if (!isE2eEncrypted && durationSeconds != null)
+        'duration_seconds': durationSeconds,
     };
   }
 
@@ -310,6 +324,10 @@ class MessageAttachment {
       name: json['name'] as String?,
       sizeBytes: (json['size_bytes'] as num?)?.toInt(),
       e2eKeyWire: json['e2e_key_wire'] as String?,
+      musicTitle: json['title'] as String?,
+      musicArtist: json['artist'] as String?,
+      musicAlbum: json['album'] as String?,
+      durationSeconds: (json['duration_seconds'] as num?)?.toInt(),
     );
   }
 

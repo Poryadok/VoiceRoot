@@ -7,7 +7,7 @@ import ast,base64,copy,hashlib,json,os,re,subprocess,sys
 from pathlib import Path
 import shutil,tempfile,time,uuid
 import rollout_census_integration as fixture
-from nats_contract_plan import DECLARATIONS
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS
 
 
 def select_transport(args, environ=None, platform=None):
@@ -24,7 +24,7 @@ def select_transport(args, environ=None, platform=None):
 def fixture_bootstrap_grants(contract):
     """Exact disposable credentials for baseline resources plus v3 consumers."""
     streams=contract['streams'];pairs={tuple(pair) for pair in contract['consumer_pairs']}
-    pairs.update((stream,config['durable_name']) for stream,config in DECLARATIONS)
+    pairs.update((stream,config['durable_name']) for stream,config in V3_DECLARATIONS)
     if (not isinstance(streams,list) or not streams or len(set(streams))!=len(streams)
         or any(not isinstance(name,str) or not name for name in streams)
         or any(len(pair)!=2 or any(not isinstance(value,str) or not value for value in pair) for pair in pairs)):
@@ -142,6 +142,10 @@ def inner(base):
     operator={'data':{key:base64.b64encode((base/'inputs'/key).read_bytes()).decode() for key in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}}
     guard.ROOT=base/'root-custody';guard.ROOT.mkdir(mode=0o700)
     bootstrap_auth.ACCOUNT_SHA=account_sha
+    from controller import Blocked
+    try:bootstrap_auth.prove(old.encode(),operator,lambda:None)
+    except Blocked:pass
+    else:raise RuntimeError('old_bootstrap_unexpectedly_authorizes_music_consumer')
     auth=bootstrap_auth.prove(renewed,operator,lambda:None)
     assert auth['verified'] and auth['reply_prefix']=='_INBOX.voice.bootstrap.reply'
     (base/'inputs/bootstrap.creds').write_bytes(renewed)
@@ -183,7 +187,7 @@ def inner(base):
         scratch=base/'auth-store';scratch.mkdir(mode=0o700);os.chown(scratch,65532,65532)
         normalizer=runtime.start_broker('normalizer',scratch);ready(runtime,normalizer)
         actor=Actor(runtime,normalizer,runtime.owned[normalizer]['id'],scratch,fenced)
-        for stream in ('chat_events','social_events','role_events'):
+        for stream in ('chat_events','social_events','role_events','file_events'):
             actor._request('$JS.API.STREAM.CREATE.'+stream,copy.deepcopy(infos[stream]['config']))
         normalized_consumers={}
         for stream,declaration in DECLARATIONS:
@@ -200,6 +204,7 @@ def inner(base):
             '$JS.API.STREAM.UPDATE.role_events',
             '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
             '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',
+            '$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata',
         }
         if {action['api'] for action in plan['actions']}!=expected_actions:
             raise RuntimeError('v3_migration_delta_unexpected')
@@ -271,7 +276,7 @@ def inner(base):
         assert any(e['kind']=='nats_contract_mutation_issued' for e in state['events'])
         migration=apply_contract(base,state,Stage(),state['events'].append)
         assert migration['verified'] and migration['old_record_files_verified']
-        if migration['proof']['old_consumers_preserved']!=45 or migration['proof']['created_consumers']!=2:
+        if migration['proof']['old_consumers_preserved']!=45 or migration['proof']['created_consumers']!=3:
             raise RuntimeError('v3_consumer_census_unexpected')
         postproof=verify_post_apply(runtime,store,migration['cut'],fenced)
         assert postproof['native_files_verified'] and postproof['census_verified']

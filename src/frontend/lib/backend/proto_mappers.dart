@@ -567,6 +567,7 @@ FileMetadataData fileMetadataFromProto(file_pb.FileMetadata meta) {
         : null,
     sizeBytes: meta.hasSizeBytes() ? meta.sizeBytes.toInt() : null,
     isE2e: meta.isE2e,
+    isMusic: meta.intent == file_pb.UploadIntent.UPLOAD_INTENT_MUSIC,
     expiresAt: meta.hasExpiresAt() ? meta.expiresAt.toDateTime() : null,
   );
 }
@@ -582,12 +583,16 @@ file_pb.RequestUploadRequest requestUploadToProto({
   String? chatId,
   ChatType chatType = ChatType.CHAT_TYPE_DM,
   bool isE2e = false,
+  bool music = false,
   String? storyId,
 }) {
   final request = file_pb.RequestUploadRequest(
     originalName: originalName,
     mimeType: mimeType,
     sizeBytes: Int64(sizeBytes),
+    intent: music
+        ? file_pb.UploadIntent.UPLOAD_INTENT_MUSIC
+        : file_pb.UploadIntent.UPLOAD_INTENT_UNSPECIFIED,
     contextChat: chatId == null || chatId.isEmpty
         ? null
         : chatRefToProto(chatId, type: chatType),

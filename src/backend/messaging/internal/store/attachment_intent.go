@@ -68,12 +68,7 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		return nil, err
 	}
 	defer unlock()
-	canonical := row
-	canonical.ID = uuid.Nil
-	identityBytes, err := json.Marshal(struct {
-		Row   MessageRow
-		Space *uuid.UUID
-	}{canonical, space})
+	identityBytes, err := attachmentIntentIdentity(row, space)
 	if err != nil {
 		return nil, err
 	}
@@ -210,6 +205,33 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		return nil, err
 	}
 	return saved, nil
+}
+
+// File-owned tags can refresh between two identical client retries. Keep the
+// caller's file/content/key identity bound, but never hash mutable enrichment.
+// Non-Music rows retain the exact existing serialized identity shape.
+func attachmentIntentIdentity(row MessageRow, space *uuid.UUID) ([]byte, error) {
+	row.ID = uuid.Nil
+	if row.MusicBinding != nil && !row.IsE2E && row.ContentType == "music" {
+		var attachments []map[string]any
+		if err := json.Unmarshal([]byte(row.AttachmentsJSON), &attachments); err != nil {
+			return nil, err
+		}
+		for _, attachment := range attachments {
+			for _, key := range []string{"title", "artist", "album", "duration_seconds"} {
+				delete(attachment, key)
+			}
+		}
+		raw, err := json.Marshal(attachments)
+		if err != nil {
+			return nil, err
+		}
+		row.AttachmentsJSON = string(raw)
+	}
+	return json.Marshal(struct {
+		Row   MessageRow
+		Space *uuid.UUID
+	}{row, space})
 }
 
 func (s *MessagesStore) ReconcileAttachmentIntents(ctx context.Context, release func(context.Context, *filev1.ReleaseFileReferencesRequest) error) error {
