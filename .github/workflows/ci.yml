@@ -1732,6 +1732,8 @@ jobs:
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
       - name: Generate disposable media principal and TLS fixture
+        env:
+          PHASE0_MATCHSQUAD_FIXTURE_UID: "65532"
         run: |
           echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
           python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"

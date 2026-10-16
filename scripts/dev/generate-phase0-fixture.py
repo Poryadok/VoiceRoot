@@ -183,6 +183,41 @@ def generate(destination):
                     "-storetype", "PKCS12", "-storepass", "phase0-fixture")
             for path in root.rglob("*"):
                 path.chmod(0o700 if path.is_dir() else 0o600)
+            fixture_uid = os.environ.get("PHASE0_MATCHSQUAD_FIXTURE_UID")
+            if fixture_uid is not None:
+                if os.name != "posix" or fixture_uid != "65532":
+                    raise ValueError("unsupported MatchSquad fixture owner")
+                owned_paths = [
+                    root / "matchmaking",
+                    root / "tls/chat-match-squad-grpc.crt",
+                    root / "tls/chat-match-squad-grpc.key",
+                    root / "tls/voice-match-squad-grpc.crt",
+                    root / "tls/voice-match-squad-grpc.key",
+                    root / "tls/matchmaking-client.crt",
+                    root / "tls/matchmaking-client.key",
+                    root / "ca/ca.crt",
+                ]
+                # Permit path traversal to only the owner-only files below;
+                # execute-only directories do not permit listing or reading
+                # any of the remaining fixture material.
+                for path in (root, root / "tls", root / "ca"):
+                    path.chmod(0o711)
+                if os.geteuid() == 0:
+                    for path in owned_paths:
+                        entries = (path, *path.rglob("*")) if path == root / "matchmaking" else (path,)
+                        for entry in entries:
+                            os.chown(entry, 65532, 65532)
+                else:
+                    for path in owned_paths:
+                        command_args = ["sudo", "-n", "chown"]
+                        if path == root / "matchmaking":
+                            command_args.append("-R")
+                        command_args.extend(("65532:65532", str(path)))
+                        result = subprocess.run(
+                            command_args,
+                            capture_output=True, timeout=30, check=False)
+                        if result.returncode:
+                            raise ValueError("MatchSquad fixture ownership setup failed")
             # No existing output is overwritten; a failed tool leaves only the
             # temporary tree, whose context manager removes all key material.
             root.rename(destination)

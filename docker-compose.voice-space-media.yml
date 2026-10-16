@@ -1,6 +1,5 @@
 services:
   matchmaking:
-    user: "0:0"
     environment:
       MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR: chat:9092
       MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR: voice:9094
@@ -22,7 +21,6 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
 
   chat:
-    user: "0:0"
     expose: ["9092"]
     environment:
       CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN: :9092

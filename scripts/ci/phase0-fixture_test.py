@@ -28,6 +28,7 @@ URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
 MATCHMAKING_JWKS_URL = f"https://{PROXY}:8443/matchmaking/jwks.json"
 STARTUP_DIAGNOSTICS = ROOT / "scripts/ci/t31-startup-diagnostics.py"
+CAN_SET_MATCHSQUAD_UID = os.name == "posix" and (os.geteuid() == 0 or shutil.which("sudo"))
 sys.dont_write_bytecode = True
 STARTUP_SPEC = importlib.util.spec_from_file_location("t31_startup_diagnostics", STARTUP_DIAGNOSTICS)
 assert STARTUP_SPEC and STARTUP_SPEC.loader
@@ -52,6 +53,17 @@ def require_binary(name):
         raise AssertionError(f"required offline test prerequisite missing: {name}")
 
 
+def restore_fixture_owner(destination):
+    if os.name != "posix" or not Path(destination).exists():
+        return
+    uid, gid = os.getuid(), os.getgid()
+    if os.geteuid() == 0:
+        for path in (Path(destination), *Path(destination).rglob("*")):
+            os.chown(path, uid, gid)
+        return
+    require_success(run("sudo", "-n", "chown", "-R", f"{uid}:{gid}", destination))
+
+
 class FixtureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -62,7 +74,13 @@ class FixtureTests(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix="voice-phase0-test-")
         cls.addClassCleanup(cls.temp.cleanup)
         cls.dest = Path(cls.temp.name) / "fixture"
-        cls.generated = run(sys.executable, GENERATOR, cls.dest)
+        generator_env = os.environ.copy()
+        if CAN_SET_MATCHSQUAD_UID:
+            Path(cls.temp.name).chmod(0o711)
+            generator_env["PHASE0_MATCHSQUAD_FIXTURE_UID"] = "65532"
+        cls.generated = run(sys.executable, GENERATOR, cls.dest, env=generator_env)
+        if CAN_SET_MATCHSQUAD_UID:
+            cls.addClassCleanup(restore_fixture_owner, cls.dest)
         require_success(cls.generated)
 
     def openssl(self, *args, input=None):
@@ -314,11 +332,53 @@ sys.exit(code)
 
     @unittest.skipUnless(os.name == "posix", "POSIX modes are verified in Linux CI")
     def test_private_permissions(self):
-        for path in (self.dest, *self.dest.rglob("*")):
+        paths = [self.dest]
+        for directory, dirs, files in os.walk(self.dest, topdown=True):
+            current = Path(directory)
+            paths.extend(current / name for name in (*dirs, *files))
+            if current == self.dest:
+                dirs[:] = [name for name in dirs if name != "matchmaking"]
+        for path in paths:
             if path.is_dir():
-                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
+                expected = (0o711 if CAN_SET_MATCHSQUAD_UID and path in
+                            (self.dest, self.dest / "tls", self.dest / "ca") else 0o700)
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), expected)
             elif path.suffix in (".pem", ".key", ".p12"):
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+    @unittest.skipUnless(CAN_SET_MATCHSQUAD_UID, "UID ownership is verified in Linux CI")
+    def test_match_squad_fixture_is_private_and_readable_by_service_uid(self):
+        self.assertEqual(stat.S_IMODE(Path(self.temp.name).stat().st_mode), 0o711)
+        owned_directory = self.dest / "matchmaking"
+        self.assertEqual((owned_directory.stat().st_uid, owned_directory.stat().st_gid), (65532, 65532))
+        self.assertEqual(stat.S_IMODE(owned_directory.stat().st_mode), 0o700)
+        owned = [owned_directory,
+                 self.dest / "matchmaking/current.pem", self.dest / "matchmaking/next.pem",
+                 self.dest / "tls/chat-match-squad-grpc.crt",
+                 self.dest / "tls/chat-match-squad-grpc.key",
+                 self.dest / "tls/voice-match-squad-grpc.crt",
+                 self.dest / "tls/voice-match-squad-grpc.key",
+                 self.dest / "tls/matchmaking-client.crt",
+                 self.dest / "tls/matchmaking-client.key",
+                 self.dest / "ca/ca.crt"]
+        if os.geteuid() != 0:
+            require_binary("sudo")
+        read_check = (
+            "import pathlib,stat,sys\n"
+            "for raw in sys.argv[1:]:\n"
+            " p=pathlib.Path(raw); s=p.stat(); expected=0o700 if p.is_dir() else 0o600\n"
+            " assert (s.st_uid,s.st_gid)==(65532,65532) and stat.S_IMODE(s.st_mode)==expected\n"
+            " if p.is_dir(): assert {x.name for x in p.iterdir()}=={'current.pem','next.pem'}\n"
+            " else: p.read_bytes()"
+        )
+        paths = [str(path) for path in owned]
+        if os.geteuid() == 0:
+            command = ("sudo", "-n", "-u", "#65532", sys.executable, "-c", read_check, *paths)
+            if not shutil.which("sudo"):
+                self.skipTest("sudo is required to verify access as the service UID")
+        else:
+            command = ("sudo", "-n", "-u", "#65532", sys.executable, "-c", read_check, *paths)
+        require_success(run(*command))
 
 
 class ComposeTests(unittest.TestCase):
@@ -336,7 +396,13 @@ class ComposeTests(unittest.TestCase):
         cls.empty_env.write_text("")
         for binary in ("openssl", "keytool"):
             require_binary(binary)
-        require_success(run(sys.executable, GENERATOR, cls.fixture))
+        generator_env = os.environ.copy()
+        if CAN_SET_MATCHSQUAD_UID:
+            Path(cls.temp.name).chmod(0o711)
+            generator_env["PHASE0_MATCHSQUAD_FIXTURE_UID"] = "65532"
+        require_success(run(sys.executable, GENERATOR, cls.fixture, env=generator_env))
+        if CAN_SET_MATCHSQUAD_UID:
+            cls.addClassCleanup(restore_fixture_owner, cls.fixture)
         # Whitelist execution prerequisites, never inherit developer Compose secrets.
         cls.env = {k: v for k, v in os.environ.items()
                    if k.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "HOME", "USERPROFILE",
@@ -387,7 +453,7 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(self.source_at("matchmaking", environment["S2S_JWKS_CA_FILE"]),
                          "ca/ca.crt")
         self.assertIn(str(self.merged["matchmaking"].get("user")), ("0", "0:0", "root"),
-                      "all generated fixture files are root-owned mode 0600 in Linux CI")
+                      "the base Phase0 overlay retains its established root fixture access")
 
     def test_media_compose_uses_protected_match_squad_provider_fixture(self):
         matchmaking = self.media_merged["matchmaking"]
@@ -407,7 +473,8 @@ class ComposeTests(unittest.TestCase):
                          "tls/matchmaking-client.crt")
         self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_MATCH_SQUAD_CLIENT_KEY_FILE"]),
                          "tls/matchmaking-client.key")
-        self.assertIn(str(matchmaking.get("user")), ("0", "0:0", "root"))
+        self.assertNotIn("user", matchmaking, "Matchmaking must retain its Dockerfile nonroot identity")
+        self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/matchmaking/Dockerfile").read_text())
         self.assertEqual(chat["environment"]["CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN"], ":9092")
         self.assertEqual(voice["environment"]["VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN"], ":9094")
         for service, env, leaf in (("chat", chat["environment"], "chat-match-squad-grpc"),
@@ -416,7 +483,9 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE"], "/run/phase0/ca.crt")
             self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
             self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD"], "")
-            self.assertIn(str(self.media_merged[service].get("user")), ("0", "0:0", "root"))
+            self.assertNotIn("user", self.media_merged[service],
+                             f"{service} must retain its Dockerfile nonroot identity")
+            self.assertIn("USER nonroot:nonroot", (ROOT / f"src/backend/{service}/Dockerfile").read_text())
             self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE"],
                                                   merged=self.media_merged), f"tls/{leaf}.crt")
             self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE"],
@@ -444,6 +513,7 @@ class ComposeTests(unittest.TestCase):
             if volume.get("type") == "bind" and volume.get("target") == target:
                 source = Path(volume["source"])
                 if source.is_relative_to(self.fixture):
+                    self.assertTrue(volume.get("read_only"), f"{service} fixture mount must stay read-only: {target}")
                     return source.relative_to(self.fixture).as_posix()
         self.fail(f"{service} config path has no Phase0 fixture mount: {target}")
 
