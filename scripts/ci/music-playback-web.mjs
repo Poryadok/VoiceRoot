@@ -23,6 +23,8 @@ await once(server, 'listening');
 let chrome, socket;
 const pending = new Map();
 let sequence = 0;
+let setupStage = 'chrome_launch';
+let setupFailure;
 let receipt = { result: 'fail', stage: 'chrome_setup' };
 try {
   chrome = spawn(process.env.CHROME_EXECUTABLE || 'google-chrome', [
@@ -31,16 +33,23 @@ try {
     '--remote-debugging-address=127.0.0.1', '--no-first-run',
     '--user-data-dir=' + profile, 'about:blank',
   ], { stdio: 'ignore' });
-  let spawnError = false;
-  chrome.on('error', () => { spawnError = true; });
+  let spawnError;
+  chrome.on('error', error => {
+    spawnError = ['ENOENT', 'EACCES', 'ENOEXEC'].includes(error.code) ? error.code : 'other';
+  });
   const deadline = Date.now() + 180_000;
   let port;
+  setupStage = 'devtools_port';
   while (!port) {
-    if (spawnError || chrome.exitCode !== null || Date.now() > deadline) throw new Error('chrome_setup');
+    if (spawnError) { setupFailure = `spawn_${spawnError}`; throw new Error('chrome_setup'); }
+    if (chrome.exitCode !== null) { setupFailure = 'early_exit'; throw new Error('chrome_setup'); }
+    if (Date.now() > deadline) { setupFailure = 'devtools_port_timeout'; throw new Error('chrome_setup'); }
     try { port = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); }
     catch { await new Promise(r => setTimeout(r, 100)); }
   }
+  setupStage = 'devtools_page_create';
   const page = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT', signal: AbortSignal.timeout(5000) })).json();
+  setupStage = 'cdp_websocket';
   socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolveOpen, reject) => { socket.addEventListener('open', resolveOpen, { once: true }); socket.addEventListener('error', reject, { once: true }); });
   socket.addEventListener('message', event => {
@@ -60,6 +69,7 @@ try {
     });
   }
   // Keep this a local fixture: external decoder/CDN fallback is a failure.
+  setupStage = 'cdp_fetch_enable';
   await command('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
   const origin = `http://127.0.0.1:${server.address().port}`;
   socket.addEventListener('message', event => {
@@ -71,6 +81,7 @@ try {
       ? { requestId: request.requestId }
       : { requestId: request.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
   });
+  setupStage = 'page_navigation';
   await command('Page.navigate', { url: origin + '/index.html' });
   receipt = { result: 'fail', stage: 'decoder_timeout' };
   while (Date.now() < deadline) {
@@ -83,6 +94,11 @@ try {
   if (receipt.result !== 'pass' || JSON.stringify(receipt.cases) !== JSON.stringify(expected)) process.exitCode = 1;
 } catch {
   process.exitCode = 1;
+  if (receipt.stage === 'chrome_setup') {
+    receipt = { result: 'fail', stage: setupStage, reason: setupFailure || 'setup_operation_failed' };
+    if (Number.isInteger(chrome?.exitCode)) receipt.exit_code = chrome.exitCode;
+    if (chrome?.signalCode) receipt.signal = chrome.signalCode;
+  }
 } finally {
   for (const waiter of pending.values()) clearTimeout(waiter.timer);
   socket?.close();
