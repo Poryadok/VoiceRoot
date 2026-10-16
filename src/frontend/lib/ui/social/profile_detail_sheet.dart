@@ -132,6 +132,9 @@ class ProfileDetailSheet extends ConsumerWidget {
             playerRatingProvider((profileId: profileId, gameId: firstGameId)),
           );
     final presence = ref.watch(presenceProvider(profileId));
+    final gameTitle = presence != null &&
+            !presence.appearsOffline && !presence.isInvisible
+        ? presence.gameTitle : null;
     final requestsAsync = ref.watch(friendRequestsProvider);
     final auth = ref.watch(authControllerProvider);
     final isProfileSwitching = ref.watch(profileSwitchInProgressProvider);
@@ -337,6 +340,17 @@ class ProfileDetailSheet extends ConsumerWidget {
                                     const SizedBox(height: 4),
                                     Text(
                                       status,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                  if (gameTitle case final game?
+                                      when game.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      l10n.contactProfilePlayingGame(game),
+                                      key: const Key('profile_game_activity'),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: Theme.of(context).textTheme.bodySmall,

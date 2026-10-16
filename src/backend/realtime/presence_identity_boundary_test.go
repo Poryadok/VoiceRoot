@@ -25,8 +25,9 @@ const boundaryBlockedAccount = "44444444-4444-4444-4444-444444444444"
 
 type boundaryPresenceServer struct {
 	userv1.UnimplementedUserServiceServer
-	metadata chan metadata.MD
+	metadata        chan metadata.MD
 	responseProfile string
+	gameTitle       string
 }
 
 func (s *boundaryPresenceServer) UpdatePresence(ctx context.Context, _ *userv1.UpdatePresenceRequest) (*userv1.UpdatePresenceResponse, error) {
@@ -50,6 +51,9 @@ func (s *boundaryPresenceServer) GetPresence(ctx context.Context, request *userv
 	}
 	if accounts[0] != boundaryBlockedAccount {
 		presence.Status = "online"
+		if s.gameTitle != "" {
+			presence.GameTitle = &s.gameTitle
+		}
 	}
 	return &userv1.GetPresenceResponse{PresenceStatus: presence}, nil
 }

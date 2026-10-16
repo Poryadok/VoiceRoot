@@ -106,6 +106,92 @@ func TestShouldPublishGameDetected(t *testing.T) {
 	}
 }
 
+func TestShouldPublishGameActivityChange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		previous *store.PresenceSnapshot
+		gameName string
+		want     bool
+	}{
+		{name: "first title", previous: &store.PresenceSnapshot{}, gameName: "Dota 2", want: true},
+		{name: "changed title", previous: &store.PresenceSnapshot{Live: true, GameTitle: "Dota 2"}, gameName: "Counter-Strike 2", want: true},
+		{name: "cleared title", previous: &store.PresenceSnapshot{Live: true, GameTitle: "Dota 2"}, gameName: "", want: true},
+		{name: "unchanged title", previous: &store.PresenceSnapshot{Live: true, GameTitle: "Dota 2"}, gameName: "Dota 2", want: false},
+		{name: "whitespace remains empty", previous: &store.PresenceSnapshot{Live: true}, gameName: "  ", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, shouldPublishGameActivityChange(tt.previous, tt.gameName))
+		})
+	}
+}
+
+func TestPresenceEventTransitionForSnapshot(t *testing.T) {
+	online := int32(userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE)
+	dnd := int32(userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND)
+
+	tests := []struct {
+		name        string
+		previous    *store.PresenceSnapshot
+		newStatus   string
+		newEnum     int32
+		gameTitle   string
+		wantOld     string
+		wantCurrent string
+		wantPublish bool
+	}{
+		{
+			name:        "game switch publishes equal status fields",
+			previous:    &store.PresenceSnapshot{Live: true, Status: "online", StatusEnum: online, GameTitle: "Dota 2"},
+			newStatus:   "online",
+			newEnum:     online,
+			gameTitle:   "Counter-Strike 2",
+			wantOld:     "online",
+			wantCurrent: "online",
+			wantPublish: true,
+		},
+		{
+			name:        "game clear publishes equal status fields",
+			previous:    &store.PresenceSnapshot{Live: true, Status: "online", StatusEnum: online, GameTitle: "Dota 2"},
+			newStatus:   "online",
+			newEnum:     online,
+			wantOld:     "online",
+			wantCurrent: "online",
+			wantPublish: true,
+		},
+		{
+			name:        "same snapshot does not publish",
+			previous:    &store.PresenceSnapshot{Live: true, Status: "online", StatusEnum: online, GameTitle: "Dota 2"},
+			newStatus:   "online",
+			newEnum:     online,
+			gameTitle:   "Dota 2",
+			wantPublish: false,
+		},
+		{
+			name:        "status transition keeps status delta",
+			previous:    &store.PresenceSnapshot{Live: true, Status: "online", StatusEnum: online, GameTitle: "Dota 2"},
+			newStatus:   "dnd",
+			newEnum:     dnd,
+			gameTitle:   "Counter-Strike 2",
+			wantOld:     "online",
+			wantCurrent: "dnd",
+			wantPublish: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldStatus, currentStatus, publish := presenceEventTransitionForSnapshot(tt.previous, tt.newStatus, tt.newEnum, tt.gameTitle)
+			require.Equal(t, tt.wantPublish, publish)
+			require.Equal(t, tt.wantOld, oldStatus)
+			require.Equal(t, tt.wantCurrent, currentStatus)
+		})
+	}
+}
+
 func TestPresenceChangeProto_DeltaFieldsRoundTripWithLegacyCurrentStatus(t *testing.T) {
 	want := &eventsv1.PresenceChange{
 		ProfileId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",

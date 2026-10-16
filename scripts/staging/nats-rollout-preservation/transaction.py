@@ -200,7 +200,7 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -210,6 +210,10 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    if lifecycle is not None:
+        if set(lifecycle)-{'provisional','repair_parent','source_authority','execution_authority'}:
+            raise Blocked('provisional_binding_invalid')
+        state.update(copy.deepcopy(lifecycle))
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
     save(base/'checkpoint.json',state)
@@ -422,6 +426,9 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             'backup':{'archive_sha256':manifest['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
                       'census_sha256':cut['census_sha256'],'off_node_verified':True},
             'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()}
+        if state.get('provisional') is not None:
+            import provisional
+            receipt['provisional']=copy.deepcopy(provisional.validate(state['provisional']))
         if authorization_deadline is not None:
             current_deadline()
             receipt['expires_at']=(authorization_deadline if expired_authority is not None else
@@ -447,6 +454,8 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
 
 
 def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None):
+    import provisional
+    provisional.receipt_binding(state,receipt)
     if finish_authority is not None:
         return finish_only(kube,base,state,receipt,contract,finish_authority,publication=publication)
     if state['phase']!='PAUSED_APPLY' or state['status']!='WAITING':
@@ -491,7 +500,7 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
         state['context']=context(stage)
         if publication is not None:publication(state,authority_guard=resume_authority)
         resume_authority()
-        state['context']=context(stage);state['phase']='POST_RESTART';state['status']='PASS';state['fence_status']='RELEASED'
+        state['context']=context(stage);state['phase']='POST_RESTART';state['status']='PROVISIONAL_READY' if state.get('provisional') is not None else 'PASS';state['fence_status']='RELEASED'
         save(Path(base)/'checkpoint.json',state)
         return state
     except Exception as error:
