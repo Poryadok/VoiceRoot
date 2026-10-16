@@ -19,6 +19,10 @@ import (
 
 var errPresenceAuthorityUnavailable = errors.New("notification presence authority unavailable")
 
+// ErrGamePushChatScopeUnavailable prevents chat-category pushes from falling
+// back to ordinary previews when GIS cannot classify a chat.
+var ErrGamePushChatScopeUnavailable = errors.New("game notification chat scope authority unavailable")
+
 // TokenRepository lists and deletes device tokens for push delivery.
 type TokenRepository interface {
 	ListByProfile(ctx context.Context, profileID uuid.UUID) ([]store.DeviceToken, error)
@@ -228,7 +232,10 @@ func (p *MessagePusher) sendPush(
 					continue
 				}
 				gameScoped = true
-			} else if in.GameCategory != "" && in.ChatID != "" && p.GameChatScope != nil {
+			} else if in.GameCategory != "" {
+				if in.ChatID == "" || p.GameChatScope == nil {
+					return ErrGamePushChatScopeUnavailable
+				}
 				chatID, err := uuid.Parse(in.ChatID)
 				if err != nil || chatID == uuid.Nil {
 					return fmt.Errorf("game notification chat scope: invalid chat id")
