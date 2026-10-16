@@ -124,6 +124,8 @@ try {
       return result.result.value;
     };
     captureFailure = async () => {
+      journey.failureSemantics = await evaluate(
+        `document.querySelector('flt-semantics-host')?.outerHTML ?? '<missing semantics host>'`);
       const { data } = await send('Page.captureScreenshot', { format: 'png' });
       await writeFile(join(output, `${viewport.name}-failure.png`), Buffer.from(data, 'base64'));
     };
@@ -133,11 +135,13 @@ try {
       width: viewport.width, height: viewport.height, deviceScaleFactor: 1, mobile: false,
     });
     await send('Page.navigate', { url: fixtureUrl });
-    const labels = () => evaluate(`Array.from(document.querySelectorAll('[aria-label]'))
-      .map(e => e.getAttribute('aria-label'))`);
+    // Flutter 3.41.7 uses DOM text for leaf buttons/headings, aria-label for containers.
+    // Both are real engine semantics; do not replace actual input with DOM click().
+    const labels = () => evaluate(`Array.from(document.querySelectorAll('flt-semantics, [aria-label]'))
+      .map(e => (e.getAttribute('aria-label') ?? e.textContent ?? '').trim()).filter(Boolean)`);
     const locate = (label) => evaluate(`(() => {
-      const matches = Array.from(document.querySelectorAll('[aria-label]'))
-        .filter(e => e.getAttribute('aria-label').trim() === ${JSON.stringify(label)});
+      const matches = Array.from(document.querySelectorAll('flt-semantics, [aria-label]'))
+        .filter(e => (e.getAttribute('aria-label') ?? e.textContent ?? '').trim() === ${JSON.stringify(label)});
       for (const e of matches.reverse()) {
         const r = e.getBoundingClientRect();
         const x = r.x + r.width / 2, y = r.y + r.height / 2;
@@ -171,6 +175,8 @@ try {
       return bounds;
     };
     await until('fixture startup and enabled semantics', () => locate('Open Settings Help smoke'));
+    journey.startupSemantics = await evaluate(
+      `document.querySelector('flt-semantics-host')?.outerHTML ?? '<missing semantics host>'`);
     await click('Open Settings Help smoke');
     await click('Help');
     await find('Project documentation');
