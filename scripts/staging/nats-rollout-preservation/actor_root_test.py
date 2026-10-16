@@ -264,6 +264,32 @@ class Tests(unittest.TestCase):
                 stage.snapshots['voice-social']['spec']['template']['spec']['volumes'][0]['secret']['secretName']='other'
                 with self.assertRaises(root.Blocked):root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
 
+    def test_messaging_preflight_attests_exact_music_consumer_grants_on_existing_mount(self):
+        canonical=(Path(__file__).resolve().parents[3]/root.ACL).read_bytes()
+        with tempfile.TemporaryDirectory() as td:
+            source=Path(td);kube,stage,decoder,service,operator,account=self.fixture(source,'messaging')
+            (source/root.ACL).write_bytes(canonical)
+            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),\
+                 patch.object(root.actor_verification,'verify',return_value={'signed_chain_verified':True}) as verify:
+                result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['messaging'],decoder)
+            self.assertEqual(result['roles'],['messaging'])
+            self.assertEqual(result['mounts']['messaging']['key'],'messaging.creds')
+            required=verify.call_args.args[7]
+            self.assertEqual(required['pub'],[
+                'message.sent','message.edited','message.deleted','message.read','message.read_receipt_revoked',
+                'message.reaction_added','message.reaction_removed','message.mention_added','message.pinned',
+                'message.unpinned','message.forwarded','message.delivery_ack','$JS.API.STREAM.INFO.message_events',
+                '$JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack',
+                '$JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy',
+                '$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata',
+                '$JS.ACK.message_events.messaging_delivery_ack.>','$JS.ACK.user_events.messaging_receipt_privacy.>',
+                '$JS.ACK.file_events.messaging_music_metadata.>'])
+            self.assertEqual(required['sub'],[
+                '_INBOX.voice.messaging.>','_INBOX.voice.messaging.messaging_delivery_ack',
+                '_INBOX.voice.messaging.messaging_receipt_privacy','_INBOX.voice.messaging.messaging_music_metadata'])
+            self.assertNotIn('$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata',required['pub'])
+            self.assertFalse(any(subject.startswith('file.processed') for subject in required['pub']))
+
     def test_secret_drift_or_different_role_identity_refuses_revalidation(self):
         with tempfile.TemporaryDirectory() as td:
             source=Path(td);kube,stage,decoder,service,operator,account=self.fixture(source)
