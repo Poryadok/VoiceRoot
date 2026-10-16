@@ -36,6 +36,36 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 
+### AttachMenu rich-action contracts
+
+- [ ] **UIV3-PANEL-CHAT-ATTACHMENU — Location picker/preview contract** —
+  [screen-controls.md §3.6a](../design/screen-controls.md#36a-attach-popup)
+  requires a map picker; §3.3 requires a static-map bubble opening a maps app.
+  The payload is defined (`lat`, `lon`, optional `label` and `static_map_file_id`),
+  but the map/provider integration, selection and confirmation interaction,
+  current-location permission/fallback behavior, and preview production path
+  are not specified. [file-storage.md](../features/file-storage.md) permits
+  either client-generated or server-generated previews without selecting a
+  consumer contract. Define these decisions and H/V picker states before
+  implementing the action; a coordinate form or placeholder menu entry is not
+  an approved substitute for the required map picker.
+- [ ] **UIV3-PANEL-CHAT-ATTACHMENU — Article and Music consumers** —
+  [text-chat.md](../features/text-chat.md#article-vs-inline-url) requires Article
+  server-side metadata fetching by Messaging, not client-side inline-URL
+  preview. [file-service.md](../microservices/file-service.md) requires Music
+  metadata extraction and a Messaging metadata-update consumer. Complete or
+  verify these producers/consumers before exposing the corresponding picker
+  flows; typed attachment validation alone does not prove them.
+
+The original five-action ticket remains open. The shipped Photo/Document
+subset has H/V and keyboard/focus evidence from PR #767 (Flutter run
+38493294129, capture artifact 11863412351). The retained document fixture also
+passed post-deployment and post-restart verification on final source
+`33a78c8e2e0824e1eb34a3cfa8f294f9015189c1` on 2026-10-15. These results establish
+the supported subset, not the three missing actions or their visual acceptance.
+This gap record does not advance the active milestone or waive the five-entry
+DoD; see [PLAN.md](../PLAN.md) A6 and G1's unfinished-rich-type limitation.
+
 ### Game SDK authorization (T14 client slice)
 
 - [ ] **T14 integration gates remain open** — the Flutter consent/callback

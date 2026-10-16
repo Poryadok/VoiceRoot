@@ -474,7 +474,7 @@ read_receipts
 
 **Gaps vs full spec:** composer for `send_silent`; scheduled handlers, worker and event producer usage; typed `content_type`, `message_attachments` table and `RecordMessageView` — см. § ниже и [todo/backend.md](../todo/backend.md).
 
-**Attachment validation (code):** `validateAttachments` today requires `file_id` on each attachment — blocks normative `location` / `article` payloads without File row until validation branches on `content_type` (**code backlog**, R3-A06).
+**Attachment validation (code):** R3-A06 is implemented: `validateParsedAttachments` branches on `content_type`; `location` / `article` use rich-payload validation without a File row, while `sticker` / `gif` / `music` / `video_note` require rich-payload and File metadata validation. This does not establish picker, Article metadata-fetch, or Music metadata-processing completion; see [AttachMenu contract gaps](../todo/client.md#attachmenu-rich-action-contracts).
 
 ### Delete scope
 
