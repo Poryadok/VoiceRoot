@@ -11,8 +11,9 @@ import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../api_error_messages.dart';
 import 'message_requests_folder.dart';
+import 'manage_folders_sheet.dart';
 
-/// Folder icons in desktop rail (§1.1b) — functional, icon + tooltip.
+/// Compact horizontal folder filter strip (§1.1b), placed below search on H.
 class ChatRailFoldersSection extends ConsumerWidget {
   const ChatRailFoldersSection({super.key});
 
@@ -24,16 +25,28 @@ class ChatRailFoldersSection extends ConsumerWidget {
     final foldersAsync = ref.watch(chatFoldersProvider);
     final selectedId = ref.watch(selectedChatFolderIdProvider);
     final voice = VoiceColors.of(context);
+    final folders = foldersAsync.asData?.value.folders ?? const <VoiceFolder>[];
 
-    return foldersAsync.when(
-      data: (data) {
-        if (data.folders.isEmpty) return const SizedBox.shrink();
-        return Column(
-          key: sectionKey,
-          mainAxisSize: MainAxisSize.min,
+    return SizedBox(
+      key: sectionKey,
+      height: 40,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
           children: [
-            const Divider(height: 1),
-            for (final folder in data.folders)
+            if (foldersAsync.isLoading)
+              const SizedBox(
+                width: 40,
+                height: 40,
+                child: Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+            for (final folder in folders)
               _RailFolderButton(
                 key: folderKey(folder.id),
                 folder: folder,
@@ -44,22 +57,18 @@ class ChatRailFoldersSection extends ConsumerWidget {
               selected: isMessageRequestsFolderSelected(selectedId),
               onPressed: () => _selectMessageRequests(ref),
             ),
-            const Divider(height: 1),
+            IconButton(
+              tooltip: AppLocalizations.of(context)!.chatFoldersManageAction,
+              icon: Icon(
+                Icons.tune,
+                color: voice.textSecondary,
+                semanticLabel: AppLocalizations.of(context)!.chatFoldersManageAction,
+              ),
+              onPressed: () => ManageFoldersSheet.show(context),
+            ),
           ],
-        );
-      },
-      loading: () => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: voice.textSecondary,
-          ),
         ),
       ),
-      error: (_, _) => const SizedBox.shrink(),
     );
   }
 
@@ -96,17 +105,22 @@ class _RailFolderButton extends StatelessWidget {
     final voice = VoiceColors.of(context);
     return Tooltip(
       message: folder.name,
-      child: Material(
-        color: selected ? voice.elevated : Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          child: SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: Icon(
-              _iconForFolder(folder),
-              size: 20,
-              color: selected ? voice.profileAccent : voice.textSecondary,
+      child: Semantics(
+        label: folder.name,
+        button: true,
+        selected: selected,
+        child: Material(
+          color: selected ? voice.elevated : Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(
+                _iconForFolder(folder),
+                size: 20,
+                color: selected ? voice.profileAccent : voice.textSecondary,
+              ),
             ),
           ),
         ),

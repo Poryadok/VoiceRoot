@@ -96,7 +96,6 @@ class DesktopShellRail extends ConsumerWidget {
               selected: false,
               onPressed: goMatchmaking,
             ),
-            const ChatRailFoldersSection(),
             const ChatRailQuickAccessSection(),
             const Spacer(),
             _RailIconButton(
