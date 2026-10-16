@@ -53,14 +53,17 @@ service NotificationService {
 ## Debug push capture (Compose/dev only)
 
 `GET /debug/recorded-pushes?profile_id=<uuid>` is registered only when
-`NOTIFICATION_RECORD_PUSHES=true` (case-insensitive, surrounding whitespace is
-ignored). With recording disabled, the route returns 404. When enabled, it
+both `NOTIFICATION_RECORD_PUSHES=true` and the separate strict
+`NOTIFICATION_DEBUG_HTTP_ENABLED=true` opt-in are configured. The debug flag
+defaults to false; without it, recording is not installed and the route returns
+404. When enabled, it
 returns the latest recorded FCM attempt for that profile, including the device
 token and push payload. The endpoint is unauthenticated and is intended only
 for isolated Compose/development test environments; do not enable it in
-production. The checked-in production ConfigMap currently sets the recording
-flag to `true`, so this source-level opt-in gate alone does not close the
-production exposure tracked by [backend TODO](../todo/backend.md).
+production. The checked-in production and staging ConfigMaps retain the legacy
+recording/routing flag but omit the debug HTTP opt-in, so they do not enable
+payload recording or this endpoint. Deployment acceptance remains separate from
+the source/configuration boundary tracked by [backend TODO](../todo/backend.md).
 
 ## Модель данных
 
