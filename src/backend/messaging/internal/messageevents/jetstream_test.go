@@ -424,6 +424,7 @@ func TestJetStreamPublisher_MessageRead(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectMessageRead)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.Flush())
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
