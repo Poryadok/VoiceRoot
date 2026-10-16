@@ -99,7 +99,7 @@ Dev Auth отправляет письма в собственную Resend-со
 С Windows запустить и оставить открытым отдельный терминал:
 
 ```powershell
-ssh -L 14180:127.0.0.1:14180 voice-staging "kubectl -n voice-dev port-forward svc/voice-dev-mail 14180:4180 --address=127.0.0.1"
+ssh -L 127.0.0.1:14180:127.0.0.1:14180 voice-staging "kubectl -n voice-dev port-forward svc/voice-dev-mail 14180:4180 --address=127.0.0.1"
 ```
 
 После регистрации или запроса кода в приложении, во втором терминале:
