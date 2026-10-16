@@ -404,6 +404,8 @@ class ProfileDetailSheet extends ConsumerWidget {
                                 key: ValueKey((profileId, session, isProfileSwitching)),
                                 profileId: profileId,
                               ),
+                              if (isFriend)
+                                _ProfileFavoriteAction(profileId: profileId),
                             ],
                           ),
                         ],
@@ -444,10 +446,6 @@ class ProfileDetailSheet extends ConsumerWidget {
                             isFriend: isFriend,
                             isGuest: isGuest,
                           ),
-                          if (isFriend) ...[
-                            const SizedBox(height: 8),
-                            _ProfileFavoriteAction(profileId: profileId),
-                          ],
                           const SizedBox(height: 8),
                           TextButton(
                             key: ProfileDetailSheet.blockKey,

@@ -44,6 +44,145 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  for (final favorite in [false, true]) {
+    testWidgets('friend Favorites ${favorite ? 'on' : 'off'} stays with communication actions in H/V', (
+      tester,
+    ) async {
+      final client = MockClient(
+        (request) async => throw StateError('Unexpected $request'),
+      );
+      final container = _container(client, overrides: [
+        profileProvider.overrideWith((ref, id) async => const VoiceProfile(
+          id: 'p-target', accountId: 'a-target', username: 'alex',
+          discriminator: '0001', displayName: 'Alex', bio: 'Co-op and design.',
+          verificationType: 'personal', bannerUrl: _bannerUrl,
+        )),
+        isFriendProvider.overrideWith((ref, id) => true),
+        profileContactMembershipProvider.overrideWith((ref, id) async => false),
+        presenceProvider.overrideWith((ref, id) => VoicePresence(
+          profileId: id, status: 'online', customStatus: 'Ready for co-op',
+        )),
+        activeStoryAuthorIdsProvider.overrideWith((ref) => {'p-target'}),
+        profileStoriesProvider.overrideWith((ref, id) async => const [
+          StoryData(id: 'story-one', authorProfileId: 'p-target', type: 'text', textContent: 'Hello'),
+        ]),
+        profileHighlightsProvider.overrideWith((ref, id) async => const [
+          HighlightData(id: 'co-op', name: 'Co-op', profileId: 'p-target', storyIds: ['story-one'], visibility: 'friends'),
+        ]),
+        contactCommonSpacesProvider.overrideWith((ref, id) async => [_commonSpace]),
+        favoritesListProvider.overrideWith((ref) async => FavoritesListData(
+          favorites: favorite ? ['p-target'] : [],
+        )),
+      ]);
+      final theme = await _captureTheme(tester);
+      final imageClient = _ImageClient(await _avatarBytes(tester), expectedUrl: _bannerUrl);
+      final previousImageClient = debugNetworkImageHttpClientProvider;
+      debugNetworkImageHttpClientProvider = () => imageClient;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          await tester.binding.setSurfaceSize(size);
+          await tester.pumpWidget(_app(container, theme: theme, plainModal: true));
+          await tester.runAsync(() => precacheImage(
+            const NetworkImage(_bannerUrl),
+            tester.element(find.byKey(const Key('open_contact_profile'))),
+          ));
+          await tester.tap(find.byKey(const Key('open_contact_profile')));
+          await tester.pumpAndSettle();
+          final toggle = find.byKey(const Key('profile_favorite_toggle'));
+          final call = find.byKey(ProfileDetailSheet.callKey);
+          final l10n = AppLocalizations.of(tester.element(toggle))!;
+          expect(find.byTooltip(favorite ? l10n.socialRemoveFavorite : l10n.socialAddFavorite), findsOneWidget);
+          final toggleRect = tester.getRect(toggle);
+          final callRect = tester.getRect(call);
+          final highlightsRect = tester.getRect(find.byKey(const Key('highlights_section')));
+          final commonRect = tester.getRect(find.byKey(const Key('profile_common_spaces')));
+          expect(toggleRect.bottom, lessThanOrEqualTo(highlightsRect.top));
+          expect(highlightsRect.bottom, lessThanOrEqualTo(commonRect.top));
+          if ((toggleRect.top - callRect.top).abs() < 1) {
+            expect(callRect.right, lessThan(toggleRect.left));
+          } else {
+            expect(callRect.bottom, lessThanOrEqualTo(toggleRect.top));
+          }
+          expect(toggleRect.left, greaterThanOrEqualTo(0));
+          expect(toggleRect.right, lessThanOrEqualTo(size.width));
+          expect(find.text('Ready for co-op'), findsOneWidget);
+          expect(find.byKey(const Key('profile_not_in_contacts_warning')), findsNothing);
+          expect(tester.takeException(), isNull);
+          final orientation = size.width > size.height ? 'h' : 'v';
+          await _capture(tester, 'contact-favorite-${favorite ? 'on' : 'off'}-$orientation.png');
+          await tester.ensureVisible(find.byKey(const Key('profile_report')));
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('profile_report')).hitTestable(), findsOneWidget);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        }
+      } finally {
+        debugNetworkImageHttpClientProvider = previousImageClient;
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  for (final state in ['loading', 'error']) {
+    testWidgets('friend Favorites $state recovery stays in the action band', (
+      tester,
+    ) async {
+      final pending = Completer<FavoritesListData>();
+      var reads = 0;
+      final client = MockClient((request) async => throw StateError('Unexpected $request'));
+      final container = _container(client, overrides: [
+        isFriendProvider.overrideWith((ref, id) => true),
+        favoritesListProvider.overrideWith((ref) async {
+          reads++;
+          if (state == 'loading') return pending.future;
+          if (reads == 1) throw StateError('favorite-private-diagnostic');
+          return const FavoritesListData(favorites: []);
+        }),
+      ]);
+      try {
+        await tester.pumpWidget(_app(container, plainModal: true));
+        await tester.tap(find.byKey(const Key('open_contact_profile')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        if (state == 'error') {
+          await tester.pumpAndSettle();
+        }
+        final band = find.byKey(const Key('profile_communication_actions'));
+        if (state == 'loading') {
+          expect(find.descendant(of: band, matching: find.byType(CircularProgressIndicator)), findsOneWidget);
+          pending.complete(const FavoritesListData(favorites: []));
+        } else {
+          final l10n = AppLocalizations.of(tester.element(band))!;
+          final retry = find.descendant(of: band, matching: find.text(l10n.commonRetry));
+          expect(retry, findsOneWidget);
+          expect(find.textContaining('favorite-private-diagnostic'), findsNothing);
+          await tester.ensureVisible(retry);
+          await tester.tap(retry);
+        }
+        await tester.pumpAndSettle();
+        expect(find.descendant(of: band, matching: find.byKey(const Key('profile_favorite_toggle'))), findsOneWidget);
+        expect(reads, state == 'loading' ? 1 : 2);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        if (!pending.isCompleted) {
+          pending.complete(const FavoritesListData(favorites: []));
+        }
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
   for (final variant in [
     (name: 'h', size: const Size(1280, 800), scale: 1.0, locale: 'en'),
     (name: 'v', size: const Size(390, 844), scale: 1.0, locale: 'en'),
