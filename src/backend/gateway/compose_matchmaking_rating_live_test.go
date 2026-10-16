@@ -57,7 +57,8 @@ func TestComposeMatchmakingRating_live(t *testing.T) {
 	}
 	require.Equal(t, "active", matchActive["status"])
 
-	profileB := extractProfileID(t, matchActive, sessB.ProfileID)
+	profileB := extractProfileID(t, matchActive, sessA.ProfileID)
+	require.Equal(t, sessB.ProfileID, profileB)
 	completeComposeMatch(t, client, base, sessA.AccessToken, matchID)
 	completeComposeMatch(t, client, base, sessB.AccessToken, matchID)
 
