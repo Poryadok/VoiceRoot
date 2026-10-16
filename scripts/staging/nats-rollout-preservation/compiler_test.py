@@ -118,4 +118,81 @@ class CompilerTest(unittest.TestCase):
         self.assertEqual(pack['target']['images'],parameters['images'])
         self.assertEqual(pack['migrations'],[])
 
+    def mixed_images_fixture(self):
+        import source_plan_test as fixtures
+        kube,p=fixtures.SourceTests().canonical_fixture('images-only')
+        selected=['gateway','social','user','voice','web']
+        p.update(generation='r20260930a4',dataPVC='voice-nats-jsdata-d202610040049430b',changed_services=selected)
+        kube.objects[('Deployment','voice-gateway')]['spec']['template'].setdefault('metadata',{}).setdefault('annotations',{})['kubectl.kubernetes.io/restartedAt']='2026-10-16T00:00:00Z'
+        web=kube.objects[('Deployment','voice-web')]
+        web['metadata'].setdefault('annotations',{})['fixture/operator-note']='preserve'
+        web['spec']['template'].setdefault('metadata',{}).setdefault('annotations',{})['fixture/runtime']='preserve'
+        web['spec']['template']['spec']['containers'].append({'name':'retained-sidecar','image':'registry/sidecar@sha256:'+'c'*64,'env':[{'name':'FIXTURE','value':'unchanged'}]})
+        web['spec']['template']['spec'].setdefault('initContainers',[]).append({'name':'retained-init','image':'registry/init@sha256:'+'d'*64})
+        p['images']={}
+        for service in selected:
+            name='voice-'+service;spec=kube.objects[('Deployment',name)]['spec']['template']['spec']
+            for container in spec.get('initContainers',[])+spec['containers']:
+                p['images'][name+'/'+container['name']]=(container['image'] if container['name'].startswith('retained-')
+                    else 'registry/'+container['name']+'@sha256:'+'a'*64)
+        p['enrolled']=['voice-'+name for name in selected]
+        p['contract']={'scripts':[]}
+        for part in ('realtime','notification','search','analytics-chat'):
+            path=fixtures.SOURCE/('deploy/templates/nats-'+part+'-bootstrap.yaml')
+            row=fixtures.decoder(path.read_bytes().split(b'---')[0])
+            p['contract']['scripts'].append({'part':part,'sha256':hashlib.sha256(row['data']['bootstrap.sh'].encode()).hexdigest()})
+        return fixtures,kube,p
+
+    def test_actual_main_mixed_images_scope_keeps_selected_live_frontend_and_exact_pins(self):
+        fixtures,kube,p=self.mixed_images_fixture()
+        before=copy.deepcopy(kube.objects[('Deployment','voice-web')])
+        params=self.source/'mixed-parameters.json';params.write_text(json.dumps(p))
+        output=self.source/('target-'+p['tag']+'.json')
+        with patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder):
+            compiler.main([str(fixtures.SOURCE),str(params),str(output)],producer=kube)
+        pack=json.loads(output.read_bytes())
+        self.assertEqual(set(pack['target']['template_hashes']),set(p['enrolled']))
+        self.assertEqual(pack['target']['images'],p['images'])
+        self.assertEqual(pack['migrations'],[]);self.assertEqual(pack['nonnats']['actions'],[])
+        self.assertEqual({row['kind'] for row in pack['manifests']},{'Deployment'})
+        self.assertEqual(len(pack['manifests']),5)
+        expected=copy.deepcopy(before)
+        for container in expected['spec']['template']['spec'].get('initContainers',[])+expected['spec']['template']['spec']['containers']:
+            container['image']=p['images']['voice-web/'+container['name']]
+        self.assertEqual(next(row for row in pack['manifests'] if row['metadata']['name']=='voice-web'),expected)
+        self.assertEqual(kube.objects[('Deployment','voice-web')],before)
+        self.assertEqual(pack['target']['source_hashes']['deploy/staging/flutter-web.yaml'],
+            hashlib.sha256((fixtures.SOURCE/'deploy/staging/flutter-web.yaml').read_bytes()).hexdigest())
+        self.assertNotIn('deploy/staging/admin.yaml',pack['target']['source_hashes'])
+        from normalize import image_only_documents
+        snapshots={name:copy.deepcopy(kube.objects[('Deployment',name)]) for name in p['enrolled']}
+        stage=SimpleNamespace(snapshots=snapshots,expected={'source_claim':p['dataPVC']},old_images={})
+        normalized,target=image_only_documents(stage,pack['manifests'],pack['target'])
+        for row in normalized:
+            name=row['metadata']['name'];expected_spec=copy.deepcopy(snapshots[name]['spec'])
+            for container in expected_spec['template']['spec'].get('initContainers',[])+expected_spec['template']['spec']['containers']:
+                container['image']=p['images'][name+'/'+container['name']]
+            self.assertEqual(row['spec'],expected_spec)
+        gateway=next(row for row in normalized if row['metadata']['name']=='voice-gateway')
+        self.assertEqual(gateway['spec']['template']['metadata']['annotations']['kubectl.kubernetes.io/restartedAt'],'2026-10-16T00:00:00Z')
+        self.assertEqual(target['images'],p['images'])
+
+    def test_actual_main_mixed_images_rejects_unused_pins_and_duplicate_frontend(self):
+        for fault in ('unknown-container','unselected-frontend','duplicate-frontend'):
+            with self.subTest(fault=fault):
+                fixtures,kube,p=self.mixed_images_fixture()
+                if fault=='unknown-container':p['images']['voice-gateway/foreign']=IMAGE
+                elif fault=='unselected-frontend':p['images']['voice-admin/admin']=IMAGE
+                params=self.source/('parameters-'+fault+'.json');params.write_text(json.dumps(p))
+                output=self.source/('target-'+p['tag']+'.json')
+                original=compiler.rendered_source
+                def render(*args):
+                    rows=original(*args)
+                    if fault=='duplicate-frontend':rows.append(copy.deepcopy(kube.objects[('Deployment','voice-web')]))
+                    return rows
+                with patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder),\
+                     patch.object(compiler,'rendered_source',side_effect=render),self.assertRaises(Blocked):
+                    compiler.main([str(fixtures.SOURCE),str(params),str(output)],producer=kube)
+                self.assertFalse(output.exists())
+
 if __name__=='__main__':unittest.main()
