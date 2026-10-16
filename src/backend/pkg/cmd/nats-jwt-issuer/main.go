@@ -85,7 +85,7 @@ func main() {
 		fmt.Println("Existing NATS bootstrap renewed through private controller pipe")
 		return
 	}
-	namespace := flag.String("namespace", "", "voice-staging or voice-prod")
+	namespace := flag.String("namespace", "", "voice-dev, voice-staging or voice-prod")
 	cert := flag.String("tls-cert", "", "TLS certificate PEM with voice-nats SAN")
 	key := flag.String("tls-key", "", "matching TLS private key PEM")
 	ca := flag.String("tls-ca", "", "TLS CA PEM")
@@ -105,7 +105,7 @@ func issue(aclPath, dest, namespace, certPath, keyPath, caPath string) (resultEr
 	if runtime.GOOS != "linux" {
 		return errors.New("issuer requires Linux filesystem permissions")
 	}
-	if namespace != "voice-staging" && namespace != "voice-prod" {
+	if namespace != "voice-dev" && namespace != "voice-staging" && namespace != "voice-prod" {
 		return errors.New("unsupported namespace")
 	}
 	if !filepath.IsAbs(dest) || filepath.Clean(dest) != dest {
