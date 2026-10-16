@@ -614,18 +614,25 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (!identical(currentAuth, requestAuth) ||
         currentAuth.gatewayRequestIdentity != requestIdentity ||
         currentAuth.sessionInstallGeneration != sessionGeneration ||
-        _ref.read(profileSwitchInProgressProvider) ||
-        _ref.read(messageRequestsNavigationGenerationProvider) !=
-            navigationGeneration) {
+        _ref.read(profileSwitchInProgressProvider)) {
       return kChatActionStaleContext;
     }
     switch (result) {
       case ChatsApiOk<void>():
         final reconciler = _ref.read(inboxReconcilerProvider.notifier);
-        final error = _afterRequestAction(chatId, profileId, auth);
+        final error = _afterRequestAction(
+          chatId,
+          profileId,
+          auth,
+          expectedNavigationGeneration: navigationGeneration,
+        );
         if (error == null) unawaited(reconciler.reconcile());
         return error;
       case ChatsApiFailure(:final message):
+        if (_ref.read(messageRequestsNavigationGenerationProvider) !=
+            navigationGeneration) {
+          return kChatActionStaleContext;
+        }
         return message;
     }
   }
@@ -649,14 +656,21 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (!identical(currentAuth, requestAuth) ||
         currentAuth.gatewayRequestIdentity != requestIdentity ||
         currentAuth.sessionInstallGeneration != sessionGeneration ||
-        _ref.read(profileSwitchInProgressProvider) ||
-        _ref.read(messageRequestsNavigationGenerationProvider) !=
-            navigationGeneration) {
+        _ref.read(profileSwitchInProgressProvider)) {
       return kChatActionStaleContext;
     }
     return switch (result) {
-      ChatsApiOk<void>() => _afterRequestAction(chatId, profileId, auth),
-      ChatsApiFailure(:final message) => message,
+      ChatsApiOk<void>() => _afterRequestAction(
+        chatId,
+        profileId,
+        auth,
+        expectedNavigationGeneration: navigationGeneration,
+      ),
+      ChatsApiFailure(:final message) =>
+        _ref.read(messageRequestsNavigationGenerationProvider) !=
+                navigationGeneration
+            ? kChatActionStaleContext
+            : message,
     };
   }
 
@@ -792,22 +806,22 @@ class ChatListController extends StateNotifier<ChatListState> {
   String? _afterRequestAction(
     String chatId,
     String? expectedProfileId,
-    String expectedAuthorization,
-  ) {
+    String expectedAuthorization, {
+    required int expectedNavigationGeneration,
+  }) {
     if (!_matchesSession(expectedProfileId, expectedAuthorization)) {
       return kChatActionStaleContext;
     }
-    state = state.copyWith(
-      items: state.items.where((item) => item.chatId != chatId).toList(),
-    );
     final isRequestsSelection =
         _ref.read(chatInboxProvider) == 'requests' &&
         isMessageRequestsFolderSelected(
           _ref.read(selectedChatFolderIdProvider),
         );
-    final navigationGeneration = _ref.read(
-      messageRequestsNavigationGenerationProvider,
-    );
+    if (isRequestsSelection) {
+      state = state.copyWith(
+        items: state.items.where((item) => item.chatId != chatId).toList(),
+      );
+    }
     final container = _ref.container;
     final Future<MessageRequestsSummary>? summaryFuture;
     if (isRequestsSelection) {
@@ -822,7 +836,7 @@ class ChatListController extends StateNotifier<ChatListState> {
         restorePreviousChatFolderAfterFinalRequest(
           container,
           summaryFuture: summaryFuture,
-          expectedGeneration: navigationGeneration,
+          expectedGeneration: expectedNavigationGeneration,
           expectedAuthorization: expectedAuthorization,
           expectedProfileId: expectedProfileId,
         ),
