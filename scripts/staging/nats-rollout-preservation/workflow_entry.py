@@ -25,7 +25,12 @@ def main(args):
     if args not in (['--preflight'],['--apply']):raise Blocked('rollout_workflow_arguments_invalid')
     runner.main(['--preflight'] if args==['--preflight'] else [])
 
-if __name__=='__main__':
-    try:main(sys.argv[1:])
-    except Exception:
-        print('NATS_ROLLOUT_WORKFLOW=BLOCKED',file=sys.stderr);sys.exit(1)
+def cli(args):
+    try:main(args);return 0
+    except Exception as error:
+        from bridge_client import emit_failure
+        emit_failure(error,'workflow',args[0][2:] if args and args[0] in ('--preflight','--apply','--configure') else 'unknown',os.environ)
+        print('NATS_ROLLOUT_WORKFLOW=BLOCKED',file=sys.stderr)
+        return 1
+
+if __name__=='__main__':sys.exit(cli(sys.argv[1:]))

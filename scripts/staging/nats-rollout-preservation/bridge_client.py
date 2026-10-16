@@ -12,6 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
 import bridge
 import deployment_report
+from errors import safe_error
 
 INSTALLED=Path('/var/lib/voice-nats-preservation/installed')
 
@@ -82,6 +83,62 @@ def output_directory(environment):
     if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or info.st_mode&0o022:raise ValueError('report_output_directory_invalid')
     return Path(tempfile.mkdtemp(prefix='voice-deployment-reports-',dir=base))
 
+BOUNDARY_ACTIONS=frozenset(bridge.FIELDS)|frozenset(('preflight','apply','configure','unknown'))
+BOUNDARY_FIELDS={'schema','boundary','action','error_code','run_id','run_attempt','source_sha',
+    'operation','operation_status','recovery_authorized','updated_at'}
+
+def failure_index(environment):
+    # Runner-owned observations never masquerade as a root response/nonce.
+    run=environment['GITHUB_RUN_ID'];attempt=environment['GITHUB_RUN_ATTEMPT']
+    if not re.fullmatch('[1-9][0-9]{0,19}',run) or not re.fullmatch('[1-9][0-9]{0,9}',attempt):raise ValueError('report_identity_invalid')
+    base=Path(environment['RUNNER_TEMP']);info=base.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or info.st_mode&0o022:raise ValueError('report_output_directory_invalid')
+    return base/('voice-deployment-'+run+'-'+attempt+'.failures')
+
+def validate_failure(row,environment):
+    if (not isinstance(row,dict) or set(row)!=BOUNDARY_FIELDS
+        or row['schema']!='voice-deployment-boundary-failure-v1'
+        or row['boundary'] not in ('workflow','bridge-client') or row['action'] not in BOUNDARY_ACTIONS
+        or row['operation_status']!='UNKNOWN' or row['recovery_authorized'] is not False
+        or type(row['run_id']) is not int or row['run_id']!=int(environment['GITHUB_RUN_ID'])
+        or type(row['run_attempt']) is not int or row['run_attempt']!=int(environment['GITHUB_RUN_ATTEMPT'])
+        or row['source_sha']!=environment['GITHUB_SHA'] or not re.fullmatch('[a-f0-9]{40}',row['source_sha'])
+        or type(row['updated_at']) is not int or not 0<row['updated_at']<=time.time()+60
+        or row['operation'] is not None and (not isinstance(row['operation'],str) or not re.fullmatch('[a-f0-9]{12}',row['operation']))
+        or deployment_report.code(row['error_code'])!=row['error_code']):raise ValueError('boundary_report_invalid')
+    return row
+
+def failure_file(fd):
+    info=os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.geteuid() or info.st_mode&0o077 or info.st_nlink!=1 or info.st_size>65536:raise ValueError('report_index_invalid')
+    return info
+
+def record_failure(error,boundary,action,environment):
+    row={'schema':'voice-deployment-boundary-failure-v1','boundary':boundary,
+        'action':action if action in BOUNDARY_ACTIONS else 'unknown','error_code':deployment_report.code(safe_error(error)),
+        'run_id':int(environment['GITHUB_RUN_ID']),'run_attempt':int(environment['GITHUB_RUN_ATTEMPT']),
+        'source_sha':environment['GITHUB_SHA'],'operation':None,'operation_status':'UNKNOWN',
+        'recovery_authorized':False,'updated_at':int(time.time())}
+    operation=environment.get('VOICE_NATS_ROLLOUT_OPERATION','')
+    if re.fullmatch('[a-f0-9]{12}',operation):row['operation']=operation
+    validate_failure(row,environment)
+    raw=(json.dumps(row,sort_keys=True)+'\n').encode()
+    fd=os.open(failure_index(environment),os.O_WRONLY|os.O_CREAT|os.O_APPEND|os.O_NOFOLLOW|os.O_NONBLOCK,0o600)
+    try:
+        if failure_file(fd).st_size+len(raw)>65536:raise ValueError('report_index_invalid')
+        if os.write(fd,raw)!=len(raw):raise OSError('report_write_incomplete')
+        os.fsync(fd)
+    finally:os.close(fd)
+    if environment.get('GITHUB_STEP_SUMMARY'):
+        with open(environment['GITHUB_STEP_SUMMARY'],'a') as output:
+            output.write('Deployment boundary failure: '+boundary+'/'+row['action']+' error='+row['error_code']+'; operation state UNKNOWN.\n\n')
+
+def emit_failure(error,boundary,action,environment):
+    # Emit the safe reason even when local evidence cannot be persisted.
+    print('NATS_DEPLOYMENT_FAILURE boundary='+boundary+' error='+safe_error(error),file=sys.stderr)
+    try:record_failure(error,boundary,action,environment)
+    except Exception:print('NATS_DEPLOYMENT_REPORT=UNAVAILABLE',file=sys.stderr)
+
 def collect(nonce,environment,installed=INSTALLED,*,target=None):
     if not re.fullmatch('[a-f0-9]{64}',nonce):raise ValueError('report_nonce_invalid')
     row=deployment_report.read(Path(installed)/'responses'/(nonce+'.report.json'),nonce=nonce,
@@ -101,11 +158,25 @@ def collect(nonce,environment,installed=INSTALLED,*,target=None):
 
 def collect_all(environment):
     index=Path(environment['RUNNER_TEMP'])/('voice-deployment-'+environment['GITHUB_RUN_ID']+'-'+environment['GITHUB_RUN_ATTEMPT']+'.requests')
-    if index.is_symlink() or index.stat().st_size>8192:raise ValueError('report_index_invalid')
-    nonces=index.read_text().splitlines()
-    if not 1<=len(nonces)<=64:raise ValueError('report_index_invalid')
+    nonces=[]
+    if index.exists() or index.is_symlink():
+        if index.is_symlink() or index.stat().st_size>8192:raise ValueError('report_index_invalid')
+        nonces=index.read_text().splitlines()
+        if not 1<=len(nonces)<=64:raise ValueError('report_index_invalid')
     failed=False
     target=output_directory(environment)
+    failures=failure_index(environment)
+    if failures.exists() or failures.is_symlink():
+        fd=os.open(failures,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        try:
+            info=failure_file(fd);raw=os.read(fd,65537)
+            if len(raw)!=info.st_size:raise ValueError('report_index_invalid')
+        finally:os.close(fd)
+        rows=[validate_failure(json.loads(line),environment) for line in raw.splitlines()]
+        if not 1<=len(rows)<=64:raise ValueError('report_index_invalid')
+        for number,row in enumerate(rows):
+            with open(target/('boundary-'+str(number)+'.deployment-report.json'),'x') as output:json.dump(row,output,sort_keys=True)
+    elif not nonces:raise ValueError('report_index_missing')
     for nonce in dict.fromkeys(nonces):
         try:collect(nonce,environment,target=target)
         except Exception:
@@ -141,4 +212,5 @@ if __name__=='__main__':
         print(json.dumps(result,sort_keys=True))
     except Exception as error:
         if hasattr(error,'safe_result'):print(json.dumps(error.safe_result,sort_keys=True))
+        emit_failure(error,'bridge-client',sys.argv[1] if len(sys.argv)>1 else 'unknown',os.environ)
         print('NATS_ROLLOUT_BRIDGE=BLOCKED',file=sys.stderr);sys.exit(1)
