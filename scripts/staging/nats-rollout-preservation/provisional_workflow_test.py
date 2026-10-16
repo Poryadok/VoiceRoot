@@ -1,10 +1,27 @@
 import ast
+import itertools
+import json
 import os
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 class Tests(unittest.TestCase):
+    def test_actual_deploy_guard_keeps_ordinary_calls_and_excludes_acceptance_and_diagnostics(self):
+        root=Path(os.environ.get('VOICE_TEST_REPO_ROOT',Path(__file__).resolve().parents[3]))
+        text=(root/'.github/workflows/staging-deploy.yml').read_text()
+        raw=text.split('  deploy:\n',1)[1].splitlines()[0].strip().removeprefix('if: ')
+        expression=json.loads(raw).replace('&&',' and ').replace('||',' or ').replace('!inputs.','not inputs.')
+        for event in ('workflow_dispatch','workflow_call'):
+            for accept,probe,secret,mail in itertools.product((False,True),repeat=4):
+                with self.subTest(event=event,accept=accept,probe=probe,secret=secret,mail=mail):
+                    inputs=SimpleNamespace(accept_provisional_operation='1'*12 if accept else '',
+                        nats_probe_only=probe,validate_app_secret_only=secret,mail_only=mail)
+                    actual=eval(expression,{'__builtins__':{},'true':True,'inputs':inputs,
+                        'github':SimpleNamespace(event_name=event)})
+                    self.assertEqual(actual,not accept and (event!='workflow_dispatch' or not any((probe,secret,mail))))
+
     def select(self,changes=None,action='--bridge-prepare'):
         root=Path(os.environ.get('VOICE_TEST_REPO_ROOT',Path(__file__).resolve().parents[3]))
         text=(root/'.github/workflows/staging-deploy.yml').read_text()

@@ -13,8 +13,8 @@ printf '%s\n' "$dispatch" | grep -Fq '      nats_probe_only:' || fail "missing n
 printf '%s\n' "$dispatch" | grep -Fq '        type: boolean' || fail "probe input must be boolean"
 printf '%s\n' "$dispatch" | grep -Fq '        default: false' || fail "probe input must default false"
 deploy="$(sed -n '/^  deploy:$/,/^  nats-search-jetstream-probe:$/p' "$WORKFLOW")"
-grep -Fq -- "if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true)" <<<"$deploy" \
-  || fail "deploy must skip diagnostics-only dispatches and preserve workflow_call"
+grep -Fq -- "!inputs.accept_provisional_operation && (github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true))" <<<"$deploy" \
+  || fail "deploy must skip acceptance/diagnostics-only dispatches and preserve workflow_call"
 probe="$(sed -n '/^  nats-search-jetstream-probe:$/,/^  validate-app-secret:$/p' "$WORKFLOW")"
 [ -n "$probe" ] || fail "diagnostic job missing"
 test_bin="$(mktemp -d)"
