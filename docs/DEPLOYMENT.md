@@ -1,5 +1,9 @@
 # Окружения и выкат
 
+Before diagnosis or acceptance, read [Release evidence and recovery
+lessons](RELEASE_EVIDENCE.md): source/run binding, safe diagnostics, immutable
+failure history and independent preservation checks.
+
 Mixed `images-only` selection may include backend services and frontends in one
 preservation transaction. The compiler includes only the selected live frontend
 Deployments alongside the backend manifests and binds their canonical source
