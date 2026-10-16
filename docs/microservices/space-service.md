@@ -227,8 +227,8 @@ does not invent one.
 | Space | `member_banned`, `member_unbanned` | `account`; the affected account | shipped |
 | Space | `category_created`, `category_updated`, `category_deleted` | `category`; the category ID | pending |
 | Space | `voice_room_created`, `voice_room_updated`, `voice_room_deleted` | `voice_room`; the room ID | pending |
-| Space | `tree_node_upserted`, `tree_node_removed` | `tree_node`; the node ID | pending |
-| Space | `tree_reordered` | `space`; the same `space_id` | pending |
+| Space | `tree_node_upserted`, `tree_node_removed` | `tree_node`; the node ID | shipped |
+| Space | `tree_reordered` | `space`; the same `space_id` | shipped |
 | Role | `role_created`, `role_updated`, `role_deleted`, `default_join_role_set` | `role`; the role ID | pending protected producer |
 | Role | `roles_reordered` | `space`; the same `space_id` | pending protected producer |
 | Role | `role_assigned`, `role_revoked` | `profile`; the affected profile; details bind the role | pending protected producer |
