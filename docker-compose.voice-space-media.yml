@@ -215,7 +215,7 @@ services:
     # Gate it on the real public document instead of a timing delay.
     profiles: ["app"]
     image: node:24-alpine
-    user: "0:0"
+    user: "65532:65532"
     read_only: true
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]

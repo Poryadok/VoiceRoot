@@ -751,6 +751,7 @@ class ComposeTests(unittest.TestCase):
     def test_media_voice_waits_for_verified_public_match_squad_jwks(self):
         readiness = self.media_merged["phase0-matchmaking-jwks-readiness"]
         self.assertEqual(readiness["image"], "node:24-alpine")
+        self.assertEqual(readiness["user"], "65532:65532")
         self.assertTrue(readiness["read_only"])
         self.assertEqual(readiness["cap_drop"], ["ALL"])
         self.assertEqual(readiness["security_opt"], ["no-new-privileges:true"])
@@ -758,6 +759,13 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("app", readiness.get("profiles", []))
         self.assertEqual(self.media_source_at("phase0-matchmaking-jwks-readiness", "/run/phase0/ca.crt"),
                          "ca/ca.crt")
+        ca_mount = next(volume for volume in readiness["volumes"]
+                        if isinstance(volume, dict) and volume.get("target") == "/run/phase0/ca.crt")
+        self.assertTrue(ca_mount["read_only"])
+        if CAN_SET_MATCHSQUAD_UID:
+            ca_stat = self.fixture.joinpath("ca/ca.crt").stat()
+            self.assertEqual((ca_stat.st_uid, ca_stat.st_gid), (65532, 65532))
+            self.assertEqual(stat.S_IMODE(ca_stat.st_mode), 0o600)
         self.assertEqual(self.media_source_at("phase0-matchmaking-jwks-readiness", "/run/phase0/readiness.js"),
                          "scripts/dev/phase0-matchmaking-jwks-readiness.js")
         self.assertEqual(readiness["depends_on"]["phase0-jwks"]["condition"], "service_started")
@@ -769,8 +777,10 @@ class ComposeTests(unittest.TestCase):
         for marker in ("https.get", "ca,", "servername: endpoint.hostname", "response.statusCode !== 200",
                        "document.keys", 'key.kty === "RSA"', 'key.alg === "RS256"',
                        'Object.hasOwn(key, privateField)', '"dp", "dq", "qi", "oth"',
-                       "phase0_matchmaking_jwks_readiness_failed"):
+                       "phase0_matchmaking_jwks_readiness_failed", "const ATTEMPT_TIMEOUT_MS = 2000",
+                       "deadline = setTimeout(", "clearTimeout(deadline)", "request.destroy()"):
             self.assertIn(marker, probe)
+        self.assertNotIn("timeout: 2000", probe)
 
     def test_startup_diagnostics_can_scope_status_and_logs_to_voice(self):
         status = json.dumps([{
