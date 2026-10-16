@@ -327,6 +327,23 @@ func TestSpaceTree_AuditWritesAreAtomicAndVisible(t *testing.T) {
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	chatA, chatB := uuid.New(), uuid.New()
 
+	invalidAuditRows := []struct {
+		name, action, targetType, details string
+	}{
+		{"tree upsert with no reference", "tree_node_upserted", "tree_node", `{"kind":"text_chat","sort_order":0,"is_pinned":false}`},
+		{"tree upsert with extra details", "tree_node_upserted", "tree_node", `{"kind":"text_chat","chat_id":"` + uuid.NewString() + `","sort_order":0,"is_pinned":false,"extra":true}`},
+		{"tree upsert with wrong target", "tree_node_upserted", "space", `{"kind":"text_chat","chat_id":"` + uuid.NewString() + `","sort_order":0,"is_pinned":false}`},
+		{"tree removal with details", "tree_node_removed", "tree_node", `{"reason":"manual"}`},
+		{"tree reorder with zero count", "tree_reordered", "space", `{"count":0}`},
+	}
+	for _, tc := range invalidAuditRows {
+		t.Run("registry rejects "+tc.name, func(t *testing.T) {
+			_, err := pool.Exec(ctx, `INSERT INTO audit_log(space_id,actor_profile_id,action,target_type,target_id,details)
+VALUES($1,$2,$3,$4,$5,$6::jsonb)`, spaceID, owner, tc.action, tc.targetType, uuid.New(), tc.details)
+			require.Error(t, err)
+		})
+	}
+
 	first, err := client.UpsertTreeNode(ownerCtx, &spacev1.UpsertTreeNodeRequest{
 		SpaceId: spaceID.String(), Kind: "text_chat", CategoryId: ptr(categoryID),
 		LinkedChat: &chatv1.ChatRef{Id: chatA.String(), Type: &chatType}, SortOrder: ptrInt32(4),
@@ -393,6 +410,16 @@ func TestSpaceTree_AuditWritesAreAtomicAndVisible(t *testing.T) {
 	require.True(t, seen["tree_node_upserted"])
 	require.True(t, seen["tree_node_removed"])
 	require.True(t, seen["tree_reordered"])
+
+	downgrade, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000025_tree_audit_actions.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(downgrade))
+	require.ErrorContains(t, err, "cannot remove Space tree audit registry actions while audit evidence exists")
+	var retainedAudits, retainedOutbox int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action LIKE 'tree_%'`, spaceID).Scan(&retainedAudits))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox o JOIN audit_log a ON a.id=o.audit_event_id WHERE a.space_id=$1 AND a.action LIKE 'tree_%'`, spaceID).Scan(&retainedOutbox))
+	require.Equal(t, 4, retainedAudits, "failed downgrade must retain every tree audit row")
+	require.Equal(t, retainedAudits, retainedOutbox, "failed downgrade must retain matching outbox evidence")
 }
 
 func TestSpaceTree_AuditInsertFailureRollsBackUpsert(t *testing.T) {
@@ -431,10 +458,12 @@ CREATE TRIGGER fail_tree_audit_insert BEFORE INSERT ON audit_log FOR EACH ROW EX
 
 func applySpaceAuditLedgerMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000015_audit_ledger.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(auditMigration))
-	require.NoError(t, err)
+	for _, name := range []string{"000015_audit_ledger.up.sql", "000025_tree_audit_actions.up.sql"} {
+		auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(auditMigration))
+		require.NoError(t, err)
+	}
 }
 
 func requireTreeAuditEntry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, spaceID, actorID uuid.UUID, action, targetType string, targetID uuid.UUID, wantDetails map[string]any) {
