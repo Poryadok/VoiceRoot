@@ -961,6 +961,10 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	for _, table := range wantTables {
 		var dropped *string
 		require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass($1)::text`, "public."+table).Scan(&dropped))
+		if table == "file_music_event_outbox" {
+			require.NotNil(t, dropped, "the unrelated 000006 Music migration remains applied after the R23 lifecycle DOWNs")
+			continue
+		}
 		require.Nil(t, dropped, "%s must be removed by an empty guarded DOWN", table)
 	}
 }
