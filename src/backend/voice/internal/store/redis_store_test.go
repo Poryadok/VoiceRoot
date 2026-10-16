@@ -324,6 +324,8 @@ func mustRedisValue(t *testing.T, store *RedisCallStore, key string) string {
 	value, err := store.client.Get(context.Background(), key).Result()
 	require.NoError(t, err)
 	return value
+}
+
 func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing.T) {
 	ctx := t.Context()
 	store, client := newRedisCallStoreForTest(t, "space-media-store:")
