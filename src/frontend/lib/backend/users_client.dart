@@ -91,12 +91,14 @@ class VoicePresence {
     required this.profileId,
     required this.status,
     this.customStatus,
+    this.gameTitle,
     this.lastSeen,
   });
 
   final String profileId;
   final String status;
   final String? customStatus;
+  final String? gameTitle;
   final DateTime? lastSeen;
 
   bool get isOnline => status == 'online';

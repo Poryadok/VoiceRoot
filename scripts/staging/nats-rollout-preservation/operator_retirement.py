@@ -1759,11 +1759,89 @@ def _terminal_finish_service_repair(values,raw,event,request,disposition):
     if values['checkpoint']['events'][:len(after['events'])]!=after['events']:fail()
 
 
+def compiler_inventory_disposition(installed,path,receipt=None):
+    """Verify a separate root attestation; never replay or deployment authority."""
+    installed=Path(installed);path=Path(path)
+    if path.parent!=installed/'journal' or not re.fullmatch(r'[a-f0-9]{64}\.json',path.name):fail()
+    destination=installed/('compiler-inventory-rejection-'+path.stem+'.json')
+    receipt_raw=None
+    if receipt is None:
+        try:destination.lstat()
+        except FileNotFoundError:return None
+        receipt_raw=private_bytes(destination,2<<20);receipt=json.loads(receipt_raw)
+    keys={'schema','nonce','disposition','deployment_pass','recovery_authorized','helper_binding',
+        'files','old_receipt_sha256','source_tree','build_tree'}
+    if (not isinstance(receipt,dict) or set(receipt)!=keys
+        or receipt['schema']!='voice-compiler-inventory-rejection-v1' or receipt['nonce']!=path.stem
+        or receipt['disposition']!='ABANDONED_PRECHECKPOINT' or receipt['deployment_pass'] is not False
+        or receipt['recovery_authorized'] is not False
+        or not re.fullmatch('[a-f0-9]{64}',receipt['helper_binding'])
+        or not isinstance(receipt['files'],dict) or set(receipt['files'])!={'journal','response','report'}):fail()
+    old=private_bytes(installed/PENDING_ABANDONMENT_NAME,2<<20)
+    if hashlib.sha256(old).hexdigest()!=receipt['old_receipt_sha256'] or path.name in json.loads(old).get('entries',{}):fail()
+    locations={'journal':path,'response':installed/'responses'/path.name,
+        'report':installed/'responses'/(path.stem+'.report.json')}
+    values={}
+    for key,candidate in locations.items():
+        raw=private_bytes(candidate,2<<20,group_read=key!='journal');pin=receipt['files'][key]
+        if pin!={'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}:fail()
+        values[key]=json.loads(raw)
+    row=values['journal'];request=row.get('request',{});operation=path.stem[:12]
+    import bridge
+    import deployment_report
+    expected_fields={'action','nonce','source_sha','run_id','mode','changed_services','report_run_id','report_source_sha','run_attempt'}
+    if (set(request)!=expected_fields or request.get('action')!='prepare' or request.get('nonce')!=path.stem
+        or request.get('mode')!='images-only' or not request.get('changed_services')
+        or request.get('run_id')!=request.get('report_run_id') or request.get('source_sha')!=request.get('report_source_sha')):fail()
+    try:bridge.validate(dict(request,token='disposition-schema-check'))
+    except bridge.BridgeError:fail()
+    if (row!={'schema':'voice-nats-bridge-request-v1','request':request,'request_sha256':canonical(request),
+            'phase':'STARTED','prepare_stage':{'name':'target-build','status':'STARTED'},'prepare_error':'guard_rejected'}
+        or values['response']!={'status':'BLOCKED','error':'rollout_compile_image_inventory_changed'}):fail()
+    report=values['report']
+    try:deployment_report.validate(report,nonce=path.stem,source_sha=request['source_sha'],
+        run_id=request['run_id'],run_attempt=request['run_attempt'])
+    except (ValueError,TypeError,KeyError):fail()
+    expected={'request_action':'prepare','request_status':'BLOCKED','operation':None,'operation_status':'UNKNOWN',
+        'stage':'target-build','error_code':'rollout_compile_image_inventory_changed','helper_binding':receipt['helper_binding']}
+    if any(report.get(k)!=v for k,v in expected.items()) or any(v!='UNKNOWN' for v in report['effects'].values()):fail()
+    try:(guard.ROOT/('rollout-'+operation)).lstat()
+    except FileNotFoundError:pass
+    else:fail()
+    source=_retained_prepare_tree(installed/'sources'/operation,receipt['source_tree'])
+    build_path=installed/'sources'/(operation+'-build')
+    if source is None or receipt['build_tree'] is None or {p.name for p in build_path.iterdir()}!={'parameters.json'}:fail()
+    build=_retained_prepare_tree(build_path,receipt['build_tree'])
+    if receipt_raw is not None and private_bytes(destination,2<<20)!=receipt_raw:fail()
+    return {'disposition':'ABANDONED_COMPILER_INVENTORY_REJECTION','operation':operation,
+        'receipt_sha256':hashlib.sha256(receipt_raw).hexdigest() if receipt_raw is not None else canonical(receipt),
+        'files':receipt['files'],'source':source,'build':build,'old_receipt_sha256':receipt['old_receipt_sha256']}
+
+
+def attest_compiler_inventory_rejection(reviewed_path,reviewed_sha):
+    """Root-only, create-only attestation of an independently reviewed failure."""
+    if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('operator_retirement_human_root_required')
+    with operation_lock():
+        installed=guard.ROOT/'installed'
+        if any((installed/'inbox').iterdir()) or any((installed/'processing').iterdir()):fail()
+        raw=private_bytes(reviewed_path,2<<20)
+        if hashlib.sha256(raw).hexdigest()!=reviewed_sha:fail()
+        receipt=json.loads(raw);nonce=receipt.get('nonce','')
+        if not re.fullmatch('[a-f0-9]{64}',nonce):fail()
+        path=installed/'journal'/(nonce+'.json')
+        compiler_inventory_disposition(installed,path,receipt)
+        destination=installed/('compiler-inventory-rejection-'+nonce+'.json')
+        exclusive(destination,raw)
+        return compiler_inventory_disposition(installed,path)
+
+
 def pending_request_accepted(installed,path,closure):
     installed=Path(installed);path=Path(path)
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
     row=document(path)
     if row.get('phase')=='COMPLETE':return
+    compiler=compiler_inventory_disposition(installed,path)
+    if compiler is not None:return compiler
     terminal=terminal_finish_disposition(installed,path)
     if terminal is not None:return terminal
     request=row.get('request',{})
@@ -1931,6 +2009,7 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
+        if compiler_inventory_disposition(installed,path) is not None:continue
         if terminal_finish_disposition(installed,path) is not None:continue
         if path.name==STORY_PREFENCE_NONCE+'.json':
             _verify_story_prefence_rejection(installed,path,row)

@@ -1460,5 +1460,7 @@
   "e2eBackupDelete": "Удалить копию",
   "e2eBackupRestoreCta": "Восстановить зашифрованную историю",
   "e2eKeyBackupManage": "Управление резервной копией ключей",
-  "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны"
+  "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны",
+  "contactProfilePlayingGame": "Играет в {title}",
+  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
 }

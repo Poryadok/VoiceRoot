@@ -28,11 +28,13 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
 
   final Ref _ref;
   final Set<String> _watched = {};
+  final Map<String, int> _versions = {};
   Timer? _pollTimer;
   ProviderSubscription<RealtimeLinkStatus>? _linkSub;
   ProviderSubscription<AsyncValue<RealtimeFrame>>? _eventSub;
 
   void ensureWatched(String profileId) {
+    if (_ref.read(profileSwitchInProgressProvider)) return;
     if (profileId.isEmpty) return;
     final added = _watched.add(profileId);
     if (added && !state.containsKey(profileId)) {
@@ -52,6 +54,7 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
   }
 
   void _onRealtimeFrame(RealtimeFrame frame) {
+    if (_ref.read(profileSwitchInProgressProvider)) return;
     if (frame.op != 'presence_update') return;
     final data = frame.data;
     if (data == null) return;
@@ -59,6 +62,7 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
     final status = data['status'] as String?;
     if (profileId == null || profileId.isEmpty) return;
     if (!_watched.contains(profileId)) return;
+    _nextVersion(profileId);
     // Realtime sends a viewer-filtered sparse snapshot. Missing fields revoke
     // previous visibility; retaining them would leak stale presence data.
     final statusIsInvisible = status == 'invisible';
@@ -66,12 +70,20 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
         ? 'offline'
         : status;
     final customStatus = data['custom_status'] as String?;
+    final gameTitle = data['game_title'] as String?;
     final lastSeenRaw = data['last_seen'] as String?;
     state = {
       ...state,
       profileId: VoicePresence(
         profileId: profileId,
         status: visibleStatus,
+        gameTitle:
+            statusIsInvisible ||
+                visibleStatus == 'offline' ||
+                gameTitle == null ||
+                gameTitle.isEmpty
+            ? null
+            : gameTitle,
         customStatus:
             statusIsInvisible || customStatus == null || customStatus.isEmpty
             ? null
@@ -121,30 +133,65 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
 
   Future<void> refreshBulk(Iterable<String> profileIds) async {
     final ids = profileIds.where((id) => id.isNotEmpty).toSet().toList();
-    if (ids.isEmpty) return;
+    if (ids.isEmpty || _ref.read(profileSwitchInProgressProvider)) return;
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    final controller = _ref.read(authControllerProvider.notifier);
+    final generation = controller.sessionInstallGeneration;
+    final versions = {for (final id in ids) id: _nextVersion(id)};
     final result = await _ref
         .read(voiceUsersClientProvider)
         .getBulkPresence(authorization: auth, profileIds: ids);
-    if (!mounted) return;
-    if (result case UsersApiOk(:final data)) {
-      if (data.isEmpty) return;
-      state = {...state, ...data};
+    if (!_sameViewer(controller, generation, auth)) return;
+    final next = {...state};
+    for (final id in ids) {
+      if (_versions[id] != versions[id]) continue;
+      if (result case UsersApiOk(
+        :final data,
+      ) when data[id] != null && data[id]!.profileId == id) {
+        next[id] = data[id]!;
+      } else if (next[id] case final previous?) {
+        next[id] = _withoutGame(previous);
+      }
     }
+    state = next;
   }
 
   Future<void> _refreshOne(String profileId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    final controller = _ref.read(authControllerProvider.notifier);
+    final generation = controller.sessionInstallGeneration;
+    final version = _nextVersion(profileId);
     final result = await _ref
         .read(voiceUsersClientProvider)
         .getPresence(authorization: auth, profileId: profileId);
-    if (!mounted) return;
-    if (result case UsersApiOk(:final data)) {
+    if (!_sameViewer(controller, generation, auth) ||
+        _versions[profileId] != version) {
+      return;
+    }
+    if (result case UsersApiOk(:final data) when data.profileId == profileId) {
       state = {...state, profileId: data};
+    } else if (state[profileId] case final previous?) {
+      state = {...state, profileId: _withoutGame(previous)};
     }
   }
+
+  int _nextVersion(String id) => _versions[id] = (_versions[id] ?? 0) + 1;
+
+  bool _sameViewer(AuthController controller, int generation, String auth) =>
+      mounted &&
+      identical(_ref.read(authControllerProvider.notifier), controller) &&
+      controller.sessionInstallGeneration == generation &&
+      _ref.read(authorizationHeaderProvider) == auth &&
+      !_ref.read(profileSwitchInProgressProvider);
+
+  VoicePresence _withoutGame(VoicePresence previous) => VoicePresence(
+    profileId: previous.profileId,
+    status: previous.status,
+    customStatus: previous.customStatus,
+    lastSeen: previous.lastSeen,
+  );
 
   @override
   void dispose() {
@@ -159,6 +206,10 @@ final presenceMapProvider =
     StateNotifierProvider<PresenceController, Map<String, VoicePresence>>((
       ref,
     ) {
+      // Viewer-filtered snapshots cannot survive login/profile replacement or a
+      // switch attempt that returns the same session after failure.
+      ref.watch(authControllerProvider.select((state) => state.session));
+      ref.watch(profileSwitchInProgressProvider);
       return PresenceController(ref);
     });
 
