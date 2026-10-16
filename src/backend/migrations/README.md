@@ -82,6 +82,23 @@ Path B for `auth_db` only (then set `AUTH_FLYWAY_ENABLED=false` for Auth):
 migrate -path src/backend/migrations/auth_db -database "postgres://voice:voice@localhost:5432/auth_db?sslmode=disable" up
 ```
 
+## Space DB tree audit registry
+
+The Space migration head after `000024_authority_revision` is
+`000025_tree_audit_actions`. Its UP migration replaces only
+`audit_log_closed_registry`, retaining every action already accepted by
+`000015_audit_ledger` and adding the documented tree shapes:
+`tree_node_upserted` targets `tree_node` and carries `kind`, exactly one
+`chat_id` or `voice_room_id`, optional `category_id`, `sort_order`,
+`is_pinned`, and optional `pin_order`; `tree_node_removed` targets `tree_node`
+with `{}`; `tree_reordered` targets `space` with `count`. The DOWN migration
+locks `audit_log` and raises before changing the constraint while any of those
+tree actions remain, preserving their audit and outbox evidence. This records
+source migration behavior only; it does not authorize applying it to a live DB.
+PostgreSQL validates the revised CHECK while holding `ACCESS EXCLUSIVE` on
+`audit_log`; schedule that source migration in a controlled window because the
+lock duration depends on the existing audit table size.
+
 ## Role protected authority reads
 
 Role `000016_sdk_authority_revision` adds a global, permanent SDK session/grant
