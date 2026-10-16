@@ -2211,10 +2211,6 @@ f13_collect_master_push_contributions() {
     "${repo}" "${event_before}" "${target}" "${output}" "${diagnostic_file}"
 }
 
-# These fixtures exercise the real master-push wrapper, so run them only after
-# the collector functions above have been defined in this sequential script.
-f13_game_checkpoint_projection_fixtures
-
  f13_base_origin_class() {
   if [[ -n "${VOICE_R22_BASE_SHA:-}" ]]; then
     printf '%s\n' push-before
@@ -3374,6 +3370,10 @@ game_checkpoint_path_allowed_for_provenance() {
   target_entry="$(git -C "${repo}" ls-tree "${approved_target}" -- ":(literal)${path}" 2>/dev/null)" || return 1
   [[ "${checkpoint_entry}" == "${target_entry}" ]]
 }
+
+# The producer-shaped fixtures also call this provenance helper. Invoke them
+# only after every collector and path-authorization function is defined.
+f13_game_checkpoint_projection_fixtures
 
 git -C "${f13_fixture_repo}" checkout -qb f13-bot-only-integration "${f13_fixture_base}"
 git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture unrelated-only merge' f13-bot-source
