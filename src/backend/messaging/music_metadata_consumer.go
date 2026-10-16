@@ -145,7 +145,7 @@ func runMusicMetadataConsumerOnce(ctx context.Context, url string, messages musi
 	if err != nil {
 		return err
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 	<-ctx.Done()
 	return ctx.Err()
 }

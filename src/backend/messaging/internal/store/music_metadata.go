@@ -101,7 +101,7 @@ func (s *MessagesStore) PersistMusicSnapshot(ctx context.Context, e *eventsv1.Fi
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	current, err := persistMusicSnapshotTx(ctx, tx, incoming)
 	if err != nil {
 		return nil, err
@@ -233,7 +233,7 @@ func (s *MessagesStore) RefreshMusicMetadata(ctx context.Context, chat uuid.UUID
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	if err = lockMessageMutation(ctx, tx, chat, space, nil); err != nil {
 		return 0, err
 	}
