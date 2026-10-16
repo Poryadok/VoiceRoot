@@ -537,8 +537,11 @@ class ComposeTests(unittest.TestCase):
         if CAN_SET_MATCHSQUAD_UID:
             for directory in (self.fixture, self.fixture / "tls", self.fixture / "ca"):
                 info = directory.stat()
-                self.assertEqual((info.st_uid, info.st_gid), (65532, 65532))
                 self.assertEqual(stat.S_IMODE(info.st_mode), 0o711)
+            matchmaking_dir = self.fixture / "matchmaking"
+            matchmaking_info = matchmaking_dir.stat()
+            self.assertEqual((matchmaking_info.st_uid, matchmaking_info.st_gid), (65532, 65532))
+            self.assertEqual(stat.S_IMODE(matchmaking_info.st_mode), 0o700)
             for leaf in ("tls/matchmaking-complete-grpc.crt", "tls/matchmaking-complete-grpc.key", "ca/ca.crt"):
                 path = self.fixture / leaf
                 info = path.stat()
