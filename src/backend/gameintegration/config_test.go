@@ -54,6 +54,21 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	_, err = loadConfig(func(name string) string { return values[name] })
 	require.ErrorContains(t, err, "GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64")
 	values["GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64"] = ""
+	values["GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("n", 32)))
+	values["GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("r", 32)))
+	config, err = loadConfig(func(name string) string { return values[name] })
+	require.NoError(t, err)
+	require.Len(t, config.NotificationWorkloadKey, 32)
+	require.Len(t, config.RealtimeWorkloadKey, 32)
+	values["GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64"] = values["GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64"]
+	_, err = loadConfig(func(name string) string { return values[name] })
+	require.ErrorContains(t, err, "must be distinct")
+	values["GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("r", 32)))
+	values["GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64"] = "short"
+	_, err = loadConfig(func(name string) string { return values[name] })
+	require.ErrorContains(t, err, "GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64")
+	values["GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64"] = ""
+	values["GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64"] = ""
 	values["GIS_AUTH_GAME_BINDING_BASE_URL"] = "https://auth:9443"
 	_, err = loadConfig(func(name string) string { return values[name] })
 	require.ErrorContains(t, err, "must be configured together")

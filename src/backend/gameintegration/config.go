@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -33,6 +34,8 @@ type config struct {
 	MessagingWorkloadKey         []byte
 	MessagingPreviousWorkloadKey []byte
 	MessagingPreviousKeyUntil    time.Time
+	NotificationWorkloadKey      []byte
+	RealtimeWorkloadKey          []byte
 	PrincipalPrivateKeyFile      string
 	PrincipalKeyID               string
 	PrincipalNextPrivateKeyFile  string
@@ -59,6 +62,27 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	if c.ListenAddr == "" {
 		c.ListenAddr = ":8080"
+	}
+	for _, value := range []struct {
+		name string
+		raw  string
+		dst  *[]byte
+	}{
+		{"GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64", strings.TrimSpace(getenv("GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64")), &c.NotificationWorkloadKey},
+		{"GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64", strings.TrimSpace(getenv("GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64")), &c.RealtimeWorkloadKey},
+	} {
+		if value.raw == "" {
+			continue
+		}
+		key, err := decodeNotificationWorkloadKey(value.raw)
+		if err != nil {
+			return config{}, fmt.Errorf("invalid %s", value.name)
+		}
+		*value.dst = key
+	}
+	if len(c.NotificationWorkloadKey) == 32 && len(c.RealtimeWorkloadKey) == 32 &&
+		bytes.Equal(c.NotificationWorkloadKey, c.RealtimeWorkloadKey) {
+		return config{}, fmt.Errorf("notification and realtime workload keys must be distinct")
 	}
 	for _, required := range []struct {
 		name  string
@@ -235,6 +259,14 @@ func decodeMessagingWorkloadKey(encoded string) ([]byte, error) {
 	key, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil || len(key) != 32 {
 		return nil, fmt.Errorf("invalid GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64")
+	}
+	return key, nil
+}
+
+func decodeNotificationWorkloadKey(encoded string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(key) != 32 {
+		return nil, fmt.Errorf("invalid workload key")
 	}
 	return key, nil
 }

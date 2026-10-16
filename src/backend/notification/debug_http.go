@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,10 +11,14 @@ import (
 )
 
 func notificationHTTPHandler(serviceName string) http.Handler {
-	return notificationHTTPHandlerWithReadiness(serviceName, nil)
+	return notificationHTTPHandlerWithReadinessAndDebug(serviceName, nil, false)
 }
 
 func notificationHTTPHandlerWithReadiness(serviceName string, readiness *notificationConsumerReadiness) http.Handler {
+	return notificationHTTPHandlerWithReadinessAndDebug(serviceName, readiness, false)
+}
+
+func notificationHTTPHandlerWithReadinessAndDebug(serviceName string, readiness *notificationConsumerReadiness, debugRecorderEnabled bool) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		if !readiness.ready() {
@@ -24,7 +27,7 @@ func notificationHTTPHandlerWithReadiness(serviceName string, readiness *notific
 		}
 		healthHandler(serviceName).ServeHTTP(w, r)
 	})
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true") {
+	if debugRecorderEnabled {
 		mux.HandleFunc("/debug/recorded-pushes", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet {
 				w.WriteHeader(http.StatusMethodNotAllowed)
