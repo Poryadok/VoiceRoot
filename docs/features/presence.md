@@ -25,6 +25,9 @@ Contact Profile (§14.25 screen-controls) отображает уже отфил
 `game_title` как «Играет в {Game}» в H/V. Realtime и клиент передают только
 viewer-specific snapshot; отсутствие поля в новом snapshot удаляет предыдущую
 активность. Смена активной сессии/профиля не переносит видимость старого viewer.
+Смена или очистка `game_title` публикует существующий `user.presence_changed`
+fan-out даже при неизменном online status, чтобы открытый Contact Profile получил
+обновлённый viewer-filtered snapshot.
 Это проекция существующего presence API, а не desktop process detector:
 автоопределение процессов остаётся отдельным post-MVP пунктом `todo/client.md`.
 
