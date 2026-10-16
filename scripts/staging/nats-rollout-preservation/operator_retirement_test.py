@@ -1270,11 +1270,19 @@ class PendingAbandonmentTests(unittest.TestCase):
             st=build.lstat()
             fingerprint={'device':st.st_dev,'inode':st.st_ino,'mode':stat.S_IMODE(st.st_mode),
                 'uid':st.st_uid,'gid':st.st_gid,'bytes':st.st_size,'mtime_ns':st.st_mtime_ns,'ctime_ns':st.st_ctime_ns}
+            original_mode=stat.S_IMODE(st.st_mode)
             pins.update(operation_state='PREBUILD_ONLY',build_present=True,build_fingerprint=fingerprint)
             fixture[5]['inventory_sha256']=retirement.canonical(fixture[5]['entries'])
             self.assertEqual(self.check(fixture,installed_root=installed)['name'],name)
             (build/'changed').write_text('preserved source build state',encoding='utf-8')
-            with self.assertRaises(Blocked):self.check(fixture,installed_root=installed)
+            # A child write does not necessarily change directory timestamps on
+            # the fixture filesystem. Also mutate a field held in the exact
+            # directory fingerprint so this identity-drift assertion is stable.
+            build.chmod(original_mode ^ stat.S_IXUSR)
+            try:
+                with self.assertRaises(Blocked):self.check(fixture,installed_root=installed)
+            finally:
+                build.chmod(original_mode)
 
     def test_absent_checkpoint_disposition_rejects_a_checkpoint_that_appears(self):
         import tempfile

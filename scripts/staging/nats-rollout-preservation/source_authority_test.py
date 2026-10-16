@@ -18,6 +18,14 @@ TREE = 'b' * 40
 
 
 class SourceTests(unittest.TestCase):
+    def test_closed_image_authority_matches_catalog_including_gameintegration(self):
+        catalog=json.loads((SOURCE/'scripts/ci/staging-image-catalog.json').read_text())
+        names={row['name'] for row in catalog['images']}
+        self.assertIn('gameintegration',names)
+        self.assertEqual(names|{'nats-hub-config-renderer'},module.IMAGE_NAMES)
+        with self.assertRaises(module.SourceError):
+            module._resolve_image('not-a-catalog-image',SHA,1)
+
     def test_api_pagination_keeps_full_item_limit_with_small_pages(self):
         requests = []
 

@@ -380,7 +380,7 @@ expect_regex 'docs/microservices/voice-service.md' 'Redis.*(projection|прое�
 expect_regex 'docs/microservices/voice-service.md' '(source-disabled|не зарегистрирован|not registered|оста[её]тся выключен)' F12
 expect_regex 'docs/DATA_STORES.md' 'Voice Service[[:space:]]*\|[[:space:]]*`voice_db`' F12
 expect_regex 'docs/DATA_STORES.md' '\*\*17\*\*.*PostgreSQL' F12
-expect_regex 'docs/DATA_STORES.md' '\*\*16\*\*.*(provision|созда|разв[её]р)' F12
+expect_regex 'docs/DATA_STORES.md' '\*\*17\*\*.*(provision|созда|разв[её]р)' F12
 expect_fixed 'src/backend/migrations/README.md' 'voice_db' F12
 expect_fixed 'src/backend/migrations/README.md' 'compose-migrate-voice' F12
 expect_fixed 'src/backend/migrations/README.md' 'compose-db-init' F12
