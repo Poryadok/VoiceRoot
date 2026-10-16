@@ -29,28 +29,33 @@ class _LateHeadersClient extends http.BaseClient {
 }
 
 void main() {
-  test('header timeout aborts transport and cancels late response', () async {
-    final transport = _LateHeadersClient();
-    final client = GatewayHttpClient(
-      httpClient: transport,
-      config: const GatewayConfig(baseUrl: 'https://api.example'),
-    );
-    final result = client.getBytes(
-      uri: Uri.parse('https://storage.example/signed'),
-      maxBytes: 100,
-    );
-    // Future.timeout uses a real timer here; advancing a widget test's fake
-    // clock leaves the request pending and makes this test hang.
-    await Future<void>.delayed(const Duration(seconds: 31));
-    expect(await result, isA<GatewayHttpFailure>());
-    expect(transport.aborted, isTrue);
-    var cancelled = false;
-    final body = StreamController<List<int>>(onCancel: () => cancelled = true);
-    transport.headers.complete(http.StreamedResponse(body.stream, 200));
-    await Future<void>.delayed(Duration.zero);
-    expect(cancelled, isTrue);
-    await body.close();
-  });
+  test(
+    'header timeout aborts transport and cancels late response',
+    () async {
+      final transport = _LateHeadersClient();
+      final client = GatewayHttpClient(
+        httpClient: transport,
+        config: const GatewayConfig(baseUrl: 'https://api.example'),
+      );
+      final result = client.getBytes(
+        uri: Uri.parse('https://storage.example/signed'),
+        maxBytes: 100,
+      );
+      // Exercise Future.timeout's real 30-second header deadline.
+      await Future<void>.delayed(const Duration(seconds: 31));
+      expect(await result, isA<GatewayHttpFailure>());
+      expect(transport.aborted, isTrue);
+      var cancelled = false;
+      final body = StreamController<List<int>>(
+        onCancel: () => cancelled = true,
+      );
+      transport.headers.complete(http.StreamedResponse(body.stream, 200));
+      await Future<void>.delayed(Duration.zero);
+      expect(cancelled, isTrue);
+      await body.close();
+    },
+    timeout: Timeout(const Duration(seconds: 45)),
+  );
   GatewayHttpClient gateway(http.StreamedResponse Function() response) =>
       GatewayHttpClient(
         httpClient: _StreamingClient(response),
