@@ -197,7 +197,7 @@ services:
       VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
       VOICE_SPACE_LIFECYCLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
       VOICE_SPACE_LIFECYCLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}'
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
       VOICE_ROLE_GRPC_ADDR: role:9091
       VOICE_ROLE_TLS_CA_FILE: /run/phase0/ca.crt

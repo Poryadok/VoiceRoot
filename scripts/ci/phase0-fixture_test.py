@@ -1479,6 +1479,14 @@ class ComposeTests(unittest.TestCase):
         command[-3:-3] = ["-f", MEDIA_OVERLAY]
         combined = json.loads(require_success(run(*command, env=self.env)))["services"]
         voice = combined["voice"]["environment"]
+        self.assertEqual(json.loads(voice["S2S_JWKS_URLS_JSON"]), {
+            "gateway": "https://phase0-jwks:8443/gateway-bootstrap/jwks.json",
+            "space": "https://phase0-jwks:8443/space/jwks.json",
+        })
+        matchmaking = combined["matchmaking"]["environment"]
+        self.assertEqual(json.loads(matchmaking["S2S_JWKS_URLS_JSON"]), {
+            "space": "https://phase0-jwks:8443/space/jwks.json",
+        })
         listeners = [voice[name] for name in (
             "VOICE_GAME_PRINCIPAL_GRPC_LISTEN", "VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN",
             "VOICE_USER_PRINCIPAL_GRPC_LISTEN")]
