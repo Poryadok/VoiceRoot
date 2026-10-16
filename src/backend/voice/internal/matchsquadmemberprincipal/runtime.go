@@ -118,10 +118,9 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		_ = runtime.Close()
 		return nil, errors.New("voice MatchSquad member Redis unavailable")
 	}
-	if err := resolver.Refresh(startup, issuer); err != nil {
-		_ = runtime.Close()
-		return nil, errors.New("voice delegated user JWKS unavailable")
-	}
+	// Gateway waits for this listener before serving its JWKS endpoint. Start
+	// with an empty cache; Verify resolves and validates a trusted key before
+	// any protected request can pass principal verification.
 	refreshCtx, stop := context.WithCancel(ctx)
 	runtime.cancel = stop
 	go runtime.refreshLoop(refreshCtx)

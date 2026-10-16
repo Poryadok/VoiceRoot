@@ -791,6 +791,26 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(record["first_error"]["startup_detail"], "jwks_tls_verification_failed")
         self.assertNotIn(secret, json.dumps(record))
 
+    def test_t31_voice_match_squad_member_startup_details_are_allowlisted_and_redacted(self):
+        secret = "private-redis-password-or-jwks-url"
+        cases = {
+            "voice MatchSquad member TLS identity unavailable": "voice_match_squad_member_tls_identity_unavailable",
+            "voice MatchSquad member client CA unavailable": "voice_match_squad_member_client_ca_unavailable",
+            "voice MatchSquad member client CA is invalid": "voice_match_squad_member_client_ca_invalid",
+            "system CA roots unavailable for delegated user JWKS": "voice_match_squad_member_jwks_system_trust_unavailable",
+            "voice MatchSquad member JWKS CA is invalid": "voice_match_squad_member_jwks_ca_invalid",
+            "voice MatchSquad member Redis unavailable": "voice_match_squad_member_redis_unavailable",
+            "voice delegated user JWKS unavailable": "voice_match_squad_member_jwks_refresh_unavailable",
+        }
+        for message, expected in cases.items():
+            with self.subTest(expected=expected):
+                raw = ("voice-1 | voice MatchSquad member principal runtime: " + message + " " + secret + "\n").encode()
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+                self.assertEqual(summary["lines_read"], 1)
+                self.assertEqual(first["startup_category"], "voice_match_squad_member_principal_runtime")
+                self.assertEqual(first["startup_detail"], expected)
+                self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
+
     def test_media_voice_waits_for_verified_public_match_squad_jwks(self):
         readiness = self.media_merged["phase0-matchmaking-jwks-readiness"]
         self.assertEqual(readiness["image"], "node:24-alpine")

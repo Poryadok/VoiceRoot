@@ -108,6 +108,13 @@ VOICE_STARTUP_PREFIXES = (
     ("Space media invalidation consumer startup:", "space_media_invalidation_consumer_startup"),
 )
 VOICE_STARTUP_DETAILS = (
+    ("voice MatchSquad member TLS identity unavailable", "voice_match_squad_member_tls_identity_unavailable"),
+    ("voice MatchSquad member client CA unavailable", "voice_match_squad_member_client_ca_unavailable"),
+    ("voice MatchSquad member client CA is invalid", "voice_match_squad_member_client_ca_invalid"),
+    ("system CA roots unavailable for delegated user JWKS", "voice_match_squad_member_jwks_system_trust_unavailable"),
+    ("voice MatchSquad member JWKS CA is invalid", "voice_match_squad_member_jwks_ca_invalid"),
+    ("voice MatchSquad member Redis unavailable", "voice_match_squad_member_redis_unavailable"),
+    ("voice delegated user JWKS unavailable", "voice_match_squad_member_jwks_refresh_unavailable"),
     ("voice MatchSquad TLS certificate/key unavailable", "voice_match_squad_tls_server_identity"),
     ("voice MatchSquad client CA unavailable", "voice_match_squad_tls_client_ca_unavailable"),
     ("voice MatchSquad client CA is invalid", "voice_match_squad_tls_client_ca_invalid"),
