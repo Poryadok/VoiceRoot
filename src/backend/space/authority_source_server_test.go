@@ -32,6 +32,17 @@ func TestSpaceAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	require.NoError(t, err)
 	_, err = database.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, space.ID, member)
 	require.NoError(t, err)
+	chatID := uuid.New()
+	_, err = reader.UpsertTreeNode(ctx, store.UpsertTreeNodeInput{
+		SpaceID: space.ID, ActorProfileID: owner, Kind: store.TreeKindTextChat, ChatID: &chatID,
+	})
+	require.NoError(t, err)
+	var auditBefore, outboxBefore, matchingOutboxBefore int
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='tree_node_upserted'`, space.ID).Scan(&auditBefore))
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, space.ID).Scan(&outboxBefore))
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox o JOIN audit_log a ON a.id=o.audit_event_id WHERE a.space_id=$1 AND a.action='tree_node_upserted'`, space.ID).Scan(&matchingOutboxBefore))
+	require.Equal(t, 1, auditBefore, "rollback refusal must be exercised with real tree audit evidence")
+	require.Equal(t, auditBefore, matchingOutboxBefore, "tree audit row must have its transactional outbox row")
 	f := integrationtest.NewSourceTLSFixture(t, authorityv1.AuthorityOwner_AUTHORITY_OWNER_SPACE)
 	_, err = database.Pool.Exec(ctx, `UPDATE schema_migrations SET dirty=true`)
 	require.NoError(t, err)
@@ -78,4 +89,11 @@ func TestSpaceAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	var retained int
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=$2`, space.ID, owner).Scan(&retained))
 	require.Equal(t, 1, retained, "refused rollback must preserve ordinary owner state")
+	var auditAfter, outboxAfter, matchingOutbox int
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='tree_node_upserted'`, space.ID).Scan(&auditAfter))
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, space.ID).Scan(&outboxAfter))
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox o JOIN audit_log a ON a.id=o.audit_event_id WHERE a.space_id=$1 AND a.action='tree_node_upserted'`, space.ID).Scan(&matchingOutbox))
+	require.Equal(t, auditBefore, auditAfter, "refused downgrade must retain tree audit rows")
+	require.Equal(t, outboxBefore, outboxAfter, "refused downgrade must retain outbox rows")
+	require.Equal(t, auditAfter, matchingOutbox, "retained tree audit rows must have matching outbox evidence")
 }
