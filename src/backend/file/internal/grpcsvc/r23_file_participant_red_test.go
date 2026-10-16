@@ -913,7 +913,7 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	ctx := r23TestContext(t)
 	pool := startR23FilePostgres(t, ctx)
 	wantTables := []string{
-		"file_access_capabilities", "file_blobs", "file_reference_gc_receipts", "file_reference_operations", "file_references",
+		"file_access_capabilities", "file_blobs", "file_music_event_outbox", "file_reference_gc_receipts", "file_reference_operations", "file_references",
 		"file_space_deletion_manifest_chunks", "file_space_deletion_manifests", "file_space_deletion_producer_releases",
 		"file_space_lifecycle_fences", "file_space_purge_receipts",
 	}
@@ -927,7 +927,7 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	}
 	tableRows.Close()
 	require.NoError(t, tableRows.Err())
-	require.Equal(t, wantTables, gotTables, "schema fingerprint includes chunk, exact producer-release, purge-receipt and GC ownership tables")
+	require.Equal(t, wantTables, gotTables, "schema fingerprint includes the music outbox and all lifecycle, purge-receipt and GC ownership tables")
 
 	wantColumns := []string{
 		"file_access_capabilities.allowed_surfaces", "file_access_capabilities.capability_id", "file_access_capabilities.created_at", "file_access_capabilities.expires_at", "file_access_capabilities.file_id", "file_access_capabilities.issue_operation_id", "file_access_capabilities.owner_id", "file_access_capabilities.owner_type", "file_access_capabilities.request_bytes", "file_access_capabilities.request_sha256", "file_access_capabilities.scope_space_id", "file_access_capabilities.subject_profile_id", "file_access_capabilities.subresource_id",

@@ -319,6 +319,10 @@ jobs:
           name: music-controls-${{ github.run_id }}
           path: ${{ runner.temp }}/music-capture/*.png
           if-no-files-found: error
+      - name: Install FFmpeg for Music probe fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
       - name: Verify Music codecs and E2E local playback in Chrome
         timeout-minutes: 10
         run: timeout 540s bash scripts/ci/music-playback-web.sh
