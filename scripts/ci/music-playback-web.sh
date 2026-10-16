@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+node --test "$ROOT/scripts/ci/music-module-ready.test.mjs"
 command -v ffmpeg >/dev/null || { echo 'Music fixture setup requires ffmpeg' >&2; exit 1; }
 cd "$ROOT/src/frontend"
 flutter build web --release --no-pub --no-web-resources-cdn --target tool/music_playback_probe.dart

@@ -162,5 +162,5 @@ func TestEncryptedMusicNeverCallsServerExtractor(t *testing.T) {
 	require.Empty(t, confirmed.GetFileMetadata().GetMusicTitle())
 	require.Empty(t, confirmed.GetFileMetadata().GetMusicArtist())
 	require.Empty(t, confirmed.GetFileMetadata().GetMusicAlbum())
-	require.False(t, confirmed.GetFileMetadata().HasDurationSeconds())
+	require.Nil(t, confirmed.GetFileMetadata().DurationSeconds)
 }

@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'music_format.dart';
+import 'music_module_ready.dart'
+    if (dart.library.js_interop) 'music_module_ready_web.dart';
 
 final musicPlaybackFactoryProvider = Provider<MusicPlayback Function()>(
   (ref) => PullMusicPlayback.new,
@@ -85,7 +87,7 @@ class PullMusicPlayback extends MusicPlayback {
       throw const FormatException('music_load_cancelled');
     _active = this;
     final generation = ++_generation;
-    _initializing ??= _audio.init();
+    _initializing ??= musicModuleReady().then((_) => _audio.init());
     try {
       await _initializing!.timeout(const Duration(seconds: 10));
     } catch (_) {

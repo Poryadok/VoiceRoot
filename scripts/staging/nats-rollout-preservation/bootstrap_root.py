@@ -51,8 +51,8 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
     from nats_contract_plan import digest
     previous_enrollment=private_read(root/'bootstrap-enrollment.json')
     if previous_enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v1':fail()
-    from nats_root_plan import _V3_AUTH_KEYS
-    if set(previous_enrollment.get('auth_proof',{}))!=_V3_AUTH_KEYS:fail()
+    from nats_root_plan import _LEGACY_AUTH_KEYS,_V3_AUTH_KEYS
+    if set(previous_enrollment.get('auth_proof',{})) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS):fail()
     previous_name=select(kube,previous_enrollment,GENERATION)
     previous_secret=kube.get('secret',previous_name)
     marker=kube.get('configmap','voice-nats-generation')

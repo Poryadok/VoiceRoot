@@ -141,8 +141,15 @@ class CompositionTests(unittest.TestCase):
                     reached.append(value);op=args[2];operation=base/('rollout-'+op);operation.mkdir()
                     return {'operation':op,'target':value['target']}
                 actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding={}
+                from nats_contract_plan import digest
+                prior={'fixture':'prior-enrollment'}
+                for filename,record in (
+                    ('bootstrap-enrollment.json',prior),
+                    ('bootstrap-enrollment-v4.json',{'schema':'voice-nats-bootstrap-enrollment-v4','previous_enrollment':prior,'previous_enrollment_sha256':digest(prior)}),
+                ):
+                    path=base/filename;path.write_text(json.dumps(record));path.chmod(0o600)
                 execution={'dispatcher_run_id':123,'head_sha':p['tag']}
-                with patch.object(bridge_root,'INSTALLED',installed),patch.object(bridge_root.guard,'ROOT',base),patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(123,execution)),patch.object(bridge_root.source_authority,'capture_source',capture_source),patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})),patch.object(bridge_root.RolloutStage,'capture',return_value=stage),patch('commands.capture',side_effect=capture),patch.object(compiler,'capture',side_effect=capture),patch.object(renderer_root,'prove',side_effect=renderer_proof),patch.object(actor_root,'preflight',return_value=None),patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value),patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state):
+                with patch.object(bridge_root,'INSTALLED',installed),patch.object(bridge_root.guard,'ROOT',base),patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(123,execution)),patch.object(bridge_root.source_authority,'capture_source',capture_source),patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})),patch.object(bridge_root.RolloutStage,'capture',return_value=stage),patch('commands.capture',side_effect=capture),patch.object(compiler,'capture',side_effect=capture),patch.object(renderer_root,'prove',side_effect=renderer_proof),patch.object(actor_root,'preflight',return_value=None),patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}),patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value),patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state):
                     result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
                 self.assertEqual(result['target']['mode'],mode);self.assertEqual(len(reached[0]['nonnats']['checks']),16)
                 self.assertEqual(any(key.startswith(bridge_root.HUB+'/') for key in result['target']['images']),mode=='full')

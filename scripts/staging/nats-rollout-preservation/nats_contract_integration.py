@@ -143,8 +143,9 @@ def inner(base):
     guard.ROOT=base/'root-custody';guard.ROOT.mkdir(mode=0o700)
     bootstrap_auth.ACCOUNT_SHA=account_sha
     from controller import Blocked
+    from nats_contract_plan import ContractError
     try:bootstrap_auth.prove(old.encode(),operator,lambda:None)
-    except Blocked:pass
+    except (Blocked,ContractError):pass
     else:raise RuntimeError('old_bootstrap_unexpectedly_authorizes_music_consumer')
     auth=bootstrap_auth.prove(renewed,operator,lambda:None)
     assert auth['verified'] and auth['reply_prefix']=='_INBOX.voice.bootstrap.reply'

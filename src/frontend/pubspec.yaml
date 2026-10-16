@@ -72,7 +72,7 @@ dependencies:
   image_picker: ^1.1.2
   video_player: ^2.9.5
   # Music uses only bounded pull decoding; never loadFile/loadMem native fallback.
-  flutter_soloud: 5.2.1
+  flutter_soloud: 4.1.7
 
 dev_dependencies:
   flutter_test:

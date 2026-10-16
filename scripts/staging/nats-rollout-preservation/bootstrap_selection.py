@@ -21,9 +21,10 @@ def select(kube,receipt,generation):
             or receipt.get('binding',{}).get('previous_enrollment_sha256')!=digest(previous)):fail()
         select(kube,previous,generation)
         # Local import avoids a module-initialization cycle; the same exact
-        # old-three/new-four normalization rule governs enrollment and capture.
-        from nats_root_plan import _validated_normalized_consumers,_V3_AUTH_KEYS
-        if set(previous.get('auth_proof',{}))!=_V3_AUTH_KEYS:fail()
+        # prior-one/prior-three to new-four rule governs enrollment and capture.
+        # A later proof never rewrites a historical single-row enrollment.
+        from nats_root_plan import _validated_normalized_consumers,_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS
+        if set(previous.get('auth_proof',{})) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS):fail()
         _validated_normalized_consumers(receipt['auth_proof'],previous['auth_proof'])
         for key in ('generation','marker_uid','old_secret','operator_secret','actor_sha256','account_sha256'):
             if receipt['binding'].get(key)!=previous['binding'].get(key):fail()

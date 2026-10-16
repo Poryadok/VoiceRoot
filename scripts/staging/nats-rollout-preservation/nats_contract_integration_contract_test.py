@@ -1,7 +1,7 @@
 import unittest
 
 from nats_contract_integration import fixture_bootstrap_grants
-from nats_contract_plan import DECLARATIONS
+from nats_contract_plan import V3_DECLARATIONS as DECLARATIONS
 
 
 class Tests(unittest.TestCase):

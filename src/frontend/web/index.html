@@ -49,7 +49,15 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <!-- Install the audio module readiness promise before Flutter can start. -->
-  <script src="assets/packages/flutter_soloud/web/init_soloud.js"></script>
+  <script src="assets/packages/flutter_soloud/web/libflutter_soloud_plugin.js"></script>
+  <script>
+    // The pinned package exports a factory, then expects its resolved instance.
+    // Keep initialization failure observable to Music without logging raw errors.
+    globalThis.voiceMusicReady = Promise.resolve().then(() => Module_soloud()).then(module => {
+      globalThis.Module_soloud = module;
+    });
+    globalThis.voiceMusicReady.catch(() => {});
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
