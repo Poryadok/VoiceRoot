@@ -143,6 +143,7 @@ class FixtureTests(unittest.TestCase):
                          {"ca.crt", "gameintegration-client-ca.crt", "space-lifecycle-client-ca.crt"},
                          "CA signing key must not survive issuance")
         for leaf, hostname in (("role", "role"), ("auth", "auth"), ("proxy", PROXY),
+                               ("matchmaking-complete-grpc", "matchmaking"),
                                ("gameintegration-jwks", "gameintegration"),
                                 ("voice-jwks", "voice"), ("chat-gis-grpc", "chat"),
                                 ("voice-game-grpc", "voice"),
@@ -373,6 +374,8 @@ sys.exit(code)
                   self.dest / "tls/voice-match-squad-member-grpc.key",
                  self.dest / "tls/matchmaking-client.crt",
                  self.dest / "tls/matchmaking-client.key",
+                 self.dest / "tls/matchmaking-complete-grpc.crt",
+                 self.dest / "tls/matchmaking-complete-grpc.key",
                  self.dest / "ca/ca.crt"]
         if os.geteuid() != 0:
             require_binary("sudo")
@@ -467,6 +470,30 @@ class ComposeTests(unittest.TestCase):
                          "ca/ca.crt")
         self.assertIn(str(self.merged["matchmaking"].get("user")), ("0", "0:0", "root"),
                       "the base Phase0 overlay retains its established root fixture access")
+
+    def test_matchmaking_complete_match_uses_gateway_principal_and_scoped_mtls(self):
+        gateway = self.merged["gateway"]
+        matchmaking = self.merged["matchmaking"]
+        gateway_env = gateway["environment"]
+        matchmaking_env = matchmaking["environment"]
+        self.assertEqual(gateway_env["GATEWAY_MATCHMAKING_COMPLETE_GRPC_ADDR"], "matchmaking:9092")
+        self.assertEqual(gateway_env["GATEWAY_MATCHMAKING_COMPLETE_TLS_SERVER_NAME"], "matchmaking")
+        for key, leaf in (("GATEWAY_MATCHMAKING_COMPLETE_TLS_CA_FILE", "ca/ca.crt"),
+                          ("GATEWAY_MATCHMAKING_COMPLETE_CLIENT_CERT_FILE", "tls/gateway-client.crt"),
+                          ("GATEWAY_MATCHMAKING_COMPLETE_CLIENT_KEY_FILE", "tls/gateway-client.key")):
+            self.assertEqual(self.source_at("gateway", gateway_env[key]), leaf)
+        self.assertEqual(json.loads(matchmaking_env["S2S_JWKS_URLS_JSON"])["gateway"],
+                         "https://phase0-jwks:8443/gateway/jwks.json")
+        self.assertEqual(json.loads(matchmaking_env["S2S_JWKS_URLS_JSON"])["space"],
+                         "https://space:8443/.well-known/jwks.json")
+        self.assertEqual(self.source_at("matchmaking", matchmaking_env["S2S_JWKS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(self.source_at("matchmaking", matchmaking_env["MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE"]),
+                         "ca/ca.crt")
+        self.assertEqual(self.source_at("matchmaking", matchmaking_env["MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE"]),
+                         "tls/matchmaking-complete-grpc.crt")
+        self.assertEqual(self.source_at("matchmaking", matchmaking_env["MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE"]),
+                         "tls/matchmaking-complete-grpc.key")
+        self.assertEqual(matchmaking["depends_on"]["phase0-jwks"]["condition"], "service_started")
 
     def test_media_compose_uses_protected_match_squad_provider_fixture(self):
         matchmaking = self.media_merged["matchmaking"]
