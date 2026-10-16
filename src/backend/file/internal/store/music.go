@@ -15,7 +15,7 @@ func (s *FilesStore) markUnavailableWithMusicEvent(ctx context.Context, id uuid.
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	row, err := getFileByID(ctx, tx, id, "FOR UPDATE")
 	if err != nil {
 		return err
@@ -51,14 +51,14 @@ func (s *FilesStore) markUnavailableWithMusicEvent(ctx context.Context, id uuid.
 	return tx.Commit(ctx)
 }
 
-// Metadata and its processing event commit together. No clock value serves as
+// ApplyAudioProcessing commits metadata and its processing event together. No clock value serves as
 // a revision; retries consume the same durable snapshot.
 func (s *FilesStore) ApplyAudioProcessing(ctx context.Context, id uuid.UUID, title, artist, album string, duration int32) (FileRow, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return FileRow{}, err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	tag, err := tx.Exec(ctx, `UPDATE files SET status='ready',music_title=NULLIF($2,''),music_artist=NULLIF($3,''),music_album=NULLIF($4,''),duration_seconds=$5,music_metadata_revision=music_metadata_revision+1,updated_at=now()
 WHERE id=$1 AND status='processing' AND upload_intent='music' AND file_type='audio' AND NOT is_e2e AND scan_result IN ('clean','skipped') AND size_bytes<=10485760`, id, title, artist, album, duration)
 	if err != nil {
@@ -100,7 +100,7 @@ func (s *FilesStore) DispatchMusicEvent(ctx context.Context, publish func(contex
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	var id uuid.UUID
 	var payload []byte
 	err = tx.QueryRow(ctx, `SELECT event_id,payload FROM file_music_event_outbox WHERE published_at IS NULL ORDER BY file_id,metadata_revision FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id, &payload)

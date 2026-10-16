@@ -39,7 +39,7 @@ func NewMusicProcessed(fileID, chatID string, revision uint64, size int64, scan 
 	return env, nil
 }
 
-// Tombstones carry no extracted tags. Their durable revision prevents a delayed
+// NewMusicTombstone carries no extracted tags. Its durable revision prevents a delayed
 // ready snapshot from restoring metadata after this event has been consumed.
 func NewMusicTombstone(fileID, chatID string, revision uint64, status string) (*eventsv1.FileStreamEvent, error) {
 	invalid := errors.New("invalid music tombstone authority")

@@ -171,8 +171,9 @@ void main() {
                     200,
                   );
                 }
-                if (req.url.path.endsWith('/pending/cancel'))
+                if (req.url.path.endsWith('/pending/cancel')) {
                   return pending.future;
+                }
                 return http.Response('{}', 200);
               }),
             ),
@@ -216,8 +217,9 @@ void main() {
           await tester.pumpAndSettle();
           expect(requestReads, reads);
           expect(find.text('Could not complete this action.'), findsNothing);
-          if (!failedSwitch)
+          if (!failedSwitch) {
             expect(find.text('No friend requests'), findsOneWidget);
+          }
         },
       );
     }

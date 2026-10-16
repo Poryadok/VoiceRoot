@@ -31,8 +31,9 @@ class _MusicAttachmentPlayerState extends State<MusicAttachmentPlayer> {
   void didUpdateWidget(MusicAttachmentPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.attachment.fileId != widget.attachment.fileId ||
-        oldWidget.attachment.e2eKeyWire != widget.attachment.e2eKeyWire)
+        oldWidget.attachment.e2eKeyWire != widget.attachment.e2eKeyWire) {
       _retire();
+    }
   }
 
   void _changed() {
@@ -85,8 +86,9 @@ class _MusicAttachmentPlayerState extends State<MusicAttachmentPlayer> {
     try {
       bytes = await widget.loadBytes();
       if (!mounted || generation != _generation) return;
-      if (!hasSupportedMusicSignature(bytes))
+      if (!hasSupportedMusicSignature(bytes)) {
         throw const FormatException('music_format_invalid');
+      }
       playback = widget.createPlayback()..addListener(_changed);
       _playback = playback;
       await playback.open(bytes);

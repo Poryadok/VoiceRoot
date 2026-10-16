@@ -47,8 +47,9 @@ bool hasSupportedMusicSignature(Uint8List bytes) {
                 0x38,
                 0x9b,
                 0x71,
-              ]))
+              ])) {
             return false;
+          }
           codec = view.getUint16(body + 24, Endian.little);
         }
         return (codec == 1 && const [8, 16, 24, 32].contains(bits)) ||

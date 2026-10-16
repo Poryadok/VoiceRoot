@@ -2392,8 +2392,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }) async {
     if (_textSendInFlight ||
         !identical(_pendingTextSend, attempt) ||
-        !_isCurrentTextSend(attempt))
+        !_isCurrentTextSend(attempt)) {
       return;
+    }
     final controller = ref.read(
       chatRoomControllerProvider(attempt.chatId).notifier,
     );
@@ -2415,7 +2416,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _pendingTextSendControllerGeneration = controller.immediateSendGeneration;
     }
     final err = await submission;
-    if (!_isCurrentTextSend(attempt)) return;
+    if (!mounted || !_isCurrentTextSend(attempt)) return;
     setState(() {
       _textSendInFlight = false;
       _textSendFailed =
@@ -2423,8 +2424,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           controller.canRetryFailedMessage &&
           _pendingTextSendControllerGeneration ==
               controller.immediateSendGeneration;
-      if (err == null || (err == kChatActionStaleContext && !_textSendFailed))
+      if (err == null || (err == kChatActionStaleContext && !_textSendFailed)) {
         _pendingTextSend = null;
+      }
     });
     if (err == kChatOfflineBlockedError) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2436,8 +2438,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (_composer.text == attempt.content) {
         _composer.clear();
         final key = attempt.draftKey;
-        if (key != null)
+        if (key != null) {
           unawaited(ref.read(chatDraftProvider(key).notifier).clear());
+        }
       }
       if (attempt.replyTarget != null &&
           ref.read(chatReplyTargetProvider(attempt.chatId))?.id ==
@@ -3267,8 +3270,9 @@ Future<ChatAttachmentFile?> _defaultPickChatAttachment({
   if (file == null) return null;
   if (music) {
     final length = await file.length();
-    if (length <= 0 || length > 10 * 1024 * 1024)
+    if (length <= 0 || length > 10 * 1024 * 1024) {
       throw const _MusicFileRejected();
+    }
   }
   final bytes = await file.readAsBytes();
   return ChatAttachmentFile(
@@ -3448,8 +3452,9 @@ class _AttachmentPreview extends ConsumerWidget {
         createPlayback: ref.watch(musicPlaybackFactoryProvider),
         loadBytes: () async {
           final auth = ref.read(authorizationHeaderProvider);
-          if (auth == null || !viewerIsCurrent())
+          if (auth == null || !viewerIsCurrent()) {
             throw const FormatException('music_access_missing');
+          }
           final files = ref.read(voiceFilesClientProvider);
           final metadata = await files.getFileMetadata(
             authorization: auth,

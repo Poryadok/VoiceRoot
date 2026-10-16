@@ -52,9 +52,9 @@ func (p Extractor) Extract(ctx context.Context, raw []byte) (Metadata, error) {
 	if err != nil {
 		return Metadata{}, ErrAudio
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	if _, err = f.Write(raw); err != nil {
-		f.Close()
+		_ = f.Close()
 		return Metadata{}, ErrAudio
 	}
 	if err = f.Close(); err != nil {

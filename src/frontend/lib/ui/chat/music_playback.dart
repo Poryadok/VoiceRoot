@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
@@ -70,21 +69,24 @@ class PullMusicPlayback extends MusicPlayback {
   static String? _tag(String? value) {
     if (value == null ||
         value.length > 1024 ||
-        RegExp(r'[\x00-\x1f\x7f]').hasMatch(value))
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)) {
       return null;
+    }
     final clean = value.trim();
     return clean.isEmpty ? null : clean;
   }
 
   @override
   Future<void> open(Uint8List bytes) async {
-    if (_closed || !hasSupportedMusicSignature(bytes))
+    if (_closed || !hasSupportedMusicSignature(bytes)) {
       throw const FormatException('music_format_invalid');
+    }
     final activation = ++_activation;
     final previous = _active;
     if (previous != null && previous != this) await previous.close();
-    if (_closed || activation != _activation)
+    if (_closed || activation != _activation) {
       throw const FormatException('music_load_cancelled');
+    }
     _active = this;
     final generation = ++_generation;
     _initializing ??= musicModuleReady().then((_) => _audio.init());
@@ -94,14 +96,16 @@ class PullMusicPlayback extends MusicPlayback {
       _initializing = null;
       rethrow;
     }
-    if (_closed || generation != _generation || _active != this)
+    if (_closed || generation != _generation || _active != this) {
       throw const FormatException('music_load_cancelled');
+    }
     _bytes = Uint8List.fromList(bytes);
     final ready = Completer<void>();
     void fail() {
       _failed = true;
-      if (!ready.isCompleted)
+      if (!ready.isCompleted) {
         ready.completeError(const FormatException('music_decode_failed'));
+      }
       unawaited(close());
     }
 
@@ -112,8 +116,9 @@ class PullMusicPlayback extends MusicPlayback {
         if (_closed ||
             generation != _generation ||
             input == null ||
-            source == null)
+            source == null) {
           return;
+        }
         if (offset < 0 || offset > input.length) {
           fail();
           return;
@@ -128,6 +133,8 @@ class PullMusicPlayback extends MusicPlayback {
           return;
         }
         try {
+          // Pinned 4.1.7 pull API; real hosted decoder coverage guards upgrades.
+          // ignore: experimental_member_use
           _audio.addPullBufferDataStream(
             source,
             Uint8List.sublistView(input, offset, end),
@@ -140,6 +147,8 @@ class PullMusicPlayback extends MusicPlayback {
     }
 
     try {
+      // Pinned pull API avoids the package file/native fallback path.
+      // ignore: experimental_member_use
       _source = _audio.setPullBufferStream(
         bufferSizeBytes: 4 * 1024 * 1024,
         audioSizeBytes: bytes.length,
@@ -186,8 +195,9 @@ class PullMusicPlayback extends MusicPlayback {
       _handle = _audio.play(_source!, paused: true);
       feed(0);
       await ready.future.timeout(const Duration(seconds: 10));
-      if (_closed || _active != this)
+      if (_closed || _active != this) {
         throw const FormatException('music_load_cancelled');
+      }
       resume();
       _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (_closed || _handle == null) return;
@@ -226,8 +236,9 @@ class PullMusicPlayback extends MusicPlayback {
     if (_closed ||
         _handle == null ||
         position < Duration.zero ||
-        position > _duration)
+        position > _duration) {
       return;
+    }
     _fed = 0;
     _audio.seek(_handle!, position);
     notifyListeners();

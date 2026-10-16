@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from contextlib import ExitStack
 from unittest.mock import patch
 import bridge_root
 import encrypted_cut
@@ -149,7 +150,21 @@ class CompositionTests(unittest.TestCase):
                 ):
                     path=base/filename;path.write_text(json.dumps(record));path.chmod(0o600)
                 execution={'dispatcher_run_id':123,'head_sha':p['tag']}
-                with patch.object(bridge_root,'INSTALLED',installed),patch.object(bridge_root.guard,'ROOT',base),patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(123,execution)),patch.object(bridge_root.source_authority,'capture_source',capture_source),patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})),patch.object(bridge_root.RolloutStage,'capture',return_value=stage),patch('commands.capture',side_effect=capture),patch.object(compiler,'capture',side_effect=capture),patch.object(renderer_root,'prove',side_effect=renderer_proof),patch.object(actor_root,'preflight',return_value=None),patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}),patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value),patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state):
+                with ExitStack() as patches:
+                    patches.enter_context(patch.object(bridge_root,'INSTALLED',installed))
+                    patches.enter_context(patch.object(bridge_root.guard,'ROOT',base))
+                    patches.enter_context(patch.object(actions,'_idle'))
+                    patches.enter_context(patch.object(actions,'_dispatcher',return_value=(123,execution)))
+                    patches.enter_context(patch.object(bridge_root.source_authority,'capture_source',capture_source))
+                    patches.enter_context(patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})))
+                    patches.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
+                    patches.enter_context(patch('commands.capture',side_effect=capture))
+                    patches.enter_context(patch.object(compiler,'capture',side_effect=capture))
+                    patches.enter_context(patch.object(renderer_root,'prove',side_effect=renderer_proof))
+                    patches.enter_context(patch.object(actor_root,'preflight',return_value=None))
+                    patches.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
+                    patches.enter_context(patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value))
+                    patches.enter_context(patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state))
                     result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
                     # Required v4 admission cannot be bypassed by a private
                     # but malformed JSON file. Stop before compilation/fencing.

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +10,6 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/ui/chat/music_attachment_player.dart';
 import 'package:voice_frontend/ui/chat/music_playback.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
-import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 
 class _Playback extends MusicPlayback {
