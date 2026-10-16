@@ -95,6 +95,10 @@ void main() {
             cancelled = true;
             return http.Response('{}', 200);
           }
+          if (req.url.path == '/api/v1/users/profiles/pending' ||
+              req.url.path == '/api/v1/users/profiles/declined') {
+            return http.Response('{"code":"NOT_FOUND"}', 404);
+          }
           return http.Response('{}', 200);
         }),
       ),
