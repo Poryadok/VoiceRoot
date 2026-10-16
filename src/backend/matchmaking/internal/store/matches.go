@@ -103,9 +103,14 @@ func (s *MatchStore) ListPendingDeadlineMatchIDs(ctx context.Context, limit int)
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id FROM matches
 		WHERE status = $1 AND created_at + ($2 * interval '1 millisecond') <= clock_timestamp()
+		  AND EXISTS (SELECT 1 FROM match_proposals p WHERE p.match_id = matches.id)
+		  AND NOT EXISTS (
+			SELECT 1 FROM match_proposals p
+			WHERE p.match_id = matches.id AND p.response <> $4
+		  )
 		ORDER BY created_at, id
 		LIMIT $3
-	`, MatchStatusPendingAccept, MatchAcceptWindow.Milliseconds(), limit)
+	`, MatchStatusPendingAccept, MatchAcceptWindow.Milliseconds(), limit, ProposalResponseAccepted)
 	if err != nil {
 		return nil, err
 	}
@@ -634,9 +639,9 @@ func (s *MatchStore) RecordAcceptance(ctx context.Context, matchID, profileID uu
 }
 
 var (
-	ErrMatchNotFound       = errors.New("match not found")
-	ErrProposalNotFound    = errors.New("match proposal not found")
-	ErrNotMatchParticipant = errors.New("not a match participant")
+	ErrMatchNotFound          = errors.New("match not found")
+	ErrProposalNotFound       = errors.New("match proposal not found")
+	ErrNotMatchParticipant    = errors.New("not a match participant")
 	ErrMatchOperationConflict = errors.New("match operation ID is bound to another request")
 )
 

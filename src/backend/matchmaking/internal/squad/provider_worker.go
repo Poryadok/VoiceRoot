@@ -110,6 +110,21 @@ func (w *MatchSquadProviderWorker) RunProvisioningOnce(ctx context.Context, limi
 		}
 		completed++
 	}
+	// A process can die after the final proposal response commits and before
+	// Provision() persists its immutable provider intent. Recover those matches
+	// through the same idempotent entry point once the operation scan is done.
+	missingIntent, err := w.Store.ListAcceptedMatchesMissingProvisioningIntent(ctx, limit)
+	if err != nil {
+		failures = append(failures, fmt.Errorf("list accepted matches without provisioning intent: %w", err))
+	} else {
+		for _, match := range missingIntent {
+			if _, err := w.ProvisionAndActivate(ctx, match.ID, match.ProfileIDs()); err != nil {
+				failures = append(failures, fmt.Errorf("recover accepted match %s provisioning: %w", match.ID, err))
+				continue
+			}
+			completed++
+		}
+	}
 	return completed, errors.Join(failures...)
 }
 

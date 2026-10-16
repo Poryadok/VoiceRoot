@@ -226,6 +226,47 @@ func TestRespondToMatch_AcceptAllActivatesMatch(t *testing.T) {
 	require.True(t, got.GetServerNow().IsValid())
 }
 
+func TestProvisioningWorkerRecoversAcceptedMatchWithoutIntent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchIDText, profileA, profileB := seedPendingDuoMatch(t, ctx, srv)
+	matchID, err := uuid.Parse(matchIDText)
+	require.NoError(t, err)
+	for _, profileID := range []uuid.UUID{profileA, profileB} {
+		_, err := srv.Matches.SetProposalResponse(ctx, matchID, profileID, store.ProposalResponseAccepted)
+		require.NoError(t, err)
+	}
+
+	worker := newTestProtectedProvisioner(t, pool)
+	completed, err := worker.RunProvisioningOnce(ctx, 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, completed)
+	match, err := srv.Matches.Get(ctx, matchID)
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusActive, match.Status)
+	require.NotNil(t, match.ChatID)
+	require.NotNil(t, match.VoiceRoomID)
+	var operations int
+	var operationState string
+	var chatReceipt, voiceReceipt []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state, chat_receipt_bytes, voice_receipt_bytes FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID).Scan(&operationState, &chatReceipt, &voiceReceipt))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID).Scan(&operations))
+	require.Equal(t, 1, operations)
+	require.Equal(t, "active", operationState)
+	require.NotEmpty(t, chatReceipt, "chat receipt must be durable before activation")
+	require.NotEmpty(t, voiceReceipt, "voice receipt must be durable before activation")
+
+	completed, err = worker.RunProvisioningOnce(ctx, 100)
+	require.NoError(t, err)
+	require.Zero(t, completed)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID).Scan(&operations))
+	require.Equal(t, 1, operations, "replay must reuse the persisted intent")
+}
+
 func TestGetMatch_AtDeadlineReturnsServerRecoveryState(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

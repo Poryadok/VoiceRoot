@@ -81,6 +81,43 @@ func TestMatchStore_CreateProposalPersistsMatchAndProposals(t *testing.T) {
 	require.Equal(t, result.Match.ID, *updatedA.MatchID)
 }
 
+func TestListPendingDeadlineMatchIDsSkipsFullyAcceptedRowsBeforeLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	games := &GameStore{Pool: pool}
+	page, err := games.List(ctx, ListGamesParams{PageSize: 1, Status: StatusActive})
+	require.NoError(t, err)
+	require.NotEmpty(t, page.Games)
+	sessions := &SessionStore{Pool: pool}
+	matches := &MatchStore{Pool: pool}
+	create := func() CreateProposalResult {
+		profileA, profileB := uuid.New(), uuid.New()
+		a, err := sessions.Create(ctx, CreateSessionParams{ProfileID: profileA, GameID: page.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(time.Hour)})
+		require.NoError(t, err)
+		b, err := sessions.Create(ctx, CreateSessionParams{ProfileID: profileB, GameID: page.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(time.Hour)})
+		require.NoError(t, err)
+		result, err := matches.CreateProposal(ctx, CreateProposalParams{GameID: page.Games[0].ID, Mode: "Duo", Region: "eu", Sessions: []ProposalSession{{SessionID: a.ID, ProfileID: profileA}, {SessionID: b.ID, ProfileID: profileB}}})
+		require.NoError(t, err)
+		return result
+	}
+	accepted := create()
+	for _, profileID := range accepted.Match.ProfileIDs() {
+		_, err := matches.SetProposalResponse(ctx, accepted.Match.ID, profileID, ProposalResponseAccepted)
+		require.NoError(t, err)
+	}
+	pending := create()
+	_, err = pool.Exec(ctx, `UPDATE matches SET created_at=clock_timestamp()-interval '1 minute' WHERE id IN ($1,$2)`, accepted.Match.ID, pending.Match.ID)
+	require.NoError(t, err)
+
+	ids, err := matches.ListPendingDeadlineMatchIDs(ctx, 1)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pending.Match.ID}, ids)
+}
+
 func TestMatchStore_DeclineRecoveryEffectsRemainDurableUntilProjectionSucceeds(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

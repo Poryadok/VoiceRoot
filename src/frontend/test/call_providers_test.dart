@@ -311,6 +311,29 @@ void main() {
       final notifier = container.read(callControllerProvider.notifier);
       await notifier.joinGroupVoice(roomId: 'squad-room', matchId: 'match-id');
       expect(container.read(callControllerProvider).phase, CallPhase.active);
+      final priorSession = container.read(authControllerProvider).session!;
+      container.read(authControllerProvider.notifier).state = container
+          .read(authControllerProvider)
+          .copyWith(
+            session: AuthSession(
+              accessToken: 'rotated-access',
+              refreshToken: 'rotated-refresh',
+              accountId: priorSession.accountId,
+              activeProfileId: priorSession.activeProfileId,
+              expiresInSeconds: 900,
+              accountType: priorSession.accountType,
+            ),
+          );
+      final versionBeforeRefreshCallback = container
+          .read(callControllerProvider)
+          .mediaTracksVersion;
+      room.onTracksChanged?.call();
+      expect(
+        container.read(callControllerProvider).mediaTracksVersion,
+        versionBeforeRefreshCallback + 1,
+        reason:
+            'the persistent LiveKit callback remains valid after token rotation',
+      );
       await notifier.setMuted(true);
       await notifier.setVideoEnabled(true);
       expect(room.lastSetMuted, isTrue);

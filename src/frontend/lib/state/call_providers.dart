@@ -786,7 +786,6 @@ class CallController extends StateNotifier<CallState> {
         room.onTracksChanged = () {
           if (!mounted ||
               !_isConnectCurrent(connectGeneration, connectRoomId) ||
-              _ref.read(authorizationHeaderProvider) != auth ||
               state.session?.matchId != session.matchId ||
               state.session?.mediaEpoch != session.mediaEpoch) {
             return;

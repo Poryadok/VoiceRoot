@@ -514,6 +514,44 @@ void main() {
   );
 
   test(
+    'same-profile token refresh preserves the pending match overlay',
+    () async {
+      final client = MockClient(
+        (_) async => _matchResponse(id: 'match-1', deadline: true),
+      );
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(
+        matchmakingMatchControllerProvider.notifier,
+      );
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
+      final pending = container.read(matchmakingMatchControllerProvider).match;
+      final current = container.read(authControllerProvider).session!;
+      container.read(authControllerProvider.notifier).state = AuthState(
+        session: AuthSession(
+          accessToken: 'refreshed-access',
+          refreshToken: 'refreshed-refresh',
+          accountId: current.accountId,
+          activeProfileId: current.activeProfileId,
+          expiresInSeconds: 900,
+          accountType: current.accountType,
+        ),
+      );
+
+      expect(
+        container.read(matchmakingMatchControllerProvider).match,
+        same(pending),
+      );
+    },
+  );
+
+  test(
     'late accepted response is ignored after the auth session changes',
     () async {
       final respondStarted = Completer<void>();

@@ -116,7 +116,7 @@ func TestMatchSquadProvisionCompensationSealsChatOnlyWorkAndNeverCompletesMatch(
 	`, aggregateID, uuid.New())
 	require.Error(t, err, "provisioning compensation cannot publish a match-completed event")
 
-	downRecovery, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_durable_recovery.down.sql"))
+	downRecovery, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db", "000018_match_squad_durable_recovery.down.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(downRecovery))
 	require.Error(t, err, "rollback must retain a sealed compensation provider set")
@@ -272,7 +272,7 @@ func rollbackMatchSquadDurableRecoveryForStoreTest(t *testing.T, ctx context.Con
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }) {
 	t.Helper()
-	down, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_durable_recovery.down.sql"))
+	down, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db", "000018_match_squad_durable_recovery.down.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(down))
 	require.NoError(t, err, "the empty 000017 recovery extension rolls back before testing 000016")
@@ -299,7 +299,7 @@ func TestMatchSquadLifecycleDownRefusesToDropProvisioningEvidence(t *testing.T) 
 	rollbackMatchSquadDurableRecoveryForStoreTest(t, ctx, pool)
 
 	root := repoRoot(t)
-	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_lifecycle.down.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(down))
 	require.Error(t, err, "rollback must preserve admitted provisioning IDs and receipts")
@@ -367,7 +367,7 @@ func TestMatchSquadLifecycleDownRefusesConcurrentWriterWithoutAbortingConnection
 	require.NoError(t, err)
 
 	root := repoRoot(t)
-	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_lifecycle.down.sql"))
 	require.NoError(t, err)
 	downConn, err := pool.Acquire(ctx)
 	require.NoError(t, err)
@@ -398,7 +398,7 @@ func TestMatchSquadLifecycleDownLateLockRefusalReleasesEarlierLocks(t *testing.T
 	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
 	rollbackMatchSquadDurableRecoveryForStoreTest(t, ctx, pool)
 	root := repoRoot(t)
-	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_lifecycle.down.sql"))
 	require.NoError(t, err)
 
 	writer, err := pool.Acquire(ctx)
@@ -446,7 +446,7 @@ func TestMatchSquadLifecycleDownAtomicRollbackAndEmptySuccess(t *testing.T) {
 	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
 	rollbackMatchSquadDurableRecoveryForStoreTest(t, ctx, pool)
 	root := repoRoot(t)
-	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_lifecycle.down.sql"))
 	require.NoError(t, err)
 
 	// A dependent view forces a late DDL failure after the DO has executed its

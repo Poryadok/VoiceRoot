@@ -53,7 +53,7 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
     _authSub = ref.listen<AuthState>(authControllerProvider, (previous, next) {
       final prior = previous?.session ?? _lastAuthSession;
       _lastAuthSession = next.session;
-      if (prior == next.session) return;
+      if (_sameAuthPrincipal(prior, next.session)) return;
       _authGeneration++;
       _contextGeneration++;
       _operationGeneration++;
@@ -71,6 +71,14 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
       _authSub?.close();
     });
     return const PendingMatchState();
+  }
+
+  bool _sameAuthPrincipal(AuthSession? a, AuthSession? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    return a.accountId == b.accountId &&
+        a.activeProfileId == b.activeProfileId &&
+        a.accountType == b.accountType;
   }
 
   void onPushNotificationData(Map<String, dynamic>? data) {

@@ -52,6 +52,7 @@ bool matchesMatchSquadLocalIdentity(
 ) {
   final expected = _matchSquadIdentity(profileId, mediaEpoch);
   return expected != null && sdkIdentity == expected;
+}
 
 final RegExp _spaceMediaParticipantIdentity = RegExp(
   r'^profile:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):media:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$',
@@ -271,7 +272,7 @@ class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
     // by muting non-commander remotes while broadcast is active (spec: client ducking).
     final muteOthers = enabled && duckedVolume < 1.0;
     final commanderProfileId =
-        commanderIdentity != null && _isCanonicalProfileUuid(commanderIdentity)
+        commanderIdentity != null && _isCanonicalNonzeroUuid(commanderIdentity)
         ? commanderIdentity
         : null;
     for (final participant in _room.remoteParticipants.values) {
@@ -435,7 +436,7 @@ class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
     String? participantIdentity,
   }) {
     if (participantIdentity != null &&
-        !_isCanonicalProfileUuid(participantIdentity)) {
+        !_isCanonicalNonzeroUuid(participantIdentity)) {
       return const [];
     }
     final tracks = <livekit.RemoteVideoTrack>[];
