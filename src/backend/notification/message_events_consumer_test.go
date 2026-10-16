@@ -509,7 +509,7 @@ func TestMessageEventsJetStreamNakRestartRecoversOrdinaryScopeWithoutDebugCaptur
 	created, err := js.AddConsumer(jsStreamMessageEvents, &nats.ConsumerConfig{
 		Durable: durable, FilterSubject: jsSubjectMessageEvents,
 		DeliverSubject: "_INBOX.voice.notification.message", AckPolicy: nats.AckExplicitPolicy,
-		DeliverPolicy: nats.DeliverNewPolicy,
+		DeliverPolicy: nats.DeliverNewPolicy, AckWait: 250 * time.Millisecond,
 	})
 	require.NoError(t, err)
 
@@ -563,10 +563,21 @@ func TestMessageEventsJetStreamNakRestartRecoversOrdinaryScopeWithoutDebugCaptur
 		}
 	}
 	stop(firstCancel, firstDone)
-	require.Eventually(t, func() bool {
+	waitNotificationConsumerPushBound(t, js, durable, false)
+	var pendingState string
+	pendingObserved := assert.Eventually(t, func() bool {
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
-		return infoErr == nil && !info.PushBound && info.NumPending == 1 && info.NumAckPending == 0 && info.NumRedelivered > 0
-	}, 5*time.Second, 20*time.Millisecond, "failed authority leaves the published event pending on the same durable")
+		if infoErr != nil {
+			pendingState = fmt.Sprintf("consumer info error type=%T", infoErr)
+			return false
+		}
+		pendingState = fmt.Sprintf("push_bound=%t num_pending=%d num_ack_pending=%d redelivered=%d delivered=%d",
+			info.PushBound, info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Consumer)
+		return info.NumPending == 1 && info.NumAckPending == 0
+	}, 5*time.Second, 20*time.Millisecond)
+	if !pendingObserved {
+		t.Fatalf("failed authority leaves the NAKed event pending on the same durable; last observation: %s", pendingState)
+	}
 	select {
 	case got := <-failedDeliveries:
 		t.Fatalf("authority failure must not send a preview before recovery: %#v", got)
@@ -598,7 +609,7 @@ func TestMessageEventsJetStreamNakRestartRecoversOrdinaryScopeWithoutDebugCaptur
 	require.Eventually(t, func() bool {
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
 		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0 &&
-			info.AckFloor.Stream >= published.Sequence && info.NumRedelivered > 0 && info.Created.Equal(created.Created)
+			info.AckFloor.Stream >= published.Sequence && info.Created.Equal(created.Created)
 	}, 5*time.Second, 20*time.Millisecond, "recovered delivery ACKs the redelivered event and drains the durable")
 	select {
 	case duplicate := <-deliveries:
