@@ -76,7 +76,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 "$ROOT/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
+PHASE0_MATCHSQUAD_FIXTURE_UID=65532 python3 "$ROOT/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
 printf 'PHASE0_FIXTURE_DIR=%s\n' "$phase0_fixture_dir" >"$compose_env"
 export PHASE0_FIXTURE_DIR="$phase0_fixture_dir"
 

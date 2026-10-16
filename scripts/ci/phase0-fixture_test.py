@@ -517,6 +517,36 @@ class ComposeTests(unittest.TestCase):
                     return source.relative_to(self.fixture).as_posix()
         self.fail(f"{service} config path has no Phase0 fixture mount: {target}")
 
+    def test_all_media_overlay_fixture_producers_enable_nonroot_material(self):
+        wrappers = (
+            "scripts/ci/compose-a1-flutter-profile-handoff.sh",
+            "scripts/ci/compose-a1-multi-account-proof.sh",
+            "scripts/ci/compose-file-attachment-restart-proof.sh",
+        )
+        for relative in wrappers:
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn("docker-compose.voice-space-media.yml", source, relative)
+            self.assertRegex(
+                source,
+                r"PHASE0_MATCHSQUAD_FIXTURE_UID=65532\s+python3 .*generate-phase0-fixture\.py",
+                relative,
+            )
+
+        workflows = (
+            (".github/workflows/ci.yml", "compose-e2e", "Generate disposable media principal and TLS fixture"),
+            (".github/workflows/t31-session-events-e2e.yml", "compose-https-claim-inbox-ack",
+             "Generate isolated Phase0 and HTTPS certificates"),
+        )
+        for relative, job, name in workflows:
+            workflow = yaml.safe_load((ROOT / relative).read_text(encoding="utf-8"))
+            producer = next(step for step in workflow["jobs"][job]["steps"]
+                            if step.get("name") == name)
+            self.assertEqual(producer.get("env", {}).get("PHASE0_MATCHSQUAD_FIXTURE_UID"), "65532",
+                             f"{relative}:{job}:{name}")
+
+        self.assertIn("docker-compose.voice-space-media.yml",
+                      (ROOT / "scripts/ci/t31-session-event-compose-bootstrap.py").read_text(encoding="utf-8"))
+
     def test_delivery_ack_has_authoritative_messaging_reader(self):
         for name, services in (("base", self.base), ("phase0", self.merged),
                                ("media", self.media_merged)):

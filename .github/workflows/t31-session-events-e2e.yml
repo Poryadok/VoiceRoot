@@ -69,6 +69,8 @@ jobs:
 
       - name: Generate isolated Phase0 and HTTPS certificates
         shell: bash
+        env:
+          PHASE0_MATCHSQUAD_FIXTURE_UID: "65532"
         run: |
           set -euo pipefail
           mkdir -p tmp/phase0-t31-ci-fixture tmp/t31-session-event-e2e/tls tmp/t31-session-event-e2e/state
