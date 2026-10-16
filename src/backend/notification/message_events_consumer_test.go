@@ -563,7 +563,7 @@ func TestMessageEventsJetStreamNakRestartRecoversOrdinaryScopeWithoutDebugCaptur
 		}
 	}
 	stop(firstCancel, firstDone)
-	waitNotificationConsumerPushBound(t, js, durable, false)
+	waitNotificationConsumerPushBound(t, js, jsStreamMessageEvents, durable, false)
 	var pendingState string
 	pendingObserved := assert.Eventually(t, func() bool {
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
