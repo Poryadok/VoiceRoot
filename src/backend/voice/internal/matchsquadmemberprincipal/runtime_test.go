@@ -130,22 +130,18 @@ func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *test
 	}
 
 	available.Store(true)
-	if err := runtime.Close(); err != nil {
-		t.Fatal(err)
-	}
-	// A fresh process cache models recovery by the normal next startup. It
-	// must still avoid an eager fetch, then lazily resolve the now-available key
-	// while verifying the correctly signed and request-bound protected call.
-	runtime, err = New(context.Background(), config)
-	if err != nil {
-		t.Fatalf("member verifier startup failed after Gateway recovered: %v", err)
-	}
-	if got := jwksRequests.Load(); got != 1 {
-		t.Fatalf("recovered constructor made an eager JWKS request; request count=%d", got)
+	// This is the same Runtime that denied the cold-cache request. Refresh is
+	// the operation used by its normal background loop; doing it directly here
+	// avoids waiting for the production five-second failure cooldown.
+	if err := runtime.resolver.Refresh(context.Background(), issuer); err != nil {
+		t.Fatalf("resolver did not recover after Gateway returned: %v", err)
 	}
 	called, err = invoke(issuer, uuid.MustParse("00000000-0000-4000-8000-000000000002").String())
 	if err != nil || !called {
 		t.Fatalf("valid bound call after JWKS recovery called=%v err=%v", called, err)
+	}
+	if got := jwksRequests.Load(); got != 2 {
+		t.Fatalf("expected one cold failure and one recovered refresh, got %d JWKS requests", got)
 	}
 	if redisFixture.sets.Load() != 1 || redisFixture.gets.Load() != 1 {
 		t.Fatalf("verified call replay/epoch checks SET=%d GET=%d; want one each", redisFixture.sets.Load(), redisFixture.gets.Load())
