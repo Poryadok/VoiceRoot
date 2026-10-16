@@ -558,7 +558,7 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
 			return nil, err
 		}
-		access, accessErr := s.resolveCanonicalVoiceRoomAccess(ctx, call.VoiceRoomID, profileID)
+		access, accessErr := s.resolveCanonicalVoiceRoomAccess(ctx, call.SpaceID, call.VoiceRoomID, profileID)
 		if accessErr != nil {
 			return nil, accessErr
 		}

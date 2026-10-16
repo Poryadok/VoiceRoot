@@ -129,7 +129,7 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 		return &matchmakingv1.RateMatchResponse{}, nil
 	}
 
-	err = s.Ratings.InsertMatchRating(ctx, store.InsertMatchRatingParams{
+	err = s.Ratings.RecordMatchRating(ctx, store.InsertMatchRatingParams{
 		MatchID:        matchID,
 		RaterProfileID: raterID,
 		RatedProfileID: ratedID,
@@ -142,11 +142,7 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 		return nil, status.Error(codes.InvalidArgument, "invalid stars")
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "insert rating: %v", err)
-	}
-
-	if _, err := s.Ratings.UpsertPlayerRating(ctx, ratedID, match.GameID, stars); err != nil {
-		return nil, status.Errorf(codes.Internal, "update aggregate: %v", err)
+		return nil, status.Errorf(codes.Internal, "persist rating: %v", err)
 	}
 
 	if s.Events != nil {

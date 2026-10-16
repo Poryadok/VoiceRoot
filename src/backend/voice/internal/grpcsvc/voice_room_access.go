@@ -19,7 +19,7 @@ type CanonicalVoiceRoomAccess struct {
 }
 
 type AuthoritativeVoiceRoomAccessResolver interface {
-	ResolveVoiceRoomAccess(context.Context, string, string) (CanonicalVoiceRoomAccess, error)
+	ResolveVoiceRoomAccess(context.Context, string, string, string) (CanonicalVoiceRoomAccess, error)
 }
 
 type CanonicalVoiceRoomGrants struct {
@@ -33,11 +33,11 @@ type SpaceVoiceRoomGrantResolver interface {
 	ResolveVoiceRoomGrants(context.Context, string, string, string) (CanonicalVoiceRoomGrants, error)
 }
 
-func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
+func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, expectedSpaceID, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
 	if s == nil || s.VoiceRoomAccessResolver == nil {
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.FailedPrecondition, "canonical voice room resolver not configured")
 	}
-	access, err := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(ctx, voiceRoomID, profileID)
+	access, err := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(ctx, expectedSpaceID, voiceRoomID, profileID)
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound, codes.Unavailable:
@@ -50,6 +50,9 @@ func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, voiceRo
 	}
 	if _, err := uuid.Parse(access.SpaceID); err != nil {
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.PermissionDenied, "canonical voice room access denied")
+	}
+	if access.SpaceID != expectedSpaceID {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.PermissionDenied, "canonical voice room space does not match expected Space")
 	}
 	if s.SpaceLifecycle == nil {
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space lifecycle admission unavailable")

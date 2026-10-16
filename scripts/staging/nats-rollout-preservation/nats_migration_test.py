@@ -1,4 +1,4 @@
-import copy,tempfile,unittest,tarfile,io,json,hashlib,os
+import copy,tempfile,unittest,tarfile,io,json,hashlib,os,stat
 from pathlib import Path
 from unittest.mock import Mock,patch
 import nats_migration as module
@@ -51,8 +51,38 @@ class SelectedStoreTests(unittest.TestCase):
                 self.assertEqual(runtime.new_stores,set());runtime.run.assert_not_called()
 
 class Tests(unittest.TestCase):
+    def test_retry_recovers_only_each_issued_closed_consumer_create(self):
+        from nats_contract_plan import DECLARATIONS
+        from nats_migration import recovered_consumer_create_actions
+        plan=plan_tests.Tests().plan()
+        actions=[a for a in plan['actions'] if a['api'].startswith('$JS.API.CONSUMER.CREATE.')]
+        self.assertEqual(len(actions),len(DECLARATIONS))
+        action=actions[1];attempt='owned-broker-2';started='2026-10-12T12:00:00+00:00'
+        events=[{'kind':'nats_contract_broker_opened','container_id':attempt,'server_image':module.NATS_IMAGE,'started_at':started},
+            {'kind':'nats_contract_mutation_issued','object':action['object'],'api':action['api'],
+                'target_sha256':action['normalized_config_sha256'],'migration_attempt':attempt},
+            {'kind':'nats_contract_broker_closed','container_id':attempt,'server_image':module.NATS_IMAGE,
+                'started_at':started,'finished_at':'2026-10-12T12:00:01+00:00'}]
+        pair=tuple(action['object'].split('/',1));current={pair:{'config_sha256':action['normalized_config_sha256']}}
+        self.assertEqual(recovered_consumer_create_actions(plan,current,events),[action])
+        with self.assertRaisesRegex(Blocked,'creation_unowned'):
+            recovered_consumer_create_actions(plan,current,events[:1])
+        current[pair]['config_sha256']='0'*64
+        with self.assertRaisesRegex(Blocked,'config_drift'):
+            recovered_consumer_create_actions(plan,current,events)
+
+    def test_fresh_selected_guard_rejection_precedes_mount_enrollment_and_start(self):
+        state,runtime,stage,actor,manifest,census=self.fixture()
+        def reject():raise Blocked('fixture_selected_inventory_or_deadline_drift')
+        with tempfile.TemporaryDirectory() as td,patch.object(module,'DockerRuntime',return_value=runtime),\
+             patch.object(module,'verify_post_apply',return_value={'verified':True}):
+            with self.assertRaisesRegex(Blocked,'selected_inventory_or_deadline_drift'):
+                module.apply_contract(Path(td),state,stage,state['events'].append,before_selected_start=reject)
+        runtime.allow_bound_store.assert_not_called();runtime.start_broker.assert_not_called()
+        self.assertEqual(actor.calls,[])
+
     def test_issued_update_without_post_info_retains_exact_prior_attempt_evidence(self):
-        state,*_=self.fixture();action=state['nats_contract']['actions'][0];obj=action['object']
+        state,*_=self.fixture();action=next(a for a in state['nats_contract']['actions'] if a['object']=='role_events');obj=action['object']
         attempt={'container_id':'prior-owned-broker','server_image':module.NATS_IMAGE,'started_at':'2026-10-06T12:00:00+00:00'}
         state['events']=[{'kind':'nats_contract_broker_opened',**attempt},
             {'kind':'nats_contract_mutation_issued','object':obj,'api':action['api'],'target_sha256':digest(action['after']),'migration_attempt':attempt['container_id']},
@@ -65,7 +95,11 @@ class Tests(unittest.TestCase):
                 member=tarfile.TarInfo(name);member.size=len(raw);tar.addfile(member,io.BytesIO(raw))
             os.chmod(archive,0o600);real_fstat=module.os.fstat
             def custody(fd):
-                result=real_fstat(fd);return type('Stat',(),{'st_mode':result.st_mode,'st_uid':0,'st_nlink':result.st_nlink})()
+                result=real_fstat(fd);return type('Stat',(),{'st_mode':stat.S_IFREG|0o600,'st_uid':0,'st_nlink':result.st_nlink})()
+            complete=state['events'];state['events']=complete[:-1]
+            with patch.object(module.os,'fstat',side_effect=custody),self.assertRaisesRegex(Blocked,'attempt_incomplete'):
+                module.stream_updates(state,archive,manifest)
+            state['events']=complete
             with patch.object(module.os,'fstat',side_effect=custody):result=module.stream_updates(state,archive,manifest)
         self.assertEqual(result[obj]['target_config_sha256'],digest(action['after']))
         self.assertEqual(result[obj]['native_created'],'2026-10-06T12:00:01Z')
@@ -111,6 +145,7 @@ class Tests(unittest.TestCase):
         expected_actions=[
             '$JS.API.STREAM.UPDATE.chat_events',
             '$JS.API.STREAM.UPDATE.social_events',
+            '$JS.API.STREAM.UPDATE.role_events',
             '$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed',
             '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
             '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',

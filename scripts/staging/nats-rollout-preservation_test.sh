@@ -93,17 +93,18 @@ state={'namespace':{'metadata':{'uid':uid('d')}},'configmap':{'metadata':{'uid':
  'deployment':{'spec':{'replicas':0,'template':{'spec':{'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':claim}}]}}}}}
 Path(os.environ['TEST_STATE']).write_text(json.dumps(state))
 sha=lambda b:hashlib.sha256(b).hexdigest()
-scripts=[]
+scripts=[];source_hashes={'deploy/nats/acl-intent.yaml':sha((source/'deploy/nats/acl-intent.yaml').read_bytes())}
 for part in ('realtime','notification','search','analytics-chat'):
     file=source/'deploy/templates'/('nats-'+part+'-bootstrap.yaml');file.parent.mkdir(parents=True,exist_ok=True)
-    file.write_text('apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: voice-nats-'+part+'-bootstrap\n')
+    file.write_text('apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: voice-nats-'+part+'-bootstrap\ndata:\n  bootstrap.sh: |\n    SAFE_FIXTURE\n')
+    source_hashes[file.relative_to(source).as_posix()]=sha(file.read_bytes())
     scripts.append({'part':part,'sha256':sha(b'SAFE_FIXTURE\n')})
 (source/'scripts/staging/nats-known-baseline/deployed-contract.json').write_text(json.dumps({'scripts':scripts}))
 receipt={'schema':'nats-rollout-preservation-v1','operation':'1a2b3c4d5e6f','namespace_uid':uid('d'),
  'marker':{'uid':uid('a'),'resourceVersion':'100',**{k:data[k] for k in ('generation','previousGeneration','dataPVC')}},
  'pvc':{'name':claim,'uid':uid('b'),'pv_name':'pvc-'+uid('b')},'pv':{'uid':uid('c'),'kind':'local','path':pvpath,'node':'pmdebook'},
  'target':{'registry':'ghcr.io/voiceroot/voiceroot','tag':'next-version','mode':os.environ['DEPLOY_MODE'],'changed_services':[],
- 'source_hashes':{'deploy/nats/acl-intent.yaml':sha((source/'deploy/nats/acl-intent.yaml').read_bytes())},
+ 'source_hashes':source_hashes,
  'template_hashes':{'voice-gateway':sha(json.dumps(template,sort_keys=True,separators=(',',':')).encode())},'input_template_hashes':{'voice-gateway':sha(json.dumps(template,sort_keys=True,separators=(',',':')).encode())},'images':{'voice-gateway/gateway':image},'manifest_sha256':sha(raw),'nonnats_sha256':'4'*64,'migration_sha256':sha(b'[]')},
  'backup':{'archive_sha256':'1'*64,'manifest_sha256':'2'*64,'census_sha256':'3'*64,'off_node_verified':True},
  'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat()}

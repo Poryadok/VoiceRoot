@@ -37,7 +37,7 @@ type InvalidationConsumer struct {
 
 func StartInvalidationConsumer(ctx context.Context, natsURL string, coordinator *Coordinator, logger *slog.Logger) (*InvalidationConsumer, error) {
 	if ctx == nil || coordinator == nil || natsURL == "" {
-		return nil, fmt.Errorf("Space media invalidation consumer is not configured")
+		return nil, fmt.Errorf("space media invalidation consumer is not configured")
 	}
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-space-media-invalidations"),

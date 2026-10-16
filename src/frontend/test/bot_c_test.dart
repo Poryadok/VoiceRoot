@@ -469,11 +469,14 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
 
     expect(
-      find.text('bot unavailable'),
+      find.text(
+        AppLocalizations.of(tester.element(gameField))!.backendUnavailable,
+      ),
       findsOneWidget,
       reason:
-          'BotsApiFailure from autocomplete must surface to the user (BOT-C)',
+          'Autocomplete failure must surface as localized outage feedback (BOT-C, CL-009)',
     );
+    expect(find.text('bot unavailable'), findsNothing);
   });
 
   testWidgets('privileged bot install requires explicit acknowledgment (BOT-C)', (

@@ -137,7 +137,7 @@ func main() {
 			return spaceLifecycleStore.CheckSchema(ctx)
 		}
 	}
-	if gamePrincipalEnabled != roleGrantEnabled {
+	if gamePrincipalEnabled && !roleGrantEnabled {
 		log.Fatal("Voice managed game-session admission requires both GIS provisioning and Role grant checker configuration")
 	}
 	if (roleGrantEnabled || userPrincipalEnabled) && !principalJWKSEnabled {
@@ -153,7 +153,7 @@ func main() {
 		}
 	}
 	var userPrincipalRuntime *voiceuserprincipalruntime.Runtime
-	var sessionEpochChecker grpcsvc.CurrentSessionEpochChecker
+	var sessionEpochChecker *sessionfloor.Client
 	if userPrincipalEnabled {
 		epochClient, epochConn, clientErr := authFloorConfig.Dial(voiceIssuer)
 		if clientErr != nil {
@@ -186,6 +186,7 @@ func main() {
 	var gameProvisionListener net.Listener
 	var managedGameSessionRooms grpcsvc.ManagedGameSessionRoomLookup
 	var managedGameSessionGrants grpcsvc.ManagedGameSessionGrantChecker
+	var voiceRoomGrantResolver s2s.VoiceRoomGrantResolver
 	var conversionAdmission grpcsvc.SdkConversionAdmissionGuard
 	var accountVoiceFences gameprovision.AccountVoiceFenceStore = gameprovision.UnavailableAccountVoiceFenceStore{}
 	var accountVoiceProfiles grpcsvc.AccountVoiceProfileResolver
@@ -195,7 +196,10 @@ func main() {
 			log.Fatalf("voice Role grant checker: %v", clientErr)
 		}
 		defer func() { _ = roleConn.Close() }()
-		managedGameSessionGrants = checker
+		voiceRoomGrantResolver = checker
+		if gamePrincipalEnabled {
+			managedGameSessionGrants = checker
+		}
 	}
 	if gamePrincipalEnabled {
 		gamePrincipalRuntime, err = gameprincipal.New(runCtx, gamePrincipalConfig)
@@ -306,7 +310,6 @@ func main() {
 	var voiceRoomAccessResolver grpcsvc.AuthoritativeVoiceRoomAccessResolver
 	var spacePro grpcsvc.SpaceProLookup
 	var rolePerms grpcsvc.RolePermissionChecker
-	var voiceRoomGrantResolver s2s.VoiceRoomGrantResolver
 	if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 		uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
@@ -352,7 +355,6 @@ func main() {
 		defer func() { _ = rconn.Close() }()
 		roleClient := rolev1.NewRoleServiceClient(rconn)
 		rolePerms = s2s.NewGRPCRolePermissions(roleClient)
-		voiceRoomGrantResolver = s2s.NewGRPCVoiceRoomGrantResolver(roleClient)
 	}
 
 	tokenTTL := time.Hour

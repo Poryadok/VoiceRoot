@@ -65,15 +65,16 @@ grep -Fq 'a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}' "$WORKFLOW" ||
 awk '/^a1_t106_live:[[:space:]]*$/ { inside = 1; next } inside && /^[^[:space:]][^:]*:/ { exit } inside { print }' "$FILTERS" >"$filter_block_file"
 [[ -s "$filter_block_file" ]] || fail "path-filters.yml must define a1_t106_live"
 sed -E -e 's/\r$//' -e 's/^[[:space:]]*-[[:space:]]*//' -e "s/^['\"]//; s/['\"][[:space:]]*$//" -e 's/[[:space:]]+#.*$//' "$filter_block_file" >"$filter_entries_file"
-[[ "$(grep -cve '^[[:space:]]*$' "$filter_entries_file")" -eq 1 ]] || fail "a1_t106_live must contain exactly one T106 test path"
+[[ "$(grep -cve '^[[:space:]]*$' "$filter_entries_file")" -eq 2 ]] || fail "a1_t106_live must contain exactly the T055 and T106 test paths"
+grep -Fxq 'src/frontend/test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart' "$filter_entries_file" || \
+  fail "a1_t106_live must match the T055 live test path"
 grep -Fxq 'src/frontend/test/t106_account_soft_delete_e2e_live_test.dart' "$filter_entries_file" || \
   fail "a1_t106_live must match the T106 live test path"
 
 job_block ci-gate >"$gate_file"
 [[ -s "$gate_file" ]] || fail "missing ci-gate workflow block"
-if grep -Fq "$JOB" "$gate_file"; then
-  fail "${JOB} must not become a ci-gate dependency"
-fi
+grep -Fq "      - $JOB" "$gate_file" || fail "${JOB} must be a ci-gate dependency"
+grep -Fq 'JOB_A1_FLUTTER_PROFILE_HANDOFF:' "$gate_file" || fail "ci-gate must receive A1 Flutter result"
 
 awk '/^a1_e2e:[[:space:]]*$/ { inside = 1; next } inside && /^[^[:space:]][^:]*:/ { exit } inside { print }' "$FILTERS" >"$filter_block_file"
 [[ -s "$filter_block_file" ]] || fail "path-filters.yml must define a1_e2e"

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
@@ -38,6 +39,32 @@ void main() {
     );
 
     expect(_messageCreateEventExposesDeletedPeerMarker(frame), isTrue);
+  });
+
+  test('T106 reload recorder separates automatic and explicit reads', () async {
+    final recorder = _RecordingHttpClient(
+      MockClient((_) async => http.Response('{}', 200)),
+    );
+    final uri = Uri.parse('http://localhost/api/v1/messages?chat_id=room');
+    final firstReload = Object();
+    final secondReload = Object();
+    await recorder.get(uri);
+    await runZoned(() async {
+      await recorder.get(uri);
+      await recorder.get(uri);
+      await recorder.get(
+        uri.replace(queryParameters: {'chat_id': 'other-room'}),
+      );
+    }, zoneValues: {_explicitReloadZoneKey: firstReload});
+    await runZoned(
+      () => recorder.get(uri),
+      zoneValues: {_explicitReloadZoneKey: secondReload},
+    );
+    expect(recorder.messageGetCountFor('room'), 4);
+    expect(recorder.explicitReloadCountFor('room', firstReload), 2);
+    expect(recorder.explicitReloadCountFor('room', secondReload), 1);
+    expect(recorder.explicitReloadCountFor('other-room', firstReload), 1);
+    expect(recorder.explicitReloadCountFor('room', Object()), 0);
   });
 
   testWidgets('T106 live binding permits native loopback HTTP', (tester) async {
@@ -239,9 +266,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 500));
         expect(deletionEvents, hasLength(1));
         expect(
-          messageCreateEvents.any(
-            _messageCreateEventExposesDeletedPeerMarker,
-          ),
+          messageCreateEvents.any(_messageCreateEventExposesDeletedPeerMarker),
           isFalse,
           reason:
               'a message_create event exposed the local deleted-peer marker text',
@@ -303,7 +328,11 @@ void main() {
         );
 
         for (var observation = 1; observation <= 2; observation++) {
-          await room.loadInitial();
+          final explicitReload = Object();
+          await runZoned(
+            room.loadInitial,
+            zoneValues: {_explicitReloadZoneKey: explicitReload},
+          );
           final afterDelete = container.read(chatRoomControllerProvider(dm.id));
           expect(afterDelete.isDmPeerDeleted, isTrue);
           expect(
@@ -319,7 +348,9 @@ void main() {
             )).map((m) => m.toJson()).toList(),
             baselineCache,
           );
-          expect(recorder.messageGetCountFor(dm.id), observation + 1);
+          // Live event/reconnect catch-up can also read this selected room.
+          // Each explicit observation must still perform exactly one REST GET.
+          expect(recorder.explicitReloadCountFor(dm.id, explicitReload), 1);
         }
       });
       await tester.pump();
@@ -373,10 +404,16 @@ class _RecordingHttpClient extends http.BaseClient {
 
   final http.Client _inner;
   final List<Uri> _messageGetUris = [];
+  final Map<Object, List<Uri>> _explicitReloadUris = {};
 
   int messageGetCountFor(String chatId) => _messageGetUris
       .where((uri) => uri.queryParameters['chat_id'] == chatId)
       .length;
+
+  int explicitReloadCountFor(String chatId, Object reload) =>
+      (_explicitReloadUris[reload] ?? const <Uri>[])
+          .where((uri) => uri.queryParameters['chat_id'] == chatId)
+          .length;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) {
@@ -385,6 +422,10 @@ class _RecordingHttpClient extends http.BaseClient {
         queryParameters: {...request.url.queryParameters, 'page_size': '1'},
       );
       _messageGetUris.add(uri);
+      final explicitReload = Zone.current[_explicitReloadZoneKey];
+      if (explicitReload != null) {
+        (_explicitReloadUris[explicitReload] ??= []).add(uri);
+      }
       final shapedRequest = http.Request('GET', uri)
         ..headers.addAll(request.headers)
         ..followRedirects = request.followRedirects
@@ -395,6 +436,8 @@ class _RecordingHttpClient extends http.BaseClient {
     return _inner.send(request);
   }
 }
+
+const _explicitReloadZoneKey = #t106ExplicitReload;
 
 class _T106LiveTestBinding extends AutomatedTestWidgetsFlutterBinding {
   @override

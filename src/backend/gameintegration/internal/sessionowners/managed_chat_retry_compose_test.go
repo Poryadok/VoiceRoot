@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -16,7 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/gameintegration/internal/registry"
@@ -51,6 +55,10 @@ func TestT30ComposeChatProvisionLostResponseRetriesRealReceipt(t *testing.T) {
 	chatConn, err := dialMTLS(config.ChatAddress, config.ChatCA, config.ChatClientCert, config.ChatClientKey)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = chatConn.Close() })
+	// NewClient is lazy. Establish the real mTLS transport as fixture setup,
+	// before the production adapter starts its unchanged two-second RPC budget.
+	// This sends no warmup mutation and does not retry an uncertain owner effect.
+	require.NoError(t, waitForComposeChatConnection(ctx, chatConn), "Chat owner transport must be ready before response-loss injection")
 	issuer := composeTestIssuer(t)
 	chatClient := &dropFirstProvisionResponse{
 		GameIntegrationChatServiceClient: chatv1.NewGameIntegrationChatServiceClient(chatConn),
@@ -70,10 +78,19 @@ func TestT30ComposeChatProvisionLostResponseRetriesRealReceipt(t *testing.T) {
 	_, err = orchestrator.AdvanceOne(ctx, accepted.OperationID)
 	require.Error(t, err, "the real Chat RPC committed before the test wrapper dropped its first successful response")
 	require.Len(t, chatClient.requests, 1)
+	require.Len(t, chatClient.responses, 1,
+		"the underlying Chat RPC must succeed before the wrapper injects response loss; actual gRPC status=%s, error=%v",
+		chatClient.firstRPCErrorCode, err)
+	require.Equal(t, codes.Unavailable, status.Code(err), "the test wrapper must return its simulated response-loss status")
 	firstRequest := chatClient.requests[0]
+	firstResponse := chatClient.responses[0]
+	require.NotEmpty(t, firstResponse.GetChatId())
+	require.Equal(t, firstRequest.GetOperationId(), firstResponse.GetReceiptId())
 	firstHash, err := principal.RequestHash(firstRequest)
 	require.NoError(t, err)
 	require.NotEmpty(t, firstHash)
+	require.Equal(t, firstHash, firstResponse.GetRequestHash())
+	require.False(t, firstResponse.GetReplayed())
 
 	chatID, chatReceiptID, chatRequestHash := assertCommittedChatReceipt(t, ctx, chatPool, applicationID, environmentID, externalKey, firstRequest.GetOperationId())
 	var mappingCount, mappingOperationCount, ownerReceiptCount, outboxCount int
@@ -139,16 +156,77 @@ func TestT30ComposeChatProvisionLostResponseRetriesRealReceipt(t *testing.T) {
 	t.Logf("T30 actual Chat receipt retry passed: session_id=%s chat_operation_id=%s chat_id=%s receipt_id=%s request_hash=%s gis_mapping_rows=%d chat_effect_rows=%d", accepted.SessionID, firstRequest.GetOperationId(), chatID, chatReceiptID, firstHash, mappingCount, 1)
 }
 
+func waitForComposeChatConnection(ctx context.Context, conn *grpc.ClientConn) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	conn.Connect()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.Shutdown {
+			return errors.New("Chat owner connection closed before becoming ready")
+		}
+		if !conn.WaitForStateChange(ctx, state) {
+			return ctx.Err()
+		}
+	}
+}
+
+func TestComposeChatConnectionReadiness(t *testing.T) {
+	t.Run("connects lazy transport without an application RPC", func(t *testing.T) {
+		listener := bufconn.Listen(1 << 20)
+		server := grpc.NewServer() // No application service or mutation is registered.
+		go func() { _ = server.Serve(listener) }()
+		t.Cleanup(func() { server.Stop(); _ = listener.Close() })
+		conn, err := grpc.NewClient("passthrough:///compose-chat-ready", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		require.Equal(t, connectivity.Idle, conn.GetState())
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		defer cancel()
+		require.NoError(t, waitForComposeChatConnection(ctx, conn))
+		require.Equal(t, connectivity.Ready, conn.GetState())
+	})
+	t.Run("unavailable transport stays bounded by fixture context", func(t *testing.T) {
+		conn, err := grpc.NewClient("passthrough:///compose-chat-unavailable", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return nil, errors.New("fixture transport unavailable")
+		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		defer cancel()
+		require.ErrorIs(t, waitForComposeChatConnection(ctx, conn), context.DeadlineExceeded)
+	})
+	t.Run("closed transport cannot pass readiness", func(t *testing.T) {
+		conn, err := grpc.NewClient("passthrough:///compose-chat-closed", grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		require.NoError(t, conn.Close())
+		require.ErrorContains(t, waitForComposeChatConnection(t.Context(), conn), "connection closed")
+	})
+}
+
 type dropFirstProvisionResponse struct {
 	chatv1.GameIntegrationChatServiceClient
-	requests  []*chatv1.ProvisionManagedChatRequest
-	responses []*chatv1.ProvisionManagedChatResponse
+	requests          []*chatv1.ProvisionManagedChatRequest
+	responses         []*chatv1.ProvisionManagedChatResponse
+	firstRPCErrorCode string
 }
 
 func (c *dropFirstProvisionResponse) ProvisionManagedChat(ctx context.Context, request *chatv1.ProvisionManagedChatRequest, options ...grpc.CallOption) (*chatv1.ProvisionManagedChatResponse, error) {
 	c.requests = append(c.requests, proto.Clone(request).(*chatv1.ProvisionManagedChatRequest))
 	response, err := c.GameIntegrationChatServiceClient.ProvisionManagedChat(ctx, request, options...)
 	if err != nil {
+		if len(c.requests) == 1 {
+			c.firstRPCErrorCode = status.Code(err).String()
+		}
 		return nil, err
 	}
 	c.responses = append(c.responses, proto.Clone(response).(*chatv1.ProvisionManagedChatResponse))

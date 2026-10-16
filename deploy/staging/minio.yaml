@@ -85,9 +85,17 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
       containers:
         - name: mc
           image: __VOICE_MINIO_MC_IMAGE__
+          imagePullPolicy: IfNotPresent
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
           args: ["mb", "--ignore-existing", "local/voice-staging-avatars"]
           env:
             - name: MINIO_ROOT_USER
@@ -113,9 +121,17 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      dnsPolicy: ClusterFirst
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
       containers:
         - name: mc
           image: __VOICE_MINIO_MC_IMAGE__
+          imagePullPolicy: IfNotPresent
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
           args: ["mb", "--ignore-existing", "local/voice-staging-files"]
           env:
             - name: MINIO_ROOT_USER

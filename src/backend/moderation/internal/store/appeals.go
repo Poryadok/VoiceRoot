@@ -84,6 +84,32 @@ FROM appeals WHERE id = $1`, appealID).Scan(
 	return row, nil
 }
 
+
+// ReviewAppealTx reviews an appeal inside the caller's account-serialized transaction.
+func (s *AppealStore) ReviewAppealTx(ctx context.Context, tx pgx.Tx, appealID uuid.UUID, status string, reviewedBy uuid.UUID, notes *string) (*AppealRow, error) {
+	if s == nil || tx == nil {
+		return nil, errStoreNotConfigured
+	}
+	row := &AppealRow{}
+	err := tx.QueryRow(ctx, `
+UPDATE appeals
+SET status = $2, reviewed_by = $3, reviewed_at = now(), review_notes = $4
+WHERE id = $1 AND status = 'pending'
+RETURNING id, sanction_id, appellant_account_id, reason, status, reviewed_by, reviewed_at, review_notes, created_at`,
+		appealID, status, reviewedBy, notes,
+	).Scan(
+		&row.ID, &row.SanctionID, &row.AppellantAccountID, &row.Reason, &row.Status,
+		&row.ReviewedBy, &row.ReviewedAt, &row.ReviewNotes, &row.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, err
+	}
+	return row, nil
+}
+
 func (s *AppealStore) ReviewAppeal(ctx context.Context, appealID uuid.UUID, status string, reviewedBy uuid.UUID, notes *string) (*AppealRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errStoreNotConfigured

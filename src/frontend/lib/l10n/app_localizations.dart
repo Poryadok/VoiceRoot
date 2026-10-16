@@ -890,6 +890,30 @@ abstract class AppLocalizations {
   /// **'Last seen {dateTime}'**
   String socialPresenceLastSeen(String dateTime);
 
+  /// No description provided for @socialPresenceLastSeenJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen just now'**
+  String get socialPresenceLastSeenJustNow;
+
+  /// No description provided for @socialPresenceLastSeenMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} minute ago} other{Last seen {count} minutes ago}}'**
+  String socialPresenceLastSeenMinutes(int count);
+
+  /// No description provided for @socialPresenceLastSeenHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} hour ago} other{Last seen {count} hours ago}}'**
+  String socialPresenceLastSeenHours(int count);
+
+  /// No description provided for @socialPresenceLastSeenDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} day ago} other{Last seen {count} days ago}}'**
+  String socialPresenceLastSeenDays(int count);
+
   /// No description provided for @socialPresenceUnknown.
   ///
   /// In en, this message translates to:
@@ -1045,6 +1069,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Load more chats'**
   String get chatListLoadMore;
+
+  /// No description provided for @chatScheduleMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatScheduleMessage;
+
+  /// No description provided for @chatSendWhenOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online'**
+  String get chatSendWhenOnline;
+
+  /// No description provided for @chatSchedulePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatSchedulePickerTitle;
+
+  /// No description provided for @chatSchedulePending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get chatSchedulePending;
+
+  /// No description provided for @chatScheduleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit scheduled message'**
+  String get chatScheduleEdit;
+
+  /// No description provided for @chatScheduleCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel scheduled message'**
+  String get chatScheduleCancel;
+
+  /// No description provided for @chatScheduleSendNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Send now'**
+  String get chatScheduleSendNow;
+
+  /// No description provided for @chatScheduleRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatScheduleRetry;
+
+  /// No description provided for @chatScheduleDateInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a time within the next 365 days'**
+  String get chatScheduleDateInvalid;
+
+  /// No description provided for @chatScheduleFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the scheduled-message request. Try again.'**
+  String get chatScheduleFailure;
+
+  /// No description provided for @chatScheduleLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more scheduled messages'**
+  String get chatScheduleLoadMore;
 
   /// No description provided for @chatListUnreadCount.
   ///
@@ -1711,6 +1801,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Message'**
   String get profileMessage;
+
+  /// No description provided for @profileDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get profileDetailTitle;
+
+  /// No description provided for @profileMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get profileMoreActions;
+
+  /// No description provided for @profileOpenAvatar.
+  ///
+  /// In en, this message translates to:
+  /// **'Open fullscreen avatar'**
+  String get profileOpenAvatar;
+
+  /// No description provided for @profileAvatarUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar unavailable'**
+  String get profileAvatarUnavailable;
+
+  /// No description provided for @profileCommonSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Common spaces'**
+  String get profileCommonSpaces;
+
+  /// No description provided for @profileCommonSpacesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load common spaces'**
+  String get profileCommonSpacesLoadError;
 
   /// No description provided for @profileEditTitle.
   ///
@@ -3391,6 +3517,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You will no longer receive messages from this group.'**
   String get chatGroupLeaveConfirmMessage;
+
+  /// No description provided for @chatChannelLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel'**
+  String get chatChannelLeave;
+
+  /// No description provided for @chatChannelLeaveConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel?'**
+  String get chatChannelLeaveConfirmTitle;
+
+  /// No description provided for @chatChannelLeaveConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You will no longer receive messages from this channel.'**
+  String get chatChannelLeaveConfirmMessage;
 
   /// No description provided for @chatGroupOwnerLeaveHint.
   ///
@@ -6356,6 +6500,18 @@ abstract class AppLocalizations {
   /// **'Not found'**
   String get deepLinkResourceNotFound;
 
+  /// No description provided for @deepLinkAccessDeniedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'You do not have permission to open this link. It may be intended for another profile.'**
+  String get deepLinkAccessDeniedDescription;
+
+  /// No description provided for @deepLinkResourceNotFoundDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'This link is unavailable or no longer valid.'**
+  String get deepLinkResourceNotFoundDescription;
+
   /// No description provided for @deepLinkReturnHome.
   ///
   /// In en, this message translates to:
@@ -6427,6 +6583,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage encrypted key backup'**
   String get e2eKeyBackupManage;
+
+  /// No description provided for @profileNotInContactsWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in contacts · messages may be unsafe'**
+  String get profileNotInContactsWarning;
 }
 
 class _AppLocalizationsDelegate

@@ -461,6 +461,42 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Last seen just now';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count minutes ago',
+      one: 'Last seen $count minute ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count hours ago',
+      one: 'Last seen $count hour ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count days ago',
+      one: 'Last seen $count day ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Unknown';
 
   @override
@@ -545,6 +581,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatListLoadMore => 'Load more chats';
+
+  @override
+  String get chatScheduleMessage => 'Schedule message';
+
+  @override
+  String get chatSendWhenOnline => 'Send when online';
+
+  @override
+  String get chatSchedulePickerTitle => 'Schedule message';
+
+  @override
+  String get chatSchedulePending => 'Pending';
+
+  @override
+  String get chatScheduleEdit => 'Edit scheduled message';
+
+  @override
+  String get chatScheduleCancel => 'Cancel scheduled message';
+
+  @override
+  String get chatScheduleSendNow => 'Send now';
+
+  @override
+  String get chatScheduleRetry => 'Retry';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Choose a time within the next 365 days';
+
+  @override
+  String get chatScheduleFailure =>
+      'Could not complete the scheduled-message request. Try again.';
+
+  @override
+  String get chatScheduleLoadMore => 'Load more scheduled messages';
 
   @override
   String chatListUnreadCount(int count) {
@@ -920,6 +991,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileMessage => 'Message';
+
+  @override
+  String get profileDetailTitle => 'Profile';
+
+  @override
+  String get profileMoreActions => 'More actions';
+
+  @override
+  String get profileOpenAvatar => 'Open fullscreen avatar';
+
+  @override
+  String get profileAvatarUnavailable => 'Avatar unavailable';
+
+  @override
+  String get profileCommonSpaces => 'Common spaces';
+
+  @override
+  String get profileCommonSpacesLoadError => 'Could not load common spaces';
 
   @override
   String get profileEditTitle => 'Edit profile';
@@ -1866,6 +1955,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chatGroupLeaveConfirmMessage =>
       'You will no longer receive messages from this group.';
+
+  @override
+  String get chatChannelLeave => 'Leave channel';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Leave channel?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'You will no longer receive messages from this channel.';
 
   @override
   String get chatGroupOwnerLeaveHint =>
@@ -3477,6 +3576,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deepLinkResourceNotFound => 'Not found';
 
   @override
+  String get deepLinkAccessDeniedDescription =>
+      'You do not have permission to open this link. It may be intended for another profile.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'This link is unavailable or no longer valid.';
+
+  @override
   String get deepLinkReturnHome => 'Go to Home';
 
   @override
@@ -3516,4 +3623,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eKeyBackupManage => 'Manage encrypted key backup';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Not in contacts · messages may be unsafe';
 }

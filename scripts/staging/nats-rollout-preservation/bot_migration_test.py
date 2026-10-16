@@ -3,6 +3,19 @@ from unittest.mock import Mock,patch
 import bot_migration
 
 class BotPrerequisiteTest(unittest.TestCase):
+    def test_current_canonical_bot_target_is_accepted_after_migrations(self):
+        from pathlib import Path
+        files=(Path(__file__).resolve().parents[3]/'src/backend/migrations/bot_db').glob('*.up.sql')
+        version=max(int(path.name.split('_',1)[0]) for path in files)
+        self.assertEqual(version,6)
+        for current in range(1,version+1):
+            row=dict(self.row(),version=current)
+            with self.subTest(version=current):self.assertEqual(bot_migration.verify(row),row)
+        for field,value in [('version',version+1),('dirty',True),('duplicate_token_groups',1)]:
+            changed=dict(self.row(),version=version);changed[field]=value
+            with self.subTest(field=field),self.assertRaises(bot_migration.PrerequisiteError):
+                bot_migration.verify(changed)
+
     def row(self,**values):
         return dict(database='bot_db',version=3,dirty=False,duplicate_token_groups=0,**values)
     def test_empty_token_collision_vetoes_forward_unique_index(self):

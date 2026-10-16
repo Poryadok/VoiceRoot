@@ -41,9 +41,7 @@ class _GuestNicknameScreenState extends ConsumerState<GuestNicknameScreen> {
     if (err != null) {
       setState(() {
         _busy = false;
-        _error = err == 'not_authenticated'
-            ? err
-            : AppLocalizations.of(context)!.commonActionFailed;
+        _error = AppLocalizations.of(context)!.commonActionFailed;
       });
       return;
     }

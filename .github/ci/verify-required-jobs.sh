@@ -27,9 +27,12 @@ if [[ "${EVENT_NAME}" != "pull_request" && "${EVENT_NAME}" != "push" ]]; then
   exit 0
 fi
 
-if [[ "${CODE}" != "true" ]]; then
-  echo "ci-gate: docs-only change; skip gate"
-  exit 0
+RUN_COMPOSE_E2E="${RUN_COMPOSE_E2E:-false}"
+compose_result="${JOB_COMPOSE_E2E:-skipped}"
+if [[ "${RUN_COMPOSE_E2E}" == "true" ]]; then
+  require_job compose-e2e "${compose_result}"
+elif [[ "${compose_result}" != "success" && "${compose_result}" != "skipped" ]]; then
+  fail "unexpected compose-e2e result=${compose_result}"
 fi
 
 # Job results passed via env JOB_<name_with_underscore>=result
@@ -77,6 +80,25 @@ if [[ "${PROFILE}" == "full" ]]; then
   RUN_WEB=true
 fi
 
+# Some acceptance and broad Go jobs are selected even when CODE=false (for
+# example ci_global-only workflow edits). Validate them before the code guard.
+check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
+check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
+check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go
+check_if "${RUN_NATS_HUB_CONFIG_RENDERER_IMAGE:-$(or_true "${RUN_PKG}" "${COMPOSE}" "${GLOBAL}")}" nats-hub-config-renderer-image
+for job in flutter-key-backup-goldens flutter-android-smoke flutter-web-integration flutter-ios \
+  a1-e2e a1-flutter-profile-handoff a1-attachment-restart-proof \
+  analytics-clickhouse-integration grafana-analytics-smoke; do
+  selector="RUN_${job//-/_}"
+  selector="${selector^^}"
+  check_if "${!selector:-false}" "${job}"
+done
+
+if [[ "${CODE}" != "true" ]]; then
+  echo "ci-gate: selected non-code jobs passed; skip code-only jobs"
+  exit 0
+fi
+
 check_if "$(or_true "${PROTOS}" "${GLOBAL}")" protobuf
 check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
 check_if "${GLOBAL}" ci-script-tests
@@ -84,10 +106,6 @@ check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-driver
 check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
-check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
-check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
-check_if "$(or_true "${RUN_PKG}" "${COMPOSE}" "${GLOBAL}")" nats-hub-config-renderer-image
-check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go
 check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr
 check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth
 check_if "$(or_true "${RUN_PORTAL}" "${FILTER_PORTAL}" "${GLOBAL}")" developer-portal

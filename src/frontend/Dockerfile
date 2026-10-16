@@ -12,6 +12,7 @@ COPY . .
 ARG VOICE_API_BASE_URL=http://127.0.0.1:8080
 ARG VOICE_LIVEKIT_URL=ws://127.0.0.1:7880
 RUN flutter build web --release --dart-define=VOICE_API_BASE_URL=${VOICE_API_BASE_URL} --dart-define=VOICE_LIVEKIT_URL=${VOICE_LIVEKIT_URL}
+RUN python3 docker/version_web_assets.py build/web
 
 FROM nginx:1.27-alpine
 COPY docker/nginx-default.conf /etc/nginx/conf.d/default.conf

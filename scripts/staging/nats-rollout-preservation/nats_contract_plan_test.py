@@ -4,25 +4,71 @@ from pathlib import Path
 from nats_contract_plan import compile_plan, execute, verify_census, ContractError, DECLARATIONS
 
 SOURCE=Path(__file__).parents[3]
+HISTORICAL_BOOTSTRAP_SOURCE='9ae2e0c259e5e039109f7331aaf62b3607e549dd'
+HISTORICAL_BOOTSTRAP_BLOBS=('59099dea8f129c1300b31c7441fc9cc393875108',
+    'a88ed972161f7445ad26886cf194d1a3b4f78125')
+REVIEWED_13=frozenset({'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.voice_room_access_invalidated'})
+REVIEWED_15=frozenset({'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.deletion_scheduled','space.restored','space.voice_room_access_invalidated'})
+REVIEWED_14=frozenset({'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.deletion_scheduled','space.restored'})
+TARGET_17=frozenset({'chat.created','chat.updated','chat.deleted','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.deletion_scheduled','space.restored','space.voice_room_access_invalidated'})
+REVIEWED_ROLE_9=frozenset({'role.created','role.updated','role.deleted','role.assigned','role.revoked','role.chat_override_set','role.chat_override_removed','role.voice_override_set','role.voice_override_removed'})
+TARGET_ROLE_10=REVIEWED_ROLE_9|{'role.voice_policy_invalidated'}
 def live():
-    chat=['chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.voice_room_access_invalidated']
+    # Exact immutable source shape from 9ae2e0c259e5e039109f7331aaf62b3607e549dd:
+    # both canonical bootstrap copies declare the same 14 chat and 9 role subjects.
+    chat=['chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.deletion_scheduled','space.restored']
     social=['social.friend_request','social.friend_accepted','social.friend_removed','social.user_blocked','social.contacts_synced']
-    role=['role.created','role.updated','role.deleted','role.assigned','role.revoked','role.chat_override_set','role.chat_override_removed','role.voice_override_set','role.voice_override_removed','role.voice_policy_invalidated']
+    role=list(REVIEWED_ROLE_9)
     def info(name,subjects):
         return {'config':{'name':name,'subjects':subjects,'storage':'file','retention':'limits','max_age':604800000000000,'duplicate_window':120000000000,'max_msgs':-1,'metadata':{'preserve':'yes'}},'state':{'messages':7,'first_seq':11,'last_seq':17,'consumer_count':4}}
     return {'chat_events':info('chat_events',chat),'social_events':info('social_events',social),'role_events':info('role_events',role)}
 class Tests(unittest.TestCase):
     def normalized(self): return {(stream,config['durable_name']):copy.deepcopy(config) for stream,config in DECLARATIONS}
     def plan(self,streams=None,consumers=None): return compile_plan(SOURCE,streams or live(),consumers or {},self.normalized())
-    def test_exact_five_actions_preserve_other_config(self):
-        p=self.plan();self.assertEqual([a['api'] for a in p['actions']],['$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed','$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat','$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role'])
-        for action in p['actions'][:2]:
+    def test_frozen_9ae_template_fixture_is_the_exact_additive_predecessor(self):
+        self.assertEqual(HISTORICAL_BOOTSTRAP_SOURCE,'9ae2e0c259e5e039109f7331aaf62b3607e549dd')
+        self.assertEqual(HISTORICAL_BOOTSTRAP_BLOBS,(
+            '59099dea8f129c1300b31c7441fc9cc393875108',
+            'a88ed972161f7445ad26886cf194d1a3b4f78125'))
+        state=live()
+        self.assertEqual(set(state['chat_events']['config']['subjects']),REVIEWED_14)
+        self.assertEqual(set(state['role_events']['config']['subjects']),REVIEWED_ROLE_9)
+    def test_exact_six_actions_preserve_other_config(self):
+        p=self.plan();self.assertEqual([a['api'] for a in p['actions']],['$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.STREAM.UPDATE.role_events','$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed','$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat','$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role'])
+        for action in p['actions'][:3]:
             self.assertEqual(action['after']['metadata'],{'preserve':'yes'});self.assertEqual(action['after']['max_msgs'],-1)
-        self.assertEqual(p['actions'][2]['after']['config']['deliver_policy'],'new')
+        self.assertEqual(p['actions'][3]['after']['config']['deliver_policy'],'new')
         self.assertEqual(len(p['consumer_targets']),3)
+    def test_only_literal_reviewed_chat_subject_shapes_are_accepted(self):
+        for subjects,updates in ((REVIEWED_13,1),(REVIEWED_14,1),(REVIEWED_15,1),(TARGET_17,0)):
+            with self.subTest(count=len(subjects)):
+                s=live();s['chat_events']['config']['subjects']=list(subjects)
+                p=self.plan(s)
+                chat_update=next((a for a in p['actions'] if a['object']=='chat_events'),None)
+                self.assertEqual(chat_update is not None,updates==1)
+                if chat_update is not None:
+                    self.assertEqual(set(chat_update['before']['subjects']),set(subjects))
+                    self.assertEqual(set(chat_update['after']['subjects']),TARGET_17)
+    def test_exact_historical_role_subject_shape_gets_only_the_missing_invalidation(self):
+        s=live();p=self.plan(s)
+        role_update=next(a for a in p['actions'] if a['object']=='role_events')
+        self.assertEqual(set(role_update['before']['subjects']),REVIEWED_ROLE_9)
+        self.assertEqual(set(role_update['after']['subjects']),TARGET_ROLE_10)
+        self.assertEqual(role_update['api'],'$JS.API.STREAM.UPDATE.role_events')
+        s=live();s['role_events']['config']['subjects']=list(TARGET_ROLE_10)
+        self.assertFalse(any(a['object']=='role_events' for a in self.plan(s)['actions']))
+        for subjects in (REVIEWED_ROLE_9-{'role.revoked'},):
+            s=live();s['role_events']['config']['subjects']=list(subjects)
+            with self.subTest(role_subjects=subjects),self.assertRaises(ContractError):self.plan(s)
+    def test_unreviewed_chat_subject_shape_rejected(self):
+        for subjects in (TARGET_17-{'chat.updated'}, REVIEWED_13|{'unreviewed.subject'}):
+            s=live();s['chat_events']['config']['subjects']=list(subjects)
+            with self.subTest(subjects=subjects),self.assertRaises(ContractError):self.plan(s)
     def test_exact_desired_retry_is_preserve(self):
         p=self.plan();s=live()
-        for action in p['actions'][:2]: s[action['object']]['config']=action['after']
+        for action in p['actions']:
+            if action['api'].startswith('$JS.API.STREAM.UPDATE.'):
+                s[action['object']]['config']=action['after']
         consumers={(stream,config['durable_name']):{'config':copy.deepcopy(config)} for stream,config in DECLARATIONS}
         self.assertEqual(self.plan(s,consumers)['actions'],[])
     def test_unrelated_subject_drift_rejected(self):
@@ -37,12 +83,13 @@ class Tests(unittest.TestCase):
     def test_no_existing_record_state_in_mutation_payload(self):
         p=self.plan();self.assertTrue(all('state' not in a['after'] for a in p['actions']))
     def test_dynamic_stream_overlap_refused_before_plan(self):
-        for subject in ('space.restored','space.*','space.>','>'):
+        for subject in ('space.restored','chat.updated','chat.deleted','space.voice_room_access_invalidated',
+            'role.voice_policy_invalidated','role.*','space.*','space.>','>'):
             s=live();s['dynamic_extra']={'config':{'name':'dynamic_extra','subjects':[subject]}}
             with self.assertRaises(ContractError):self.plan(s)
     def test_nonoverlapping_dynamic_stream_preserved(self):
         s=live();s['dynamic_extra']={'config':{'name':'dynamic_extra','subjects':['space.other','other.>']}}
-        self.assertEqual(len(self.plan(s)['actions']),5)
+        self.assertEqual(len(self.plan(s)['actions']),6)
 class Actor:
     def __init__(self,p):self.current={a['object']:copy.deepcopy(a['before']) for a in p['actions']};self.calls=[];self.safe=True;self.crash=False
     def assert_closed_isolation(self):
@@ -66,11 +113,11 @@ class ExecuteTests(Tests):
             self.assertEqual(j[-1]['api'],api);self.assertEqual(j[-1]['target_sha256'],j[-2]['target_sha256'])
             original(api,payload)
         a.mutate=mutate;execute(p,a,j.append)
-        self.assertEqual([x['kind'] for x in j],['nats_contract_intent','nats_contract_mutation_issued','nats_contract_applied']*5)
+        self.assertEqual([x['kind'] for x in j],['nats_contract_intent','nats_contract_mutation_issued','nats_contract_applied']*6)
     def test_interrupted_after_update_retries_only_remaining_actions(self):
         p=self.plan();a=Actor(p);a.crash=True;j=[]
         with self.assertRaises(RuntimeError):execute(p,a,j.append)
-        execute(p,a,j.append);self.assertEqual(len(a.calls),5)
+        execute(p,a,j.append);self.assertEqual(len(a.calls),6)
     def test_unrelated_config_drift_never_adopted(self):
         p=self.plan();a=Actor(p);a.current['chat_events']['max_msgs']=1
         with self.assertRaises(ContractError):execute(p,a,lambda event:None)
@@ -83,7 +130,9 @@ class CensusTests(Tests):
         before['consumers']=[{'stream':'social_events','name':'existing','config_sha256':'old-config','ack_floor':{'consumer_seq':2,'stream_seq':12},'num_ack_pending':1,'num_redelivered':1,'num_pending':3}]
         after=copy.deepcopy(before)
         from nats_contract_plan import digest
-        for a in p['actions'][:2]:next(s for s in after['streams'] if s['name']==a['object'])['config_sha256']=digest(a['after'])
+        for a in p['actions']:
+            if a['api'].startswith('$JS.API.STREAM.UPDATE.'):
+                next(s for s in after['streams'] if s['name']==a['object'])['config_sha256']=digest(a['after'])
         targets={(row['stream'],row['name']):row['config_sha256'] for row in p['consumer_targets']}
         for stream,config in DECLARATIONS:
             durable=config['durable_name'];last=next(s for s in before['streams'] if s['name']==stream)['state']['last_seq']

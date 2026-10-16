@@ -63,6 +63,35 @@ class CustodyTests(unittest.TestCase):
         self.assertNotIn('Authorization', self.requests[-1][1])
         self.assertNotIn('private', json.dumps(receipt))
 
+    def test_actual_expired_producer_names_reach_strict_artifact_verifier(self):
+        import ast
+        import bridge_root
+        tree=ast.parse(Path(bridge_root.__file__).read_text())
+        methods={node.name:node for node in ast.walk(tree) if isinstance(node,ast.FunctionDef)}
+        for method,schema in (('_produce_expired_observation','voice-expired-observation-producer-v1'),
+            ('_produce_finish_observation','voice-expired-finish-observation-producer-v1')):
+            self.assertIn(schema,[node.value for node in ast.walk(methods[method])
+                if isinstance(node,ast.Constant) and isinstance(node.value,str)])
+        for method in ('_prepare_expired_native','_prepare_expired_finish'):
+            expressions={}
+            for node in ast.walk(methods[method]):
+                if isinstance(node,ast.Dict):
+                    for key,value in zip(node.keys,node.values):
+                        if isinstance(key,ast.Constant) and key.value in ('original_artifact_name','observation_artifact_name'):
+                            expressions[key.value]=value
+            self.assertEqual(set(expressions),{'original_artifact_name','observation_artifact_name'})
+            bindings={'original':{**self.binding,'challenge':'b'*32},'observation':{**self.binding,'challenge':'d'*32}}
+            record={'artifact_bindings':bindings};state={'operation':self.binding['operation']}
+            for role in ('original','observation'):
+                with self.subTest(method=method,role=role):
+                    self.binding=bindings[role]
+                    expression=ast.Expression(expressions[role+'_artifact_name'])
+                    self.metadata['name']=eval(compile(expression,'actual-producer','eval'),{'state':state,'record':record})
+                    self.assertTrue(self.verify()['verified'])
+                    other=bindings['observation' if role=='original' else 'original']
+                    self.metadata['name']='voice-nats-rollout-'+state['operation']+'-'+other['challenge']
+                    with self.assertRaises(custody.CustodyError):self.verify()
+
     def test_wrong_metadata(self):
         for key, value in [('name', 'wrong'), ('expired', True), ('created_at', '2000-01-01T00:00:00Z'), ('size_in_bytes', 1), ('url', 'https://evil.invalid')]:
             original = copy.deepcopy(self.metadata)

@@ -15,11 +15,14 @@ docker run --rm --network none --entrypoint tar \
     tar -xf - -C /usr/local
     export PATH=/usr/local/go/bin:$PATH GOMAXPROCS=2 GOFLAGS=-p=2
     mkdir -p /tmp/repo/src/backend/auth/src/main/resources/db /tmp/repo/docker/clickhouse /etc/systemd/system
+    mkdir -m 700 /fixture
+    export TMPDIR=/fixture
     cp -R /work/scripts /work/deploy /work/.github /tmp/repo/
+    cp /work/docker-compose.voice-space-media.yml /tmp/repo/
     cp -R /work/src/backend/migrations /tmp/repo/src/backend/
     cp -R /work/src/backend/auth/src/main/resources/db/migration /tmp/repo/src/backend/auth/src/main/resources/db/
     cp -R /work/docker/clickhouse/init /tmp/repo/docker/clickhouse/
-    apk add --no-cache bash openssl >/dev/null
+    apk add --no-cache bash git jq openssl >/dev/null
     ln -s /usr/local/bin/python3 /usr/bin/python3
     python -m pip install --quiet --root-user-action=ignore --disable-pip-version-check PyYAML==6.0.3
     cd /tmp/repo/scripts/staging/nats-rollout-preservation

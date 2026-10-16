@@ -187,7 +187,7 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
         SnackBar(
           content: Text(
             err == 'not_authenticated'
-                ? l10n.spaceInviteCreateError(err)
+                ? l10n.spaceInviteCreateError(commonActionErrorMessage(l10n))
                 : commonActionErrorMessage(l10n),
           ),
         ),
@@ -225,7 +225,7 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
         SnackBar(
           content: Text(
             err == 'not_authenticated'
-                ? l10n.spaceInviteRevokeError(err)
+                ? l10n.spaceInviteRevokeError(commonActionErrorMessage(l10n))
                 : commonActionErrorMessage(l10n),
           ),
         ),

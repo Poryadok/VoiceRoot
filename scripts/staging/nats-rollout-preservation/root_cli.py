@@ -34,18 +34,54 @@ def operation_path(raw):
     return base
 
 
+def public_code_sha(path):
+    """Hash public captured code as the runner, without root-only O_NOATIME."""
+    path=Path(path)
+    fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,
+        s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    parent_before=path.parent.lstat()
+    parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    try:
+        if (not stat.S_ISDIR(parent_before.st_mode) or parent_before.st_uid!=0
+            or parent_before.st_mode&0o022
+            or fingerprint(parent_before)!=fingerprint(os.fstat(parent))):
+            raise Blocked('rollout_code_custody_invalid')
+        before=os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+        fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+        try:
+            opened=os.fstat(fd)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0
+                or opened.st_mode&0o022 or opened.st_nlink!=1
+                or not 0<=opened.st_size<=16<<20 or fingerprint(before)!=fingerprint(opened)):
+                raise Blocked('rollout_code_custody_invalid')
+            digest=hashlib.sha256();count=0
+            while chunk:=os.read(fd,1<<20):
+                count+=len(chunk)
+                if count>opened.st_size:raise Blocked('rollout_captured_code_changed')
+                digest.update(chunk)
+            if (count!=opened.st_size or fingerprint(opened)!=fingerprint(os.fstat(fd))
+                or fingerprint(opened)!=fingerprint(os.stat(path.name,dir_fd=parent,follow_symlinks=False))
+                or fingerprint(parent_before)!=fingerprint(os.fstat(parent))
+                or fingerprint(parent_before)!=fingerprint(path.parent.lstat())):
+                raise Blocked('rollout_captured_code_changed')
+            return digest.hexdigest()
+        finally:os.close(fd)
+    finally:os.close(parent)
+
+
 def code_binding(code):
     manifest=json.loads(public_read(code/'capture-manifest.json'))
-    if not isinstance(manifest,dict) or not 1<=len(manifest)<=64:raise Blocked('rollout_code_manifest_invalid')
+    if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not guard.SHA.fullmatch(wanted):raise Blocked('rollout_code_manifest_invalid')
         path=code/p
         for parent in (path,*path.parents):
-            s=parent.lstat()
+            try:s=parent.lstat()
+            except FileNotFoundError:raise Blocked('rollout_code_custody_invalid') from None
             if s.st_uid!=0 or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode):raise Blocked('rollout_code_custody_invalid')
             if parent==code:break
-        if file_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')
+        if public_code_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')
     return manifest
 
 

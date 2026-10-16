@@ -309,6 +309,93 @@ type ChatListMetadataRow struct {
 	LastMessageContentType   string // text | photo | ...
 }
 
+var ErrVisibilityCandidateBudgetExceeded = errors.New("messages store: visibility candidate budget exceeded")
+
+func (s *MessagesStore) UnreadMessageSenders(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID, candidateLimit int) ([]uuid.UUID, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	out := make([]uuid.UUID, 0)
+	if len(chatIDs) == 0 {
+		return out, nil
+	}
+	if candidateLimit <= 0 {
+		return nil, ErrVisibilityCandidateBudgetExceeded
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT m.sender_profile_id
+FROM messages m
+LEFT JOIN read_positions rr ON rr.chat_id = m.chat_id AND rr.profile_id = $1
+WHERE m.chat_id = ANY($2::uuid[])
+  AND m.deleted_at IS NULL
+  AND m.sender_profile_id <> $1
+  AND (NOT COALESCE(m.ghost_only, false) OR m.sender_profile_id = $1)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = m.id AND h.profile_id = $1)
+  AND (rr.last_read_message_id IS NULL OR m.id > rr.last_read_message_id)
+ORDER BY m.id DESC
+LIMIT $3
+`, viewerProfileID, chatIDs, candidateLimit+1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seen := make(map[uuid.UUID]struct{})
+	candidateRows := 0
+	for rows.Next() {
+		if candidateRows >= candidateLimit {
+			return nil, ErrVisibilityCandidateBudgetExceeded
+		}
+		candidateRows++
+		var senderID uuid.UUID
+		if err := rows.Scan(&senderID); err != nil {
+			return nil, err
+		}
+		if _, exists := seen[senderID]; !exists {
+			seen[senderID] = struct{}{}
+			out = append(out, senderID)
+		}
+	}
+	return out, rows.Err()
+}
+
+type LatestPreviewMessageCandidate struct {
+	MessageID       uuid.UUID
+	SenderProfileID uuid.UUID
+}
+
+func (s *MessagesStore) LatestPreviewMessageCandidates(ctx context.Context, chatID, viewerProfileID uuid.UUID, blockedSenderIDs []uuid.UUID, limit int) ([]LatestPreviewMessageCandidate, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	if limit <= 0 {
+		limit = 1
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT id, sender_profile_id
+FROM messages
+WHERE chat_id = $1
+  AND deleted_at IS NULL
+  AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $2)
+  AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = messages.id AND h.profile_id = $2)
+  AND NOT (sender_profile_id = ANY($3::uuid[]))
+ORDER BY id DESC
+LIMIT $4
+`, chatID, viewerProfileID, blockedSenderIDs, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]LatestPreviewMessageCandidate, 0, limit)
+	for rows.Next() {
+		var candidate LatestPreviewMessageCandidate
+		if err := rows.Scan(&candidate.MessageID, &candidate.SenderProfileID); err != nil {
+			return nil, err
+		}
+		out = append(out, candidate)
+	}
+	return out, rows.Err()
+}
+
 func (s *MessagesStore) MessageExists(ctx context.Context, chatID, messageID uuid.UUID) (bool, error) {
 	if s == nil || s.Pool == nil {
 		return false, errors.New("messages store: pool not configured")
@@ -469,6 +556,15 @@ func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 	}
 	m.ClientMessageID = clientID
 	return &m, nil
+}
+
+func (s *MessagesStore) IsHiddenForProfile(ctx context.Context, messageID, profileID uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, errors.New("messages store: pool not configured")
+	}
+	var hidden bool
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM message_hides WHERE message_id = $1 AND profile_id = $2)`, messageID, profileID).Scan(&hidden)
+	return hidden, err
 }
 
 func (s *MessagesStore) GetMessageByID(ctx context.Context, id uuid.UUID) (*MessageRow, error) {
@@ -953,7 +1049,24 @@ func deriveLastMessageDeliveryState(isOutgoing bool, lastMsgID uuid.UUID, peerRe
 	return "sent"
 }
 
-func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]ChatListMetadataRow, error) {
+func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID, blockedByChat ...map[uuid.UUID][]uuid.UUID) (map[uuid.UUID]ChatListMetadataRow, error) {
+	blockedProfiles := make([]uuid.UUID, 0)
+	if len(blockedByChat) > 0 {
+		seen := make(map[uuid.UUID]struct{})
+		for _, profileIDs := range blockedByChat[0] {
+			for _, profileID := range profileIDs {
+				if _, exists := seen[profileID]; exists {
+					continue
+				}
+				seen[profileID] = struct{}{}
+				blockedProfiles = append(blockedProfiles, profileID)
+			}
+		}
+	}
+	return s.GetChatListMetadataWithVisibility(ctx, viewerProfileID, chatIDs, blockedProfiles)
+}
+
+func (s *MessagesStore) GetChatListMetadataWithVisibility(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID, blockedProfileIDs []uuid.UUID) (map[uuid.UUID]ChatListMetadataRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
@@ -974,6 +1087,9 @@ WITH latest AS (
   SELECT id, content, created_at, sender_profile_id, attachments, content_type, chat_type
   FROM messages
   WHERE chat_id = $1 AND deleted_at IS NULL
+    AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $2)
+    AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = messages.id AND h.profile_id = $2)
+    AND NOT (sender_profile_id = ANY($3::uuid[]))
   ORDER BY id DESC
   LIMIT 1
 ), peer AS (
@@ -993,6 +1109,9 @@ WITH latest AS (
   WHERE m.chat_id = $1
     AND m.deleted_at IS NULL
     AND m.sender_profile_id <> $2
+    AND (NOT COALESCE(m.ghost_only, false) OR m.sender_profile_id = $2)
+    AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = m.id AND h.profile_id = $2)
+    AND NOT (m.sender_profile_id = ANY($3::uuid[]))
     AND (rr.last_read_message_id IS NULL OR m.id > rr.last_read_message_id)
 )
 SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id, latest.attachments, latest.content_type, latest.chat_type,
@@ -1001,7 +1120,7 @@ SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id, l
 FROM unread
 LEFT JOIN latest ON true
 LEFT JOIN peer_rr ON true
-`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &lastAttachments, &lastContentType, &lastChatType, &peerRead, &peerDelivered, &unread)
+		`, chatID, viewerProfileID, blockedProfileIDs).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &lastAttachments, &lastContentType, &lastChatType, &peerRead, &peerDelivered, &unread)
 		if err != nil {
 			return nil, err
 		}

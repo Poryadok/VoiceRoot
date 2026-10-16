@@ -29,7 +29,7 @@ func TestVoiceGRPCVoiceRoom_freeRejects33rdParticipant(t *testing.T) {
 		releasedFences:     &released,
 		cleanupAdmissions:  &cleaned,
 	}
-	svc, events, spaceID, voiceRoomID, profiles, join := freeVoiceRoomAtCapacity(t, admissions)
+	svc, events, spaceID, _, profiles, join := freeVoiceRoomAtCapacity(t, admissions)
 	startedBefore, joinedBefore := len(events.startedCall), len(events.memberJoined)
 
 	_, err := joinSpaceVoiceUser(t, svc, profiles[freeVoiceRoomCap], join)
@@ -65,7 +65,7 @@ func TestVoiceGRPCVoiceRoom_freeCapCleanupFailureRemainsUnavailable(t *testing.T
 		cleanupAdmissions:       &cleaned,
 		cleanupFailuresToInject: &failures,
 	}
-	svc, events, _, voiceRoomID, profiles, join := freeVoiceRoomAtCapacity(t, admissions)
+	svc, events, _, _, profiles, join := freeVoiceRoomAtCapacity(t, admissions)
 	startedBefore, joinedBefore := len(events.startedCall), len(events.memberJoined)
 
 	_, err := joinSpaceVoiceUser(t, svc, profiles[freeVoiceRoomCap], join)

@@ -662,56 +662,79 @@ void main() {
     });
   }
 
-  testWidgets('unauthenticated create retains its local action copy', (
-    tester,
-  ) async {
-    var requestCount = 0;
-    final auth = _MutableAuthController();
-    final gateway = GatewayHttpClient(
-      httpClient: MockClient((request) async {
-        requestCount++;
-        return http.Response('{}', 200);
-      }),
-      config: const GatewayConfig(baseUrl: 'http://api.test'),
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ...voiceThemeTestOverrides(),
-          authControllerProvider.overrideWith((ref) => auth),
-          spacePermissionProvider((
-            spaceId: 'space-1',
-            permission: SpacePermissions.spaceManageInvites,
-            chatId: null,
-            voiceRoomId: null,
-          )).overrideWith((ref) async => true),
-          gatewayHttpClientProvider.overrideWithValue(gateway),
-          authorizationHeaderProvider.overrideWithValue(null),
-          spaceInvitesProvider(
-            'space-1',
-          ).overrideWith((ref) async => sampleInvites),
-        ],
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: SpaceInvitesSheet(spaceId: 'space-1')),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(SpaceInvitesSheet)),
-    )!;
-    await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
-    await tester.pumpAndSettle();
-    expect(
-      find.text(l10n.spaceInviteCreateError('not_authenticated')),
-      findsOneWidget,
-    );
-    expect(requestCount, 0);
-  });
+  for (final language in ['en', 'ru']) {
+    for (final revoke in [false, true]) {
+      testWidgets(
+        '$language unauthenticated ${revoke ? 'revoke' : 'create'} invite uses safe copy',
+        (tester) async {
+          var requestCount = 0;
+          final auth = _MutableAuthController();
+          final gateway = GatewayHttpClient(
+            httpClient: MockClient((request) async {
+              requestCount++;
+              return http.Response('{}', 200);
+            }),
+            config: const GatewayConfig(baseUrl: 'http://api.test'),
+          );
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                ...voiceThemeTestOverrides(),
+                authControllerProvider.overrideWith((ref) => auth),
+                spacePermissionProvider((
+                  spaceId: 'space-1',
+                  permission: SpacePermissions.spaceManageInvites,
+                  chatId: null,
+                  voiceRoomId: null,
+                )).overrideWith((ref) async => true),
+                gatewayHttpClientProvider.overrideWithValue(gateway),
+                authorizationHeaderProvider.overrideWithValue(null),
+                spaceInvitesProvider(
+                  'space-1',
+                ).overrideWith((ref) async => sampleInvites),
+              ],
+              child: MaterialApp(
+                theme: voiceTestTheme(),
+                locale: Locale(language),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const Scaffold(
+                  body: SpaceInvitesSheet(spaceId: 'space-1'),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(SpaceInvitesSheet)),
+          )!;
+
+          if (revoke) {
+            await tester.tap(find.byKey(const Key('revoke_invite_inv-1')));
+            await tester.pumpAndSettle();
+            expect(
+              find.text(l10n.spaceInviteRevokeConfirmTitle),
+              findsOneWidget,
+            );
+            await tester.tap(
+              find.byKey(const Key('space_invite_revoke_confirm')),
+            );
+          } else {
+            await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
+          }
+          await tester.pumpAndSettle();
+
+          final expected = revoke
+              ? l10n.spaceInviteRevokeError(l10n.commonActionFailed)
+              : l10n.spaceInviteCreateError(l10n.commonActionFailed);
+          expect(find.text(expected), findsOneWidget);
+          expect(find.textContaining('not_authenticated'), findsNothing);
+          expect(requestCount, 0);
+          expect(find.byKey(const Key('space_invite_inv-1')), findsOneWidget);
+        },
+      );
+    }
+  }
 
   for (final change in [
     (
@@ -1133,50 +1156,61 @@ void main() {
     );
   });
 
-  testWidgets('join invite keeps the local unauthenticated message', (
-    tester,
-  ) async {
-    var requestCount = 0;
-    final gateway = GatewayHttpClient(
-      httpClient: MockClient((request) async {
-        requestCount++;
-        return http.Response('{}', 200);
-      }),
-      config: const GatewayConfig(baseUrl: 'http://api.test'),
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ...voiceThemeTestOverrides(),
-          gatewayHttpClientProvider.overrideWithValue(gateway),
-          authorizationHeaderProvider.overrideWithValue(null),
-        ],
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: JoinSpaceInviteSheet()),
+  for (final language in ['en', 'ru']) {
+    testWidgets('$language join invite localizes missing auth state', (
+      tester,
+    ) async {
+      var requestCount = 0;
+      final gateway = GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          requestCount++;
+          return http.Response('{}', 200);
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            gatewayHttpClientProvider.overrideWithValue(gateway),
+            authorizationHeaderProvider.overrideWithValue(null),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: Locale(language),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: JoinSpaceInviteSheet()),
+          ),
         ),
-      ),
-    );
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(JoinSpaceInviteSheet)),
-    )!;
-    await tester.enterText(
-      find.byKey(JoinSpaceInviteSheet.codeFieldKey),
-      'join-code-42',
-    );
-    await tester.tap(find.byKey(JoinSpaceInviteSheet.submitKey));
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(JoinSpaceInviteSheet)),
+      )!;
+      await tester.enterText(
+        find.byKey(JoinSpaceInviteSheet.codeFieldKey),
+        'join-code-42',
+      );
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(JoinSpaceInviteSheet.submitKey))
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.byKey(JoinSpaceInviteSheet.submitKey));
+      await tester.pumpAndSettle();
 
-    expect(requestCount, 0);
-    expect(find.byType(JoinSpaceInviteSheet), findsOneWidget);
-    expect(
-      find.text(l10n.spaceInviteJoinError('not_authenticated')),
-      findsOneWidget,
-    );
-  });
+      expect(requestCount, 0);
+      expect(find.byType(JoinSpaceInviteSheet), findsOneWidget);
+      expect(
+        find.text(l10n.spaceInviteJoinError(l10n.commonActionFailed)),
+        findsOneWidget,
+      );
+      expect(find.textContaining('not_authenticated'), findsNothing);
+    });
+  }
 
   testWidgets('invite expiry, QR, and revoke journey is keyboard accessible', (
     tester,

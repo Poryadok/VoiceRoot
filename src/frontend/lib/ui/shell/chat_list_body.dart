@@ -722,40 +722,25 @@ Future<void> _showChatRowActions(
         ),
       );
     case 'mute':
-      final until = DateTime.utc(9999, 12, 31);
-      final err = await controller.muteChat(item.chatId, mutedUntil: until);
-      if (err == null) {
-        ref.read(chatMutedUntilProvider.notifier).update((m) {
-          final next = Map<String, DateTime>.from(m);
-          next[item.chatId] = until;
-          return next;
-        });
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              commonActionErrorMessage(AppLocalizations.of(context)!),
-            ),
-          ),
-        );
-      }
     case 'unmute':
-      final err = await controller.muteChat(item.chatId);
-      if (err == null) {
-        ref.read(chatMutedUntilProvider.notifier).update((m) {
-          final next = Map<String, DateTime>.from(m);
-          next.remove(item.chatId);
-          return next;
-        });
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              commonActionErrorMessage(AppLocalizations.of(context)!),
-            ),
-          ),
-        );
+      final until = action == 'mute' ? DateTime.utc(9999, 12, 31) : null;
+      final err = await controller.muteChat(item.chatId, mutedUntil: until);
+      if (!context.mounted) return;
+      if (err != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(commonActionErrorMessage(l10n))));
+        return;
       }
+      ref.read(chatMutedUntilProvider.notifier).update((m) {
+        final next = Map<String, DateTime>.from(m);
+        if (until == null) {
+          next.remove(item.chatId);
+        } else {
+          next[item.chatId] = until;
+        }
+        return next;
+      });
     case 'archive':
       final err = await controller.archiveChat(
         item.chatId,

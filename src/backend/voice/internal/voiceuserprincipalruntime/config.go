@@ -78,7 +78,7 @@ func envDuration(name string, fallback time.Duration) (time.Duration, error) {
 func (c Config) validate() error {
 	if c.ReplayAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" ||
 		c.JWKSClientCertFile == "" || c.JWKSClientKeyFile == "" {
-		return errors.New("Voice user principal Redis, TLS and JWKS client credentials are required")
+		return errors.New("voice user principal Redis, TLS and JWKS client credentials are required")
 	}
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
 		return errors.New("invalid Voice user principal cache policy")
@@ -87,7 +87,7 @@ func (c Config) validate() error {
 		return errors.New("invalid Voice user principal listener")
 	}
 	if strings.TrimSpace(c.JWKSCAFile) == "" {
-		return errors.New("Voice user principal JWKS CA is required")
+		return errors.New("voice user principal JWKS CA is required")
 	}
 	endpoint, err := url.Parse(c.JWKSURL)
 	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" {

@@ -113,6 +113,7 @@ class E2eKeyBackupSheet extends StatefulWidget {
   const E2eKeyBackupSheet({super.key, required this.onSave, this.onRestore});
 
   static const Key sheetKey = Key('e2e_key_backup_sheet');
+  static const Key errorKey = Key('e2e_key_backup_error');
   static const Key passwordFieldKey = Key('e2e_key_backup_password');
   static const Key saveButtonKey = Key('e2e_key_backup_save');
   static const Key restoreButtonKey = Key('e2e_key_backup_restore');
@@ -128,6 +129,7 @@ class _E2eKeyBackupSheetState extends State<E2eKeyBackupSheet> {
   final _password = TextEditingController();
   final _hint = TextEditingController();
   var _busy = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -138,9 +140,25 @@ class _E2eKeyBackupSheetState extends State<E2eKeyBackupSheet> {
 
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _errorMessage = null;
+    });
     try {
       await action();
+    } catch (error) {
+      if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
+        final statusCode = error is _E2eKeyBackupActionFailure
+            ? error.statusCode
+            : null;
+        setState(
+          () => _errorMessage = commonActionErrorMessage(
+            l10n,
+            statusCode: statusCode,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -169,6 +187,14 @@ class _E2eKeyBackupSheetState extends State<E2eKeyBackupSheet> {
           const SizedBox(height: 8),
           Text(l10n.e2eKeyBackupHint),
           const SizedBox(height: 12),
+          if (_errorMessage != null) ...[
+            Text(
+              _errorMessage!,
+              key: E2eKeyBackupSheet.errorKey,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 8),
+          ],
           TextField(
             key: E2eKeyBackupSheet.passwordFieldKey,
             controller: _password,
@@ -332,7 +358,9 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
             password: password,
             passwordHint: hint,
           );
-          if (result is E2eApiFailure) throw StateError(result.message);
+          if (result is E2eApiFailure) {
+            throw _E2eKeyBackupActionFailure(result.statusCode);
+          }
           if (mounted) {
             Navigator.of(context).pop();
           }
@@ -344,7 +372,9 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
             isAuthorizationCurrent: () =>
                 mounted && auth == ref.read(authorizationHeaderProvider),
           );
-          if (result is E2eApiFailure) throw StateError(result.message);
+          if (result is E2eApiFailure) {
+            throw _E2eKeyBackupActionFailure(result.statusCode);
+          }
           if (mounted) {
             Navigator.of(context).pop();
           }
@@ -412,6 +442,12 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
       ],
     );
   }
+}
+
+class _E2eKeyBackupActionFailure implements Exception {
+  const _E2eKeyBackupActionFailure(this.statusCode);
+
+  final int? statusCode;
 }
 
 class _EncryptionCodeBlock extends ConsumerStatefulWidget {

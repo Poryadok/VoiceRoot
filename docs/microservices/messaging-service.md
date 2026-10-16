@@ -20,7 +20,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
 - Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; composer remains open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
-- Лимит 4000 символов
+- Лимит 4000 кодовых точек Unicode; число UTF-8 байтов не влияет на лимит.
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
 ### Durable message-event publication (BE-188 A1)
@@ -300,6 +300,10 @@ message UpdateScheduledMessageRequest {
 
 S2S enrichment для Chat `ListChats`. Код возвращает per-member unread state и preview metadata для DM/group/channel.
 
+**Viewer visibility applies to every derived read.** A profile-scoped `GetMessage`, `GetPinnedMessages`, `GetThreadMessages`, `ListSharedMedia`, and `GetChatListMetadata` must apply the same message visibility boundary as history: deleted rows are absent; `ghost_only` is visible only to its sender; `FOR_ME` hides the row only for the profile that hid it; and a directional Social profile block hides that sender's rows from the viewer. Metadata preview selects the latest remaining visible row and unread count excludes hidden rows. A missing or unavailable Chat/Social authority fails closed; clients and trusted internal callers must not use the no-profile `GetMessage` path as a viewer read.
+
+Metadata evaluates block decisions through Social's bounded `IsProfilePairsBlocked` S2S call (at most 500 profiles per request). The canonical Chat `ListChats` page supplies at most 100 chat refs; Messaging enforces that same limit before any per-chat lookup. One request can therefore make at most 100 membership checks, 100 authoritative chat-type checks, and 100 final metadata queries. Across those chats, the unread-sender query examines at most 5,000 unread message rows plus one overflow sentinel, and preview selection reads at most 5,000 candidate rows plus one sentinel. Messaging reuses each unique profile decision across the request and caps them at 5,000; duplicate senders across chats use one decision, so at most 10 Social batch calls are needed. If an exact result would exceed a request-wide budget, `GetChatListMetadata` returns `UNAVAILABLE` without partial or approximate metadata. This explicit availability budget follows the existing fail-closed visibility-dependency contract and does not change block semantics for former senders within budget.
+
 **Shipped fields** на `ChatListMetadata` (per `chat_id`):
 
 | Поле | Тип | Назначение |
@@ -414,7 +418,7 @@ messages
 ├── sender_profile_id (всегда реальный автор-профиль)
 ├── posted_as_chat (bool, default false)
 ├── display_chat_id (nullable, chats.id; обязателен при posted_as_chat=true)
-├── content (text, 4000 chars)
+├── content (text, максимум 4000 кодовых точек Unicode)
 ├── type (regular | system | forward)
 ├── thread_parent_id (nullable, logical ref → messages.id)
 ├── forward_from_id (nullable, logical ref → messages.id)
@@ -470,7 +474,7 @@ read_receipts
 
 **Gaps vs full spec:** composer for `send_silent`; scheduled handlers, worker and event producer usage; typed `content_type`, `message_attachments` table and `RecordMessageView` — см. § ниже и [todo/backend.md](../todo/backend.md).
 
-**Attachment validation (code):** `validateAttachments` today requires `file_id` on each attachment — blocks normative `location` / `article` payloads without File row until validation branches on `content_type` (**code backlog**, R3-A06).
+**Attachment validation (code):** R3-A06 is implemented: `validateParsedAttachments` branches on `content_type`; `location` / `article` use rich-payload validation without a File row, while `sticker` / `gif` / `music` / `video_note` require rich-payload and File metadata validation. This does not establish picker, Article metadata-fetch, or Music metadata-processing completion; see [AttachMenu contract gaps](../todo/client.md#attachmenu-rich-action-contracts).
 
 ### Delete scope
 

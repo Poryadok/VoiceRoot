@@ -116,7 +116,10 @@ func routeMessageNotification(
 				return err
 			}
 			raw := handler.HandleMessageReply(ctx, ev, parentAuthor)
-			decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeReply)
+			decisions, err := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeReply)
+			if err != nil {
+				return err
+			}
 			decisions, err = deliveryForMember(decisions, memberByProfileID(memberRows, parentAuthor))
 			if err != nil {
 				return err
@@ -139,7 +142,7 @@ func routeMessageNotification(
 					"deep_link":         deepLink,
 				},
 			}
-			return pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
+			return pusher.SendPreparedPush(ctx, decisions, delivery.DeliveryInput{
 				SenderProfileID:   senderID,
 				ChatID:            ev.GetChatId(),
 				Type:              delivery.TypeReply,
@@ -152,16 +155,34 @@ func routeMessageNotification(
 		raw := handler.HandleMessageSent(ctx, ev, memberRows)
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
+		type preparedRecipient struct {
+			typ      delivery.NotificationType
+			decision delivery.DeliveryDecision
+		}
+		prepared := make(map[string]preparedRecipient, len(raw))
 		for profileID, baseDecision := range raw {
 			member := memberByProfileID(memberRows, profileID)
 			typ := notificationTypeForInbox(member.InboxBucket)
-			decisions := enrichDecisions(ctx, pusher, map[string]delivery.DeliveryDecision{
+			decisions, err := enrichDecisions(ctx, pusher, map[string]delivery.DeliveryDecision{
 				profileID: baseDecision,
 			}, senderID, ev.GetChatId(), typ)
+			if err != nil {
+				return err
+			}
 			decisions, err = deliveryForMember(decisions, member)
 			if err != nil {
 				return err
 			}
+			prepared[profileID] = preparedRecipient{typ: typ, decision: decisions[profileID]}
+		}
+		preparedByType := make(map[delivery.NotificationType]map[string]delivery.DeliveryDecision)
+		for profileID, item := range prepared {
+			if preparedByType[item.typ] == nil {
+				preparedByType[item.typ] = make(map[string]delivery.DeliveryDecision)
+			}
+			preparedByType[item.typ][profileID] = item.decision
+		}
+		for typ, decisions := range preparedByType {
 			titleFallback := "New message"
 			if typ == delivery.TypeMessageRequest {
 				titleFallback = "Message request"
@@ -182,7 +203,7 @@ func routeMessageNotification(
 					"deep_link":         deepLink,
 				},
 			}
-			if err := pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
+			if err := pusher.SendPreparedPush(ctx, decisions, delivery.DeliveryInput{
 				SenderProfileID:   senderID,
 				ChatID:            ev.GetChatId(),
 				Type:              typ,
@@ -199,7 +220,10 @@ func routeMessageNotification(
 		}
 		raw := handler.HandleMentionAdded(ctx, ev)
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
-		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeMention)
+		decisions, err := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeMention)
+		if err != nil {
+			return err
+		}
 		memberRows, err := listChatMembers(ctx, members, ev.GetChatId())
 		if err != nil {
 			return err
@@ -231,7 +255,7 @@ func routeMessageNotification(
 				"deep_link":         deepLink,
 			},
 		}
-		return pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
+		return pusher.SendPreparedPush(ctx, decisions, delivery.DeliveryInput{
 			SenderProfileID: senderID,
 			ChatID:          ev.GetChatId(),
 			Type:            delivery.TypeMention,
@@ -322,16 +346,16 @@ func enrichDecisions(
 	senderID uuid.UUID,
 	chatID string,
 	typ delivery.NotificationType,
-) map[string]delivery.DeliveryDecision {
+) (map[string]delivery.DeliveryDecision, error) {
 	out := make(map[string]delivery.DeliveryDecision, len(raw))
 	for profileID := range raw {
 		enriched, err := pusher.EnrichDecision(ctx, profileID, senderID, chatID, typ)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("enrich notification delivery decision: %w", err)
 		}
 		out[profileID] = enriched
 	}
-	return out
+	return out, nil
 }
 
 func pushCopyFields(

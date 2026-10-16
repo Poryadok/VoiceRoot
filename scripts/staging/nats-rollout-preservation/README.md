@@ -5,13 +5,144 @@ the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.
 The selected PVC/PV UID and physical path remain bound throughout the operation.
 
+### Explicit baseline restoration after media startup failure
+
+The separate, exact `0e2be62a3326` original-application restoration failed during
+startup and was refenced. Its original checkpoint, failed restoration checkpoint,
+private progress, compatibility note and absent finish response remain unchanged
+evidence. The frozen original-image runner must not be rerun.
+
+The reviewed alternative establishes a `VERIFIED_GATED_TARGET_BASELINE` using
+current master source captured through the existing CI/image-lock authority,
+canonical rendered manifests and dedicated
+[media principal material](../../../deploy/staging/media-principal.md). It retains
+the existing Hub/PVC, 45-consumer contract and all 16 completed database Jobs;
+neither NATS nor database migrations are replayed. Before releasing the marker,
+it proves the exact 22 target templates/UIDs and readiness, all 19 signed service
+actors and 18 live leaf connections, and restores the owned User/Space startup
+override. A bounded private error/status/container-log capture precedes refencing
+if startup fails; public output contains only fixed stage and safe error fields.
+The immutable prepare record binds the canonical full normalized resource set;
+both apply admission and terminal verification reject any subsequent change,
+including non-Deployment configuration, even if closure hashes are recomputed.
+
+The single terminal remains `ABORTED`, with deployment PASS and rollback
+eligibility both false. It admits the existing `--install --upgrade-idle-media-v1`
+transition from the exact retained 1295 helper. A fresh ordinary populated FULL
+and actual application/principal checks provide new-build acceptance separately;
+the ignored recovery runner is not a permanent installed CLI.
+Any nonzero recovery result after mutation requires stopping and reconciling the
+saved private progress manually. Do not rerun it: the exact checkpoint admission
+refuses a changed or partially restored state.
+
+A request reported as `BLOCKED` may already have completed migrations or other
+side effects. Correlate its journal, checkpoint and resource identities before
+choosing recovery; retain private failure evidence before cleanup or refencing.
+Passing source/image gates does not prove runtime readiness or product usability.
+Revalidate current source authority and the one-hour prepared binding at execution;
+never reuse expired authority. The [deployment diagnostics runbook](../../../docs/DEPLOYMENT.md)
+provides the bounded status/report commands for that investigation.
+
+The subsequent target apply stopped after 22 Service/NetworkPolicy responses and
+an Auth Deployment CAS: Kubernetes added its controller-owned
+`deployment.kubernetes.io/revision` annotation after the template changed.
+Canonical resource semantics exclude that top-level annotation only on
+Deployments; application annotations and the complete Pod template remain bound.
+An absent completion event does not prove that its preceding CAS had no effect.
+
+The exact failed-apply successor uses the distinct
+`operator-media-target-reconciled` evidence namespace. It preserves the original
+target files, failed checkpoint and frozen runner, reconciles every resource
+against the retained before/target inventory, and obtains fresh source/CI
+authority. The canonical terminal verifier checks this fixed boundary and rejects
+cross-schema replay, mixed partial states and changed retained evidence. Admin's
+three outside-owned objects remain preserved; their updated semantic digests are
+derived from retained descriptors, never repinned from live state. Ordinary FULL
+still includes Admin normally. Capture, cleanup and refence outcomes are recorded
+separately: a cleanup error cannot discard a completed refence proof, and zero
+replicas alone cannot establish that proof. Historical UNKNOWN is not rewritten
+merely because a later read-only physical fence check succeeds.
+
+Recovery inventory fixtures must use independently recorded literal resource
+names. A successor admission initially omitted `voice-` from six NetworkPolicy
+names; tests generated their inventory from that same incorrect constant and
+therefore missed the mismatch. The corrected regression uses all 22 names from
+the retained failed progress, including their prefixes and order, and rejects
+missing-prefix aliases and reordered events. That admission refusal created only
+the byte-identical retained checkpoint and original-runner copies; these files
+are preserved and accepted only when `retain()` confirms exact existing bytes.
+
+The subsequent target restart reached readiness for 21 workloads, but Gateway
+refused startup because its staging manifest omitted
+`GATEWAY_SESSION_EPOCH_STRICT=true`. Compose's wiring test already required this
+flag; it did not cover the staging rendered target. Canonical staging compilation
+now requires the explicit strict value, existing Redis ConfigMap reference and
+Gateway signer Secret references/mount before planning application changes.
+This static check does not prove runtime readiness or authenticated product flows;
+acceptance still needs fresh Auth tokens carrying the required session epoch.
+The failed restart was refenced successfully. Preserve its checkpoint, progress,
+private failure captures and all earlier evidence; the existing reconciliation
+runner cannot be replayed against that new boundary.
+
+The fixed `operator-media-target-gateway` successor separately retains the exact
+successfully refenced restart checkpoint, prior prepared/normalized/source and
+progress bytes, original runner and both Gateway failure logs. Its canonical
+verifier retains the earlier failure chain, requires all 46 resources to match
+the previous target while fenced (21 Deployment targets, 19 Services and six
+NetworkPolicies), and checks all 22 workloads including the independently
+retained Hub. UID drift, an old/target mixture or a residual User bootstrap
+override blocks admission. A fresh accepted source capture and exclusive build
+directory bind the corrected Gateway configuration; the old authority is never
+reused. Its distinct terminal schema retains the same full readiness, signed
+actor, storage, resource and migration checks and does not claim deployment PASS.
+
+### Explicit reset after retained records expire
+
+The native `/msgs/` boundary includes `index.db`. A retention expiry can change
+its message count, first sequence and subject counts while payload block files
+remain byte-identical. That is a real preservation failure; neither index-file
+exclusion nor rewriting record timestamps is an acceptable repair.
+
+The exact `a83c5bdb26f1` operator reset is separate from FULL recovery. It retains
+the failed checkpoint and original/off-node and post-migration archives. It
+records and rechecks the old PVC inventory during reset; this is an at-reset
+observation, not an ongoing preservation guarantee. A root-reviewed runner
+creates a separate UID-bound empty PVC,
+bootstraps the retained 15-stream/43-consumer contract with existing identities,
+and proves exact configuration, zero records/consumer floors, cold native bytes
+and isolated restore before the off-node copy checkpoint. The original workload
+templates are restored with only the hub `jsdata` claim changed by CAS.
+
+`voice-nats-reset-active-contract-v1` binds that new baseline and PVC explicitly;
+the old migration receipt remains an unchanged historical predecessor. The old
+active-release record is retained privately and invalidated, and the failed FULL
+ends `ABORTED`, never deployment PASS or rollback eligibility. The exact helper
+successor is installed with `--install --upgrade-idle-expiry-reset-v1` only after
+the verified reset closure. The reviewed runner is a recovery artifact, not a
+permanent installed CLI.
+
+The zero-baseline proof describes creation, not a restriction on subsequent
+application writes. Create recent application data after reset, then run ordinary
+FULL: its new cut must preserve those records while the canonical target contract
+reaches 45 consumers. Verify the same application message/file after deployment
+and restart; the empty reset proof alone does not establish new-build quality.
+
 The workflow prepares the cut, proves an isolated restored copy, uploads only
 an authenticated encrypted CMS backup to GitHub, independently reads the entire
 artifact back through root, authorizes one paused apply, proves the original
 native bytes and complete account census again, and then resumes applications.
 No bootstrap Job runs against the retained store. NATS ConfigMaps, Secrets,
 credentials, streams and consumers are retained. A failed proof retains the
-owned fence and reports BLOCKED; it does not restart clients or overwrite data.
+owned fence and reports BLOCKED; it does not restart clients or overwrite data. A failure during
+read-only capture, before the FENCE checkpoint, instead records
+`FAILED_READ_ONLY / BLOCKED / NOT_ACQUIRED` with an immutable snapshot and a
+finite public guard label. This terminal attempt has no deployment PASS or
+rollback eligibility. Idle admission authenticates the captured code, complete
+unchanged snapshot, failure receipt and matching failed prepare journal; a raw
+BLOCKED status is insufficient. A new operation repeats every normal capture,
+backup and off-node restore check. An earlier stale read-only checkpoint may
+only be classified separately with explicit operator provenance and its exact
+original checkpoint and journal retained.
 
 ## V4 full-master safeguards and compatible backend proof
 
@@ -40,6 +171,9 @@ default postconditions gate restart. Already-applied16 does not repeat its
 backfill or erase later opt-ins. Bot004 duplicate non-NULL interaction tokens
 (including empty strings) are rechecked under the writer fence before any
 native contract mutation or database Job; conflicting data is not rewritten.
+The same read-only prerequisite accepts clean Bot schema versions1 through6,
+including the canonical `000006_bot_chat_create_requests` target after migration;
+newer versions, dirty state and duplicate token groups still refuse admission.
 
 The hub renderer is a separately bound root-only init image transition; the
 runner cannot apply arbitrary hub changes. Exact captured inputs and private
@@ -48,6 +182,8 @@ generated configuration and unchanged broker are checked after hub readiness
 and before applications resume. Failure refences; native migration/CAS still
 require closed writers. Renderer retry validates the recorded completed DB
 state rather than rerunning migrations or assuming the original version.
+Renderer continuity retains complete metadata authority and spec while allowing
+controller status revision churn; mutations CAS against the current live revision.
 
 The first compatible populated backend witness is the reviewed Story image
 pair, whose four schema UP files are identical and whose old binary has passed
@@ -58,45 +194,42 @@ Unknown old Story content and unproved backend rollback selections, including
 historical Bot/Search, fail closed. Ordinary frontend rollback remains separate.
 
 A rebuilt current Story component requires its own actual-binary/current4
-witness even when its source has not changed. Compatibility admission must bind
-the exact child manifest, config, application binary, component build source,
-four migration hashes, actual fixture receipt and successful publisher evidence.
-Historical caller/schema fixture inputs remain separate from the new image's
-build source. Current source CI approval remains a separate deployment gate.
+witness even when its source has not changed. The locked root preflight now
+admits a genuinely missing child/config pair automatically before capture or
+fence. It runs the bundled canonical Story probe against that exact immutable
+image and a disposable PostgreSQL clean4 store initialized with the four pinned
+migration files. Actual health, text creation, SQL defaults and archive timing,
+missing-profile refusal, the negative count control, unchanged complete schema
+catalog and complete owned cleanup must all pass before registration. This
+fixture accepts no selected store, staging address or service credentials.
 
-The V6 root-only witness promotion pins reviewed immutable evidence bytes;
-the runner cannot register a witness or supply a compatibility boolean. Both
-captured Story preflight and fresh rollback use the same selected root authority.
-Missing, revoked, corrupt or drifted authority vetoes before mutation. The
-captured witness digest is rechecked after custody and before authorization;
-schema, PostgreSQL, mounted actor and target-contract checks remain mandatory.
-The root-private registry retains at most 128 approved child/config pairs, so a
-new current pair does not erase the prior compatible rollback pair. Every
-selection binds the complete monotonic registry revision. Any registry change
-during an operation vetoes revalidation; revocation cannot silently re-enable
-the same record. Conflicting evidence for an existing pair is rejected.
+Automatic evidence binds child/config/application binary, migration and catalog
+hashes, authenticated helper/probe/fixture hashes and actual result/cleanup.
+An image revision label is retained when present; absence is recorded as null,
+not replaced with an invented source or publisher approval. Current source CI
+and immutable target image admission remain separate mandatory deployment gates.
 
-Delivery has two phases. First review, merge, publish and install the generic
-V6 helper using its exact immutable assets and fixed V5 predecessor. After the
-final master image is published, run and review the actual image/current4
-fixture and its publisher/component/schema evidence, then publish that evidence
-as separately pinned public data. This evidence contains no credentials and is
-not compiled into the helper. An explicit human-root command promotes the
-reviewed file; neither pmd nor the workflow can approve it:
+The existing root-private registry and locked atomic selector are reused. Both
+captured Story preflight and fresh rollback re-read the selected enabled record.
+Revoked, corrupt or conflicting evidence fails closed and never triggers a new
+fixture. Adding another automatically proven pair preserves an unchanged
+captured origin record; changed evidence or revocation still vetoes rollback.
+Manual v1 records retain their exact registry-revision comparison and publisher/
+review evidence contract. Code upgrades preserve every approved/revoked record.
+The runner cannot register evidence or supply a compatibility boolean, and
+schema, PostgreSQL identity, mounted actor and target-contract checks remain.
 
-```sh
-/usr/bin/python3 -I -S /var/lib/voice-nats-preservation/installed/code/nats-rollout-preservation/story_witness.py --promote /root/reviewed-story-witness.json REVIEWED_WITNESS_SHA256
-```
-
-The supplied file must be root-owned, private, regular, single-link and read
-through trusted ancestors. Root promotion takes the existing global operation
-lock, checks installed code and idle operations, and rereads the unchanged
-active marker before its atomic selector write. Use `--revoke` with the same
-record path/hash for explicit revocation. Code upgrades preserve every registry
-and immutable record byte; unknown partial files or corruption veto the upgrade.
-The V5 operator has no intake, so newly rebuilt content remains blocked until
-V6 and the separately reviewed evidence are installed. Promotion is scoped
-binary/schema compatibility authority, not current CI or live rollout proof.
+Build the probe once on Linux with Go 1.26.8 from
+`src/backend/story/cmd/owned-story-probe`, using
+`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o LINUX_STORY_PROBE .`,
+then bundle it with the existing kernel and renewer:
+`python bundle.py KERNEL OUTPUT LINUX_BOOTSTRAP_RENEWER LINUX_STORY_PROBE`.
+The captured-file limit for a probe is 16 MiB; these build flags keep the
+executable within that bound without changing the limit.
+The launcher admits at most64MiB total with each member still bounded to32MiB;
+exact archive bytes/hash, complete manifest membership and root custody remain
+mandatory. Subsequent ordinary FULL and rollback releases require no manual
+per-image fixture, witness promotion or helper installation.
 
 Acceptance order is populated Story transition, an ordinary postrelease record,
 fresh latest-operation rollback preserving that record and all dynamic native
@@ -134,22 +267,197 @@ validated private account signer at
 `/var/lib/voice-nats-issuer/app-account-r20260930a4.seed`. The CI request bridge
 has no issuer action. Fresh signed-chain, revocation, scoped-authority and
 immutable old Secret checks precede renewal. The same account, actor and user
-seed retain all existing claims and deny rules; only the four documented fixed
-publish permissions are added. A create-only immutable new bootstrap Secret is
+seed retain all existing claims and deny rules; renewal permits only the three
+fixed stream UPDATE subjects and the exact consumer INFO/CREATE subjects for the
+declared durable pairs. A create-only immutable new bootstrap Secret is
 authenticated with its existing reply prefix in a pinned network-none scratch
 broker before an atomic root enrollment. The old Secret and Windows signer
 original remain intact. Never paste seed, JWT or credentials into a receipt.
 
 Normal backend prepare binds that enrollment, the approved source, pinned
 server and complete current contract. The authoritative closed native cut and
-encrypted full off-node readback precede the two fixed stream UPDATEs and one
-new-policy durable CREATE. Preserve every old record, existing consumer
+encrypted full off-node readback precede the three fixed stream UPDATEs and the
+exact CREATEs for any missing v3 consumer declarations. Preserve every old record, existing consumer
 config/ACK/pending/redelivery state and dynamic resource. The post-config cold
 ledger is the app-apply baseline; do not compare changed config bytes to the
 pre-migration ledger or restore that old archive. Only proved pinned recovery
 timestamp observations are classified; durable and untouched-stream creation
 identity remains strict. The public script ConfigMaps and root active-contract
 receipt advance only after the complete proof, without replaying bootstrap Jobs.
+
+The v3 plan adds only the declared `voice_space_media_chat` and
+`voice_space_media_role` durables alongside the existing friend-removal
+durable. It accepts only the exact reviewed predecessor stream declarations
+and adds the missing target subjects to `chat_events` and `role_events`.
+Starting from the captured 9ae2e0c baseline, the v3 plan adds `chat.updated`,
+`chat.deleted`, and `space.voice_room_access_invalidated` to chat, plus
+`role.voice_policy_invalidated` to role. An explicitly invoked existing-actor
+renewal may add only the three stream UPDATE subjects and matching consumer
+INFO/CREATE subjects for the declared durables. There are no wildcard
+grants, and every existing deny remains a veto. The actor, account,
+seed, saved enrollment and its legacy proof are retained; the v3 scratch proof
+is validated separately and bound into the new plan. This source change does
+not issue credentials or rewrite installed enrollment or recovery receipts.
+
+Root preflight also pins the exact reviewed Search bootstrap template, whose
+required Chat inputs include `chat.updated` and `chat.deleted`. Its extracted
+script hash joins the Realtime/Analytics target authority passed to the compiler;
+the legacy contract remains unchanged. Modified Search bytes fail root preflight,
+and Notification still requires its unchanged legacy script hash. This source
+binding authorizes target compilation. After the existing native preservation
+proof, the same Search script may advance through the existing UID/resourceVersion
+ConfigMap CAS and active-contract receipt, alongside Realtime and Analytics.
+No bootstrap Job is executed, and Notification gains no new script authority.
+
+The already-installed idle helper requires its own separately reviewed,
+versioned predecessor transition. First compare the installed captured helper
+binding and manifest with the reviewed candidate; a release label or prior
+successful rollout does not identify the installed helper. The existing
+`--upgrade-idle` route remains limited to its exact V15 predecessor. The new
+`--upgrade-idle-ceccb-v1` route accepts only the reviewed installed binding
+`ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032` and writes
+its separate `upgrade-idle-ceccb-v1.json` receipt and `code-ceccb-preserved`
+backup. Both routes retain the same idle, closure, marker, queue, journal,
+policy, recovery-key, witness and history checks; neither permits a changed
+predecessor or replacement of earlier evidence.
+
+The next exact transition, `--upgrade-idle-source-capture-v1`, is limited to
+the captured installed binding
+`65717bd51213624f7c0890e97b2cdf1ef9149f57fb27f22f3bdbebca5fb963e5`. It writes
+its own `upgrade-idle-source-capture-v1.json` receipt and
+`code-source-65717-preserved` backup through the same strict idle transition.
+Its only additional journal admission is the immutable full-prepare request
+from run `38469787490`, whose source-capture step was rejected before a
+checkpoint or source build existed. The disposition binds the exact request,
+journal and response hashes and rechecks that the operation/build are absent
+and its private source workspace is still empty. It does not infer success,
+claim that no external effects occurred, or admit another failed request.
+The smaller GitHub Actions page size preserves the existing complete 10,000
+job/artifact inventory bound after the observed 100-row endpoint failed; every
+page and stable total is still required. The route also retains all existing
+idle, closure, marker, queue, journal, policy, recovery-key, witness and history
+checks. It neither changes the V15 nor CECCB predecessor routes nor rewrites
+the failed request history.
+
+The next captured-launcher route, `--install --upgrade-idle-search-bootstrap-v1`,
+accepts only installed binding
+`a025ffb62b4c0716a44611c4ac00fe9cae60b8bcb5e8b48204b44a62dc541749`.
+It preserves the predecessor as `code-search-a025-preserved` and records its own
+`upgrade-idle-search-bootstrap-v1.json` receipt. All existing idle, terminal
+closure, policy, key, marker, queue and history guards still apply. Its two
+additional dispositions are exact failed FULL prepares from runs `38478016683`
+and `38482268019`: respectively rejected at NATS preflight and target build,
+with no rollout directory/checkpoint. Both are explicitly abandoned before a
+checkpoint, never classified as successful, effect-free or terminal releases.
+Admission binds their complete request, journal and response bytes plus the
+retained source/build tree hashes and custody; these are checked again after
+the code swap. Original request history and workspaces remain intact. Any
+different request, added rollout directory, changed tree or replaced custody
+refuses this transition. Use only the reviewed captured bundle and launcher;
+this route does not renew credentials or alter existing grant receipts.
+
+The prepare associated with d4 run `38274239522` is a hard stop until its
+exact journal, matching checkpoint and response are accepted by the existing
+operation-closure checks. Use the `Record exact operation status after failure`
+step in [`staging-deploy.yml`](../../../.github/workflows/staging-deploy.yml)
+when it has an operation ID; it records the finite summary fields `operation`,
+`phase`, `status`, `fence_status` and `error`. Correlate these with the exact
+checkpoint and request journal, including `prepare_stage.name`,
+`prepare_stage.status` and `prepare_error`. A `COMPLETE` journal by itself does
+not prove that the run has a valid terminal closure. If the workflow did not
+record an operation ID/status, associate only an existing
+`installed/journal/<nonce>.json` whose request has `action=prepare` and exact
+`run_id` and `source_sha` matching that workflow run and reviewed source. Its
+paired response is `installed/responses/<nonce>.json`; its checkpoint must name
+the same operation. Report only the nonce prefix, journal `phase`,
+`prepare_stage.name/status`, `prepare_error`, response `status/error`, and—when
+present—checkpoint `phase/status/fence_status`. If there is no unique exact
+match, the association remains unknown: no helper transition or deployment
+may proceed, and no ID should be inferred from unbounded logs. Preserve its
+journal, response, checkpoint and enrollment bytes; do not delete, rewrite,
+re-enroll or reset them to make admission pass.
+The helper transition does not renew bootstrap credentials or prove
+service-actor grants. Recheck the same actor/account/seed identity and exact v3
+grant scope through the existing approved authority path; never broaden
+wildcards or rotate keys as a workaround.
+
+Keep historical and current proof receipts distinct. The successful historical
+9ae full/rollback/full evidence remains valid for that release, but does not
+prove that a later helper or actor grant accepts the v3 contract. The current
+hosted native fixture separately passed with seven preserved records, 45 prior
+consumers and two declared consumers created; its fresh rollback retained eight
+records. This is fixture evidence, not a live staging receipt. Before any
+ordinary release, require current source CI and the native preservation gate,
+then use a new non-reset operation with a fresh populated cut, authenticated
+encrypted backup and complete readback, isolated restore, paused apply, native
+byte verification and full-account census. A rollback must take a fresh cut
+after release and preserve post-release records. The fixture is not staging
+acceptance; only actual staging release and fresh rollback receipts prove those
+gates.
+
+Service-actor authorization remains a separate prerequisite. Re-prove the
+current Role publish grant for `role.voice_policy_invalidated`, the Space
+publish grant for `space.voice_room_access_invalidated`, and the Voice
+consumer INFO plus exact ACK grants for `chat_events/voice_space_media_chat`
+and `role_events/voice_space_media_role` against the approved service source.
+The existing `_INBOX.voice.voice.>` subscription scope already covers their
+delivery subjects. This bootstrap-renewer change does not modify those service
+actors; any service-actor renewal must retain its existing identity and use its
+own reviewed exact grant transition.
+
+### Grant drift and prepare-failure diagnosis
+
+Updating `deploy/nats/acl-intent.yaml`, deploying a new application image or
+installing a new preservation helper does not change already signed user JWTs.
+Staging has encountered both service-actor grant drift and, after its correction,
+separate enrolled-bootstrap grant drift. A valid signed chain and successful
+authentication alone do not prove that a credential permits the current source
+contract. Check the credentials actually selected by the current generation and
+mounts or enrollment, not newly generated fixture credentials.
+
+| Credential authority | Required comparison |
+| --- | --- |
+| Service actors | Signed effective publish/subscribe grants against the canonical service ACL: this includes Role/Space invalidation publications and Voice consumer INFO/ACK rights. Existing owned inbox wildcards may already cover concrete delivery subjects; do not add redundant authority solely to equalize lists. |
+| Enrolled bootstrap | Signed grants against the canonical bootstrap ACL and the fixed migration plan: stream UPDATE and consumer INFO/CREATE for every declared migration pair. Service-actor acceptance does not prove bootstrap authority, or vice versa. |
+
+Ordinary deployment does not renew either credential class. An explicit reviewed
+operator transition must retain the account, user identity and seed, all denies,
+expiry and limits; add only the bounded missing subjects supported by the issuer.
+Use the existing protected signer and private pipe interface, never wildcard
+widening or root rotation to make preflight pass. Immutable service Secret changes
+need their own exact identity/CAS, protected original-byte backup and affected
+workload stop/readback procedure. Bootstrap enrollment uses a create-only immutable
+candidate Secret and an atomic protected receipt switch after proof; retain the
+old enrollment evidence, original draft and Secrets. A saved draft is bound to its
+original issuer and inputs: blindly replaying the initial enrollment command can
+refuse or reuse stale credentials. A reviewed incident wrapper is not a permanent
+installed CLI or permission to rewrite historical receipts.
+
+Before retrying, verify the complete proposed grant set and unchanged signed
+claims, including deny overlap. Then prove the actual candidate credentials with
+the pinned, isolated broker: service authentication and effective ACL compatibility,
+or the complete bootstrap consumer-declaration proof as applicable. Read back the
+selected credentials/enrollment and repeat the normal source preflight. These
+checks do not attest live business delivery, a successful FULL deployment or its
+preservation gates; those require the ensuing operation's own evidence.
+
+For any failed prepare, first correlate the exact workflow run/source/attempt
+with its request journal and response using the bounded procedure above. Record
+the failing stage and whether a matching checkpoint exists. A `target-build`
+failure before checkpoint creation is a prepare/build failure; do not call it a
+fenced rollout or run rollback based on the workflow label alone. Conversely,
+when a checkpoint exists, its `phase/status/fence_status` and journal determine
+the required recovery and closure. Absence of a checkpoint alone does not prove
+that no external effects occurred or make the request safe to discard.
+
+Keep raw JWTs, seeds, credential bytes, Secret bodies and encoded backups out of
+terminal/CI logs and public receipts. Report only the correlated finite stage,
+safe error category, reviewed subject differences, hashes and resource identities.
+`unexpected` or empty CLI stdout is not a root cause, even with exit code zero;
+inspect bounded private stderr and signed permissions before deciding whether the
+failure is authorization, parsing, build or another class. Track missing safe
+stage/error reporting under `CI-A1-DEPLOY-DIAGNOSTICS`; that follow-up neither
+waives a failed gate nor authorizes a blind retry.
 
 Increasing the social duplicate window does not establish retroactive 24-hour
 deduplication history. Fresh rollback captures current post-release records and
@@ -294,6 +602,27 @@ linux/amd64 GHCR digests; the tag-only artifact does not itself attest digests.
 This assumes authorized project package publishers. Source files are passive
 compiler inputs; their scripts are never executed as root.
 
+Successful gate jobs alone are insufficient: `source_authority.py` also checks
+the parent source CI run and its complete observed attempt. An in-progress
+parent is permitted after the required jobs pass; a completed parent must have
+conclusion `success`, or satisfy the narrowly checked deployment-only `failure`
+exception. A completed `cancelled` run is rejected even when its visible gate
+and lock jobs succeeded. A successful web/images-only deployment does not prove
+that an earlier backend change received a full rollout.
+
+Before a standalone full rollout, check the exact source run's conclusion as
+well as its gate and lock jobs. If it is cancelled, preserve the guard and wait
+for an eligible source-triggered CI run from the next reviewed master change;
+do not blindly retry deployment or manufacture approval from individual green
+jobs. A generic `NATS_ROLLOUT_BRIDGE=BLOCKED` response does not identify the
+private journal failure. Keep the failed run/job receipt and use the bounded
+journal correlation procedure above before attributing a root cause.
+
+CI concurrency groups include the event name: scheduled and manual checks must
+not cancel the push workflow that authorizes a release. New pushes on the same
+branch still supersede older push runs; deployment approval remains bound to
+the exact source revision and attempt.
+
 Reusable deployment retains the parent CI run ID. Standalone staging dispatch
 has a separate execution authority bound to its fixed workflow/master/head and
 attempt. The encrypted backup artifact belongs to the current execution run,
@@ -306,8 +635,19 @@ to the latest successful operation. Root derives its changed workloads and
 recorded actual old image digests from the protected receipt, keeps current live
 configuration, and takes a fresh cut of the current PVC, including records
 written after the previous release. It never replays the prior archive or
-undoes database migrations. Full/app-only rollback needs a separate explicit
-database compatibility plan and is rejected by this images-only endpoint.
+undoes database migrations. A latest successful FULL may be the origin of a
+Story-only rollback: only its recorded reviewed Story application predecessor
+is selected. Fresh current Story schema4 and the exact migration hashes are
+required; current configuration, template, sidecar/init pins, other workloads
+and HUB renderer remain. Generic FULL/app-only reversal is rejected.
+
+Recovery of an interrupted images-only apply before business restart uses the
+same ROOT CLOSED-seal producer after restoring its captured templates. The
+original receipt deadline remains in force at every template, resume and release
+effect. Completion checks the owned release marker, running selected storage,
+and the UID, exact restored template, replica count and readiness of every
+captured workload. A late failure re-fences only the owned objects; replacement
+identities remain BLOCKED with unknown fence state rather than being taken over.
 
 Nonce replay returns the persisted result; interrupted finish with an already
 persisted PASS does not repeat restart or turn the operation into BLOCKED.
@@ -344,8 +684,10 @@ Rollout archives stream bounded chunks and support PVC capacity up to 48 GiB and
 their defaults. Before fencing, capacity, existing native entries/types, free
 space for archives/restored copies/encryption/readback and available inodes are
 checked. Active-write growth may still exhaust capacity after this preflight;
-such failures retain the fence with an explicit recovery status. Checkpoints
-are bounded 128 MiB and monitoring 64 MiB; supported capacities are finite.
+such failures retain the fence with an explicit recovery status. Operation
+checkpoints have a 128 MiB read/write bound; ancillary private JSON inputs retain
+their 2 MiB bound, and monitoring remains bounded at 64 MiB. Supported capacities
+are finite.
 
 ## Evidence
 
@@ -442,6 +784,15 @@ stack-lock artifact, recompiles retained parameters and compares compiled,
 image-only and server-normalized targets with the original checkpoint. Current
 helper approval does not replace historical target approval.
 
+Paused canonical recompilation retains the original desired file/user signing
+endpoint objects. The recovery-only producer first requires the exact owned
+Deployment UID/resourceVersion and semantics, plus an original-to-owned change
+limited to the recorded replica count1→0. It projects only the original desired
+spec onto fresh current metadata for server dry-run; ordinary compiler reads
+remain live. Exact compiled/image-only/normalized target equality is retained,
+and the producer rechecks custody after compilation. Saved targets, snapshots
+and live replicas are never refreshed or rewritten to make recompilation pass.
+
 Before accepting a cut, a pinned isolated broker restores the closed native
 archive; one actual account monitoring snapshot feeds both census and contract
 compilation. Original plan, binding and selected scripts must match, and root
@@ -451,3 +802,371 @@ unverified cleanup cannot return an accepted cut. Interrupted capture or partial
 outputs cannot be replayed. Completed encrypted output recovery requires the
 same fresh execution nonce/run/head and operation binding. Ordinary encrypted
 off-node readback, paused authorization, apply and release guards remain required.
+
+The ciphertext-only export directory is explicitly root:pmd/0750 after creation,
+including under the bridge service umask0077. Its ciphertext remains root:pmd/0440;
+private plaintext, keys and checkpoint modes are not broadened. Upload failure
+after AWAITING_OFF_NODE cannot authorize a new capture or refresh the saved cut.
+
+## Preserved ciphertext upload recovery
+
+Captured NATS client inputs use a root:65532 directory with explicit mode0750,
+including under the bridge service umask0077. Credential files remain
+root:65532/0440. This applies to future captures; it does not repair or resume
+an existing fenced operation or change its stored authority and deadlines.
+
+V9 provides a closed continuation for operation3340764a7d24 in its recorded
+WAITING/AWAITING_OFF_NODE/VERIFIED state. The advanced-state installer preserves
+checkpoint bytes and inode, the original V8 code, keys, policy, witness records,
+ciphertext, cut and all original journals/responses. It cannot reset progressed
+state or admit an unknown unfinished operation. Installation does not repair the
+export directory or authorize deployment.
+
+The `cipher_upload_operation` workflow input is separate from cold-backup and
+rollback. Current helper source is admitted first. The historical73ca target
+workspace is acquired as bounded data before starting the fresh upload window;
+it is never substituted for current helper code or executed as an old helper.
+`resume-cipher-upload` binds a fresh actual workflow run/attempt/head/nonce to
+the immutable original ciphertext/run37900273078/cut. Under the global lock,
+root verifies original checkpoint/journal/response and ciphertext custody,
+repairs only the owned export directory through its verified FD to0750, and
+creates an exclusive immutable upload record. It performs no capture, encryption,
+target recompilation or checkpoint rewrite.
+
+`authorize-preserved-upload` requires that explicit upload nonce and fresh
+dispatcher authority. Actual GitHub artifact identity and the entire downloaded
+ZIP ciphertext are compared with the original private ciphertext. The dedicated
+route cannot fall back to ordinary artifact verification. It rechecks source,
+actor and state authority after readback. Its deadline is the minimum of the
+fresh600-second window and the original four-hour proof expiry; no timestamp or
+original proof is renewed. Checks occur before authorization mutation, before
+prepared state and before receipt creation; the resulting receipt is clamped
+to that deadline. Ordinary authorization retains its existing deadline policy.
+Before transaction mutation, rejection preserves the original checkpoint. After
+mutation begins, failures retain truthful progressed BLOCKED/refenced state.
+Expired original proof leaves the stage fenced and requires a separately reviewed
+invariant-bound fresh-proof disposition, never a blind retry or recapture.
+
+Scoped verification covers actualUID1000 ciphertext access under umask0077,
+root-isolated immutable record/replay and full ZIP comparison, actual client to
+Actions/dispatcher composition with explicit external adapters, workflow/guard
+historical-data ordering, ordinary transaction controls and pre/post-mutation
+deadline rejection. The captured V8-to-V9 installer fixture verifies preservation,
+partial rename retry, unknown journal and original execution/cipher drift vetoes.
+Synthetic data, mocked Kubernetes/API boundaries and fixture capabilities do not
+establish live backup, apply, rollback or full staging acceptance.
+
+## Exact expired native recovery (implementation in progress)
+
+The dedicated334076 recovery binds a fresh complete private-copy full native/records/config/consumer ACK-pending proof and actual full off-node readback to separate short authority. Original cipher/cut/target/execution/expiry and BLOCKED history remain immutable. Closed selected bytes must equal the proved current observation immediately before first selected broker mount; unknown drift rejects. Durable prospective transaction entry precedes broker startup and intent/issued records; later failure retains truthful progress and refence rather than restoring the adopted checkpoint. Finish-only proof permits missing resume/release obligations without migration/application replay. A safety pause records a new resume obligation. Ordinary routes are unchanged. No live consumer accepts the new authority until the whole adoption/readers/proof/workflow/apply/finish outcome has final independent review and exact CI. Typed startup-rewrite disposition requires real populated pinned-image evidence, not semantic equality alone.
+
+The V10 package includes the complete cold-route dependency closure and fixed
+installer unit restrictions. The new ELF and rebuilt archive require independent
+validation. Installation admits only the exact V9 BLOCKED/pre-intent adoption;
+it preserves checkpoint bytes and does not repair inputs, start a broker, issue
+authority, or replay a request. The fixed transferred archive path is
+`/home/pmd/voice-nats-rollout-v10/rollout-bundle.tar`. Activation follows combined
+implementation/operator review, normal CI/merge and complete remote readback.
+
+
+The expired-recovery consumer checks its fresh independent capability after durable intent/issued journal work immediately before every NATS API, custody CAS and active-release publication. Finish observation accepts an exactly owned already-verified marker without replaying its CAS. Dedicated apply receipts use a closed authority-bound schema through the public guard/runner/apply consumers; ordinary receipts remain strict. Successful finish-proof request status is separate from the truthful blocked operation.
+
+Ordinary full/app/images rollout and every new rollback keep HUB stopped from
+the original cold cut through paused apply and release verification. Clients
+stop first. ROOT captures the original complete live census and exact running
+container, retains the Pod with one operation finalizer, scales HUB to zero,
+and records its current matching container termination with exit0 and no OOM
+before removing only its finalizer. Kubernetes1.27 or later and a Ready node are
+required; absent or replaced termination evidence blocks capture.
+
+The complete canonical original census is also written into the root-private
+operation checkpoint at the shutdown-intent journal boundary. Its canonical
+digest must match the intent event before the finalizer CAS or HUB scale can
+proceed; checkpoint size limits remain fail-closed. A reconstructed new-format
+operation validates the snapshot schema and digest before using it for the
+pre-cut native inventory comparison. A historical checkpoint that contains
+only `live_census_sha256` remains readable for phases whose cut and backup were
+already proved, but it cannot continue a pre-cut capture that needs the missing
+original census. Do not substitute a fresh observation or infer the lost census
+from shutdown events or the restored store.
+
+Before any copied broker starts, the closed archive enumerates every stream
+metadata pair and consumer metadata/state triple, rejecting memory storage and
+unknown layouts. Complete offline durable decoding includes ACK floor,
+delivered sequences, pending timestamps and redelivery maps. The restored
+broker census must enumerate the same native resources. Actual authenticated
+CMS decryption verifies every promised member, native archive and isolated
+payload/durable readback; complete remote ciphertext equality binds that proof
+to the off-node artifact. Release records durable verified intent before normal
+HUB startup and client resume. It requires no selected-HUB live seal or custom
+namespace/firewall support. Natural timer/retention changes that cannot be
+classified exactly block release; unavailable live callback telemetry is not
+claimed.
+
+Only the already-stopped historical operation3340764a7d24 uses separate fresh
+current observation and authority without inventing original termination proof.
+Its input repair creates an exact private runtime copy and verifies both copies
+at every mount; original input directory custody and historical bytes remain
+unchanged. A new rollback always captures current state and retains additive
+contracts and migrations instead of replaying an earlier cut.
+
+Interrupted cold finish obtains a fresh full current CLOSED-copy proof, both
+complete ciphertext readbacks and a separate short finish-only capability.
+Unknown loss, natural retention or ACK progress that cannot be exactly classified
+blocks admission; the package does not claim universal resume after application
+traffic has changed the store. Historical live-seal/postseal states explicitly
+reject as unsupported before pause, copied broker startup or release. Their
+source/evidence remains preserved outside the qualified package. Each admitted
+finish checks resumed workloads and its deadline before release/publication;
+failure retains truthful progress and fresh safety-pause obligations.
+# Cold native proof and V11 continuity
+
+Active cold deployment, rollback and expired recovery copy readbacks verify the
+complete authoritative native archive, exact message-file inventory and hashes,
+restored pinned-broker census/configuration, and complete decoded durable state
+(including pending timestamps and redelivery maps). They do not require the live
+bootstrap role to publish message GET requests and do not claim API-decoded
+message semantics. Authenticated CMS decryption verifies every promised member
+and repeats the isolated native restore/readback before release authority.
+
+Complete consumer decoding uses authenticated private archive bytes. Archive
+custody, manifest and hashes are checked before and after the read; live fence
+checks remain at those phase boundaries and after all consumers are decoded.
+Losing authority at the final boundary rejects the entire proof. Consumer count
+does not multiply live cluster checks during this immutable-byte phase; every
+consumer still receives complete native-state and admitted-decoder validation.
+
+V11 preserves the V10 helper and original adoption, checkpoint, request journal,
+response and recovery keys. Its separate upgrade record binds the replacement
+code. The exact failed pre-proof recovery request is recorded without replay;
+new recovery requires a fresh dispatcher and separately verified current proof.
+Exact native continuity requires no inferred historical startup interval;
+changed metadata remains subject to the pinned interval/checksum classifier.
+
+V12 corrects the common state-reader routing after the V11 helper upgrade. The
+reader selects the expired adoption verifier only for the exact current upgrade
+receipt and then verifies the full preserved V11/V10/V9 code and adoption chain.
+The historical V9 reader cannot be redirected by a newer receipt. Installation
+preserves V11 code, its upgrade receipt and all original history; a separate V12
+receipt binds the replacement and a separate disposition freezes the exact
+failed pre-proof reader request. Neither record grants recovery permission.
+
+V13 prefers an optional protected archive at
+`installed/source-archives/<full-commit-sha>.tar.gz` in both source consumers.
+Archives are passive data: each use still verifies the live approved commit,
+complete Git tree, blob contents and executable modes, CI, image lock and image
+identity. Only a missing archive uses the existing network download; an invalid
+present archive blocks. The dispatcher filters CI runs by its exact validated
+head SHA while retaining the existing response checks and deadline.
+
+Installation preserves the installed V12 code and all earlier upgrade receipts,
+adoption, checkpoint and request history. A separate V13 receipt binds the new
+helper, and an immutable disposition records the exact failed pre-source
+transport request without replay or recovery authority.
+
+## Explicit retirement of the prepared historical operation
+
+The root-only reviewed retirement action applies only to operation3340764a7d24
+and the exact frozen prepared/unapplied checkpoint. The user's current-data
+waiver permits loss of all current messages and consumers while retaining the
+staging setup. Retirement restores the original twenty workloads with their
+existing UIDs and templates, verifies configuration and selected storage, and
+releases the prepared marker only after the selected setup checks. The original
+strict action requires all workloads ready. The separately attested continuation
+of the exact failed125-event attempt restores original desired replicas and
+templates, requires HUB ready, and records actual readiness for all other apps;
+it may close with unhealthy old apps so a normal FULL can repair them. It
+preserves the complete historical checkpoint as an immutable snapshot and appends truthful retirement
+events. The terminal state is ABORTED/OPERATOR_RETIRED/RELEASED, never a
+deployment PASS or rollback source.
+
+Normal idle admission requires the separately bound immutable plan, closure
+receipt, exact historical event prefix, setup proof and named journal bytes.
+An ABORTED status alone grants nothing. A root-only idle helper update accepts
+the fixed installed V15 predecessor after that closure and preserves all old
+operation code, keys, policy, receipts and request history. Unknown pending
+requests still block. Neither action is exposed through the bridge or workflow.
+
+The exact blocked pre-cut fence at operation `32151c4cb431` has a separate
+root-only recovery path. Its checkpoint is `FENCE/BLOCKED/UNKNOWN` and contains
+no cut or cipher, so restoring the captured workloads after the retained HUB
+pod's orderly exit is an explicitly authorized disposable-staging recovery,
+not a preservation PASS and not a rollback source. The recovery is pinned to
+that checkpoint, journal/response hashes, namespace, selected PVC/PV, workload
+UIDs/templates, marker, and the retained pod UID/container/finalizer. It removes
+only that owned pod finalizer with UID/resourceVersion tests, restores the
+captured workloads in the recorded dependency order, and releases the marker
+only after readiness checks. A failure during restoration leaves the marker
+fenced and a private progress step. If the marker-release patch succeeds but
+closure persistence then fails, the marker can already be active; the private
+progress step distinguishes that case. In either case, stop for root operator
+inspection and reconciliation. Do not rerun the one-shot recovery or treat an
+active marker as proof that closure/idle admission completed.
+
+There is one narrowly bound continuation for the observed
+`removing_owned_finalizer` progress step. It is not a retry of the Pod patch:
+the continuation requires the exact unchanged pre-cut snapshot and progress
+record, confirms the original Pod name and UID are absent, rechecks the marker,
+storage identity, zero-replica workloads and absence of PVC writers, then resumes
+at HUB scale. Its v2 closure explicitly records that the patch response metadata
+was unavailable and that the exact Pod UID was observed absent; it leaves both
+pre- and post-patch resourceVersions unknown. It cannot be used if the Pod remains,
+the name is reused, any progress advanced beyond the finalizer step, or any
+precondition changed. On any such mismatch, stop for manual reconciliation.
+The normal patch path treats an omitted empty `metadata.finalizers` field as an
+empty list but still requires the actual returned resourceVersion; no version is
+inferred or fabricated.
+
+The isolated operator container must present the same root-owned evidence
+directory at both `/evidence` and `/var/lib/voice-nats-preservation`, because
+the one-shot driver uses the former while the captured verifier uses its
+canonical latter path. The paths must resolve to the same device and inode;
+root:gid1000 mode `0750` is accepted, while group-write and all other-user access
+are rejected. The captured manifest root contains `nats-known-baseline/` and
+`nats-rollout-preservation/` directly beneath its `code/` directory.
+
+The historical `STARTED` request rows are handled by a separate, root-owned
+administrative abandonment receipt after the exact fence recovery closes. The
+receipt binds the complete pending-row inventory and each unchanged journal,
+response, request, operation checkpoint, and source-build state. It records the
+explicit disposable-staging authorization; it does not claim those requests had
+no effects or succeeded. Each row records whether a terminal checkpoint exists,
+only a source-build directory exists, or the referenced checkpoint is absent;
+absence is an observed filesystem state, never a no-effects claim. The request
+and response operation IDs must agree, and checkpoint/build presence is
+rechecked when the receipt is consumed. Journal and response files remain
+immutable. A new, unknown, changed, or nonterminal row blocks admission, as does
+any unreferenced nonterminal rollout directory. This disposition is
+separate from the 321 fence closure and is required before the exact installed
+`ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032` helper
+predecessor can use `--upgrade-idle-ceccb-v1`; it does not broaden the existing
+V15-only `--upgrade-idle` route. After that reviewed helper transition, any new
+deployment must use the ordinary protected fresh-cut, encrypted backup and
+readback, isolated restore, native preservation, and post-apply gates. The
+fence-abort or abandonment receipts alone do not establish those gates.
+
+The separately fixed source-capture rejection from run `38469787490` is not a
+row in that abandonment receipt: `--upgrade-idle-source-capture-v1` checks its
+exact request/journal/response hashes and the still-empty pre-capture workspace
+directly. All other pending rows still require the full inventory disposition,
+and all rollout, marker, key, policy, witness, and closure checks remain in
+force.
+
+Captured public code is hashed through an ordinary protected read-only file
+descriptor so the unprivileged workflow can verify root-owned group-readable
+source. Its complete manifest, ownership, mode, single-link, size, hash and
+identity checks remain. Private state and native data retain their existing
+O_NOATIME readers. Future deployments and new rollbacks use the normal protected
+cold transaction and require fresh preservation and release evidence.
+
+
+Actual owned Running Pods can identify a previous application image even when
+the application is not Ready: a current container attempt and unique immutable
+runtime imageID must match its owned ReplicaSet and current deployment template.
+Missing or ambiguous attempts, foreign ownership and changed templates refuse
+capture. HUB live census and graceful shutdown health requirements are unchanged.
+
+
+Leaf readiness and monitoring are separate checks. The October 15 recovery
+reached Ready for all 22 workloads but its leaf monitoring request failed because
+the shared leaf configuration did not enable HTTP monitoring. Staging leaf
+Deployment arguments now bind both the client and monitor to 127.0.0.1, with
+monitor port 8222; the shared ConfigMap is preserved. The Realtime dual-leaf proof
+uses client/monitor ports 4222/8222 and 4223/8223. Canonical target preflight rejects
+missing, duplicate, public-host, or alternate leaf-monitor arguments and changed
+config mounts before applying a target. An isolated pinned-image linked-Hub/two-
+leaf proof verifies the actual listener addresses and the leafz response contract.
+
+The fixed media_monitor helper identifies the Hub varz or allowlisted leaf leafz
+request in command failure diagnostics. Command failures retain exit/timeout,
+a fixed stderr reason, and the hash/length of bounded stderr, never its contents
+in public output. Recovery consumers must retain that diagnostic with the current
+failure and update the current checkpoint error; copied historical checkpoint
+errors are not the cause of a newer failure. The ready-baseline-proof failure at
+checkpoint cf937 must be read from its retained progress/failure records (the
+historical error field still names the earlier Gateway timeout). Preserve those
+bytes. Neither all-ready snapshots nor this monitoring correction authorizes
+replaying an old runner or claims terminal deployment acceptance.
+
+
+The exact cf937 monitoring-failure successor uses the separate
+operator-media-target-monitor namespace and voice-media-target-monitor-closure-v1
+receipt. Admission binds all 30 retained members, including the prior 21-member
+history, cf937 bytes, gateway source/prepared/normalized/progress artifacts, the
+202e runner and current command_failed record. It reconstructs the failed state
+from the prior boundary plus progress, requires verified refence, all 46 resources
+at the prior target with unchanged UIDs, and all 22 paused workload snapshots
+including Hub separately. User bootstrap overrides, foreign rows, changed history,
+old terminal namespaces and source/CI mismatch refuse admission. A fresh accepted
+source capture and full normalized digest are required; only the new Deployment
+templates enable monitoring. Existing ConfigMaps, storage, migrations and prior
+runner/artifact bytes are retained. The new runner records current failure error
+and safe monitor diagnostics without altering historical checkpoints. Independent
+terminal readback and live Admin preservation remain mandatory before and after
+helper installation; this closure still does not mean ordinary FULL or product
+acceptance passed.
+
+The subsequent ordinary FULL request `8d65ee47ce1b` failed before fencing: its
+isolated Story writer called the real `CreateStory` RPC without a User privacy
+provider and received `Unavailable`. HTTP health did not prove writer readiness.
+The disposable probe now supplies `GetPrivacySettings` only for its generated
+author and the `story` caller on loopback port 9091; the fixture sets
+`USER_GRPC_ADDR` to that endpoint. The production Story privacy check remains
+fail-closed. A successful writer must observe that RPC, preserve SQL/schema
+assertions, and pass the independent wrong-count negative control (exit 17).
+Rebuild `story-current4-probe` when changing this fixture; replacing Python alone
+does not activate the dependency. Safe fixed writer failure labels and the
+original command action are captured before Docker cleanup.
+
+After reviewing the new bundle, `installer.py --upgrade-idle-story-fixture-v1`
+accepts only installed binding `7f5b901d8429f2d560bb7f71481baabfd90ad2303cfd1b06c8569d94ff87920b`.
+It requires the successful monitor checkpoint `bfa1426b` / receipt `f951ce87`
+and the exact failed pre-fence request, source tree/custody, journal, response and
+public report bytes. The request is classified `ABANDONED_PRECHECKPOINT` with
+`BLOCKED` status; its STARTED journal and all retained evidence remain unchanged.
+Any operation/build directory, changed source, request or terminal evidence
+refuses admission. This upgrade authorizes no rollback or replay and makes no
+ordinary FULL acceptance claim. Root must submit a fresh ordinary request and
+complete deployment and product acceptance after installation.
+
+Before swapping helpers, validate every installed journal together. The exact
+Story disposition is excluded from the legacy abandonment census only after its
+strict retained-evidence verifier succeeds; the legacy 29-entry receipt stays
+byte-identical. An isolated new-request test misses this interaction: regression
+coverage must include both inventories, corrupt Story evidence and an unknown
+STARTED nonce, plus the complete installer admission path.
+
+Check the reviewed ACL proof digest and generation before costly preparation.
+When the source ACL changes, retain the reviewed delta and its signed-grant,
+server-authentication and bootstrap API evidence before updating proof variables;
+ACL compatibility does not establish business publication, ACK or product acceptance.
+After full apply, preserved Services may have new resource versions from kubectl
+bookkeeping. Finish still requires their original UID and complete desired
+semantics, including labels, annotations, selectors and ports. Pre-apply version
+checks and Secret preservation remain strict; this is not a general version waiver.
+
+A failed finish request can remain STARTED after a separate finish completes the
+same operation. Do not rewrite its journal, response or public report to make an
+idle helper upgrade pass. Root may retain a private immutable
+`terminal-finish-disposition-<failed-nonce>.json` with schema
+`voice-terminal-finish-disposition-v1`. Its closed file map pins both finish
+journals/responses/reports, terminal checkpoint and apply authorization; it binds
+the operation and captured helper. Admission requires the same source, dispatcher
+run, attempt and apply claim, a successful completion and released terminal marker.
+The failed request remains BLOCKED. This grants no replay or new deployment authority.
+Any retained Service RV reconciliation must include its original checkpoint and
+receipt and reproduce the exact recorded metadata-only change. Both the legacy
+pending census and per-journal admission verify this disposition, and the existing
+idle upgrade transaction rechecks it after the code swap. Use that internal
+transaction with reviewed exact predecessor/destination bindings and fresh immutable
+receipt names; no new public upgrade command or failed-nonce exception is needed.
+
+Historical source admission pins content and enforces safe live custody. Its
+full metadata fingerprint is valid only within a read or across the locked
+helper swap: `installed/sources` is shared, so a later operation legitimately
+changes that parent's timestamps and link count. Do not persist that mutable
+parent fingerprint as a permanent historical equality or repin it after each
+operation. The Story boundary retains exact content, ownership/mode/link checks
+and per-read race checks; the installer still refuses metadata changes during
+its swap. Original per-entry metadata was not retained, so this does not claim
+historical inode/timestamp equality.

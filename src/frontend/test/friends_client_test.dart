@@ -12,6 +12,28 @@ void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
 
+  test('cancel sends only target path with active authorization', () async {
+    final client = VoiceFriendsClient(
+      gateway: gatewayHttpForTest(
+        MockClient((req) async {
+          expect(req.method, 'POST');
+          expect(req.url.path, '/api/v1/friends/invitations/target/cancel');
+          expect(req.headers['Authorization'], auth);
+          expect(req.body, isEmpty);
+          return http.Response('{}', 200);
+        }),
+        config: config,
+      ),
+    );
+    expect(
+      await client.cancelFriendInvitation(
+        authorization: auth,
+        targetProfileId: 'target',
+      ),
+      isA<FriendsApiEmpty>(),
+    );
+  });
+
   group('VoiceFriendsClient.listFriends', () {
     test('GET /api/v1/friends', () async {
       final mock = MockClient((req) async {

@@ -58,6 +58,15 @@ def rendered_source(source,parameters,decoder):
         path=Path(source)/relative
         if path.is_symlink() or not path.is_file() or path.stat().st_size>2<<20:raise Blocked('rollout_compile_manifest_invalid')
         text=path.read_bytes().decode('utf-8')
+        if '__GATEWAY_INGRESS_HOST__' in text:
+            host=parameters.get('gateway_host')
+            if host is None:
+                defaults=(Path(source)/'deploy/staging/domains.defaults').read_text(encoding='utf-8')
+                match=re.search(r'^VOICE_GATEWAY_INGRESS_HOST=([a-zA-Z0-9.-]+)$',defaults,re.M)
+                host=match.group(1) if match else ''
+            if not isinstance(host,str) or not re.fullmatch(r'[a-zA-Z0-9.-]+',host):
+                raise Blocked('rollout_compile_gateway_jwks_host_invalid')
+            text=text.replace('__GATEWAY_INGRESS_HOST__',host)
         for key,value in replacements.items():text=text.replace(key,value)
         if re.search(r'__[A-Z0-9_]+__|IMAGE_PLACEHOLDER',text):raise Blocked('rollout_compile_placeholder_unresolved')
         # One object per invocation: kubectl printers do not guarantee one
@@ -82,7 +91,7 @@ class ProducerKube:
         values=self.run(['get','secret',name,'-o',"jsonpath-as-json={.metadata['uid','resourceVersion']}"])
         return dict(zip(('uid','resourceVersion'),values))
 
-def main(args):
+def main(args,*,producer=None):
     if len(args)!=3:raise Blocked('rollout_compile_arguments_invalid')
     source=Path(args[0]).resolve(strict=True);parameter_path=Path(args[1]);output=Path(args[2])
     if parameter_path.is_symlink() or not parameter_path.is_file() or not 1<=parameter_path.stat().st_size<=65536:
@@ -98,7 +107,7 @@ def main(args):
         raise Blocked('rollout_compile_version_invalid')
     scope={**p,'template_hashes':{'voice-'+name:None for name in p['changed_services']}}
     frontend_only=guard.frontend_image_only(scope)
-    producer=ProducerKube()
+    producer=ProducerKube() if producer is None else producer
     if frontend_only:
         bootstrap_paths=[]
         rows=[producer.get('Deployment','voice-'+name) for name in sorted(set(p['changed_services']))]
@@ -107,6 +116,13 @@ def main(args):
         bootstrap_paths=compatible_bootstrap(source,p['contract'],decode_yaml,p.get('bootstrap_target_scripts'))
         rows=rendered_source(source,p,decode_yaml)
         source_paths=SOURCE_MANIFESTS
+        if p['mode']=='images-only':
+            # Backend manifests do not contain frontend Deployments. Preserve
+            # selected live frontend templates just as the frontend-only path.
+            fronts=sorted(set(p['changed_services'])&{'web','admin','developer-portal'})
+            rows.extend(producer.get('Deployment','voice-'+name) for name in fronts)
+            source_paths=(*source_paths,*(
+                'deploy/staging/'+({'web':'flutter-web'}.get(name,name))+'.yaml' for name in fronts))
     import source_plan
     plan=source_plan.compile_plan(source,p,decode_yaml,producer)
     if frontend_only and plan['actions']:raise Blocked('rollout_frontend_auxiliary_action_forbidden')

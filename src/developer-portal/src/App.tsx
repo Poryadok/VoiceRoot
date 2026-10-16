@@ -190,6 +190,7 @@ function Portal() {
     fallback: BotSummary | undefined,
     request: AuthenticatedRequest,
     clearSecrets = true,
+    clearStatus = true,
   ) => {
     const selectionGeneration = ++selectionGenerationRef.current;
     selectedBotIdRef.current = botId;
@@ -204,7 +205,9 @@ function Portal() {
     applyBotToEditForm(undefined);
     setCatalog([]);
     setManifest(defaultManifest);
-    setStatus('');
+    if (clearStatus) {
+      setStatus('');
+    }
     void loadBotDetail(botId, fallback, request, selectionGeneration);
     void loadBotCatalog(botId, request, selectionGeneration);
   }, [applyBotToEditForm, loadBotCatalog, loadBotDetail]);
@@ -233,7 +236,7 @@ function Portal() {
       const nextId = current && list.some((bot) => bot.id === current)
         ? current
         : list[0].id!;
-      selectBot(nextId, list.find((bot) => bot.id === nextId), request, false);
+      selectBot(nextId, list.find((bot) => bot.id === nextId), request, false, nextId !== current);
     } else {
       selectedBotIdRef.current = '';
       selectionGenerationRef.current += 1;

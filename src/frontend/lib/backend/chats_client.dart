@@ -400,11 +400,12 @@ class VoiceChatsClient {
   Future<ChatsApiResult<VoiceChat>> createGroup({
     required String authorization,
     required String name,
+    String? requestId,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/chats'),
       authorization: authorization,
-      body: createGroupRequestToProto(name: name),
+      body: createGroupRequestToProto(name: name, requestId: requestId),
       createEmpty: chat_pb.CreateChatResponse.create,
     );
     return _map(result, (data) => voiceChatFromProto(data.chat));

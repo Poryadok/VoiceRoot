@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -148,7 +147,7 @@ void main() {
       );
       expect(retryButton, findsOneWidget);
       expect(
-        tester.getSemantics(retryButton).hasFlag(SemanticsFlag.isButton),
+        tester.getSemantics(retryButton).flagsCollection.isButton,
         isTrue,
       );
       bool retryOwnsPrimaryFocus() {

@@ -52,6 +52,7 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key pinnedMessagesKey = Key('chat_info_pinned_messages');
   static const Key chatThemesKey = Key('chat_info_chat_themes');
   static const Key createGroupKey = Key('chat_info_create_group');
+  static const Key leaveChannelKey = Key('chat_info_leave_channel');
 
   final String chatId;
   final String? groupName;
@@ -71,6 +72,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   bool _standalonePinsFailed = false;
   int? _standalonePinsStatusCode;
   bool _showChannelSettings = false;
+  bool _leavingChannel = false;
 
   @override
   void initState() {
@@ -101,12 +103,17 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     final auth = ref.watch(authControllerProvider);
     final authorization = ref.watch(authorizationHeaderProvider);
     final chatList = ref.watch(chatListControllerProvider);
-    final pinsKey = (widget.chatId, auth.activeProfileId, authorization);
-    PendingPinnedMessageJump? pendingPinnedJump;
-    final roomState = roomExists ? ref.watch(roomProvider) : null;
     final viewerProfileId = auth.activeProfileId;
     final listBelongsToViewer =
         viewerProfileId != null && chatList.profileId == viewerProfileId;
+    final chat = listBelongsToViewer
+        ? chatMetadataForId(chatList.items, widget.chatId)
+        : null;
+    final isStandaloneChannel =
+        chat?.isChannel == true && !chat!.isSpaceChannel;
+    final pinsKey = (widget.chatId, auth.activeProfileId, authorization);
+    PendingPinnedMessageJump? pendingPinnedJump;
+    final roomState = roomExists ? ref.watch(roomProvider) : null;
     final roomBelongsToViewer =
         viewerProfileId != null &&
         roomState?.historyProfileId == viewerProfileId;
@@ -145,6 +152,19 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
           Divider(height: 1, color: voice.borderDefault),
         ],
+        if (isStandaloneChannel)
+          ListTile(
+            key: ChatInfoPanel.leaveChannelKey,
+            leading: const Icon(Icons.exit_to_app),
+            title: Text(l10n.chatChannelLeave),
+            trailing: _leavingChannel
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : null,
+            onTap: _leavingChannel ? null : _confirmLeaveChannel,
+          ),
         if (pinnedMessages.isNotEmpty)
           ListTile(
             key: ChatInfoPanel.pinnedMessagesKey,
@@ -484,6 +504,91 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           statusCode: statusCode,
         ),
     };
+  }
+
+  Future<void> _confirmLeaveChannel() async {
+    final session = ref.read(authControllerProvider).session;
+    if (session == null || session.activeProfileId.isEmpty) return;
+    final chatId = widget.chatId;
+    final selectionBeforeDialog = ref.read(selectedChatIdProvider);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final dialogL10n = AppLocalizations.of(dialogContext)!;
+        return AlertDialog(
+          title: Text(dialogL10n.chatChannelLeaveConfirmTitle),
+          content: Text(dialogL10n.chatChannelLeaveConfirmMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(dialogL10n.commonCancel),
+            ),
+            FilledButton(
+              key: const Key('chat_info_leave_channel_confirm'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(dialogL10n.chatChannelLeave),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted || !context.mounted) return;
+    if (!_isCurrentLeaveActor(session.accountId, session.activeProfileId) ||
+        widget.chatId != chatId) {
+      return;
+    }
+
+    final currentSession = ref.read(authControllerProvider).session;
+    if (currentSession == null) return;
+    setState(() => _leavingChannel = true);
+
+    ChatsApiResult<void> result;
+    try {
+      result = await ref
+          .read(voiceChatsClientProvider)
+          .leaveGroup(
+            authorization: currentSession.authorizationHeader,
+            chatId: chatId,
+          );
+    } catch (_) {
+      result = const ChatsApiFailure(message: 'unknown_error');
+    }
+
+    if (!mounted || !context.mounted) return;
+    setState(() => _leavingChannel = false);
+    if (!_isCurrentLeaveActor(session.accountId, session.activeProfileId) ||
+        widget.chatId != chatId) {
+      return;
+    }
+
+    switch (result) {
+      case ChatsApiFailure(:final statusCode):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(
+                AppLocalizations.of(context)!,
+                statusCode: statusCode,
+              ),
+            ),
+          ),
+        );
+      case ChatsApiOk<void>():
+        ref.invalidate(chatListControllerProvider);
+        if (ref.read(selectedChatIdProvider) != selectionBeforeDialog) return;
+        if (selectionBeforeDialog == chatId) {
+          ref.read(selectedChatIdProvider.notifier).state = null;
+        }
+        ref.read(shellNavigationProvider).closeSidePanel();
+        if (context.mounted) Navigator.of(context).maybePop();
+    }
+  }
+
+  bool _isCurrentLeaveActor(String accountId, String profileId) {
+    final current = ref.read(authControllerProvider).session;
+    return current != null &&
+        current.accountId == accountId &&
+        current.activeProfileId == profileId;
   }
 }
 

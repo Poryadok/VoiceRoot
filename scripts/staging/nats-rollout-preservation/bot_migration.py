@@ -22,7 +22,7 @@ def required(plan):
 def verify(row):
     keys={'database','version','dirty','duplicate_token_groups'}
     if (not isinstance(row,dict) or set(row)!=keys or row['database']!='bot_db'
-        or type(row['version']) is not int or not 1<=row['version']<=5
+        or type(row['version']) is not int or not 1<=row['version']<=6
         or row['dirty'] is not False or type(row['duplicate_token_groups']) is not int
         or row['duplicate_token_groups']!=0):
         raise PrerequisiteError('bot_forward_constraint_prerequisite_failed')

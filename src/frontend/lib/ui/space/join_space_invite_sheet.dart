@@ -66,7 +66,8 @@ class _JoinSpaceInviteSheetState extends ConsumerState<JoinSpaceInviteSheet> {
     if (joinResult.error != null) {
       final error = joinResult.error!;
       final safeError = switch (error) {
-        'not_authenticated' || 'code_required' => error,
+        'code_required' => error,
+        'not_authenticated' => commonActionErrorMessage(l10n),
         _ => commonActionErrorMessage(l10n),
       };
       ScaffoldMessenger.of(context).showSnackBar(

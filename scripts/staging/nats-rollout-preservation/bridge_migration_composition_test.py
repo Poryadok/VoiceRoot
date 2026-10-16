@@ -12,6 +12,7 @@ import actor_root
 import github_custody_test as http
 from native_store import archive_closed_store
 from nats_contract_plan import digest
+from nats_contract_plan_test import CensusTests as ContractPlanFixture
 
 @unittest.skipUnless(os.name=='posix' and os.geteuid()==0,'disposable root Linux fixture')
 class Tests(unittest.TestCase):
@@ -52,10 +53,21 @@ class Tests(unittest.TestCase):
             stage.snapshots={'voice-story':copy.deepcopy(old)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images={'voice-story/story':old_image}
             stage.marker=marker;stage.service={};stage.final_claim=claim;stage.final_pv={'metadata':{'uid':'pv'},'spec':{'local':{'path':str(store)}}};stage.final_path=store
+            live_census={'schema':'voice-nats-census-v1','account':'A'+'B'*55,
+                'streams':[{'name':'chat_events','created':'2026-10-13T00:00:00Z','config_sha256':'a'*64,
+                    'state':{'messages':5,'bytes':50,'first_seq':1,'last_seq':5,'consumer_count':0},'observations':{}}],
+                'consumers':[]}
             order=[];messages=[5]
             def fence():
                 stage.marker['data'].update(phase='rollout-capturing',knownRolloutOperation=stage.operation)
-                stage.snapshots['voice-story']['spec']['replicas']=0;order.append('closed-fence')
+                stage.snapshots['voice-story']['spec']['replicas']=0
+                stage.original_live_census=copy.deepcopy(live_census)
+                stage.save({'kind':'original_hub_shutdown_intent',
+                    'live_census_sha256':transaction.canonical(live_census)})
+                order.append('closed-fence')
+            def capture_stage(_kube,_operation,save,_extra=()):
+                stage.save=save
+                return stage
             stage.fence.side_effect=fence
             def prepared():stage.marker['data']['phase']='rollout-prepared';order.append('prepared-after-config-proof')
             stage.prepared.side_effect=prepared;stage.verified.side_effect=lambda:order.append('verified-before-restart')
@@ -63,13 +75,14 @@ class Tests(unittest.TestCase):
                 order.append('sole-restart');stage.marker['data']['phase']='active';stage.marker['data'].pop('knownRolloutOperation',None)
                 return {'verified':True}
             stage.restart.side_effect=restart
-            enrollment={'fixture':'existing-actor-auth-proof'};authority={'plan':{'migration_id':'fixed-approved','sources':{}},'binding':{},
+            enrollment={'fixture':'existing-actor-auth-proof'};plan_fixture=ContractPlanFixture();plan_fixture.setUp()
+            authority={'plan':plan_fixture.plan(),'binding':{},
                 'scripts':{part:{'script':'target','sha256':hashlib.sha256(b'target').hexdigest()} for part in scripts}}
             # Explicit external actor fixture; actual role/auth/schema checks have
             # separate real-capture and pinned-binary tests, never caller flags.
             actor={'roles':['story'],'proofs':{'story':{'fixture-external-auth':True}},'mounts':{'story':{'fixture-exact-mount':True}},'binding':{'fixture-same-account':True},'story_schema':{'clean_version':4}}
             actor['compatible_story_candidate']={'schema':'voice-reviewed-story-compatible-pair-v1','image':old_image,'child_sha256':child,'config_sha256':config,'component_source_sha':component,'schema_sha256':transaction.canonical(actor['story_schema']),'actor_sha256':transaction.canonical({'binding':actor['binding'],'mount':actor['mounts']['story'],'proof':actor['proofs']['story']})}
-            def cold(runtime,source,fence):
+            def cold(runtime,source,fence,*,live_catalog=None):
                 fence();manifest=archive_closed_store(source,runtime.base/'rollout-before.tar')
                 order.append('original-cold-cut')
                 return {'manifest':manifest,'census':{'streams':[{'state':{'messages':messages[0]}}]},'census_sha256':'3'*64}
@@ -81,11 +94,12 @@ class Tests(unittest.TestCase):
             def proof(runtime,source,cut,fence):
                 self.assertEqual(cut,{'post-config-baseline':messages[0]});order.append('post-config-store-proof');return {'messages':messages[0],'native_files_verified':True}
             actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding=binding
+            decrypt_patch=patch.object(actions,'_verify_decrypted_restore');decrypt_patch.start();self.addCleanup(decrypt_patch.stop)
             protected_receipt=guard.protected_receipt
             with patch.object(root_cli,'ROOT',workspace),patch.object(guard,'ROOT',workspace),patch.object(bridge_root,'INSTALLED',installed),\
                 patch.object(root_cli,'Kube',return_value=kube),patch.object(bridge_root,'Kube',return_value=kube),\
                 patch('grp.getgrnam',return_value=type('Group',(),{'gr_gid':1000})()),\
-                patch.object(transaction.RolloutStage,'capture',return_value=stage),patch.object(transaction,'reconstruct',return_value=stage),\
+                patch.object(transaction.RolloutStage,'capture',side_effect=capture_stage),patch.object(transaction,'reconstruct',return_value=stage),\
                 patch.multiple(transaction,native_preflight=Mock(return_value={}),private_json=Mock(return_value=enrollment)),\
                 patch.object(transaction,'capture_inputs',return_value={}) as capture,\
                 patch.object(transaction.nonnats_runtime,'preflight',return_value={}),patch.object(transaction.nonnats_runtime,'verify',return_value={'verified':True}),\

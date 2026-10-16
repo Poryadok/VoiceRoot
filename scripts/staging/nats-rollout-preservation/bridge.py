@@ -14,6 +14,13 @@ FIELDS={
     'prepare':{'source_sha','run_id','mode','changed_services','token'},
     'prepare-rollback':{'operation','run_id','token'},
     'resume-cold-backup':{'operation','run_id','token'},
+    'resume-cipher-upload':{'operation','run_id','token'},
+    'authorize-preserved-upload':{'operation','artifact_id','upload_nonce','run_id','token'},
+    'prepare-expired-native':{'operation','run_id','token'},
+    'prepare-expired-finish':{'operation','run_id','token'},
+    'authorize-expired-native':{'operation','original_artifact_id','observation_artifact_id','upload_nonce','run_id','token'},
+    'authorize-expired-finish':{'operation','original_artifact_id','observation_artifact_id','upload_nonce','run_id','token'},
+    'finish-expired-native':{'operation','claim_rv','run_id','token'},
     'authorize':{'operation','artifact_id','token'},
     'finish':{'operation','claim_rv'},
     'status':{'operation'},
@@ -33,12 +40,19 @@ def prepare_error(error):
     return 'unexpected'
 
 def validate(row):
-    if not isinstance(row,dict) or row.get('action') not in FIELDS or set(row)!={'action','nonce'}|FIELDS[row['action']]:raise BridgeError('bridge_request_invalid')
+    if not isinstance(row,dict) or row.get('action') not in FIELDS or set(row)-{'run_attempt','report_run_id','report_source_sha'}!={'action','nonce'}|FIELDS[row['action']]:raise BridgeError('bridge_request_invalid')
+    for key in ('run_attempt','report_run_id'):
+        if key in row and (type(row[key]) is not int or not 0<row[key]<2**63):raise BridgeError('bridge_identity_invalid')
+    if 'report_source_sha' in row and (not isinstance(row['report_source_sha'],str) or not re.fullmatch('[a-f0-9]{40}',row['report_source_sha'])):raise BridgeError('bridge_identity_invalid')
     if not isinstance(row['nonce'],str) or not re.fullmatch('[a-f0-9]{64}',row['nonce']):raise BridgeError('bridge_nonce_invalid')
     for key,pattern in (('operation','[a-f0-9]{12}'),('source_sha','[a-f0-9]{40}'),('claim_rv','[0-9]{1,20}')):
         if key in row and (not isinstance(row[key],str) or not re.fullmatch(pattern,row[key])):raise BridgeError('bridge_identity_invalid')
-    for key in ('run_id','artifact_id'):
+    if 'upload_nonce' in row and (not isinstance(row['upload_nonce'],str) or not re.fullmatch('[a-f0-9]{64}',row['upload_nonce'])):
+        raise BridgeError('bridge_upload_nonce_invalid')
+    for key in ('run_id','artifact_id','original_artifact_id','observation_artifact_id'):
         if key in row and (type(row[key]) is not int or not 0<row[key]<2**63):raise BridgeError('bridge_identity_invalid')
+    if 'original_artifact_id' in row and row['original_artifact_id']==row['observation_artifact_id']:
+        raise BridgeError('bridge_artifact_identity_not_distinct')
     if 'token' in row and (not isinstance(row['token'],str) or not 1<=len(row['token'])<=4096 or any(ord(c)<33 or ord(c)>126 for c in row['token'])):raise BridgeError('bridge_token_invalid')
     if row['action']=='prepare':
         if row['mode'] not in ('full','app-only','images-only') or not isinstance(row['changed_services'],list) or not 0<=len(row['changed_services'])<=23 or len(set(row['changed_services']))!=len(row['changed_services']) or row['mode']=='images-only' and not row['changed_services']:raise BridgeError('bridge_target_invalid')
@@ -58,13 +72,18 @@ def _save(path,row):
     finally:
         if scratch.exists():scratch.unlink()
 
-def dispatch(directory,request,execute,recover,execute_observed=None):
+def dispatch(directory,request,execute,recover,execute_observed=None,reporter=None):
     """Never rerun an interrupted mutation unless checkpoint proves completion.
 
     Tokens are excluded from the durable journal. The request hash includes
     all noncredential fields, so refreshed short-lived credentials may retry.
     """
     validate(request);directory=Path(directory)
+    import deployment_report
+    def publish(**values):
+        if reporter is not None:
+            try:reporter(**values)
+            except Exception:print('NATS_DEPLOYMENT_REPORT=UNAVAILABLE',file=sys.stderr)
     public={k:v for k,v in request.items() if k!='token'}
     wanted=hashlib.sha256(json.dumps(public,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     path=directory/(request['nonce']+'.json')
@@ -82,19 +101,31 @@ def dispatch(directory,request,execute,recover,execute_observed=None):
     else:
         state={'schema':'voice-nats-bridge-request-v1','request_sha256':wanted,'request':public,'phase':'STARTED'}
         _save(path,state)
+        publish(request_status='STARTED')
         def observe(name,status):
             if request['action'] not in ('prepare','prepare-rollback') or name not in PREPARE_STAGES or status not in ('STARTED','COMPLETE'):
                 raise BridgeError('bridge_prepare_stage_invalid')
             state['prepare_stage']={'name':name,'status':status}
             _save(path,state)
+            publish(stage=name,last=name if status=='COMPLETE' else None,request_status='STARTED')
         try:
+            deployment_report._observer=lambda checkpoint:publish(checkpoint=checkpoint,request_status='STARTED')
+            deployment_report._failure_observer=lambda error:publish(error=error)
+            import commands
+            commands.diagnostic_observer=lambda action,status:publish(current_action=action,last=action if status=='COMPLETE' else None,request_status='STARTED')
             result=execute(request) if execute_observed is None else execute_observed(request,observe)
         except BaseException as error:
             if execute_observed is not None:
                 state['prepare_error']=prepare_error(error);_save(path,state)
+            publish(error=error)
             raise
+        finally:
+            deployment_report._observer=None
+            deployment_report._failure_observer=None
+            commands.diagnostic_observer=None
     if not isinstance(result,dict):raise BridgeError('bridge_result_invalid')
     state['phase']='COMPLETE';state['result']=result;_save(path,state)
+    publish(request_status='COMPLETE')
     return result
 
 
@@ -142,7 +173,26 @@ def drain(installed):
                 # Replace the runner inode with a root-created copy. A runner
                 # descriptor opened before claim cannot alter the replay input.
                 _save(claimed,request)
-                result=dispatch(installed/'journal',request,actions.execute,actions.recover,execute_observed=actions.execute_observed)
+                import deployment_report
+                import grp
+                latest={}
+                def reporter(**values):
+                    checkpoint=values.pop('checkpoint',None)
+                    if checkpoint is not None:
+                        latest['checkpoint']=checkpoint
+                        latest.pop('stage',None)
+                    latest.update({k:v for k,v in values.items() if v is not None})
+                    snapshot=latest.get('checkpoint',{})
+                    operation=request.get('operation',request['nonce'][:12])
+                    try:
+                        from bridge_root import private_json
+                        snapshot=private_json(guard.ROOT/('rollout-'+operation)/'checkpoint.json')
+                    except (FileNotFoundError,PermissionError):pass
+                    binding=getattr(actions,'binding',None)
+                    digest=hashlib.sha256(json.dumps(binding,sort_keys=True,separators=(',',':')).encode()).hexdigest() if binding is not None else None
+                    row=deployment_report.build(request,snapshot,binding=digest,**{k:v for k,v in latest.items() if k!='checkpoint'})
+                    deployment_report.persist(installed/'responses'/(request['nonce']+'.report.json'),row,grp.getgrnam('pmd').gr_gid)
+                result=dispatch(installed/'journal',request,actions.execute,actions.recover,execute_observed=actions.execute_observed,reporter=reporter)
             except Exception as error:result={'status':'BLOCKED','error':safe_error(error)}
             _save(response,result)
             import grp

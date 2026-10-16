@@ -8,8 +8,11 @@ COPY src/backend/user/pb/voice/user/go.mod /src/backend/user/pb/voice/user/go.mo
 COPY src/backend/user/pb/voice/common/go.mod /src/backend/user/pb/voice/common/go.mod
 COPY src/backend/analytics/pb/voice/analytics/go.mod /src/backend/analytics/pb/voice/analytics/go.mod
 COPY src/backend/messaging/pb/voice/events/go.mod /src/backend/messaging/pb/voice/events/go.mod
+COPY src/backend/chat/pb/voice/chat/go.mod /src/backend/chat/pb/voice/chat/go.mod
 RUN go mod download
 COPY src/backend/pkg/ ./
+COPY src/backend/chat/pb/voice/chat/v1/ /src/backend/chat/pb/voice/chat/v1/
+COPY src/backend/user/pb/voice/common/v1/ /src/backend/user/pb/voice/common/v1/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/nats-hub-config-renderer ./cmd/nats-hub-config-renderer
 
 FROM nats@sha256:b270f5e2428354c0335612694d7dd2fb588148e567a5757fdff325ef9c9332e6 AS nats-server

@@ -2107,9 +2107,22 @@ After restart, an expired worker lease is reclaimed within six seconds while
 GIS and required owners are healthy. Retry delay is exponential from one
 second, capped at 30 seconds; dependency outage has no completion-time SLA.
 Transient and unknown owner outcomes remain retryable with the backoff above;
-unknown is never treated as success until a durable receipt is read. Permanent
-owner rejections are recorded with the failed stage and do not publish active;
-the worker stops automatic retries. If Voice or Role resources exist, GIS enters
+unknown is never treated as success until a durable receipt is read. A durable
+owner rejection uses `google.rpc.ErrorInfo` reason
+`GIS_PERMANENT_OWNER_REJECTION`, with exact owner domain, RPC, category,
+operation ID, and canonical request hash. GIS allow-lists those values for
+Chat operation/resource conflicts, Chat roster resource-missing after the
+create receipt, Voice provisioning conflicts, and Role operation conflict or
+terminal-revoked outcomes. It does not infer permanence from a public gRPC
+code: malformed requests, principal/setup failures, and persistence failures
+remain retryable or unknown. A matching rejection fails the create operation
+and persists a deterministic failure operation. If Voice resources exist,
+that operation persists Voice-close and Role-revoke receipts before the
+session reaches terminal `failed`; unknown owner effects are still reconciled
+with the same operation ID and hash. An error never publishes active. If close wins
+while a create-stage owner call may have committed, GIS persists a
+reconciliation stage and replays the same owner key under the close operation
+before terminal cleanup. If Voice or Role resources exist, GIS enters
 `failure_voice_close_pending` then `failure_role_revoke_pending`, persists the
 Voice close and Role revoke receipts, and only then marks the session terminal
 `failed`. The create operation then reports `status: failed`,
@@ -2118,11 +2131,25 @@ If neither resource exists, it records terminal `failed` immediately with no
 owner close receipts.
 Failure fencing is retried with the deterministic terminalization owner IDs;
 it never deletes Chat or removes a referenced party roster. A failure before
-Voice creation leaves any created owned Chat retained but inactive. After the
-cause is corrected, an exact same-operation replay resumes an un-fenced pending
-failure. Since Chat and
+Voice creation leaves any created owned Chat retained but inactive. Transient
+cleanup failures resume by replaying the same deterministic failure operation;
+the terminal failed create operation itself is read-only. Since Chat and
 Voice expose no operation-scoped delete API, recovery is forward-only and GIS
 never deletes an owner resource to compensate.
+
+If explicit close wins while the in-flight create-stage replay returns a typed
+owner rejection, GIS does not retry that immutable rejection. It advances
+without an owner receipt only for the exact Chat-roster `resource_missing`
+result after the saved Chat-create receipt, or Role-apply `terminal_revoked`
+result. GIS stores the rejection classification on the close operation, then
+continues the existing close stages; it never fabricates a receipt for the
+rejected stage. Operation conflicts and Chat resource conflicts may conceal a
+pre-existing effect, so the close operation remains pending at an explicit
+`create_reconcile_unresolved:<stage>:<category>` stage, the session remains
+`closing`, and automatic dispatch is suspended. Reading or replaying that close
+returns the same unresolved custody without another owner call. Generic,
+transport, setup, and persistence errors keep the normal exact-request retry
+backoff.
 
 Before either explicit close or permanent-failure fencing starts, GIS
 transactionally claims the session's single `terminalization_operation_id` by

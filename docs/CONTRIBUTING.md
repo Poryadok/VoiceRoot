@@ -1,5 +1,9 @@
 # Участие в разработке (Git и процесс)
 
+For older branches and release integration, see [Release evidence and recovery
+lessons](RELEASE_EVIDENCE.md). Review actual scope and landed equivalents; retain
+source-bound acceptance when integrating and never overwrite shipped migrations.
+
 Репозиторий на **GitHub**. Хостинг кода и **CI/CD** — GitHub Actions ([MICROSERVICES.md](MICROSERVICES.md)). Сколько репозиториев заводить и как называть — [REPOSITORIES.md](REPOSITORIES.md).
 
 ---

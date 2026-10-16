@@ -460,6 +460,48 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Был(а) только что';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count минуты назад',
+      many: 'Был(а) $count минут назад',
+      few: 'Был(а) $count минуты назад',
+      one: 'Был(а) $count минуту назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count часа назад',
+      many: 'Был(а) $count часов назад',
+      few: 'Был(а) $count часа назад',
+      one: 'Был(а) $count час назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count дня назад',
+      many: 'Был(а) $count дней назад',
+      few: 'Был(а) $count дня назад',
+      one: 'Был(а) $count день назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Неизвестно';
 
   @override
@@ -544,6 +586,41 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatListLoadMore => 'Загрузить ещё чаты';
+
+  @override
+  String get chatScheduleMessage => 'Запланировать сообщение';
+
+  @override
+  String get chatSendWhenOnline => 'Отправить, когда будет в сети';
+
+  @override
+  String get chatSchedulePickerTitle => 'Запланировать сообщение';
+
+  @override
+  String get chatSchedulePending => 'Ожидает отправки';
+
+  @override
+  String get chatScheduleEdit => 'Изменить запланированное сообщение';
+
+  @override
+  String get chatScheduleCancel => 'Отменить запланированное сообщение';
+
+  @override
+  String get chatScheduleSendNow => 'Отправить сейчас';
+
+  @override
+  String get chatScheduleRetry => 'Повторить';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Выберите время в пределах следующих 365 дней';
+
+  @override
+  String get chatScheduleFailure =>
+      'Не удалось выполнить запрос для запланированного сообщения. Попробуйте ещё раз.';
+
+  @override
+  String get chatScheduleLoadMore => 'Загрузить ещё запланированные сообщения';
 
   @override
   String chatListUnreadCount(int count) {
@@ -920,6 +997,25 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get profileMessage => 'Написать';
+
+  @override
+  String get profileDetailTitle => 'Профиль';
+
+  @override
+  String get profileMoreActions => 'Ещё';
+
+  @override
+  String get profileOpenAvatar => 'Открыть аватар на весь экран';
+
+  @override
+  String get profileAvatarUnavailable => 'Аватар недоступен';
+
+  @override
+  String get profileCommonSpaces => 'Общие пространства';
+
+  @override
+  String get profileCommonSpacesLoadError =>
+      'Не удалось загрузить общие пространства';
 
   @override
   String get profileEditTitle => 'Редактировать профиль';
@@ -1874,6 +1970,16 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get chatGroupLeaveConfirmMessage =>
       'Вы больше не будете получать сообщения из этой группы.';
+
+  @override
+  String get chatChannelLeave => 'Выйти из канала';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Выйти из канала?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'Вы больше не будете получать сообщения из этого канала.';
 
   @override
   String get chatGroupOwnerLeaveHint =>
@@ -3095,7 +3201,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get matchHistoryEntry => 'Match history';
 
   @override
-  String get matchHistoryLoadError => 'Could not load match history';
+  String get matchHistoryLoadError => 'Не удалось загрузить историю матчей';
 
   @override
   String get matchHistoryEmpty => 'No match squads yet';
@@ -3504,6 +3610,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deepLinkResourceNotFound => 'Не найдено';
 
   @override
+  String get deepLinkAccessDeniedDescription =>
+      'У вас нет разрешения открыть эту ссылку. Возможно, она предназначена для другого профиля.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'Ссылка недоступна или больше не действует.';
+
+  @override
   String get deepLinkReturnHome => 'На главную';
 
   @override
@@ -3543,4 +3657,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get e2eKeyBackupManage => 'Управление резервной копией ключей';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Не в контактах · сообщения могут быть небезопасны';
 }

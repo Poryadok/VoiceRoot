@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"voice/backend/pkg/principal"
 )
@@ -160,21 +161,22 @@ func TestOrdinaryRejectsSocialOnlyOnPrivacy(t *testing.T) {
 func TestCredentialTemporalAndMethodScope(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	req := wrapperspb.String("profile")
-	hash, err := principal.RequestHash(req)
-	require.NoError(t, err)
 	for _, tc := range []struct {
 		name, method string
+		request      proto.Message
 		offset       time.Duration
 		want         codes.Code
 		called       bool
 	}{
-		{"expired", Method("user"), -time.Minute, codes.Unauthenticated, false},
-		{"future", Method("user"), time.Minute, codes.Unauthenticated, false},
-		{"valid profile lookup", "/voice.user.v1.UserService/GetProfile", 0, codes.OK, true},
-		{"valid forbidden method", "/voice.user.v1.UserService/GetProfiles", 0, codes.PermissionDenied, false},
+		{"expired", Method("user"), wrapperspb.String("profile"), -time.Minute, codes.Unauthenticated, false},
+		{"future", Method("user"), wrapperspb.String("profile"), time.Minute, codes.Unauthenticated, false},
+		{"valid profile lookup", "/voice.user.v1.UserService/GetProfile", wrapperspb.String("profile"), 0, codes.OK, true},
+		{"valid request-bound GetProfiles", "/voice.user.v1.UserService/GetProfiles", wrapperspb.String("00000000-0000-4000-8000-000000000001"), 0, codes.OK, true},
+		{"unlisted method denied", "/voice.user.v1.UserService/GetBulkPresence", wrapperspb.String("profile"), 0, codes.PermissionDenied, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			hash, err := principal.RequestHash(tc.request)
+			require.NoError(t, err)
 			issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "social", KeyID: "current", PrivateKey: key, Clock: func() time.Time { return time.Now().Add(tc.offset) }})
 			require.NoError(t, err)
 			token, err := issuer.IssueService(principal.ServiceInput{Audience: "user", RPC: tc.method, RequestID: "request", RequestHash: hash})
@@ -182,9 +184,71 @@ func TestCredentialTemporalAndMethodScope(t *testing.T) {
 			verifier := &Verifier{Target: "user", Issuers: map[string]bool{"social": true}, Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }}
 			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "request"))
 			called := false
-			_, err = StrictUnaryInterceptor(verifier)(ctx, req, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) { called = true; return req, nil })
+			_, err = StrictUnaryInterceptor(verifier)(ctx, tc.request, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) { called = true; return tc.request, nil })
 			require.Equal(t, tc.want, status.Code(err))
 			require.Equal(t, tc.called, called)
 		})
 	}
+}
+
+func TestNotificationPresenceCapabilityIsNarrowAndRequestBound(t *testing.T) {
+	const method = "/voice.user.v1.UserService/GetNotificationRoutingPresence"
+	req := wrapperspb.String("profile")
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	require.Equal(t, method, Method("notification"))
+	require.True(t, AllowsMethod("notification", method))
+	require.False(t, AllowsMethod("notification", "/voice.user.v1.UserService/GetBulkPresence"))
+
+	valid := principal.Principal{Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: method, RequestHash: hash}
+	require.NoError(t, RequireNotificationPresence(principal.WithVerified(context.Background(), valid), method, req))
+
+	for name, wrong := range map[string]principal.Principal{
+		"wrong issuer":   {Kind: "service", Issuer: "social", Subject: "service:social", Audience: "user", RPC: method, RequestHash: hash},
+		"wrong audience": {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "social", RPC: method, RequestHash: hash},
+		"wrong method":   {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: "/voice.user.v1.UserService/GetBulkPresence", RequestHash: hash},
+		"wrong hash":     {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: method, RequestHash: "different"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := RequireNotificationPresence(principal.WithVerified(context.Background(), wrong), method, req)
+			want := codes.Unauthenticated
+			if name == "wrong issuer" {
+				want = codes.PermissionDenied
+			}
+			require.Equal(t, want, status.Code(err))
+		})
+	}
+	require.Equal(t, codes.PermissionDenied, status.Code(RequireNotificationPresence(context.Background(), method, req)))
+}
+
+func TestMessagingScheduledPresenceCapabilityIsNarrowAndRequestBound(t *testing.T) {
+	const method = "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
+	req := wrapperspb.String("scheduled request")
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	require.Equal(t, method, Method("messaging"))
+	require.True(t, AllowsMethod("messaging", method))
+	require.False(t, AllowsMethod("messaging", "/voice.user.v1.UserService/GetBulkPresence"))
+	require.False(t, AllowsMethod("messaging", "/voice.user.v1.UserService/GetNotificationRoutingPresence"))
+
+	valid := principal.Principal{Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: method, RequestHash: hash}
+	require.NoError(t, RequireMessagingPresence(principal.WithVerified(context.Background(), valid), method, req))
+
+	for name, wrong := range map[string]principal.Principal{
+		"wrong issuer":   {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: method, RequestHash: hash},
+		"wrong audience": {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "social", RPC: method, RequestHash: hash},
+		"wrong method":   {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: "/voice.user.v1.UserService/GetBulkPresence", RequestHash: hash},
+		"wrong hash":     {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: method, RequestHash: "different"},
+		"user authority": {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: method, RequestHash: hash, AccountID: "account"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := RequireMessagingPresence(principal.WithVerified(context.Background(), wrong), method, req)
+			want := codes.Unauthenticated
+			if name == "wrong issuer" {
+				want = codes.PermissionDenied
+			}
+			require.Equal(t, want, status.Code(err))
+		})
+	}
+	require.Equal(t, codes.PermissionDenied, status.Code(RequireMessagingPresence(context.Background(), method, req)))
 }

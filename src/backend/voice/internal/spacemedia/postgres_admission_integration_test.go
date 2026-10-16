@@ -136,13 +136,6 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	require.NoError(t, admissions.Fence(ctx, creator))
 	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
 
-	failed := admissionFixture()
-	failed.RoomID, failed.SpaceID, failed.VoiceRoomID = creator.RoomID, creator.SpaceID, creator.VoiceRoomID
-	failed.CreatedRoom = false
-	require.NoError(t, prepareAdmission(ctx, admissions, &failed))
-	require.NoError(t, admissions.Fence(ctx, failed))
-	require.NoError(t, admissions.MarkCommitted(ctx, failed.OperationID, failed.Generation))
-
 	calls := store.NewMemoryCallStore()
 	_, err := calls.CreateCall(ctx, store.Call{
 		RoomID: creator.RoomID, LivekitRoomName: "voice-room-" + creator.VoiceRoomID,
@@ -173,6 +166,14 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	}
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
 
+	failed := admissionFixture()
+	failed.RoomID, failed.SpaceID, failed.VoiceRoomID = creator.RoomID, creator.SpaceID, creator.VoiceRoomID
+	failed.CreatedRoom = false
+	failed.Events = failed.Events[1:] // Existing-room joins emit member_joined, not call_started.
+	require.NoError(t, prepareAdmission(ctx, admissions, &failed))
+	require.NoError(t, admissions.Fence(ctx, failed))
+	require.NoError(t, admissions.MarkCommitted(ctx, failed.OperationID, failed.Generation))
+
 	require.Len(t, creator.Events, 2, "a created Space room has exactly two canonical event intents")
 	expectedCreatorEvents := make(map[uuid.UUID]AdmissionEvent, len(creator.Events))
 	for _, event := range creator.Events {
@@ -200,10 +201,12 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	coordinator := &Coordinator{
 		Store: calls, Calls: calls, Admissions: faultingAdmissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			failed.ProfileID.String(): {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch},
+			creator.ProfileID.String(): {SpaceID: creator.SpaceID.String(), Active: true, Member: true, AccessEpoch: creator.AccessEpoch},
+			failed.ProfileID.String():  {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
-			failed.ProfileID.String(): {PolicyEpoch: failed.PolicyEpoch, CanJoin: true, CanSubscribe: true},
+			creator.ProfileID.String(): {PolicyEpoch: creator.PolicyEpoch, CanJoin: true, CanSubscribe: true},
+			failed.ProfileID.String():  {PolicyEpoch: failed.PolicyEpoch, CanJoin: true, CanSubscribe: true},
 		}},
 		SessionEpochChecker: currentEpochChecker{},
 	}
@@ -214,7 +217,7 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	rows, err := admissions.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Empty(t, rows, "the cleanup effect committed despite the lost acknowledgement")
-	item, err := admissions.ClaimOutbox(ctx, time.Second)
+	item, err = admissions.ClaimOutbox(ctx, time.Second)
 	require.NoError(t, err)
 	require.Nil(t, item, "the cap-rejected operation remains unclaimable after committed cleanup")
 	var failedFenceCount int
@@ -229,6 +232,14 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	require.NotContains(t, call.SpaceMedia, failed.ProfileID.String())
 
 	require.NoError(t, coordinator.reconcileAdmissions(ctx), "a normal retry after lost acknowledgement is harmless")
+	require.False(t, faultingAdmissions.loseNextCleanupAck, "the lost acknowledgement fault was exercised")
+	require.NoError(t, admissions.ConfirmProjection(ctx, creator.OperationID, creator.Generation))
+	call, err = calls.GetCall(ctx, creator.RoomID)
+	require.NoError(t, err)
+	require.Len(t, call.SpaceMedia, store.MaxVoiceRoomParticipants)
+	require.Equal(t, creator.OperationID.String(), call.SpaceMedia[creator.ProfileID.String()].AdmissionOperationID)
+	require.Equal(t, creator.Generation, call.SpaceMedia[creator.ProfileID.String()].Generation)
+	require.Equal(t, creator.Identity, call.SpaceMedia[creator.ProfileID.String()].Identity)
 	rows, err = admissions.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Empty(t, rows)

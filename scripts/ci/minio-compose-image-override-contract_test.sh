@@ -13,11 +13,12 @@ VERIFY_SCRIPT="$ROOT/scripts/ci/verify-compose-minio-images.sh"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 compose_invocation_is_valid() {
-  local block="$1" target="$2" login_line verify_line compose_line
-  grep -Fq "run: $target" <<<"$block" || return 1
+  local block="$1" target="$2" login_line verify_line compose_line inline_line script_line
   login_line="$(grep -nF 'uses: docker/login-action@v4' <<<"$block" | head -n1 | cut -d: -f1)"
   verify_line="$(grep -nF "run: $VERIFY" <<<"$block" | head -n1 | cut -d: -f1)"
-  compose_line="$(grep -nE 'run: (COMPOSE_PARALLEL_LIMIT=[0-9]+ )?(docker compose|make compose-)' <<<"$block" | head -n1 | cut -d: -f1)"
+  inline_line="$(grep -nF "run: $target" <<<"$block" | head -n1 | cut -d: -f1 || true)"
+  script_line="$(grep -nF "if $target; then" <<<"$block" | head -n1 | cut -d: -f1 || true)"
+  compose_line="${inline_line:-$script_line}"
   [[ -n "$compose_line" ]] || return 1
   (( login_line < verify_line && verify_line < compose_line ))
 }
@@ -58,6 +59,9 @@ expected_compose='COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml 
 valid_compose_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" "run: $expected_compose")"
 compose_invocation_is_valid "$valid_compose_fixture" "$expected_compose" \
   || fail 'Compose contract rejected the expected verified app invocation'
+multiline_compose_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" 'run: |' "  if $expected_compose; then" '    :' '  fi')"
+compose_invocation_is_valid "$multiline_compose_fixture" "$expected_compose" \
+  || fail 'Compose contract rejected the verified multiline app invocation'
 wrong_app_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" 'run: make compose-app-up')"
 if compose_invocation_is_valid "$wrong_app_fixture" "$expected_compose"; then
   fail 'Compose contract accepted the obsolete app target'

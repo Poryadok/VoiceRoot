@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:livekit_client/livekit_client.dart' as livekit;
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/livekit_room.dart';
 import 'package:voice_frontend/backend/voice_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/call_providers.dart';
@@ -13,6 +17,50 @@ import 'package:voice_frontend/ui/call/screen_share_panel.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
+
+class _ScreenShareRoom extends Fake implements VoiceLiveKitRoom {
+  bool failFirstCapture = false;
+  final captureRates = <double>[];
+  int stopCalls = 0;
+
+  @override
+  void Function(bool)? onAudioPlaybackUnlockNeeded;
+
+  @override
+  void Function()? onTracksChanged;
+
+  @override
+  Future<void> connect({
+    required String url,
+    required String token,
+    required bool video,
+  }) async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
+  livekit.LocalVideoTrack? localScreenShareTrack() => null;
+
+  @override
+  Future<void> startScreenShare({
+    double maxFrameRate = 15,
+    bool captureSystemAudio = false,
+  }) async {
+    captureRates.add(maxFrameRate);
+    if (failFirstCapture && captureRates.length == 1) {
+      throw StateError('private-screen-detail-6ab');
+    }
+  }
+
+  @override
+  Future<void> stopScreenShare() async {
+    stopCalls++;
+  }
+}
 
 void main() {
   testWidgets('dual screen share shows both streams with local self preview', (
@@ -92,7 +140,9 @@ void main() {
     expect(find.byKey(const Key('screen_share_local_preview')), findsNothing);
   });
 
-  testWidgets('screen share shows waiting text and limit error', (tester) async {
+  testWidgets('screen share shows waiting text and limit error', (
+    tester,
+  ) async {
     final container = ProviderContainer(
       overrides: [
         ...voiceAppTestOverrides(
@@ -199,9 +249,7 @@ void main() {
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(
-            body: Row(children: [ScreenSharePauseButton()]),
-          ),
+          home: const Scaffold(body: Row(children: [ScreenSharePauseButton()])),
         ),
       ),
     );
@@ -212,7 +260,9 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('screen share stop button and generic error message', (tester) async {
+  testWidgets('screen share stop button and generic error message', (
+    tester,
+  ) async {
     final container = ProviderContainer(
       overrides: [
         ...voiceAppTestOverrides(
@@ -256,10 +306,7 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: const Scaffold(
             body: Column(
-              children: [
-                ScreenSharePanel(),
-                ScreenShareCallButton(),
-              ],
+              children: [ScreenSharePanel(), ScreenShareCallButton()],
             ),
           ),
         ),
@@ -267,12 +314,226 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('upload_failed'), findsOneWidget);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(ScreenSharePanel.panelKey)),
+    )!;
+    expect(find.text(l10n.commonActionFailed), findsOneWidget);
+    expect(find.text('upload_failed'), findsNothing);
     await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
     await tester.pump();
   });
 
-  testWidgets('screen share quality dialog returns selected fps', (tester) async {
+  for (final language in ['en', 'ru']) {
+    for (final failure in [
+      ('API 500', 500),
+      ('API 503', 503),
+      ('capture', 200),
+      ('limit', 429),
+    ]) {
+      testWidgets(
+        'ScreenSharePanel $language ${failure.$1} safely recovers on explicit retry',
+        (tester) async {
+          final room = _ScreenShareRoom()
+            ..failFirstCapture = failure.$1 == 'capture';
+          final requests = <http.Request>[];
+          var shareAttempts = 0;
+          final container = ProviderContainer(
+            overrides: [
+              ...voiceAppTestOverrides(
+                client: MockClient((request) async {
+                  requests.add(request);
+                  if (request.method == 'POST' &&
+                      request.url.path == '/api/v1/voice/calls/room-1/accept') {
+                    return http.Response(
+                      jsonEncode({
+                        'call_session': {
+                          'room_id': 'room-1',
+                          'livekit_room_name': 'lk-room',
+                          'linked_chat': {'id': 'chat-1'},
+                          'initiator_profile_id': 'prof-peer',
+                          'callee_profile_id': 'prof-test',
+                          'media_kind': 'CALL_MEDIA_KIND_AUDIO',
+                          'status': 'CALL_STATUS_ACTIVE',
+                        },
+                      }),
+                      200,
+                    );
+                  }
+                  if (request.method == 'GET' &&
+                      request.url.path == '/api/v1/voice/calls/room-1/token') {
+                    return http.Response(
+                      jsonEncode({
+                        'jwt': 'fake-media-token',
+                        'livekit_url': 'wss://media.test',
+                      }),
+                      200,
+                    );
+                  }
+                  if (request.method == 'POST' &&
+                      request.url.path ==
+                          '/api/v1/voice/calls/room-1/screen-share/start') {
+                    shareAttempts++;
+                    if (shareAttempts == 1 && failure.$2 != 200) {
+                      return http.Response(
+                        jsonEncode({'message': 'private-screen-detail-6ab'}),
+                        failure.$2,
+                      );
+                    }
+                    return http.Response(
+                      jsonEncode({
+                        'screen_share_session': {
+                          'stream_id': 'stream-$shareAttempts',
+                        },
+                      }),
+                      200,
+                    );
+                  }
+                  if (request.method == 'POST' &&
+                      request.url.path ==
+                          '/api/v1/voice/calls/room-1/screen-share/stop') {
+                    return http.Response('', 204);
+                  }
+                  return http.Response('{}', 404);
+                }),
+              ),
+              liveKitRoomFactoryProvider.overrideWithValue(() => room),
+            ],
+          );
+          addTearDown(container.dispose);
+          final controller = container.read(callControllerProvider.notifier);
+          controller.state = const CallState(
+            phase: CallPhase.incoming,
+            session: VoiceCallSession(
+              roomId: 'room-1',
+              livekitRoomName: 'lk-room',
+              chatId: 'chat-1',
+              initiatorProfileId: 'prof-peer',
+              calleeProfileId: 'prof-test',
+              mediaKind: VoiceCallMediaKind.audio,
+              status: VoiceCallStatus.ringing,
+            ),
+          );
+          await controller.acceptCall();
+          expect(
+            container.read(callControllerProvider).phase,
+            CallPhase.active,
+          );
+          expect(controller.liveKitRoom, same(room));
+          requests.clear();
+
+          await tester.pumpWidget(
+            UncontrolledProviderScope(
+              container: container,
+              child: MaterialApp(
+                theme: voiceTestTheme(),
+                locale: Locale(language),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const Scaffold(
+                  body: Column(
+                    children: [ScreenSharePanel(), ScreenShareCallButton()],
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final l10n = AppLocalizations.of(
+            tester.element(find.byKey(ScreenSharePanel.panelKey)),
+          )!;
+
+          Future<void> startShare() async {
+            await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text(l10n.screenShareQuality720p15));
+            await tester.pumpAndSettle();
+          }
+
+          await startShare();
+          expect(
+            find.text(
+              failure.$1 == 'limit'
+                  ? l10n.screenShareLimitReached
+                  : l10n.commonActionFailed,
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('private-screen-detail-6ab'),
+            findsNothing,
+          );
+          expect(find.textContaining('Bad state:'), findsNothing);
+          expect(find.textContaining('Exception'), findsNothing);
+          expect(
+            container.read(screenShareControllerProvider).isSharing,
+            isFalse,
+          );
+          expect(
+            container.read(callControllerProvider).phase,
+            CallPhase.active,
+          );
+          expect(
+            container.read(callControllerProvider).session!.roomId,
+            'room-1',
+          );
+          expect(shareAttempts, 1);
+          expect(room.captureRates, failure.$1 == 'capture' ? [15.0] : isEmpty);
+          expect(requests.map((request) => request.url.path).toList(), [
+            '/api/v1/voice/calls/room-1/screen-share/start',
+            if (failure.$1 == 'capture')
+              '/api/v1/voice/calls/room-1/screen-share/stop',
+          ]);
+          if (failure.$1 == 'capture') {
+            expect(jsonDecode(requests.last.body), {'stream_id': 'stream-1'});
+          }
+
+          await startShare();
+          expect(shareAttempts, 2);
+          final sharing = container.read(screenShareControllerProvider);
+          expect(sharing.isSharing, isTrue);
+          expect(sharing.localStreamId, 'stream-2');
+          expect(sharing.errorMessage, isNull);
+          expect(find.text(l10n.commonActionFailed), findsNothing);
+          expect(find.text(l10n.screenShareLimitReached), findsNothing);
+          expect(
+            room.captureRates,
+            failure.$1 == 'capture' ? [15.0, 15.0] : [15.0],
+          );
+          for (final request in requests) {
+            expect(request.method, 'POST');
+            expect(request.headers['Authorization'], 'Bearer test-access');
+            if (request.url.path.endsWith('/start')) {
+              expect(jsonDecode(request.body), {'room_id': 'room-1'});
+            }
+          }
+
+          await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
+          await tester.pumpAndSettle();
+          expect(room.stopCalls, 1);
+          expect(
+            container.read(screenShareControllerProvider).isSharing,
+            isFalse,
+          );
+          expect(
+            container.read(callControllerProvider).phase,
+            CallPhase.active,
+          );
+          expect(requests.map((request) => request.url.path).toList(), [
+            '/api/v1/voice/calls/room-1/screen-share/start',
+            if (failure.$1 == 'capture')
+              '/api/v1/voice/calls/room-1/screen-share/stop',
+            '/api/v1/voice/calls/room-1/screen-share/start',
+            '/api/v1/voice/calls/room-1/screen-share/stop',
+          ]);
+          expect(jsonDecode(requests.last.body), {'stream_id': 'stream-2'});
+        },
+      );
+    }
+  }
+
+  testWidgets('screen share quality dialog returns selected fps', (
+    tester,
+  ) async {
     double? selectedFps;
     await tester.pumpWidget(
       MaterialApp(

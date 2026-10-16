@@ -197,6 +197,13 @@
       }
     }
   },
+  "socialPresenceLastSeenJustNow": "Last seen just now",
+  "socialPresenceLastSeenMinutes": "{count, plural, one{Last seen {count} minute ago} other{Last seen {count} minutes ago}}",
+  "@socialPresenceLastSeenMinutes": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenHours": "{count, plural, one{Last seen {count} hour ago} other{Last seen {count} hours ago}}",
+  "@socialPresenceLastSeenHours": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenDays": "{count, plural, one{Last seen {count} day ago} other{Last seen {count} days ago}}",
+  "@socialPresenceLastSeenDays": {"placeholders": {"count": {"type": "int"}}},
   "socialPresenceUnknown": "Unknown",
   "socialActionError": "Error: {message}",
   "@socialActionError": {
@@ -237,6 +244,17 @@
   "chatListEmpty": "No conversations yet",
   "chatListEmptyHint": "Find people in Search to start a direct message.",
   "chatListLoadMore": "Load more chats",
+  "chatScheduleMessage": "Schedule message",
+  "chatSendWhenOnline": "Send when online",
+  "chatSchedulePickerTitle": "Schedule message",
+  "chatSchedulePending": "Pending",
+  "chatScheduleEdit": "Edit scheduled message",
+  "chatScheduleCancel": "Cancel scheduled message",
+  "chatScheduleSendNow": "Send now",
+  "chatScheduleRetry": "Retry",
+  "chatScheduleDateInvalid": "Choose a time within the next 365 days",
+  "chatScheduleFailure": "Could not complete the scheduled-message request. Try again.",
+  "chatScheduleLoadMore": "Load more scheduled messages",
   "chatListUnreadCount": "{count} unread",
   "@chatListUnreadCount": {
     "placeholders": {
@@ -439,6 +457,12 @@
   "callGroupVoiceActive": "Group voice active",
   "callGroupVoiceInProgress": "Voice call in progress in this group",
   "profileMessage": "Message",
+  "profileDetailTitle": "Profile",
+  "profileMoreActions": "More actions",
+  "profileOpenAvatar": "Open fullscreen avatar",
+  "profileAvatarUnavailable": "Avatar unavailable",
+  "profileCommonSpaces": "Common spaces",
+  "profileCommonSpacesLoadError": "Could not load common spaces",
   "profileEditTitle": "Edit profile",
   "profileEditTooltip": "Edit profile",
   "profileDisplayNameLabel": "Display name",
@@ -914,6 +938,9 @@
   "chatGroupLeave": "Leave group",
   "chatGroupLeaveConfirmTitle": "Leave group?",
   "chatGroupLeaveConfirmMessage": "You will no longer receive messages from this group.",
+  "chatChannelLeave": "Leave channel",
+  "chatChannelLeaveConfirmTitle": "Leave channel?",
+  "chatChannelLeaveConfirmMessage": "You will no longer receive messages from this channel.",
   "chatGroupOwnerLeaveHint": "Transfer ownership to another member before leaving.",
   "chatGroupTransferOwnershipTo": "Transfer ownership to {name}",
   "@chatGroupTransferOwnershipTo": {
@@ -1228,6 +1255,8 @@
   "versionRestartToUpdate": "Restart and update",
   "profileBlock": "Block user",
   "profileBlockConfirmTitle": "Block this user?",
+  "profileRemoveFriendConfirmTitle": "Remove this friend?",
+  "profileRemoveFriendConfirmMessage": "Remove this user from your friends list?",
   "profileBlockConfirmMessage": "They will not be able to message you.",
   "callVideoPlaceholder": "Video preview",
   "screenShareStart": "Share screen",
@@ -1515,6 +1544,8 @@
   "onboardingWrapUpStart": "Start",
   "deepLinkAccessDenied": "Access denied",
   "deepLinkResourceNotFound": "Not found",
+  "deepLinkAccessDeniedDescription": "You do not have permission to open this link. It may be intended for another profile.",
+  "deepLinkResourceNotFoundDescription": "This link is unavailable or no longer valid.",
   "deepLinkReturnHome": "Go to Home",
   "e2eBackupStatusChecking": "Checking encrypted key backup…",
   "e2eBackupStatusPresent": "Encrypted key backup is available for this account.",
@@ -1526,5 +1557,6 @@
   "e2eBackupDeleteConfirm": "This deletes the encrypted backup from this account. Your keys on this device will stay intact.",
   "e2eBackupDelete": "Delete backup",
   "e2eBackupRestoreCta": "Restore encrypted history",
-  "e2eKeyBackupManage": "Manage encrypted key backup"
+  "e2eKeyBackupManage": "Manage encrypted key backup",
+  "profileNotInContactsWarning": "Not in contacts · messages may be unsafe"
 }

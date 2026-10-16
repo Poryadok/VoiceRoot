@@ -20,6 +20,7 @@ import (
 type voiceRoomMoveFixture struct {
 	svc                   *VoiceGRPC
 	events                *recordingEvents
+	admissions            *[]voicestore.SpaceMediaAdmission
 	roles                 *recordingVoiceRolePermissions
 	spaceID, source, dest string
 	actor, target         string
@@ -30,15 +31,17 @@ func newVoiceRoomMoveFixture(t *testing.T) voiceRoomMoveFixture {
 	spaceID, source, dest, actor, target := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	members := map[string]map[string]bool{spaceID: {actor: true, target: true}}
 	events := &recordingEvents{}
+	var admissions []voicestore.SpaceMediaAdmission
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	roles := &recordingVoiceRolePermissions{}
 	svc.Roles = roles
 	configureReadySpaceMediaFixture(svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{source: spaceID, dest: spaceID}, members: members, accessEpoch: 11})
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{preparedAdmissions: &admissions}
 	for _, profileID := range []string{actor, target} {
 		_, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: source, Space: &spacev1.SpaceRef{Id: spaceID}})
 		require.NoError(t, err)
 	}
-	return voiceRoomMoveFixture{svc: svc, events: events, roles: roles, spaceID: spaceID, source: source, dest: dest, actor: actor, target: target}
+	return voiceRoomMoveFixture{svc: svc, events: events, admissions: &admissions, roles: roles, spaceID: spaceID, source: source, dest: dest, actor: actor, target: target}
 }
 
 func (f voiceRoomMoveFixture) moderatorRequest(operationID string) *callsv1.MoveVoiceRoomParticipantRequest {
@@ -47,8 +50,12 @@ func (f voiceRoomMoveFixture) moderatorRequest(operationID string) *callsv1.Move
 
 func TestSpaceMoveVoiceRoomParticipant_FailsClosedBeforeEffects(t *testing.T) {
 	f := newVoiceRoomMoveFixture(t)
-	require.Len(t, f.events.startedCall, 1)
-	require.Len(t, f.events.memberJoined, 2)
+	wantAdmissionEvents := []string{"voice.call_started", "voice.member_joined", "voice.member_joined"}
+	require.Equal(t, wantAdmissionEvents, preparedSpaceMediaEventSubjects(t, *f.admissions))
+	require.Empty(t, f.events.startedCall, "canonical admission events are journaled, not directly published")
+	require.Empty(t, f.events.memberJoined, "canonical admission events are journaled, not directly published")
+	admissionCount := len(*f.admissions)
+	voiceJoinCheckCount := len(f.roles.voiceJoinChecks)
 	_, err := f.svc.MoveVoiceRoomParticipant(voiceTestCtx(f.actor), f.moderatorRequest(uuid.NewString()))
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	source, err := f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.source)
@@ -57,15 +64,17 @@ func TestSpaceMoveVoiceRoomParticipant_FailsClosedBeforeEffects(t *testing.T) {
 	require.True(t, source.IsParticipant(f.target))
 	_, err = f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.dest)
 	require.ErrorIs(t, err, voicestore.ErrNotFound)
-	require.Len(t, f.events.memberJoined, 2)
+	require.Len(t, *f.admissions, admissionCount, "failed move must not prepare destination admission events")
+	require.Equal(t, wantAdmissionEvents, preparedSpaceMediaEventSubjects(t, *f.admissions))
 	require.Empty(t, f.roles.moveOthersChecks)
-	require.Empty(t, f.roles.voiceJoinChecks)
+	require.Len(t, f.roles.voiceJoinChecks, voiceJoinCheckCount, "failed move must not add a Voice join authorization check")
 	selfRequest := &callsv1.MoveToVoiceRoomRequest{FromVoiceRoomId: f.source, ToVoiceRoomId: f.dest, Space: &spacev1.SpaceRef{Id: f.spaceID}, OperationId: uuid.NewString()}
 	_, err = f.svc.MoveToVoiceRoom(voiceTestCtx(f.target), selfRequest)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	_, err = f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.dest)
 	require.ErrorIs(t, err, voicestore.ErrNotFound)
-	require.Len(t, f.events.memberJoined, 2)
+	require.Len(t, *f.admissions, admissionCount)
+	require.Len(t, f.roles.voiceJoinChecks, voiceJoinCheckCount, "failed self-move must not add a Voice join authorization check")
 }
 
 func TestMoveVoiceRoomParticipant_ReplayAndConflictingReplayDoNotMutateRoster(t *testing.T) {

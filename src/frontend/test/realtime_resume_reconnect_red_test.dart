@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -71,66 +70,105 @@ void main() {
     expect(harness.connection(1).resumeLastSequences, [42]);
   });
 
-  test(
+  testWidgets(
     'pre-hello failures retain exponential backoff until accepted hello',
-    () {
+    (tester) async {
       late _ResumeReconnectHarness harness;
-      fakeAsync((clock) {
-        harness = _ResumeReconnectHarness();
-        try {
-          unawaited(harness.hub.ensureConnected());
-          clock.flushMicrotasks();
-          expect(harness.transport.connections, hasLength(1));
+      var elapsed = Duration.zero;
+      final timeline = <String>[];
+      void record(String event) =>
+          timeline.add('t=${elapsed.inMilliseconds}ms $event');
+      void snapshot(String label) => record(
+        '$label connections=${harness.transport.connections.length} '
+        'status=${harness.container.read(realtimeLinkStatusProvider)}',
+      );
 
-          const delays = [1, 2, 4, 8, 16, 30, 30];
-          var elapsedSeconds = 0;
-          for (var attempt = 0; attempt < delays.length; attempt++) {
-            unawaited(harness.connection(attempt).closeFrames());
-            clock.flushMicrotasks();
+      Future<void> drainClosedSubscription() async {
+        // Cancelling an already-closed stream can return Dart's root-zone
+        // Future._nullFuture. Drain that continuation without advancing the
+        // fake clock, then flush work it schedules back into the test zone.
+        await tester.runAsync(() async {
+          await Future<void>.delayed(Duration.zero);
+        });
+        await tester.pump();
+      }
 
-            final delay = delays[attempt];
-            clock.elapse(Duration(seconds: delay - 1));
-            clock.flushMicrotasks();
-            expect(
-              harness.transport.connections,
-              hasLength(attempt + 1),
-              reason: 'attempt ${attempt + 1} must wait ${delay}s',
-            );
+      harness = _ResumeReconnectHarness(trace: record);
+      try {
+        unawaited(harness.hub.ensureConnected());
+        await tester.pump();
+        snapshot('initial');
+        expect(harness.transport.connections, hasLength(1));
 
-            clock.elapse(const Duration(seconds: 1));
-            clock.flushMicrotasks();
-            elapsedSeconds += delay;
-            expect(
-              harness.transport.connections,
-              hasLength(attempt + 2),
-              reason: 'attempt ${attempt + 2} starts at t=$elapsedSeconds',
-            );
-          }
+        const delays = [1, 2, 4, 8, 16, 30, 30];
+        var elapsedSeconds = 0;
+        for (var attempt = 0; attempt < delays.length; attempt++) {
+          harness
+              .connection(attempt)
+              .events
+              .listen(
+                (_) {},
+                onDone: () => record('observer onDone connection=$attempt'),
+              );
+          record('request close connection=$attempt');
+          unawaited(harness.connection(attempt).closeFrames());
+          await tester.pump();
+          snapshot('after close connection=$attempt');
 
-          final recovered = harness.connection(delays.length);
-          recovered.addHello();
-          clock.flushMicrotasks();
-          unawaited(recovered.closeFrames());
-          clock.flushMicrotasks();
-
-          clock.elapse(const Duration(milliseconds: 999));
-          clock.flushMicrotasks();
-          expect(harness.transport.connections, hasLength(delays.length + 1));
-          clock.elapse(const Duration(milliseconds: 1));
-          clock.flushMicrotasks();
+          final delay = delays[attempt];
+          record(
+            'expected pending timer attempt=${attempt + 1} '
+            'deadline=${elapsed.inMilliseconds + delay * 1000}ms',
+          );
+          elapsed += Duration(seconds: delay - 1);
+          await tester.pump(Duration(seconds: delay - 1));
+          snapshot('before retry deadline connection=$attempt delay=${delay}s');
           expect(
             harness.transport.connections,
-            hasLength(delays.length + 2),
-            reason: 'the first disconnect after accepted hello starts at 1s',
+            hasLength(attempt + 1),
+            reason:
+                'attempt ${attempt + 1} must wait ${delay}s; '
+                'timeline: ${timeline.join(' | ')}',
           );
-        } finally {
-          harness.container.dispose();
-          for (final connection in harness.transport.connections) {
-            unawaited(connection.closeFrames());
-          }
-          clock.flushMicrotasks();
+
+          elapsed += const Duration(seconds: 1);
+          await tester.pump(const Duration(seconds: 1));
+          await drainClosedSubscription();
+          elapsedSeconds += delay;
+          snapshot('at retry deadline expectedAttempt=${attempt + 1}');
+          expect(
+            harness.transport.connections,
+            hasLength(attempt + 2),
+            reason:
+                'attempt ${attempt + 2} starts at t=$elapsedSeconds; '
+                'timeline: ${timeline.join(' | ')}',
+          );
         }
-      });
+
+        final recovered = harness.connection(delays.length);
+        recovered.addHello();
+        await tester.pump();
+        unawaited(recovered.closeFrames());
+        await tester.pump();
+
+        elapsed += const Duration(milliseconds: 999);
+        await tester.pump(const Duration(milliseconds: 999));
+        expect(harness.transport.connections, hasLength(delays.length + 1));
+        elapsed += const Duration(milliseconds: 1);
+        await tester.pump(const Duration(milliseconds: 1));
+        await drainClosedSubscription();
+        expect(
+          harness.transport.connections,
+          hasLength(delays.length + 2),
+          reason: 'the first disconnect after accepted hello starts at 1s',
+        );
+      } finally {
+        harness.container.dispose();
+        for (final connection in harness.transport.connections) {
+          unawaited(connection.closeFrames());
+        }
+        await tester.pump();
+      }
     },
   );
 
@@ -220,7 +258,10 @@ const _rotatedSession = AuthSession(
 );
 
 class _ResumeReconnectHarness {
-  _ResumeReconnectHarness({bool autoConnect = false}) {
+  _ResumeReconnectHarness({
+    bool autoConnect = false,
+    void Function(String event)? trace,
+  }) : transport = _ResumeTransportFactory(trace) {
     final client = MockClient((_) async => http.Response('{}', 404));
     auth = AuthController(
       authClient: VoiceAuthClient(gateway: gatewayHttpForTest(client)),
@@ -240,7 +281,7 @@ class _ResumeReconnectHarness {
     hub = container.read(realtimeHubProvider);
   }
 
-  final transport = _ResumeTransportFactory();
+  final _ResumeTransportFactory transport;
   late final AuthController auth;
   late final ProviderContainer container;
   late final RealtimeHub hub;
@@ -266,6 +307,9 @@ class _ResumeReconnectHarness {
 }
 
 class _ResumeTransportFactory implements RealtimeTransportFactory {
+  _ResumeTransportFactory(this._trace);
+
+  final void Function(String event)? _trace;
   final connections = <_ResumeConnection>[];
   final sessions = <AuthSession>[];
 
@@ -274,8 +318,12 @@ class _ResumeTransportFactory implements RealtimeTransportFactory {
     required Uri uri,
     required AuthSession session,
   }) async {
+    _trace?.call(
+      'transport open attempt=${connections.length} '
+      'session=${session.accountId}/${session.activeProfileId}',
+    );
     sessions.add(session);
-    final connection = _ResumeConnection(connections.length);
+    final connection = _ResumeConnection(connections.length, _trace);
     connections.add(connection);
     return connection;
   }
@@ -295,10 +343,11 @@ class _ResumeTransportFactory implements RealtimeTransportFactory {
 }
 
 class _ResumeConnection extends VoiceRealtimeConnection {
-  _ResumeConnection(this.attempt)
+  _ResumeConnection(this.attempt, this._trace)
     : super(uri: Uri.parse('ws://transport.test/ws'), headers: const {});
 
   final int attempt;
+  final void Function(String event)? _trace;
   final connectStarted = Completer<void>();
   final _frames = StreamController<RealtimeFrame>.broadcast(sync: true);
   final resumeLastSequences = <int>[];
@@ -308,11 +357,15 @@ class _ResumeConnection extends VoiceRealtimeConnection {
 
   @override
   Future<void> connect() async {
+    _trace?.call('connect start attempt=$attempt');
     if (!connectStarted.isCompleted) connectStarted.complete();
+    _trace?.call('connect complete attempt=$attempt');
   }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    _trace?.call('dispose attempt=$attempt');
+  }
 
   // Expected RealtimeTransport contract: resume data comes from the retired
   // connection and is supplied explicitly to this fresh transport.
@@ -321,11 +374,18 @@ class _ResumeConnection extends VoiceRealtimeConnection {
     resumeLastSequences.add(lastSequence);
   }
 
-  void addHello() => _frames.add(const RealtimeFrame(op: 'hello', sequence: 1));
+  void addHello() {
+    _trace?.call('hello attempt=$attempt');
+    _frames.add(const RealtimeFrame(op: 'hello', sequence: 1));
+  }
 
   void addFrame(RealtimeFrame frame) => _frames.add(frame);
 
   Future<void> closeFrames() async {
-    if (!_frames.isClosed) await _frames.close();
+    if (!_frames.isClosed) {
+      _trace?.call('stream close start attempt=$attempt');
+      await _frames.close();
+      _trace?.call('stream close complete attempt=$attempt');
+    }
   }
 }

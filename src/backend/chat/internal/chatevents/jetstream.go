@@ -86,6 +86,7 @@ func chatEventStreamSubjects() []string {
 		subjectChatCreated, subjectChatUpdated, subjectChatDeleted, subjectChatMemberChanged, subjectDMPeerDeleted,
 		"space.tree_changed", "space.created", "voice.room_created", "voice.room_deleted",
 		"space.invite_created", "space.member_joined", "space.member_left", "space.updated", "space.deleted", "space.deletion_scheduled", "space.restored",
+		"space.voice_room_access_invalidated",
 	}
 }
 func validateBootstrappedStream(info *nats.StreamInfo) error {

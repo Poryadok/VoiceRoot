@@ -64,6 +64,20 @@ POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в за�
 
 The caller-relative profile action check is `GET /api/v1/chats/dm-permission/{other_profile_id}` and returns only `{ "allowed": boolean }` from Chat `CanCreateDM`. Gateway preserves typed authorization/dependency errors. The route performs no chat mutation; the subsequent `POST /api/v1/chats/dm` repeats Chat authorization.
 
+### Scheduled message REST transport
+
+The scheduled-message lifecycle is exposed through authenticated Messaging gRPC calls. Gateway derives `x-voice-user-id` and `x-voice-profile-id` from the verified access token; request bodies and paths do not supply an acting profile or sender. Chat access is resolved by Messaging from the chat ID and authenticated profile.
+
+| Method and route | Messaging RPC | Body/query and response |
+|---|---|---|
+| `POST /api/v1/messages/send` | `SendMessage` | Existing send body; optional oneof arm is a direct `scheduled_at` timestamp or `send_when_online: true`. The response is the existing union: exactly one of `message` (immediate) or `scheduled_message` (accepted schedule). |
+| `GET /api/v1/messages/scheduled?chat_id=…&cursor=…&page_size=…` | `ListScheduledMessages` | `chat_id` is required by the chat-scoped RPC; cursor/page size use `CursorPageRequest`. Response fields are `scheduled_messages` and `page` (`next_cursor`, `has_more`). |
+| `PATCH /api/v1/messages/scheduled/{scheduled_message_id}` | `UpdateScheduledMessage` | Optional complete `payload` and/or one direct schedule arm (`scheduled_at` or `send_when_online: true`); the path ID overrides any body ID. Response contains `scheduled_message`. |
+| `DELETE /api/v1/messages/scheduled/{scheduled_message_id}` | `CancelScheduledMessage` | No body; success is `204 No Content`. |
+| `POST /api/v1/messages/scheduled/{scheduled_message_id}/send-now` | `SendScheduledMessageNow` | No body; response contains the sent `message`. |
+
+These custom routes use protobuf JSON field names and Gateway's standard gRPC error mapping (`INVALID_ARGUMENT` → 400, `NOT_FOUND` → 404, `PERMISSION_DENIED` → 403, `FAILED_PRECONDITION` → 412, `UNAVAILABLE` → 503). Owner-only pending-state rules and idempotent cancel/send-now behavior remain Messaging's authority; omitted update schedule fields retain the stored schedule.
+
 ### T14 SDK authorization routes
 
 Gateway applies a route-specific principal policy to the Auth consumer routes.

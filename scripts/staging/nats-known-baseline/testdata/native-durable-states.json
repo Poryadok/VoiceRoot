@@ -1,0 +1,449 @@
+{
+  "provenance": "retained actual populated pinned-server synthetic fixture e52f; no new broker run",
+  "source_pins": {
+    "failed-2-before-native-bytes.json": "db63040a388a0ba41dd4b02cc09f7d321e8d760d2a1c37129af3293c65f6fea7",
+    "failed-2-after-native-bytes.json": "8bec6a0f2a937b41de0d5072800dc69aa0f0fcb1256955c4244e289ffcef5121"
+  },
+  "rows": [
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/analytics_events/obs/analytics_v2_telemetry/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/bot_events/obs/analytics_v2_bot/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/chat_events/obs/analytics_v2_chat/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/chat_events/obs/rt_realtime1_chat/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/chat_events/obs/search-indexer-chat-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/file_events/obs/analytics_v2_file/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/matchmaking_events/obs/analytics_v2_mm/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/matchmaking_events/obs/notif_mm/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/matchmaking_events/obs/rt_realtime1_matchmaking/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/analytics_v2_msg/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/bot_message_events/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/chat_message_activity/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/messaging_delivery_ack/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/notif_msg_v2/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/rt_realtime1_msg/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/search-indexer-message-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/moderation_events/obs/analytics_v2_moderation/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/moderation_events/obs/notif_mod/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/role_events/obs/analytics_v2_role/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/role_events/obs/rt_realtime1_role/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/rollout_extra/obs/rollout_extra_durable/o.dat",
+      "data": "FgIBAQMCAb6ax6wNAQEAAQEB"
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/rollout_extra/obs/rollout_extra_ephemeral/o.dat",
+      "data": "FgIAAAEBAb6ax6wNAQEAAA=="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/analytics_v2_social/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/chat_friend_accepted/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/notif_social/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/rt_realtime1_friend_request/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/rt_realtime1_social/o.dat",
+      "data": "FgIBAQICAb6ax6wNAQEAAA=="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/story_events/obs/analytics_v2_story/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/story_events/obs/matchmaking_story_lfp_v2/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/story_events/obs/notif_story/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/analytics_v2_subscription/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/auth_subscription_tier/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/notif_subscription/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/space_subscription_entitlement/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/analytics_v2_user/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/chat_account_deleted/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/messaging_receipt_privacy/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/rt_realtime1_user/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/search-indexer-user-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/user-account-deletion-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_profile_projection/obs/search-user-profile-projection-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/voice_events/obs/analytics_v2_voice/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/voice_events/obs/notif_voice/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "before",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/voice_events/obs/rt_realtime1_voice/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/analytics_events/obs/analytics_v2_telemetry/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/bot_events/obs/analytics_v2_bot/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/chat_events/obs/analytics_v2_chat/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/chat_events/obs/rt_realtime1_chat/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/chat_events/obs/search-indexer-chat-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/file_events/obs/analytics_v2_file/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/matchmaking_events/obs/analytics_v2_mm/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/matchmaking_events/obs/notif_mm/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/matchmaking_events/obs/rt_realtime1_matchmaking/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/analytics_v2_msg/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/bot_message_events/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/chat_message_activity/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/messaging_delivery_ack/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/notif_msg_v2/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/rt_realtime1_msg/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/message_events/obs/search-indexer-message-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/moderation_events/obs/analytics_v2_moderation/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/moderation_events/obs/notif_mod/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/role_events/obs/analytics_v2_role/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/role_events/obs/rt_realtime1_role/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/rollout_extra/obs/rollout_extra_durable/o.dat",
+      "data": "FgIBAQMCAb6ax6wNAQEAAQEB"
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/rollout_extra/obs/rollout_extra_ephemeral/o.dat",
+      "data": "FgIAAAEBAb6ax6wNAQEAAA=="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/analytics_v2_social/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/chat_friend_accepted/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/notif_social/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/rt_realtime1_friend_request/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/social_events/obs/rt_realtime1_social/o.dat",
+      "data": "FgIBAQICAb6ax6wNAQEAAA=="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/story_events/obs/analytics_v2_story/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/story_events/obs/matchmaking_story_lfp_v2/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/story_events/obs/notif_story/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/analytics_v2_subscription/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/auth_subscription_tier/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/notif_subscription/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/subscription_events/obs/space_subscription_entitlement/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/analytics_v2_user/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/chat_account_deleted/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/messaging_receipt_privacy/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/rt_realtime1_user/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/search-indexer-user-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_events/obs/user-account-deletion-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/user_profile_projection/obs/search-user-profile-projection-v1/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/voice_events/obs/analytics_v2_voice/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/voice_events/obs/notif_voice/o.dat",
+      "data": "FgIAAAAAAAA="
+    },
+    {
+      "phase": "after",
+      "path": "jetstream/ABZE7UQMVJI36EA6HABFMWHMAYWTSJUKM7TCEKIG3IL3UEF5R4CCTFRF/streams/voice_events/obs/rt_realtime1_voice/o.dat",
+      "data": "FgIAAAAAAAA="
+    }
+  ]
+}

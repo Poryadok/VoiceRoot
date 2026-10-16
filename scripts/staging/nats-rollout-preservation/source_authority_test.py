@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -17,6 +18,101 @@ TREE = 'b' * 40
 
 
 class SourceTests(unittest.TestCase):
+    def test_api_pagination_keeps_full_item_limit_with_small_pages(self):
+        requests = []
+
+        def page(url, headers, deadline):
+            requests.append(url)
+            self.assertIn('?per_page=20&page=', url)
+            number = int(url.rsplit('page=', 1)[1])
+            first = (number - 1) * 20
+            return {'total_count': 10000, 'jobs': [{'id': item} for item in range(first + 1, first + 21)]}
+
+        with patch.object(module, '_get', side_effect=page):
+            rows = module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        self.assertEqual(len(rows), 10000)
+        self.assertEqual(len(requests), 500)
+        self.assertEqual(rows[0]['id'], 1)
+        self.assertEqual(rows[-1]['id'], 10000)
+
+    def test_api_pagination_rejects_over_limit_and_inconsistent_pages(self):
+        with patch.object(module, '_get', return_value={'total_count': 10001, 'jobs': []}):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        responses = [
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+            {'total_count': 3, 'jobs': [{'id': 2}]},
+        ]
+        with patch.object(module, '_get', side_effect=responses):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        responses = [
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+        ]
+        with patch.object(module, '_get', side_effect=responses):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+    def test_cached_archive_runs_complete_capture_without_remote_tarball(self):
+        private=tempfile.TemporaryDirectory(dir='/home/pmd');self.addCleanup(private.cleanup)
+        cache=Path(private.name)/'source-archives';cache.mkdir(mode=0o750)
+        # Shared cache uses the exact full-SHA codeload root.
+        buffer=io.BytesIO()
+        with tarfile.open(fileobj=buffer,mode='w:gz') as archive:
+            for path,content in self.files.items():
+                member=tarfile.TarInfo('VoiceRoot-'+SHA+'/'+path)
+                member.size=len(content);member.mode=0o664
+                archive.addfile(member,io.BytesIO(content))
+        cached=cache/(SHA+'.tar.gz');cached.write_bytes(buffer.getvalue());cached.chmod(0o440)
+        calls=[]
+        def fetch(url,*args,**kwargs):
+            calls.append(url)
+            if url.endswith('/tarball/'+SHA):raise AssertionError('cache must avoid archive network')
+            return self.fetch(url,*args,**kwargs)
+        with patch.object(module,'SOURCE_CACHE_DIR',cache,create=True),patch.object(module,'_fetch',fetch):
+            result=module.capture_source('private-token',123,SHA,self.destination)
+        self.assertTrue(result['verified']);self.assertEqual(result['tree_sha'],TREE)
+        self.assertTrue(any('/git/trees/' in url for url in calls))
+        self.assertTrue(any('/actions/artifacts/99/zip' in url for url in calls))
+        self.assertTrue(any('/manifests/' in url for url in calls))
+
+    def test_archive_executable_mode_mismatch_is_rejected(self):
+        tree=self.tree();tree['tree'][0]['mode']='100755'
+        with patch.object(self,'tree',return_value=tree),self.assertRaises(module.SourceError):
+            self.capture()
+
+    def test_cache_custody_rejects_invalid_present_and_changed_held_bytes(self):
+        with tempfile.TemporaryDirectory(dir='/home/pmd') as td:
+            root=Path(td);root.chmod(0o750)
+            cache=root/'cache';cache.mkdir(mode=0o750)
+            path=cache/(SHA+'.tar.gz')
+            with patch.object(module,'SOURCE_CACHE_DIR',cache):
+                for drift in ('writable','hardlink','symlink','directory'):
+                    with self.subTest(drift=drift):
+                        path.write_bytes(b'archive');path.chmod(0o440)
+                        if drift=='writable':path.chmod(0o660)
+                        elif drift=='hardlink':os.link(path,root/'linked')
+                        elif drift=='symlink':path.unlink();path.symlink_to(root/'missing')
+                        else:path.unlink();path.mkdir()
+                        with self.assertRaises((module.SourceError,OSError)):
+                            with module.cached_archive(SHA):pass
+                        if path.is_dir():path.rmdir()
+                        else:path.unlink()
+                        if (root/'linked').exists():(root/'linked').unlink()
+                path.write_bytes(b'archive');path.chmod(0o440)
+                with self.assertRaises(module.SourceError):
+                    with module.cached_archive(SHA) as held:
+                        self.assertEqual(held.read(),b'archive')
+                        path.chmod(0o600)
+                        path.write_bytes(b'changed')
+                path.unlink();cache.rmdir();cache.symlink_to(root)
+                with self.assertRaises(OSError):
+                    with module.cached_archive(SHA):pass
+
     def test_immutable_runtime_index_and_child_require_same_content_chain(self):
         prefix=module.REGISTRY+'/auth@sha256:'
         actual=prefix+'a'*64; target=prefix+'b'*64
@@ -103,8 +199,11 @@ class SourceTests(unittest.TestCase):
             self.master_calls+=1
             data={'ref':'refs/heads/master','object':{'type':'commit','sha':'d'*40 if self.master_moved and self.master_calls>1 else SHA}}
         elif url.endswith('/actions/runs/123'): data=self.run
-        elif '/jobs?' in url: data={'total_count':len(self.jobs),'jobs':self.jobs}
-        elif url.endswith('/actions/runs/123/artifacts?per_page=100&page=1'): data={'total_count':1,'artifacts':[self.artifact]}
+        elif '/jobs?' in url:
+            query=dict(part.split('=',1) for part in url.split('?',1)[1].split('&'))
+            page=int(query['page']);per_page=int(query['per_page']);start=(page-1)*per_page
+            data={'total_count':len(self.jobs),'jobs':self.jobs[start:start+per_page]}
+        elif url.endswith('/actions/runs/123/artifacts?per_page=20&page=1'): data={'total_count':1,'artifacts':[self.artifact]}
         elif url.endswith('/actions/artifacts/99'):
             data=copy.deepcopy(self.artifact)
             buffer=io.BytesIO()

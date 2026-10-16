@@ -45,7 +45,8 @@ state_dir="$(mktemp -d "${tmp_parent}/voice-file-restart-proof.XXXXXXXX")"
 state_dir="$(cd "$state_dir" && pwd -P)"
 state_path_posix="${state_dir}/state.json"
 compose_env="${state_dir}/compose-empty.env"
-: > "$compose_env" # Explicit --env-file prevents an ambient repository .env from participating.
+phase0_fixture_dir="${state_dir}/phase0-fixture"
+compose_started=false
 
 if command -v cygpath >/dev/null 2>&1; then
   state_path="$(cygpath -am "$state_path_posix")"
@@ -55,18 +56,29 @@ fi
 
 cleanup() {
   local status=$?
-  if [[ "${VOICE_FILE_ATTACHMENT_RESTART_CLEANUP:-false}" == "true" ]]; then
+  local compose_down_succeeded=true
+  if [[ "${VOICE_FILE_ATTACHMENT_RESTART_CLEANUP:-false}" == "true" && "$compose_started" == "true" ]]; then
     # Exact generated project only; never delete named volumes.
-    compose down --remove-orphans || true
+    compose down --remove-orphans || compose_down_succeeded=false
   fi
   [[ "$state_dir" == "$tmp_parent"/voice-file-restart-proof.* ]] || {
     echo "refusing unsafe state cleanup path: $state_dir" >&2
     return "$status"
   }
-  rm -rf -- "$state_dir"
+  if [[ "$compose_down_succeeded" == "false" ]]; then
+    echo "Compose cleanup failed; disposable fixture retained at $state_dir" >&2
+  elif [[ "${VOICE_FILE_ATTACHMENT_RESTART_CLEANUP:-false}" == "true" || "$compose_started" == "false" ]]; then
+    rm -rf -- "$state_dir"
+  else
+    echo "disposable fixture retained with Compose project at $state_dir" >&2
+  fi
   return "$status"
 }
 trap cleanup EXIT
+
+python3 "$ROOT/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
+printf 'PHASE0_FIXTURE_DIR=%s\n' "$phase0_fixture_dir" >"$compose_env"
+export PHASE0_FIXTURE_DIR="$phase0_fixture_dir"
 
 export COMPOSE_PROJECT_NAME="$project"
 export POSTGRES_PORT="$port_base"
@@ -108,7 +120,8 @@ fi
 restart_test="${restart_tests[0]}"
 
 compose() {
-  docker compose --env-file "$compose_env" --project-name "$project" --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" --profile app "$@"
+  docker compose --env-file "$compose_env" --project-name "$project" --project-directory "$ROOT" \
+    -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.voice-space-media.yml" --profile app "$@"
 }
 
 wait_healthy() {
@@ -144,6 +157,7 @@ wait_gateway() {
 
 echo "A1 restart proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose config --quiet
+compose_started=true
 set +e
 compose up -d --build
 initial_up_status=$?

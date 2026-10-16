@@ -85,6 +85,19 @@ func (r readySpaceMediaAdmission) Prepare(_ context.Context, admission voicestor
 	}
 	return r.err
 }
+
+func preparedSpaceMediaEventSubjects(t *testing.T, admissions []voicestore.SpaceMediaAdmission) []string {
+	t.Helper()
+	var subjects []string
+	for _, admission := range admissions {
+		for _, event := range admission.Events {
+			require.NotEmpty(t, event.Payload, "prepared admission events must retain their durable payload")
+			subjects = append(subjects, event.Subject)
+		}
+	}
+	return subjects
+}
+
 func (r readySpaceMediaAdmission) Fence(context.Context, voicestore.SpaceMediaAdmission) error {
 	return r.err
 }
@@ -145,8 +158,11 @@ type fixtureSpaceMediaAccessResolver struct {
 	accessEpoch uint64
 }
 
-func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Context, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
+func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Context, expectedSpaceID, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
 	spaceID, active := r.rooms[voiceRoomID]
+	if spaceID == "" || expectedSpaceID != spaceID {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.NotFound, "voice room is not bound to expected Space")
+	}
 	return CanonicalVoiceRoomAccess{
 		SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID], AccessEpoch: r.accessEpoch,
 	}, nil
@@ -195,7 +211,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	require.NoError(t, err)
 	_, err = svc.Calls.AdmitSpaceMediaParticipant(t.Context(), call.RoomID, voicestore.SpaceMediaParticipant{
 		AccountID: accountID, AdmissionOperationID: uuid.NewString(), ProfileID: profileID,
-		Identity: identity, Generation: generation,
+		Identity: identity, Generation: generation, RoomGeneration: 1,
 		Issued: voicestore.SpaceMediaGrant{SessionEpoch: 9, AccessEpoch: 11, PolicyEpoch: 7, CanJoin: true, CanSubscribe: true},
 	}, voicestore.MaxVoiceRoomParticipants)
 	require.NoError(t, err)
@@ -354,7 +370,7 @@ func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testin
 	require.Equal(t, call.RoomID, prepared.RoomID)
 	require.True(t, prepared.CreatedRoom)
 	require.Len(t, prepared.Events, 2)
-	require.Equal([]string{"voice.call_started", "voice.member_joined"}, []string{
+	require.Equal(t, []string{"voice.call_started", "voice.member_joined"}, []string{
 		prepared.Events[0].Subject, prepared.Events[1].Subject,
 	})
 	require.NotEqual(t, uuid.Nil, prepared.Events[0].ID)

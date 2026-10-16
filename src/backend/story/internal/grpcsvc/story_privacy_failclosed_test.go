@@ -57,7 +57,7 @@ func TestCapCreateStoryVisibilityFailsBeforeReturningPermissivePolicy(t *testing
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &StoryGRPC{Privacy: tc.checker}
-			_, err := svc.capCreateStoryVisibility(context.Background(), profileID, "everyone", nil)
+			_, _, err := svc.capCreateStoryVisibility(context.Background(), profileID, "everyone", nil)
 			require.Equal(t, codes.Unavailable, status.Code(err))
 		})
 	}

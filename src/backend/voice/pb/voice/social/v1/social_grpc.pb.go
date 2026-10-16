@@ -22,6 +22,7 @@ const (
 	SocialService_SendFriendInvitation_FullMethodName    = "/voice.social.v1.SocialService/SendFriendInvitation"
 	SocialService_AcceptFriendInvitation_FullMethodName  = "/voice.social.v1.SocialService/AcceptFriendInvitation"
 	SocialService_DeclineFriendInvitation_FullMethodName = "/voice.social.v1.SocialService/DeclineFriendInvitation"
+	SocialService_CancelFriendInvitation_FullMethodName  = "/voice.social.v1.SocialService/CancelFriendInvitation"
 	SocialService_RemoveFriend_FullMethodName            = "/voice.social.v1.SocialService/RemoveFriend"
 	SocialService_ListFriends_FullMethodName             = "/voice.social.v1.SocialService/ListFriends"
 	SocialService_ListFriendRequests_FullMethodName      = "/voice.social.v1.SocialService/ListFriendRequests"
@@ -40,6 +41,7 @@ const (
 	SocialService_GetFriendsOfFriends_FullMethodName     = "/voice.social.v1.SocialService/GetFriendsOfFriends"
 	SocialService_HasContact_FullMethodName              = "/voice.social.v1.SocialService/HasContact"
 	SocialService_IsProfilePairBlocked_FullMethodName    = "/voice.social.v1.SocialService/IsProfilePairBlocked"
+	SocialService_IsProfilePairsBlocked_FullMethodName   = "/voice.social.v1.SocialService/IsProfilePairsBlocked"
 )
 
 // SocialServiceClient is the client API for SocialService service.
@@ -51,6 +53,8 @@ type SocialServiceClient interface {
 	SendFriendInvitation(ctx context.Context, in *SendFriendInvitationRequest, opts ...grpc.CallOption) (*SendFriendInvitationResponse, error)
 	AcceptFriendInvitation(ctx context.Context, in *AcceptFriendInvitationRequest, opts ...grpc.CallOption) (*AcceptFriendInvitationResponse, error)
 	DeclineFriendInvitation(ctx context.Context, in *DeclineFriendInvitationRequest, opts ...grpc.CallOption) (*DeclineFriendInvitationResponse, error)
+	// Sender cancels only its own pending invitation.
+	CancelFriendInvitation(ctx context.Context, in *CancelFriendInvitationRequest, opts ...grpc.CallOption) (*CancelFriendInvitationResponse, error)
 	RemoveFriend(ctx context.Context, in *RemoveFriendRequest, opts ...grpc.CallOption) (*RemoveFriendResponse, error)
 	ListFriends(ctx context.Context, in *ListFriendsRequest, opts ...grpc.CallOption) (*ListFriendsResponse, error)
 	ListFriendRequests(ctx context.Context, in *ListFriendRequestsRequest, opts ...grpc.CallOption) (*ListFriendRequestsResponse, error)
@@ -71,6 +75,8 @@ type SocialServiceClient interface {
 	HasContact(ctx context.Context, in *HasContactRequest, opts ...grpc.CallOption) (*HasContactResponse, error)
 	// Internal S2S: directional block visibility for a profile pair; returns only a boolean.
 	IsProfilePairBlocked(ctx context.Context, in *IsProfilePairBlockedRequest, opts ...grpc.CallOption) (*IsProfilePairBlockedResponse, error)
+	// Internal S2S: bounded batch of directional profile-pair visibility decisions.
+	IsProfilePairsBlocked(ctx context.Context, in *IsProfilePairsBlockedRequest, opts ...grpc.CallOption) (*IsProfilePairsBlockedResponse, error)
 }
 
 type socialServiceClient struct {
@@ -105,6 +111,16 @@ func (c *socialServiceClient) DeclineFriendInvitation(ctx context.Context, in *D
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeclineFriendInvitationResponse)
 	err := c.cc.Invoke(ctx, SocialService_DeclineFriendInvitation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *socialServiceClient) CancelFriendInvitation(ctx context.Context, in *CancelFriendInvitationRequest, opts ...grpc.CallOption) (*CancelFriendInvitationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelFriendInvitationResponse)
+	err := c.cc.Invoke(ctx, SocialService_CancelFriendInvitation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +307,16 @@ func (c *socialServiceClient) IsProfilePairBlocked(ctx context.Context, in *IsPr
 	return out, nil
 }
 
+func (c *socialServiceClient) IsProfilePairsBlocked(ctx context.Context, in *IsProfilePairsBlockedRequest, opts ...grpc.CallOption) (*IsProfilePairsBlockedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IsProfilePairsBlockedResponse)
+	err := c.cc.Invoke(ctx, SocialService_IsProfilePairsBlocked_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SocialServiceServer is the server API for SocialService service.
 // All implementations must embed UnimplementedSocialServiceServer
 // for forward compatibility.
@@ -300,6 +326,8 @@ type SocialServiceServer interface {
 	SendFriendInvitation(context.Context, *SendFriendInvitationRequest) (*SendFriendInvitationResponse, error)
 	AcceptFriendInvitation(context.Context, *AcceptFriendInvitationRequest) (*AcceptFriendInvitationResponse, error)
 	DeclineFriendInvitation(context.Context, *DeclineFriendInvitationRequest) (*DeclineFriendInvitationResponse, error)
+	// Sender cancels only its own pending invitation.
+	CancelFriendInvitation(context.Context, *CancelFriendInvitationRequest) (*CancelFriendInvitationResponse, error)
 	RemoveFriend(context.Context, *RemoveFriendRequest) (*RemoveFriendResponse, error)
 	ListFriends(context.Context, *ListFriendsRequest) (*ListFriendsResponse, error)
 	ListFriendRequests(context.Context, *ListFriendRequestsRequest) (*ListFriendRequestsResponse, error)
@@ -320,6 +348,8 @@ type SocialServiceServer interface {
 	HasContact(context.Context, *HasContactRequest) (*HasContactResponse, error)
 	// Internal S2S: directional block visibility for a profile pair; returns only a boolean.
 	IsProfilePairBlocked(context.Context, *IsProfilePairBlockedRequest) (*IsProfilePairBlockedResponse, error)
+	// Internal S2S: bounded batch of directional profile-pair visibility decisions.
+	IsProfilePairsBlocked(context.Context, *IsProfilePairsBlockedRequest) (*IsProfilePairsBlockedResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }
 
@@ -338,6 +368,9 @@ func (UnimplementedSocialServiceServer) AcceptFriendInvitation(context.Context, 
 }
 func (UnimplementedSocialServiceServer) DeclineFriendInvitation(context.Context, *DeclineFriendInvitationRequest) (*DeclineFriendInvitationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeclineFriendInvitation not implemented")
+}
+func (UnimplementedSocialServiceServer) CancelFriendInvitation(context.Context, *CancelFriendInvitationRequest) (*CancelFriendInvitationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelFriendInvitation not implemented")
 }
 func (UnimplementedSocialServiceServer) RemoveFriend(context.Context, *RemoveFriendRequest) (*RemoveFriendResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveFriend not implemented")
@@ -392,6 +425,9 @@ func (UnimplementedSocialServiceServer) HasContact(context.Context, *HasContactR
 }
 func (UnimplementedSocialServiceServer) IsProfilePairBlocked(context.Context, *IsProfilePairBlockedRequest) (*IsProfilePairBlockedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IsProfilePairBlocked not implemented")
+}
+func (UnimplementedSocialServiceServer) IsProfilePairsBlocked(context.Context, *IsProfilePairsBlockedRequest) (*IsProfilePairsBlockedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsProfilePairsBlocked not implemented")
 }
 func (UnimplementedSocialServiceServer) mustEmbedUnimplementedSocialServiceServer() {}
 func (UnimplementedSocialServiceServer) testEmbeddedByValue()                       {}
@@ -464,6 +500,24 @@ func _SocialService_DeclineFriendInvitation_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SocialServiceServer).DeclineFriendInvitation(ctx, req.(*DeclineFriendInvitationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SocialService_CancelFriendInvitation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelFriendInvitationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).CancelFriendInvitation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_CancelFriendInvitation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).CancelFriendInvitation(ctx, req.(*CancelFriendInvitationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -792,6 +846,24 @@ func _SocialService_IsProfilePairBlocked_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SocialService_IsProfilePairsBlocked_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IsProfilePairsBlockedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).IsProfilePairsBlocked(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_IsProfilePairsBlocked_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).IsProfilePairsBlocked(ctx, req.(*IsProfilePairsBlockedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SocialService_ServiceDesc is the grpc.ServiceDesc for SocialService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -810,6 +882,10 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeclineFriendInvitation",
 			Handler:    _SocialService_DeclineFriendInvitation_Handler,
+		},
+		{
+			MethodName: "CancelFriendInvitation",
+			Handler:    _SocialService_CancelFriendInvitation_Handler,
 		},
 		{
 			MethodName: "RemoveFriend",
@@ -882,6 +958,10 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IsProfilePairBlocked",
 			Handler:    _SocialService_IsProfilePairBlocked_Handler,
+		},
+		{
+			MethodName: "IsProfilePairsBlocked",
+			Handler:    _SocialService_IsProfilePairsBlocked_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

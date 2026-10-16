@@ -184,6 +184,13 @@
       }
     }
   },
+  "socialPresenceLastSeenJustNow": "Был(а) только что",
+  "socialPresenceLastSeenMinutes": "{count, plural, one{Был(а) {count} минуту назад} few{Был(а) {count} минуты назад} many{Был(а) {count} минут назад} other{Был(а) {count} минуты назад}}",
+  "@socialPresenceLastSeenMinutes": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenHours": "{count, plural, one{Был(а) {count} час назад} few{Был(а) {count} часа назад} many{Был(а) {count} часов назад} other{Был(а) {count} часа назад}}",
+  "@socialPresenceLastSeenHours": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenDays": "{count, plural, one{Был(а) {count} день назад} few{Был(а) {count} дня назад} many{Был(а) {count} дней назад} other{Был(а) {count} дня назад}}",
+  "@socialPresenceLastSeenDays": {"placeholders": {"count": {"type": "int"}}},
   "socialPresenceUnknown": "Неизвестно",
   "socialActionError": "Ошибка: {message}",
   "@socialActionError": {
@@ -207,6 +214,17 @@
   "chatListEmpty": "Пока нет диалогов",
   "chatListEmptyHint": "Найдите людей в поиске, чтобы начать личный диалог.",
   "chatListLoadMore": "Загрузить ещё чаты",
+  "chatScheduleMessage": "Запланировать сообщение",
+  "chatSendWhenOnline": "Отправить, когда будет в сети",
+  "chatSchedulePickerTitle": "Запланировать сообщение",
+  "chatSchedulePending": "Ожидает отправки",
+  "chatScheduleEdit": "Изменить запланированное сообщение",
+  "chatScheduleCancel": "Отменить запланированное сообщение",
+  "chatScheduleSendNow": "Отправить сейчас",
+  "chatScheduleRetry": "Повторить",
+  "chatScheduleDateInvalid": "Выберите время в пределах следующих 365 дней",
+  "chatScheduleFailure": "Не удалось выполнить запрос для запланированного сообщения. Попробуйте ещё раз.",
+  "chatScheduleLoadMore": "Загрузить ещё запланированные сообщения",
   "chatListUnreadCount": "Непрочитанных: {count}",
   "@chatListUnreadCount": {
     "placeholders": {
@@ -402,6 +420,12 @@
   "callGroupVoiceActive": "Групповой голос активен",
   "callGroupVoiceInProgress": "В группе идёт голосовой звонок",
   "profileMessage": "Написать",
+  "profileDetailTitle": "Профиль",
+  "profileMoreActions": "Ещё",
+  "profileOpenAvatar": "Открыть аватар на весь экран",
+  "profileAvatarUnavailable": "Аватар недоступен",
+  "profileCommonSpaces": "Общие пространства",
+  "profileCommonSpacesLoadError": "Не удалось загрузить общие пространства",
   "profileEditTitle": "Редактировать профиль",
   "profileEditTooltip": "Редактировать профиль",
   "profileDisplayNameLabel": "Имя профиля",
@@ -853,6 +877,9 @@
   "chatGroupLeave": "Выйти из группы",
   "chatGroupLeaveConfirmTitle": "Выйти из группы?",
   "chatGroupLeaveConfirmMessage": "Вы больше не будете получать сообщения из этой группы.",
+  "chatChannelLeave": "Выйти из канала",
+  "chatChannelLeaveConfirmTitle": "Выйти из канала?",
+  "chatChannelLeaveConfirmMessage": "Вы больше не будете получать сообщения из этого канала.",
   "chatGroupOwnerLeaveHint": "Передайте владение другому участнику перед выходом.",
   "chatGroupTransferOwnershipTo": "Передать владение: {name}",
   "@chatGroupTransferOwnershipTo": {
@@ -1160,6 +1187,8 @@
   "versionRestartToUpdate": "Перезапустить и обновить",
   "profileBlock": "Заблокировать",
   "profileBlockConfirmTitle": "Заблокировать пользователя?",
+  "profileRemoveFriendConfirmTitle": "Удалить из друзей?",
+  "profileRemoveFriendConfirmMessage": "Удалить этого пользователя из списка друзей?",
   "profileBlockConfirmMessage": "Он не сможет писать вам сообщения.",
   "callVideoPlaceholder": "Видео",
   "screenShareStart": "Демонстрация экрана",
@@ -1282,6 +1311,7 @@
   "matchRatingBanAction": "Бан в ММ",
   "matchRatingSubmitError": "Не удалось отправить оценку",
   "matchRatingBanError": "Не удалось забанить в матчмейкинге",
+  "matchHistoryLoadError": "Не удалось загрузить историю матчей",
   "profileMmRating": "Рейтинг ММ: {rating} ★",
   "e2eEnableTitle": "Включить сквозное шифрование",
   "e2eChatInfoSwitchLabel": "Сквозное шифрование",
@@ -1416,6 +1446,8 @@
   "onboardingWrapUpStart": "Начать",
   "deepLinkAccessDenied": "Нет доступа",
   "deepLinkResourceNotFound": "Не найдено",
+  "deepLinkAccessDeniedDescription": "У вас нет разрешения открыть эту ссылку. Возможно, она предназначена для другого профиля.",
+  "deepLinkResourceNotFoundDescription": "Ссылка недоступна или больше не действует.",
   "deepLinkReturnHome": "На главную",
   "e2eBackupStatusChecking": "Проверяем резервную копию ключей…",
   "e2eBackupStatusPresent": "В этом аккаунте доступна зашифрованная резервная копия ключей.",
@@ -1427,5 +1459,6 @@
   "e2eBackupDeleteConfirm": "Зашифрованная копия будет удалена из аккаунта. Ключи на этом устройстве останутся без изменений.",
   "e2eBackupDelete": "Удалить копию",
   "e2eBackupRestoreCta": "Восстановить зашифрованную историю",
-  "e2eKeyBackupManage": "Управление резервной копией ключей"
+  "e2eKeyBackupManage": "Управление резервной копией ключей",
+  "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны"
 }
