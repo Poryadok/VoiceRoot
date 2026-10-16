@@ -2,6 +2,8 @@
 """Create short-lived local/CI Phase0 credentials; never provision a live cluster."""
 
 import argparse
+import base64
+import json
 import os
 from pathlib import Path
 import shutil
@@ -31,12 +33,67 @@ def generate(destination):
     try:
         with tempfile.TemporaryDirectory(prefix=".phase0-", dir=destination.parent) as scratch:
             root = Path(scratch)
-            for directory in ("gateway", "space", "gameintegration", "voice", "bot", "tls", "ca"):
+            for directory in ("gateway", "space", "matchmaking", "gameintegration", "voice", "bot", "jwks", "tls", "ca"):
                 (root / directory).mkdir(mode=0o700)
-            for issuer in ("gateway", "space"):
+            (root / "jwks/matchmaking").mkdir(mode=0o700)
+            for issuer in ("gateway", "space", "matchmaking"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
                             "rsa_keygen_bits:2048", "-out", root / issuer / f"{kid}.pem")
+
+            def der_value(data, offset, expected_tag):
+                if offset >= len(data) or data[offset] != expected_tag:
+                    raise ValueError("invalid RSA public key encoding")
+                offset += 1
+                if offset >= len(data):
+                    raise ValueError("truncated RSA public key encoding")
+                length = data[offset]
+                offset += 1
+                if length & 0x80:
+                    count = length & 0x7f
+                    if not count or offset + count > len(data):
+                        raise ValueError("invalid RSA public key length")
+                    length = int.from_bytes(data[offset:offset + count], "big")
+                    offset += count
+                end = offset + length
+                if end > len(data):
+                    raise ValueError("truncated RSA public key value")
+                return data[offset:end], end
+
+            def b64url(value):
+                return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+            matchmaking_keys = []
+            for kid in ("current", "next"):
+                der = subprocess.run(
+                    [binaries["openssl"], "pkey", "-in", str(root / "matchmaking" / f"{kid}.pem"),
+                     "-pubout", "-outform", "DER"],
+                    capture_output=True, timeout=60, check=False)
+                if der.returncode:
+                    raise ValueError("matchmaking public key export failed")
+                spki, end = der_value(der.stdout, 0, 0x30)
+                if end != len(der.stdout):
+                    raise ValueError("trailing RSA public key data")
+                _, offset = der_value(spki, 0, 0x30)
+                bit_string, offset = der_value(spki, offset, 0x03)
+                if offset != len(spki) or not bit_string or bit_string[0] != 0:
+                    raise ValueError("invalid RSA public key bit string")
+                rsa_key, end = der_value(bit_string[1:], 0, 0x30)
+                if end != len(bit_string) - 1:
+                    raise ValueError("trailing RSA key data")
+                modulus, offset = der_value(rsa_key, 0, 0x02)
+                exponent, offset = der_value(rsa_key, offset, 0x02)
+                if offset != len(rsa_key):
+                    raise ValueError("trailing RSA integer data")
+                modulus = modulus.lstrip(b"\x00")
+                exponent = exponent.lstrip(b"\x00")
+                matchmaking_keys.append({
+                    "kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256",
+                    "n": b64url(modulus), "e": b64url(exponent),
+                })
+            (root / "jwks/matchmaking/jwks.json").write_text(
+                json.dumps({"keys": matchmaking_keys}, separators=(",", ":")) + "\n",
+                encoding="ascii")
             for issuer in ("gameintegration", "voice", "bot"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
@@ -64,6 +121,7 @@ def generate(destination):
                     (("role", "role"), ("auth", "auth"), ("proxy", "phase0-jwks"),
                      ("gameintegration-jwks", "gameintegration"), ("voice-jwks", "voice"),
                      ("chat-gis-grpc", "chat"), ("voice-game-grpc", "voice"),
+                     ("chat-match-squad-grpc", "chat"), ("voice-match-squad-grpc", "voice"),
                      ("space-lifecycle", "space"), ("bot-game-event", "bot"),
                      ("notification-lifecycle", "notification"),
                      ("messaging-gameintegration-grpc", "messaging")), 1):
@@ -81,7 +139,7 @@ def generate(destination):
                         "-extfile", extensions, "-out", root / f"tls/{leaf}.crt")
                 csr.unlink()
             extensions.unlink()
-            for serial, service in enumerate(("space", "gameintegration", "voice"), 100):
+            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking"), 100):
                 client_key = root / f"tls/{service}-client.key"
                 client_csr = root / f"tls/{service}-client.csr"
                 client_extensions = root / "client.ext"

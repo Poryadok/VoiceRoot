@@ -26,6 +26,7 @@ MEDIA_OVERLAY = ROOT / "docker-compose.voice-space-media.yml"
 PROXY = "phase0-jwks"
 URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
+MATCHMAKING_JWKS_URL = f"https://{PROXY}:8443/matchmaking/jwks.json"
 STARTUP_DIAGNOSTICS = ROOT / "scripts/ci/t31-startup-diagnostics.py"
 sys.dont_write_bytecode = True
 STARTUP_SPEC = importlib.util.spec_from_file_location("t31_startup_diagnostics", STARTUP_DIAGNOSTICS)
@@ -69,7 +70,7 @@ class FixtureTests(unittest.TestCase):
 
     def test_separate_current_next_rsa_pkcs8_keys(self):
         public_keys = set()
-        for issuer in ("gateway", "space"):
+        for issuer in ("gateway", "space", "matchmaking"):
             self.assertEqual({p.name for p in (self.dest / issuer).iterdir()},
                              {"current.pem", "next.pem"})
             for kid in ("current", "next"):
@@ -93,7 +94,20 @@ class FixtureTests(unittest.TestCase):
                 self.assertIsNotNone(bits)
                 self.assertGreaterEqual(int(bits.group(1)), 2048)
                 public_keys.add(public)
-        self.assertEqual(len(public_keys), 10, "issuer and service signing keys must be independent")
+        self.assertEqual(len(public_keys), 12, "issuer and service signing keys must be independent")
+
+    def test_matchmaking_public_jwks_matches_both_private_rotation_keys(self):
+        document = json.loads((self.dest / "jwks/matchmaking/jwks.json").read_text(encoding="ascii"))
+        self.assertEqual({key["kid"] for key in document["keys"]}, {"current", "next"})
+        self.assertEqual(len(document["keys"]), 2)
+        for key in document["keys"]:
+            with self.subTest(kid=key["kid"]):
+                self.assertEqual((key["kty"], key["use"], key["alg"]), ("RSA", "sig", "RS256"))
+                modulus = self.openssl("pkey", "-in", self.dest / f"matchmaking/{key['kid']}.pem",
+                                       "-noout", "-modulus").strip().split(b"=", 1)[1]
+                decode = lambda value: base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+                self.assertEqual(decode(key["n"]), bytes.fromhex(modulus.decode("ascii")))
+                self.assertEqual(int.from_bytes(decode(key["e"]), "big"), 65537)
 
     def test_ca_signed_leaf_keys_hostname_and_short_lifetime(self):
         ca = self.dest / "ca/ca.crt"
@@ -103,7 +117,9 @@ class FixtureTests(unittest.TestCase):
         for leaf, hostname in (("role", "role"), ("auth", "auth"), ("proxy", PROXY),
                                ("gameintegration-jwks", "gameintegration"),
                                 ("voice-jwks", "voice"), ("chat-gis-grpc", "chat"),
-                                ("voice-game-grpc", "voice"), ("space-lifecycle", "space"),
+                                ("voice-game-grpc", "voice"),
+                                ("chat-match-squad-grpc", "chat"), ("voice-match-squad-grpc", "voice"),
+                                ("space-lifecycle", "space"),
                                 ("bot-game-event", "bot"), ("notification-lifecycle", "notification"),
                                 ("messaging-gameintegration-grpc", "messaging")):
             with self.subTest(leaf=leaf):
@@ -126,7 +142,7 @@ class FixtureTests(unittest.TestCase):
                 self.assertLessEqual(lifetime, 2 * 86400 + 60)
 
     def test_service_client_leaves_are_ca_signed_and_client_auth_only(self):
-        for service in ("space", "gameintegration", "voice"):
+        for service in ("space", "gameintegration", "voice", "matchmaking"):
             with self.subTest(service=service):
                 cert = self.dest / f"tls/{service}-client.crt"
                 self.openssl("verify", "-CAfile", self.dest / "ca/ca.crt", "-purpose", "sslclient", cert)
@@ -372,6 +388,64 @@ class ComposeTests(unittest.TestCase):
                          "ca/ca.crt")
         self.assertIn(str(self.merged["matchmaking"].get("user")), ("0", "0:0", "root"),
                       "all generated fixture files are root-owned mode 0600 in Linux CI")
+
+    def test_media_compose_uses_protected_match_squad_provider_fixture(self):
+        matchmaking = self.media_merged["matchmaking"]
+        chat = self.media_merged["chat"]
+        voice = self.media_merged["voice"]
+        environment = matchmaking["environment"]
+        self.assertEqual(environment["MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR"], "chat:9092")
+        self.assertEqual(environment["MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR"], "voice:9094")
+        self.assertEqual(environment["MATCHMAKING_MATCH_SQUAD_CHAT_SERVER_NAME"], "chat")
+        self.assertEqual(environment["MATCHMAKING_MATCH_SQUAD_VOICE_SERVER_NAME"], "voice")
+        self.assertEqual(environment["MATCHMAKING_PRINCIPAL_ACTIVE_KID"], "current")
+        for key in ("MATCHMAKING_MATCH_SQUAD_CHAT_CA_FILE", "MATCHMAKING_MATCH_SQUAD_VOICE_CA_FILE"):
+            self.assertEqual(self.media_source_at("matchmaking", environment[key]), "ca/ca.crt")
+        self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR"]),
+                         "matchmaking")
+        self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_MATCH_SQUAD_CLIENT_CERT_FILE"]),
+                         "tls/matchmaking-client.crt")
+        self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_MATCH_SQUAD_CLIENT_KEY_FILE"]),
+                         "tls/matchmaking-client.key")
+        self.assertIn(str(matchmaking.get("user")), ("0", "0:0", "root"))
+        self.assertEqual(chat["environment"]["CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN"], ":9092")
+        self.assertEqual(voice["environment"]["VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN"], ":9094")
+        for service, env, leaf in (("chat", chat["environment"], "chat-match-squad-grpc"),
+                                   ("voice", voice["environment"], "voice-match-squad-grpc")):
+            self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_JWKS_URL"], MATCHMAKING_JWKS_URL)
+            self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE"], "/run/phase0/ca.crt")
+            self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
+            self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD"], "")
+            self.assertIn(str(self.media_merged[service].get("user")), ("0", "0:0", "root"))
+            self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE"],
+                                                  merged=self.media_merged), f"tls/{leaf}.crt")
+            self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE"],
+                                                  merged=self.media_merged), f"tls/{leaf}.key")
+            self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE"],
+                                                  merged=self.media_merged), "ca/ca.crt")
+        self.assertEqual(self.media_source_at("phase0-jwks", "/run/phase0/matchmaking/jwks.json",
+                                              merged=self.media_merged), "jwks/matchmaking/jwks.json")
+
+    def test_match_squad_provider_fixture_is_opt_in_to_media_compose(self):
+        for service in ("chat", "voice", "matchmaking"):
+            with self.subTest(service=service):
+                environment = self.base[service].get("environment", {})
+                self.assertFalse(any("MATCH_SQUAD" in key for key in environment),
+                                 "base Compose must retain its existing provider policy")
+        proxy = (ROOT / "docker/phase0/nginx.conf").read_text(encoding="utf-8")
+        self.assertIn("location = /matchmaking/jwks.json", proxy)
+        self.assertIn("if ($request_method != GET) { return 405; }", proxy)
+        self.assertIn("alias /run/phase0/matchmaking/jwks.json;", proxy)
+        self.assertIn("location / { return 404; }", proxy)
+
+    def media_source_at(self, service, target, merged=None):
+        selected = merged or self.media_merged
+        for volume in selected[service].get("volumes", []):
+            if volume.get("type") == "bind" and volume.get("target") == target:
+                source = Path(volume["source"])
+                if source.is_relative_to(self.fixture):
+                    return source.relative_to(self.fixture).as_posix()
+        self.fail(f"{service} config path has no Phase0 fixture mount: {target}")
 
     def test_delivery_ack_has_authoritative_messaging_reader(self):
         for name, services in (("base", self.base), ("phase0", self.merged),
