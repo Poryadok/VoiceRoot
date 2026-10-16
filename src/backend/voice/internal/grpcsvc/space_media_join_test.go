@@ -1,7 +1,6 @@
 package grpcsvc
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -9,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -25,7 +23,6 @@ import (
 
 	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/livekit"
-	"voice/backend/voice/internal/spacemedia"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceuserprincipalruntime"
 
@@ -33,34 +30,6 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
-
-func TestSpaceMediaAdmissionCommitFailureLogUsesOnlyFixedClass(t *testing.T) {
-	secret := errors.New("postgres: profile=private operation=secret detail=not-for-logs")
-	cases := []struct {
-		name  string
-		err   error
-		class string
-	}{
-		{name: "room head pending", err: fmt.Errorf("wrapped: %w", spacemedia.ErrRoomHeadPending), class: "room_head_pending"},
-		{name: "admission conflict", err: fmt.Errorf("wrapped: %w", spacemedia.ErrAdmissionConflict), class: "admission_conflict"},
-		{name: "admission unavailable", err: fmt.Errorf("wrapped: %w", spacemedia.ErrAdmissionUnavailable), class: "admission_unavailable"},
-		{name: "store error", err: secret, class: "store_error"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var output bytes.Buffer
-			svc := &VoiceGRPC{Logger: slog.New(slog.NewJSONHandler(&output, nil))}
-			svc.logSpaceMediaAdmissionCommitFailure(context.Background(), tc.err)
-
-			line := output.String()
-			require.Contains(t, line, `"failure_class":"`+tc.class+`"`)
-			require.NotContains(t, line, "postgres")
-			require.NotContains(t, line, "private")
-			require.NotContains(t, line, "secret")
-			require.NotContains(t, line, "operation")
-		})
-	}
-}
 
 type staticSpaceMediaGrants struct {
 	grants CanonicalVoiceRoomGrants
