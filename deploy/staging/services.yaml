@@ -66,7 +66,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/auth.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -142,7 +142,7 @@ spec:
             - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/social.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -236,7 +236,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/user.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -306,7 +306,7 @@ spec:
             - {name: media-ca, mountPath: /etc/voice/media/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/role.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -378,7 +378,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/space.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -438,7 +438,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/chat.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -509,7 +509,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/file-principal/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/file.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -572,7 +572,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/messaging.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -670,7 +670,7 @@ spec:
             periodSeconds: 5
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/voice.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -736,7 +736,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/matchmaking.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -802,7 +802,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/search-projection/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/search.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -876,7 +876,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/notification.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -932,7 +932,7 @@ spec:
           readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/realtime.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -994,7 +994,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/bot.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -1047,7 +1047,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/subscription.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -1100,7 +1100,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/moderation.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -1153,7 +1153,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/story.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -1209,7 +1209,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/analytics.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}

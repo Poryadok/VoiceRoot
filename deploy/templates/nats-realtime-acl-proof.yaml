@@ -33,7 +33,7 @@ spec:
         - name: realtime-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           restartPolicy: Always
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/realtime.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -46,7 +46,7 @@ spec:
           args:
             - |
               sed 's/^listen: 127.0.0.1:4222$/listen: 127.0.0.1:4223/' /etc/nats/leaf.conf > /tmp/leaf-proof.conf
-              exec nats-server -c /tmp/leaf-proof.conf
+              exec nats-server -c /tmp/leaf-proof.conf -a 127.0.0.1 -m 8223
           env: [{name: NATS_CREDS, value: "/var/run/nats/proof/proof.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}

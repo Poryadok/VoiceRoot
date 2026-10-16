@@ -197,6 +197,8 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
             if any(state.get(key) is not None for key in ('operator_retirement','operator_fence_abort')):
                 closure=retirement.verify_terminal(base,state)
         if closure is None:raise Blocked('bridge_upgrade_retirement_required')
+        if version=='idle-story-fixture-v1':
+            retirement.pending_request_accepted(installed,installed/'journal'/(retirement.STORY_PREFENCE_NONCE+'.json'),closure)
         for path in (installed,installed/'inbox',installed/'processing',installed/'journal',installed/'responses',installed/'recovery'):
             row=path.lstat()
             if not path.is_dir() or path.is_symlink() or row.st_uid!=0 or row.st_mode&0o002 or path.name!='inbox' and row.st_mode&0o020:
@@ -211,8 +213,10 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
             source_workspaces={}
             for path in (installed/'journal').iterdir():
                 accepted=retirement.pending_request_accepted(installed,path,closure)
+                if isinstance(accepted,dict) and accepted.get('disposition')=='SUPERSEDED_FAILED_FINISH':source_workspaces[path.name]=accepted
                 if path.name==retirement.SOURCE_CAPTURE_REJECTION['nonce']+'.json':source_workspaces[path.name]=accepted
                 if path.stem[:12] in retirement.SEARCH_BOOTSTRAP_REJECTIONS:source_workspaces[path.name]=accepted
+                if path.name==retirement.STORY_PREFENCE_NONCE+'.json':source_workspaces[path.name]=accepted
             protected={str(installed/'policy.json'):hashlib.sha256(retirement.private_bytes(installed/'policy.json',2<<20)).hexdigest()}
             abandonment=installed/retirement.PENDING_ABANDONMENT_NAME
             try:abandonment.lstat()
@@ -273,6 +277,12 @@ def upgrade_idle_media_v1(code):
     _upgrade_idle_transition(code,'1295ba61d4603a18790c33cfb9b12ae5e3d337c799d9853bd0fca3a80cc00c20',
         'idle-media-v1','media-1295',
         'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_MEDIA_V1_KEYS_POLICY_HISTORY_PRESERVED')
+
+def upgrade_idle_story_fixture_v1(code):
+    """Exact monitor-success helper successor; failed preflight bytes stay immutable."""
+    _upgrade_idle_transition(code,'7f5b901d8429f2d560bb7f71481baabfd90ad2303cfd1b06c8569d94ff87920b',
+        'idle-story-fixture-v1','story-7f5b',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_STORY_FIXTURE_V1_KEYS_POLICY_HISTORY_PRESERVED')
 
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
@@ -347,8 +357,9 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1 | --upgrade-idle-expiry-reset-v1 | --upgrade-idle-media-v1')
-    if sys.argv[1]=='--upgrade-idle-media-v1':upgrade_idle_media_v1(Path(__file__).resolve().parents[1])
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1 | --upgrade-idle-expiry-reset-v1 | --upgrade-idle-media-v1 | --upgrade-idle-story-fixture-v1')
+    if sys.argv[1]=='--upgrade-idle-story-fixture-v1':upgrade_idle_story_fixture_v1(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle-media-v1':upgrade_idle_media_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-expiry-reset-v1':upgrade_idle_expiry_reset_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle':upgrade_idle(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-ceccb-v1':upgrade_idle_ceccb_v1(Path(__file__).resolve().parents[1])

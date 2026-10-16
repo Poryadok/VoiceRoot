@@ -221,6 +221,7 @@ class MediaAbortTest(unittest.TestCase):
                 terminal=retirement.media_abort_terminal(failed,closure)
                 self.assertEqual(retirement.verify_media_abort_terminal(base,terminal),closure)
                 self.assertEqual(terminal['operator_media_abort']['schema'],retirement.MEDIA_RECONCILED_REFERENCE)
+                self.check_gateway_terminal(base,failed,closure,prepared,newproof,encoded,write)
                 for schema in ('voice-media-target-baseline-reference-v1','voice-media-original-restore-reference-v1'):
                     forged=copy.deepcopy(terminal);forged['operator_media_abort']['schema']=schema
                     with self.subTest(schema=schema),self.assertRaises((Blocked,FileNotFoundError)):
@@ -232,6 +233,79 @@ class MediaAbortTest(unittest.TestCase):
                 with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,retirement.media_abort_terminal(failed,forged))
         finally:
             for name,value in restore.items():write(name,value)
+
+    def check_gateway_terminal(self,base,failed,closure,prepared,proof,encoded,write):
+        old=retirement.MEDIA_RECONCILED_PREFIX;new=retirement.MEDIA_GATEWAY_PREFIX
+        pins=copy.deepcopy(retirement.MEDIA_FAILED_APPLY)
+        blocked=copy.deepcopy(failed);blocked['fence_status']='VERIFIED'
+        blocked['events'].append({'kind':'gateway_failed_then_refenced'})
+        blocked_raw=encoded(blocked);write(new+'-blocked.json',blocked_raw)
+        pins[new+'-blocked.json']={'bytes':len(blocked_raw),'sha256':hashlib.sha256(blocked_raw).hexdigest()}
+        progress_raw=encoded({'phase':'BLOCKED'});write(old+'-progress.json',progress_raw)
+        pins[old+'-progress.json']={'bytes':len(progress_raw),'sha256':hashlib.sha256(progress_raw).hexdigest()}
+        new_prepared=copy.deepcopy(prepared);new_prepared.pop('failed_apply')
+        new_prepared['failed_restart']=pins
+        values={name:(base/name).read_bytes() for name in closure['retained_files'] if not name.startswith(old+'-')}
+        values.update({name:(base/name).read_bytes() for name in pins})
+        for suffix in ('compatibility.md','active-contract.json','source-authority.json','compiled.json',
+                       'normalized.json','parameters.json'):
+            values[new+'-'+suffix]=(base/(old+'-'+suffix)).read_bytes()
+        values[new+'-prepared.json']=encoded(new_prepared);values[new+'-verified.json']=encoded(proof)
+        for name,value in values.items():write(name,value)
+        receipt=copy.deepcopy(closure);receipt.update(schema=retirement.MEDIA_GATEWAY_SCHEMA,
+            retained_files={name:{'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()} for name,value in values.items()})
+        with patch.object(retirement,'MEDIA_FAILED_RESTART',pins),patch.object(retirement,'media_restart_pins',return_value=pins),\
+             patch.object(retirement,'media_restart_failed',return_value=blocked),\
+             patch.object(retirement,'media_restart_reconciliation',return_value=prepared['reconciliation']):
+            write(new+'-receipt.json',encoded(receipt));terminal=retirement.media_abort_terminal(blocked,receipt)
+            self.assertEqual(retirement.verify_media_abort_terminal(base,terminal),receipt)
+            self.assertEqual(terminal['operator_media_abort']['schema'],retirement.MEDIA_GATEWAY_REFERENCE)
+            for schema in (retirement.MEDIA_RECONCILED_REFERENCE,'voice-media-target-baseline-reference-v1'):
+                forged=copy.deepcopy(terminal);forged['operator_media_abort']['schema']=schema
+                with self.assertRaises((Blocked,FileNotFoundError)):retirement.verify_media_abort_terminal(base,forged)
+            tampered=copy.deepcopy(new_prepared);tampered['failed_restart']={}
+            raw=encoded(tampered);write(new+'-prepared.json',raw)
+            forged=copy.deepcopy(receipt);forged['retained_files'][new+'-prepared.json']={'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+            write(new+'-receipt.json',encoded(forged))
+            with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,retirement.media_abort_terminal(blocked,forged))
+        write(new+'-prepared.json',encoded(new_prepared));write(new+'-receipt.json',encoded(receipt))
+        self.check_monitor_terminal(base,blocked,receipt,new_prepared,proof,encoded,write)
+
+    def check_monitor_terminal(self,base,failed,closure,prepared,proof,encoded,write):
+        old=retirement.MEDIA_GATEWAY_PREFIX;new=retirement.MEDIA_MONITOR_PREFIX
+        pins=copy.deepcopy(closure['retained_files'])
+        blocked=copy.deepcopy(failed);blocked['fence_status']='VERIFIED'
+        blocked['events'].append({'kind':'gateway_failed_then_refenced'})
+        blocked_raw=encoded(blocked);write(new+'-blocked.json',blocked_raw)
+        pins[new+'-blocked.json']={'bytes':len(blocked_raw),'sha256':hashlib.sha256(blocked_raw).hexdigest()}
+        progress_raw=encoded({'phase':'BLOCKED'});write(old+'-progress.json',progress_raw)
+        pins[old+'-progress.json']={'bytes':len(progress_raw),'sha256':hashlib.sha256(progress_raw).hexdigest()}
+        new_prepared=copy.deepcopy(prepared);new_prepared.pop('failed_restart')
+        new_prepared['failed_monitor']=pins
+        values={name:(base/name).read_bytes() for name in closure['retained_files'] if not name.startswith(old+'-')}
+        values.update({name:(base/name).read_bytes() for name in pins})
+        for suffix in ('compatibility.md','active-contract.json','source-authority.json','compiled.json',
+                       'normalized.json','parameters.json'):
+            values[new+'-'+suffix]=(base/(old+'-'+suffix)).read_bytes()
+        values[new+'-prepared.json']=encoded(new_prepared);values[new+'-verified.json']=encoded(proof)
+        for name,value in values.items():write(name,value)
+        receipt=copy.deepcopy(closure);receipt.update(schema=retirement.MEDIA_MONITOR_SCHEMA,
+            retained_files={name:{'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()} for name,value in values.items()})
+        with patch.object(retirement,'MEDIA_FAILED_MONITOR',pins),patch.object(retirement,'media_monitor_pins',return_value=pins),\
+             patch.object(retirement,'media_monitor_failed',return_value=blocked),\
+             patch.object(retirement,'media_monitor_reconciliation',return_value=prepared['reconciliation']):
+            write(new+'-receipt.json',encoded(receipt));terminal=retirement.media_abort_terminal(blocked,receipt)
+            self.assertEqual(retirement.verify_media_abort_terminal(base,terminal),receipt)
+            self.assertEqual(terminal['operator_media_abort']['schema'],retirement.MEDIA_MONITOR_REFERENCE)
+            for schema in (retirement.MEDIA_GATEWAY_REFERENCE,'voice-media-target-baseline-reference-v1'):
+                forged=copy.deepcopy(terminal);forged['operator_media_abort']['schema']=schema
+                with self.assertRaises((Blocked,FileNotFoundError)):retirement.verify_media_abort_terminal(base,forged)
+            tampered=copy.deepcopy(new_prepared);tampered['failed_monitor']={}
+            raw=encoded(tampered);write(new+'-prepared.json',raw)
+            forged=copy.deepcopy(receipt);forged['retained_files'][new+'-prepared.json']={'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+            write(new+'-receipt.json',encoded(forged))
+            with self.assertRaises(Blocked):retirement.verify_media_abort_terminal(base,retirement.media_abort_terminal(blocked,forged))
+        write(new+'-prepared.json',encoded(new_prepared));write(new+'-receipt.json',encoded(receipt))
 
     def test_exact_snapshot_hash_is_required_before_any_structural_authority(self):
         for raw in (b'{}', b'{"operation":"0e2be62a3326","status":"BLOCKED"}'):

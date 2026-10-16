@@ -1,5 +1,6 @@
 """Linux subprocess capture with enforced byte and wall-clock bounds."""
 import os
+import hashlib
 import selectors
 import signal
 import subprocess
@@ -66,7 +67,17 @@ def capture(argv, *, body=b'', timeout=30, limit=2<<20, env=None, pass_fds=()):
         exit_code=child.wait(timeout=max(0.01,deadline-time.monotonic()))
         if exit_code!=0:
             cause='application_authorization' if b'permissions violation' in bytes(errors).lower() or b'authorization violation' in bytes(errors).lower() else 'nonzero_exit'
-            raise failure('command_failed',exit_code=exit_code,cause=cause)
+            error=failure('command_failed',exit_code=exit_code,cause=cause)
+            # Hash only the already bounded stderr buffer. Never expose its text,
+            # which may contain credential material even for a read-only command.
+            lower=bytes(errors).lower()
+            reason=next((name for needle,name in (
+                (b'connection refused','connection_refused'),
+                (b'no such file or directory','executable_missing'),
+                (b'forbidden','forbidden')) if needle in lower),'nonzero_exit')
+            error.diagnostic.update(stderr_reason=reason,stderr_bytes=len(errors),
+                stderr_sha256=hashlib.sha256(errors).hexdigest())
+            raise error
         if diagnostic_observer is not None:diagnostic_observer(action,'COMPLETE')
         return bytes(output)
     except PermissionError:raise failure('command_failed',cause='os_permission_denied') from None
