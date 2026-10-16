@@ -18,9 +18,16 @@ INSTALLED=Path('/var/lib/voice-nats-preservation/installed')
 
 def request(args,environment):
     action=args[0] if args else ''
-    if action=='prepare' and len(args)==5:
+    parent=None
+    if action=='prepare-repair' and len(args) in (6,7):
+        parent=args[1];args=['prepare',*args[2:]];action='prepare'
+    if action=='prepare' and len(args) in (5,6):
         row={'action':action,'mode':args[1],'changed_services':[s for s in args[2].split(',') if s],'source_sha':args[3],'run_id':int(args[4]),'token':environment['GITHUB_TOKEN']}
-    elif action in ('prepare-rollback','resume-cold-backup','resume-cipher-upload','prepare-expired-native','prepare-expired-finish') and len(args)==3:
+        if len(args)==6:
+            if args[5] not in ('true','false'):raise bridge.BridgeError('bridge_client_arguments_invalid')
+            row['provisional_staging']=args[5]=='true'
+        if parent is not None:row.update(action='prepare-repair',operation=parent)
+    elif action in ('prepare-rollback','resume-cold-backup','resume-cipher-upload','prepare-expired-native','prepare-expired-finish','accept-provisional') and len(args)==3:
         row={'action':action,'operation':args[1],'run_id':int(args[2]),'token':environment['GITHUB_TOKEN']}
     elif action=='authorize' and len(args)==3:
         row={'action':action,'operation':args[1],'artifact_id':int(args[2]),'token':environment['GITHUB_TOKEN']}

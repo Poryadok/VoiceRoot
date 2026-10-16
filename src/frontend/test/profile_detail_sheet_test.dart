@@ -1266,6 +1266,20 @@ MockClient _profilePresentationClient({
         200,
       );
     }
+    if (request.url.path == '/api/v1/users/presence/bulk') {
+      return http.Response(
+        jsonEncode({
+          'byProfileId': {
+            profileId: {
+              'profileId': profileId,
+              'status': 'online',
+              'customStatus': ?visibleCustomStatus,
+            },
+          },
+        }),
+        200,
+      );
+    }
     if (request.url.path == '/api/v1/chats/dm-permission/$profileId') {
       return http.Response(jsonEncode({'allowed': false}), 200);
     }

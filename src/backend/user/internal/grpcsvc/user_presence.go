@@ -53,7 +53,7 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	oldStatus, newStatus, publish := presenceTransitionForSnapshot(previous, st, enum)
+	oldStatus, newStatus, publish := presenceEventTransitionForSnapshot(previous, st, enum, in.GameTitle)
 	if publish && s.Events != nil {
 		_ = s.Events.PublishPresenceChanged(ctx, profileID.String(), oldStatus, newStatus)
 	}
@@ -61,6 +61,24 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 		_ = s.Events.PublishGameDetected(ctx, profileID.String(), in.GameTitle)
 	}
 	return &userv1.UpdatePresenceResponse{}, nil
+}
+
+func presenceEventTransitionForSnapshot(previous *store.PresenceSnapshot, newStatus string, newEnum int32, gameTitle string) (oldStatus, currentStatus string, publish bool) {
+	oldStatus, currentStatus, publish = presenceTransitionForSnapshot(previous, newStatus, newEnum)
+	if publish || !shouldPublishGameActivityChange(previous, gameTitle) {
+		return oldStatus, currentStatus, publish
+	}
+	// Equal statuses mark a game-only snapshot refresh while preserving
+	// invisible-status handling in the existing Realtime fan-out.
+	return newStatus, newStatus, true
+}
+
+func shouldPublishGameActivityChange(previous *store.PresenceSnapshot, gameTitle string) bool {
+	gameTitle = strings.TrimSpace(gameTitle)
+	if previous == nil || !previous.Live {
+		return gameTitle != ""
+	}
+	return strings.TrimSpace(previous.GameTitle) != gameTitle
 }
 
 func shouldPublishGameDetected(previous *store.PresenceSnapshot, gameTitle string) bool {

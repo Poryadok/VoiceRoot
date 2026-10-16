@@ -22,6 +22,7 @@ ROLLOUT+=('hub_bridge_identity.py','hub_bridge_unit.py','operator_retirement.py'
 ROLLOUT+=('closed_archive.py','closed_durable.py','closed-seal-source-policies.json')
 ROLLOUT+=('operator_reset.py',)
 ROLLOUT+=('deployment_report.py',)
+ROLLOUT+=('provisional.py',)
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
