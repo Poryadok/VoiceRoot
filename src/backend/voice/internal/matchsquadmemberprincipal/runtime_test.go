@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -133,7 +132,7 @@ func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *test
 	// This is the same Runtime that denied the cold-cache request. Refresh is
 	// the operation used by its normal background loop; doing it directly here
 	// avoids waiting for the production five-second failure cooldown.
-	if err := runtime.resolver.Refresh(context.Background(), issuer); err != nil {
+	if err := runtime.resolver.Refresh(context.Background(), "gateway"); err != nil {
 		t.Fatalf("resolver did not recover after Gateway returned: %v", err)
 	}
 	called, err = invoke(issuer, uuid.MustParse("00000000-0000-4000-8000-000000000002").String())
