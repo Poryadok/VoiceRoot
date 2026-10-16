@@ -1874,7 +1874,9 @@ f13_make_nested_crisscross_fixture() {
 # The accepted graph mirrors the two nested criss-cross source merges present
 # in the release PR: a shared historical source merge and a later refresh merge.
 f13_nested_repo="${TMP_DIR}/f13-nested-crisscross-fixture"
-read -r f13_nested_base f13_nested_release _ < <(f13_make_nested_crisscross_fixture "${f13_nested_repo}" f13-nested false)
+mapfile -t f13_nested_fixture_values < <(f13_make_nested_crisscross_fixture "${f13_nested_repo}" f13-nested false)
+f13_nested_base="${f13_nested_fixture_values[0]:-}"
+f13_nested_release="${f13_nested_fixture_values[1]:-}"
 f13_collect_master_push_contributions "${f13_nested_repo}" push refs/heads/master \
   "${f13_nested_base}" "${f13_nested_base}" "${f13_nested_release}" \
   "${TMP_DIR}/f13-nested-map" "${TMP_DIR}/f13-nested-category" || {
@@ -1904,7 +1906,9 @@ fi
 
 # A guarded source path that differs across best bases remains ambiguous.
 f13_nested_bad_repo="${TMP_DIR}/f13-nested-guarded-crisscross-fixture"
-read -r f13_nested_bad_base f13_nested_bad_release _ < <(f13_make_nested_crisscross_fixture "${f13_nested_bad_repo}" f13-nested-guarded true)
+mapfile -t f13_nested_bad_fixture_values < <(f13_make_nested_crisscross_fixture "${f13_nested_bad_repo}" f13-nested-guarded true)
+f13_nested_bad_base="${f13_nested_bad_fixture_values[0]:-}"
+f13_nested_bad_release="${f13_nested_bad_fixture_values[1]:-}"
 if f13_collect_master_release_pr_contributions "${f13_nested_bad_repo}" "${f13_nested_bad_base}" \
   "${f13_nested_bad_release}" "${TMP_DIR}/f13-nested-bad-map" "${TMP_DIR}/f13-nested-bad-category"; then
   printf '%s\n' 'F13 oracle bug: guarded criss-cross provenance was accepted' >&2
