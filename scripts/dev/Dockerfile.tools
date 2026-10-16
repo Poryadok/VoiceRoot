@@ -1,0 +1,7 @@
+# Private bootstrap tooling only; public trust inputs come from the exact Auth image.
+FROM eclipse-temurin:25-jdk
+RUN apt-get update && apt-get install -y --no-install-recommends python3 openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin voice-dev-issuer
+USER 10001:10001
+ENTRYPOINT ["python3"]
