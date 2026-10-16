@@ -264,6 +264,16 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 ## CI (GitHub Actions)
 
+The `codex/contact-requests-panel-acceptance` PR uses the existing Flutter job to
+run `test/contact_requests_capture_test.dart` with
+`VOICE_CONTACT_REQUESTS_CAPTURE_DIR` and retain `contact-requests-hv-<run_id>`.
+Its twelve PNGs show the actual `SocialPanel` pending tab: populated, busy,
+empty, loading, load error, and Russian populated states in H (1280×800 with
+a 360px panel) and V (390×844). Capture mode loads the shipped token catalog,
+Noto Sans and Material Icons. These are friendship-request panel evidence for
+screen-controls §4.3; they do not establish equivalence to the separate
+stranger-DM HTML workspace or complete the original ContactRequests panel DoD.
+
 Файлы workflow лежат в репозитории; **они начинают выполняться только после** публикации репозитория на GitHub и включения Actions (ветки, secrets для GHCR/staging — [DEPLOYMENT.md](DEPLOYMENT.md)). Локально перед PR — минимум по затронутому коду (таблица выше); полный sign-off: **`make build-all`** + **`make flutter-ci`** (как nightly job **`local-ci-parity`**).
 
 ### Node.js в workflow и фронтовых пакетах
