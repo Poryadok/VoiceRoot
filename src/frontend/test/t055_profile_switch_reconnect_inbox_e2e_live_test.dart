@@ -722,7 +722,7 @@ void main() {
       expect(offlineMessageId, isNotEmpty, reason: 'offline selected delta');
       // The durable POST can finish before its asynchronous message_create.
       // Hold that exact live event so this window measures reconnect REST only.
-      relay.holdOfflineMessage(selectedChatId, offlineMessageId!);
+      relay.holdOfflineMessage(selectedChatId, offlineMessageId);
 
       recorder.failNextInboxReconciliationPage(
         authorization: bAuthorization,
