@@ -3562,6 +3562,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deepLinkResourceNotFound => 'Не найдено';
 
   @override
+  String get deepLinkAccessDeniedDescription =>
+      'У вас нет разрешения открыть эту ссылку. Возможно, она предназначена для другого профиля.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'Ссылка недоступна или больше не действует.';
+
+  @override
   String get deepLinkReturnHome => 'На главную';
 
   @override

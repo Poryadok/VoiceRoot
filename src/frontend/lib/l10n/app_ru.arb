@@ -1437,6 +1437,8 @@
   "onboardingWrapUpStart": "Начать",
   "deepLinkAccessDenied": "Нет доступа",
   "deepLinkResourceNotFound": "Не найдено",
+  "deepLinkAccessDeniedDescription": "У вас нет разрешения открыть эту ссылку. Возможно, она предназначена для другого профиля.",
+  "deepLinkResourceNotFoundDescription": "Ссылка недоступна или больше не действует.",
   "deepLinkReturnHome": "На главную",
   "e2eBackupStatusChecking": "Проверяем резервную копию ключей…",
   "e2eBackupStatusPresent": "В этом аккаунте доступна зашифрованная резервная копия ключей.",

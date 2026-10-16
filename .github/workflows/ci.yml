@@ -471,6 +471,23 @@ jobs:
             ${{ runner.temp }}/contact-profile-capture/contact-communication-large-text.png
           if-no-files-found: error
           retention-days: 7
+      - name: Capture Deep Links error reference views
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/deep-link-error-reference'
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_DEEPLINK_CAPTURE_DIR: ${{ runner.temp }}/deep-link-error-capture
+        run: timeout 300s flutter test --no-pub --reporter expanded --concurrency=1 test/deep_link_navigation_widget_test.dart
+      - name: Upload Deep Links error reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'fix/deep-link-error-reference'
+        uses: actions/upload-artifact@v6
+        with:
+          name: deep-link-error-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/deep-link-error-capture/deep-link-error-h.png
+            ${{ runner.temp }}/deep-link-error-capture/deep-link-error-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6

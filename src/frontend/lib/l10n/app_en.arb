@@ -1535,6 +1535,8 @@
   "onboardingWrapUpStart": "Start",
   "deepLinkAccessDenied": "Access denied",
   "deepLinkResourceNotFound": "Not found",
+  "deepLinkAccessDeniedDescription": "You do not have permission to open this link. It may be intended for another profile.",
+  "deepLinkResourceNotFoundDescription": "This link is unavailable or no longer valid.",
   "deepLinkReturnHome": "Go to Home",
   "e2eBackupStatusChecking": "Checking encrypted key backup…",
   "e2eBackupStatusPresent": "Encrypted key backup is available for this account.",
