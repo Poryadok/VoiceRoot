@@ -46,8 +46,8 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 			t.Errorf("%s appears %d times, want exactly once", key, count)
 		}
 	}
-	if len(counts) != 45 {
-		t.Errorf("central bootstrap defines %d unique durables, want 45", len(counts))
+	if len(counts) != 46 {
+		t.Errorf("central bootstrap defines %d unique durables, want 46", len(counts))
 	}
 	for _, line := range []string{
 		"consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request",
@@ -55,6 +55,7 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 		"consumer social_events chat_friend_accepted social.friend_accepted _INBOX.voice.chat.chat_friend_accepted all chat_friend_accepted",
 		"consumer message_events messaging_delivery_ack message.delivery_ack _INBOX.voice.messaging.messaging_delivery_ack all messaging_delivery_ack",
 		"consumer user_events messaging_receipt_privacy user.settings_changed _INBOX.voice.messaging.messaging_receipt_privacy all messaging_receipt_privacy",
+		"consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata",
 		"consumer message_events bot_message_events message.sent _INBOX.voice.bot.bot_message_events all ''",
 		"consumer_filters story_events matchmaking_story_lfp_v2 _INBOX.voice.matchmaking.matchmaking_story_lfp_v2 all story.lfp_created story.lfp_response",
 		"consumer_filters subscription_events space_subscription_entitlement _INBOX.voice.space.space_subscription_entitlement new subscription.space_pro_started subscription.space_pro_expired",
@@ -133,6 +134,7 @@ func TestCanonicalBootstrapACLMatchesConsumers(t *testing.T) {
 		{"chat", "message_events", "chat_message_activity", "_INBOX.voice.chat.chat_message_activity"},
 		{"messaging", "message_events", "messaging_delivery_ack", "_INBOX.voice.messaging.messaging_delivery_ack"},
 		{"messaging", "user_events", "messaging_receipt_privacy", "_INBOX.voice.messaging.messaging_receipt_privacy"},
+		{"messaging", "file_events", "messaging_music_metadata", "_INBOX.voice.messaging.messaging_music_metadata"},
 		{"bot", "message_events", "bot_message_events", "_INBOX.voice.bot.bot_message_events"},
 		{"matchmaking", "story_events", "matchmaking_story_lfp_v2", "_INBOX.voice.matchmaking.matchmaking_story_lfp_v2"},
 		{"space", "subscription_events", "space_subscription_entitlement", "_INBOX.voice.space.space_subscription_entitlement"},

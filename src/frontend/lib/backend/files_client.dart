@@ -59,6 +59,7 @@ class FileMetadataData {
     this.convertedR2Key,
     this.sizeBytes,
     this.isE2e = false,
+    this.isMusic = false,
     this.expiresAt,
   });
 
@@ -72,6 +73,7 @@ class FileMetadataData {
   final String? convertedR2Key;
   final int? sizeBytes;
   final bool isE2e;
+  final bool isMusic;
   final DateTime? expiresAt;
 }
 
@@ -89,6 +91,7 @@ class VoiceFilesClient {
     String? chatType,
     String? storyId,
     bool isE2e = false,
+    bool music = false,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/files/upload'),
@@ -101,6 +104,7 @@ class VoiceFilesClient {
         chatType: chatTypeFromWire(chatType),
         storyId: storyId,
         isE2e: isE2e,
+        music: music,
       ),
       createEmpty: file_pb.RequestUploadResponse.create,
     );
@@ -157,6 +161,7 @@ class VoiceFilesClient {
     required String authorization,
     required String fileId,
     FileUrlVariant variant = FileUrlVariant.original,
+    int? maxBytes,
   }) async {
     final urlResult = await getFileUrl(
       authorization: authorization,
@@ -164,7 +169,10 @@ class VoiceFilesClient {
       variant: variant,
     );
     final downloaded = switch (urlResult) {
-      FilesApiOk(:final data) => await _downloadPresigned(Uri.parse(data)),
+      FilesApiOk(:final data) => await _downloadPresigned(
+        Uri.parse(data),
+        maxBytes: maxBytes,
+      ),
       FilesApiFailure(:final message, :final errorCode, :final statusCode) =>
         FilesApiFailure(
           message: message,
@@ -181,7 +189,10 @@ class VoiceFilesClient {
         variant: variant,
       );
       return switch (refreshedURL) {
-        FilesApiOk(:final data) => _downloadPresigned(Uri.parse(data)),
+        FilesApiOk(:final data) => _downloadPresigned(
+          Uri.parse(data),
+          maxBytes: maxBytes,
+        ),
         FilesApiFailure(:final message, :final errorCode, :final statusCode) =>
           FilesApiFailure(
             message: message,
@@ -193,8 +204,15 @@ class VoiceFilesClient {
     return downloaded;
   }
 
-  Future<FilesApiResult<Uint8List>> _downloadPresigned(Uri uri) async {
-    final result = await getPresignedBytes(gateway: _gateway, downloadUrl: uri);
+  Future<FilesApiResult<Uint8List>> _downloadPresigned(
+    Uri uri, {
+    int? maxBytes,
+  }) async {
+    final result = await getPresignedBytes(
+      gateway: _gateway,
+      downloadUrl: uri,
+      maxBytes: maxBytes,
+    );
     return switch (result) {
       GatewayHttpOk(:final data) => FilesApiOk(data),
       GatewayHttpFailure(:final error) => FilesApiFailure(

@@ -83,7 +83,7 @@ void main() {
                 'username': 'bob',
                 'discriminator': '0042',
                 'display_name': 'Bob',
-                if (banner != null) 'banner_url': banner,
+                'banner_url': ?banner,
               },
             }),
             200,

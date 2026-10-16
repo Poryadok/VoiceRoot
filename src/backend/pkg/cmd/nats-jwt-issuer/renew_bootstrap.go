@@ -22,6 +22,8 @@ var bootstrapRenewSubjects = []string{
 	"$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat",
 	"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role",
 	"$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role",
+	"$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata",
+	"$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata",
 }
 
 func renewalFailure() error { return errors.New("existing_bootstrap_renewal_refused") }

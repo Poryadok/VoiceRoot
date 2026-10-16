@@ -64,6 +64,8 @@ func TestRenewBootstrapPreservesIdentitySeedAndAllOtherClaims(t *testing.T) {
 		"$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat":        true,
 		"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role":          true,
 		"$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role":        true,
+		"$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata":        true,
+		"$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata":      true,
 	}
 	if !reflect.DeepEqual(added, want) || len(after.Pub.Allow) != len(before.Pub.Allow)+len(want) {
 		t.Fatalf("permission delta changed: got %v", added)
@@ -129,6 +131,8 @@ func TestRenewBootstrapNewConsumersRemainVetoedByExactDenies(t *testing.T) {
 		"$JS.API.CONSUMER.CREATE.chat_events.>",
 		"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role",
 		"$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role",
+		"$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata",
+		"$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata",
 	}
 	for _, deny := range denies {
 		old, at, ot, signer, actor, account, u, ap, _ := renewalFixture(t)

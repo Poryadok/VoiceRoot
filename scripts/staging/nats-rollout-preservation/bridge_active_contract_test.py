@@ -29,7 +29,7 @@ class Tests(unittest.TestCase):
 
     @staticmethod
     def _proof(migration_id):
-        return {'schema':'voice-nats-additive-census-proof-v2','migration_id':migration_id,
+        return {'schema':'voice-nats-additive-census-proof-v3','migration_id':migration_id,
             'before_sha256':'d'*64,'after_sha256':'e'*64,'messages':17,
             'old_consumers_preserved':42,'created_consumers':1,'ephemeral_recovery_observations':[]}
 
@@ -59,10 +59,10 @@ class Tests(unittest.TestCase):
         no_op=copy.deepcopy(self.active);no_op['proof'].pop('ephemeral_recovery_observations')
         validate_identity(no_op,self.expected,self.baseline)
 
-    def test_v3_producer_proof_survives_custody_and_active_receipt_validation(self):
+    def test_current_producer_proof_survives_custody_and_active_receipt_validation(self):
         census=CensusTests();census.setUp();plan,before,after=census.proof()
         proof=verify_census(plan,before,after)
-        self.assertEqual(proof['schema'],'voice-nats-additive-census-proof-v2')
+        self.assertEqual(proof['schema'],'voice-nats-additive-census-proof-v3')
         proof['ephemeral_recovery_observations']=[]
         kube,stage,state,_=custody_fixture()
         baseline=copy.deepcopy(state['contract']['consumer_pairs'])

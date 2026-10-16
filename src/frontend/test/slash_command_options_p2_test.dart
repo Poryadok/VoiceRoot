@@ -83,6 +83,7 @@ class _ScriptedFilesClient extends VoiceFilesClient {
     String? chatType,
     String? storyId,
     bool isE2e = false,
+    bool music = false,
   }) async {
     final failure = _failure('ticket');
     if (failure != null) return failure;

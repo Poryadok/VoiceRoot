@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from contextlib import ExitStack
 from unittest.mock import patch
 import bridge_root
 import encrypted_cut
@@ -141,9 +142,41 @@ class CompositionTests(unittest.TestCase):
                     reached.append(value);op=args[2];operation=base/('rollout-'+op);operation.mkdir()
                     return {'operation':op,'target':value['target']}
                 actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding={}
+                from nats_contract_plan import digest
+                prior={'fixture':'prior-enrollment'}
+                for filename,record in (
+                    ('bootstrap-enrollment.json',prior),
+                    ('bootstrap-enrollment-v4.json',{'schema':'voice-nats-bootstrap-enrollment-v4','previous_enrollment':prior,'previous_enrollment_sha256':digest(prior)}),
+                ):
+                    path=base/filename;path.write_text(json.dumps(record));path.chmod(0o600)
                 execution={'dispatcher_run_id':123,'head_sha':p['tag']}
-                with patch.object(bridge_root,'INSTALLED',installed),patch.object(bridge_root.guard,'ROOT',base),patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(123,execution)),patch.object(bridge_root.source_authority,'capture_source',capture_source),patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})),patch.object(bridge_root.RolloutStage,'capture',return_value=stage),patch('commands.capture',side_effect=capture),patch.object(compiler,'capture',side_effect=capture),patch.object(renderer_root,'prove',side_effect=renderer_proof),patch.object(actor_root,'preflight',return_value=None),patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value),patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state):
+                with ExitStack() as patches:
+                    patches.enter_context(patch.object(bridge_root,'INSTALLED',installed))
+                    patches.enter_context(patch.object(bridge_root.guard,'ROOT',base))
+                    patches.enter_context(patch.object(actions,'_idle'))
+                    patches.enter_context(patch.object(actions,'_dispatcher',return_value=(123,execution)))
+                    patches.enter_context(patch.object(bridge_root.source_authority,'capture_source',capture_source))
+                    patches.enter_context(patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})))
+                    patches.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
+                    patches.enter_context(patch('commands.capture',side_effect=capture))
+                    patches.enter_context(patch.object(compiler,'capture',side_effect=capture))
+                    patches.enter_context(patch.object(renderer_root,'prove',side_effect=renderer_proof))
+                    patches.enter_context(patch.object(actor_root,'preflight',return_value=None))
+                    patches.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
+                    patches.enter_context(patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value))
+                    patches.enter_context(patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state))
                     result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
+                    # Required v4 admission cannot be bypassed by a private
+                    # but malformed JSON file. Stop before compilation/fencing.
+                    real_read=bridge_root.private_json
+                    for digit,invalid in (('b',None),('c',[]),('d','invalid')):
+                        with self.subTest(enrollment=invalid):
+                            def read(path):
+                                return invalid if path.name=='bootstrap-enrollment-v4.json' else real_read(path)
+                            with patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root.compiler,'main') as build,patch.object(bridge_root.root_cli,'prepare_value') as prepare:
+                                with self.assertRaisesRegex(bridge_root.Blocked,'enrolled_bootstrap_selection_refused'):
+                                    actions._prepare({'nonce':digit*64,'token':'private','mode':mode,'changed_services':[]})
+                                build.assert_not_called();prepare.assert_not_called()
                 self.assertEqual(result['target']['mode'],mode);self.assertEqual(len(reached[0]['nonnats']['checks']),16)
                 self.assertEqual(any(key.startswith(bridge_root.HUB+'/') for key in result['target']['images']),mode=='full')
                 self.assertFalse(any(row['metadata']['name']==bridge_root.HUB for row in reached[0]['manifests']))

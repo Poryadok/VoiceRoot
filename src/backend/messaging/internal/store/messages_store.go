@@ -23,6 +23,7 @@ import (
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
 type MessageRow struct {
+	MusicBinding           *MusicAttachmentBinding `json:"-"`
 	ID                     uuid.UUID
 	ChatID                 uuid.UUID
 	ChatType               string
@@ -480,15 +481,24 @@ func insertMessageDB(ctx context.Context, db messageInsertDB, row MessageRow) (*
 	if contentType != "" {
 		contentTypeAny = contentType
 	}
+	var musicFile, musicChat, musicRevision any
+	if row.MusicBinding != nil {
+		b := row.MusicBinding
+		if row.IsE2E || contentType != "music" || b.FileID == uuid.Nil || b.SourceChatID == uuid.Nil || b.Revision == 0 || b.Revision > uint64(1<<63-1) {
+			return nil, errors.New("invalid private music binding")
+		}
+		musicFile, musicChat, musicRevision = b.FileID, b.SourceChatID, int64(b.Revision)
+	}
 
 	q := `
 INSERT INTO messages (
   id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
   content, type, thread_parent_id, forward_from_id, forward_from_sender,
-  attachments, mentions, client_message_id, ghost_only, is_e2e, content_type, send_silent
+  attachments, mentions, client_message_id, ghost_only, is_e2e, content_type, send_silent,
+  music_file_id, music_source_chat_id, music_metadata_revision
 ) VALUES (
   $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18
+  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21
 )
 ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
@@ -498,6 +508,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 		row.ID, row.ChatID, chatType, row.SenderProfileID, row.PostedAsChat, displayAny,
 		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
 		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly, row.IsE2E, contentTypeAny, row.SendSilent,
+		musicFile, musicChat, musicRevision,
 	)
 	if err != nil {
 		return nil, err

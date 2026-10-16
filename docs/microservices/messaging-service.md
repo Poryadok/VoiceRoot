@@ -660,7 +660,37 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 | Messaging consumer | Updates attachment JSON on `messages` / `message_attachments`; invalidates or recomputes `GetChatListMetadata` for affected `chat_id`s |
 | Client | On `message_update` WS (or poll) refresh bubble + list row label |
 
-**Not yet implemented** — consumer + cache invalidation contract; see [todo/backend.md](../todo/backend.md). Subject matrix: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md).
+**Music implementation:** explicit File Music uploads carry a persisted intent
+and monotonic metadata revision. At send/forward admission, Messaging obtains
+viewer-authorized File metadata, replaces caller-supplied plaintext tags and
+privately binds file ID, source chat and revision. The `file_events` durable
+`messaging_music_metadata` consumes the existing `file.processed` subject with
+`DeliverNew`; File is the sole publisher. It validates that binding and updates
+eligible original/forwarded attachments plus the normal `message.edited` outbox
+atomically under the chat/Space mutation fence. List/history reads use the
+updated attachment data; the event reaches the existing `message_update` client
+path. It does not change message identity, creation time or Chat-owned sort keys.
+
+Messaging persists the latest per-file snapshot in
+`messaging_music_file_snapshots` before enumerating destinations. The
+send/forward insert transaction locks that snapshot and reconciles its admitted
+tags against a newer stored revision before inserting. This covers a
+`file.processed` tombstone delivered after File reference acquisition but before
+the first message row exists.
+
+Only ready plaintext Music with the existing clean-or-skipped scan policy can
+gain tags. Missing fields clear previous tags. Delete/expiry emits a newer
+metadata-free snapshot; Messaging retains that revision so replayed ready events
+cannot restore tags. This is ordered eventual revocation, not a claim that File
+state has been synchronously re-read before every background update. File still
+authorizes downloads. E2E ciphertext is never extracted server-side and receives
+no public metadata; the client derives tags from authenticated decrypted bytes.
+
+Activation requires the versioned four-consumer preservation/credential proof
+before deploying the new File producer; see the [NATS activation runbook](../../scripts/staging/nats-rollout-preservation/README.md).
+Other attachment processing consumers and their cache invalidation remain open;
+see [todo/backend.md](../todo/backend.md). Subject matrix:
+[CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md).
 
 ### Timestamp ownership (`chats.last_message_at`)
 

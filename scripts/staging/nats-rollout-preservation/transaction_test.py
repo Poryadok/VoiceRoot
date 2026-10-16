@@ -475,6 +475,11 @@ class FullOriginStoryRollbackTests(unittest.TestCase):
                 raise StopBeforeFence()
             def read_private(path):
                 if path.name=='policy.json':return {'s3_signing_endpoint':'https://example.invalid'}
+                if path.name=='bootstrap-enrollment.json':return {'fixture':'prior-enrollment'}
+                if path.name=='bootstrap-enrollment-v4.json':
+                    from nats_contract_plan import digest
+                    prior={'fixture':'prior-enrollment'}
+                    return {'schema':'voice-nats-bootstrap-enrollment-v4','previous_enrollment':prior,'previous_enrollment_sha256':digest(prior)}
                 raise FileNotFoundError()
             with ExitStack() as stack:
                 stack.enter_context(patch.object(bridge_root,'INSTALLED',installed))
@@ -483,6 +488,7 @@ class FullOriginStoryRollbackTests(unittest.TestCase):
                 stack.enter_context(patch.object(bridge_root.source_authority,'capture_source',
                     return_value={'source_sha':'a'*40,'images':{'story':'ghcr.io/poryadok/voiceroot/story@sha256:'+'e'*64}}))
                 stack.enter_context(patch.object(bridge_root,'private_json',side_effect=read_private))
+                stack.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
                 stack.enter_context(patch.object(bridge_root,'public_read',return_value=b'{}'))
                 stack.enter_context(patch.object(bridge_root,'save',side_effect=lambda path,row:path.write_text(json.dumps(row))))
                 fresh=stack.enter_context(patch.object(actor_root,'preflight',return_value=previous['service_actor_authority']))
