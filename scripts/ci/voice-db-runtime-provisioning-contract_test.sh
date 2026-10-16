@@ -693,6 +693,7 @@ fi
 # Exercise the later whole-snapshot verifier against a producer-shaped nested
 # merge. The immutable record binds source base B0, snapshot H, and source A;
 # event base B may equal B0 or add separately governed paths before result T.
+f13_game_checkpoint_projection_fixtures() {
 game_projection_repo="${TMP_DIR}/game-coherent-projection-fixture"
 mkdir -p "${game_projection_repo}"
 git -C "${game_projection_repo}" init -q
@@ -973,6 +974,8 @@ if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${g
   printf '%s\n' 'F13 oracle bug: changed Game entry type/path was accepted' >&2
   exit 2
 fi
+}
+
 accepted_r23_base='edc52d46406d97283f81dfbdfc916660f50dcc69'
 r23_contract_base_allowed() {
   local candidate="$1"
@@ -2207,6 +2210,10 @@ f13_collect_master_push_contributions() {
   f13_collect_master_release_pr_contributions \
     "${repo}" "${event_before}" "${target}" "${output}" "${diagnostic_file}"
 }
+
+# These fixtures exercise the real master-push wrapper, so run them only after
+# the collector functions above have been defined in this sequential script.
+f13_game_checkpoint_projection_fixtures
 
  f13_base_origin_class() {
   if [[ -n "${VOICE_R22_BASE_SHA:-}" ]]; then
