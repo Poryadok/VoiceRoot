@@ -15,14 +15,14 @@ spec:
       automountServiceAccountToken: false
       initContainers:
         - name: wait-postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
           command: ["/bin/sh", "-ec", "until pg_isready -h voice-postgres -p 5432 -U voice; do sleep 2; done"]
           resources:
             requests: {cpu: 20m, memory: 64Mi}
             limits: {cpu: 250m, memory: 256Mi}
       containers:
         - name: migrate
-          image: migrate/migrate:v4.18.1
+          image: migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539
           command: ["/bin/sh", "-ec"]
           args:
             - |

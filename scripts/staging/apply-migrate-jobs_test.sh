@@ -115,11 +115,31 @@ grep -Fq 'key: GAME_INTEGRATION_DB_PASSWORD' "${GIS_ROLE_TEMPLATE}" || {
   exit 1
 }
 role_call_line="$(grep -n -m1 '^[[:space:]]*provision_gameintegration_runtime_role$' "${GIS_MIGRATION_SCRIPT}" | cut -d: -f1 || true)"
+gameintegration_wrapper_line="$(grep -n -m1 '^apply_gameintegration_migrations()' "${GIS_MIGRATION_SCRIPT}" | cut -d: -f1 || true)"
 migration_call_line="$(grep -n -m1 '^[[:space:]]*apply_migrate game_integration_db' "${GIS_MIGRATION_SCRIPT}" | cut -d: -f1 || true)"
-if [[ -z "${role_call_line}" || -z "${migration_call_line}" || "${role_call_line}" -ge "${migration_call_line}" ]]; then
+finalizer_call_line="$(grep -n -m1 '^[[:space:]]*finalize_gameintegration_runtime_role$' "${GIS_MIGRATION_SCRIPT}" | cut -d: -f1 || true)"
+if [[ -z "${role_call_line}" || -z "${gameintegration_wrapper_line}" || -z "${migration_call_line}" || -z "${finalizer_call_line}" || \
+      "${gameintegration_wrapper_line}" -ge "${role_call_line}" || "${role_call_line}" -ge "${migration_call_line}" || \
+      "${migration_call_line}" -ge "${finalizer_call_line}" ]]; then
   echo 'FAIL: restricted GIS runtime role must be provisioned before GIS migrations' >&2
   exit 1
 fi
+grep -Fq 'voice-gameintegration-db-verifier-sql' "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: staging migration runner must apply the fixed GIS verifier ConfigMap' >&2
+  exit 1
+}
+grep -Fq 'immutable: true' "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: staging GIS verifier SQL ConfigMap must be immutable' >&2
+  exit 1
+}
+grep -Fq "local job_name='voice-verify-gameintegration-db'" "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: staging migration runner must wait for the GIS privilege finalizer Job' >&2
+  exit 1
+}
+grep -Fq 'kubectl wait --for=condition=complete "job/${job_name}"' "${GIS_MIGRATION_SCRIPT}" || {
+  echo 'FAIL: staging migration runner must wait for the GIS privilege finalizer Job' >&2
+  exit 1
+}
 if grep -Fq 'GAME_INTEGRATION_DB_PASSWORD=' "${GIS_MIGRATION_SCRIPT}"; then
   echo 'FAIL: staging script must not embed or print a GIS database password' >&2
   exit 1
@@ -649,6 +669,54 @@ run_unchanged_content_case() {
   fi
 }
 
+run_gameintegration_caller_case() {
+  local mode="$1" original_root expected_hash
+  reset_mock || return 1
+  original_root="${ROOT}"
+  ROOT="${TEST_TMP}/gis-root"
+  mkdir -p "${ROOT}/src/backend/migrations/game_integration_db" "${ROOT}/deploy/templates"
+  printf '%s\n' 'SELECT 1;' >"${ROOT}/src/backend/migrations/game_integration_db/000001_fixture.up.sql"
+  printf '%s\n' 'apiVersion: batch/v1' >"${ROOT}/deploy/templates/migrate-game-integration-db-job.yaml"
+  expected_hash="$(migration_content_hash "${ROOT}/src/backend/migrations/game_integration_db")" || return 1
+
+  provision_gameintegration_runtime_role() {
+    printf '%s\n' 'gis.provision' >>"${CALLS}"
+  }
+  finalize_gameintegration_runtime_role() {
+    printf '%s\n' 'gis.finalizer' >>"${CALLS}"
+  }
+
+  if [[ "${mode}" == noop ]]; then
+    printf '%s' "${expected_hash}" >"${STORED_HASH}"
+    : >"${JOB_EXISTS}"
+    printf '1' >"${JOB_SUCCEEDED}"
+  fi
+
+  apply_gameintegration_migrations >/dev/null || {
+    ROOT="${original_root}"
+    return 1
+  }
+  require_call_before '^gis\.provision$' '^job\.get$' \
+    "GIS role provisioning must precede the ${mode} migration decision" || {
+      ROOT="${original_root}"
+      return 1
+    }
+  if [[ "${mode}" == noop ]]; then
+    require_call_before '^job\.get$' '^gis\.finalizer$' \
+      'GIS finalizer must run after the successful content-hash no-op path' || {
+        ROOT="${original_root}"
+        return 1
+      }
+  else
+    require_call_before '^kubectl\.wait\.job$' '^gis\.finalizer$' \
+      'GIS finalizer must run after the fresh migration Job completes' || {
+        ROOT="${original_root}"
+        return 1
+      }
+  fi
+  ROOT="${original_root}"
+}
+
 run_secret_leak_case() {
   reset_mock || return 1
   readonly sentinel_password='R22_F_PASSWORD_MUST_NOT_APPEAR_7f4c'
@@ -709,6 +777,8 @@ case "${1:-all}" in
     run_diagnostics_oracle_self_test || failures=$((failures + 1))
     run_changed_content_case || failures=$((failures + 1))
     run_unchanged_content_case || failures=$((failures + 1))
+    run_gameintegration_caller_case fresh || failures=$((failures + 1))
+    run_gameintegration_caller_case noop || failures=$((failures + 1))
     run_secret_leak_case || failures=$((failures + 1))
     run_reserved_dsn_encoding_case || failures=$((failures + 1))
     run_reserved_diagnostics_case || failures=$((failures + 1))

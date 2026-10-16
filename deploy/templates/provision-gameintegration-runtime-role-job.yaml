@@ -15,7 +15,7 @@ spec:
       automountServiceAccountToken: false
       initContainers:
         - name: wait-postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
           command: ["/bin/sh", "-ec", "until pg_isready -h voice-postgres -p 5432 -U \"${POSTGRES_USER}\"; do sleep 2; done"]
           env:
             - name: POSTGRES_USER
@@ -25,7 +25,7 @@ spec:
             limits: {cpu: 250m, memory: 256Mi}
       containers:
         - name: provision
-          image: postgres:16-alpine
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
           command: ["/bin/sh", "-ec", "exec psql -v ON_ERROR_STOP=1 -h voice-postgres -p 5432 -U \"${POSTGRES_USER}\" -d postgres -f /provision/provision.sql"]
           env:
             - name: POSTGRES_USER
