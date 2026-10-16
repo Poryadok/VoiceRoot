@@ -214,6 +214,7 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
             for path in (installed/'journal').iterdir():
                 accepted=retirement.pending_request_accepted(installed,path,closure)
                 if isinstance(accepted,dict) and accepted.get('disposition')=='SUPERSEDED_FAILED_FINISH':source_workspaces[path.name]=accepted
+                if isinstance(accepted,dict) and accepted.get('disposition')=='ABANDONED_COMPILER_INVENTORY_REJECTION':source_workspaces[path.name]=accepted
                 if path.name==retirement.SOURCE_CAPTURE_REJECTION['nonce']+'.json':source_workspaces[path.name]=accepted
                 if path.stem[:12] in retirement.SEARCH_BOOTSTRAP_REJECTIONS:source_workspaces[path.name]=accepted
                 if path.name==retirement.STORY_PREFENCE_NONCE+'.json':source_workspaces[path.name]=accepted
