@@ -42,7 +42,7 @@ void main() {
     expect(nativeFlacMusicTags(truncated), isEmpty);
 
     final missingLastFlag = _flac(['TITLE=Fixture title']);
-    missingLastFlag[4] &= 0x7f;
+    missingLastFlag[42] &= 0x7f; // Clear the type-4 block's last flag.
     expect(nativeFlacMusicTags(missingLastFlag), isEmpty);
   });
 }
