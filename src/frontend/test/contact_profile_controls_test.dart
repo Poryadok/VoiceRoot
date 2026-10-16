@@ -50,7 +50,7 @@ void main() {
       final semantics = tester.ensureSemantics();
       final client = MockClient((request) async => throw StateError('Unexpected $request'));
       final container = _container(client);
-      final theme = await _captureTheme(tester);
+      final theme = await _captureTheme(tester, forceProduction: true);
       final copied = <String>[];
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -82,7 +82,8 @@ void main() {
           expect(find.descendant(of: title, matching: find.text(locale.languageCode == 'ru' ? 'Профиль' : 'Profile')), findsOneWidget);
           expect(tester.getSemantics(title).flagsCollection.isHeader, isTrue);
           final paragraph = tester.renderObject<RenderParagraph>(find.descendant(of: title, matching: find.byType(Text)));
-          expect(paragraph.didExceedMaxLines, isFalse);
+          expect(paragraph.didExceedMaxLines, isFalse,
+              reason: '${locale.languageCode} ${variant.size} scale ${variant.scale}');
           final share = find.descendant(of: header, matching: find.byTooltip(l10n.shareLinkAction));
           expect(share.hitTestable(), findsOneWidget);
           expect(find.byTooltip(l10n.shareLinkAction), findsOneWidget);
@@ -126,7 +127,7 @@ void main() {
       var requests = 0;
       final client = MockClient((request) async { requests++; throw StateError('Unexpected $request'); });
       final container = _container(client);
-      final theme = await _captureTheme(tester);
+      final theme = await _captureTheme(tester, forceProduction: true);
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -270,7 +271,7 @@ void main() {
           lastSeen: DateTime.now().subtract(const Duration(hours: 2, minutes: 5)),
         )),
       ]);
-      final theme = await _captureTheme(tester);
+      final theme = await _captureTheme(tester, forceProduction: true);
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1880,8 +1881,8 @@ class _ImageResponse extends Stream<List<int>> implements HttpClientResponse {
       throw UnsupportedError('$invocation');
 }
 
-Future<ThemeData> _captureTheme(WidgetTester tester) async {
-  if (Platform.environment[_captureDirectory]?.isNotEmpty != true) {
+Future<ThemeData> _captureTheme(WidgetTester tester, {bool forceProduction = false}) async {
+  if (!forceProduction && Platform.environment[_captureDirectory]?.isNotEmpty != true) {
     return voiceTestTheme();
   }
   if (!_captureFontsLoaded) {
