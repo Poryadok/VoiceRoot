@@ -53,6 +53,24 @@
 
 ## По языкам и компонентам
 
+### Help: реальный browser handoff
+
+Обычный Flutter job CI собирает `test/fixtures/settings_help_web_launcher_smoke.dart`
+и запускает `node scripts/ci/settings-help-browser-handoff.mjs
+src/frontend/build/help-launcher-web <evidence-dir>` из корня (Node.js 24,
+`CHROME_BIN=google-chrome`, `GITHUB_SHA` — полный SHA проверяемого checkout).
+Перед отдельным запуском из `src/frontend` нужны `flutter pub get` и
+`flutter build web --release --no-pub --no-web-resources-cdn --target
+test/fixtures/settings_help_web_launcher_smoke.dart --output build/help-launcher-web`.
+Fixture использует настоящий `HelpSheet` и `url_launcher`; mock HTTP изолирует
+только посторонние backend-запросы. В H/V доверенные pointer clicks проходят
+Settings → Help → README / Issues; проверяются `Page.windowOpen.userGesture`,
+точный URL нового target, ровно одна новая вкладка и сохранение Help без ошибки.
+Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOURCE_SHA`,
+если задан) и SHA checkout (`GITHUB_SHA`), JSON событий/targets,
+версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
+загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
+
 ### Go (сервисы, Gateway, Realtime и др.)
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.

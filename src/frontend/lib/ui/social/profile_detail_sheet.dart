@@ -186,7 +186,17 @@ class ProfileDetailSheet extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const _ProfileDismissControl(),
+            _ProfileHeader(
+              profile: profileAsync.when(
+                loading: () => null,
+                error: (error, stackTrace) => null,
+                data: (profile) => profile,
+              ),
+              isGuest: isGuest,
+              isSelf: isSelf,
+              onBlock: (profile) => _confirmBlock(context, ref, profile),
+              onReport: () => _openReport(context),
+            ),
             Flexible(
               child: profileAsync.when(
                 loading: () => const VoiceListSkeleton(rowCount: 3),
@@ -317,7 +327,9 @@ class ProfileDetailSheet extends ConsumerWidget {
                                         presence: presence,
                                       ),
                                       const SizedBox(width: 8),
-                                      Text(_presenceLabel(context, l10n, presence)),
+                                      Flexible(
+                                        child: Text(_presenceLabel(context, l10n, presence)),
+                                      ),
                                     ],
                                   ),
                                   if (presence?.customStatus case final status?
@@ -354,11 +366,6 @@ class ProfileDetailSheet extends ConsumerWidget {
                                 ],
                               ),
                             ),
-                            if (!isGuest && profile.username.isNotEmpty && !isSelf)
-                              VoiceShareLinkButton(
-                                link: profileShareUrl(profile.username),
-                                tooltip: l10n.shareLinkAction,
-                              ),
                           ],
                         ),
                         if (showNotInContactsWarning) ...[
@@ -458,13 +465,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                           const SizedBox(height: 8),
                           TextButton(
                             key: const Key('profile_report'),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              ReportSheet.show(
-                                context,
-                                target: ReportUserTarget(profileId: profileId),
-                              );
-                            },
+                            onPressed: () => _openReport(context),
                             child: Text(l10n.reportAction),
                           ),
                         ],
@@ -477,6 +478,14 @@ class ProfileDetailSheet extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _openReport(BuildContext context) {
+    Navigator.of(context).pop();
+    ReportSheet.show(
+      context,
+      target: ReportUserTarget(profileId: profileId),
     );
   }
 
@@ -552,27 +561,56 @@ class ProfileDetailSheet extends ConsumerWidget {
       _ =>
         presence.lastSeen == null
             ? l10n.socialPresenceOffline
-            : l10n.socialPresenceLastSeen(
-                _formatLastSeen(context, presence.lastSeen!),
-              ),
+            : profileLastSeenLabel(context, presence.lastSeen!),
     };
   }
 
-  String _formatLastSeen(BuildContext context, DateTime lastSeen) {
-    final local = lastSeen.toLocal();
-    final material = MaterialLocalizations.of(context);
-    final date = material.formatShortDate(local);
-    final time = TimeOfDay.fromDateTime(local).format(context);
-    return '$date $time';
-  }
 }
 
-class _ProfileDismissControl extends StatelessWidget {
-  const _ProfileDismissControl();
+/// Formats an already viewer-filtered timestamp; [now] permits boundary tests.
+String profileLastSeenLabel(BuildContext context, DateTime lastSeen, {DateTime? now}) {
+  final l10n = AppLocalizations.of(context)!;
+  final age = (now ?? DateTime.now()).difference(lastSeen);
+  if (age < const Duration(minutes: 1)) return l10n.socialPresenceLastSeenJustNow;
+  if (age < const Duration(hours: 1)) return l10n.socialPresenceLastSeenMinutes(age.inMinutes);
+  if (age < const Duration(days: 1)) return l10n.socialPresenceLastSeenHours(age.inHours);
+  if (age < const Duration(days: 7)) return l10n.socialPresenceLastSeenDays(age.inDays);
+  // The canon leaves day 7 unspecified. Preserve the existing absolute date/time
+  // fallback for >=7 days rather than define another product bucket here.
+  final local = lastSeen.toLocal();
+  final date = MaterialLocalizations.of(context).formatShortDate(local);
+  final time = TimeOfDay.fromDateTime(local).format(context);
+  return l10n.socialPresenceLastSeen('$date $time');
+}
+
+enum _ProfileMenuAction { block, report }
+
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({
+    required this.profile,
+    required this.isGuest,
+    required this.isSelf,
+    required this.onBlock,
+    required this.onReport,
+  });
+
+  final VoiceProfile? profile;
+  final bool isGuest;
+  final bool isSelf;
+  final ValueChanged<VoiceProfile> onBlock;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
     final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final l10n = AppLocalizations.of(context)!;
+    final target = profile;
+    final dismiss = FocusTraversalOrder(
+      order: const NumericFocusOrder(0),
+      child: narrow
+          ? const BackButton(key: Key('profile_dismiss'))
+          : const CloseButton(key: Key('profile_dismiss')),
+    );
     return SizedBox(
       key: const Key('profile_header_controls'),
       height: context.voiceMetrics.layoutSize('headerHeight', fallback: 56),
@@ -580,16 +618,64 @@ class _ProfileDismissControl extends StatelessWidget {
         data: IconThemeData(
           size: context.voiceMetrics.layoutSize('iconMd', fallback: 20),
         ),
-        child: Row(
-          mainAxisAlignment: narrow
-              ? MainAxisAlignment.start
-              : MainAxisAlignment.end,
-          children: [
-            if (narrow)
-              const BackButton(key: Key('profile_dismiss'))
-            else
-              const CloseButton(key: Key('profile_dismiss')),
-          ],
+        child: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Row(
+            children: [
+              if (narrow) dismiss,
+              Expanded(
+                child: Semantics(
+                  key: const Key('profile_header_title'),
+                  header: true,
+                  child: Text(
+                    l10n.profileDetailTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ),
+              if (target != null && !isSelf) ...[
+                if (!isGuest && target.username.isNotEmpty)
+                  FocusTraversalOrder(
+                    order: const NumericFocusOrder(1),
+                    child: VoiceShareLinkButton(
+                      link: profileShareUrl(target.username),
+                      tooltip: l10n.shareLinkAction,
+                    ),
+                  ),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(2),
+                  child: PopupMenuButton<_ProfileMenuAction>(
+                    key: const Key('profile_more'),
+                    tooltip: l10n.profileMoreActions,
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (action) {
+                      switch (action) {
+                        case _ProfileMenuAction.block:
+                          onBlock(target);
+                        case _ProfileMenuAction.report:
+                          onReport();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        key: const Key('profile_more_block'),
+                        value: _ProfileMenuAction.block,
+                        child: Text(l10n.profileBlock),
+                      ),
+                      PopupMenuItem(
+                        key: const Key('profile_more_report'),
+                        value: _ProfileMenuAction.report,
+                        child: Text(l10n.reportAction),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (!narrow) dismiss,
+            ],
+          ),
         ),
       ),
     );

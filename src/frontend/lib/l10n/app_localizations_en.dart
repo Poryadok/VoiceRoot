@@ -461,6 +461,42 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Last seen just now';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count minutes ago',
+      one: 'Last seen $count minute ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count hours ago',
+      one: 'Last seen $count hour ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count days ago',
+      one: 'Last seen $count day ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Unknown';
 
   @override
@@ -955,6 +991,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileMessage => 'Message';
+
+  @override
+  String get profileDetailTitle => 'Profile';
+
+  @override
+  String get profileMoreActions => 'More actions';
 
   @override
   String get profileOpenAvatar => 'Open fullscreen avatar';

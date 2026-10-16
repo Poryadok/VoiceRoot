@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	socialv1 "voice.app/voice/social/v1"
 	commonv1 "voice.app/voice/common/v1"
+	socialv1 "voice.app/voice/social/v1"
 )
 
 func (t *transcoder) serveFriends(w http.ResponseWriter, r *http.Request, rest string) bool {
@@ -68,6 +68,18 @@ func (t *transcoder) serveFriends(w http.ResponseWriter, r *http.Request, rest s
 		target := strings.TrimSuffix(strings.TrimPrefix(rest, "invitations/"), "/decline")
 		resp, err := t.clients.social.DeclineFriendInvitation(ctx, &socialv1.DeclineFriendInvitationRequest{
 			RequesterProfileId: target,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasPrefix(rest, "invitations/") && strings.HasSuffix(rest, "/cancel"):
+		target := strings.TrimSuffix(strings.TrimPrefix(rest, "invitations/"), "/cancel")
+		resp, err := t.clients.social.CancelFriendInvitation(ctx, &socialv1.CancelFriendInvitationRequest{
+			TargetProfileId: target,
 		})
 		if err != nil {
 			writeGRPCError(w, err)

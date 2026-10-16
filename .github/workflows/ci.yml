@@ -343,6 +343,31 @@ jobs:
         if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
         working-directory: src/frontend
         run: flutter test --no-pub --platform chrome --reporter expanded --concurrency=1 test/app_shell_icon_web_test.dart
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Help real Chrome external handoff (H/V)
+        id: help_browser_handoff
+        timeout-minutes: 8
+        env:
+          CHROME_BIN: google-chrome
+          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          cd src/frontend
+          flutter build web --release --no-pub --no-web-resources-cdn \
+            --target test/fixtures/settings_help_web_launcher_smoke.dart \
+            --output build/help-launcher-web
+          cd ../..
+          node scripts/ci/settings-help-browser-handoff.mjs \
+            src/frontend/build/help-launcher-web "$RUNNER_TEMP/settings-help-browser"
+      - name: Upload Help real browser handoff evidence
+        if: always() && steps.help_browser_handoff.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: settings-help-browser-${{ github.run_id }}
+          path: ${{ runner.temp }}/settings-help-browser
+          if-no-files-found: error
+          retention-days: 14
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
         id: network_offline_capture
         if: >-
@@ -469,7 +494,8 @@ jobs:
            github.head_ref == 'codex/contact-profile-banner' ||
            github.head_ref == 'codex/contact-profile-close-controls' ||
            github.head_ref == 'codex/contact-profile-communication-actions' ||
-           github.head_ref == 'codex/contact-profile-favorite-band')
+           github.head_ref == 'codex/contact-profile-favorite-band' ||
+           github.head_ref == 'codex/contact-profile-header-title')
         timeout-minutes: 5
         working-directory: src/frontend
         env:
@@ -482,7 +508,8 @@ jobs:
            github.head_ref == 'codex/contact-profile-banner' ||
            github.head_ref == 'codex/contact-profile-close-controls' ||
            github.head_ref == 'codex/contact-profile-communication-actions' ||
-           github.head_ref == 'codex/contact-profile-favorite-band')
+           github.head_ref == 'codex/contact-profile-favorite-band' ||
+           github.head_ref == 'codex/contact-profile-header-title')
         uses: actions/upload-artifact@v6
         with:
           name: contact-profile-hv-${{ github.run_id }}
@@ -511,6 +538,16 @@ jobs:
             ${{ runner.temp }}/contact-profile-capture/contact-favorite-off-v.png
             ${{ runner.temp }}/contact-profile-capture/contact-favorite-on-h.png
             ${{ runner.temp }}/contact-profile-capture/contact-favorite-on-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-en-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-en-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-ru-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-ru-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-menu-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-menu-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-en-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-en-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-ru-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-ru-v.png
           if-no-files-found: error
           retention-days: 7
       - name: Capture Deep Links error reference views
