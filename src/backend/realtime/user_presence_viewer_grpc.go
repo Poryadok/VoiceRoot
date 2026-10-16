@@ -20,15 +20,16 @@ type presenceViewer interface {
 }
 
 type presenceViewerRequest struct {
-	TargetProfileID    string
-	ViewerAccountID    string
-	ViewerProfileID    string
-	ViewerAccountType  string
+	TargetProfileID   string
+	ViewerAccountID   string
+	ViewerProfileID   string
+	ViewerAccountType string
 }
 
 type viewerPresence struct {
 	Status       string
 	CustomStatus string
+	GameTitle    string
 	LastSeen     *time.Time
 }
 
@@ -76,7 +77,7 @@ func (g *grpcPresenceViewer) PresenceForViewer(ctx context.Context, request pres
 	if err != nil || responseProfileID != targetProfileID {
 		return viewerPresence{}, fmt.Errorf("user presence response does not match target")
 	}
-	out := viewerPresence{Status: status.GetStatus(), CustomStatus: status.GetCustomStatus()}
+	out := viewerPresence{Status: status.GetStatus(), CustomStatus: status.GetCustomStatus(), GameTitle: status.GetGameTitle()}
 	if lastSeen := status.GetLastSeen(); lastSeen != nil && lastSeen.IsValid() {
 		at := lastSeen.AsTime().UTC()
 		out.LastSeen = &at
@@ -91,9 +92,9 @@ func presenceFanoutPayload(ctx context.Context, viewer presenceViewer, targetPro
 		return nil, fmt.Errorf("presence privacy viewer is not configured")
 	}
 	snapshot, err := viewer.PresenceForViewer(ctx, presenceViewerRequest{
-		TargetProfileID: targetProfileID,
-		ViewerAccountID: reg.accountID,
-		ViewerProfileID: reg.profileID,
+		TargetProfileID:   targetProfileID,
+		ViewerAccountID:   reg.accountID,
+		ViewerProfileID:   reg.profileID,
 		ViewerAccountType: reg.accountType,
 	})
 	if err != nil {
@@ -105,6 +106,9 @@ func presenceFanoutPayload(ctx context.Context, viewer presenceViewer, targetPro
 		body["status"] = snapshot.Status
 		if snapshot.CustomStatus != "" {
 			body["custom_status"] = snapshot.CustomStatus
+		}
+		if snapshot.GameTitle != "" {
+			body["game_title"] = snapshot.GameTitle
 		}
 	}
 	if !invisible && snapshot.LastSeen != nil {

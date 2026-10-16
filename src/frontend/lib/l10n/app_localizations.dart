@@ -5138,6 +5138,18 @@ abstract class AppLocalizations {
   /// **'Block this user?'**
   String get profileBlockConfirmTitle;
 
+  /// No description provided for @profileRemoveFriendConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this friend?'**
+  String get profileRemoveFriendConfirmTitle;
+
+  /// No description provided for @profileRemoveFriendConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this user from your friends list?'**
+  String get profileRemoveFriendConfirmMessage;
+
   /// No description provided for @profileBlockConfirmMessage.
   ///
   /// In en, this message translates to:
@@ -6589,6 +6601,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not in contacts · messages may be unsafe'**
   String get profileNotInContactsWarning;
+
+  /// No description provided for @contactProfilePlayingGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing {title}'**
+  String contactProfilePlayingGame(String title);
 }
 
 class _AppLocalizationsDelegate

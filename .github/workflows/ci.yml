@@ -434,7 +434,8 @@ jobs:
            github.head_ref == 'codex/contact-profile-close-controls' ||
            github.head_ref == 'codex/contact-profile-communication-actions' ||
            github.head_ref == 'codex/contact-profile-favorite-band' ||
-           github.head_ref == 'codex/contact-profile-header-title')
+             github.head_ref == 'codex/contact-profile-header-title' ||
+             github.head_ref == 'codex/contact-profile-game-presence')
         timeout-minutes: 5
         working-directory: src/frontend
         env:
@@ -448,12 +449,14 @@ jobs:
            github.head_ref == 'codex/contact-profile-close-controls' ||
            github.head_ref == 'codex/contact-profile-communication-actions' ||
            github.head_ref == 'codex/contact-profile-favorite-band' ||
-           github.head_ref == 'codex/contact-profile-header-title')
+             github.head_ref == 'codex/contact-profile-header-title' ||
+             github.head_ref == 'codex/contact-profile-game-presence')
         uses: actions/upload-artifact@v6
         with:
           name: contact-profile-hv-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/contact-profile-capture/contact-profile-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-game-*.png
             ${{ runner.temp }}/contact-profile-capture/contact-profile-v.png
             ${{ runner.temp }}/contact-profile-capture/contact-avatar-h.png
             ${{ runner.temp }}/contact-profile-capture/contact-avatar-v.png
