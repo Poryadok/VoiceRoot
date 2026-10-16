@@ -278,6 +278,38 @@ docker build -f src/developer-portal/Dockerfile src/developer-portal \
 
 ### Flutter web staging
 
+The image build binds fresh `index.html` to a SHA256-named bootstrap, whose
+generated `mainJsPath` points to SHA256-named main JavaScript. Both stay in the
+web root, preserving relative renderer/resource paths. The original files remain
+for legacy references. Flutter 3.41's cleanup-only service worker and Firebase
+messaging worker remain unchanged; a caching worker with a resource map is
+rejected by the postprocessor until explicitly integrated.
+
+Nginx sends `Cache-Control: no-store` for mutable entry points, manifests and
+other unversioned resources. Only the two content-addressed JavaScript filename
+forms receive immutable caching; a missing hashed asset returns 404, not SPA HTML.
+`web-asset-manifest.json` (`voice-web-assets-v1`) records each bootstrap/main path,
+SHA256 and byte count. Public acceptance must follow the fresh HTML reference and
+compare complete decoded bytes with the manifest and deployed image. HTTP 200 or
+the legacy `/main.dart.js` alone does not prove current-release delivery.
+
+For release acceptance, first retain the exact deployed image/Pod manifest and
+asset hashes. Fetch public HTML and manifest with normal TLS verification; reject
+a stale manifest against those retained pins. Require the HTML script reference
+to equal `manifest.bootstrap.path`, then verify its complete decoded byte count
+and SHA256. Parse its generated build configuration and require `mainJsPath` to
+equal `manifest.main.path`; fetch that path and verify its complete decoded byte
+count and SHA256. Reject incomplete transfers, HTML fallbacks and mismatched
+references even when every HTTP status is 200. This sequence is independent of
+the ordinary rollout's Kubernetes readiness result.
+
+Previously cached entry points can require an independently authorized cache
+invalidation; new origin headers do not rewrite existing edge cache entries.
+The October 16 incident demonstrated both stale canonical asset HITs and a
+current-size cache MISS that still stalled in transfer. Content addressing fixes
+release identity, not that separate network delivery failure; no DNS or TLS
+weakening is part of this contract.
+
 Deployment + Ingress: [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml). **CI** (job `web` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes `ghcr.io/<owner>/<repo>/web:<git_sha>` on push to `master` with build-args:
 
 | Build arg | Purpose |

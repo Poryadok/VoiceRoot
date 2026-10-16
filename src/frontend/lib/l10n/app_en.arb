@@ -197,6 +197,13 @@
       }
     }
   },
+  "socialPresenceLastSeenJustNow": "Last seen just now",
+  "socialPresenceLastSeenMinutes": "{count, plural, one{Last seen {count} minute ago} other{Last seen {count} minutes ago}}",
+  "@socialPresenceLastSeenMinutes": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenHours": "{count, plural, one{Last seen {count} hour ago} other{Last seen {count} hours ago}}",
+  "@socialPresenceLastSeenHours": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenDays": "{count, plural, one{Last seen {count} day ago} other{Last seen {count} days ago}}",
+  "@socialPresenceLastSeenDays": {"placeholders": {"count": {"type": "int"}}},
   "socialPresenceUnknown": "Unknown",
   "socialActionError": "Error: {message}",
   "@socialActionError": {
@@ -450,6 +457,8 @@
   "callGroupVoiceActive": "Group voice active",
   "callGroupVoiceInProgress": "Voice call in progress in this group",
   "profileMessage": "Message",
+  "profileDetailTitle": "Profile",
+  "profileMoreActions": "More actions",
   "profileOpenAvatar": "Open fullscreen avatar",
   "profileAvatarUnavailable": "Avatar unavailable",
   "profileCommonSpaces": "Common spaces",

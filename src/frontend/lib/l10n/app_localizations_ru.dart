@@ -460,6 +460,48 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Был(а) только что';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count минуты назад',
+      many: 'Был(а) $count минут назад',
+      few: 'Был(а) $count минуты назад',
+      one: 'Был(а) $count минуту назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count часа назад',
+      many: 'Был(а) $count часов назад',
+      few: 'Был(а) $count часа назад',
+      one: 'Был(а) $count час назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count дня назад',
+      many: 'Был(а) $count дней назад',
+      few: 'Был(а) $count дня назад',
+      one: 'Был(а) $count день назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Неизвестно';
 
   @override
@@ -955,6 +997,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get profileMessage => 'Написать';
+
+  @override
+  String get profileDetailTitle => 'Профиль';
+
+  @override
+  String get profileMoreActions => 'Ещё';
 
   @override
   String get profileOpenAvatar => 'Открыть аватар на весь экран';
