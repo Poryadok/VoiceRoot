@@ -1,0 +1,13 @@
+[Unit]
+Description=Renew independent Voice dev signaling certificate
+Wants=network-online.target
+Requires=docker.service k3s.service
+After=network-online.target docker.service k3s.service
+RequiresMountsFor=/home/voice-dev/tls /home/voice-dev/operator /var/lib/docker /var/lib/rancher/k3s
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /home/voice-dev/operator/signal_tls.py renew --kubeconfig=/home/pmd/.kube/config
+TimeoutStartSec=15min

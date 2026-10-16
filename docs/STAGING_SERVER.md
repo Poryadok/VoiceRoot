@@ -99,6 +99,53 @@ chmod 600 ~/.kube/config
 
 ## Voice на этом стенде
 
+### Контейнерное хранилище и dev (2026-10-16)
+
+Раздел `/var` имеет 92 GiB, `/home` — 342 GiB; остальные разделы физического
+NVMe заняты в том числе Windows. Контейнерное хранилище перенесено холодным
+копированием на `/home/container-data/active/`. Старые пути сохранены bind mount:
+`/var/lib/rancher/k3s`, `/var/lib/docker`, `/var/lib/containerd`,
+`/var/lib/kubelet`, `/var/log/pods`, `/var/lib/voice-nats-preservation`.
+Таким образом существующие PV и bind mounts продолжают указывать на те же пути.
+Данные dev дополнительно находятся в `/home/voice-dev/data/`.
+
+Постоянные systemd mount units требуют `/home` и `/var`; drop-in
+`container-storage-home.conf` требует все шесть mounts перед запуском runtimes.
+При недоступном `/home` runtime должен остановиться, а не создать пустой каталог.
+Проверка после переноса: `/var` 5.1 GiB занято / 82 GiB свободно,
+`/home` около 127 GiB занято / 199 GiB свободно, включая rollback-копии.
+Полная перезагрузка хоста в рамках переноса не выполнялась.
+
+Одноразовый host-specific executor: [container-storage-home.py](../scripts/ops/container-storage-home.py).
+Протокол, согласованные SQLite backups и инвентарь — root-only
+`/home/container-data/migration/`; холодные оригиналы сохранены в
+`/home/container-data/rollback/`. Это копии на том же диске, не внешний backup.
+Не запускать `capture`/`migrate` повторно на работающем перенесённом стенде.
+
+**TTenrec**: namespace `chinchilla`, Deployment `tracker`, PVC `tracker-data`,
+mount `/data`; SQLite `tracker.db` и WAL лежат в PVC. Все исходные 17 PV/PVC
+сохранили UID. После принудительной остановки CRI-контейнера tracker восстановился,
+SQLite integrity_check и хеши содержимого обеих таблиц совпали с холодным backup.
+Удаление pod/контейнера сохраняет данные; удаление PVC/namespace опасно:
+у существующего PV reclaim policy `Delete`. Защита от потери диска требует
+отдельного внешнего резервного копирования.
+
+Dev: [dev.comrade.click](https://dev.comrade.click),
+[API](https://api-dev.comrade.click/health),
+[admin](https://admin-dev.comrade.click),
+[developer portal](https://developers-dev.comrade.click).
+Полное описание, доступ, тестовая почта, обновления и ограничения —
+[DEV_SERVER.md](DEV_SERVER.md); инструменты — [dev runbook](../scripts/dev/README.md).
+
+Dev имеет отдельный Let's Encrypt TLS Secret
+`voice-dev/voice-dev-signaling-tls` для пяти адресов: `dev`, `api-dev`, `admin-dev`,
+`developers-dev`, `livekit-dev` в зоне `comrade.click`, HTTPS Ingress
+и HTTP-01 маршруты. Сертификат проверен прямым подключением к origin с обычной
+проверкой TLS; продление выполняет root systemd timer
+`voice-dev-signaling-tls-renew.timer`. Данные ACME находятся в
+`/home/voice-dev/tls/` (root0700). Для прямого публичного доступа требуются пять
+явных A-записей на95.31.10.177 в режиме **DNS only**; wildcard/staging DNS не меняются.
+
 - Kubernetes namespace: **`voice-staging`** (как в репозитории).
 - Образ **gateway** из GHCR и теги — [DEPLOYMENT.md](DEPLOYMENT.md).
 - Публичные **FQDN** на этом стенде — [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (`voice`, `developers`, `app`, `admin`, `livekit` на `comrade.click`). В GitHub: Variables **`VOICE_*_INGRESS_HOST`**. DNS: в Cloudflare для зоны **comrade.click** — записи **A** на внешний IP ноды; **`livekit`** — предпочтительно **DNS only** (grey cloud) для WebRTC UDP.
