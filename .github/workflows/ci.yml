@@ -451,6 +451,48 @@ jobs:
             ${{ runner.temp }}/slash-composer-capture/options-v.png
           if-no-files-found: error
           retention-days: 7
+      - name: Capture Friends pending and DM request shell states in H/V
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/contact-requests-panel-acceptance'
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_CONTACT_REQUESTS_CAPTURE_DIR: ${{ runner.temp }}/contact-requests-capture
+        run: flutter test --no-pub --reporter expanded --concurrency=1 test/contact_requests_capture_test.dart test/message_requests_shell_test.dart
+      - name: Upload Friends pending and DM request shell reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/contact-requests-panel-acceptance'
+        uses: actions/upload-artifact@v6
+        with:
+          name: contact-requests-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-populated-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-populated-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-busy-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-busy-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-empty-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-empty-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-loading-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-loading-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-error-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-error-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-ru-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-ru-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-error-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-error-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-missing-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-missing-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-loading-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-loading-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-wide.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-narrow.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-drawer-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-busy-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-busy-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-error-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-error-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-final-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-final-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Capture ContactProfile controls and fullscreen avatar in H/V
         if: >-
           github.event_name == 'pull_request' &&

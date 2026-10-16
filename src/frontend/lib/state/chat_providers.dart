@@ -598,19 +598,41 @@ class ChatListController extends StateNotifier<ChatListState> {
   Future<String?> acceptRequest(String chatId) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null) return 'not_authenticated';
+    final requestAuth = _ref.read(authControllerProvider.notifier);
+    final requestIdentity = requestAuth.gatewayRequestIdentity;
+    final sessionGeneration = requestAuth.sessionInstallGeneration;
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
     final result = await _ref
         .read(voiceChatsClientProvider)
         .acceptDmRequest(authorization: auth, chatId: chatId);
     if (!mounted) return kChatActionStaleContext;
+    final currentAuth = _ref.read(authControllerProvider.notifier);
+    if (!identical(currentAuth, requestAuth) ||
+        currentAuth.gatewayRequestIdentity != requestIdentity ||
+        currentAuth.sessionInstallGeneration != sessionGeneration ||
+        _ref.read(profileSwitchInProgressProvider)) {
+      return kChatActionStaleContext;
+    }
     switch (result) {
       case ChatsApiOk<void>():
         final reconciler = _ref.read(inboxReconcilerProvider.notifier);
-        final error = _afterRequestAction(chatId, profileId, auth);
+        final error = _afterRequestAction(
+          chatId,
+          profileId,
+          auth,
+          expectedNavigationGeneration: navigationGeneration,
+        );
         if (error == null) unawaited(reconciler.reconcile());
         return error;
       case ChatsApiFailure(:final message):
+        if (_ref.read(messageRequestsNavigationGenerationProvider) !=
+            navigationGeneration) {
+          return kChatActionStaleContext;
+        }
         return message;
     }
   }
@@ -618,15 +640,37 @@ class ChatListController extends StateNotifier<ChatListState> {
   Future<String?> declineRequest(String chatId) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null) return 'not_authenticated';
+    final requestAuth = _ref.read(authControllerProvider.notifier);
+    final requestIdentity = requestAuth.gatewayRequestIdentity;
+    final sessionGeneration = requestAuth.sessionInstallGeneration;
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
     final result = await _ref
         .read(voiceChatsClientProvider)
         .declineDmRequest(authorization: auth, chatId: chatId);
     if (!mounted) return kChatActionStaleContext;
+    final currentAuth = _ref.read(authControllerProvider.notifier);
+    if (!identical(currentAuth, requestAuth) ||
+        currentAuth.gatewayRequestIdentity != requestIdentity ||
+        currentAuth.sessionInstallGeneration != sessionGeneration ||
+        _ref.read(profileSwitchInProgressProvider)) {
+      return kChatActionStaleContext;
+    }
     return switch (result) {
-      ChatsApiOk<void>() => _afterRequestAction(chatId, profileId, auth),
-      ChatsApiFailure(:final message) => message,
+      ChatsApiOk<void>() => _afterRequestAction(
+        chatId,
+        profileId,
+        auth,
+        expectedNavigationGeneration: navigationGeneration,
+      ),
+      ChatsApiFailure(:final message) =>
+        _ref.read(messageRequestsNavigationGenerationProvider) !=
+                navigationGeneration
+            ? kChatActionStaleContext
+            : message,
     };
   }
 
@@ -639,6 +683,9 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (session == null) return 'not_authenticated';
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
     ChatListItem? archivedItem = sourceItem;
     if (archived) {
       if (archivedItem == null) {
@@ -667,7 +714,14 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (!mounted) return kChatActionStaleContext;
     return switch (result) {
       ChatsApiOk<void>() => () {
-        if (!archived) return _afterRequestAction(chatId, profileId, auth);
+        if (!archived) {
+          return _afterRequestAction(
+            chatId,
+            profileId,
+            auth,
+            expectedNavigationGeneration: navigationGeneration,
+          );
+        }
         if (!_matchesSession(profileId, auth)) {
           return kChatActionStaleContext;
         }
@@ -762,22 +816,22 @@ class ChatListController extends StateNotifier<ChatListState> {
   String? _afterRequestAction(
     String chatId,
     String? expectedProfileId,
-    String expectedAuthorization,
-  ) {
+    String expectedAuthorization, {
+    required int expectedNavigationGeneration,
+  }) {
     if (!_matchesSession(expectedProfileId, expectedAuthorization)) {
       return kChatActionStaleContext;
     }
-    state = state.copyWith(
-      items: state.items.where((item) => item.chatId != chatId).toList(),
-    );
     final isRequestsSelection =
         _ref.read(chatInboxProvider) == 'requests' &&
         isMessageRequestsFolderSelected(
           _ref.read(selectedChatFolderIdProvider),
         );
-    final navigationGeneration = _ref.read(
-      messageRequestsNavigationGenerationProvider,
-    );
+    if (isRequestsSelection) {
+      state = state.copyWith(
+        items: state.items.where((item) => item.chatId != chatId).toList(),
+      );
+    }
     final container = _ref.container;
     final Future<MessageRequestsSummary>? summaryFuture;
     if (isRequestsSelection) {
@@ -792,7 +846,7 @@ class ChatListController extends StateNotifier<ChatListState> {
         restorePreviousChatFolderAfterFinalRequest(
           container,
           summaryFuture: summaryFuture,
-          expectedGeneration: navigationGeneration,
+          expectedGeneration: expectedNavigationGeneration,
           expectedAuthorization: expectedAuthorization,
           expectedProfileId: expectedProfileId,
         ),

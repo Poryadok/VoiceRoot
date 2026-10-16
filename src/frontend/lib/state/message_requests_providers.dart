@@ -68,6 +68,10 @@ bool isMessageRequestsFolderSelected(String? folderId) =>
 
 void selectChatFolder(WidgetRef ref, String? folderId) {
   final wasInRequests = ref.read(chatInboxProvider) == 'requests';
+  if (wasInRequests || isMessageRequestsFolderSelected(folderId)) {
+    ref.read(shellNavigationProvider).closeSidePanel();
+    ref.read(selectedChatIdProvider.notifier).state = null;
+  }
   if (isMessageRequestsFolderSelected(folderId)) {
     if (!wasInRequests) {
       final selectedFolder = ref.read(selectedChatFolderIdProvider);
