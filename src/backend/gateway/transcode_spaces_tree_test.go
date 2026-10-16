@@ -22,6 +22,7 @@ type recordingSpaceTree struct {
 	lastCategory    *spacev1.CreateCategoryRequest
 	lastVoiceRoom   *spacev1.CreateVoiceRoomRequest
 	lastUpsert      *spacev1.UpsertTreeNodeRequest
+	upsertCalls     int
 	lastReorder     *spacev1.ReorderSpaceTreeRequest
 	lastRemove      *spacev1.RemoveTreeNodeRequest
 }
@@ -50,6 +51,7 @@ func (s *recordingSpaceTree) CreateVoiceRoom(_ context.Context, req *spacev1.Cre
 
 func (s *recordingSpaceTree) UpsertTreeNode(_ context.Context, req *spacev1.UpsertTreeNodeRequest) (*spacev1.UpsertTreeNodeResponse, error) {
 	s.lastUpsert = req
+	s.upsertCalls++
 	return &spacev1.UpsertTreeNodeResponse{
 		SpaceTreeNode: &spacev1.SpaceTreeNode{Id: "node-new", SpaceId: req.GetSpaceId(), Kind: req.GetKind()},
 	}, nil
@@ -67,7 +69,8 @@ func (s *recordingSpaceTree) RemoveTreeNode(_ context.Context, req *spacev1.Remo
 
 type recordingChatsForSpaceTree struct {
 	chatv1.UnimplementedChatServiceServer
-	lastCreate *chatv1.CreateChatRequest
+	lastCreate  *chatv1.CreateChatRequest
+	createCalls int
 }
 
 func (c *recordingChatsForSpaceTree) GetChat(_ context.Context, req *chatv1.GetChatRequest) (*chatv1.GetChatResponse, error) {
@@ -83,6 +86,7 @@ func (c *recordingChatsForSpaceTree) GetChat(_ context.Context, req *chatv1.GetC
 
 func (c *recordingChatsForSpaceTree) CreateChat(_ context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {
 	c.lastCreate = req
+	c.createCalls++
 	now := timestamppb.Now()
 	name := req.GetName()
 	return &chatv1.CreateChatResponse{
@@ -200,7 +204,9 @@ func TestTranscodeSpacesOrchestrateChat(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NotNil(t, chatRec.lastCreate)
+	require.Equal(t, 1, chatRec.createCalls, "composite POST must create one chat")
 	require.Equal(t, "space-1", chatRec.lastCreate.GetSpaceId())
+	require.Equal(t, 1, rec.upsertCalls, "composite POST must emit one tree mutation, hence one tree audit effect")
 	require.Equal(t, "text_chat", rec.lastUpsert.GetKind())
 	require.Equal(t, "chat-99", rec.lastUpsert.GetLinkedChat().GetId())
 	require.Contains(t, resp.Body.String(), `"display_name":"general"`)

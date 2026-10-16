@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -410,14 +411,15 @@ func (s *SpaceStore) DeleteVoiceRoom(ctx context.Context, voiceRoomID uuid.UUID)
 
 // UpsertTreeNodeInput holds fields for creating or updating a tree node.
 type UpsertTreeNodeInput struct {
-	SpaceID     uuid.UUID
-	NodeID      *uuid.UUID
-	CategoryID  *uuid.UUID
-	Kind        string
-	ChatID      *uuid.UUID
-	VoiceRoomID *uuid.UUID
-	SortOrder   *int32
-	IsSystem    *bool
+	SpaceID        uuid.UUID
+	ActorProfileID uuid.UUID
+	NodeID         *uuid.UUID
+	CategoryID     *uuid.UUID
+	Kind           string
+	ChatID         *uuid.UUID
+	VoiceRoomID    *uuid.UUID
+	SortOrder      *int32
+	IsSystem       *bool
 }
 
 // UpsertTreeNode creates or updates a tree node.
@@ -441,10 +443,88 @@ func (s *SpaceStore) UpsertTreeNode(ctx context.Context, in UpsertTreeNodeInput)
 		return nil, errors.New("voice_room_id is required for voice_room")
 	}
 
+	var (
+		before *TreeNodeRow
+		err    error
+	)
 	if in.NodeID != nil && *in.NodeID != uuid.Nil {
-		return s.updateTreeNode(ctx, in)
+		before, err = scanTreeNodeRow(s.db().QueryRow(ctx, `
+SELECT `+treeNodeSelectColumns+` FROM space_tree_nodes WHERE id=$1 AND space_id=$2
+`, *in.NodeID, in.SpaceID))
+		if err != nil {
+			return nil, err
+		}
 	}
-	return s.insertTreeNode(ctx, in)
+
+	var node *TreeNodeRow
+	if in.NodeID != nil && *in.NodeID != uuid.Nil {
+		node, err = s.updateTreeNode(ctx, in)
+	} else {
+		node, err = s.insertTreeNode(ctx, in)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if in.ActorProfileID != uuid.Nil && (before == nil || !sameTreeNodeState(before, node)) {
+		if err := recordTreeAudit(ctx, s.db(), node.SpaceID, in.ActorProfileID, "tree_node_upserted", "tree_node", node.ID, treeNodeAuditDetails(node)); err != nil {
+			return nil, err
+		}
+	}
+	return node, nil
+}
+
+func sameTreeNodeState(a, b *TreeNodeRow) bool {
+	return a.Kind == b.Kind && a.SortOrder == b.SortOrder && a.IsSystem == b.IsSystem &&
+		a.IsPinned == b.IsPinned && equalUUIDPtr(a.CategoryID, b.CategoryID) &&
+		equalUUIDPtr(a.ChatID, b.ChatID) && equalUUIDPtr(a.VoiceRoomID, b.VoiceRoomID) &&
+		equalInt32Ptr(a.PinOrder, b.PinOrder)
+}
+
+func equalUUIDPtr(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func equalInt32Ptr(a, b *int32) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func treeNodeAuditDetails(node *TreeNodeRow) map[string]any {
+	details := map[string]any{
+		"kind":       node.Kind,
+		"sort_order": node.SortOrder,
+		"is_pinned":  node.IsPinned,
+	}
+	if node.ChatID != nil {
+		details["chat_id"] = node.ChatID.String()
+	}
+	if node.VoiceRoomID != nil {
+		details["voice_room_id"] = node.VoiceRoomID.String()
+	}
+	if node.CategoryID != nil {
+		details["category_id"] = node.CategoryID.String()
+	}
+	if node.IsPinned && node.PinOrder != nil {
+		details["pin_order"] = *node.PinOrder
+	}
+	return details
+}
+
+func recordTreeAudit(ctx context.Context, db spaceStoreDB, spaceID, actorID uuid.UUID, action, targetType string, targetID uuid.UUID, details any) error {
+	encoded, err := json.Marshal(details)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `
+INSERT INTO audit_log(space_id,actor_profile_id,action,target_type,target_id,details)
+VALUES($1,$2,$3,$4,$5,$6::jsonb)
+`, spaceID, actorID, action, targetType, targetID, encoded)
+	return err
 }
 
 func (s *SpaceStore) insertTreeNode(ctx context.Context, in UpsertTreeNodeInput) (*TreeNodeRow, error) {
@@ -539,12 +619,20 @@ RETURNING `+treeNodeSelectColumns+`
 
 // RemoveTreeNode deletes a tree node by id.
 func (s *SpaceStore) RemoveTreeNode(ctx context.Context, spaceID, nodeID uuid.UUID) error {
+	return s.removeTreeNode(ctx, spaceID, nodeID, uuid.Nil)
+}
+
+func (s *SpaceStore) RemoveTreeNodeWithActor(ctx context.Context, spaceID, nodeID, actorID uuid.UUID) error {
+	return s.removeTreeNode(ctx, spaceID, nodeID, actorID)
+}
+
+func (s *SpaceStore) removeTreeNode(ctx context.Context, spaceID, nodeID, actorID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
 	if s.tx == nil {
 		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
-			return scoped.RemoveTreeNode(ctx, spaceID, nodeID)
+			return scoped.removeTreeNode(ctx, spaceID, nodeID, actorID)
 		})
 	}
 	tag, err := s.db().Exec(ctx, `
@@ -555,6 +643,11 @@ DELETE FROM space_tree_nodes WHERE id = $1 AND space_id = $2
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrTreeNodeNotFound
+	}
+	if actorID != uuid.Nil {
+		if err := recordTreeAudit(ctx, s.db(), spaceID, actorID, "tree_node_removed", "tree_node", nodeID, map[string]any{}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -756,12 +849,20 @@ RETURNING `+treeNodeSelectColumns+`
 
 // ReorderSpaceTree assigns pin_order or sort_order 0..n-1 within one pin group.
 func (s *SpaceStore) ReorderSpaceTree(ctx context.Context, spaceID uuid.UUID, orderedNodeIDs []uuid.UUID) error {
+	return s.reorderSpaceTree(ctx, spaceID, orderedNodeIDs, uuid.Nil)
+}
+
+func (s *SpaceStore) ReorderSpaceTreeWithActor(ctx context.Context, spaceID uuid.UUID, orderedNodeIDs []uuid.UUID, actorID uuid.UUID) error {
+	return s.reorderSpaceTree(ctx, spaceID, orderedNodeIDs, actorID)
+}
+
+func (s *SpaceStore) reorderSpaceTree(ctx context.Context, spaceID uuid.UUID, orderedNodeIDs []uuid.UUID, actorID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
 	if s.tx == nil {
 		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
-			return scoped.ReorderSpaceTree(ctx, spaceID, orderedNodeIDs)
+			return scoped.reorderSpaceTree(ctx, spaceID, orderedNodeIDs, actorID)
 		})
 	}
 	if len(orderedNodeIDs) == 0 {
@@ -777,10 +878,12 @@ func (s *SpaceStore) ReorderSpaceTree(ctx context.Context, spaceID uuid.UUID, or
 	type nodeMeta struct {
 		isPinned   bool
 		categoryID *uuid.UUID
+		sortOrder  int32
+		pinOrder   *int32
 	}
 	metaByID := make(map[uuid.UUID]nodeMeta, len(orderedNodeIDs))
 	rows, err := tx.Query(ctx, `
-SELECT id, category_id, is_pinned
+SELECT id, category_id, is_pinned, sort_order, pin_order
 FROM space_tree_nodes
 WHERE space_id = $1 AND id = ANY($2)
 `, spaceID, orderedNodeIDs)
@@ -791,7 +894,9 @@ WHERE space_id = $1 AND id = ANY($2)
 		var id uuid.UUID
 		var categoryID pgtype.UUID
 		var isPinned bool
-		if err := rows.Scan(&id, &categoryID, &isPinned); err != nil {
+		var sortOrder int32
+		var pinOrder pgtype.Int4
+		if err := rows.Scan(&id, &categoryID, &isPinned, &sortOrder, &pinOrder); err != nil {
 			rows.Close()
 			return err
 		}
@@ -800,7 +905,12 @@ WHERE space_id = $1 AND id = ANY($2)
 			cid := uuid.UUID(categoryID.Bytes)
 			cat = &cid
 		}
-		metaByID[id] = nodeMeta{isPinned: isPinned, categoryID: cat}
+		var pin *int32
+		if pinOrder.Valid {
+			value := pinOrder.Int32
+			pin = &value
+		}
+		metaByID[id] = nodeMeta{isPinned: isPinned, categoryID: cat, sortOrder: sortOrder, pinOrder: pin}
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -811,6 +921,15 @@ WHERE space_id = $1 AND id = ANY($2)
 	}
 
 	first := metaByID[orderedNodeIDs[0]]
+	changed := false
+	for i, id := range orderedNodeIDs {
+		meta := metaByID[id]
+		if first.isPinned {
+			changed = changed || meta.pinOrder == nil || *meta.pinOrder != int32(i)
+		} else {
+			changed = changed || meta.sortOrder != int32(i)
+		}
+	}
 	for _, id := range orderedNodeIDs[1:] {
 		cur := metaByID[id]
 		if cur.isPinned != first.isPinned {
@@ -844,6 +963,12 @@ WHERE id = $2 AND space_id = $3
 		}
 		if tag.RowsAffected() == 0 {
 			return ErrInvalidReorder
+		}
+	}
+	if changed && actorID != uuid.Nil {
+		if err := recordTreeAudit(ctx, tx, spaceID, actorID, "tree_reordered", "space", spaceID,
+			map[string]any{"count": len(orderedNodeIDs)}); err != nil {
+			return err
 		}
 	}
 	return tx.Commit(ctx)
