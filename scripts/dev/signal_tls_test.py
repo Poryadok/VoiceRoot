@@ -82,5 +82,50 @@ class SignalTLSTests(unittest.TestCase):
         client=Client();tls.publish(client,tls.secret(b'cert',b'key'))
         self.assertEqual(client.calls,[])
 
+    def test_exact_five_hosts_route_https_and_all_challenges_to_web(self):
+        expected={'livekit-dev.comrade.click':('voice-livekit',7880),
+                  'dev.comrade.click':('voice-web',80),'api-dev.comrade.click':('voice-gateway',8080),
+                  'admin-dev.comrade.click':('voice-admin',80),
+                  'developers-dev.comrade.click':('voice-developer-portal',80)}
+        names=set()
+        for host,(service,port) in expected.items():
+            self.assertEqual(tls.challenge({'CERTBOT_DOMAIN':host,'CERTBOT_TOKEN':'safe'}),'safe')
+            for secure in (False,True):
+                obj=tls.ingress(secure,host=host)
+                names.add(obj['metadata']['name'])
+                self.assertEqual(obj['metadata']['namespace'],'voice-dev')
+                self.assertEqual(obj['spec']['rules'][0]['host'],host)
+                backend=obj['spec']['rules'][0]['http']['paths'][0]['backend']['service']
+                self.assertEqual(backend,{'name':service if secure else 'voice-web','port':{'number':port if secure else 80}})
+                if secure:self.assertEqual(obj['spec']['tls'],[{'hosts':[host],'secretName':tls.SECRET}])
+        self.assertEqual(len(names),10)
+        self.assertEqual(tls.ingress(True)['metadata']['name'],'voice-dev-signaling-https')
+        for host in ('livekit.comrade.click','voice.comrade.click','app.comrade.click','other.example.org','*.comrade.click'):
+            with self.assertRaises(ValueError):tls.ingress(True,host)
+            with self.assertRaises(ValueError):tls.challenge({'CERTBOT_DOMAIN':host,'CERTBOT_TOKEN':'safe'})
+
+    def test_expand_requires_owned_existing_secret_and_requests_exact_sans(self):
+        with self.assertRaises(ValueError):tls.validate_action('expand',None,False)
+        with self.assertRaises(ValueError):tls.validate_action('expand',{'metadata':{'namespace':tls.NS}},False)
+        tls.validate_action('expand',tls.secret(b'cert',b'key'),False)
+        for action in ('issue','expand'):
+            args=tls.certbot_arguments(action,agree_tos=True)
+            self.assertEqual(args[0],'certonly')
+            domains=[args[i+1] for i,value in enumerate(args[:-1]) if value=='-d']
+            self.assertEqual(set(domains),set(tls.ROUTES))
+            self.assertEqual(len(domains),5)
+            self.assertEqual(args[args.index('--cert-name')+1],tls.HOST)
+            self.assertEqual('--expand' in args,action=='expand')
+        renewal=tls.certbot_arguments('renew')
+        self.assertEqual(renewal[0],'renew')
+        self.assertNotIn('-d',renewal)
+        self.assertEqual(renewal[renewal.index('--cert-name')+1],tls.HOST)
+
+    def test_certificate_checks_cover_all_five_hosts_before_publication(self):
+        with patch.object(tls,'run',return_value=b'public-key') as command:
+            tls.validate_certificate(Path('/private/fullchain.pem'),Path('/private/key.pem'))
+        hosts=[args.args[0][args.args[0].index('-checkhost')+1] for args in command.call_args_list if '-checkhost' in args.args[0]]
+        self.assertEqual(set(hosts),set(tls.ROUTES))
+
 
 if __name__=='__main__': unittest.main()
