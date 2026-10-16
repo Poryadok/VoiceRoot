@@ -584,6 +584,31 @@ checks the exact tuple against its own rows.
 This producer and lookup contract does not implement T31 session orchestration,
 roster synchronization, or Chat/Voice provisioning.
 
+### Notification chat scope and consent
+
+Notification and Realtime resolve a chat whose event has no persisted GIS scope
+through `GET /internal/v1/notification-consents/chat/{profile_id}/{chat_id}/{category}/{channel}`.
+This route stays on the GIS service listener and is not Gateway-published. It
+accepts only the canonical notification categories `game_activity`,
+`game_social`, and `game_actions`, with channel `push` or `in_app`. The caller
+uses WorkloadProof v1 with the dedicated `notification` or `realtime` 32-byte
+key, a fresh Redis nonce, and the matching `X-Voice-Workload` identity; GIS
+signs the exact response bytes with that same key. The response is
+`{"game_scoped":bool,"allowed":bool}` and is never cached.
+
+GIS resolves scope only from an active, unexpired
+`game_resource_binding_chats` lease joined to an active player binding, active
+application/environment, and active Chat mapping. Consent is read from that
+same mapped binding for the requested category and channel. A live mapped chat
+is game-scoped even when its recipient is not bound or has not opted in; those
+cases return `allowed:false`. Multiple application/environment scopes are
+game-scoped and denied as ambiguous. Missing, expired, revoked, retired, or
+unmapped relations return `game_scoped:false`, preserving ordinary Voice
+notification delivery. Invalid workload proof, replay, or unavailable GIS
+authority fails closed; Notification retries the event on resolver errors.
+Mapped game pushes continue to use generic copy and the normal Voice DND/block
+checks.
+
 ## T31: durable session orchestration
 
 At base `c31a8e0b771f99d00f00a760a2c6e2f7ec67cbcd`, this was a target contract.

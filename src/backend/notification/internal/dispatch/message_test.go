@@ -157,6 +157,11 @@ func TestMessagePusherResolvesChatScopeBeforeOrdinaryChatPush(t *testing.T) {
 	in := delivery.DeliveryInput{ChatID: chatID.String(), Type: delivery.TypeNewMessage, GameCategory: "game_activity"}
 	decisions := map[string]delivery.DeliveryDecision{profileID.String(): {Push: true}}
 
+	missingResolverSender := &recordingFCM{}
+	missingResolver := &dispatch.MessagePusher{Tokens: tokens, Pusher: &dispatch.PushDispatcher{FCM: missingResolverSender}}
+	require.ErrorIs(t, missingResolver.SendPush(context.Background(), decisions, in, push.Payload{Body: "private preview"}, "private preview"), dispatch.ErrGamePushChatScopeUnavailable)
+	require.Empty(t, missingResolverSender.sent, "chat pushes with game categories fail closed when GIS is not configured")
+
 	deniedSender := &recordingFCM{}
 	deniedScope := &gamePushChatScopeStub{scoped: true, allowed: false}
 	denied := &dispatch.MessagePusher{Tokens: tokens, Pusher: &dispatch.PushDispatcher{FCM: deniedSender}, GameChatScope: deniedScope}

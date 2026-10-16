@@ -1,0 +1,16 @@
+# Private disposable Compose E2E override only. Never use for prod/staging.
+services:
+  notification:
+    build:
+      context: ${VOICE_REPO_ROOT:?}/src/backend
+      dockerfile: notification/Dockerfile
+      args:
+        NOTIFICATION_COMPOSE_FCM_DIAGNOSTIC: "true"
+    user: "${VOICE_FCM_DIAG_UID:?}:${VOICE_FCM_DIAG_GID:?}"
+    environment:
+      VOICE_FCM_DIAGNOSTIC_FILE: /run/voice-fcm/correlation.json
+    volumes:
+      - type: bind
+        source: ${VOICE_FCM_DIAGNOSTIC_DIR:?}
+        target: /run/voice-fcm
+        read_only: true

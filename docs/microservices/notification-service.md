@@ -53,14 +53,31 @@ service NotificationService {
 ## Debug push capture (Compose/dev only)
 
 `GET /debug/recorded-pushes?profile_id=<uuid>` is registered only when
-`NOTIFICATION_RECORD_PUSHES=true` (case-insensitive, surrounding whitespace is
-ignored). With recording disabled, the route returns 404. When enabled, it
+both `NOTIFICATION_RECORD_PUSHES=true` and the separate strict
+`NOTIFICATION_DEBUG_HTTP_ENABLED=true` opt-in are configured. The debug flag
+defaults to false; without it, recording is not installed and the route returns
+404. When enabled, it
 returns the latest recorded FCM attempt for that profile, including the device
 token and push payload. The endpoint is unauthenticated and is intended only
 for isolated Compose/development test environments; do not enable it in
-production. The checked-in production ConfigMap currently sets the recording
-flag to `true`, so this source-level opt-in gate alone does not close the
-production exposure tracked by [backend TODO](../todo/backend.md).
+production. The checked-in production and staging ConfigMaps retain the legacy
+recording/routing flag but omit the debug HTTP opt-in, so they do not enable
+payload recording or this endpoint. Deployment acceptance remains separate from
+the source/configuration boundary tracked by [backend TODO](../todo/backend.md).
+
+The private Compose failure collector drains unrelated application stdout before
+applying its diagnostic byte/line limits. Only marker-bearing candidates reach
+the existing strict parser; malformed or prefixed candidates still invalidate
+the result. Producer failure, timeout, duplicate records, and excessive diagnostic
+output remain unknown evidence, never a successful delivery result. A collector
+failure does not establish why the push failed; retain the original FCM assertion.
+The observer attributes only the selected message (or its chat/sender tuple
+before the response supplies the message ID). Unrelated well-formed traffic
+does not consume that candidate budget or invalidate its result. Same-target
+identity/tuple conflicts and multiple event identities still produce unknown
+evidence. Only a fresh invalid-to-valid control window clears earlier admission
+failures; normal resampling cannot erase them. Callback phase flags describe
+global consumer progress, not successful delivery of the selected message.
 
 ## Модель данных
 
@@ -260,6 +277,23 @@ Composer label — [text-chat.md](../features/text-chat.md) § Send options; [sc
 Durable read cursor — **Messaging** `MarkRead` REST/gRPC only. WS `mark_read` / `message_read` — Realtime fan-out for same-profile tabs; **does not** replace REST persist. List unread / badges on other devices refresh after REST + `ListChats` metadata — [messaging-service.md](messaging-service.md) § MarkRead, [realtime-service.md](realtime-service.md) § Reconnect checklist, [notifications.md](../features/notifications.md) § Каналы доставки, [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § WS vs REST.
 
 ## Публикуемые события (→ NATS)
+
+### Debug push recorder (disposable Compose E2E only)
+
+The unauthenticated `GET /debug/recorded-pushes?profile_id=...` route is absent
+by default. It is available only when both `NOTIFICATION_RECORD_PUSHES=true`
+and `NOTIFICATION_DEBUG_HTTP_ENABLED=true` are explicitly configured. The
+debug flag accepts only `true` or `false` (case-insensitive, surrounding
+whitespace ignored); a present empty or malformed value fails startup, and
+enabling the debug route without push recording also fails startup. The
+recording flag continues to select offline presence routing independently;
+only the two-flag opt-in captures push data or registers the debug route.
+
+The disposable Compose Notification fixture opts in to both flags for its
+existing FCM delivery E2E consumer. Production and staging configuration keep
+their existing recording/routing setting but omit the debug HTTP flag, so the
+unauthenticated route and capture wrapper remain disabled there. This is a
+configuration/source boundary, not evidence of deployed runtime acceptance.
 
 Отдельного доменного stream **`notification.events`** нет: события ниже — **телеметрия доставки**; публикация в **`analytics.notification.*`** (см. [MICROSERVICES.md](../MICROSERVICES.md) — раздел «Аналитика»).
 
