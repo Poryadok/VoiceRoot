@@ -136,6 +136,15 @@ Dev: [dev.comrade.click](https://dev.comrade.click),
 [developer portal](https://developers-dev.comrade.click).
 Порядок обновления и ограничения — [dev runbook](../scripts/dev/README.md).
 
+Dev имеет отдельный Let's Encrypt TLS Secret
+`voice-dev/voice-dev-signaling-tls` для пяти адресов: `dev`, `api-dev`, `admin-dev`,
+`developers-dev`, `livekit-dev` в зоне `comrade.click`, HTTPS Ingress
+и HTTP-01 маршруты. Сертификат проверен прямым подключением к origin с обычной
+проверкой TLS; продление выполняет root systemd timer
+`voice-dev-signaling-tls-renew.timer`. Данные ACME находятся в
+`/home/voice-dev/tls/` (root0700). Для прямого публичного доступа требуются пять
+явных A-записей на95.31.10.177 в режиме **DNS only**; wildcard/staging DNS не меняются.
+
 - Kubernetes namespace: **`voice-staging`** (как в репозитории).
 - Образ **gateway** из GHCR и теги — [DEPLOYMENT.md](DEPLOYMENT.md).
 - Публичные **FQDN** на этом стенде — [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (`voice`, `developers`, `app`, `admin`, `livekit` на `comrade.click`). В GitHub: Variables **`VOICE_*_INGRESS_HOST`**. DNS: в Cloudflare для зоны **comrade.click** — записи **A** на внешний IP ноды; **`livekit`** — предпочтительно **DNS only** (grey cloud) для WebRTC UDP.

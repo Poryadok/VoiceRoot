@@ -140,3 +140,73 @@ Known limitations remain: public Go HTTP2 response stalls (HTTP1 dev workaround)
 failed bidirectional RTP test, test-only email, local frontend image custody, no
 full host reboot/off-host backup test. Shared-host storage move and TTenrec
 container-restart persistence are verified independently of application audio.
+
+## Continued acceptance audit
+
+2026-10-16: prior turn classified progress: live environment, storage migration,
+actual updater rollouts and PR exist. Completion still unproven while audio
+acceptance fails. Revalidated30 healthy controllers and /home backing mounts.
+Browser loaded login, signed in with a disposable dev fixture account, opened
+its DM and visibly sent/read a message. PCM diagnostics showed both sources
+processing ~48kHz; one subscription received RTP, but server closed both peers
+with NEGOTIATE_FAILED. DM identity filtering matches issued JWT profile IDs.
+
+LiveKit was inherited from staging1.8.4 (2025-03-02), while Compose test infra
+uses latest. Testing dev-only official stable1.13.10 (2026-10-14), digest
+sha256:89ca9ce0791e18d6e03bf6e2c49ceb27e1c754eae8bd50c989386c1a5963791a;
+old image retained for exact rollback. No staging image/configuration changes.
+
+Acceptance result: original unchanged RTP assertions pass with signaling routed
+directly to dev NodePort30272 on BOTH LiveKit1.13.10(7.176s) and1.8.4(5.942s).
+Restored original1.8.4 digest. PublicCF endpoint still fails negotiation; alternate
+api-dev/livekit CF route also failed and its two temporary dev objects removed.
+This rules out a required server upgrade and proves bidirectional media path.
+
+Proceed with ownhostname livekit-dev HTTPS origin, not shared staging SNI: adding
+a cert to livekit.comrade.click would affect staging TLS selection too. Cloudflare
+DNS access is missing (browserloginrequired, no configured envvar); user asked
+where API/CLI access is configured or to toggle onlylivekit-dev record DNS-only.
+Preparing all certificate/routes before waiting on that one external DNS action.
+Certbot pinnedf70ad0adbb7e117f0fe42a63c553f28ea451edabc0148757b6efcd9735acaa20,
+client/k3s probe passed. Raw operator diagnostics are private and may contain
+Secret data after a malformed kubectl metadata query; no such data in source/PR.
+
+## Current completion audit
+
+- [x] Independent dev namespace/routes, all27Deployments+3StatefulSets healthy.
+- [x] Fresh stores/PVs/keys and observed dev-to-staging Postgres denial.
+- [x] All container storage on/home, persistent bind dependencies, TTenrec forced
+  restart preserves full SQLite content; existing staging workloads retained.
+- [x] Digest-only app updater tested with real frontend rollouts and lock release.
+- [x] Browser login, DM send/read visibly verified; screenshot in ignored
+  tmp/dev-environment/browser-smoke.jpg.
+- [x] Original bidirectional audio test passes direct signaling on existing1.8.4.
+- [x] Independent trusted dev TLS origin issued; curl resolve HTTP200/TLSverify0;
+  unchanged RTP test with actual WSS hostname+test-only DNS override passes6.372s.
+- [x] Daily root renewal timer installed+enabled; root systemd-analyze verify and
+  actual renewal/no-op service passed Resultsuccess/Exit0. Certificate expires
+  2027-01-14; state root0700/home/voice-dev/tls, protected operator copy on/home.
+- [x]37dev+4storage focused Python tests pass, independent TLS review no blockers.
+- [ ] Five explicit dev A95.31.10.177 DNS-only records; no provider access in
+  current browser/env, user question pending. Never modify wildcard/staging DNS.
+- [ ] Original public RTP test without test DNS override after resolver change.
+- [ ] Final PR CI completion; preserve original goal until these gates verified.
+
+Only new dev TLS SNI is published; shared staging hostname design was rejected.
+Temporary CF path experiment removed, LiveKit upgrade reverted. Existing TLS
+readiness does not prove public DNS has switched. Goal remains active.
+
+Five-host expansion succeeded: independent dev certificate covers dev, api-dev,
+admin-dev, developers-dev and livekit-dev.comrade.click; expires2027-01-14.
+All ten fixed dev HTTP01/HTTPS routes use owned resources. The existing timer
+uses the expanded lineage. Independent review approved failure preservation,
+ownership/CAS and renewal compatibility. Public API still stalls through the
+Cloudflare route even with HTTP1; DNS-only is needed for all five dev names.
+User question updated with the exact five A records; wildcard/staging untouched.
+
+Five-host origin acceptance: all five certificates validate (curl TLSverify0),
+web/admin/portal/LiveKit HTTP200; API root404 expected, health tested separately.
+Original full authenticated bidirectional RTP scenario with actual HTTPS API
+and WSS names, test-local DNS overrides only, passed7.477s. No assertion or TLS
+verification weakened. Normal public DNS acceptance still pending provider change.
+Current /var82GiB free, /home195GiB free after disposable media tool caches.

@@ -8,6 +8,7 @@ build for testing. Same physical host remains a common failure domain.
 - Web `https://dev.comrade.click`, API `https://api-dev.comrade.click`, admin
   `https://admin-dev.comrade.click`, portal `https://developers-dev.comrade.click`,
   LiveKit signaling `wss://livekit-dev.comrade.click`.
+  All five hosts require explicit DNS-only A records and the origin TLS setup below.
 - Dedicated PostgreSQL, Redis, MinIO, ClickHouse, NATS and LiveKit. Static local
   PVs use `/home/voice-dev/data/{postgres,minio,clickhouse,nats}` and `Retain`.
   These local directories have no filesystem quota; PVC sizes are scheduling
@@ -98,6 +99,62 @@ GODEBUG=http2client=0 (68.560s), and direct Gateway passed (41.881s). Dev Voice
 uses the same HTTP/1.1 workaround for HTTPS Gateway JWKS; TLS validation remains
 enabled. Remove the workaround only after a public HTTP/2 regression proof.
 
-Voice smoke: real calls/tokens, LiveKit signaling, ICE/DTLS and publishing both
-microphone tracks succeeded after the LAN media exception. The bidirectional
-RTP test still timed out waiting for remote audio. Audio is not signed off.
+Voice smoke: the unchanged bidirectional RTP test passes through direct signaling
+on the original LiveKit1.8.4. It also passes through the real WSS hostname and
+trusted origin certificate with a test-local DNS override to95.31.10.177 (6.372s).
+Cloudflare-proxied signaling still fails negotiation; a server upgrade and an
+alternate proxied path did not fix it. Public voice acceptance remains pending
+the DNS-only record and a successful run without the test DNS override.
+
+## Public dev TLS
+
+Create or update the five explicit Cloudflare A records `dev.comrade.click`,
+`api-dev.comrade.click`, `admin-dev.comrade.click`, `developers-dev.comrade.click`
+and `livekit-dev.comrade.click` to `95.31.10.177`, proxy **DNS only** (grey cloud).
+Keep the wildcard and staging
+records unchanged. Browser WSS then reaches the existing HTTPS Traefik NodePort
+forward. LiveKit media remains on TCP31081 / UDP31082.
+
+The origin has an independently issued Let's Encrypt certificate, in the owned
+`voice-dev-signaling-tls` Secret and `voice-dev-signaling-https` Ingress.
+Only the five fixed dev hostnames are covered; staging SNI, manifests and keys
+are unaffected. Additional HTTP/HTTPS routes use voice-dev-edge-{web,api,admin,developers}
+with -http01/-https suffixes; all HTTP-01 challenges go to voice-web.
+HTTP-01 uses `voice-dev-signaling-http01` and the dev web container's public
+`/.well-known/acme-challenge/` files. Hooks validate domain, filename, exact
+authorization and dev ownership before writing or removing a token file.
+
+Root operator source: `signal_tls.py`. Issuance accepts ACME terms explicitly:
+
+```sh
+python3 scripts/dev/signal_tls.py issue --agree-tos --email operator@example.org
+python3 scripts/dev/signal_tls.py renew
+```
+
+For the original single-host installation only, `signal_tls.py expand` extends
+the owned certificate lineage to the five fixed hosts. Renewal alone does not
+change SANs. This expansion has already succeeded on pmdebook.
+
+The first installation was issued without an email contact; the certificate
+expires2027-01-14. Private ACME account, lineage and captured logs are under
+root0700 `/home/voice-dev/tls`; do not publish these logs. Certbot is pinned by
+digest; certificate hostname, expiry, key match and system trust are checked
+before publishing. Existing resources require dev ownership; replacements use
+UID/resourceVersion concurrency checks. Unchanged certificate data is a no-op.
+
+Installed root-owned operator copy: `/home/voice-dev/operator/signal_tls.py`.
+The units in `systemd/` are installed on pmdebook; the daily
+`voice-dev-signaling-tls-renew.timer` is enabled, and its service has passed a
+real renewal/no-op run. Runtime/mount dependencies keep it on the intended
+storage. After changing the operator source, review and reinstall the root copy.
+
+```sh
+systemctl status voice-dev-signaling-tls-renew.timer
+systemctl show voice-dev-signaling-tls-renew.service -p Result -p ExecMainStatus
+curl --resolve livekit-dev.comrade.click:443:95.31.10.177 https://livekit-dev.comrade.click/
+```
+
+The last command verifies the origin with normal certificate validation while
+DNS is still proxied. Final acceptance uses the unchanged audio test with normal
+DNS, without `--add-host`/`--resolve`. Issuance and renewal follow the
+[Certbot HTTP-01 hook contract](https://eff-certbot.readthedocs.io/en/stable/using.html#manual).
