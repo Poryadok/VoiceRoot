@@ -144,11 +144,7 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
   bool _isBindingCurrent(_MatchBinding binding) {
     if (_disposed || binding.authGeneration != _authGeneration) return false;
     final current = ref.read(authControllerProvider).session;
-    return current != null &&
-        current.accessToken == binding.session.accessToken &&
-        current.refreshToken == binding.session.refreshToken &&
-        current.accountId == binding.session.accountId &&
-        current.activeProfileId == binding.session.activeProfileId;
+    return _sameAuthPrincipal(binding.session, current);
   }
 
   Future<MatchData?> _loadAndShow(
@@ -376,8 +372,10 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
         state.match?.status != 'pending_accept') {
       return null;
     }
+    final latestSession = ref.read(authControllerProvider).session;
+    if (latestSession == null || !_isBindingCurrent(binding)) return null;
     final result = await client.respondToMatch(
-      authorization: binding.session.authorizationHeader,
+      authorization: latestSession.authorizationHeader,
       matchId: matchId,
       accept: accept,
     );

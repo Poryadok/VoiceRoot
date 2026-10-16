@@ -104,7 +104,7 @@ func (s *MatchStore) ListPendingDeadlineMatchIDs(ctx context.Context, limit int)
 		SELECT id FROM matches
 		WHERE status = $1 AND created_at + ($2 * interval '1 millisecond') <= clock_timestamp()
 		  AND EXISTS (SELECT 1 FROM match_proposals p WHERE p.match_id = matches.id)
-		  AND NOT EXISTS (
+		  AND EXISTS (
 			SELECT 1 FROM match_proposals p
 			WHERE p.match_id = matches.id AND p.response <> $4
 		  )

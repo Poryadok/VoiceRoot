@@ -551,6 +551,61 @@ void main() {
     },
   );
 
+  test('Accept survives a 401 refresh during its preflight GET', () async {
+    var matchGets = 0;
+    var respondCalls = 0;
+    String? respondAuthorization;
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v1/auth/refresh') {
+        return http.Response(
+          jsonEncode({
+            'session': {
+              'access_token': 'refreshed-access',
+              'refresh_token': 'refreshed-refresh',
+              'account_id': 'acc-test',
+              'profile_id': 'prof-test',
+              'expires_in_seconds': 900,
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/matchmaking/matches/match-1') {
+        matchGets++;
+        if (matchGets == 2) return http.Response('{}', 401);
+        return _matchResponse(id: 'match-1', deadline: true);
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/api/v1/matchmaking/matches/match-1/respond') {
+        respondCalls++;
+        respondAuthorization = request.headers['authorization'];
+        return _acceptedMatchResponse();
+      }
+      return http.Response('{}', 404);
+    });
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: client),
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(
+      matchmakingMatchControllerProvider.notifier,
+    );
+    controller.onPushNotificationData({
+      'type': 'match_found',
+      'match_id': 'match-1',
+    });
+    await _waitForMatch(container, 'match-1');
+
+    final response = await controller.respond(true);
+
+    expect(matchGets, 3, reason: 'the 401 request must retry after refresh');
+    expect(respondCalls, 1);
+    expect(respondAuthorization, 'Bearer refreshed-access');
+    expect(response?.match.status, 'active');
+    expect(container.read(activeSquadMatchProvider)?.id, 'match-1');
+  });
+
   test(
     'late accepted response is ignored after the auth session changes',
     () async {
