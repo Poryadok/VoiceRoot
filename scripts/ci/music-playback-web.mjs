@@ -20,7 +20,7 @@ const server = createServer(async (req, res) => {
 });
 server.listen(0, '127.0.0.1');
 await once(server, 'listening');
-let chrome, socket;
+let chrome, socket, chromeClosed;
 const pending = new Map();
 let sequence = 0;
 let setupStage = 'chrome_launch';
@@ -33,6 +33,7 @@ try {
     '--remote-debugging-address=127.0.0.1', '--no-first-run',
     '--user-data-dir=' + profile, 'about:blank',
   ], { stdio: 'ignore' });
+  chromeClosed = new Promise(resolveClose => chrome.once('close', () => resolveClose(true)));
   let spawnError;
   chrome.on('error', error => {
     spawnError = ['ENOENT', 'EACCES', 'ENOEXEC'].includes(error.code) ? error.code : 'other';
@@ -101,20 +102,44 @@ try {
   }
 } finally {
   for (const waiter of pending.values()) clearTimeout(waiter.timer);
+  const cleanupFailures = [];
+  const waitForChromeClose = async timeoutMs => {
+    if (!chromeClosed) return true;
+    let timer;
+    const didClose = await Promise.race([
+      chromeClosed,
+      new Promise(resolveClose => { timer = setTimeout(() => resolveClose(false), timeoutMs); }),
+    ]);
+    clearTimeout(timer);
+    return didClose;
+  };
+  if (chrome?.pid) {
+    if (chrome.exitCode === null && socket?.readyState === WebSocket.OPEN) {
+      try { socket.send(JSON.stringify({ id: ++sequence, method: 'Browser.close' })); } catch {}
+    }
+    let closed = await waitForChromeClose(5000);
+    if (!closed && chrome.exitCode === null) {
+      chrome.kill('SIGTERM');
+      closed = await waitForChromeClose(2000);
+    }
+    if (!closed && chrome.exitCode === null) {
+      chrome.kill('SIGKILL');
+      closed = await waitForChromeClose(5000);
+    }
+    if (!closed) cleanupFailures.push('chrome_shutdown_timeout');
+  }
   socket?.close();
-  if (chrome?.pid && chrome.exitCode === null) { chrome.kill('SIGKILL'); await once(chrome, 'exit').catch(() => {}); }
   server.closeAllConnections();
   await new Promise(r => server.close(r));
-  let profileCleanupFailed = false;
   try {
     await rm(profile, { recursive: true, force: true });
   } catch {
-    // Chrome may leave a profile file behind briefly after its process exits.
-    // Preserve the playback receipt so CI can report the decoder result.
-    profileCleanupFailed = true;
+    cleanupFailures.push('profile_remove_failed');
+  }
+  if (cleanupFailures.length) {
+    receipt.cleanup = cleanupFailures;
     process.exitCode = 1;
   }
-  if (profileCleanupFailed) receipt.cleanup = 'profile_remove_failed';
   await writeFile(join(root, 'music-playback-result.json'), JSON.stringify(receipt) + '\n');
   console.log(JSON.stringify(receipt));
 }
