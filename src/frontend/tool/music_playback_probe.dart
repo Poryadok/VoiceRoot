@@ -11,7 +11,13 @@ import 'package:voice_frontend/ui/chat/music_playback.dart';
 import '../test/support/e2e_attachment_test_fixture.dart';
 
 void require(bool condition, String reason) {
-  if (!condition) throw StateError(reason);
+  if (!condition) throw _ProbeFailure(reason);
+}
+
+class _ProbeFailure implements Exception {
+  const _ProbeFailure(this.code);
+
+  final String code;
 }
 
 Future<void> main() async {
@@ -123,14 +129,21 @@ Future<void> main() async {
       'data-music-result',
       jsonEncode({'result': 'pass', 'cases': results}),
     );
-  } catch (_) {
-    // Never serialize decrypted metadata, keys, arbitrary exceptions or URLs.
+  } catch (error) {
+    // Keep diagnostics to probe-owned codes and exception categories. Never
+    // serialize decrypted metadata, keys, arbitrary exceptions or URLs.
     web.document.documentElement!.setAttribute(
       'data-music-result',
       jsonEncode({
         'result': 'fail',
         'stage': stage,
         'completed': results.length,
+        'reason': switch (error) {
+          _ProbeFailure(:final code) => code,
+          TimeoutException() => 'timeout',
+          FormatException() => 'format_exception',
+          _ => 'unexpected_exception',
+        },
       }),
     );
   }
