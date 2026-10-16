@@ -69,6 +69,41 @@ void main() {
   });
 
   group('VoiceUsersClient.getProfile', () {
+    for (final banner in [null, '', 'https://cdn.example/banners/bob.png']) {
+      test('preserves the public optional banner_url ($banner)', () async {
+        final mock = MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/api/v1/users/profiles/p-99');
+          expect(request.headers['authorization'], auth);
+          return http.Response(
+            jsonEncode({
+              'profile': {
+                'id': 'p-99',
+                'account_id': 'a-9',
+                'username': 'bob',
+                'discriminator': '0042',
+                'display_name': 'Bob',
+                if (banner != null) 'banner_url': banner,
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceUsersClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        final result = await client.getProfile(
+          authorization: auth,
+          profileId: 'p-99',
+        );
+        expect(result, isA<UsersApiOk<VoiceProfile>>());
+        expect(
+          (result as UsersApiOk<VoiceProfile>).data.bannerUrl,
+          banner == '' ? isNull : banner,
+        );
+      });
+    }
+
     test('GET /api/v1/users/profiles/{id}', () async {
       final mock = MockClient((req) async {
         expect(req.url.path, '/api/v1/users/profiles/p-99');

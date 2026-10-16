@@ -9,12 +9,7 @@ import '../backend/gateway_api_error.dart';
 import '../services/desktop_updater_service.dart';
 import 'gateway_providers.dart';
 
-enum VersionPolicyPhase {
-  ok,
-  softUpdate,
-  forceUpdate,
-  desktopReadyToRestart,
-}
+enum VersionPolicyPhase { ok, softUpdate, forceUpdate, desktopReadyToRestart }
 
 class VersionPolicyState {
   const VersionPolicyState({
@@ -113,7 +108,6 @@ class VersionPolicyController extends StateNotifier<VersionPolicyState> {
     state = VersionPolicyState(
       phase: VersionPolicyPhase.forceUpdate,
       updateUrl: _updateUrlFromError(error),
-      releaseNotes: error.message,
     );
   }
 

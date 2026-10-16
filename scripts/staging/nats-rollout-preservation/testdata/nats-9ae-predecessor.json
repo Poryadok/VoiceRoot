@@ -1,0 +1,34 @@
+{
+  "schema": "voice-nats-reviewed-predecessor-v1",
+  "source_commit": "9ae2e0c259e5e039109f7331aaf62b3607e549dd",
+  "sources": {
+    "deploy/templates/nats-realtime-bootstrap.yaml": "59099dea8f129c1300b31c7441fc9cc393875108",
+    "deploy/templates/nats-analytics-chat-bootstrap.yaml": "a88ed972161f7445ad26886cf194d1a3b4f78125"
+  },
+  "chat_subjects": [
+    "chat.created", "chat.member_changed", "chat.dm_peer_deleted",
+    "space.tree_changed", "space.created", "voice.room_created",
+    "voice.room_deleted", "space.invite_created", "space.member_joined",
+    "space.member_left", "space.updated", "space.deleted",
+    "space.deletion_scheduled", "space.restored"
+  ],
+  "role_subjects": [
+    "role.created", "role.updated", "role.deleted", "role.assigned",
+    "role.revoked", "role.chat_override_set", "role.chat_override_removed",
+    "role.voice_override_set", "role.voice_override_removed"
+  ],
+  "social_subjects": [
+    "social.friend_request", "social.friend_accepted", "social.friend_removed",
+    "social.user_blocked", "social.contacts_synced"
+  ],
+  "social_max_age_ns": 604800000000000,
+  "social_duplicate_window_ns": 86400000000000,
+  "friend_removed_consumer": {
+    "stream": "social_events",
+    "name": "rt_realtime1_friend_removed",
+    "filter_subject": "social.friend_removed",
+    "deliver_subject": "_INBOX.voice.realtime1.friend_removed",
+    "deliver_policy": "new",
+    "ack_policy": "explicit"
+  }
+}

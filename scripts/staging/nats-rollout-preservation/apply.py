@@ -32,6 +32,9 @@ def paused_documents(documents,receipt):
             spec['replicas']=0
         if kind=='Service' and name=='voice-nats' and row['spec'].get('selector')!={'app':'voice-nats-pvc-candidate'}:
             raise Blocked('rollout_hub_service_changed')
+        # Own fencing changes live revisions after the frozen intent was captured.
+        # Keep identity/content; the consumed marker CAS remains apply authority.
+        meta.pop('resourceVersion',None)
     return result
 
 def main():
@@ -52,6 +55,7 @@ def main():
     if not isinstance(rows,list) or not 1<=len(rows)<=128:raise Blocked('rollout_manifest_shape_invalid')
     paused=paused_documents(rows,receipt)
     guard.anchor(receipt,'rollout-applying',rv)
+    guard.recovery_at_use(receipt)
     guard.kubectl(['apply','-f','/dev/stdin','-o','name'],{'apiVersion':'v1','kind':'List','items':paused})
     guard.anchor(receipt,'rollout-applying',rv)
     print('NATS_ROLLOUT_APPLY=PAUSED_COMPLETE')

@@ -3,16 +3,18 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/messaging/internal/messageevents"
 )
 
 // ReactionAggregate is one emoji counter row for reactions_json wire format.
 type ReactionAggregate struct {
-	Emoji        string `json:"emoji"`
-	Count        int    `json:"count"`
-	ReactedByMe  bool   `json:"reacted_by_me"`
+	Emoji       string `json:"emoji"`
+	Count       int    `json:"count"`
+	ReactedByMe bool   `json:"reacted_by_me"`
 }
 
 // ReactionsStore persists per-message emoji reactions.
@@ -42,6 +44,42 @@ func (s *ReactionsStore) DeleteReaction(ctx context.Context, messageID, profileI
 DELETE FROM reactions WHERE message_id = $1 AND profile_id = $2 AND emoji = $3
 `, messageID, profileID, emoji)
 	return err
+}
+
+func (s *ReactionsStore) MutateReactionWithOutbox(ctx context.Context, chatID, spaceID, messageID, profileID uuid.UUID, emoji string, add bool, event messageevents.OutboxEvent) error {
+	if s == nil || s.Pool == nil {
+		return ErrStoreNotConfigured
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var scope *uuid.UUID
+	if spaceID != uuid.Nil {
+		scope = &spaceID
+	}
+	if err := lockMessageMutation(ctx, tx, chatID, scope, &messageID); err != nil {
+		return err
+	}
+	if err := requireLiveMessage(ctx, tx, chatID, messageID); err != nil {
+		return err
+	}
+	if add {
+		_, err = tx.Exec(ctx, `INSERT INTO reactions(message_id,profile_id,emoji) VALUES($1,$2,$3) ON CONFLICT(message_id,profile_id,emoji) DO NOTHING`, messageID, profileID, emoji)
+	} else {
+		_, err = tx.Exec(ctx, `DELETE FROM reactions WHERE message_id=$1 AND profile_id=$2 AND emoji=$3`, messageID, profileID, emoji)
+	}
+	if err != nil {
+		return err
+	}
+	if event.MessageID != messageID || event.ChatID != chatID {
+		return errors.New("reaction outbox event identity mismatch")
+	}
+	if err := enqueueMessageEvent(ctx, tx, event); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ReactionsJSONByMessageIDs returns reactions_json per message id for the viewer profile.

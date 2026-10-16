@@ -8,6 +8,32 @@ from unittest.mock import patch
 import bridge
 
 class ReplayTests(unittest.TestCase):
+    def test_prepare_failure_retains_fixed_stage_without_exception_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request={'action':'prepare','source_sha':'a'*40,'run_id':17,'mode':'images-only','changed_services':['user'],'token':'private-token','nonce':'b'*64}
+            def execute(row,observe):
+                observe('source-capture','COMPLETE')
+                observe('nats-preflight','STARTED')
+                raise ValueError('private credential text must not be saved')
+            with self.assertRaises(ValueError):
+                bridge.dispatch(Path(directory),request,lambda row:self.fail(),lambda row:None,execute_observed=execute)
+            raw=(Path(directory)/(request['nonce']+'.json')).read_text()
+            state=json.loads(raw)
+            self.assertEqual(state['prepare_stage'],{'name':'nats-preflight','status':'STARTED'})
+            self.assertEqual(state['prepare_error'],'exception_ValueError')
+            self.assertNotIn('private credential',raw);self.assertNotIn('private-token',raw)
+            with self.assertRaises(bridge.BridgeError):
+                bridge.dispatch(Path(directory),request,lambda row:self.fail('must not retry'),lambda row:None)
+
+    def test_prepare_stage_rejects_arbitrary_labels_before_saving(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request={'action':'prepare','source_sha':'a'*40,'run_id':17,'mode':'images-only','changed_services':['user'],'token':'private-token','nonce':'b'*64}
+            def execute(row,observe):observe('private credential text','STARTED')
+            with self.assertRaises(bridge.BridgeError):
+                bridge.dispatch(Path(directory),request,lambda row:self.fail(),lambda row:None,execute_observed=execute)
+            state=json.loads((Path(directory)/(request['nonce']+'.json')).read_text())
+            self.assertNotIn('prepare_stage',state)
+
     def test_completed_request_replays_without_second_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             calls=[]; request={'action':'finish','operation':'a'*12,'claim_rv':'17','nonce':'b'*64}
@@ -48,6 +74,7 @@ class ReplayTests(unittest.TestCase):
             old_inode=inbox.stat().st_ino
             class FakeActions:
                 def __init__(self,code):pass
+                def execute_observed(self,row,observe):return self.execute(row)
                 def execute(self,row):
                     claimed=installed/'processing'/(nonce+'.json')
                     self_test.assertNotEqual(claimed.stat().st_ino,old_inode)

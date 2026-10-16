@@ -493,7 +493,7 @@ and Voice IDs denied while history remains.
 
 - [ ] **[Auth] Resend на staging/prod** — `ResendMailSender` есть; без `RESEND_API_KEY` → `NoopMailSender`. [ci.md](ci.md).
 - [x] **[Auth] NATS `user.guest_converted` not wired in compose/staging** — **done (compose):** `AUTH_NATS_URL` + `depends_on: nats` in `docker-compose.yml`; convert publishes + `TestComposeConvertGuestNATS_live`. Staging env still worth verifying separately.
-- [ ] **[Auth] Password change (logged-in) + revoke-all-refresh not implemented** — reset-via-OTP есть; нет change-password для сессии. UI reset — [client.md](client.md).
+- [ ] **[Auth] Password change (logged-in) + revoke-all-refresh** — `POST /api/v1/auth/password/change` and the Settings form are implemented in the current change; keep this item open until the exact-head hosted Auth and Flutter checks pass. Reset-via-OTP remains a separate recovery flow. See [auth-service.md](../microservices/auth-service.md#authenticated-password-change) and [auth-and-contacts.md](../features/auth-and-contacts.md#смена-пароля-из-settings).
 
 ### Realtime
 
@@ -642,7 +642,7 @@ and Voice IDs denied while history remains.
 - [ ] **[Messaging] `ListThreads` bounded successor** — the RPC fails closed while the per-viewer projection is unavailable; the legacy `messages` aggregate is no longer a runtime fallback. Implement the Messaging-owned versioned AVL read model, durable Chat membership outbox/inbox, journal/backfill/readiness, cursor state and live visibility revocation defined in `docs/microservices/messaging-service.md` and `docs/testing/listthreads-versioned-readmodel-exec-plan.md`; do not activate cursor pagination through candidate-limited SQL. **Activation contract gap:** Space membership and Role `TEXT_CHAT_VIEW` changes need durable source revisions/reconciliation into Chat effective membership, with a consistent backfill watermark. Define DM delete/reopen and archived-profile eligibility invalidations, and replace Messaging's first-100-members guard with complete authoritative admission. A `chat_members`-only outbox is insufficient; the unavailable guard does not complete this task.
 - [ ] **[Messaging] `message_attachments` target table not migrated** — spec DDL; implementation uses `messages.attachments` JSONB + indexes (`000008_shared_media_indexes`).
 - [ ] **[Messaging] Test holes on forward / GetMessage** — forward tests cover DM/group attribution only; no channel forward, E2E forward, commentary, or `GetMessage` integration test.
-- [ ] **[Messaging] NATS publish best-effort** — DB commit succeeds, JetStream failure only logged (`logPublishError`); no outbox/retry.
+- [ ] **[Messaging / BE-188 A1] Durable message-event outbox implementation awaiting hosted validation** — enabled mutation events now persist exact bytes with their PostgreSQL mutation and retry until positive JetStream PubAck; the frozen Space-chat purge event set is gated before File/Search side effects. Keep this open until the selected hosted Messaging checks and original Compose acceptance pass. PubAck is not downstream Realtime commit; the separate A2 Realtime P3 participant remains required for end-to-end purge privacy closure. Scheduled-message handlers/producers remain fail-closed and inactive.
 
 ### Search
 
@@ -704,7 +704,7 @@ and Voice IDs denied while history remains.
 
 
 - [ ] **[Auth] NATS event matrix mostly unimplemented** — `docs/microservices/auth-service.md` lists `user.registered`, `user.logged_in`, `user.logged_out`, `user.2fa_enabled`, `user.account_deleted`, `user.account_restored`; `AuthEventPublisher` only defines `user.guest_converted`. Files: `src/backend/auth/src/main/java/voice/backend/auth/events/AuthEventPublisher.java`, `src/backend/auth/src/main/java/voice/backend/auth/events/NatsAuthEventPublisher.java`.
-- [ ] **[Auth] Disable 2FA not implemented** — No RPC/REST to turn off TOTP or invalidate backup codes after enrollment. Sessions list/revoke **есть** (`GET /api/v1/auth/sessions`, `TestComposeAuthSessions_live`); Flutter UI — [client.md](client.md).
+- [x] **[Auth] Disable 2FA and invalidate backup codes** — Auth requires the current password and TOTP, revokes all sessions, and invalidates the enrollment's backup codes. Implemented by [`AuthService.disable2FA`](../../src/backend/auth/src/main/java/voice/backend/auth/service/AuthService.java), REST [`POST /api/v1/auth/2fa/disable`](../../src/backend/auth/src/main/java/voice/backend/auth/rest/AuthRestController.java), and gRPC [`Disable2FA`](../../protos/voice/auth/v1/auth.proto); coverage: [`TwoFactorAuthTest`](../../src/backend/auth/src/test/java/voice/backend/auth/TwoFactorAuthTest.java) and [`AuthGrpc2FATest`](../../src/backend/auth/src/test/java/voice/backend/auth/AuthGrpc2FATest.java).
 - [x] **[Auth] gRPC token context via `lastAccessToken` atomic** — Protected Auth gRPC methods now use only `Authorization` metadata from the current RPC and fail closed when it is absent; no process-wide remembered bearer remains. In-process regression coverage proves a preceding `Register` cannot authorize a later headerless 2FA or E2E-backup call. File: `src/backend/auth/src/main/java/voice/backend/auth/grpc/AuthGrpcService.java`.
 
 ### Realtime

@@ -34,18 +34,54 @@ def operation_path(raw):
     return base
 
 
+def public_code_sha(path):
+    """Hash public captured code as the runner, without root-only O_NOATIME."""
+    path=Path(path)
+    fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,
+        s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    parent_before=path.parent.lstat()
+    parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    try:
+        if (not stat.S_ISDIR(parent_before.st_mode) or parent_before.st_uid!=0
+            or parent_before.st_mode&0o022
+            or fingerprint(parent_before)!=fingerprint(os.fstat(parent))):
+            raise Blocked('rollout_code_custody_invalid')
+        before=os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+        fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+        try:
+            opened=os.fstat(fd)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0
+                or opened.st_mode&0o022 or opened.st_nlink!=1
+                or not 0<=opened.st_size<=16<<20 or fingerprint(before)!=fingerprint(opened)):
+                raise Blocked('rollout_code_custody_invalid')
+            digest=hashlib.sha256();count=0
+            while chunk:=os.read(fd,1<<20):
+                count+=len(chunk)
+                if count>opened.st_size:raise Blocked('rollout_captured_code_changed')
+                digest.update(chunk)
+            if (count!=opened.st_size or fingerprint(opened)!=fingerprint(os.fstat(fd))
+                or fingerprint(opened)!=fingerprint(os.stat(path.name,dir_fd=parent,follow_symlinks=False))
+                or fingerprint(parent_before)!=fingerprint(os.fstat(parent))
+                or fingerprint(parent_before)!=fingerprint(path.parent.lstat())):
+                raise Blocked('rollout_captured_code_changed')
+            return digest.hexdigest()
+        finally:os.close(fd)
+    finally:os.close(parent)
+
+
 def code_binding(code):
     manifest=json.loads(public_read(code/'capture-manifest.json'))
-    if not isinstance(manifest,dict) or not 1<=len(manifest)<=64:raise Blocked('rollout_code_manifest_invalid')
+    if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not guard.SHA.fullmatch(wanted):raise Blocked('rollout_code_manifest_invalid')
         path=code/p
         for parent in (path,*path.parents):
-            s=parent.lstat()
+            try:s=parent.lstat()
+            except FileNotFoundError:raise Blocked('rollout_code_custody_invalid') from None
             if s.st_uid!=0 or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode):raise Blocked('rollout_code_custody_invalid')
             if parent==code:break
-        if file_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')
+        if public_code_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')
     return manifest
 
 
@@ -102,7 +138,7 @@ def publish_copy(base,state):
     cut=state['cut'];row={'schema':'nats-rollout-copy-v1','operation':state['operation'],
        'phase':state['phase'],'fence_status':state['fence_status'],
        'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
-       'census_sha256':cut['census_sha256'],'messages':sum(s['messages'] for s in cut['census']['streams']),
+       'census_sha256':cut['census_sha256'],'messages':sum(s['state']['messages'] for s in cut['census']['streams']),
        'streams':len(cut['census']['streams']),'consumers':len(cut['census']['consumers'])}
     save(base/'copy-checkpoint.json',row)
     gid=grp.getgrnam('pmd').gr_gid
@@ -114,10 +150,19 @@ def publish_copy(base,state):
 
 def main_unlocked(args,code):
     binding=code_binding(code)
+    if args==['--enroll-existing-bootstrap']:
+        # Explicit human command only; CI bridge has no issuer action.
+        from bridge_root import Actions
+        from bootstrap_root import enroll_current
+        from bootstrap_auth import prove
+        enroll_current(Kube(),code,binding,Actions(code)._idle,private_json,save,prove)
+        print('NATS_EXISTING_BOOTSTRAP_ENROLLMENT=READY');return
     previous=None
     if len(args)==2 and args[0]=='--prepare-rollback':
         prior=operation_path(args[1]);previous=private_json(prior/'checkpoint.json')
-        if previous.get('code_capture')!=binding:raise Blocked('rollout_operation_code_changed')
+        import paused_recovery
+        paused_recovery.verify_adopted_binding(prior,previous,binding)
+        if previous.get('renderer_authority') is not None:raise Blocked('renderer_rollback_protected_bridge_required')
         value=transaction.rollback_package(previous)
         expected=previous['context']['expected'];kube=Kube()
         namespace=kube.get('namespace',guard.NS);marker=kube.get('configmap','voice-nats-generation')
@@ -132,7 +177,8 @@ def main_unlocked(args,code):
     if len(args)>=2 and args[0] in ('--authorize','--finish','--rollback','--status'):
         base=operation_path(args[1]);state=private_json(base/'checkpoint.json')
         if state.get('operation')!=base.name[len('rollout-'):]:raise Blocked('rollout_checkpoint_identity_invalid')
-        if state.get('code_capture')!=binding:raise Blocked('rollout_operation_code_changed')
+        import paused_recovery
+        paused_recovery.verify_adopted_binding(base,state,binding)
         if args[0]=='--status' and len(args)==2:
             print(json.dumps({k:state[k] for k in ('schema','operation','phase','status','fence_status','error','restart','preservation') if k in state},sort_keys=True));return
         if args[0]=='--authorize' and len(args)==4:
@@ -152,7 +198,7 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
         base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
@@ -170,7 +216,7 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
         (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence)
+        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)

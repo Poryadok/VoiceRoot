@@ -45,4 +45,11 @@ public class JdbcE2EKeyBackupRepository implements E2EKeyBackupRepository {
         .stream()
         .findFirst();
   }
+
+  @Override
+  public void delete(UUID accountId) {
+    jdbc.update(
+        "DELETE FROM e2e_key_backups WHERE account_id = :accountId",
+        new MapSqlParameterSource("accountId", accountId));
+  }
 }

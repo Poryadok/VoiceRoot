@@ -46,8 +46,8 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 			t.Errorf("%s appears %d times, want exactly once", key, count)
 		}
 	}
-	if len(counts) != 43 {
-		t.Errorf("central bootstrap defines %d unique durables, want 43", len(counts))
+	if len(counts) != 45 {
+		t.Errorf("central bootstrap defines %d unique durables, want 45", len(counts))
 	}
 	for _, line := range []string{
 		"consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request",
@@ -58,6 +58,8 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 		"consumer message_events bot_message_events message.sent _INBOX.voice.bot.bot_message_events all ''",
 		"consumer_filters story_events matchmaking_story_lfp_v2 _INBOX.voice.matchmaking.matchmaking_story_lfp_v2 all story.lfp_created story.lfp_response",
 		"consumer_filters subscription_events space_subscription_entitlement _INBOX.voice.space.space_subscription_entitlement new subscription.space_pro_started subscription.space_pro_expired",
+		"consumer chat_events voice_space_media_chat space.voice_room_access_invalidated _INBOX.voice.voice.space_media_chat",
+		"consumer role_events voice_space_media_role role.voice_policy_invalidated _INBOX.voice.voice.space_media_role",
 		"pull_consumer user_events user-account-deletion-v1 user.account_deleted all",
 		"consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new '' 5 '[1000000000,5000000000,30000000000,120000000000,300000000000]'",
 	} {

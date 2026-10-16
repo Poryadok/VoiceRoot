@@ -61,9 +61,36 @@ func (s *ModerationGRPC) ApplySanction(ctx context.Context, req *moderationv1.Ap
 		t := req.GetExpiresAt().AsTime().UTC()
 		expiresAt = &t
 	}
-	row, err := s.Sanctions.InsertSanction(ctx, targetAccount, sanctionType, reason, reportID, modProfile, expiresAt)
+	var row *store.SanctionRow
+	err = s.Sanctions.WithAccountLock(ctx, targetAccount, func(tx pgx.Tx) error {
+		var err error
+		row, err = s.Sanctions.InsertSanctionTx(ctx, tx, targetAccount, sanctionType, reason, reportID, modProfile, expiresAt)
+		if err != nil {
+			return err
+		}
+		if (sanctionType == "temp_ban" || sanctionType == "perm_ban") && s.Auth != nil {
+			effective, err := s.Sanctions.HasEffectiveAccountBanTx(ctx, tx, targetAccount)
+			if err != nil {
+				return err
+			}
+			if effective {
+				return s.Auth.SetAccountStatus(ctx, targetAccount, "suspended", reason)
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		if s.Auth != nil && (sanctionType == "temp_ban" || sanctionType == "perm_ban") {
+			recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if recoveryErr := s.queueAccountStatusSync(recoveryCtx, targetAccount); recoveryErr == nil {
+				recoveryErr = s.reconcileAccountStatus(recoveryCtx, targetAccount, "sanction apply recovery")
+				err = errors.Join(err, recoveryErr)
+			} else {
+				err = errors.Join(err, recoveryErr)
+			}
+		}
+		return nil, status.Error(codes.Internal, fmt.Sprintf("sanction sync: %v", err))
 	}
 	if s.AuditLog != nil {
 		details, _ := json.Marshal(map[string]string{
@@ -72,11 +99,6 @@ func (s *ModerationGRPC) ApplySanction(ctx context.Context, req *moderationv1.Ap
 			"reason":      reason,
 		})
 		_ = s.AuditLog.InsertAudit(ctx, modProfile, "sanction_applied", "account", targetAccount, string(details))
-	}
-	if s.Auth != nil && (sanctionType == "temp_ban" || sanctionType == "perm_ban") {
-		if err := s.Auth.SetAccountStatus(ctx, targetAccount, "suspended", reason); err != nil {
-			return nil, status.Error(codes.Internal, fmt.Sprintf("auth sync: %v", err))
-		}
 	}
 	if s.Matchmaking != nil && sanctionType == "mm_ban" {
 		if err := s.Matchmaking.ApplyPlatformMMBan(ctx, targetAccount, modProfile, reason, expiresAt); err != nil {
@@ -115,20 +137,36 @@ func (s *ModerationGRPC) RevokeSanction(ctx context.Context, req *moderationv1.R
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := s.Sanctions.RevokeSanction(ctx, sanctionID, modProfile); err != nil {
+	err = s.Sanctions.WithAccountLock(ctx, before.TargetAccountID, func(tx pgx.Tx) error {
+		current, err := s.Sanctions.GetByIDTx(ctx, tx, sanctionID)
+		if err != nil {
+			return err
+		}
+		if current.TargetAccountID != before.TargetAccountID {
+			return errors.New("sanction account changed")
+		}
+		if err := s.Sanctions.RevokeSanctionTx(ctx, tx, sanctionID, modProfile); err != nil {
+			return err
+		}
+		if s.Auth != nil && (current.Type == "temp_ban" || current.Type == "perm_ban") {
+			return s.Sanctions.QueueAccountStatusSyncTx(ctx, tx, current.TargetAccountID)
+		}
+		return nil
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "sanction not found")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, fmt.Sprintf("sanction update: %v", err))
+	}
+	if s.Auth != nil && (before.Type == "temp_ban" || before.Type == "perm_ban") {
+		if err := s.reconcileAccountStatus(ctx, before.TargetAccountID, "sanction revoked"); err != nil {
+			return nil, status.Error(codes.Internal, fmt.Sprintf("sanction status reconciliation: %v", err))
+		}
 	}
 	if s.AuditLog != nil {
 		details, _ := json.Marshal(map[string]string{"sanction_id": sanctionID.String()})
 		_ = s.AuditLog.InsertAudit(ctx, modProfile, "sanction_revoked", "account", before.TargetAccountID, string(details))
-	}
-	if s.Auth != nil && (before.Type == "temp_ban" || before.Type == "perm_ban") {
-		if err := s.Auth.SetAccountStatus(ctx, before.TargetAccountID, "active", "sanction revoked"); err != nil {
-			return nil, status.Error(codes.Internal, fmt.Sprintf("auth sync: %v", err))
-		}
 	}
 	if s.Matchmaking != nil && before.Type == "mm_ban" {
 		if err := s.Matchmaking.RevokePlatformMMBan(ctx, before.TargetAccountID); err != nil {

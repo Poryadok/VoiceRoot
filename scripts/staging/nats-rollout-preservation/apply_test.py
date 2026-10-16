@@ -10,6 +10,23 @@ class PausedTest(unittest.TestCase):
     def test_verified_target_stays_zero_without_mutating_original(self):
         out=apply.paused_documents([self.row],self.receipt)
         self.assertEqual(out[0]['spec']['replicas'],0);self.assertEqual(self.row['spec']['replicas'],1)
+    def test_owned_scale_revision_is_not_replayed_as_apply_authority(self):
+        self.row['metadata'].update({'uid':'651b9c66-c423-4ac0-b8b1-30866d5470c3',
+            'resourceVersion':'3166782','annotations':{'voice.io/intent':'retained'}})
+        source=copy.deepcopy(self.row)
+        out=apply.paused_documents([self.row],self.receipt)[0]
+        # The own scale-to-zero CAS advanced live RV to3170058. Declarative
+        # target apply retains UID/content, without the captured stale CAS RV.
+        expected=copy.deepcopy(source);expected['metadata'].pop('resourceVersion');expected['spec']['replicas']=0
+        self.assertEqual(out,expected)
+        self.assertEqual(self.row,source)
+        for kind in ('ConfigMap','Service','NetworkPolicy','Ingress'):
+            row={'kind':kind,'metadata':{'name':'retained','namespace':'voice-staging',
+                'uid':'651b9c66-c423-4ac0-b8b1-30866d5470c3','resourceVersion':'3166782'},
+                'data':{'key':'retained'},'spec':{'retained':'content'}}
+            original=copy.deepcopy(row);expected=copy.deepcopy(row);expected['metadata'].pop('resourceVersion')
+            self.assertEqual(apply.paused_documents([row],self.receipt),[expected])
+            self.assertEqual(row,original)
     def test_pvc_object_is_never_applied(self):
         with self.assertRaises(guard.Blocked):apply.paused_documents([{'kind':'PersistentVolumeClaim','metadata':{'namespace':'voice-staging','name':'x'}}],self.receipt)
     def test_job_is_never_started(self):

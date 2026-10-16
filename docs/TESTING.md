@@ -53,6 +53,24 @@
 
 ## По языкам и компонентам
 
+### Help: реальный browser handoff
+
+Обычный Flutter job CI собирает `test/fixtures/settings_help_web_launcher_smoke.dart`
+и запускает `node scripts/ci/settings-help-browser-handoff.mjs
+src/frontend/build/help-launcher-web <evidence-dir>` из корня (Node.js 24,
+`CHROME_BIN=google-chrome`, `GITHUB_SHA` — полный SHA проверяемого checkout).
+Перед отдельным запуском из `src/frontend` нужны `flutter pub get` и
+`flutter build web --release --no-pub --no-web-resources-cdn --target
+test/fixtures/settings_help_web_launcher_smoke.dart --output build/help-launcher-web`.
+Fixture использует настоящий `HelpSheet` и `url_launcher`; mock HTTP изолирует
+только посторонние backend-запросы. В H/V доверенные pointer clicks проходят
+Settings → Help → README / Issues; проверяются `Page.windowOpen.userGesture`,
+точный URL нового target, ровно одна новая вкладка и сохранение Help без ошибки.
+Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOURCE_SHA`,
+если задан) и SHA checkout (`GITHUB_SHA`), JSON событий/targets,
+версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
+загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
+
 ### Go (сервисы, Gateway, Realtime и др.)
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
@@ -303,6 +321,8 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 - **Smoke (tier 2 / master push):** `scripts/ci/compose-e2e-smoke.sh` — один тест на фичу продукта.
 - **Full:** `make compose-e2e-live` или workflow [compose-e2e-live.yml](../.github/workflows/compose-e2e-live.yml).
 - **A1 isolated Flutter proof:** `make compose-a1-flutter-profile-handoff` runs ordered T-055 profile handoff, T-106 soft-delete, T-107 folders/Quick Access persistence, and pending-email logout → fresh login → verification against its own Compose project and ports.
+- On PR/master runs, `ci-gate` requires literal success from each selected acceptance job, including the A1 proofs, Flutter key-backup matrix/platform jobs, and analytics integration/smoke jobs. Their existing path/event selectors remain authoritative; intentionally unselected jobs may skip. CI-only changes still check selected jobs even when the `code` filter is false. Offline selector/result coverage runs with `make verify-required-jobs-test`.
+- T-055 fixture readiness observes the selected fresh DM's Chat `last_message_at` projection before recording the handoff. Messaging preview visibility alone does not prove that Chat's asynchronous ordering projection has settled. The measured two-page/item/cursor/hello-order assertions remain unchanged.
 - Манифест фич: [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
 - Flutter live helper `registerUser` завершает публичный email verification flow через compose-only Resend fixture: `otp/send` → `GET /emails/latest?to=<unique-email>` → `otp/verify`. Compose публикует fixture только на loopback; изолированный runner передаёт его URL через `VOICE_AUTH_MAIL_STUB_URL`. Staging/production сохраняют стандартный endpoint `https://api.resend.com/emails`.
 - A1 session-bound verification proof must register/convert once, obtain the
@@ -311,6 +331,7 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
   persistence before regular routing or bounded `PROMOTION_PENDING` recovery.
 - R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
   E2E и не активируют handlers, coordinator или Redis bridge.
+- F13 analyzes every non-first parent of an ordinary integration merge as a separate source contribution, including octopus merges. Each source needs one unambiguous ancestor base; guarded source tree entries and ownership must survive the merge and final result. An octopus may not invent guarded result paths. The outer master release merge still requires the exact push-before first parent and two-parent shape. This provenance support does not authorize R22 runtime activation.
 
 ### E2E по фичам
 

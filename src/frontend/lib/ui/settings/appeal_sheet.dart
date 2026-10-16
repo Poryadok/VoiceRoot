@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/trust_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_primary_button.dart';
 
@@ -50,7 +51,9 @@ class _AppealSheetState extends ConsumerState<AppealSheet> {
     final sanctionId = _sanctionController.text.trim();
     final reason = _reasonController.text.trim();
     if (sanctionId.isEmpty || reason.isEmpty) {
-      setState(() => _error = AppLocalizations.of(context)!.appealValidationError);
+      setState(
+        () => _error = AppLocalizations.of(context)!.appealValidationError,
+      );
       return;
     }
 
@@ -60,11 +63,13 @@ class _AppealSheetState extends ConsumerState<AppealSheet> {
       _success = null;
     });
 
-    final result = await ref.read(voiceModerationClientProvider).submitAppeal(
-      authorization: session.authorizationHeader,
-      sanctionId: sanctionId,
-      reason: reason,
-    );
+    final result = await ref
+        .read(voiceModerationClientProvider)
+        .submitAppeal(
+          authorization: session.authorizationHeader,
+          sanctionId: sanctionId,
+          reason: reason,
+        );
 
     if (!mounted) return;
     switch (result) {
@@ -73,10 +78,13 @@ class _AppealSheetState extends ConsumerState<AppealSheet> {
           _busy = false;
           _success = AppLocalizations.of(context)!.appealSubmittedMessage;
         });
-      case ModerationApiFailure(:final message):
+      case ModerationApiFailure(:final statusCode):
         setState(() {
           _busy = false;
-          _error = message;
+          _error = commonActionErrorMessage(
+            AppLocalizations.of(context)!,
+            statusCode: statusCode,
+          );
         });
     }
   }
@@ -94,7 +102,10 @@ class _AppealSheetState extends ConsumerState<AppealSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l10n.appealTitle, style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              l10n.appealTitle,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
             Text(
               l10n.appealDescription,

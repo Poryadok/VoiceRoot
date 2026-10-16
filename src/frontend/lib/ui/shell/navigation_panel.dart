@@ -13,7 +13,12 @@ import 'chat_list_body.dart';
 
 /// Left navigation column: chats, spaces, and inline social.
 class NavigationPanel extends ConsumerWidget {
-  const NavigationPanel({super.key, required this.collapsed});
+  const NavigationPanel({
+    super.key,
+    required this.collapsed,
+    this.statusBanner,
+    this.statusBannerAtListEnd = false,
+  });
 
   static const Key panelKey = Key('navigation_panel');
   static const Key homeButtonKey = Key('navigation_home');
@@ -21,13 +26,19 @@ class NavigationPanel extends ConsumerWidget {
   static const Key chatsToggleKey = Key('navigation_chats_toggle');
 
   final bool collapsed;
+  final Widget? statusBanner;
+  final bool statusBannerAtListEnd;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (collapsed) {
       return _CollapsedNavigation(panelKey: panelKey);
     }
-    return const _ExpandedNavigation(key: panelKey);
+    return _ExpandedNavigation(
+      key: panelKey,
+      statusBanner: statusBanner,
+      statusBannerAtListEnd: statusBannerAtListEnd,
+    );
   }
 }
 
@@ -59,9 +70,7 @@ class _CollapsedNavigation extends ConsumerWidget {
             icon: Icon(Icons.home_outlined, color: voice.textSecondary),
           ),
           Expanded(
-            child: SpaceRail(
-              onSpaceSelected: (id) => shellNav.selectSpace(id),
-            ),
+            child: SpaceRail(onSpaceSelected: (id) => shellNav.selectSpace(id)),
           ),
           _SocialToggleButton(
             buttonKey: NavigationPanel.socialToggleKey,
@@ -80,7 +89,14 @@ class _CollapsedNavigation extends ConsumerWidget {
 }
 
 class _ExpandedNavigation extends ConsumerStatefulWidget {
-  const _ExpandedNavigation({super.key});
+  const _ExpandedNavigation({
+    super.key,
+    this.statusBanner,
+    this.statusBannerAtListEnd = false,
+  });
+
+  final Widget? statusBanner;
+  final bool statusBannerAtListEnd;
 
   @override
   ConsumerState<_ExpandedNavigation> createState() =>
@@ -102,53 +118,56 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
       child: KeyedSubtree(
         key: OnboardingAnchorKeys.spaces,
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const GlobalSearchPanel(compact: true),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-            child: SegmentedButton<NavigationSection>(
-              style: SegmentedButton.styleFrom(
-                textStyle: Theme.of(context).textTheme.labelSmall,
-                visualDensity: VisualDensity.compact,
-              ),
-              segments: [
-                ButtonSegment(
-                  value: NavigationSection.chats,
-                  label: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(l10n.chatListTitle),
-                  ),
-                  icon: const Icon(Icons.chat_bubble_outline, size: 18),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const GlobalSearchPanel(compact: true),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+              child: SegmentedButton<NavigationSection>(
+                style: SegmentedButton.styleFrom(
+                  textStyle: Theme.of(context).textTheme.labelSmall,
+                  visualDensity: VisualDensity.compact,
                 ),
-                ButtonSegment(
-                  value: NavigationSection.social,
-                  label: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(l10n.socialTabFriends),
-                  ),
-                  icon: Badge(
-                    isLabelVisible: socialBadge > 0,
-                    label: Text(
-                      socialBadge > 9 ? '9+' : '$socialBadge',
-                      style: const TextStyle(fontSize: 10),
+                segments: [
+                  ButtonSegment(
+                    value: NavigationSection.chats,
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(l10n.chatListTitle),
                     ),
-                    child: const Icon(Icons.people_outline, size: 18),
+                    icon: const Icon(Icons.chat_bubble_outline, size: 18),
                   ),
-                ),
-              ],
-              selected: {section},
-              onSelectionChanged: (next) =>
-                  shellNav.setNavigationSection(next.single),
+                  ButtonSegment(
+                    value: NavigationSection.social,
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(l10n.socialTabFriends),
+                    ),
+                    icon: Badge(
+                      isLabelVisible: socialBadge > 0,
+                      label: Text(
+                        socialBadge > 9 ? '9+' : '$socialBadge',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      child: const Icon(Icons.people_outline, size: 18),
+                    ),
+                  ),
+                ],
+                selected: {section},
+                onSelectionChanged: (next) =>
+                    shellNav.setNavigationSection(next.single),
+              ),
             ),
-          ),
-          Expanded(
-            child: section == NavigationSection.chats
-                ? const ChatListBody()
-                : const SocialPanel(),
-          ),
-        ],
-      ),
+            Expanded(
+              child: section == NavigationSection.chats
+                  ? ChatListBody(
+                      statusBanner: widget.statusBanner,
+                      statusBannerAtListEnd: widget.statusBannerAtListEnd,
+                    )
+                  : const SocialPanel(),
+            ),
+          ],
+        ),
       ),
     );
   }

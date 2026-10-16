@@ -58,6 +58,13 @@ type ProfileAccountsResolver interface {
 	AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error)
 }
 
+// ProfileAccountsBatchResolver is an optional batch lookup used by block checks.
+// Keeping it separate lets older single-profile resolvers fail closed when batch
+// resolution is unavailable.
+type ProfileAccountsBatchResolver interface {
+	AccountIDsByProfileIDs(ctx context.Context, profileIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
+}
+
 // BlockedProfile is the selected public identity captured when an account is blocked.
 type BlockedProfile = store.BlockedProfile
 
@@ -245,6 +252,28 @@ func (s *SocialGRPC) DeclineFriendInvitation(ctx context.Context, req *socialv1.
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &socialv1.DeclineFriendInvitationResponse{}, nil
+}
+
+// CancelFriendInvitation removes an outgoing pending request, not a friendship.
+func (s *SocialGRPC) CancelFriendInvitation(ctx context.Context, req *socialv1.CancelFriendInvitationRequest) (*socialv1.CancelFriendInvitationResponse, error) {
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	target, err := parseUUIDField("target_profile_id", req.GetTargetProfileId())
+	if err != nil {
+		return nil, err
+	}
+	if s.Friends == nil {
+		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	if err := s.Friends.CancelInvitation(ctx, caller, target); err != nil {
+		if errors.Is(err, store.ErrFriendshipNotFound) {
+			return nil, status.Error(codes.NotFound, "pending friend request not found")
+		}
+		return nil, status.Error(codes.Internal, "could not cancel friend request")
+	}
+	return &socialv1.CancelFriendInvitationResponse{}, nil
 }
 
 // RemoveFriend implements voice.social.v1.SocialService.

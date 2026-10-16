@@ -29,6 +29,7 @@ class AuthPrincipalServerLifecycleTest {
   static final MethodDescriptor<Struct,Struct> ISSUE = method(AuthPrincipalServerInterceptor.ISSUE_RPC);
   static final MethodDescriptor<Struct,Struct> CONSUME = method(AuthPrincipalServerInterceptor.CONSUME_RPC);
   static final MethodDescriptor<Struct,Struct> LOOKUP = method(AuthPrincipalServerInterceptor.LOOKUP_RPC);
+  static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AuthGrpcService service = mock(AuthGrpcService.class);
   final AuthPrincipalVerifier verifier = mock(AuthPrincipalVerifier.class);
@@ -36,6 +37,7 @@ class AuthPrincipalServerLifecycleTest {
   final AtomicReference<VerifiedPrincipal> observed = new AtomicReference<>();
   final VerifiedPrincipal principal = new VerifiedPrincipal("delegated_user", "gateway", UUID.randomUUID(), UUID.randomUUID(), 2);
   final VerifiedPrincipal spacePrincipal = new VerifiedPrincipal("service", "space", null, null, 0);
+  final VerifiedPrincipal voicePrincipal = new VerifiedPrincipal("service", "voice", null, null, 0);
   final AuthProperties properties = new AuthProperties();
 
   AuthPrincipalServerLifecycleTest() {
@@ -43,20 +45,26 @@ class AuthPrincipalServerLifecycleTest {
     when(verifier.verify(anyString(), anyString(), anyString(), anyString())).thenReturn(principal);
     when(verifier.verify(anyString(), eq(AuthPrincipalServerInterceptor.LOOKUP_RPC), anyString(), anyString()))
         .thenReturn(spacePrincipal);
+    when(verifier.verify(anyString(), eq(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC), anyString(), anyString()))
+        .thenReturn(voicePrincipal);
     when(service.bindService()).thenReturn(definition(true));
   }
 
   @Test void startsSeparateListenersRegistersOnlyProofsPrivatelyAndStopsBoth() throws Exception {
     AuthGrpcServer server = server(new AuthPrincipalServerInterceptor(verifier));
-    ManagedChannel legacy = null, privateChannel = null;
+    ManagedChannel legacy = null, privateChannel = null, floorChannel = null;
     try {
       server.start();
       assertTrue(server.isRunning());
-      assertTrue(server.legacyPort() > 0); assertTrue(server.principalPort() > 0);
+      assertTrue(server.legacyPort() > 0); assertTrue(server.principalPort() > 0); assertTrue(server.sessionFloorPort() > 0);
       assertNotEquals(server.legacyPort(), server.principalPort());
+      assertNotEquals(server.legacyPort(), server.sessionFloorPort());
+      assertNotEquals(server.principalPort(), server.sessionFloorPort());
       legacy = channel(server.legacyPort()); privateChannel = channel(server.principalPort());
+      floorChannel = channel(server.sessionFloorPort());
       assertStatus(legacy, ISSUE, Status.Code.UNAUTHENTICATED);
       assertStatus(legacy, LOOKUP, Status.Code.UNAUTHENTICATED);
+      assertStatus(legacy, FLOOR, Status.Code.UNIMPLEMENTED);
       assertEquals(0, proofCalls.get());
       assertEquals(REQUEST, call(legacy, LOGIN));
       assertEquals(1, loginCalls.get());
@@ -68,6 +76,13 @@ class AuthPrincipalServerLifecycleTest {
       assertEquals(2, proofCalls.get()); assertEquals(spacePrincipal, observed.get());
       verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.LOOKUP_RPC,
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
+      assertStatus(privateChannel, FLOOR, Status.Code.UNIMPLEMENTED);
+      assertEquals(REQUEST, call(floorChannel, FLOOR));
+      assertEquals(voicePrincipal, observed.get());
+      assertEquals(3, proofCalls.get());
+      verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC,
+          "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
+      assertStatus(floorChannel, ISSUE, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, LOGIN, Status.Code.UNIMPLEMENTED);
       for(var sourceRpc : java.util.List.of("ReadSnapshot","ReadRevision")) {
         var source = method("/voice.authority.v1.AuthoritySourceService/" + sourceRpc);
@@ -76,18 +91,19 @@ class AuthPrincipalServerLifecycleTest {
       }
       assertEquals(1, loginCalls.get());
       int legacyPort = server.legacyPort();
-      int principalPort = server.principalPort();
+      int principalPort = server.principalPort(); int floorPort = server.sessionFloorPort();
       server.stop();
       assertFalse(server.isRunning());
       // shutdownNow cancels calls on an established transport. Verify listener shutdown through
       // new connection attempts, whose contract is UNAVAILABLE rather than transport cancellation.
-      close(legacy); close(privateChannel);
-      legacy = channel(legacyPort); privateChannel = channel(principalPort);
+      close(legacy); close(privateChannel); close(floorChannel);
+      legacy = channel(legacyPort); privateChannel = channel(principalPort); floorChannel = channel(floorPort);
       assertStatus(legacy, LOGIN, Status.Code.UNAVAILABLE);
       assertStatus(privateChannel, ISSUE, Status.Code.UNAVAILABLE);
       assertStatus(privateChannel, LOOKUP, Status.Code.UNAVAILABLE);
-      assertEquals(1, loginCalls.get()); assertEquals(2, proofCalls.get());
-    } finally { server.stop(); close(legacy); close(privateChannel); }
+      assertStatus(floorChannel, FLOOR, Status.Code.UNAVAILABLE);
+       assertEquals(1, loginCalls.get()); assertEquals(3, proofCalls.get());
+    } finally { server.stop(); close(legacy); close(privateChannel); close(floorChannel); }
   }
 
   @Test void absentVerifierHasNoPrivateListenerAndProofsRemainDeniedOnLegacy() throws Exception {
@@ -121,8 +137,35 @@ class AuthPrincipalServerLifecycleTest {
     } finally { server.stop(); }
   }
 
+  @Test void missingFloorClientCaFailsProductionStartupBeforeBindingAnyListener() throws Exception {
+    int legacyPort = freePort();
+    int principalPort = freePortExcept(legacyPort);
+    int floorPort = freePortExcept(legacyPort, principalPort);
+    properties.getGrpc().setPort(legacyPort);
+    var cert = new java.io.File(getClass().getResource("/principal-tls/server-cert.pem").toURI());
+    var key = new java.io.File(getClass().getResource("/principal-tls/server-key.pem").toURI());
+    var environment = new MockEnvironment()
+        .withProperty("AUTH_PRINCIPAL_GRPC_PORT", Integer.toString(principalPort))
+        .withProperty("AUTH_SESSION_FLOOR_GRPC_PORT", Integer.toString(floorPort))
+        .withProperty("AUTH_GRPC_TLS_CERT_FILE", cert.getAbsolutePath())
+        .withProperty("AUTH_GRPC_TLS_KEY_FILE", key.getAbsolutePath());
+    environment.setActiveProfiles("production");
+    AuthGrpcServer server = new AuthGrpcServer(service, properties, new RequestIdServerInterceptor(),
+        new AuthorizationServerInterceptor(), new AuthPrincipalServerInterceptor(verifier), environment);
+
+    assertThrows(IllegalStateException.class, server::start);
+    assertFalse(server.isRunning());
+    for (int port : java.util.List.of(legacyPort, principalPort, floorPort)) {
+      try (var rebound = new ServerSocket(port)) { assertEquals(port, rebound.getLocalPort()); }
+    }
+    verifyNoInteractions(verifier);
+    assertEquals(0, proofCalls.get());
+    assertEquals(0, loginCalls.get());
+  }
+
   AuthGrpcServer server(AuthPrincipalServerInterceptor interceptor) {
-    var environment = new MockEnvironment().withProperty("AUTH_PRINCIPAL_GRPC_PORT", "0");
+    var environment = new MockEnvironment().withProperty("AUTH_PRINCIPAL_GRPC_PORT", "0")
+        .withProperty("AUTH_SESSION_FLOOR_GRPC_PORT", "0");
     environment.setActiveProfiles("test");
     return new AuthGrpcServer(service, properties, new RequestIdServerInterceptor(),
         new AuthorizationServerInterceptor(), interceptor, environment);
@@ -135,6 +178,10 @@ class AuthPrincipalServerLifecycleTest {
           observer.onNext(request); observer.onCompleted();
         }))
         .addMethod(LOOKUP, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
+        .addMethod(FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
         }))
@@ -165,6 +212,16 @@ class AuthPrincipalServerLifecycleTest {
   }
   static ManagedChannel channel(int port) {
     return NettyChannelBuilder.forAddress("localhost", port).usePlaintext().build();
+  }
+  static int freePort() throws Exception { return freePortExcept(); }
+  static int freePortExcept(int... excluded) throws Exception {
+    for (int attempt = 0; attempt < 20; attempt++) {
+      try (var socket = new ServerSocket(0)) {
+        int port = socket.getLocalPort();
+        if (java.util.Arrays.stream(excluded).noneMatch(value -> value == port)) return port;
+      }
+    }
+    throw new IllegalStateException("could not allocate distinct test ports");
   }
   static void close(ManagedChannel channel) throws Exception {
     if (channel != null) channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);

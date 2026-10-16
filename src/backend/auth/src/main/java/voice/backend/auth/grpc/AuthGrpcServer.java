@@ -21,6 +21,7 @@ public class AuthGrpcServer implements SmartLifecycle {
   private final Environment environment;
   private Server server;
   private Server principalServer;
+  private Server sessionFloorServer;
   private boolean running;
 
   public AuthGrpcServer(
@@ -47,10 +48,16 @@ public class AuthGrpcServer implements SmartLifecycle {
           ? AuthPrincipalTransport.port(environment, properties.getGrpc().getPort()) : 0;
       var privateBuilder = NettyServerBuilder.forPort(privatePort);
       AuthPrincipalTransport.configure(privateBuilder, environment, principalInterceptor.enabled());
-      // Construct and validate both surfaces before binding either socket.
+      // Construct and validate all surfaces before binding any socket.
       if (principalInterceptor.enabled()) {
         principalServer = privateBuilder.intercept(requestIdServerInterceptor)
             .addService(AuthPrincipalServices.proofService(definition, principalInterceptor)).build();
+        int floorPort = AuthPrincipalTransport.sessionFloorPort(environment,
+            properties.getGrpc().getPort(), privatePort);
+        var floorBuilder = NettyServerBuilder.forPort(floorPort);
+        AuthPrincipalTransport.configureSessionFloor(floorBuilder, environment, true);
+        sessionFloorServer = floorBuilder.intercept(requestIdServerInterceptor)
+            .addService(AuthPrincipalServices.sessionFloorService(definition, principalInterceptor)).build();
       }
       server = NettyServerBuilder.forPort(properties.getGrpc().getPort())
           .intercept(requestIdServerInterceptor)
@@ -59,6 +66,7 @@ public class AuthGrpcServer implements SmartLifecycle {
           .build();
       server.start();
       if (principalServer != null) principalServer.start();
+      if (sessionFloorServer != null) sessionFloorServer.start();
       running = true;
     } catch (IOException | RuntimeException ex) {
       stop();
@@ -69,12 +77,14 @@ public class AuthGrpcServer implements SmartLifecycle {
   @Override
   public void stop() {
     if (principalServer != null) principalServer.shutdownNow();
+    if (sessionFloorServer != null) sessionFloorServer.shutdownNow();
     if (server != null) server.shutdownNow();
     running = false;
   }
 
   int legacyPort() { return server == null ? -1 : server.getPort(); }
   int principalPort() { return principalServer == null ? -1 : principalServer.getPort(); }
+  int sessionFloorPort() { return sessionFloorServer == null ? -1 : sessionFloorServer.getPort(); }
 
   @Override
   public boolean isRunning() { return running; }

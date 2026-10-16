@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - scripts/staging/nats-populated-proof/**
+      - scripts/staging/nats-rollout-preservation/**
+      - scripts/staging/nats-known-baseline/**
       - .github/workflows/nats-populated-proof.yml
       - deploy/nats/acl-intent.yaml
       - deploy/staging/infra.yaml
@@ -11,10 +13,16 @@ on:
       - deploy/nats/leaf-sidecar.template.yaml
       - src/backend/pkg/cmd/nats-hub-config-renderer/**
       - deploy/templates/nats-realtime-bootstrap.yaml
+      - deploy/templates/nats-analytics-chat-bootstrap.yaml
+      - src/backend/pkg/cmd/nats-jwt-issuer/**
+      - src/backend/pkg/go.mod
+      - src/backend/pkg/go.sum
   push:
     branches: [master]
     paths:
       - scripts/staging/nats-populated-proof/**
+      - scripts/staging/nats-rollout-preservation/**
+      - scripts/staging/nats-known-baseline/**
       - .github/workflows/nats-populated-proof.yml
       - deploy/nats/acl-intent.yaml
       - deploy/staging/infra.yaml
@@ -22,6 +30,10 @@ on:
       - deploy/nats/leaf-sidecar.template.yaml
       - src/backend/pkg/cmd/nats-hub-config-renderer/**
       - deploy/templates/nats-realtime-bootstrap.yaml
+      - deploy/templates/nats-analytics-chat-bootstrap.yaml
+      - src/backend/pkg/cmd/nats-jwt-issuer/**
+      - src/backend/pkg/go.mod
+      - src/backend/pkg/go.sum
 
 permissions:
   contents: read
@@ -56,3 +68,24 @@ jobs:
           sudo env -i PATH="$PATH" HOME="$fixture_home" TMPDIR="$fixture_home" \
             GOCACHE="$fixture_home/cache" GOPATH="$fixture_home/go" GOTOOLCHAIN=local \
             go test -tags=dockerproof -run TestDockerPopulatedProof -count=1 -timeout=4m ./...
+
+  owned-nats-contract-preservation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: |
+            src/backend/pkg/go.sum
+            scripts/staging/nats-known-baseline/go.sum
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - name: Check explicit hosted-mode and baseline guards
+        run: python -m unittest discover -s scripts/staging/nats-rollout-preservation -p nats_contract_integration_test.py
+      - name: Run owned native NATS migration, recovery, rollback and payload-preservation fixture
+        env:
+          GOTOOLCHAIN: local
+        run: python scripts/staging/nats-rollout-preservation/nats_contract_integration.py --github-hosted

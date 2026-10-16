@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_bottom_sheet.dart';
 
@@ -55,16 +56,20 @@ class _CreateSpaceSheetState extends ConsumerState<CreateSpaceSheet> {
     if (!_canSubmit) return;
     setState(() => _submitting = true);
     final l10n = AppLocalizations.of(context)!;
-    final err = await ref.read(spaceActionsProvider).createSpace(
-      name: _nameController.text.trim(),
-      description: _descriptionController.text,
-      iconUrl: _iconController.text,
-    );
+    final err = await ref
+        .read(spaceActionsProvider)
+        .createSpace(
+          name: _nameController.text.trim(),
+          description: _descriptionController.text,
+          iconUrl: _iconController.text,
+        );
     if (!mounted) return;
     setState(() => _submitting = false);
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceCreateError(err))),
+        SnackBar(
+          content: Text(l10n.spaceCreateError(commonActionErrorMessage(l10n))),
+        ),
       );
       return;
     }
@@ -88,10 +93,7 @@ class _CreateSpaceSheetState extends ConsumerState<CreateSpaceSheet> {
             const SizedBox(height: 16),
             Row(
               children: [
-                VoiceAvatar(
-                  label: name.isEmpty ? '?' : name,
-                  radius: 28,
-                ),
+                VoiceAvatar(label: name.isEmpty ? '?' : name, radius: 28),
                 const SizedBox(width: 16),
                 Expanded(
                   child: TextField(

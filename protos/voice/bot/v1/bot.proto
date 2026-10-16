@@ -474,6 +474,8 @@ message CreateBotChatRequest {
   string name = 2;
   // "group" or "channel"
   string chat_type = 3;
+  // Stable UUID reused for retries of one logical create. Empty preserves legacy behavior.
+  string request_id = 4;
 }
 
 message CreateBotChatResponse {

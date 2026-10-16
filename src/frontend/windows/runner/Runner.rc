@@ -53,6 +53,12 @@ END
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
 IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
+IDI_APP_ICON_VOICE_SKY  ICON                    "resources\\app_icon_voice_sky.ico"
+IDI_APP_ICON_MIDNIGHT   ICON                    "resources\\app_icon_midnight.ico"
+IDI_APP_ICON_VIOLET     ICON                    "resources\\app_icon_violet.ico"
+IDI_APP_ICON_SUNRISE    ICON                    "resources\\app_icon_sunrise.ico"
+IDI_APP_ICON_MINT       ICON                    "resources\\app_icon_mint.ico"
+IDI_APP_ICON_CORAL      ICON                    "resources\\app_icon_coral.ico"
 
 
 /////////////////////////////////////////////////////////////////////////////

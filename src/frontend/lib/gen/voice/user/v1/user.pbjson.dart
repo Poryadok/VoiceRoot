@@ -51,6 +51,23 @@ final $typed_data.Uint8List privacyPresetDescriptor = $convert.base64Decode(
     'FDWV9QUkVTRVRfUEVSU09OQUwQARIZChVQUklWQUNZX1BSRVNFVF9HQU1JTkcQAhIXChNQUklW'
     'QUNZX1BSRVNFVF9XT1JLEAM=');
 
+@$core.Deprecated('Use scheduledMessageDispatchModeDescriptor instead')
+const ScheduledMessageDispatchMode$json = {
+  '1': 'ScheduledMessageDispatchMode',
+  '2': [
+    {'1': 'SCHEDULED_MESSAGE_DISPATCH_MODE_UNSPECIFIED', '2': 0},
+    {'1': 'SCHEDULED_MESSAGE_DISPATCH_MODE_AT', '2': 1},
+    {'1': 'SCHEDULED_MESSAGE_DISPATCH_MODE_WHEN_ONLINE', '2': 2},
+  ],
+};
+
+/// Descriptor for `ScheduledMessageDispatchMode`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List scheduledMessageDispatchModeDescriptor = $convert.base64Decode(
+    'ChxTY2hlZHVsZWRNZXNzYWdlRGlzcGF0Y2hNb2RlEi8KK1NDSEVEVUxFRF9NRVNTQUdFX0RJU1'
+    'BBVENIX01PREVfVU5TUEVDSUZJRUQQABImCiJTQ0hFRFVMRURfTUVTU0FHRV9ESVNQQVRDSF9N'
+    'T0RFX0FUEAESLworU0NIRURVTEVEX01FU1NBR0VfRElTUEFUQ0hfTU9ERV9XSEVOX09OTElORR'
+    'AC');
+
 @$core.Deprecated('Use ensurePrimaryProfileRequestDescriptor instead')
 const EnsurePrimaryProfileRequest$json = {
   '1': 'EnsurePrimaryProfileRequest',
@@ -1439,6 +1456,132 @@ final $typed_data.Uint8List getBulkPresenceResponseDescriptor = $convert.base64D
     'UudXNlci52MS5HZXRCdWxrUHJlc2VuY2VSZXNwb25zZS5CeVByb2ZpbGVJZEVudHJ5UgtieVBy'
     'b2ZpbGVJZBpdChBCeVByb2ZpbGVJZEVudHJ5EhAKA2tleRgBIAEoCVIDa2V5EjMKBXZhbHVlGA'
     'IgASgLMh0udm9pY2UudXNlci52MS5QcmVzZW5jZVN0YXR1c1IFdmFsdWU6AjgB');
+
+@$core.Deprecated('Use getNotificationRoutingPresenceRequestDescriptor instead')
+const GetNotificationRoutingPresenceRequest$json = {
+  '1': 'GetNotificationRoutingPresenceRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `GetNotificationRoutingPresenceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getNotificationRoutingPresenceRequestDescriptor =
+    $convert.base64Decode(
+        'CiVHZXROb3RpZmljYXRpb25Sb3V0aW5nUHJlc2VuY2VSZXF1ZXN0Eh0KCnByb2ZpbGVfaWQYAS'
+        'ABKAlSCXByb2ZpbGVJZA==');
+
+@$core
+    .Deprecated('Use getNotificationRoutingPresenceResponseDescriptor instead')
+const GetNotificationRoutingPresenceResponse$json = {
+  '1': 'GetNotificationRoutingPresenceResponse',
+  '2': [
+    {
+      '1': 'has_active_session',
+      '3': 1,
+      '4': 1,
+      '5': 8,
+      '10': 'hasActiveSession'
+    },
+  ],
+};
+
+/// Descriptor for `GetNotificationRoutingPresenceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getNotificationRoutingPresenceResponseDescriptor =
+    $convert.base64Decode(
+        'CiZHZXROb3RpZmljYXRpb25Sb3V0aW5nUHJlc2VuY2VSZXNwb25zZRIsChJoYXNfYWN0aXZlX3'
+        'Nlc3Npb24YASABKAhSEGhhc0FjdGl2ZVNlc3Npb24=');
+
+@$core.Deprecated(
+    'Use getScheduledMessageDispatchPresenceRequestDescriptor instead')
+const GetScheduledMessageDispatchPresenceRequest$json = {
+  '1': 'GetScheduledMessageDispatchPresenceRequest',
+  '2': [
+    {
+      '1': 'scheduled_message_id',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'scheduledMessageId'
+    },
+    {'1': 'sender_account_id', '3': 2, '4': 1, '5': 9, '10': 'senderAccountId'},
+    {'1': 'sender_profile_id', '3': 3, '4': 1, '5': 9, '10': 'senderProfileId'},
+    {'1': 'chat_id', '3': 4, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'recipient_profile_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'recipientProfileId',
+      '17': true
+    },
+    {
+      '1': 'schedule_generation',
+      '3': 6,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {
+      '1': 'mode',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.user.v1.ScheduledMessageDispatchMode',
+      '10': 'mode'
+    },
+    {
+      '1': 'chat_type',
+      '3': 8,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.chat.v1.ChatType',
+      '10': 'chatType'
+    },
+  ],
+  '8': [
+    {'1': '_recipient_profile_id'},
+  ],
+};
+
+/// Descriptor for `GetScheduledMessageDispatchPresenceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getScheduledMessageDispatchPresenceRequestDescriptor = $convert.base64Decode(
+    'CipHZXRTY2hlZHVsZWRNZXNzYWdlRGlzcGF0Y2hQcmVzZW5jZVJlcXVlc3QSMAoUc2NoZWR1bG'
+    'VkX21lc3NhZ2VfaWQYASABKAlSEnNjaGVkdWxlZE1lc3NhZ2VJZBIqChFzZW5kZXJfYWNjb3Vu'
+    'dF9pZBgCIAEoCVIPc2VuZGVyQWNjb3VudElkEioKEXNlbmRlcl9wcm9maWxlX2lkGAMgASgJUg'
+    '9zZW5kZXJQcm9maWxlSWQSFwoHY2hhdF9pZBgEIAEoCVIGY2hhdElkEjUKFHJlY2lwaWVudF9w'
+    'cm9maWxlX2lkGAUgASgJSABSEnJlY2lwaWVudFByb2ZpbGVJZIgBARIvChNzY2hlZHVsZV9nZW'
+    '5lcmF0aW9uGAYgASgEUhJzY2hlZHVsZUdlbmVyYXRpb24SPwoEbW9kZRgHIAEoDjIrLnZvaWNl'
+    'LnVzZXIudjEuU2NoZWR1bGVkTWVzc2FnZURpc3BhdGNoTW9kZVIEbW9kZRI0CgljaGF0X3R5cG'
+    'UYCCABKA4yFy52b2ljZS5jaGF0LnYxLkNoYXRUeXBlUghjaGF0VHlwZUIXChVfcmVjaXBpZW50'
+    'X3Byb2ZpbGVfaWQ=');
+
+@$core.Deprecated(
+    'Use getScheduledMessageDispatchPresenceResponseDescriptor instead')
+const GetScheduledMessageDispatchPresenceResponse$json = {
+  '1': 'GetScheduledMessageDispatchPresenceResponse',
+  '2': [
+    {
+      '1': 'user_policy_allows_dispatch',
+      '3': 1,
+      '4': 1,
+      '5': 8,
+      '10': 'userPolicyAllowsDispatch'
+    },
+    {'1': 'recipient_online', '3': 2, '4': 1, '5': 8, '10': 'recipientOnline'},
+    {'1': 'sender_is_guest', '3': 3, '4': 1, '5': 8, '10': 'senderIsGuest'},
+  ],
+};
+
+/// Descriptor for `GetScheduledMessageDispatchPresenceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    getScheduledMessageDispatchPresenceResponseDescriptor =
+    $convert.base64Decode(
+        'CitHZXRTY2hlZHVsZWRNZXNzYWdlRGlzcGF0Y2hQcmVzZW5jZVJlc3BvbnNlEj0KG3VzZXJfcG'
+        '9saWN5X2FsbG93c19kaXNwYXRjaBgBIAEoCFIYdXNlclBvbGljeUFsbG93c0Rpc3BhdGNoEikK'
+        'EHJlY2lwaWVudF9vbmxpbmUYAiABKAhSD3JlY2lwaWVudE9ubGluZRImCg9zZW5kZXJfaXNfZ3'
+        'Vlc3QYAyABKAhSDXNlbmRlcklzR3Vlc3Q=');
 
 @$core.Deprecated('Use getSettingsResponseDescriptor instead')
 const GetSettingsResponse$json = {

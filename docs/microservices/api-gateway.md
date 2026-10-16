@@ -35,7 +35,7 @@
 
 В реализации Gateway группа **File upload** также покрывает `POST /api/v1/users/me/avatar/presigned-upload` (выдача presigned PUT для статичного аватара — [user-profile.md](../features/user-profile.md); см. ниже).
 
-Реализация: Redis sliding window counter. Для публичных маршрутов ключ строится по IP; `X-Forwarded-For` учитывается только от доверенных proxy из `GATEWAY_TRUSTED_PROXY_CIDRS`. Для защищённых маршрутов ключ строится по `user_id`.
+Реализация: Redis sliding window counter. Для публичных маршрутов ключ строится по IP независимо от содержимого `Authorization`; `X-Forwarded-For` учитывается только от доверенных proxy из `GATEWAY_TRUSTED_PROXY_CIDRS`. Для защищённых пользовательских маршрутов ключ строится по проверенному `user_id`. Ключ Bot применяется только на защищённых Bot-token маршрутах `/api/v1/bots/me/**`; посторонний Bot header не меняет identity защищённого пользовательского запроса.
 
 ## Маршрутизация
 
@@ -61,6 +61,22 @@
 POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в заголовке)
 /ws                      → Realtime Service (WebSocket upgrade; `Authorization` или `?ticket=`)
 ```
+
+The caller-relative profile action check is `GET /api/v1/chats/dm-permission/{other_profile_id}` and returns only `{ "allowed": boolean }` from Chat `CanCreateDM`. Gateway preserves typed authorization/dependency errors. The route performs no chat mutation; the subsequent `POST /api/v1/chats/dm` repeats Chat authorization.
+
+### Scheduled message REST transport
+
+The scheduled-message lifecycle is exposed through authenticated Messaging gRPC calls. Gateway derives `x-voice-user-id` and `x-voice-profile-id` from the verified access token; request bodies and paths do not supply an acting profile or sender. Chat access is resolved by Messaging from the chat ID and authenticated profile.
+
+| Method and route | Messaging RPC | Body/query and response |
+|---|---|---|
+| `POST /api/v1/messages/send` | `SendMessage` | Existing send body; optional oneof arm is a direct `scheduled_at` timestamp or `send_when_online: true`. The response is the existing union: exactly one of `message` (immediate) or `scheduled_message` (accepted schedule). |
+| `GET /api/v1/messages/scheduled?chat_id=…&cursor=…&page_size=…` | `ListScheduledMessages` | `chat_id` is required by the chat-scoped RPC; cursor/page size use `CursorPageRequest`. Response fields are `scheduled_messages` and `page` (`next_cursor`, `has_more`). |
+| `PATCH /api/v1/messages/scheduled/{scheduled_message_id}` | `UpdateScheduledMessage` | Optional complete `payload` and/or one direct schedule arm (`scheduled_at` or `send_when_online: true`); the path ID overrides any body ID. Response contains `scheduled_message`. |
+| `DELETE /api/v1/messages/scheduled/{scheduled_message_id}` | `CancelScheduledMessage` | No body; success is `204 No Content`. |
+| `POST /api/v1/messages/scheduled/{scheduled_message_id}/send-now` | `SendScheduledMessageNow` | No body; response contains the sent `message`. |
+
+These custom routes use protobuf JSON field names and Gateway's standard gRPC error mapping (`INVALID_ARGUMENT` → 400, `NOT_FOUND` → 404, `PERMISSION_DENIED` → 403, `FAILED_PRECONDITION` → 412, `UNAVAILABLE` → 503). Owner-only pending-state rules and idempotent cancel/send-now behavior remain Messaging's authority; omitted update schedule fields retain the stored schedule.
 
 ### T14 SDK authorization routes
 
@@ -208,7 +224,7 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 6. Сохраняет проверенные claims и upstream JWT в существующем auth context при проксировании `/ws` в Realtime; отдельный downstream header для `session_epoch` этим контрактом не вводится
 7. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
 
-### Phase-0 delegated transport (target)
+### Phase-0 delegated transport
 
 Для защищённого downstream gRPC Gateway выдаёт отдельный delegated-user bearer,
 а не пересылает client JWT или `X-Voice-*` identity headers. В metadata остаются
@@ -268,7 +284,8 @@ blacklist-механизмом и не заменяется epoch.
 | `GATEWAY_REDIS_ADDR`, `GATEWAY_REDIS_PASSWORD` | Redis для rate limit и JWT blacklist |
 | `GATEWAY_SESSION_EPOCH_STRICT` | Только точное `true` включает strict; unset/точное `false` — compatibility; прочее не даёт Gateway стартовать |
 | `GATEWAY_JWT_BLACKLIST_PREFIX` | Prefix blacklist ключей; default `jwt:blacklist:` |
-| `GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR`, `GATEWAY_PRINCIPAL_ACTIVE_KID` | Phase-0 Gateway issuer: secret-mounted каталог с ровно двумя unencrypted PKCS#8 RSA private keys `<kid>.pem` (active + peer). `ACTIVE_KID` выбирает signing key; JWKS публикует оба sorted public keys. Неполная/некорректная конфигурация или legacy aliases `S2S_SIGNING_KEY_PEM` / `S2S_SIGNING_KID` не дают Gateway стартовать. Выпуск delegated credentials в downstream routes пока **not wired**. |
+| `GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR`, `GATEWAY_PRINCIPAL_ACTIVE_KID` | Phase-0 Gateway issuer: secret-mounted каталог с ровно двумя unencrypted PKCS#8 RSA private keys `<kid>.pem` (active + peer). `ACTIVE_KID` выбирает signing key; JWKS публикует оба sorted public keys. Неполная/некорректная конфигурация или legacy aliases `S2S_SIGNING_KEY_PEM` / `S2S_SIGNING_KID` не дают Gateway стартовать. Подписанные delegated-user credentials используются для выделенных Voice user RPC. |
+| `GATEWAY_VOICE_USER_GRPC_ADDR`, `GATEWAY_VOICE_USER_TLS_CA_FILE`, `GATEWAY_VOICE_USER_TLS_SERVER_NAME`, `GATEWAY_VOICE_USER_CLIENT_CERT_FILE`, `GATEWAY_VOICE_USER_CLIENT_KEY_FILE` | Dedicated mTLS client для Voice Join/Leave/GetJoinToken user-principal listener. Требуется полный набор значений; отсутствующая, частичная или неисправная конфигурация делает `GetJoinToken` недоступным (503), без вызова обычного Voice client и без downgrade. DM/group/guest policy выполняется Voice по проверенному delegated principal, когда транспорт настроен. |
 | `S2S_JWKS_URLS_JSON`, `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | **Target, not wired:** будущие Phase-0 issuer JWKS endpoints и bounded verifier cache; общий contract с downstream services. Текущий Gateway эти vars не читает, до wiring они unused. |
 | `GATEWAY_TRUSTED_PROXY_CIDRS` | CIDR/IP список proxy, от которых принимается `X-Forwarded-For` |
 | `GATEWAY_CORS_ALLOWED_ORIGINS` | CSV allowlist browser origins; default deny |

@@ -180,6 +180,8 @@ func rateLimitGroup(method, path string) string {
 		return "E2EKeyBackupPut"
 	case method == http.MethodGet && path == "/api/v1/auth/e2e-key-backup":
 		return "E2EKeyBackupGet"
+	case method == http.MethodDelete && path == "/api/v1/auth/e2e-key-backup":
+		return "E2EKeyBackupPut"
 	case method == http.MethodPost && path == "/api/v1/messages/prekeys":
 		return "PreKeyUpload"
 	case method == http.MethodGet && path == "/api/v1/messages/prekeys":
@@ -212,10 +214,15 @@ func rateLimitRetryAfterSeconds(group string) int {
 }
 
 func (g *gateway) rateLimitKey(r *http.Request, claims tokenClaims, publicRoute bool) string {
-	if token := botBearerToken(r); token != "" {
-		return "bot:" + token
+	if publicRoute {
+		return "ip:" + g.clientIP(r)
 	}
-	if publicRoute || claims.UserID == "" {
+	if isBotTokenRESTRoute(r.URL.Path) {
+		if token := botBearerToken(r); token != "" {
+			return "bot:" + token
+		}
+	}
+	if claims.UserID == "" {
 		return "ip:" + g.clientIP(r)
 	}
 	return "user:" + claims.UserID

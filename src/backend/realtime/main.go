@@ -73,6 +73,7 @@ func main() {
 
 	hub := newWSHub()
 	hub.setPresenceViewer(presenceViewer)
+	hub.deliveryAckReader = dialDeliveryAckMessageReader()
 	subscriptionChecker := dialChatSubscriptionChecker(hub)
 	hub.memberInboxLister = memberInboxLister
 	hub.subscriptionChecker = subscriptionChecker
@@ -281,6 +282,14 @@ func dialRealtimeGRPCDependency(name, envKey string) *grpc.ClientConn {
 		return nil
 	}
 	return conn
+}
+
+func dialDeliveryAckMessageReader() deliveryAckMessageReader {
+	conn := dialRealtimeGRPCDependency("delivery acknowledgement message lookup", "REALTIME_MESSAGING_GRPC_ADDR")
+	if conn == nil {
+		return nil
+	}
+	return newGRPCDeliveryAckMessageReader(conn)
 }
 
 func dialChatBootstrapLister() chatBootstrapLister {

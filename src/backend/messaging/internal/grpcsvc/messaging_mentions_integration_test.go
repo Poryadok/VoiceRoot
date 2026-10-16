@@ -84,12 +84,14 @@ func TestMessagingSendMessage_dmUserMention(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, mentionsJSON, sent.GetMessage().GetMentionsJson())
 
-	snap, mentionEv, _, _, _ := spy.snapshot()
-	require.Len(t, snap, 1)
-	require.Equal(t, "true", snap[0][3])
-	require.Len(t, mentionEv, 1)
-	require.Equal(t, profB.String(), mentionEv[0][3])
-	require.Equal(t, "true", mentionEv[0][4])
+	sentEvents := storedOutboxEvents(t, pool, "message.sent")
+	require.Len(t, sentEvents, 1)
+	require.True(t, sentEvents[0].GetMessageSent().GetHasMentions())
+	require.True(t, sentEvents[0].GetMessageSent().GetSendSilent())
+	mentionEvents := storedOutboxEvents(t, pool, "message.mention_added")
+	require.Len(t, mentionEvents, 1)
+	require.Equal(t, []string{profB.String()}, mentionEvents[0].GetMentionAdded().GetMentionedProfileIds())
+	require.True(t, mentionEvents[0].GetMentionAdded().GetSendSilent())
 }
 
 func TestMessagingEditMessage_SilentMessageMentionPreservesSilent(t *testing.T) {
@@ -120,10 +122,10 @@ func TestMessagingEditMessage_SilentMessageMentionPreservesSilent(t *testing.T) 
 		Content:   "hey @" + profB.String(),
 	})
 	require.NoError(t, err)
-	_, mentionEv, _, _, _ := spy.snapshot()
-	require.Len(t, mentionEv, 1)
-	require.Equal(t, profB.String(), mentionEv[0][3])
-	require.Equal(t, "true", mentionEv[0][4])
+	mentionEvents := storedOutboxEvents(t, pool, "message.mention_added")
+	require.Len(t, mentionEvents, 1)
+	require.Equal(t, []string{profB.String()}, mentionEvents[0].GetMentionAdded().GetMentionedProfileIds())
+	require.True(t, mentionEvents[0].GetMentionAdded().GetSendSilent())
 }
 
 // TestMessagingSendMessage_mentionNonMemberRejected ensures unknown profile cannot be mentioned.
@@ -223,9 +225,9 @@ func TestMessagingSendMessage_everyoneInSpaceAllowed(t *testing.T) {
 	require.Len(t, stored, 1)
 	require.Equal(t, "everyone", stored[0]["type"])
 
-	_, mentionEv, _, _, _ := spy.snapshot()
-	require.Len(t, mentionEv, 1)
-	require.Contains(t, mentionEv[0][3], profB.String())
+	mentionEvents := storedOutboxEvents(t, pool, "message.mention_added")
+	require.Len(t, mentionEvents, 1)
+	require.Contains(t, mentionEvents[0].GetMentionAdded().GetMentionedProfileIds(), profB.String())
 }
 
 // TestMessagingSendMessage_hereUsesPresence documents @here online filter.
@@ -269,9 +271,9 @@ VALUES ($1, 'group', $2, 0, $3)
 	})
 	require.NoError(t, err)
 
-	_, mentionEv, _, _, _ := spy.snapshot()
-	require.Len(t, mentionEv, 1)
-	require.Equal(t, profC.String(), mentionEv[0][3])
+	mentionEvents := storedOutboxEvents(t, pool, "message.mention_added")
+	require.Len(t, mentionEvents, 1)
+	require.Equal(t, []string{profC.String()}, mentionEvents[0].GetMentionAdded().GetMentionedProfileIds())
 }
 
 // TestMessagingSendMessage_bareEveryoneFromContent documents TC-MSG-03:
@@ -312,9 +314,9 @@ func TestMessagingSendMessage_bareEveryoneFromContent(t *testing.T) {
 	require.Len(t, stored, 1)
 	require.Equal(t, "everyone", stored[0]["type"])
 
-	_, mentionEv, _, _, _ := spy.snapshot()
-	require.Len(t, mentionEv, 1)
-	require.Contains(t, mentionEv[0][3], profB.String())
+	mentionEvents := storedOutboxEvents(t, pool, "message.mention_added")
+	require.Len(t, mentionEvents, 1)
+	require.Contains(t, mentionEvents[0].GetMentionAdded().GetMentionedProfileIds(), profB.String())
 }
 
 // TestMessagingSendMessage_bareEveryoneDeniedWithoutPermission gates content-parsed @everyone.

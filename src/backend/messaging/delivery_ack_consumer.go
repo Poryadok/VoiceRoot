@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,7 +22,11 @@ const deliveryAckDurable = "messaging_delivery_ack"
 const deliveryAckSubject = "message.delivery_ack"
 
 type deliveryCursorStore interface {
-	UpsertDeliveredCursor(ctx context.Context, chatID, profileID, messageID uuid.UUID) error
+	UpsertDeliveredCursorWithMutationFence(ctx context.Context, chatID, spaceID, profileID, messageID uuid.UUID) error
+}
+
+type deliveryAckChatPolicy interface {
+	Load(context.Context, uuid.UUID) (*store.ChatThreadPolicy, error)
 }
 
 func deliveryAckDurableName(_ string) string { return deliveryAckDurable }
@@ -77,9 +82,9 @@ func deliveryAckFromEvent(data []byte) (chatID, profileID, messageID uuid.UUID, 
 	return chatID, profileID, messageID, true
 }
 
-func subscribeDeliveryAck(ctx context.Context, js nats.JetStreamContext, store deliveryCursorStore, logger *slog.Logger) (*nats.Subscription, error) {
-	if store == nil {
-		return nil, fmt.Errorf("delivery ack store not configured")
+func subscribeDeliveryAck(ctx context.Context, js nats.JetStreamContext, cursors deliveryCursorStore, policy deliveryAckChatPolicy, logger *slog.Logger) (*nats.Subscription, error) {
+	if cursors == nil || policy == nil {
+		return nil, fmt.Errorf("delivery ack store and authoritative chat policy required")
 	}
 	handler := func(msg *nats.Msg) {
 		chatID, profileID, messageID, ok := deliveryAckFromEvent(msg.Data)
@@ -93,7 +98,29 @@ func subscribeDeliveryAck(ctx context.Context, js nats.JetStreamContext, store d
 			slog.String("profile_id", profileID.String()),
 			slog.String("message_id", messageID.String()),
 		}
-		if err := store.UpsertDeliveredCursor(ctx, chatID, profileID, messageID); err != nil {
+		chatPolicy, err := policy.Load(ctx, chatID)
+		if err != nil {
+			if errors.Is(err, store.ErrChatNotFound) {
+				// A delivery acknowledgement for a definitively removed chat is stale.
+				_ = msg.Ack()
+				return
+			}
+			attrs = append(attrs, slog.String("error", err.Error()))
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "delivery_ack authoritative chat lookup failed", attrs...)
+			_ = msg.Nak()
+			return
+		}
+		if chatPolicy == nil {
+			attrs = append(attrs, slog.String("error", "authoritative chat policy is empty"))
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "delivery_ack authoritative chat lookup failed", attrs...)
+			_ = msg.Nak()
+			return
+		}
+		var spaceID uuid.UUID
+		if chatPolicy.SpaceID != nil {
+			spaceID = *chatPolicy.SpaceID
+		}
+		if err := cursors.UpsertDeliveredCursorWithMutationFence(ctx, chatID, spaceID, profileID, messageID); err != nil {
 			attrs = append(attrs, slog.String("error", err.Error()))
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "delivery_ack cursor update failed", attrs...)
 			_ = msg.Nak()
@@ -113,12 +140,12 @@ func subscribeDeliveryAck(ctx context.Context, js nats.JetStreamContext, store d
 	return sub, nil
 }
 
-func runDeliveryAckConsumer(ctx context.Context, natsURL string, store deliveryCursorStore, logger *slog.Logger) error {
+func runDeliveryAckConsumer(ctx context.Context, natsURL string, cursors deliveryCursorStore, policy deliveryAckChatPolicy, logger *slog.Logger) error {
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("delivery ack consumer: missing NATS URL")
 	}
 	for {
-		err := runDeliveryAckConsumerOnce(ctx, natsURL, store, logger)
+		err := runDeliveryAckConsumerOnce(ctx, natsURL, cursors, policy, logger)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -133,7 +160,7 @@ func runDeliveryAckConsumer(ctx context.Context, natsURL string, store deliveryC
 	}
 }
 
-func runDeliveryAckConsumerOnce(ctx context.Context, natsURL string, store deliveryCursorStore, logger *slog.Logger) error {
+func runDeliveryAckConsumerOnce(ctx context.Context, natsURL string, cursors deliveryCursorStore, policy deliveryAckChatPolicy, logger *slog.Logger) error {
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-messaging-delivery-ack"),
 		nats.CustomInboxPrefix("_INBOX.voice.messaging"),
@@ -151,7 +178,7 @@ func runDeliveryAckConsumerOnce(ctx context.Context, natsURL string, store deliv
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeDeliveryAck(ctx, js, store, logger)
+	sub, err := subscribeDeliveryAck(ctx, js, cursors, policy, logger)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/screen_share_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/platform_capability_hints.dart';
 
 class ScreenSharePanel extends ConsumerWidget {
@@ -36,7 +37,8 @@ class ScreenSharePanel extends ConsumerWidget {
     final _ = call.mediaTracksVersion;
 
     livekit.VideoTrack? track;
-    final isLocalSelf = share.isSharing &&
+    final isLocalSelf =
+        share.isSharing &&
         selected != null &&
         (selected.streamId == share.localStreamId ||
             (selfId != null && selected.profileId == selfId));
@@ -122,9 +124,12 @@ class ScreenSharePanel extends ConsumerWidget {
                     l10n.screenShareWaitingForVideo,
                     style: TextStyle(color: voice.textSecondary),
                   ),
-                if (share.isPaused &&
-                    share.localStreamId == selected?.streamId)
-                  Icon(Icons.pause_circle, size: 48, color: voice.textSecondary),
+                if (share.isPaused && share.localStreamId == selected?.streamId)
+                  Icon(
+                    Icons.pause_circle,
+                    size: 48,
+                    color: voice.textSecondary,
+                  ),
               ],
             ),
           ),
@@ -135,7 +140,7 @@ class ScreenSharePanel extends ConsumerWidget {
             child: Text(
               share.errorMessage == 'screen_share_limit'
                   ? l10n.screenShareLimitReached
-                  : share.errorMessage!,
+                  : commonActionErrorMessage(l10n),
               style: TextStyle(color: voice.error),
             ),
           ),
@@ -165,10 +170,7 @@ Future<double?> showScreenShareQualityDialog(BuildContext context) {
           ),
           if (webHint != null) ...[
             const SizedBox(height: 8),
-            Text(
-              webHint,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(webHint, style: Theme.of(context).textTheme.bodySmall),
           ],
         ],
       ),
@@ -218,9 +220,7 @@ class ScreenSharePauseButton extends ConsumerWidget {
     if (!share.isSharing) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context)!;
     return IconButton.filledTonal(
-      tooltip: share.isPaused
-          ? l10n.screenShareResume
-          : l10n.screenSharePause,
+      tooltip: share.isPaused ? l10n.screenShareResume : l10n.screenSharePause,
       onPressed: () => ref
           .read(callControllerProvider.notifier)
           .pauseScreenShare(!share.isPaused),

@@ -48,6 +48,17 @@ class SpaceTreeColumn extends ConsumerWidget {
             )
             .valueOrNull ??
         false;
+    final canManageInvites = ref
+            .watch(
+              spacePermissionProvider((
+                spaceId: spaceId,
+                permission: SpacePermissions.spaceManageInvites,
+                chatId: null,
+                voiceRoomId: null,
+              )),
+            )
+            .valueOrNull ??
+        false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -113,13 +124,14 @@ class SpaceTreeColumn extends ConsumerWidget {
                       ? () => SpaceBotsSheet.show(context, spaceId: spaceId)
                       : null,
                 ),
-                IconButton(
-                  key: const Key('space_invites_action'),
-                  icon: const Icon(Icons.person_add_outlined),
-                  tooltip: l10n.spaceInvitesTooltip,
-                  onPressed: () =>
-                      SpaceInvitesSheet.show(context, spaceId: spaceId),
-                ),
+                if (canManageInvites)
+                  IconButton(
+                    key: const Key('space_invites_action'),
+                    icon: const Icon(Icons.person_add_outlined),
+                    tooltip: l10n.spaceInvitesTooltip,
+                    onPressed: () =>
+                        SpaceInvitesSheet.show(context, spaceId: spaceId),
+                  ),
                 VoiceShareLinkButton(
                   link: spaceShareUrl(spaceId),
                   tooltip: l10n.shareLinkAction,

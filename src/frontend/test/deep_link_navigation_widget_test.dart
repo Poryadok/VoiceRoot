@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/routing/app_router.dart';
 import 'package:voice_frontend/routing/deep_link_parser.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -126,6 +127,15 @@ void main() {
 
         expect(container.read(selectedChatIdProvider), isNull);
         expect(find.text('private resolver detail'), findsNothing);
+        expect(find.text('$statusCode'), findsOneWidget);
+        expect(
+          find.text(
+            statusCode == 403
+                ? 'You do not have permission to open this link. It may be intended for another profile.'
+                : 'This link is unavailable or no longer valid.',
+          ),
+          findsOneWidget,
+        );
         expect(
           find.text(statusCode == 403 ? 'Access denied' : 'Not found'),
           findsOneWidget,
@@ -250,6 +260,92 @@ void main() {
     expect(find.byKey(const ValueKey('deep-link-error-screen')), findsNothing);
   });
 
+  testWidgets(
+    'a resolve result is ignored after the active profile changes within the account',
+    (tester) async {
+      final pendingResponse = Completer<http.Response>();
+      final mockClient = MockClient((_) => pendingResponse.future);
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: mockClient),
+      );
+      addTearDown(container.dispose);
+      final router = _createResolverRouter();
+      await tester.pumpWidget(
+        _resolverApp(container: container, router: router),
+      );
+
+      await tester.tap(find.text('resolve'));
+      await tester.pump();
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'next-profile-access',
+          refreshToken: 'next-profile-refresh',
+          accountId: 'acc-test',
+          activeProfileId: 'prof-next',
+          expiresInSeconds: 900,
+        ),
+      );
+      pendingResponse.complete(
+        http.Response(
+          '{"code":"PRIVATE_DETAIL","message":"private resolver detail"}',
+          403,
+          headers: const {'content-type': 'application/json'},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(authControllerProvider).session?.accountId,
+        'acc-test',
+      );
+      expect(
+        container.read(authControllerProvider).session?.activeProfileId,
+        'prof-next',
+      );
+      expect(container.read(selectedChatIdProvider), isNull);
+      expect(
+        find.byKey(const ValueKey('deep-link-error-screen')),
+        findsNothing,
+      );
+      expect(find.text('private resolver detail'), findsNothing);
+    },
+  );
+
+  testWidgets('the Home CTA is reachable and activatable from the keyboard', (
+    tester,
+  ) async {
+    final mockClient = MockClient(
+      (_) async => http.Response(
+        '{"code":"PRIVATE_DETAIL","message":"private resolver detail"}',
+        404,
+        headers: const {'content-type': 'application/json'},
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: mockClient),
+    );
+    addTearDown(container.dispose);
+    final router = _createResolverRouter();
+    await tester.pumpWidget(_resolverApp(container: container, router: router));
+
+    await tester.tap(find.text('resolve'));
+    await tester.pumpAndSettle();
+    expect(find.text('Not found'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('deep-link-error-home')), findsOneWidget);
+    expect(find.text('Go to Home'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('home shell'), findsOneWidget);
+    expect(find.byKey(const ValueKey('deep-link-error-screen')), findsNothing);
+    expect(find.text('Not found'), findsNothing);
+    expect(find.text('private resolver detail'), findsNothing);
+  });
+
   testWidgets('a newer resolve supersedes an older pending result', (
     tester,
   ) async {
@@ -338,6 +434,21 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Go to Home'), findsOneWidget);
+        expect(find.text('$statusCode'), findsOneWidget);
+        final code = tester.getRect(find.text('$statusCode'));
+        final title = tester.getRect(
+          find.text(statusCode == 403 ? 'Access denied' : 'Not found'),
+        );
+        final body = tester.getRect(
+          find.byKey(const ValueKey('deep-link-error-description')),
+        );
+        final home = tester.getRect(
+          find.byKey(const ValueKey('deep-link-error-home')),
+        );
+        expect(code.bottom, lessThan(title.top));
+        expect(title.bottom, lessThan(body.top));
+        expect(body.bottom, lessThan(home.top));
+        expect(body.width, lessThanOrEqualTo(352));
         expect(find.text('private resolver detail'), findsNothing);
         expect(tester.takeException(), isNull);
         if (captureDirectory != null && captureDirectory.isNotEmpty) {
@@ -349,6 +460,42 @@ void main() {
         }
       },
     );
+  }
+
+  for (final statusCode in [403, 404]) {
+    testWidgets('a $statusCode explanation remains usable with enlarged text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', statusCode)),
+        ),
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        _resolverApp(container: container, router: _createResolverRouter()),
+      );
+      await tester.tap(find.text('resolve'));
+      await tester.pumpAndSettle();
+      expect(find.text('$statusCode'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('deep-link-error-description')),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('deep-link-error-home')),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Go to Home'));
+      await tester.pumpAndSettle();
+      expect(find.text('home shell'), findsOneWidget);
+    });
   }
 }
 
@@ -430,7 +577,7 @@ Future<ThemeData> _captureTheme(WidgetTester tester) async {
     final catalog = await VoiceTokenCatalog.load();
     return VoiceTheme.build(
       catalog: catalog,
-      mode: VoiceThemeMode.dark,
+      mode: VoiceThemeMode.light,
       profileAccent: catalog.profileAccentAt(0),
     );
   });

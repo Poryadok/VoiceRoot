@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,8 +48,8 @@ func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error
 		call.States = defaultStates(call)
 	}
 	keys := []string{s.callKey(call.RoomID)}
-	if call.IsVoiceRoom() {
-		keys = append(keys, s.activeVoiceRoomKey(call.VoiceRoomID))
+	if call.IsVoiceRoom() && call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		keys = append(keys, s.activeVoiceRoomKey(call.VoiceRoomID), s.activeSpaceVoiceRoomsKey(call.SpaceID))
 	}
 	if call.IsGroupVoice() && !call.ManagedGameSession {
 		keys = append(keys, s.activeChatKey(call.ChatID))
@@ -64,7 +66,7 @@ func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error
 			} else if exists != 0 {
 				return ErrInvalidState
 			}
-			if call.IsVoiceRoom() {
+			if call.IsVoiceRoom() && call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 				if _, err := tx.Get(ctx, s.activeVoiceRoomKey(call.VoiceRoomID)).Result(); err == nil {
 					return ErrActiveCall
 				} else if !errors.Is(err, redis.Nil) {
@@ -171,6 +173,369 @@ func (s *RedisCallStore) GetCallByVoiceRoomID(ctx context.Context, voiceRoomID s
 	return call, nil
 }
 
+func (s *RedisCallStore) ListActiveSpaceVoiceCalls(ctx context.Context, spaceID string) ([]Call, error) {
+	if strings.TrimSpace(spaceID) == "" {
+		return nil, ErrInvalidState
+	}
+	roomIDs, err := s.client.SMembers(ctx, s.activeSpaceVoiceRoomsKey(spaceID)).Result()
+	if err != nil {
+		return nil, err
+	}
+	calls := make([]Call, 0, len(roomIDs))
+	for _, roomID := range roomIDs {
+		call, err := s.GetCall(ctx, roomID)
+		if errors.Is(err, ErrNotFound) {
+			_ = s.client.SRem(ctx, s.activeSpaceVoiceRoomsKey(spaceID), roomID).Err()
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if call.IsVoiceRoom() && call.SpaceID == spaceID && call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+			calls = append(calls, call)
+			continue
+		}
+		_ = s.client.SRem(ctx, s.activeSpaceVoiceRoomsKey(spaceID), roomID).Err()
+	}
+	return calls, nil
+}
+
+// ListActiveSpaceIDs enumerates only the durable Space room-index keys. Unlike
+// ordinary session keys, these indexes have no expiry and survive Voice restart.
+func (s *RedisCallStore) ListActiveSpaceIDs(ctx context.Context) ([]string, error) {
+	prefix := s.prefix + "active_space_voice_rooms:"
+	seen := make(map[string]struct{})
+	var cursor uint64
+	for {
+		keys, next, err := s.client.Scan(ctx, cursor, prefix+"*", expiredRingingScanCount).Result()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			spaceID, ok := strings.CutPrefix(key, prefix)
+			if !ok || spaceID == "" {
+				continue
+			}
+			members, err := s.client.SCard(ctx, key).Result()
+			if err != nil {
+				return nil, err
+			}
+			if members > 0 {
+				seen[spaceID] = struct{}{}
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	spaces := make([]string, 0, len(seen))
+	for id := range seen {
+		spaces = append(spaces, id)
+	}
+	sort.Strings(spaces)
+	return spaces, nil
+}
+
+func (s *RedisCallStore) RaiseSpaceMediaEpochFloor(ctx context.Context, spaceID string, kind SpaceMediaEpochKind, epoch uint64) (SpaceMediaEpochFloors, error) {
+	if strings.TrimSpace(spaceID) == "" || epoch == 0 || (kind != SpaceAccessEpoch && kind != RolePolicyEpoch) {
+		return SpaceMediaEpochFloors{}, ErrInvalidState
+	}
+	key := s.spaceMediaFloorKey(spaceID, kind)
+	for attempt := 0; attempt < redisTransitionAttempts; attempt++ {
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			current, err := tx.Get(ctx, key).Uint64()
+			if err != nil && !errors.Is(err, redis.Nil) {
+				return err
+			}
+			if epoch <= current {
+				return nil
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, key, strconv.FormatUint(epoch, 10), 0)
+				return nil
+			})
+			return err
+		}, key)
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return SpaceMediaEpochFloors{}, err
+		}
+		return s.GetSpaceMediaEpochFloors(ctx, spaceID)
+	}
+	return SpaceMediaEpochFloors{}, ErrMoveContention
+}
+
+func (s *RedisCallStore) GetSpaceMediaEpochFloors(ctx context.Context, spaceID string) (SpaceMediaEpochFloors, error) {
+	var floors SpaceMediaEpochFloors
+	for kind, target := range map[SpaceMediaEpochKind]*uint64{SpaceAccessEpoch: &floors.AccessEpoch, RolePolicyEpoch: &floors.PolicyEpoch} {
+		value, err := s.client.Get(ctx, s.spaceMediaFloorKey(spaceID, kind)).Uint64()
+		if errors.Is(err, redis.Nil) {
+			continue
+		}
+		if err != nil {
+			return SpaceMediaEpochFloors{}, err
+		}
+		*target = value
+	}
+	return floors, nil
+}
+
+func (s *RedisCallStore) GetSpaceMediaEpochProgress(ctx context.Context, spaceID string) (SpaceMediaEpochProgress, error) {
+	observed, err := s.GetSpaceMediaEpochFloors(ctx, spaceID)
+	if err != nil {
+		return SpaceMediaEpochProgress{}, err
+	}
+	var reconciled SpaceMediaEpochFloors
+	for kind, target := range map[SpaceMediaEpochKind]*uint64{SpaceAccessEpoch: &reconciled.AccessEpoch, RolePolicyEpoch: &reconciled.PolicyEpoch} {
+		value, err := s.client.Get(ctx, s.spaceMediaReconciledKey(spaceID, kind)).Uint64()
+		if errors.Is(err, redis.Nil) {
+			continue
+		}
+		if err != nil {
+			return SpaceMediaEpochProgress{}, err
+		}
+		*target = value
+	}
+	return SpaceMediaEpochProgress{Observed: observed, Reconciled: reconciled}, nil
+}
+
+func (s *RedisCallStore) MarkSpaceMediaEpochReconciled(ctx context.Context, spaceID string, kind SpaceMediaEpochKind, epoch uint64) (SpaceMediaEpochProgress, error) {
+	if strings.TrimSpace(spaceID) == "" || epoch == 0 || (kind != SpaceAccessEpoch && kind != RolePolicyEpoch) {
+		return SpaceMediaEpochProgress{}, ErrInvalidState
+	}
+	observedKey := s.spaceMediaFloorKey(spaceID, kind)
+	reconciledKey := s.spaceMediaReconciledKey(spaceID, kind)
+	for attempt := 0; attempt < redisTransitionAttempts; attempt++ {
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			observed, err := tx.Get(ctx, observedKey).Uint64()
+			if err != nil && !errors.Is(err, redis.Nil) {
+				return err
+			}
+			if epoch > observed {
+				return ErrSpaceMediaStaleGrant
+			}
+			current, err := tx.Get(ctx, reconciledKey).Uint64()
+			if err != nil && !errors.Is(err, redis.Nil) {
+				return err
+			}
+			if epoch <= current {
+				return nil
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, reconciledKey, strconv.FormatUint(epoch, 10), 0)
+				return nil
+			})
+			return err
+		}, observedKey, reconciledKey)
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return SpaceMediaEpochProgress{}, err
+		}
+		return s.GetSpaceMediaEpochProgress(ctx, spaceID)
+	}
+	return SpaceMediaEpochProgress{}, ErrMoveContention
+}
+
+func (s *RedisCallStore) AdmitSpaceMediaParticipant(ctx context.Context, roomID string, participant SpaceMediaParticipant, maxParticipants int) (Call, error) {
+	if participant.ProfileID == "" || participant.Identity == "" || participant.Generation == "" ||
+		participant.Issued.SessionEpoch == 0 || participant.Issued.AccessEpoch == 0 || participant.Issued.PolicyEpoch == 0 ||
+		!participant.Issued.CanJoin || !participant.Issued.CanSubscribe {
+		return Call{}, ErrInvalidState
+	}
+	initial, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, err
+	}
+	if !initial.IsVoiceRoom() || initial.SpaceID == "" {
+		return Call{}, ErrInvalidState
+	}
+	accessFloorKey := s.spaceMediaFloorKey(initial.SpaceID, SpaceAccessEpoch)
+	policyFloorKey := s.spaceMediaFloorKey(initial.SpaceID, RolePolicyEpoch)
+	profileKey := s.activeKey(participant.ProfileID)
+	for attempt := 0; attempt < redisTransitionAttempts; attempt++ {
+		var result Call
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			call, err := s.getCallTx(ctx, tx, roomID)
+			if err != nil {
+				return err
+			}
+			if !call.IsVoiceRoom() || (call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE && call.Status != callsv1.CallStatus_CALL_STATUS_UNSPECIFIED) || call.SpaceID == "" || call.SpaceID != initial.SpaceID {
+				return ErrInvalidState
+			}
+			accessFloor, err := tx.Get(ctx, s.spaceMediaFloorKey(call.SpaceID, SpaceAccessEpoch)).Uint64()
+			if err != nil && !errors.Is(err, redis.Nil) {
+				return err
+			}
+			policyFloor, err := tx.Get(ctx, s.spaceMediaFloorKey(call.SpaceID, RolePolicyEpoch)).Uint64()
+			if err != nil && !errors.Is(err, redis.Nil) {
+				return err
+			}
+			if participant.Issued.AccessEpoch < accessFloor || participant.Issued.PolicyEpoch < policyFloor {
+				return ErrSpaceMediaStaleGrant
+			}
+			if current, ok := call.SpaceMedia[participant.ProfileID]; ok {
+				if current.Generation == participant.Generation && current.Identity == participant.Identity && !current.Revoking {
+					result = call
+					return nil
+				}
+				return ErrSpaceMediaTransition
+			}
+			if activeRoomID, err := tx.Get(ctx, s.activeVoiceRoomKey(call.VoiceRoomID)).Result(); err == nil && activeRoomID != roomID {
+				return ErrActiveCall
+			} else if err != nil && !errors.Is(err, redis.Nil) {
+				return err
+			}
+			if activeRoomID, err := tx.Get(ctx, profileKey).Result(); err == nil && activeRoomID != roomID {
+				return ErrActiveCall
+			} else if err != nil && !errors.Is(err, redis.Nil) {
+				return err
+			}
+			if len(call.States) >= maxParticipants {
+				return ErrRoomFull
+			}
+			if call.States == nil {
+				call.States = map[string]ParticipantState{}
+			}
+			if call.SpaceMedia == nil {
+				call.SpaceMedia = map[string]SpaceMediaParticipant{}
+			}
+			call.States[participant.ProfileID] = ParticipantState{ProfileID: participant.ProfileID}
+			participant.Reconciled = participant.Issued
+			call.SpaceMedia[participant.ProfileID] = participant
+			call.Status = callsv1.CallStatus_CALL_STATUS_ACTIVE
+			payload, err := json.Marshal(call)
+			if err != nil {
+				return err
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				s.writeCallProjection(pipe, ctx, call, payload)
+				return nil
+			})
+			if err == nil {
+				result = call
+			}
+			return err
+		}, s.callKey(roomID), profileKey, accessFloorKey, policyFloorKey, s.activeVoiceRoomKey(initial.VoiceRoomID), s.activeSpaceVoiceRoomsKey(initial.SpaceID))
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return Call{}, err
+		}
+		return result, nil
+	}
+	return Call{}, ErrMoveContention
+}
+
+func (s *RedisCallStore) BeginSpaceMediaRevocation(ctx context.Context, roomID, profileID, identity, generation string) (Call, bool, error) {
+	return s.mutateSpaceMediaParticipant(ctx, roomID, profileID, identity, generation, func(_ context.Context, _ *redis.Tx, call *Call, participant *SpaceMediaParticipant) (bool, error) {
+		if participant.Revoking {
+			return true, nil
+		}
+		participant.Revoking = true
+		return true, nil
+	})
+}
+
+func (s *RedisCallStore) CompleteSpaceMediaRevocation(ctx context.Context, roomID, profileID, identity, generation string) (Call, bool, error) {
+	return s.mutateSpaceMediaParticipant(ctx, roomID, profileID, identity, generation, func(_ context.Context, _ *redis.Tx, call *Call, participant *SpaceMediaParticipant) (bool, error) {
+		if !participant.Revoking {
+			return false, ErrSpaceMediaTransition
+		}
+		delete(call.SpaceMedia, profileID)
+		delete(call.States, profileID)
+		*call = removeScreenSharesForProfile(*call, profileID)
+		if len(call.States) == 0 && !call.ManagedGameSession {
+			call.Status, call.EndedAt = callsv1.CallStatus_CALL_STATUS_ENDED, time.Now().UTC()
+		}
+		return true, nil
+	})
+}
+
+func (s *RedisCallStore) ReconcileSpaceMediaParticipant(ctx context.Context, roomID, profileID, identity, generation string, grant SpaceMediaGrant) (Call, bool, error) {
+	return s.mutateSpaceMediaParticipant(ctx, roomID, profileID, identity, generation, func(ctx context.Context, tx *redis.Tx, call *Call, participant *SpaceMediaParticipant) (bool, error) {
+		if participant.Revoking {
+			return false, nil
+		}
+		accessFloor, err := tx.Get(ctx, s.spaceMediaFloorKey(call.SpaceID, SpaceAccessEpoch)).Uint64()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			return false, err
+		}
+		policyFloor, err := tx.Get(ctx, s.spaceMediaFloorKey(call.SpaceID, RolePolicyEpoch)).Uint64()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			return false, err
+		}
+		if grant.AccessEpoch < accessFloor || grant.PolicyEpoch < policyFloor {
+			return false, ErrSpaceMediaStaleGrant
+		}
+		participant.Reconciled = grant
+		call.SpaceMedia[profileID] = *participant
+		return true, nil
+	})
+}
+
+func (s *RedisCallStore) mutateSpaceMediaParticipant(ctx context.Context, roomID, profileID, identity, generation string, mutate func(context.Context, *redis.Tx, *Call, *SpaceMediaParticipant) (bool, error)) (Call, bool, error) {
+	initial, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, false, err
+	}
+	keys := []string{s.callKey(roomID), s.activeKey(profileID)}
+	if initial.SpaceID != "" {
+		keys = append(keys, s.spaceMediaFloorKey(initial.SpaceID, SpaceAccessEpoch), s.spaceMediaFloorKey(initial.SpaceID, RolePolicyEpoch))
+	}
+	for attempt := 0; attempt < redisTransitionAttempts; attempt++ {
+		var result Call
+		var changed bool
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			call, err := s.getCallTx(ctx, tx, roomID)
+			if err != nil {
+				return err
+			}
+			participant, ok := call.SpaceMedia[profileID]
+			if !ok || participant.Identity != identity || participant.Generation != generation {
+				result = call
+				return nil
+			}
+			changed, err = mutate(ctx, tx, &call, &participant)
+			if err != nil || !changed {
+				result = call
+				return err
+			}
+			if _, exists := call.SpaceMedia[profileID]; exists {
+				call.SpaceMedia[profileID] = participant
+			}
+			payload, err := json.Marshal(call)
+			if err != nil {
+				return err
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				s.writeCallProjection(pipe, ctx, call, payload)
+				if _, exists := call.SpaceMedia[profileID]; !exists {
+					pipe.Del(ctx, s.activeKey(profileID))
+				}
+				return nil
+			})
+			if err == nil {
+				result = call
+			}
+			return err
+		}, keys...)
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return Call{}, false, err
+		}
+		return result, changed, nil
+	}
+	return Call{}, false, ErrMoveContention
+}
+
 func (s *RedisCallStore) RemoveParticipant(ctx context.Context, roomID, profileID string) (Call, error) {
 	return s.transitionParticipant(ctx, roomID, profileID, 0, true)
 }
@@ -199,6 +564,7 @@ func (s *RedisCallStore) transitionParticipant(ctx context.Context, roomID, prof
 					return ErrNotParticipant
 				}
 				delete(call.States, profileID)
+				delete(call.SpaceMedia, profileID)
 				call = removeScreenSharesForProfile(call, profileID)
 				if len(call.States) == 0 && !call.ManagedGameSession {
 					call.Status, call.EndedAt = callsv1.CallStatus_CALL_STATUS_ENDED, time.Now().UTC()
@@ -228,18 +594,24 @@ func (s *RedisCallStore) transitionParticipant(ctx context.Context, roomID, prof
 				return err
 			}
 			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-				pipe.Set(ctx, s.callKey(call.RoomID), payload, 24*time.Hour)
+				pipe.Set(ctx, s.callKey(call.RoomID), payload, callTTL(call))
 				if call.IsVoiceRoom() {
 					if call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
-						pipe.Set(ctx, s.activeVoiceRoomKey(call.VoiceRoomID), call.RoomID, 24*time.Hour)
+						pipe.Set(ctx, s.activeVoiceRoomKey(call.VoiceRoomID), call.RoomID, callTTL(call))
+						if call.SpaceID != "" {
+							pipe.SAdd(ctx, s.activeSpaceVoiceRoomsKey(call.SpaceID), call.RoomID)
+						}
 					} else {
 						pipe.Del(ctx, s.activeVoiceRoomKey(call.VoiceRoomID))
+						if call.SpaceID != "" {
+							pipe.SRem(ctx, s.activeSpaceVoiceRoomsKey(call.SpaceID), call.RoomID)
+						}
 					}
 				}
 				if remove {
 					pipe.Del(ctx, s.activeKey(profileID))
 				} else {
-					pipe.Set(ctx, s.activeKey(profileID), call.RoomID, 24*time.Hour)
+					pipe.Set(ctx, s.activeKey(profileID), call.RoomID, callTTL(call))
 				}
 				return nil
 			})
@@ -363,15 +735,25 @@ func (s *RedisCallStore) MoveVoiceRoomParticipant(ctx context.Context, req Voice
 				}
 			}
 			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-				pipe.Set(ctx, s.callKey(source.RoomID), sourceJSON, 24*time.Hour)
-				pipe.Set(ctx, s.callKey(destination.RoomID), destinationJSON, 24*time.Hour)
+				pipe.Set(ctx, s.callKey(source.RoomID), sourceJSON, callTTL(source))
+				pipe.Set(ctx, s.callKey(destination.RoomID), destinationJSON, callTTL(destination))
 				if source.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
-					pipe.Set(ctx, s.activeVoiceRoomKey(source.VoiceRoomID), source.RoomID, 24*time.Hour)
+					pipe.Set(ctx, s.activeVoiceRoomKey(source.VoiceRoomID), source.RoomID, callTTL(source))
 				} else {
 					pipe.Del(ctx, s.activeVoiceRoomKey(source.VoiceRoomID))
 				}
-				pipe.Set(ctx, s.activeVoiceRoomKey(destination.VoiceRoomID), destination.RoomID, 24*time.Hour)
-				pipe.Set(ctx, s.activeKey(req.ParticipantProfileID), destination.RoomID, 24*time.Hour)
+				if source.SpaceID != "" {
+					if source.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+						pipe.SAdd(ctx, s.activeSpaceVoiceRoomsKey(source.SpaceID), source.RoomID)
+					} else {
+						pipe.SRem(ctx, s.activeSpaceVoiceRoomsKey(source.SpaceID), source.RoomID)
+					}
+				}
+				pipe.Set(ctx, s.activeVoiceRoomKey(destination.VoiceRoomID), destination.RoomID, callTTL(destination))
+				if destination.SpaceID != "" {
+					pipe.SAdd(ctx, s.activeSpaceVoiceRoomsKey(destination.SpaceID), destination.RoomID)
+				}
+				pipe.Set(ctx, s.activeKey(req.ParticipantProfileID), destination.RoomID, callTTL(destination))
 				pipe.Set(ctx, s.moveOperationKey(req.ActorProfileID, req.OperationID), ledgerJSON, 24*time.Hour)
 				return nil
 			})
@@ -477,7 +859,7 @@ func (s *RedisCallStore) mutateCall(ctx context.Context, roomID string, mutate f
 }
 
 func (s *RedisCallStore) writeCallProjection(pipe redis.Pipeliner, ctx context.Context, call Call, payload []byte) {
-	pipe.Set(ctx, s.callKey(call.RoomID), payload, 24*time.Hour)
+	pipe.Set(ctx, s.callKey(call.RoomID), payload, callTTL(call))
 	if call.IsGroupVoice() && !call.ManagedGameSession && call.ChatID != "" {
 		if call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 			pipe.Set(ctx, s.activeChatKey(call.ChatID), call.RoomID, 24*time.Hour)
@@ -487,15 +869,21 @@ func (s *RedisCallStore) writeCallProjection(pipe redis.Pipeliner, ctx context.C
 	}
 	if call.IsVoiceRoom() && call.VoiceRoomID != "" {
 		if call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
-			pipe.Set(ctx, s.activeVoiceRoomKey(call.VoiceRoomID), call.RoomID, 24*time.Hour)
+			pipe.Set(ctx, s.activeVoiceRoomKey(call.VoiceRoomID), call.RoomID, callTTL(call))
+			if call.SpaceID != "" {
+				pipe.SAdd(ctx, s.activeSpaceVoiceRoomsKey(call.SpaceID), call.RoomID)
+			}
 		} else {
 			pipe.Del(ctx, s.activeVoiceRoomKey(call.VoiceRoomID))
+			if call.SpaceID != "" {
+				pipe.SRem(ctx, s.activeSpaceVoiceRoomsKey(call.SpaceID), call.RoomID)
+			}
 		}
 	}
 	if call.Status == callsv1.CallStatus_CALL_STATUS_RINGING || call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		for _, profileID := range call.ProfileIDs() {
 			if profileID != "" {
-				pipe.Set(ctx, s.activeKey(profileID), call.RoomID, 24*time.Hour)
+				pipe.Set(ctx, s.activeKey(profileID), call.RoomID, callTTL(call))
 			}
 		}
 	} else {
@@ -675,6 +1063,33 @@ func (s *RedisCallStore) activeChatKey(chatID string) string {
 
 func (s *RedisCallStore) activeVoiceRoomKey(voiceRoomID string) string {
 	return s.prefix + "active_voice_room:" + voiceRoomID
+}
+
+func (s *RedisCallStore) activeSpaceVoiceRoomsKey(spaceID string) string {
+	return s.prefix + "active_space_voice_rooms:" + spaceID
+}
+
+func (s *RedisCallStore) spaceMediaFloorKey(spaceID string, kind SpaceMediaEpochKind) string {
+	name := "access"
+	if kind == RolePolicyEpoch {
+		name = "role_policy"
+	}
+	return s.prefix + "space_media_floor:" + spaceID + ":" + name
+}
+
+func (s *RedisCallStore) spaceMediaReconciledKey(spaceID string, kind SpaceMediaEpochKind) string {
+	name := "access"
+	if kind == RolePolicyEpoch {
+		name = "role_policy"
+	}
+	return s.prefix + "space_media_reconciled:" + spaceID + ":" + name
+}
+
+func callTTL(call Call) time.Duration {
+	if call.IsVoiceRoom() && call.SpaceID != "" {
+		return 0
+	}
+	return 24 * time.Hour
 }
 
 func (s *RedisCallStore) moveOperationKey(actorProfileID, operationID string) string {

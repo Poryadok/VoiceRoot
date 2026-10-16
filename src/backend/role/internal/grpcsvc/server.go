@@ -10,6 +10,7 @@ import (
 // RoleGRPC implements voice.role.v1.RoleService.
 type RoleGRPC struct {
 	rolev1.UnimplementedRoleServiceServer
-	Store  *store.RoleStore
-	Events roleevents.Publisher
+	Store               *store.RoleStore
+	Events              roleevents.Publisher
+	voiceRoomGrantStore voiceRoomGrantDecisionStore
 }

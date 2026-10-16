@@ -184,7 +184,13 @@ class SpaceTreePanel extends ConsumerWidget {
             if (context.mounted && error != null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(l10n.spaceTreeReorderError(error.message)),
+                  content: Text(
+                    error.kind == SpaceTreeActionErrorKind.refreshFailed
+                        ? l10n.spaceTreeCreateRefreshFailed
+                        : l10n.spaceTreeReorderError(
+                            commonActionErrorMessage(l10n),
+                          ),
+                  ),
                 ),
               );
             }
@@ -211,7 +217,13 @@ class SpaceTreePanel extends ConsumerWidget {
             if (context.mounted && error != null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(l10n.spaceTreeReorderError(error.message)),
+                  content: Text(
+                    error.kind == SpaceTreeActionErrorKind.refreshFailed
+                        ? l10n.spaceTreeCreateRefreshFailed
+                        : l10n.spaceTreeReorderError(
+                            commonActionErrorMessage(l10n),
+                          ),
+                  ),
                 ),
               );
             }
@@ -297,7 +309,7 @@ class _SpaceTreeCreateDialogState extends State<_SpaceTreeCreateDialog> {
       final mustClose = error.kind != SpaceTreeActionErrorKind.rejected;
       if (mustClose) Navigator.of(context).pop();
       final detail = switch (error.message) {
-        'not_authenticated' => error.message,
+        'not_authenticated' => commonActionErrorMessage(widget.l10n),
         'name_required' => error.message,
         _ => widget.l10n.commonActionFailed,
       };

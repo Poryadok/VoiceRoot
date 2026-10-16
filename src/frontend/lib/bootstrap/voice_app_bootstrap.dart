@@ -10,6 +10,7 @@ import '../routing/deep_link_controller.dart';
 import '../routing/deep_link_parser.dart';
 import '../state/auth_providers.dart';
 import '../state/social_providers.dart';
+import '../services/app_icon_runtime_binding.dart';
 import '../settings/theme_preference.dart';
 import '../theme/voice_theme_providers.dart';
 import '../ui/auth/guest_nickname_screen.dart';
@@ -121,6 +122,7 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(appIconRuntimeBindingProvider);
     final auth = ref.watch(authControllerProvider);
     final themeAsync = ref.watch(voiceMaterialThemeProvider);
     final bootstrapTheme = _bootstrapTheme(ref);

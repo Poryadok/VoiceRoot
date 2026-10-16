@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ChatService_CreateDM_FullMethodName                       = "/voice.chat.v1.ChatService/CreateDM"
 	ChatService_GetDM_FullMethodName                          = "/voice.chat.v1.ChatService/GetDM"
+	ChatService_CanCreateDM_FullMethodName                    = "/voice.chat.v1.ChatService/CanCreateDM"
 	ChatService_CreateChat_FullMethodName                     = "/voice.chat.v1.ChatService/CreateChat"
 	ChatService_UpdateChat_FullMethodName                     = "/voice.chat.v1.ChatService/UpdateChat"
 	ChatService_DeleteChat_FullMethodName                     = "/voice.chat.v1.ChatService/DeleteChat"
@@ -71,6 +72,9 @@ const (
 type ChatServiceClient interface {
 	CreateDM(ctx context.Context, in *CreateDMRequest, opts ...grpc.CallOption) (*CreateDMResponse, error)
 	GetDM(ctx context.Context, in *GetDMRequest, opts ...grpc.CallOption) (*GetDMResponse, error)
+	// Read-only caller-relative DM authorization for gating profile actions.
+	// Does not create, promote, or otherwise mutate a DM.
+	CanCreateDM(ctx context.Context, in *CanCreateDMRequest, opts ...grpc.CallOption) (*CanCreateDMResponse, error)
 	CreateChat(ctx context.Context, in *CreateChatRequest, opts ...grpc.CallOption) (*CreateChatResponse, error)
 	UpdateChat(ctx context.Context, in *UpdateChatRequest, opts ...grpc.CallOption) (*UpdateChatResponse, error)
 	DeleteChat(ctx context.Context, in *DeleteChatRequest, opts ...grpc.CallOption) (*DeleteChatResponse, error)
@@ -147,6 +151,16 @@ func (c *chatServiceClient) GetDM(ctx context.Context, in *GetDMRequest, opts ..
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetDMResponse)
 	err := c.cc.Invoke(ctx, ChatService_GetDM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) CanCreateDM(ctx context.Context, in *CanCreateDMRequest, opts ...grpc.CallOption) (*CanCreateDMResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CanCreateDMResponse)
+	err := c.cc.Invoke(ctx, ChatService_CanCreateDM_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -561,6 +575,9 @@ func (c *chatServiceClient) GetSpacePurgeManifestPage(ctx context.Context, in *G
 type ChatServiceServer interface {
 	CreateDM(context.Context, *CreateDMRequest) (*CreateDMResponse, error)
 	GetDM(context.Context, *GetDMRequest) (*GetDMResponse, error)
+	// Read-only caller-relative DM authorization for gating profile actions.
+	// Does not create, promote, or otherwise mutate a DM.
+	CanCreateDM(context.Context, *CanCreateDMRequest) (*CanCreateDMResponse, error)
 	CreateChat(context.Context, *CreateChatRequest) (*CreateChatResponse, error)
 	UpdateChat(context.Context, *UpdateChatRequest) (*UpdateChatResponse, error)
 	DeleteChat(context.Context, *DeleteChatRequest) (*DeleteChatResponse, error)
@@ -628,6 +645,9 @@ func (UnimplementedChatServiceServer) CreateDM(context.Context, *CreateDMRequest
 }
 func (UnimplementedChatServiceServer) GetDM(context.Context, *GetDMRequest) (*GetDMResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDM not implemented")
+}
+func (UnimplementedChatServiceServer) CanCreateDM(context.Context, *CanCreateDMRequest) (*CanCreateDMResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CanCreateDM not implemented")
 }
 func (UnimplementedChatServiceServer) CreateChat(context.Context, *CreateChatRequest) (*CreateChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateChat not implemented")
@@ -802,6 +822,24 @@ func _ChatService_GetDM_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ChatServiceServer).GetDM(ctx, req.(*GetDMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_CanCreateDM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CanCreateDMRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).CanCreateDM(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_CanCreateDM_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).CanCreateDM(ctx, req.(*CanCreateDMRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1540,6 +1578,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDM",
 			Handler:    _ChatService_GetDM_Handler,
+		},
+		{
+			MethodName: "CanCreateDM",
+			Handler:    _ChatService_CanCreateDM_Handler,
 		},
 		{
 			MethodName: "CreateChat",

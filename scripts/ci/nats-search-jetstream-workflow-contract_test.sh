@@ -13,7 +13,7 @@ printf '%s\n' "$dispatch" | grep -Fq '      nats_probe_only:' || fail "missing n
 printf '%s\n' "$dispatch" | grep -Fq '        type: boolean' || fail "probe input must be boolean"
 printf '%s\n' "$dispatch" | grep -Fq '        default: false' || fail "probe input must default false"
 deploy="$(sed -n '/^  deploy:$/,/^  nats-search-jetstream-probe:$/p' "$WORKFLOW")"
-printf '%s\n' "$deploy" | grep -Fq "if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true)" \
+grep -Fq -- "if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true)" <<<"$deploy" \
   || fail "deploy must skip diagnostics-only dispatches and preserve workflow_call"
 probe="$(sed -n '/^  nats-search-jetstream-probe:$/,/^  validate-app-secret:$/p' "$WORKFLOW")"
 [ -n "$probe" ] || fail "diagnostic job missing"
@@ -117,7 +117,7 @@ printf '%s\n' "$ci_target" | grep -Fq 'staging-source-acquisition-workflow-test'
   || fail "CI script test target does not run source acquisition fixtures"
 printf '%s\n' "$probe" | grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" \
   || fail "diagnostic job gate is too broad"
-printf '%s\n' "$probe" | grep -Fq 'timeout-minutes: 8' || fail "job timeout missing"
+printf '%s\n' "$probe" | grep -Fq 'timeout-minutes: 15' || fail "job timeout missing"
 printf '%s\n' "$probe" | grep -Fq 'kctl() { kubectl --request-timeout=8s "$@"; }' || fail "kubectl timeout wrapper missing"
 if printf '%s\n' "$probe" | grep -Eq 'kubectl (get|create|delete|logs) '; then fail "unbounded direct Kubernetes request"; fi
 for required in \

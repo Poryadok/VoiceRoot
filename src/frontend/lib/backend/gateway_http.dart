@@ -10,9 +10,33 @@ import 'gateway_request_id.dart';
 import 'gateway_config.dart';
 import 'gateway_proto_json.dart';
 
-typedef GatewayUnauthorizedHandler = Future<bool> Function();
+typedef GatewayUnauthorizedHandler =
+    Future<bool> Function(GatewayRequestIdentity identity);
 typedef GatewayUpgradeRequiredHandler = void Function(GatewayApiError error);
 typedef AuthorizationProvider = String? Function();
+typedef GatewayRequestIdentityProvider = GatewayRequestIdentity? Function();
+
+final class GatewayRequestIdentity {
+  const GatewayRequestIdentity({
+    required this.generation,
+    required this.accountId,
+    required this.profileId,
+  });
+
+  final int generation;
+  final String accountId;
+  final String profileId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GatewayRequestIdentity &&
+      other.generation == generation &&
+      other.accountId == accountId &&
+      other.profileId == profileId;
+
+  @override
+  int get hashCode => Object.hash(generation, accountId, profileId);
+}
 
 sealed class GatewayHttpResult<T> {
   const GatewayHttpResult();
@@ -35,17 +59,20 @@ class GatewayHttpClient {
     required http.Client httpClient,
     required GatewayConfig config,
     AuthorizationProvider? authorizationProvider,
+    GatewayRequestIdentityProvider? requestIdentityProvider,
     GatewayUnauthorizedHandler? onUnauthorized,
     GatewayUpgradeRequiredHandler? onUpgradeRequired,
   }) : _http = httpClient,
        _config = config,
        _authorizationProvider = authorizationProvider,
+       _requestIdentityProvider = requestIdentityProvider,
        _onUnauthorized = onUnauthorized,
        _onUpgradeRequired = onUpgradeRequired;
 
   final http.Client _http;
   final GatewayConfig _config;
   final AuthorizationProvider? _authorizationProvider;
+  final GatewayRequestIdentityProvider? _requestIdentityProvider;
   final GatewayUnauthorizedHandler? _onUnauthorized;
   final GatewayUpgradeRequiredHandler? _onUpgradeRequired;
 
@@ -60,10 +87,9 @@ class GatewayHttpClient {
   Uri resolve(String path) => Uri.parse(_config.baseUrl).resolve(path);
 
   Uri replace({required String path, Map<String, String>? queryParameters}) {
-    return Uri.parse(_config.baseUrl).replace(
-      path: path,
-      queryParameters: queryParameters,
-    );
+    return Uri.parse(
+      _config.baseUrl,
+    ).replace(path: path, queryParameters: queryParameters);
   }
 
   Future<GatewayHttpResult<T>> getProto<T extends GeneratedMessage>(
@@ -85,6 +111,7 @@ class GatewayHttpClient {
       allowNotFound: allowNotFound,
       allowNoContent: allowNoContent,
       isAuthRoute: _isAuthRoute(uri),
+      authorization: authorization,
     );
   }
 
@@ -108,6 +135,7 @@ class GatewayHttpClient {
       createEmpty: createEmpty,
       allowNoContent: allowNoContent,
       isAuthRoute: _isAuthRoute(uri),
+      authorization: authorization,
     );
   }
 
@@ -131,6 +159,7 @@ class GatewayHttpClient {
       createEmpty: createEmpty,
       allowNoContent: allowNoContent,
       isAuthRoute: _isAuthRoute(uri),
+      authorization: authorization,
     );
   }
 
@@ -147,6 +176,7 @@ class GatewayHttpClient {
         ),
       ),
       isAuthRoute: _isAuthRoute(uri),
+      authorization: authorization,
     );
   }
 
@@ -166,6 +196,7 @@ class GatewayHttpClient {
         body: jsonBody == null ? null : jsonEncode(jsonBody),
       ),
       isAuthRoute: _isAuthRoute(uri),
+      authorization: authorization,
     );
   }
 
@@ -182,6 +213,7 @@ class GatewayHttpClient {
         ),
       ),
       isAuthRoute: _isAuthRoute(uri),
+      authorization: authorization,
     );
   }
 
@@ -203,6 +235,7 @@ class GatewayHttpClient {
       ),
       isAuthRoute: _isAuthRoute(uri),
       allowNoContent: allowNoContent,
+      authorization: authorization,
     );
   }
 
@@ -224,6 +257,7 @@ class GatewayHttpClient {
       ),
       isAuthRoute: _isAuthRoute(uri),
       allowNoContent: allowNoContent,
+      authorization: authorization,
     );
   }
 
@@ -245,6 +279,7 @@ class GatewayHttpClient {
       ),
       isAuthRoute: _isAuthRoute(uri),
       allowNoContent: allowNoContent,
+      authorization: authorization,
     );
   }
 
@@ -302,7 +337,12 @@ class GatewayHttpClient {
     bool allowNoContent = false,
     required bool isAuthRoute,
     bool retried = false,
+    GatewayRequestIdentity? requestIdentity,
+    String? authorization,
+    bool? retryAllowed,
   }) async {
+    requestIdentity ??= _requestIdentityProvider?.call();
+    retryAllowed ??= _canRetryWithProvider(authorization);
     if (!_config.hasBaseUrl) {
       return const GatewayHttpFailure(missingBaseUrl);
     }
@@ -314,19 +354,18 @@ class GatewayHttpClient {
         return GatewayHttpFailure(err);
       }
       if (response.statusCode == 401 && !retried && !isAuthRoute) {
-        final onUnauthorized = _onUnauthorized;
-        if (onUnauthorized != null) {
-          final refreshed = await onUnauthorized();
-          if (refreshed) {
-            return _send(
+        if (await _refreshForRequest(requestIdentity, retryAllowed)) {
+          return _send(
             send,
             createEmpty: createEmpty,
             allowNotFound: allowNotFound,
             allowNoContent: allowNoContent,
             isAuthRoute: isAuthRoute,
             retried: true,
-            );
-          }
+            requestIdentity: requestIdentity,
+            authorization: authorization,
+            retryAllowed: retryAllowed,
+          );
         }
       }
       if (response.statusCode == 404 && allowNotFound) {
@@ -358,7 +397,12 @@ class GatewayHttpClient {
     required bool isAuthRoute,
     bool allowNoContent = false,
     bool retried = false,
+    GatewayRequestIdentity? requestIdentity,
+    String? authorization,
+    bool? retryAllowed,
   }) async {
+    requestIdentity ??= _requestIdentityProvider?.call();
+    retryAllowed ??= _canRetryWithProvider(authorization);
     if (!_config.hasBaseUrl) {
       return const GatewayHttpFailure(missingBaseUrl);
     }
@@ -370,17 +414,16 @@ class GatewayHttpClient {
         return GatewayHttpFailure(err);
       }
       if (response.statusCode == 401 && !retried && !isAuthRoute) {
-        final onUnauthorized = _onUnauthorized;
-        if (onUnauthorized != null) {
-          final refreshed = await onUnauthorized();
-          if (refreshed) {
-            return _sendJsonMap(
+        if (await _refreshForRequest(requestIdentity, retryAllowed)) {
+          return _sendJsonMap(
             send,
             isAuthRoute: isAuthRoute,
             allowNoContent: allowNoContent,
             retried: true,
-            );
-          }
+            requestIdentity: requestIdentity,
+            authorization: authorization,
+            retryAllowed: retryAllowed,
+          );
         }
       }
       if (response.statusCode == 204 && allowNoContent) {
@@ -425,7 +468,12 @@ class GatewayHttpClient {
     Future<http.Response> Function(bool preferProvider) send, {
     required bool isAuthRoute,
     bool retried = false,
+    GatewayRequestIdentity? requestIdentity,
+    String? authorization,
+    bool? retryAllowed,
   }) async {
+    requestIdentity ??= _requestIdentityProvider?.call();
+    retryAllowed ??= _canRetryWithProvider(authorization);
     if (!_config.hasBaseUrl) {
       return const GatewayHttpFailure(missingBaseUrl);
     }
@@ -437,12 +485,15 @@ class GatewayHttpClient {
         return GatewayHttpFailure(err);
       }
       if (response.statusCode == 401 && !retried && !isAuthRoute) {
-        final onUnauthorized = _onUnauthorized;
-        if (onUnauthorized != null) {
-          final refreshed = await onUnauthorized();
-          if (refreshed) {
-            return _sendVoid(send, isAuthRoute: isAuthRoute, retried: true);
-          }
+        if (await _refreshForRequest(requestIdentity, retryAllowed)) {
+          return _sendVoid(
+            send,
+            isAuthRoute: isAuthRoute,
+            retried: true,
+            requestIdentity: requestIdentity,
+            authorization: authorization,
+            retryAllowed: retryAllowed,
+          );
         }
       }
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -460,13 +511,36 @@ class GatewayHttpClient {
     }
   }
 
+  bool _canRetryWithProvider(String? requestAuthorization) {
+    final currentAuthorization = _authorizationProvider?.call();
+    return currentAuthorization != null &&
+        (requestAuthorization == null ||
+            requestAuthorization == currentAuthorization);
+  }
+
+  Future<bool> _refreshForRequest(
+    GatewayRequestIdentity? identity,
+    bool? retryAllowed,
+  ) async {
+    final currentIdentity = _requestIdentityProvider?.call();
+    final onUnauthorized = _onUnauthorized;
+    if (retryAllowed != true ||
+        identity == null ||
+        currentIdentity != identity ||
+        onUnauthorized == null) {
+      return false;
+    }
+    final refreshed = await onUnauthorized(identity);
+    return refreshed && _requestIdentityProvider?.call() == identity;
+  }
+
   Map<String, String> _headers({
     String? authorization,
     bool json = false,
     bool preferProvider = false,
   }) {
     final auth = preferProvider
-        ? (_authorizationProvider?.call() ?? authorization)
+        ? _authorizationProvider?.call()
         : (authorization ?? _authorizationProvider?.call());
     return {
       ...ClientVersion.headers,

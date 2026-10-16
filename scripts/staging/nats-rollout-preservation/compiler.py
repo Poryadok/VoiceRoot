@@ -18,7 +18,7 @@ SOURCE_MANIFESTS=('deploy/staging/services.yaml','deploy/staging/gateway-deploym
  'deploy/templates/network-policy-file-user-principal.yaml',
  'deploy/templates/network-policy-search-user-projection.yaml')
 
-def compatible_bootstrap(source,contract,decoder):
+def compatible_bootstrap(source,contract,decoder,target_scripts=None):
     paths=[]
     scripts=contract.get('scripts',[])
     if len(scripts)!=4 or {r.get('part') for r in scripts}!={'realtime','notification','search','analytics-chat'}:
@@ -33,7 +33,8 @@ def compatible_bootstrap(source,contract,decoder):
         if row.get('kind')!='ConfigMap' or row.get('metadata',{}).get('name')!='voice-nats-'+expected['part']+'-bootstrap':
             raise Blocked('rollout_bootstrap_source_invalid')
         script=row.get('data',{}).get('bootstrap.sh')
-        if not isinstance(script,str) or hashlib.sha256(script.encode()).hexdigest()!=expected['sha256']:
+        wanted=(target_scripts or {}).get(expected['part'],expected['sha256'])
+        if not isinstance(script,str) or hashlib.sha256(script.encode()).hexdigest()!=wanted:
             raise Blocked('rollout_bootstrap_contract_unsupported')
         paths.append(relative)
     return paths
@@ -57,6 +58,15 @@ def rendered_source(source,parameters,decoder):
         path=Path(source)/relative
         if path.is_symlink() or not path.is_file() or path.stat().st_size>2<<20:raise Blocked('rollout_compile_manifest_invalid')
         text=path.read_bytes().decode('utf-8')
+        if '__GATEWAY_INGRESS_HOST__' in text:
+            host=parameters.get('gateway_host')
+            if host is None:
+                defaults=(Path(source)/'deploy/staging/domains.defaults').read_text(encoding='utf-8')
+                match=re.search(r'^VOICE_GATEWAY_INGRESS_HOST=([a-zA-Z0-9.-]+)$',defaults,re.M)
+                host=match.group(1) if match else ''
+            if not isinstance(host,str) or not re.fullmatch(r'[a-zA-Z0-9.-]+',host):
+                raise Blocked('rollout_compile_gateway_jwks_host_invalid')
+            text=text.replace('__GATEWAY_INGRESS_HOST__',host)
         for key,value in replacements.items():text=text.replace(key,value)
         if re.search(r'__[A-Z0-9_]+__|IMAGE_PLACEHOLDER',text):raise Blocked('rollout_compile_placeholder_unresolved')
         # One object per invocation: kubectl printers do not guarantee one
@@ -81,7 +91,7 @@ class ProducerKube:
         values=self.run(['get','secret',name,'-o',"jsonpath-as-json={.metadata['uid','resourceVersion']}"])
         return dict(zip(('uid','resourceVersion'),values))
 
-def main(args):
+def main(args,*,producer=None):
     if len(args)!=3:raise Blocked('rollout_compile_arguments_invalid')
     source=Path(args[0]).resolve(strict=True);parameter_path=Path(args[1]);output=Path(args[2])
     if parameter_path.is_symlink() or not parameter_path.is_file() or not 1<=parameter_path.stat().st_size<=65536:
@@ -90,22 +100,29 @@ def main(args):
     required={'registry','tag','mode','changed_services','images','contract','enrolled','generation','dataPVC','s3_signing_endpoint'}
     optional={'gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host',
         'gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability',
-        'minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin'}
+        'minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','bootstrap_target_scripts'}
     if not required<=set(p) or set(p)-required-optional:
         raise Blocked('rollout_compile_parameters_invalid')
     if not re.fullmatch(r'[a-z0-9][a-z0-9./_-]{1,253}',p['registry']) or not re.fullmatch(r'[a-f0-9]{40}',p['tag']):
         raise Blocked('rollout_compile_version_invalid')
     scope={**p,'template_hashes':{'voice-'+name:None for name in p['changed_services']}}
     frontend_only=guard.frontend_image_only(scope)
-    producer=ProducerKube()
+    producer=ProducerKube() if producer is None else producer
     if frontend_only:
         bootstrap_paths=[]
         rows=[producer.get('Deployment','voice-'+name) for name in sorted(set(p['changed_services']))]
         source_paths=tuple('deploy/staging/'+({'web':'flutter-web'}.get(name,name))+'.yaml' for name in sorted(set(p['changed_services'])))
     else:
-        bootstrap_paths=compatible_bootstrap(source,p['contract'],decode_yaml)
+        bootstrap_paths=compatible_bootstrap(source,p['contract'],decode_yaml,p.get('bootstrap_target_scripts'))
         rows=rendered_source(source,p,decode_yaml)
         source_paths=SOURCE_MANIFESTS
+        if p['mode']=='images-only':
+            # Backend manifests do not contain frontend Deployments. Preserve
+            # selected live frontend templates just as the frontend-only path.
+            fronts=sorted(set(p['changed_services'])&{'web','admin','developer-portal'})
+            rows.extend(producer.get('Deployment','voice-'+name) for name in fronts)
+            source_paths=(*source_paths,*(
+                'deploy/staging/'+({'web':'flutter-web'}.get(name,name))+'.yaml' for name in fronts))
     import source_plan
     plan=source_plan.compile_plan(source,p,decode_yaml,producer)
     if frontend_only and plan['actions']:raise Blocked('rollout_frontend_auxiliary_action_forbidden')

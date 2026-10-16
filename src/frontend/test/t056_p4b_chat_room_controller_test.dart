@@ -709,6 +709,7 @@ void main() {
               messages: [currentMessage],
             );
             final cacheMutations = cache.mutationSignatures();
+            messages.pinnedReads.clear();
 
             messages.completeStaleResult();
             await completion;
@@ -716,7 +717,28 @@ void main() {
 
             final state = container.read(chatRoomControllerProvider('chat-1'));
             expect(state.messages, [currentMessage]);
-            expect(state.pinnedMessages, [currentPinned]);
+            final sameProfilePinMutation =
+                transition == _StaleAuthTransition.tokenRotation &&
+                (mutation.kind == _DeferredMutationKind.pin ||
+                    mutation.kind == _DeferredMutationKind.pinFailure ||
+                    mutation.kind == _DeferredMutationKind.unpin ||
+                    mutation.kind == _DeferredMutationKind.unpinFailure);
+            expect(
+              state.pinnedMessages.map((message) => message.id),
+              sameProfilePinMutation
+                  ? ((mutation.kind == _DeferredMutationKind.pin ||
+                            mutation.kind == _DeferredMutationKind.unpinFailure)
+                        ? ['message-a']
+                        : isEmpty)
+                  : [currentPinned.id],
+            );
+            if (sameProfilePinMutation) {
+              expect(messages.pinnedReads, [
+                (authorization: 'Bearer access-a-rotated', chatId: 'chat-1'),
+              ]);
+            } else {
+              expect(messages.pinnedReads, isEmpty);
+            }
             expect(state.isSending, isTrue);
             expect(state.errorMessage, 'error-current');
             expect(await cache.cachedIdsFor(profileId: currentProfileId), [
@@ -996,6 +1018,7 @@ class _DeferredMutationMessagesClient extends VoiceMessagesClient {
   final _pin = Completer<MessagesApiResult<void>>();
   final _unpin = Completer<MessagesApiResult<void>>();
   final _pinned = Completer<MessagesApiResult<MessageListData>>();
+  final pinnedReads = <({String authorization, String chatId})>[];
   var wasRequested = false;
   String? requestedAuthorization;
 
@@ -1085,11 +1108,17 @@ class _DeferredMutationMessagesClient extends VoiceMessagesClient {
     required String authorization,
     required String chatId,
   }) {
+    pinnedReads.add((authorization: authorization, chatId: chatId));
     if (kind == _DeferredMutationKind.refreshPinned) {
       _markRequested(authorization);
       return _pinned.future;
     }
-    return Future.value(const MessagesApiOk(MessageListData(messages: [])));
+    final pinned = switch (kind) {
+      _DeferredMutationKind.pin ||
+      _DeferredMutationKind.unpinFailure => [_message('message-a')],
+      _ => const <VoiceMessage>[],
+    };
+    return Future.value(MessagesApiOk(MessageListData(messages: pinned)));
   }
 
   @override

@@ -135,6 +135,44 @@ func (p *JetStreamPublisher) PublishVoiceMemberJoined(ctx context.Context, ev *e
 	})
 }
 
+// PublishAdmissionEvent publishes an already-persisted VoiceStreamEvent
+// envelope without changing its identity or payload. JetStream's message ID
+// deduplication makes retries of the durable outbox intent stable.
+func (p *JetStreamPublisher) PublishAdmissionEvent(ctx context.Context, eventID uuid.UUID, subject string, payload []byte) error {
+	if p == nil || p.js == nil || eventID == uuid.Nil || len(payload) == 0 {
+		return fmt.Errorf("invalid durable Voice event")
+	}
+	if subject != "voice.call_started" && subject != "voice.member_joined" {
+		return fmt.Errorf("unsupported durable Voice event subject")
+	}
+	envelope := new(eventsv1.VoiceStreamEvent)
+	if err := proto.Unmarshal(payload, envelope); err != nil || envelope.GetEventId() != eventID.String() {
+		return fmt.Errorf("invalid durable Voice event envelope")
+	}
+	switch subject {
+	case "voice.call_started":
+		if envelope.GetCallStarted() == nil {
+			return fmt.Errorf("durable Voice event subject does not match envelope")
+		}
+	case "voice.member_joined":
+		if envelope.GetVoiceMemberJoined() == nil {
+			return fmt.Errorf("durable Voice event subject does not match envelope")
+		}
+	}
+	message := &nats.Msg{Subject: subject, Data: payload, Header: nats.Header{}}
+	message.Header.Set("Nats-Msg-Id", eventID.String())
+	natslog.SetRequestIDHeader(message.Header, correlation.FromGRPC(ctx))
+	ack, err := p.js.PublishMsg(message)
+	if err != nil {
+		return fmt.Errorf("publish durable Voice event %s: %w", subject, err)
+	}
+	if ack == nil {
+		return fmt.Errorf("JetStream did not acknowledge durable Voice event")
+	}
+	natslog.LogPublish(p.Logger, subject, correlation.FromGRPC(ctx), "durable Voice event published", slog.String("event_id", eventID.String()))
+	return nil
+}
+
 func (p *JetStreamPublisher) publish(ctx context.Context, subject string, env *eventsv1.VoiceStreamEvent) error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")

@@ -80,20 +80,32 @@ tmp_parent="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
 state_dir="$(mktemp -d "${tmp_parent}/voice-a1-multi-account-proof.XXXXXXXX")"
 state_dir="$(cd "$state_dir" && pwd -P)"
 compose_env="${state_dir}/compose-empty.env"
-: >"$compose_env"
+phase0_fixture_dir="${state_dir}/phase0-fixture"
+compose_started=false
 
 cleanup() {
   local status=$?
-  if [[ "${VOICE_A1_MULTI_ACCOUNT_CLEANUP:-false}" == "true" ]]; then
-    compose down --remove-orphans || true
+  local compose_down_succeeded=true
+  if [[ "${VOICE_A1_MULTI_ACCOUNT_CLEANUP:-false}" == "true" && "$compose_started" == "true" ]]; then
+    compose down --remove-orphans || compose_down_succeeded=false
   fi
-  case "$state_dir" in
-    "$tmp_parent"/voice-a1-multi-account-proof.*) rm -rf -- "$state_dir" ;;
-    *) echo "refusing unsafe state cleanup path: $state_dir" >&2; status=1 ;;
-  esac
+  if [[ "$compose_down_succeeded" == "false" ]]; then
+    echo "Compose cleanup failed; disposable fixture retained at $state_dir" >&2
+  elif [[ "${VOICE_A1_MULTI_ACCOUNT_CLEANUP:-false}" == "true" || "$compose_started" == "false" ]]; then
+    case "$state_dir" in
+      "$tmp_parent"/voice-a1-multi-account-proof.*) rm -rf -- "$state_dir" ;;
+      *) echo "refusing unsafe state cleanup path: $state_dir" >&2; status=1 ;;
+    esac
+  else
+    echo "disposable fixture retained with Compose project at $state_dir" >&2
+  fi
   return "$status"
 }
 trap cleanup EXIT
+
+python3 "${ROOT}/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
+printf 'PHASE0_FIXTURE_DIR=%s\n' "$phase0_fixture_dir" >"$compose_env"
+export PHASE0_FIXTURE_DIR="$phase0_fixture_dir"
 
 export COMPOSE_PROJECT_NAME="$project"
 unset COMPOSE_PROFILES COMPOSE_FILE COMPOSE_ENV_FILES \
@@ -126,6 +138,7 @@ compose() {
     --project-name "$project" \
     --project-directory "$ROOT" \
     -f "$COMPOSE_FILE_PATH" \
+    -f "${ROOT}/docker-compose.voice-space-media.yml" \
     --profile app \
     "$@"
 }
@@ -163,6 +176,7 @@ wait_gateway() {
 
 echo "A1 multi-account proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose config --quiet
+compose_started=true
 compose up -d --build
 wait_healthy gateway
 wait_healthy file

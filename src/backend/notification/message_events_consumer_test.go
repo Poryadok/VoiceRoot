@@ -48,12 +48,45 @@ func (s stubChatMembers) ListMembers(_ context.Context, _ string) ([]chatmembers
 }
 
 type recordingMessageFCM struct {
-	sent []push.Payload
+	sent   []push.Payload
+	sentTo []uuid.UUID
 }
 
-func (r *recordingMessageFCM) Send(_ context.Context, _ uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
+func (r *recordingMessageFCM) Send(_ context.Context, recipient uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
 	r.sent = append(r.sent, push.Payload(payload))
+	r.sentTo = append(r.sentTo, recipient)
 	return nil
+}
+
+type failOnMessagePolicyCall struct {
+	calls  atomic.Int32
+	failAt int32
+	err    error
+}
+
+type failOnceMessagePresence struct {
+	calls atomic.Int32
+	err   error
+}
+
+func (p *failOnceMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	if p.calls.Add(1) == 1 {
+		return false, p.err
+	}
+	return false, nil
+}
+
+type offlineMessagePresence struct{}
+
+func (offlineMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (p *failOnMessagePolicyCall) LoadPolicy(ctx context.Context, profileID uuid.UUID, chatID string, typ delivery.NotificationType, at time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
+	if p.calls.Add(1) == p.failAt {
+		return delivery.SettingsSnapshot{}, delivery.QuietHoursSnapshot{}, p.err
+	}
+	return delivery.PermissivePolicyLoader{}.LoadPolicy(ctx, profileID, chatID, typ, at)
 }
 
 type channelMessageFCM struct {
@@ -78,10 +111,10 @@ type recordingGameConsent struct {
 
 type recordingGameChatScope struct {
 	profileID, chatID uuid.UUID
-	category         string
-	gameScoped       bool
-	allowed          bool
-	calls            int
+	category          string
+	gameScoped        bool
+	allowed           bool
+	calls             int
 }
 
 func (r *recordingGameChatScope) ResolveGamePushChat(_ context.Context, profileID, chatID uuid.UUID, category string) (bool, bool, error) {
@@ -142,7 +175,7 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	senderID := uuid.NewString()
 	recipientID := uuid.NewString()
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-	pusher := &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}
+	pusher := &dispatch.MessagePusher{Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore()}
 	env := &eventsv1.MessageStreamEvent{
 		Payload: &eventsv1.MessageStreamEvent_MessageSent{
 			MessageSent: &eventsv1.MessageSent{
@@ -156,13 +189,107 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRouteMessageNotificationPolicyFailureRetriesAllRecipientsBeforeSending(t *testing.T) {
+	senderID, firstRecipientID, secondRecipientID := uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	policyErr := errors.New("recipient policy unavailable")
+	policy := &failOnMessagePolicyCall{failAt: 2, err: policyErr}
+	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
+			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
+		}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+	}
+	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	members := stubChatMembers{rows: []chatmembers.Member{
+		{ProfileID: senderID.String(), InboxBucket: "main"},
+		{ProfileID: firstRecipientID.String(), InboxBucket: "main"},
+		{ProfileID: secondRecipientID.String(), InboxBucket: "main"},
+	}}
+	event := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+
+	err := routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.ErrorIs(t, err, policyErr, "a transient recipient policy error must fail the durable attempt")
+	require.EqualValues(t, 2, policy.calls.Load(), "the second recipient's policy must fail after the first recipient was prepared")
+	require.Empty(t, recorder.sentTo, "resolve every recipient before dispatch so retry cannot duplicate an earlier recipient")
+
+	err = routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.NoError(t, err)
+	require.EqualValues(t, 4, policy.calls.Load(), "retry should preflight both recipients")
+	require.ElementsMatch(t, []uuid.UUID{firstRecipientID, secondRecipientID}, recorder.sentTo)
+}
+
+func TestRouteMessageNotificationDoesNotReloadPoliciesDuringDispatch(t *testing.T) {
+	senderID, firstRecipientID, secondRecipientID := uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	policyErr := errors.New("unexpected second policy read")
+	policy := &failOnMessagePolicyCall{failAt: 3, err: policyErr}
+	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
+			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
+		}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+	}
+	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	members := stubChatMembers{rows: []chatmembers.Member{
+		{ProfileID: senderID.String(), InboxBucket: "main"},
+		{ProfileID: firstRecipientID.String(), InboxBucket: "main"},
+		{ProfileID: secondRecipientID.String(), InboxBucket: "main"},
+	}}
+	event := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+
+	err := routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.NoError(t, err, "the event should use the policies already preflighted for all recipients")
+	require.EqualValues(t, 2, policy.calls.Load(), "dispatch must not reload a policy after sending starts")
+	require.ElementsMatch(t, []uuid.UUID{firstRecipientID, secondRecipientID}, recorder.sentTo)
+}
+
+func TestRouteMessageNotificationPresenceOutageDoesNotBecomeOfflinePushAndRetries(t *testing.T) {
+	senderID, firstRecipientID, secondRecipientID := uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	presenceErr := errors.New("presence authority unavailable")
+	presence := &failOnceMessagePresence{err: presenceErr}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
+			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
+		}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: presence, Grouping: grouping.NewMemoryStore(),
+	}
+	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	members := stubChatMembers{rows: []chatmembers.Member{
+		{ProfileID: senderID.String(), InboxBucket: "main"},
+		{ProfileID: firstRecipientID.String(), InboxBucket: "main"},
+		{ProfileID: secondRecipientID.String(), InboxBucket: "main"},
+	}}
+	event := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+
+	err := routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.ErrorIs(t, err, presenceErr, "authority failure must NAK rather than route the recipient as offline")
+	require.Empty(t, recorder.sentTo)
+
+	err = routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uuid.UUID{firstRecipientID, secondRecipientID}, recorder.sentTo)
+}
+
 func TestRouteMessageNotificationCarriesGameScopeAndUsesPrivatePushCopy(t *testing.T) {
 	senderID, recipientID, appID, envID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	recorder := &recordingMessageFCM{}
 	consent := &recordingGameConsent{allowed: true}
 	pusher := &dispatch.MessagePusher{
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), GameConsent: consent, GameBlocks: noGameBlock{},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore(), GameConsent: consent, GameBlocks: noGameBlock{},
 	}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting},
 		stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, pusher, pushenrich.NoopResolver{},
@@ -190,14 +317,14 @@ func TestRouteMessageNotificationResolvesChatScopeForPush(t *testing.T) {
 		payload        *eventsv1.MessageStreamEvent
 	}{
 		{
-			name: "message",
+			name:     "message",
 			category: "game_activity",
 			payload: &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
 				MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(),
 			}}},
 		},
 		{
-			name: "mention",
+			name:     "mention",
 			category: "game_social",
 			payload: &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{MentionAdded: &eventsv1.MentionAdded{
 				MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(), MentionedProfileIds: []string{uuid.NewString()},
@@ -227,8 +354,9 @@ func assertChatScopePush(t *testing.T, category, chatID, senderID, recipientID s
 	recorder := &recordingMessageFCM{}
 	scope := &recordingGameChatScope{gameScoped: true, allowed: false}
 	pusher := &dispatch.MessagePusher{
-		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientUUID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, GameChatScope: scope, GameBlocks: noGameBlock{}, Grouping: grouping.NewMemoryStore(),
+		Presence: offlineMessagePresence{},
+		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientUUID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher:   &dispatch.PushDispatcher{FCM: recorder}, GameChatScope: scope, GameBlocks: noGameBlock{}, Grouping: grouping.NewMemoryStore(),
 	}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, members, pusher, pushenrich.NoopResolver{}, event)
 	require.NoError(t, err)
@@ -244,6 +372,7 @@ func TestRouteQueuedGameMessageSuppressesPushAfterOptOutForEveryDevice(t *testin
 	recorder := &recordingMessageFCM{}
 	consent := &recordingGameConsent{allowed: true}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {
 				{Token: "device-one", PushService: "fcm"},
@@ -293,6 +422,7 @@ func TestMessageEventsJetStreamRedeliveryRechecksQueuedGameConsentAndSuppressesE
 	recorder := &recordingMessageFCM{}
 	consent := &retryThenOptedOutConsent{redeliveryHit: make(chan struct{}, 1), release: make(chan struct{})}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {
 			{Token: "device-one", PushService: "fcm"}, {Token: "device-two", PushService: "fcm"},
 		}}},
@@ -363,8 +493,9 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	senderID, recipientID := uuid.New(), uuid.New()
 	deliveries := make(chan push.Payload, 2)
 	pusher := &dispatch.MessagePusher{
-		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(),
+		Presence: offlineMessagePresence{},
+		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher:   &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(),
 	}
 	members := stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}
 
@@ -391,27 +522,10 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	case <-time.After(5 * time.Second):
 		t.Fatal("first message consumer did not stop after cancellation")
 	}
-	var (
-		unbindAttempts   int
-		unbindErrorClass = "not observed"
-		lastPushBound    = true
-	)
-	unboundObserved := assert.Eventually(t, func() bool {
-		unbindAttempts++
+	require.Eventually(t, func() bool {
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
-		if infoErr != nil {
-			unbindErrorClass = fmt.Sprintf("%T", infoErr)
-			lastPushBound = true
-			return false
-		}
-		unbindErrorClass = "none"
-		lastPushBound = info.PushBound
-		return !info.PushBound
-	}, 5*time.Second, 20*time.Millisecond, "stopped consumer is unbound from the durable before publishing")
-	if !unboundObserved {
-		t.Fatalf("stopped consumer unbind observation failed: query_attempts=%d query_error_class=%q push_bound=%t",
-			unbindAttempts, unbindErrorClass, lastPushBound)
-	}
+		return infoErr == nil && !info.PushBound
+	}, 5*time.Second, 20*time.Millisecond, "message durable is unbound before publishing the offline event")
 
 	messageID, chatID := uuid.NewString(), uuid.NewString()
 	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
@@ -516,7 +630,7 @@ func TestRouteMessageNotification_MentionAdded(t *testing.T) {
 	senderID := uuid.NewString()
 	mentionedID := uuid.NewString()
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-	pusher := &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}
+	pusher := &dispatch.MessagePusher{Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore()}
 	env := &eventsv1.MessageStreamEvent{
 		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
 			MentionAdded: &eventsv1.MentionAdded{
@@ -536,6 +650,7 @@ func TestRouteMessageNotification_SendSilentMarksPushWithoutSuppressingIt(t *tes
 	recipientID := uuid.New()
 	recorder := &recordingMessageFCM{}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
@@ -555,6 +670,7 @@ func TestRouteMessageNotification_SilentMentionDoesNotIntroduceAudiblePush(t *te
 	recipientID := uuid.New()
 	recorder := &recordingMessageFCM{}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
@@ -619,6 +735,7 @@ func TestRouteMessageNotification_ArchivedRecipientGetsNoPush(t *testing.T) {
 				},
 			}}
 			err := routeMessageNotification(context.Background(), handler, stubChatMembers{rows: members}, &dispatch.MessagePusher{
+				Presence: offlineMessagePresence{},
 				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 					recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 				}},
@@ -659,6 +776,7 @@ func TestRouteMessageNotification_ArchivedReplyAndMentionSuppressNotificationDel
 			recipientID := uuid.NewString()
 			recorder := &recordingMessageFCM{}
 			pusher := &dispatch.MessagePusher{
+				Presence: offlineMessagePresence{},
 				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 					uuid.MustParse(recipientID): {{Token: "recipient-token", PushService: "fcm"}},
 				}},

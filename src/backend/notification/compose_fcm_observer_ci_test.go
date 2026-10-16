@@ -25,6 +25,7 @@ import (
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/grouping"
+	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/store"
 )
@@ -265,6 +266,7 @@ func TestComposeFcmObserverUnreadActualRouteRemainsUnchangedAndUnknown(t *testin
 	forwardedToken := store.DeviceToken{Token: "private-test-token", PushService: "fcm"}
 	recorder := &observerCaptureFCM{}
 	pusher := &dispatch.MessagePusher{
+		Presence: presence.OfflineChecker{},
 		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {forwardedToken}}},
 		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
 		Grouping: grouping.NewMemoryStore(),
@@ -497,6 +499,7 @@ func TestComposeFcmObserverPhaseSnapshotsDecodeFailureAndRouteError(t *testing.T
 		}
 		recorder := &observerCaptureFCM{err: errors.New("private route failure")}
 		pusher := &dispatch.MessagePusher{
+			Presence: presence.OfflineChecker{},
 			Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "private-test-token", PushService: "fcm"}}}},
 			Pusher:   &dispatch.PushDispatcher{FCM: recorder},
 			Grouping: grouping.NewMemoryStore(),
@@ -750,6 +753,7 @@ func TestComposeFcmObserverPreservesRouteSenderArgumentsAndArchivedSuppression(t
 	forwardedToken := store.DeviceToken{Token: "private-test-token", PushService: "fcm"}
 	recorder := &observerCaptureFCM{}
 	pusher := &dispatch.MessagePusher{
+		Presence: presence.OfflineChecker{},
 		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {forwardedToken}}},
 		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
 		Grouping: grouping.NewMemoryStore(),
@@ -829,8 +833,9 @@ func TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait(t *t
 	members := &observerRetryMembers{sender: senderID.String(), target: targetID.String()}
 	fcmRecorder := &observerAckFCM{}
 	pusher := &dispatch.MessagePusher{
-		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{targetID: {{Token: "private-test-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: fcmRecorder}, Grouping: grouping.NewMemoryStore(),
+		Presence: presence.OfflineChecker{},
+		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{targetID: {{Token: "private-test-token", PushService: "fcm"}}}},
+		Pusher:   &dispatch.PushDispatcher{FCM: fcmRecorder}, Grouping: grouping.NewMemoryStore(),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

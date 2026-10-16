@@ -28,11 +28,18 @@ func (j *bootstrapJetStream) PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck
 }
 
 func TestJetStreamPublisher_RejectsUnbootstrappedOrMismatchedStream(t *testing.T) {
+	canonicalSubjects := []string{
+		"chat.created", "chat.updated", "chat.deleted", "chat.member_changed", "chat.dm_peer_deleted",
+		"space.tree_changed", "space.created", "voice.room_created", "voice.room_deleted",
+		"space.invite_created", "space.member_joined", "space.member_left", "space.updated", "space.deleted",
+		"space.deletion_scheduled", "space.restored", "space.voice_room_access_invalidated",
+	}
+	require.ElementsMatch(t, canonicalSubjects, chatEventStreamSubjects())
 	for _, tc := range []struct {
 		name string
 		js   *bootstrapJetStream
 	}{
-		{name: "exact", js: &bootstrapJetStream{info: &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: chatEventStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage}}}},
+		{name: "exact", js: &bootstrapJetStream{info: &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: canonicalSubjects, Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage}}}},
 		{name: "missing", js: &bootstrapJetStream{infoErr: errors.New("stream missing")}},
 		{name: "mismatched", js: &bootstrapJetStream{info: &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: []string{subjectChatCreated}}}}},
 		{name: "extra subject", js: &bootstrapJetStream{info: &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: append(chatEventStreamSubjects(), "chat.unexpected"), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage}}}},

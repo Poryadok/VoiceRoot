@@ -31,6 +31,7 @@ import (
 	"voice/backend/space/internal/authctx"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
+	"voice/backend/space/internal/outboxdelivery"
 	"voice/backend/space/internal/s2s"
 	"voice/backend/space/internal/spaceevents"
 	"voice/backend/space/internal/store"
@@ -305,6 +306,15 @@ func main() {
 				}
 			}()
 			logger.Info("space subscription entitlement consumer enabled")
+			voiceInvalidations := outboxdelivery.NewVoiceInvalidationDispatcher(spaceStore, jsPub)
+			voiceInvalidations.OnError = func(err error) {
+				logger.Warn("Space Voice invalidation delivery failed", slog.String("error", err.Error()))
+			}
+			go func() {
+				if err := voiceInvalidations.Run(runCtx); err != nil && runCtx.Err() == nil {
+					logger.Error("Space Voice invalidation delivery stopped", slog.String("error", err.Error()))
+				}
+			}()
 		}
 		outboxRuntime = startOwnershipOutboxRuntime(runCtx, ownershipOutboxRuntimeConfigFromEnv(), ownershipOutboxRuntimeDependencies{
 			store: spaceStore, transport: jsPub, alertGauge: ownershipOutboxAlertGauge, logger: logger,

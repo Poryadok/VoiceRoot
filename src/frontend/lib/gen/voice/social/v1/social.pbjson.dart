@@ -534,6 +534,58 @@ final $typed_data.Uint8List isProfilePairBlockedResponseDescriptor =
         'ChxJc1Byb2ZpbGVQYWlyQmxvY2tlZFJlc3BvbnNlEhgKB2Jsb2NrZWQYASABKAhSB2Jsb2NrZW'
         'Q=');
 
+@$core.Deprecated('Use isProfilePairsBlockedRequestDescriptor instead')
+const IsProfilePairsBlockedRequest$json = {
+  '1': 'IsProfilePairsBlockedRequest',
+  '2': [
+    {'1': 'viewer_profile_id', '3': 1, '4': 1, '5': 9, '10': 'viewerProfileId'},
+    {'1': 'other_profile_ids', '3': 2, '4': 3, '5': 9, '10': 'otherProfileIds'},
+  ],
+};
+
+/// Descriptor for `IsProfilePairsBlockedRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isProfilePairsBlockedRequestDescriptor =
+    $convert.base64Decode(
+        'ChxJc1Byb2ZpbGVQYWlyc0Jsb2NrZWRSZXF1ZXN0EioKEXZpZXdlcl9wcm9maWxlX2lkGAEgAS'
+        'gJUg92aWV3ZXJQcm9maWxlSWQSKgoRb3RoZXJfcHJvZmlsZV9pZHMYAiADKAlSD290aGVyUHJv'
+        'ZmlsZUlkcw==');
+
+@$core.Deprecated('Use profilePairBlockResultDescriptor instead')
+const ProfilePairBlockResult$json = {
+  '1': 'ProfilePairBlockResult',
+  '2': [
+    {'1': 'other_profile_id', '3': 1, '4': 1, '5': 9, '10': 'otherProfileId'},
+    {'1': 'blocked', '3': 2, '4': 1, '5': 8, '10': 'blocked'},
+  ],
+};
+
+/// Descriptor for `ProfilePairBlockResult`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List profilePairBlockResultDescriptor =
+    $convert.base64Decode(
+        'ChZQcm9maWxlUGFpckJsb2NrUmVzdWx0EigKEG90aGVyX3Byb2ZpbGVfaWQYASABKAlSDm90aG'
+        'VyUHJvZmlsZUlkEhgKB2Jsb2NrZWQYAiABKAhSB2Jsb2NrZWQ=');
+
+@$core.Deprecated('Use isProfilePairsBlockedResponseDescriptor instead')
+const IsProfilePairsBlockedResponse$json = {
+  '1': 'IsProfilePairsBlockedResponse',
+  '2': [
+    {
+      '1': 'results',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.social.v1.ProfilePairBlockResult',
+      '10': 'results'
+    },
+  ],
+};
+
+/// Descriptor for `IsProfilePairsBlockedResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isProfilePairsBlockedResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1Jc1Byb2ZpbGVQYWlyc0Jsb2NrZWRSZXNwb25zZRJBCgdyZXN1bHRzGAEgAygLMicudm9pY2'
+        'Uuc29jaWFsLnYxLlByb2ZpbGVQYWlyQmxvY2tSZXN1bHRSB3Jlc3VsdHM=');
+
 @$core.Deprecated('Use areFriendsRequestDescriptor instead')
 const AreFriendsRequest$json = {
   '1': 'AreFriendsRequest',
@@ -852,3 +904,26 @@ final $typed_data.Uint8List getFriendsOfFriendsResponseDescriptor =
     $convert.base64Decode(
         'ChtHZXRGcmllbmRzT2ZGcmllbmRzUmVzcG9uc2USRgoPcHJvZmlsZV9pZF9saXN0GAEgASgLMh'
         '4udm9pY2Uuc29jaWFsLnYxLlByb2ZpbGVJZExpc3RSDXByb2ZpbGVJZExpc3Q=');
+
+@$core.Deprecated('Use cancelFriendInvitationRequestDescriptor instead')
+const CancelFriendInvitationRequest$json = {
+  '1': 'CancelFriendInvitationRequest',
+  '2': [
+    {'1': 'target_profile_id', '3': 1, '4': 1, '5': 9, '10': 'targetProfileId'},
+  ],
+};
+
+/// Descriptor for `CancelFriendInvitationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List cancelFriendInvitationRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1DYW5jZWxGcmllbmRJbnZpdGF0aW9uUmVxdWVzdBIqChF0YXJnZXRfcHJvZmlsZV9pZBgBIA'
+        'EoCVIPdGFyZ2V0UHJvZmlsZUlk');
+
+@$core.Deprecated('Use cancelFriendInvitationResponseDescriptor instead')
+const CancelFriendInvitationResponse$json = {
+  '1': 'CancelFriendInvitationResponse',
+};
+
+/// Descriptor for `CancelFriendInvitationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List cancelFriendInvitationResponseDescriptor =
+    $convert.base64Decode('Ch5DYW5jZWxGcmllbmRJbnZpdGF0aW9uUmVzcG9uc2U=');

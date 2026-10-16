@@ -50,6 +50,31 @@ is a migration path and cannot race over the revisioned projection after
 activation. Snapshot/replay tests are specified in
 [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
 
+### Trust dependency diagnostics
+
+Voice emits `voice_trust_dependency_failure` before its existing fail-closed
+error mapping discards dependency detail. `stage` identifies `jwks_request`,
+`jwks_status`, `jwks_body`, `jwks_parse`, `jwks_keys`, `replay_write`, or the Auth
+floor boundary (`auth_floor`, `auth_floor_call`, `auth_floor_sign`,
+`auth_floor_response`). `cause` is a closed label such as `timeout`,
+`tls_unknown_authority`, `tls_hostname`, `tls_certificate`, `dns`,
+`connection_refused`, `connection_reset`, or a bounded gRPC status class;
+`duration_ms` measures that dependency attempt. `http_status` preserves only
+100–599 for a non-success JWKS response and is zero for other failures or an
+invalid status. Logs exclude raw error text,
+URLs, credentials, account/profile IDs, request bodies and key material.
+
+The two-second dependency budgets, TLS verification, replay checks and fresh
+Auth session-floor authority remain unchanged. A cold Go JWKS request can fail
+while a later warm-cache request passes; neither a successful BusyBox GET nor
+one successful audio attempt proves the original failure's cause or stable
+post-restart acceptance. The 2026-10-15 initial and post-restart audio failures
+both reached Voice and returned generic verifier `Unavailable` after 2000 ms,
+with a successful audio attempt between them. Those historical logs do not
+distinguish JWKS, replay Redis and Auth-floor failures. Preserve all outcomes;
+use the dependency event from a subsequent controlled acceptance attempt to
+identify the failing stage before changing trust or transport configuration.
+
 ## API (gRPC)
 
 Источник истины: [protos/voice/calls/v1/calls.proto](../../protos/voice/calls/v1/calls.proto) (`VoiceService`). Важные ответы: **`GetJoinTokenResponse`** — поля `jwt` и `expires_at` (`google.protobuf.Timestamp`, UTC); **`GetVoiceStatesResponse`** — `repeated VoiceParticipantState participants` (без промежуточной обёртки-списка).
@@ -363,12 +388,67 @@ projection, complete bundle and qualified capacity acceptance remain open.
 - Кодеки: Opus (32 kbps audio), VP8/VP9 (video)
 - LiveKit Simulcast для screen share (адаптивное качество)
 
-## Phase-0 Space-room media, roster и lifecycle (target; не реализовано)
+## Phase-0 Space-room media, roster и lifecycle (partial implementation; full target remains open)
 
-R22.3 предоставляет только source-disabled PostgreSQL evidence/classification
-foundation. Coordinator, handlers, LiveKit/NATS adapters, registration, grant
-issuance и public readiness остаются не реализованы; Redis v2 encoding и replay
-deadline bridge semantics (D2/D3) также остаются отдельными gates.
+R22.3 PostgreSQL evidence/classification остается source-disabled. Отдельный
+BE255 implementation slice добавляет Space-room join/leave admission, короткий
+LiveKit grant, durable Space/Role invalidation delivery и Voice reconciliation
+с точным удалением LiveKit incarnation. Каждый подписанный Voice-user RPC до
+вызова handler сверяет epoch делегированного principal с текущим Auth floor;
+epoch также сохраняется в grant.
+
+Active Space-media reconciliation reads the current signed Auth floor once per
+account in each full `ReconcileAll` sweep across Spaces, then compares every
+profile's own issued session epoch independently. Standalone `ReconcileSpace`
+calls start their own fresh pass. A Space watermark restart discards all shared
+floor values before retrying; a new sweep retains no previous values.
+Retries retain the existing per-Space bound and do not rescan completed Spaces;
+the shared floor values do not form an atomic cross-Space snapshot.
+Unavailable, missing, or nonpositive authority leaves
+reconciliation incomplete and the invalidation unacknowledged; stale epochs or
+an authoritative missing account retain exact-incarnation ejection. Admission
+recovery and signed Voice-user RPCs retain their fresh authority checks.
+
+This does not complete Phase-0: LiveKit-only reconnect eligibility after an
+Auth epoch change remains a release gate. SLA удаления 2 s p95 / 5 s max остается ограниченным потерей
+membership/Role rights и не распространяется на Auth-only epoch change. Roster projection,
+move handlers, Redis v2 encoding и replay deadline bridge semantics (D2/D3)
+также остаются отдельными gates. Hosted Linux proof относится только к явно
+выбранному BE255 media consumer и не означает завершение R22.3/BE255 целиком.
+
+The private Space lifecycle listener opts in only through
+`VOICE_SPACE_LIFECYCLE_PRINCIPAL_*` settings. Shared `S2S_JWKS_*` settings alone
+do not enable it; they also serve the separate user-principal listener. Any
+lifecycle-specific setting, including an empty value, still requires complete
+lifecycle TLS, replay, and trusted JWKS configuration or startup fails. When both
+listeners are enabled, their listen addresses must differ. The combined local/CI
+fixtures retain lifecycle port 9092 and use user-principal port 9093, with
+Gateway's matching private upstream; neither port is published to the host.
+
+Space media admission resolves Role-owned room grants only through Role's
+private mTLS listener, using the Voice workload signer and a fresh
+request-bound principal for each `ResolveVoiceRoomGrants` call. The request
+binds the canonical Space, room, and profile IDs; Role's returned policy epoch
+is retained with the media grant. `VOICE_ROLE_GRPC_ADDR` and its complete
+`VOICE_ROLE_TLS_*` client tuple enable this consumer independently of GIS
+provisioning. Incomplete settings fail startup; there is no ordinary-listener
+fallback.
+
+The user-principal listener validates local TLS configuration and replay Redis
+before startup, but starts with an empty Gateway JWKS cache. Gateway waits for
+this listener before serving its own key endpoint, so requiring an initial key
+fetch would deadlock their startup. Listener readiness does not assert that
+Gateway keys are already available: protected RPC verification fetches a complete
+valid key set before accepting any principal and returns `UNAVAILABLE` during a
+key endpoint outage. Invalid keys still deny access. Background refresh, the
+issuer-wide unknown-key cooldown, hard expiry, replay prevention and Auth epoch
+checks retain the shared Phase-0 rules.
+
+Account-wide Voice reservation and transfer checks take the caller account and
+profile from the verified delegated principal on this listener, then compare
+against User's profile ownership. Legacy identity headers cannot override or
+repair an invalid delegated identity. The existing legacy call listener retains
+its metadata-based identity path when no verified principal is present.
 
 **Public surface.** Gateway exposes Space room actions under
 `/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,

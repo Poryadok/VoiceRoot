@@ -1,0 +1,157 @@
+{
+  "namespace": "voice-staging",
+  "objects": [
+    {
+      "object": {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "NetworkPolicy",
+        "metadata": {
+          "name": "voice-nats-hub-ingress",
+          "namespace": "voice-staging"
+        },
+        "spec": {
+          "ingress": [
+            {
+              "from": [
+                {
+                  "podSelector": {
+                    "matchExpressions": [
+                      {
+                        "key": "app",
+                        "operator": "In",
+                        "values": [
+                          "voice-auth",
+                          "voice-analytics",
+                          "voice-bot",
+                          "voice-chat",
+                          "voice-file",
+                          "voice-matchmaking",
+                          "voice-messaging",
+                          "voice-moderation",
+                          "voice-notification",
+                          "voice-realtime",
+                          "voice-role",
+                          "voice-search",
+                          "voice-social",
+                          "voice-space",
+                          "voice-story",
+                          "voice-subscription",
+                          "voice-user",
+                          "voice-voice"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ],
+              "ports": [
+                {
+                  "port": 7422,
+                  "protocol": "TCP"
+                }
+              ]
+            },
+            {
+              "from": [
+                {
+                  "podSelector": {
+                    "matchExpressions": [
+                      {
+                        "key": "app",
+                        "operator": "In",
+                        "values": [
+                          "voice-nats-realtime-bootstrap",
+                          "voice-nats-notification-bootstrap",
+                          "voice-nats-search-bootstrap",
+                          "voice-nats-analytics-chat-bootstrap"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ],
+              "ports": [
+                {
+                  "port": 4222,
+                  "protocol": "TCP"
+                }
+              ]
+            }
+          ],
+          "podSelector": {
+            "matchExpressions": [
+              {
+                "key": "app",
+                "operator": "In",
+                "values": [
+                  "voice-nats",
+                  "voice-nats-pvc-candidate"
+                ]
+              }
+            ]
+          },
+          "policyTypes": [
+            "Ingress"
+          ]
+        }
+      },
+      "source": "deploy/templates/network-policy-nats-hub.yaml",
+      "source_sha256": "42fe799d0665896f6ea9b2cb9a9c6b7ee162f0a33879240f585139fe538a8914"
+    },
+    {
+      "object": {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "NetworkPolicy",
+        "metadata": {
+          "name": "voice-nats-account-delete",
+          "namespace": "voice-staging"
+        },
+        "spec": {
+          "ingress": [
+            {
+              "from": [
+                {
+                  "podSelector": {}
+                }
+              ],
+              "ports": [
+                {
+                  "port": 4222,
+                  "protocol": "TCP"
+                }
+              ]
+            },
+            {
+              "from": [
+                {
+                  "namespaceSelector": {
+                    "matchLabels": {
+                      "kubernetes.io/metadata.name": "voice-observability"
+                    }
+                  }
+                }
+              ],
+              "ports": [
+                {
+                  "port": 8222,
+                  "protocol": "TCP"
+                }
+              ]
+            }
+          ],
+          "podSelector": {
+            "matchLabels": {
+              "app": "voice-nats"
+            }
+          },
+          "policyTypes": [
+            "Ingress"
+          ]
+        }
+      },
+      "source": "deploy/templates/network-policy-nats-account-delete.yaml",
+      "source_sha256": "93dc3ff1b1d83dd2888ec9f063b06ed538e31b1afd9f67765c4392d62142265a"
+    }
+  ],
+  "schema": "voice-closed-seal-source-policies-v1"
+}

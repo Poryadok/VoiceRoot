@@ -38,6 +38,13 @@ class Runtime:
 class CensusTests(unittest.TestCase):
     def census(self, tree=None): return module.census(Runtime(tree or fixture()), 'owned-copy', ACCOUNT)
 
+    def test_memory_stream_or_durable_state_cannot_enter_cold_preservation(self):
+        for kind in ('stream','durable'):
+            tree=fixture();stream=tree['account_details'][0]['stream_detail'][0]
+            if kind=='stream':stream['config']['storage']='memory'
+            else:stream['consumer_detail'][0]['config']['mem_storage']=True
+            with self.subTest(kind=kind),self.assertRaises(module.CensusError):self.census(tree)
+
     def test_dynamic_extra_durable_ephemeral_full_delivery_state(self):
         result = self.census()
         self.assertEqual(result['account'], ACCOUNT)
@@ -111,3 +118,36 @@ class CensusTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+class PersistedSnapshotTests(unittest.TestCase):
+    def valid_snapshot(self):
+        return {'schema': module.SCHEMA, 'account': ACCOUNT,
+            'streams': [{'name': 'chat_events', 'created': CREATED, 'config_sha256': 'a' * 64,
+                'state': {'messages': 7, 'bytes': 70, 'first_seq': 1, 'last_seq': 7, 'consumer_count': 1},
+                'observations': {}}],
+            'consumers': [{'stream': 'chat_events', 'name': 'rt_realtime1', 'durable': 'rt_realtime1',
+                'created': CREATED, 'config_sha256': 'b' * 64, 'inactive_threshold': 0,
+                'delivered': {'consumer_seq': 2, 'stream_seq': 7},
+                'ack_floor': {'consumer_seq': 1, 'stream_seq': 2},
+                'num_ack_pending': 1, 'num_redelivered': 0, 'num_pending': 3, 'observations': {'num_waiting': 0}}]}
+
+    def test_persisted_snapshot_accepts_and_copies_canonical_census(self):
+        row = self.valid_snapshot()
+        restored = module.validate_snapshot(row)
+        self.assertEqual(restored, row)
+        self.assertIsNot(restored, row)
+
+    def test_persisted_snapshot_rejects_schema_identity_shape_and_state_drift(self):
+        for mutate in (
+            lambda row: row.update(schema='unknown'),
+            lambda row: row.update(account='display-name'),
+            lambda row: row['streams'][0].update(config_sha256='not-a-digest'),
+            lambda row: row['streams'][0]['state'].update(messages=True),
+            lambda row: row['streams'][0]['state'].update(messages=CREATED),
+            lambda row: row['consumers'][0]['ack_floor'].update(stream_seq=8),
+            lambda row: row['consumers'].append(copy.deepcopy(row['consumers'][0])),
+            lambda row: row.update(unrecognized=True),
+        ):
+            row = self.valid_snapshot(); mutate(row)
+            with self.subTest(row=row), self.assertRaises(module.CensusError):
+                module.validate_snapshot(row)

@@ -8,8 +8,10 @@ import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/matchmaking_rating_controller.dart';
+import '../../state/social_providers.dart';
 import '../call/active_call_panel.dart';
 import '../chat/chat_room_panel.dart';
+import 'matchmaking_player_profile_sheet.dart';
 
 /// Voice + text shell for an active match squad.
 class MatchSquadScreen extends ConsumerStatefulWidget {
@@ -17,6 +19,8 @@ class MatchSquadScreen extends ConsumerStatefulWidget {
 
   static const Key leaveButtonKey = Key('match_squad_leave');
   static const Key voiceSectionKey = Key('match_squad_voice_section');
+  static Key playerProfileKey(String profileId) =>
+      Key('match_squad_player_$profileId');
 
   final MatchData match;
 
@@ -35,16 +39,22 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     final voiceRoomId = widget.match.voiceRoomId;
     if (voiceRoomId == null || voiceRoomId.isEmpty) return;
     if (!ref.read(gatewayConfigProvider).canPlaceVoiceCalls) return;
-    await ref.read(callControllerProvider.notifier).joinGroupVoice(
-          roomId: voiceRoomId,
-        );
+    await ref
+        .read(callControllerProvider.notifier)
+        .joinGroupVoice(roomId: voiceRoomId);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final chatId = widget.match.chatId;
-    final hasVoice = widget.match.voiceRoomId != null &&
+    final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    final participantIds = widget.match.profileIds
+        .where((id) => id.isNotEmpty && id != activeProfileId)
+        .toSet()
+        .toList(growable: false);
+    final hasVoice =
+        widget.match.voiceRoomId != null &&
         widget.match.voiceRoomId!.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
@@ -57,18 +67,46 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
           ),
         ],
       ),
-      body: chatId == null || chatId.isEmpty
-          ? Center(child: Text(l10n.matchFoundRespondError))
-          : Column(
-              children: [
-                if (hasVoice)
-                  const KeyedSubtree(
-                    key: MatchSquadScreen.voiceSectionKey,
-                    child: ActiveCallPanel(),
-                  ),
-                Expanded(child: ChatRoomPanel(chatId: chatId)),
-              ],
+      body: Column(
+        children: [
+          if (participantIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final profileId in participantIds)
+                    _MatchParticipantButton(
+                      profileId: profileId,
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => MatchmakingPlayerProfileSheet(
+                          profileId: profileId,
+                          gameId: widget.match.gameId,
+                          canBanFromCurrentMatch:
+                              widget.match.status == 'active' &&
+                              widget.match.gameId.isNotEmpty,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
+          if (hasVoice)
+            const KeyedSubtree(
+              key: MatchSquadScreen.voiceSectionKey,
+              child: ActiveCallPanel(),
+            ),
+          Expanded(
+            child: chatId == null || chatId.isEmpty
+                ? Center(child: Text(l10n.matchFoundRespondError))
+                : ChatRoomPanel(chatId: chatId),
+          ),
+        ],
+      ),
     );
   }
 
@@ -91,16 +129,45 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     if (!context.mounted) return;
 
     if (result is MatchmakingApiFailure) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.matchSquadLeaveError)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
       return;
     }
 
     final completed = (result as MatchmakingApiOk<MatchData>).data;
-    ref.read(matchmakingRatingControllerProvider.notifier).showRatingForMatch(
-          completed,
-        );
+    ref
+        .read(matchmakingRatingControllerProvider.notifier)
+        .showRatingForMatch(completed);
     Navigator.of(context).pop();
+  }
+}
+
+class _MatchParticipantButton extends ConsumerWidget {
+  const _MatchParticipantButton({
+    required this.profileId,
+    required this.onPressed,
+  });
+
+  final String profileId;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider(profileId));
+    final label = profile.when(
+      skipLoadingOnRefresh: false,
+      loading: () => profileId,
+      error: (error, stackTrace) => profileId,
+      data: (value) => value?.displayName.trim().isNotEmpty == true
+          ? value!.displayName
+          : profileId,
+    );
+    return OutlinedButton.icon(
+      key: MatchSquadScreen.playerProfileKey(profileId),
+      onPressed: onPressed,
+      icon: const Icon(Icons.person_outline),
+      label: Text(label),
+    );
   }
 }

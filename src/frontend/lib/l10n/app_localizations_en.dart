@@ -461,6 +461,42 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Last seen just now';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count minutes ago',
+      one: 'Last seen $count minute ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count hours ago',
+      one: 'Last seen $count hour ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count days ago',
+      one: 'Last seen $count day ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Unknown';
 
   @override
@@ -545,6 +581,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatListLoadMore => 'Load more chats';
+
+  @override
+  String get chatScheduleMessage => 'Schedule message';
+
+  @override
+  String get chatSendWhenOnline => 'Send when online';
+
+  @override
+  String get chatSchedulePickerTitle => 'Schedule message';
+
+  @override
+  String get chatSchedulePending => 'Pending';
+
+  @override
+  String get chatScheduleEdit => 'Edit scheduled message';
+
+  @override
+  String get chatScheduleCancel => 'Cancel scheduled message';
+
+  @override
+  String get chatScheduleSendNow => 'Send now';
+
+  @override
+  String get chatScheduleRetry => 'Retry';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Choose a time within the next 365 days';
+
+  @override
+  String get chatScheduleFailure =>
+      'Could not complete the scheduled-message request. Try again.';
+
+  @override
+  String get chatScheduleLoadMore => 'Load more scheduled messages';
 
   @override
   String chatListUnreadCount(int count) {
@@ -813,6 +884,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRealtimeReconnecting => 'Reconnecting…';
 
   @override
+  String get networkReconnectDetails =>
+      'Drafts stay on this device. Realtime updates resume after reconnection.';
+
+  @override
   String get chatRealtimeOffline => 'Offline';
 
   @override
@@ -918,6 +993,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileMessage => 'Message';
 
   @override
+  String get profileDetailTitle => 'Profile';
+
+  @override
+  String get profileMoreActions => 'More actions';
+
+  @override
+  String get profileOpenAvatar => 'Open fullscreen avatar';
+
+  @override
+  String get profileAvatarUnavailable => 'Avatar unavailable';
+
+  @override
+  String get profileCommonSpaces => 'Common spaces';
+
+  @override
+  String get profileCommonSpacesLoadError => 'Could not load common spaces';
+
+  @override
   String get profileEditTitle => 'Edit profile';
 
   @override
@@ -971,6 +1064,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createProfileTitle => 'Add profile';
+
+  @override
+  String get profileCreateUsernameLabel => 'Profile tag';
+
+  @override
+  String get profileCreateSessionChanged =>
+      'The signed-in account or active profile changed. Reopen profile creation to continue.';
+
+  @override
+  String get profileCreateRecoveryFailed =>
+      'Profile created, but setup is incomplete. Try again to finish.';
 
   @override
   String get createProfileSubmit => 'Create profile';
@@ -1198,6 +1302,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatMessageUnpin => 'Unpin message';
+
+  @override
+  String get chatPinnedLimitReached => 'You can pin up to 5 messages.';
 
   @override
   String chatPinnedBar(int count) {
@@ -1514,6 +1621,51 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spaceInviteExpiryLabel => 'Expires after';
+
+  @override
+  String get spaceInviteExpiry30Minutes => '30 minutes';
+
+  @override
+  String get spaceInviteExpiry1Hour => '1 hour';
+
+  @override
+  String get spaceInviteExpiry6Hours => '6 hours';
+
+  @override
+  String get spaceInviteExpiry12Hours => '12 hours';
+
+  @override
+  String get spaceInviteExpiry1Day => '1 day';
+
+  @override
+  String get spaceInviteExpiry7Days => '7 days';
+
+  @override
+  String get spaceInviteExpiryNever => 'Never';
+
+  @override
+  String spaceInviteExpiresAt(String date) {
+    return 'Expires $date';
+  }
+
+  @override
+  String get spaceInviteShowQr => 'Show QR code';
+
+  @override
+  String get spaceInviteQrTitle => 'Invite QR code';
+
+  @override
+  String get spaceInviteQrSemanticLabel => 'QR code for space invite';
+
+  @override
+  String get spaceInviteRevokeConfirmTitle => 'Revoke invite link?';
+
+  @override
+  String get spaceInviteRevokeConfirmBody =>
+      'People with this link will no longer be able to use it.';
+
+  @override
   String get spaceInviteJoinTooltip => 'Join space by invite';
 
   @override
@@ -1733,7 +1885,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatGroupMembersSubtitle =>
-      'Owner can remove members. Members can leave the group.';
+      'Owners and admins can remove members. Members can leave the group.';
 
   @override
   String get chatGroupMembersLoadError => 'Could not load members';
@@ -1769,6 +1921,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatGroupRoleOwner => 'Owner';
 
   @override
+  String get chatGroupRoleAdmin => 'Admin';
+
+  @override
+  String get chatGroupAddMembers => 'Add members';
+
+  @override
+  String get chatGroupMembersLimitReached =>
+      'This group has reached its 500-member limit. Create a Space for a larger community.';
+
+  @override
   String chatGroupMemberYou(String name) {
     return '$name (you)';
   }
@@ -1795,6 +1957,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'You will no longer receive messages from this group.';
 
   @override
+  String get chatChannelLeave => 'Leave channel';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Leave channel?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'You will no longer receive messages from this channel.';
+
+  @override
   String get chatGroupOwnerLeaveHint =>
       'Transfer ownership to another member before leaving.';
 
@@ -1819,6 +1991,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsTooltip => 'Settings';
+
+  @override
+  String get settingsAppearance => 'Appearance';
+
+  @override
+  String get settingsChatThemes => 'Chat themes';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Exclusive themes are available to Voice Plus subscribers.';
+
+  @override
+  String get chatThemesSelected => 'Selected';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Apply $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Reset';
+
+  @override
+  String get appIconTitle => 'App Icon';
+
+  @override
+  String get appIconDeviceNotice => 'This choice applies on this device only.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Voice Plus is required to apply this icon.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Your saved icon will return when Voice Plus is active again.';
+
+  @override
+  String get appIconUnavailable =>
+      'Runtime app icons are unavailable on this device.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Voice Plus status could not be checked. Retry or choose Voice Sky.';
+
+  @override
+  String get appIconSubscriptionStatusChecking => 'Checking Voice Plus status…';
+
+  @override
+  String get appIconApplyFailure =>
+      'The app icon could not be applied. Your saved choice is kept; retry to apply it.';
+
+  @override
+  String get appIconRetry => 'Retry';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Apply $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Selected';
 
   @override
   String get settingsTheme => 'Theme';
@@ -1870,6 +2106,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHelpTitle => 'Help';
+
+  @override
+  String get settingsHelpSubtitle =>
+      'Find an answer or contact the Voice team.';
+
+  @override
+  String get settingsHelpHeading => 'How can we help?';
+
+  @override
+  String get settingsHelpBackLabel => 'Back';
+
+  @override
+  String get settingsHelpSearchHint => 'Search help (e.g. voice rooms)';
+
+  @override
+  String get settingsHelpDocsLabel => 'Project documentation';
+
+  @override
+  String get settingsHelpSupportLabel => 'Contact support';
+
+  @override
+  String get settingsHelpNoResults => 'No help topics match your search.';
+
+  @override
+  String get settingsHelpLaunchError => 'Could not open link.';
 
   @override
   String get settingsHelpChatsTitle => 'Chats';
@@ -2061,6 +2322,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get securitySettingsTitle => 'Security';
 
   @override
+  String get securityChangePasswordAction => 'Change password';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Password changed. Sign in with your new password.';
+
+  @override
   String get appealSettingsTitle => 'Appeal a sanction';
 
   @override
@@ -2153,6 +2421,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get security2faEnabled => 'Two-factor authentication is enabled.';
+
+  @override
+  String get security2faStatusUnavailable =>
+      'Two-factor status is unavailable. Try again before changing this setting.';
+
+  @override
+  String get security2faManualSecretLabel => 'Setup key';
+
+  @override
+  String get security2faCopyBackupCodes => 'Copy backup codes';
+
+  @override
+  String get security2faDownloadBackupCodes => 'Download backup codes';
+
+  @override
+  String get security2faBackupCodesCopied => 'Backup codes copied.';
+
+  @override
+  String get security2faBackupCodesDownloadFailed =>
+      'Could not save backup codes. Try again.';
 
   @override
   String get security2faDisableTitle => 'Disable two-factor authentication';
@@ -2651,6 +2939,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chatAllowGuestsSubtitle =>
       'Let invited guest accounts enter this chat.';
+
+  @override
+  String get channelSettingsTitle => 'Channel settings';
+
+  @override
+  String get channelSettingsThreads => 'Enable threads';
+
+  @override
+  String get channelSettingsMemberPosts => 'Allow member posts';
 
   @override
   String get privacyShowOnlineIncludeGuests =>
@@ -3279,5 +3576,55 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deepLinkResourceNotFound => 'Not found';
 
   @override
+  String get deepLinkAccessDeniedDescription =>
+      'You do not have permission to open this link. It may be intended for another profile.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'This link is unavailable or no longer valid.';
+
+  @override
   String get deepLinkReturnHome => 'Go to Home';
+
+  @override
+  String get e2eBackupStatusChecking => 'Checking encrypted key backup…';
+
+  @override
+  String get e2eBackupStatusPresent =>
+      'Encrypted key backup is available for this account.';
+
+  @override
+  String get e2eBackupStatusAbsent =>
+      'No encrypted key backup is saved for this account.';
+
+  @override
+  String get e2eBackupActionFailed =>
+      'We couldn\'t update the encrypted key backup. Try again.';
+
+  @override
+  String get e2eBackupRestoreFailed =>
+      'We couldn\'t restore this backup. Check the password and try again.';
+
+  @override
+  String get e2eBackupChange => 'Change backup password';
+
+  @override
+  String get e2eBackupDeleteTitle => 'Delete encrypted backup?';
+
+  @override
+  String get e2eBackupDeleteConfirm =>
+      'This deletes the encrypted backup from this account. Your keys on this device will stay intact.';
+
+  @override
+  String get e2eBackupDelete => 'Delete backup';
+
+  @override
+  String get e2eBackupRestoreCta => 'Restore encrypted history';
+
+  @override
+  String get e2eKeyBackupManage => 'Manage encrypted key backup';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Not in contacts · messages may be unsafe';
 }

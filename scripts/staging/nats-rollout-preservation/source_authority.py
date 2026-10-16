@@ -1,5 +1,6 @@
 """Passive root source capture for the fixed Voice repository and CI workflow."""
 import hashlib
+from contextlib import contextmanager
 import gzip
 import io
 import json
@@ -23,6 +24,10 @@ MAX_SOURCE = 4 * 1024 ** 3
 MAX_ARCHIVE = 2 * 1024 ** 3
 MAX_FILE = 512 * 1024 ** 2
 MAX_ITEMS = 100000
+MAX_API_PAGE_SIZE = 20
+MAX_API_ITEMS = 10000
+MAX_API_PAGES = (MAX_API_ITEMS + MAX_API_PAGE_SIZE - 1) // MAX_API_PAGE_SIZE
+SOURCE_CACHE_DIR = Path('/var/lib/voice-nats-preservation/installed/source-archives')
 IMAGE_NAMES = frozenset(('analytics', 'bot', 'chat', 'file', 'gateway', 'matchmaking', 'messaging',
     'moderation', 'notification', 'realtime', 'role', 'search', 'social', 'space', 'story', 'subscription',
     'user', 'voice', 'auth', 'web', 'developer-portal', 'admin', 'nats-hub-config-renderer'))
@@ -91,13 +96,13 @@ def _head(headers, sha, deadline):
 
 def _pages(url, field, headers, deadline):
     result, total, identifiers = [], None, set()
-    for page in range(1, 101):
-        body = _get(url + '?per_page=100&page=' + str(page), headers, deadline)
+    for page in range(1, MAX_API_PAGES + 1):
+        body = _get(url + '?per_page=' + str(MAX_API_PAGE_SIZE) + '&page=' + str(page), headers, deadline)
         observed = body['total_count']
-        if type(observed) is not int or not 0 <= observed <= 10000 or total is not None and observed != total: _fail()
+        if type(observed) is not int or not 0 <= observed <= MAX_API_ITEMS or total is not None and observed != total: _fail()
         total = observed
         rows = body[field]
-        if not isinstance(rows, list) or len(rows) > 100: _fail()
+        if not isinstance(rows, list) or len(rows) > MAX_API_PAGE_SIZE: _fail()
         for row in rows:
             if type(row['id']) is not int or row['id'] in identifiers: _fail()
             identifiers.add(row['id']); result.append(row)
@@ -199,7 +204,41 @@ class _TarReader:
         return self.tell()
 
 
-def _capture_tar(archive, destination, tree, sha, deadline):
+@contextmanager
+def cached_archive(sha):
+    """Passive fixed-SHA bytes; all authority still comes from the live API."""
+    if not isinstance(sha,str) or not re.fullmatch(r'[a-f0-9]{40}',sha):_fail()
+    name=sha+'.tar.gz'
+    parent=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    fd=None
+    def identity(row):
+        return (row.st_dev,row.st_ino,row.st_mode,row.st_uid,row.st_gid,row.st_nlink,
+                row.st_size,row.st_mtime_ns,row.st_ctime_ns)
+    try:
+        for component in SOURCE_CACHE_DIR.parts[1:]:
+            try:child=os.open(component,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+            except FileNotFoundError:
+                yield None;return
+            row=os.fstat(child)
+            if row.st_uid!=0 or row.st_mode&0o022:
+                os.close(child);_fail()
+            os.close(parent);parent=child
+        try:fd=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+        except FileNotFoundError:
+            yield None;return
+        before=os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid!=0 or before.st_mode&0o022
+            or before.st_nlink!=1 or not 1<=before.st_size<=MAX_ARCHIVE
+            or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before)):_fail()
+        with os.fdopen(fd,'rb',closefd=False) as archive:
+            yield archive
+        if identity(os.fstat(fd))!=identity(before) or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before):_fail()
+    finally:
+        if fd is not None:os.close(fd)
+        os.close(parent)
+
+
+def _capture_tar(archive, destination, tree, sha, deadline,*,cached=False):
     expected, total, tree_paths = {}, 0, set()
     if tree['truncated'] is not False or len(tree['tree']) > MAX_ITEMS: _fail()
     for row in tree['tree']:
@@ -211,7 +250,8 @@ def _capture_tar(archive, destination, tree, sha, deadline):
         if type(row['size']) is not int or not 0 <= row['size'] <= MAX_FILE or not re.fullmatch(r'[a-f0-9]{40}', row['sha']): _fail()
         expected[row['path']] = row; total += row['size']
     if not expected or total > MAX_SOURCE or shutil.disk_usage(destination).free < total + transport.CHUNK: _fail()
-    prefix, seen, hashes, items = 'Poryadok-VoiceRoot-' + sha[:7], set(), {}, 0
+    prefix = 'VoiceRoot-'+sha if cached else 'Poryadok-VoiceRoot-'+sha[:7]
+    seen, hashes, items = set(), {}, 0
     archive_names = set()
     archive.seek(0)
     with gzip.GzipFile(fileobj=archive) as expanded, tarfile.open(fileobj=_TarReader(expanded, deadline), mode='r:') as tar:
@@ -228,7 +268,8 @@ def _capture_tar(archive, destination, tree, sha, deadline):
                 continue
             if not member.isfile() or member.issparse() or not relative or relative in seen or relative not in expected: _fail()
             row = expected[relative]
-            if member.size != row['size']: _fail()
+            if (member.size != row['size']
+                or bool(member.mode&0o111)!=(row['mode']=='100755')): _fail()
             seen.add(relative)
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -272,8 +313,8 @@ def _manifest(name, reference, headers, deadline):
     return digest, body, len(raw)
 
 
-def _resolve_image(name, sha, deadline):
-    if name not in IMAGE_NAMES or not re.fullmatch(r'[a-f0-9]{40}', sha): _fail()
+def _resolve_image(name, sha, deadline, *, identity=False):
+    if name not in IMAGE_NAMES or not re.fullmatch(r'sha256:[a-f0-9]{64}' if identity else r'[a-f0-9]{40}', sha): _fail()
     token = _get('https://ghcr.io/token?service=ghcr.io&scope=repository:poryadok/voiceroot/' + name + ':pull', {}, deadline)['token']
     if not isinstance(token, str) or not token or '\r' in token or '\n' in token: _fail()
     accept = ', '.join(('application/vnd.oci.image.index.v1+json', 'application/vnd.oci.image.manifest.v1+json',
@@ -293,9 +334,28 @@ def _resolve_image(name, sha, deadline):
     config = _json(raw)
     if config['os'] != 'linux' or config['architecture'] != 'amd64': _fail()
     labels = config.get('config', {}).get('Labels') or {}
-    if ('org.opencontainers.image.revision' in labels and labels['org.opencontainers.image.revision'] != sha
+    if not identity and ('org.opencontainers.image.revision' in labels and labels['org.opencontainers.image.revision'] != sha
             or 'org.opencontainers.image.source' in labels and labels['org.opencontainers.image.source'].removesuffix('.git') != 'https://github.com/' + REPO): _fail()
+    if identity:
+        return {'requested_image':REGISTRY+'/'+name+'@'+sha,
+                'manifest_image':REGISTRY+'/'+name+'@'+digest,
+                'config_sha256':descriptor['digest'].removeprefix('sha256:')}
     return REGISTRY + '/' + name + '@' + digest
+
+
+def immutable_image_identity(image, deadline):
+    # Content identity only; this does not attest source revision or CI approval.
+    match=re.fullmatch(re.escape(REGISTRY)+r'/([a-z0-9-]+)@(sha256:[a-f0-9]{64})',image)
+    if match is None or match[1] not in IMAGE_NAMES:_fail()
+    return _resolve_image(match[1],match[2],deadline,identity=True)
+
+
+def same_image_content(actual, target, deadline):
+    pattern=re.escape(REGISTRY)+r'/([a-z0-9-]+)@sha256:[a-f0-9]{64}'
+    left=re.fullmatch(pattern,actual);right=re.fullmatch(pattern,target)
+    if left is None or right is None or left[1]!=right[1] or left[1] not in IMAGE_NAMES:_fail()
+    a=immutable_image_identity(actual,deadline);b=immutable_image_identity(target,deadline)
+    return a['manifest_image']==b['manifest_image'] and a['config_sha256']==b['config_sha256']
 
 
 def capture_source(token, run_id, source_sha, destination):
@@ -315,9 +375,13 @@ def capture_source(token, run_id, source_sha, destination):
         tree = _get(API + '/git/trees/' + commit['tree']['sha'] + '?recursive=1', headers, deadline)
         if tree['sha'] != commit['tree']['sha']: _fail()
         if shutil.disk_usage(tempfile.gettempdir()).free < MAX_ARCHIVE: _fail()
-        with tempfile.TemporaryFile() as archive:
-            _fetch(API + '/tarball/' + source_sha, headers, MAX_ARCHIVE, deadline, target=archive)
-            files = _capture_tar(archive, destination, tree, source_sha, deadline)
+        with cached_archive(source_sha) as cached:
+            if cached is not None:
+                files = _capture_tar(cached,destination,tree,source_sha,deadline,cached=True)
+            else:
+                with tempfile.TemporaryFile() as archive:
+                    _fetch(API + '/tarball/' + source_sha, headers, MAX_ARCHIVE, deadline, target=archive)
+                    files = _capture_tar(archive, destination, tree, source_sha, deadline)
         artifacts = _pages(API + '/actions/runs/' + str(run_id) + '/artifacts', 'artifacts', headers, deadline)
         candidates = [artifact for artifact in artifacts if artifact['name'] == 'staging-stack-lock']
         if len(candidates) != 1 or type(candidates[0]['id']) is not int: _fail()

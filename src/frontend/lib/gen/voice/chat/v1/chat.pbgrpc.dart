@@ -47,6 +47,15 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getDM, request, options: options);
   }
 
+  /// Read-only caller-relative DM authorization for gating profile actions.
+  /// Does not create, promote, or otherwise mutate a DM.
+  $grpc.ResponseFuture<$0.CanCreateDMResponse> canCreateDM(
+    $0.CanCreateDMRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$canCreateDM, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.CreateChatResponse> createChat(
     $0.CreateChatRequest request, {
     $grpc.CallOptions? options,
@@ -364,6 +373,11 @@ class ChatServiceClient extends $grpc.Client {
       '/voice.chat.v1.ChatService/GetDM',
       ($0.GetDMRequest value) => value.writeToBuffer(),
       $0.GetDMResponse.fromBuffer);
+  static final _$canCreateDM =
+      $grpc.ClientMethod<$0.CanCreateDMRequest, $0.CanCreateDMResponse>(
+          '/voice.chat.v1.ChatService/CanCreateDM',
+          ($0.CanCreateDMRequest value) => value.writeToBuffer(),
+          $0.CanCreateDMResponse.fromBuffer);
   static final _$createChat =
       $grpc.ClientMethod<$0.CreateChatRequest, $0.CreateChatResponse>(
           '/voice.chat.v1.ChatService/CreateChat',
@@ -591,6 +605,15 @@ abstract class ChatServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetDMRequest.fromBuffer(value),
         ($0.GetDMResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.CanCreateDMRequest, $0.CanCreateDMResponse>(
+            'CanCreateDM',
+            canCreateDM_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.CanCreateDMRequest.fromBuffer(value),
+            ($0.CanCreateDMResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.CreateChatRequest, $0.CreateChatResponse>(
         'CreateChat',
         createChat_Pre,
@@ -953,6 +976,14 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetDMResponse> getDM(
       $grpc.ServiceCall call, $0.GetDMRequest request);
+
+  $async.Future<$0.CanCreateDMResponse> canCreateDM_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.CanCreateDMRequest> $request) async {
+    return canCreateDM($call, await $request);
+  }
+
+  $async.Future<$0.CanCreateDMResponse> canCreateDM(
+      $grpc.ServiceCall call, $0.CanCreateDMRequest request);
 
   $async.Future<$0.CreateChatResponse> createChat_Pre($grpc.ServiceCall $call,
       $async.Future<$0.CreateChatRequest> $request) async {

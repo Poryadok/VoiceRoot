@@ -22,6 +22,10 @@ void main() {
   Widget offlineChatApp({
     required InMemoryMessageCacheStore cache,
     required Widget home,
+    bool isOffline = true,
+    RealtimeLinkStatus realtimeStatus = RealtimeLinkStatus.disconnected,
+    bool canRetryCurrentSession = false,
+    VoidCallback? onRetryCurrentSession,
   }) {
     return ProviderScope(
       overrides: [
@@ -29,8 +33,15 @@ void main() {
           client: MockClient((_) async => http.Response('{}', 404)),
         ),
         messageCacheStoreProvider.overrideWithValue(cache),
-        isDeviceOfflineProvider.overrideWith((ref) => true),
-        realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+        isDeviceOfflineProvider.overrideWith((ref) => isOffline),
+        realtimeLinkStatusProvider.overrideWith((ref) => realtimeStatus),
+        realtimeHubProvider.overrideWith(
+          (ref) => _NoopRealtimeHub(
+            ref,
+            canRetryCurrentSession: canRetryCurrentSession,
+            onRetryCurrentSession: onRetryCurrentSession,
+          ),
+        ),
       ],
       child: MaterialApp(
         theme: voiceTestTheme(),
@@ -113,16 +124,107 @@ void main() {
     );
     expect(attach.onPressed, isNull);
   });
+
+  testWidgets('offline chat banner explains the blocked send state', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      offlineChatApp(
+        cache: InMemoryMessageCacheStore(),
+        home: const ChatRoomPanel(chatId: 'chat-offline'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatRoomPanel.offlineBannerKey), findsOneWidget);
+    expect(find.text("Can't send messages while offline."), findsOneWidget);
+  });
+
+  testWidgets(
+    'offline chat banner dismisses while reconnect monitoring remains active',
+    (tester) async {
+      await tester.pumpWidget(
+        offlineChatApp(
+          cache: InMemoryMessageCacheStore(),
+          home: const ChatRoomPanel(chatId: 'chat-offline'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final offlineBanner = find.byKey(ChatRoomPanel.offlineBannerKey);
+      expect(offlineBanner, findsOneWidget);
+      final dismiss = find.descendant(
+        of: offlineBanner,
+        matching: find.byTooltip('Close'),
+      );
+      expect(dismiss, findsOneWidget);
+      await tester.tap(dismiss);
+      await tester.pump();
+      expect(offlineBanner, findsNothing);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatRoomPanel)),
+      );
+      container.read(isDeviceOfflineProvider.notifier).state = false;
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.reconnecting;
+      await tester.pump(reconnectBannerShowDelay);
+      expect(find.byKey(ChatRoomPanel.reconnectBannerKey), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'online chat reconnect banner retry invokes the current session',
+    (tester) async {
+      var retryCalls = 0;
+      await tester.pumpWidget(
+        offlineChatApp(
+          cache: InMemoryMessageCacheStore(),
+          home: const ChatRoomPanel(chatId: 'chat-offline'),
+          isOffline: false,
+          realtimeStatus: RealtimeLinkStatus.reconnecting,
+          canRetryCurrentSession: true,
+          onRetryCurrentSession: () => retryCalls++,
+        ),
+      );
+      await tester.pump(reconnectBannerShowDelay);
+
+      final reconnectBanner = find.byKey(ChatRoomPanel.reconnectBannerKey);
+      expect(reconnectBanner, findsOneWidget);
+      final retry = find.descendant(
+        of: reconnectBanner,
+        matching: find.text('Try again'),
+      );
+      expect(retry, findsOneWidget);
+      await tester.tap(retry);
+      await tester.pump();
+      expect(retryCalls, 1);
+    },
+  );
 }
 
 class _NoopRealtimeHub extends RealtimeHub {
-  _NoopRealtimeHub(super.ref);
+  _NoopRealtimeHub(
+    super.ref, {
+    this.canRetryCurrentSession = false,
+    this.onRetryCurrentSession,
+  });
+
+  @override
+  final bool canRetryCurrentSession;
+
+  final VoidCallback? onRetryCurrentSession;
 
   @override
   Stream<RealtimeFrame> get events => const Stream.empty();
 
   @override
   Future<void> ensureConnected() async {}
+
+  @override
+  Future<void> retryCurrentSession() async {
+    onRetryCurrentSession?.call();
+  }
 
   @override
   void ensureSubscribed(String chatId) {}
