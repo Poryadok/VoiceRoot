@@ -1821,6 +1821,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
       - name: Compose E2E smoke (all features)
+        id: compose_e2e_smoke
         env:
           VOICE_RUN_LIVE_COMPOSE: "true"
           VOICE_API_BASE_URL: http://127.0.0.1:18080
@@ -1828,6 +1829,21 @@ jobs:
           bash scripts/ci/compose-e2e-smoke.sh
           cd src/backend/gateway
           CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^(TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*|TestRequestComposeJoinToken.*)$' ./...
+      - name: Collect sanitized Space media admission diagnostics
+        id: space_media_admission_diagnostics
+        if: failure() && steps.compose_e2e_smoke.outcome == 'failure'
+        run: |
+          python3 scripts/ci/space_media_admission_diagnostics.py \
+            --output "$RUNNER_TEMP/voice-space-media-admission-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json" \
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app
+      - name: Upload sanitized Space media admission diagnostics
+        uses: actions/upload-artifact@v6
+        if: always() && steps.space_media_admission_diagnostics.outcome == 'success'
+        with:
+          name: space-media-admission-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-space-media-admission-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   a1-e2e:
     needs: changes

@@ -811,7 +811,7 @@ and Voice IDs denied while history remains.
 
 
 - [x] **[Notification] `platform_enum` precedence and fallback** — `RegisterDevice` prefers recognized enum values, uses canonical legacy fallback for present unspecified/unknown enum values, and preserves legacy string-only behavior. — `protos/voice/notification/v1/notification.proto`, `src/backend/notification/internal/grpcsvc/server.go`
-- [ ] **[Notification] Unauthenticated debug push recorder** — `/debug/recorded-pushes` exposes last recorded push by `profile_id` (compose/dev aid). — `src/backend/notification/debug_http.go`
+- [x] **[Notification] Unauthenticated debug push recorder is source/config gated** — route and push capture require both strict `NOTIFICATION_DEBUG_HTTP_ENABLED=true` and legacy `NOTIFICATION_RECORD_PUSHES=true`; default and prod/staging config omit the debug gate, while the disposable Compose FCM E2E fixture opts in. Legacy recording flag continues to select offline routing independently. Hosted contract/FCM CI plus the original A4 smoke remains required for complete acceptance; no live or deployed runtime acceptance is claimed. — `src/backend/notification/debug_http.go`, `src/backend/notification/main.go`, `deploy/{prod,staging}/configmap-app.yaml`
 - [x] **[Notification] gRPC server comment** — identifies the implemented service without stale stub wording. — `src/backend/notification/internal/grpcsvc/server.go`
 
 ### Federation

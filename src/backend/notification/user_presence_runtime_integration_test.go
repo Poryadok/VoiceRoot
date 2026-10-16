@@ -37,7 +37,7 @@ func TestNotificationMessageConsumerUsesRealUserPrivatePresenceDespitePublicPriv
 	require.NoError(t, err)
 	deliveries := make(chan notificationRestartPush, 16)
 	barrier := &userPresenceOutageBarrier{checker: user.checker, second: make(chan struct{}), release: make(chan struct{})}
-	pusher := &dispatch.MessagePusher{Tokens: fixture.tokens, Presence: barrier, Grouping: grouping.NewMemoryStore(), Pusher: &dispatch.PushDispatcher{FCM: notificationRestartFCM{sent: deliveries}}}
+	pusher := &dispatch.MessagePusher{Tokens: fixture.tokens, Presence: barrier, Grouping: grouping.NewMemoryStore(), Pusher: &dispatch.PushDispatcher{FCM: notificationRestartFCM{sent: deliveries}}, GameChatScope: ordinaryGameChatScope{}}
 	members := stubChatMembers{ids: []string{senderID.String(), user.profileID.String()}}
 	runCtx, cancel := context.WithCancel(context.Background())
 	readiness := newNotificationConsumerReadiness("message")
