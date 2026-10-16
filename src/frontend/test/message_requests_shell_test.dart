@@ -33,6 +33,7 @@ import 'package:voice_frontend/ui/shell/message_requests_folder.dart';
 import 'package:voice_frontend/ui/shell/mobile_shell_drawer.dart';
 import 'package:voice_frontend/ui/shell/navigation_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/core/voice_avatar.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/fake_voice_api_clients.dart';
@@ -62,10 +63,12 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
+        final wideChats = _RequestsChatsClient();
         final wideContainer = await _pumpVoiceShell(
           tester,
           const Size(1280, 800),
           captureTheme,
+          chats: wideChats,
         );
         expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
         expect(find.byKey(MessageRequestsFolderRailButton.keyId), findsOneWidget);
@@ -108,10 +111,17 @@ void main() {
         expect(find.byKey(const Key('message_requests_detail_hint')), findsOneWidget);
         expect(find.text('Select a conversation'), findsNothing);
         await _captureIfRequested(tester, 'contact-requests-wide.png');
-        await tester.tap(find.byKey(ChatListBody.tileKey('request-row')));
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(ChatListBody.tileKey('request-row')),
+            matching: find.byType(VoiceAvatar),
+          ),
+        );
         await tester.pumpAndSettle();
         expect(wideContainer.read(selectedChatIdProvider), 'request-row');
         expect(find.byType(ChatRoomPanel), findsOneWidget);
+        expect(wideChats.acceptCalls, 0);
+        expect(wideChats.declineCalls, 0);
         await tester.tap(find.byIcon(Icons.arrow_back));
         await tester.pumpAndSettle();
         expect(wideContainer.read(selectedChatFolderIdProvider), isNull);
@@ -255,6 +265,21 @@ void main() {
         expect(tester.widget<TextButton>(accept).onPressed, isNull);
         expect(tester.widget<TextButton>(decline).onPressed, isNull);
         expect(find.byKey(const Key('chat_request_progress_request-row')), findsOneWidget);
+        final rowBounds = tester.getRect(
+          find.byKey(ChatListBody.tileKey('request-row')),
+        );
+        final progressBounds = tester.getRect(
+          find.byKey(const Key('chat_request_progress_request-row')),
+        );
+        for (final control in [accept, decline]) {
+          final bounds = tester.getRect(control);
+          expect(bounds.left, greaterThanOrEqualTo(rowBounds.left));
+          expect(bounds.right, lessThanOrEqualTo(rowBounds.right));
+          expect(bounds.overlaps(progressBounds), isFalse);
+        }
+        expect(progressBounds.left, greaterThanOrEqualTo(rowBounds.left));
+        expect(progressBounds.right, lessThanOrEqualTo(rowBounds.right));
+        expect(progressBounds.bottom, lessThanOrEqualTo(rowBounds.bottom));
         await _captureIfRequested(tester, 'contact-requests-shell-busy-$layout.png');
         pending.complete(const ChatsApiFailure(message: 'private request failure', statusCode: 503));
         await tester.pumpAndSettle();
@@ -425,6 +450,17 @@ Future<ProviderContainer> _pumpVoiceShell(
           isPrimary: true,
         ),
       ),
+      for (final profileId in ['next-profile', 'profile-rowan'])
+        profileProvider(profileId).overrideWith(
+          (_) async => VoiceProfile(
+            id: profileId,
+            accountId: profileId == 'next-profile' ? 'next-account' : 'account-rowan',
+            username: profileId == 'next-profile' ? 'nextuser' : 'rowan',
+            discriminator: '4242',
+            displayName: profileId == 'next-profile' ? 'Next profile' : 'Rowan',
+            isPrimary: true,
+          ),
+        ),
       chatFoldersProvider.overrideWith(
         (_) async => FolderListData(
           folders: [

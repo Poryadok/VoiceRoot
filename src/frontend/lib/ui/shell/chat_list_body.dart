@@ -861,24 +861,31 @@ class _ChatListTrailing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (inbox == 'requests') {
-      return Wrap(
-        spacing: 4,
+      return Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          TextButton(
-            onPressed: requestBusy || !requestCanMutate ? null : onAccept,
-            child: Text(l10n.socialAcceptRequest),
+          Wrap(
+            spacing: 4,
+            children: [
+              TextButton(
+                onPressed: requestBusy || !requestCanMutate ? null : onAccept,
+                child: Text(l10n.socialAcceptRequest),
+              ),
+              TextButton(
+                onPressed: requestBusy || !requestCanMutate ? null : onDecline,
+                child: Text(l10n.socialDeclineRequest),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: requestBusy || !requestCanMutate ? null : onDecline,
-            child: Text(l10n.socialDeclineRequest),
-          ),
-          if (requestBusy)
+          if (requestBusy) ...[
+            const SizedBox(height: 4),
             SizedBox(
               key: Key('chat_request_progress_${item.chatId}'),
               width: 18,
               height: 18,
               child: const CircularProgressIndicator(strokeWidth: 2),
             ),
+          ],
         ],
       );
     }
