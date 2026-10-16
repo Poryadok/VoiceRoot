@@ -67,6 +67,21 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      provisional_staging:
+        description: Explicit images-only staging while exact master CI is pending; not final acceptance
+        type: boolean
+        required: false
+        default: false
+      repair_provisional_operation:
+        description: Exact released unaccepted provisional parent for a fresh repair-forward transaction
+        type: string
+        required: false
+        default: ""
+      accept_provisional_operation:
+        description: Accept exact released provisional operation after strict CI; no apply or restart
+        type: string
+        required: false
+        default: ""
       expired_native_operation:
         description: Exact reviewed expired native recovery operation, new closed proof and dual custody
         required: false
@@ -154,12 +169,15 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true)
+    if: "!inputs.accept_provisional_operation && (github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true))"
     # Home staging: set STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
     runs-on: [self-hosted, Linux, X64, voice-staging]
     environment: staging
     env:
+      ROLLOUT_PROVISIONAL_STAGING: ${{ inputs.provisional_staging && 'true' || 'false' }}
+      ROLLOUT_REPAIR_PARENT: ${{ inputs.repair_provisional_operation }}
+      ROLLOUT_NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
       ROLLOUT_EXPIRED_NATIVE_OPERATION: ${{ inputs.expired_native_operation }}
       ROLLOUT_EXPIRED_FINISH_OPERATION: ${{ inputs.expired_finish_operation }}
     steps:
@@ -415,6 +433,14 @@ jobs:
               mode=os.environ['DEPLOY_MODE']
               changed=set(filter(None,os.environ['CHANGED_SERVICES'].split(',')))
               recoveries=[value for value in (prior,cold,upload,expired_native,expired_finish) if value]
+              provisional=os.environ.get('ROLLOUT_PROVISIONAL_STAGING','false')
+              repair=os.environ.get('ROLLOUT_REPAIR_PARENT','')
+              if provisional not in ('true','false'):raise SystemExit('NATS_ROLLOUT=PROVISIONAL_INPUT_INVALID')
+              if provisional=='true' or repair:
+                  if (os.environ.get('GITHUB_EVENT_NAME')!='workflow_dispatch' or mode!='images-only'
+                      or recoveries or not changed or os.environ.get('ROLLOUT_NEEDS_FULL_ROLLOUT')!='false'
+                      or os.environ.get('ROLLOUT_NEEDS_USER_SPACE_ROLLOUT')!='false'):
+                      raise SystemExit('NATS_ROLLOUT=PROVISIONAL_INPUT_INVALID')
               if len(recoveries)>1:raise SystemExit('NATS_ROLLOUT=RECOVERY_INPUT_INVALID')
               if cold or upload or expired_native or expired_finish:
                   if ((cold or upload or expired_native or expired_finish)!='3340764a7d24' or prior or mode!='images-only' or changed!={'story'}
@@ -427,6 +453,9 @@ jobs:
                   ['resume-cold-backup',cold,os.environ['GITHUB_RUN_ID']] if cold else
                   ['prepare-rollback',prior,os.environ['GITHUB_RUN_ID']] if prior else
                   ['prepare',mode,os.environ['CHANGED_SERVICES'],os.environ['VOICE_IMAGE_TAG'],os.environ['GITHUB_RUN_ID']])
+              if repair:arguments=['prepare-repair',repair,*arguments[1:],provisional]
+              elif provisional=='true':arguments.append(provisional)
+          elif action=='--bridge-accept-provisional':arguments=['accept-provisional',op,os.environ['GITHUB_RUN_ID']]
           elif action=='--bridge-authorize':
               upload_nonce=os.environ.get('ROLLOUT_UPLOAD_NONCE','')
               expired_native=os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION','')
@@ -649,6 +678,45 @@ jobs:
         with:
           name: deployment-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.deployment_diagnostics.outputs.report_directory }}/*.deployment-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  accept-provisional:
+    if: github.event_name == 'workflow_dispatch' && inputs.accept_provisional_operation != ''
+    runs-on: [self-hosted, Linux, X64, voice-staging]
+    environment: staging
+    steps:
+      - name: Reject mixed acceptance and deployment inputs
+        env:
+          MIXED_INPUT: ${{ inputs.provisional_staging || inputs.repair_provisional_operation != '' || inputs.rollback_operation != '' || inputs.cold_backup_operation != '' || inputs.cipher_upload_operation != '' || inputs.expired_native_operation != '' || inputs.expired_finish_operation != '' || inputs.nats_probe_only || inputs.validate_app_secret_only || inputs.mail_only }}
+          INPUT_SOURCE: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          test "$MIXED_INPUT" = false
+          test "$INPUT_SOURCE" = "$GITHUB_SHA"
+      - name: Strict same-operation acceptance without workload mutation
+        env:
+          ROLLOUT_ACTION: --bridge-accept-provisional
+          ROLLOUT_CHANGED_JSON: '[]'
+          ROLLOUT_BOUND_CHANGED_SERVICES: ''
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ inputs.accept_provisional_operation }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: *protected_rollout_runner
+      - name: Collect acceptance diagnostics
+        id: acceptance_diagnostics
+        if: always()
+        continue-on-error: true
+        env:
+          ROLLOUT_ACTION: --bridge-collect
+          ROLLOUT_CHANGED_JSON: '[]'
+        run: *protected_rollout_runner
+      - name: Upload safe acceptance diagnostics
+        if: always() && steps.acceptance_diagnostics.outputs.report_directory != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.acceptance_diagnostics.outputs.report_directory }}/*.deployment-report.json
           if-no-files-found: warn
           retention-days: 30
 

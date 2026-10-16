@@ -14,7 +14,7 @@ STAGES=frozenset(('UNKNOWN','request','source-capture','workload-capture','polic
     'FENCE','COLD_BACKUP','SPACE_BACKUP','AWAITING_OFF_NODE','DATABASE_MIGRATIONS',
     'NATS_CONTRACT_MIGRATION','RENDERER_TEMPLATE','PAUSED_APPLY','POST_APPLY_PROOF',
     'RESTART','POST_RESTART','ROLLBACK_TEMPLATES','ROLLBACK_PROOF','OPERATOR_RETIRING'))
-STATUSES=frozenset(('UNKNOWN','RUNNING','WAITING','BLOCKED','PASS','ROLLED_BACK'))
+STATUSES=frozenset(('UNKNOWN','RUNNING','WAITING','BLOCKED','PASS','ROLLED_BACK','PROVISIONAL_READY'))
 EVENTS=frozenset(('rollout_maintenance_owned','original_hub_shutdown_intent',
     'original_hub_orderly_exit_verified','original_hub_owned_finalizer_removed','rollout_released','rollout_target_observed'))
 EFFECTS=frozenset(('maintenance','fence','original_broker_exit','finalizer','cut','preservation','apply','restart','release'))
@@ -52,14 +52,14 @@ def build(request,state,*,error=None,request_status='COMPLETE',stage=None,last=N
     kinds=[e.get('kind') for e in events if isinstance(e,dict) and e.get('kind') in EVENTS]
     def seen(kind):return 'RECORDED' if kind in kinds else 'UNKNOWN'
     status=state.get('status');phase=state.get('phase')
-    released=status in ('PASS','ROLLED_BACK') and state.get('fence_status')=='RELEASED'
+    released=status in ('PASS','ROLLED_BACK','PROVISIONAL_READY') and state.get('fence_status')=='RELEASED'
     execution=state.get('execution_authority') or {}
     command=getattr(error,'diagnostic',{})
     if isinstance(command,dict) and command.get('action') in ACTION_IDS:current_action=command['action']
     command={k:v for k,v in command.items() if k in COMMAND_FIELDS} if isinstance(command,dict) else {}
     command={'exit_code':command.get('exit_code') if type(command.get('exit_code')) is int and -255<=command['exit_code']<=255 else None,
         'timeout':command.get('timeout') is True,'cause':command.get('cause') if command.get('cause') in CAUSES else 'unknown'}
-    return {'schema':SCHEMA,'request_nonce':match(request.get('nonce'),r'[a-f0-9]{64}'),
+    row={'schema':SCHEMA,'request_nonce':match(request.get('nonce'),r'[a-f0-9]{64}'),
         'request_action':request.get('action') if request.get('action') in __import__('bridge').FIELDS else 'unknown',
         'request_status':'BLOCKED' if error is not None else request_status,
         'run_id':number(request.get('report_run_id',request.get('run_id',execution.get('dispatcher_run_id')))),
@@ -80,9 +80,13 @@ def build(request,state,*,error=None,request_status='COMPLETE',stage=None,last=N
             'preservation':'PRESENT' if isinstance(state.get('preservation'),dict) else 'UNKNOWN',
             'apply':seen('rollout_target_observed'),'restart':'PRESENT' if isinstance(state.get('restart'),dict) else 'UNKNOWN',
             'release':'RECORDED' if released else 'UNKNOWN'}}
+    if state.get('provisional') is not None:
+        row['release_acceptance']='ACCEPTED' if status=='PASS' and state.get('ci_acceptance',{}).get('verified') is True else 'UNACCEPTED'
+    return row
 
 def validate(row,*,nonce=None,source_sha=None,run_id=None,run_attempt=None):
-    if not isinstance(row,dict) or set(row)!=FIELDS or row['schema']!=SCHEMA:raise ValueError('report_schema_invalid')
+    if not isinstance(row,dict) or set(row) not in (FIELDS,FIELDS|{'release_acceptance'}) or row['schema']!=SCHEMA:raise ValueError('report_schema_invalid')
+    if 'release_acceptance' in row and row['release_acceptance'] not in ('ACCEPTED','UNACCEPTED'):raise ValueError('report_status_invalid')
     if row['recovery_authorized'] is not False or row['request_status'] not in ('STARTED','COMPLETE','BLOCKED'):raise ValueError('report_status_invalid')
     if row['request_action'] not in set(__import__('bridge').FIELDS)|{'unknown'}:raise ValueError('report_action_invalid')
     for key,pattern in (('request_nonce',r'[a-f0-9]{64}'),('source_sha',r'[a-f0-9]{40}'),('operation',r'[a-f0-9]{12}'),('helper_binding',r'[a-f0-9]{64}')):
@@ -158,7 +162,7 @@ def export_historical(installed,nonce,operation):
     with operation_lock():
         journal=private_json(installed/'journal'/(nonce+'.json'))
         request=journal['request'];__import__('bridge').validate(dict(request,token='historical-placeholder') if 'token' in __import__('bridge').FIELDS.get(request.get('action'),set()) else request)
-        expected=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback') else request.get('operation')
+        expected=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback','prepare-repair') else request.get('operation')
         if expected!=operation or request['nonce']!=nonce:raise ValueError('report_operation_mismatch')
         base=operation_path(str(installed.parent/('rollout-'+operation)))
         state=private_json(base/'checkpoint.json',limit=128<<20)

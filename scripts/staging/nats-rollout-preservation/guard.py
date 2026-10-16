@@ -115,6 +115,11 @@ def recovery_at_use(receipt):
 
 def validate(receipt, registry, tag, mode, changed, source_root):
     fields={'schema','operation','namespace_uid','marker','pvc','pv','target','backup','expires_at'}
+    if 'provisional' in receipt:
+        import provisional
+        value=provisional.validate(receipt['provisional'])
+        if value['source_sha']!=tag or mode!='images-only':raise Blocked('provisional_binding_invalid')
+        fields.add('provisional')
     dedicated='expired_recovery_authority_sha256' in receipt
     if set(receipt)!=(fields|{'expired_recovery_authority_sha256'} if dedicated else fields) or receipt['schema']!='nats-rollout-preservation-v1':
         raise Blocked('rollout_receipt_schema_invalid')

@@ -1,5 +1,49 @@
 # Окружения и выкат
 
+## Explicit provisional staging (implementation contract)
+
+An explicit master `workflow_dispatch` may opt into `provisional_staging=true`
+for a nonreset `images-only` deployment while that exact master push CI attempt
+is still pending. A successful exact `staging-stack-lock`, independently resolved
+immutable images, and no observed failed/cancelled job remain prerequisites.
+Automatic workflow calls and ordinary deployments retain the strict CI gate.
+The flag is bound by the bridge request, checkpoint and apply authorization;
+changing runner environment variables cannot change an admitted operation.
+
+Successful preservation and restart in this mode mean
+`PROVISIONAL_READY / POST_RESTART / RELEASED`, not release acceptance. Explicit
+same-operation acceptance must prove the original CI attempt now passes the
+ordinary gate and recheck the exact live target, images, marker and storage.
+It does not reapply or restart workloads. Pending or failed acceptance leaves
+the durable operation unchanged. Safe reports distinguish provisional runtime
+readiness from final acceptance; a green provisional workflow is not CI PASS.
+
+If candidate CI fails or master advances, an explicit repair-forward transaction
+may name that exact released provisional parent. It captures the actual current
+state, takes a fresh protected backup and uses fresh source/custody/apply
+authority. Only one child may claim a parent; linked history is preserved and
+the child must cover every image service selected by its unaccepted parent;
+the parent is superseded only after verified child completion. A failed child
+keeps the chain unresolved. Final acceptance requires healthy workloads and
+unchanged preserved non-NATS resources. Repair admission permits an unhealthy
+application only when its released marker, exact specs/images, identities,
+preserved resources and storage remain bound; fresh transaction guards still apply.
+This exception cannot admit a fenced, BLOCKED or
+UNKNOWN operation, bypass another active operation, restore old data, or turn
+failed CI into PASS. Existing recovery rules handle those other states.
+GitHub may omit the dependency-blocked `ci-gate` from the job inventory; this
+counts as pending only for an in-progress exact CI attempt. Final acceptance
+always requires the actual successful gate. A partial fence failure remains
+truthfully BLOCKED and requires existing operator recovery; this mode does not
+introduce automatic recovery from arbitrary runtime failures.
+
+When correlating a protected finish with GitHub, use its journal request's
+`report_run_id` for the deployment workflow run. `source_authority.run_id`
+identifies the CI provenance run; checkpoint `context` has no `run_id`.
+A completed prepare report describes that request's observed snapshot, not the
+operation's current finish progress. Read the finish request report or a fresh
+status report and bind its operation, source and helper before judging acceptance.
+
 Before diagnosis or acceptance, read [Release evidence and recovery
 lessons](RELEASE_EVIDENCE.md): source/run binding, safe diagnostics, immutable
 failure history and independent preservation checks.
@@ -1212,3 +1256,47 @@ This is a **production prerequisite to apply during production provisioning**,
 not evidence that the production host has already been changed. Host recovery
 and enablement precede the populated version-transition and fresh-rollback proof;
 automatic staging deployment remains disabled until that proof succeeds.
+
+### Compiler rejection before an operation exists
+
+A failed images-only prepare at `target-build` with the fixed cause
+`rollout_compile_image_inventory_changed` remains a failed request. It must not
+be marked COMPLETE/PASS or replayed. If it blocks an idle helper upgrade, root
+may append a separately reviewed `voice-compiler-inventory-rejection-v1` receipt
+using `operator_retirement.attest_compiler_inventory_rejection(path, sha256)`
+from reviewed captured code. The private reviewed document binds the exact nonce,
+original journal/response/public-report hashes and sizes, historical helper
+binding, retained source/build tree hashes and unchanged historical abandonment
+receipt hash. This is not an automatic disposition of arbitrary failed requests.
+
+Admission requires the exact rejected images-only request and matching safe
+report, no operation directory, and a build directory containing only
+`parameters.json`. Root custody and retained bytes are checked again during the
+helper swap. A separate receipt excludes only that verified nonce from the old
+pending inventory; the old receipt and original evidence remain unchanged.
+Existing operations, unknown causes, partial target output or evidence drift
+still block. No workload, NATS, source authority, or recovery permission is granted.
+
+The reviewed private JSON has exactly these fields:
+`schema`, `nonce`, `disposition` (`ABANDONED_PRECHECKPOINT`),
+`deployment_pass` (false), `recovery_authorized` (false), `helper_binding`,
+`old_receipt_sha256`, `files` (journal/response/report, each with sha256 and bytes),
+`source_tree`, and `build_tree` (each with files, bytes, sha256 using the retained
+prepare-tree census). The helper binding is the historical report's binding,
+not the replacement helper. It is not an arbitrary source/tree cleanup request.
+
+After independent review and root capture of the new helper, root uses the
+existing adapter with the verified captured helper on the Python import path:
+
+```python
+import operator_retirement
+operator_retirement.attest_compiler_inventory_rejection(
+    "/root/REVIEWED_PRIVATE_DOCUMENT.json", "REVIEWED_DOCUMENT_SHA256")
+```
+
+This one-shot call requires empty inbox/processing under the operation lock and
+creates `installed/compiler-inventory-rejection-<nonce>.json` exclusively. An
+existing destination is an error, not permission to replace or retry a receipt.
+The replacement installer must contain this verifier before the ordinary guarded
+idle upgrade can use it. Preserve the earlier rejected upgrade and failure
+evidence; revalidate current terminal state and queue custody before activation.

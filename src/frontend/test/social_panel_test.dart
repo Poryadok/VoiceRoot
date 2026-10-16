@@ -579,6 +579,20 @@ void main() {
           200,
         );
       }
+      if (req.url.path == '/api/v1/users/presence/bulk') {
+        return http.Response(
+          jsonEncode({
+            'byProfileId': {
+              'p-2': {
+                'profileId': 'p-2',
+                'status': 'invisible',
+                'lastSeen': '2026-06-02T18:30:00Z',
+              },
+            },
+          }),
+          200,
+        );
+      }
       if (req.url.path == '/api/v1/friends/requests') {
         return http.Response(
           jsonEncode({
