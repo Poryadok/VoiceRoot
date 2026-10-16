@@ -1778,6 +1778,30 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get profileMessage;
 
+  /// No description provided for @profileOpenAvatar.
+  ///
+  /// In en, this message translates to:
+  /// **'Open fullscreen avatar'**
+  String get profileOpenAvatar;
+
+  /// No description provided for @profileAvatarUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar unavailable'**
+  String get profileAvatarUnavailable;
+
+  /// No description provided for @profileCommonSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Common spaces'**
+  String get profileCommonSpaces;
+
+  /// No description provided for @profileCommonSpacesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load common spaces'**
+  String get profileCommonSpacesLoadError;
+
   /// No description provided for @profileEditTitle.
   ///
   /// In en, this message translates to:

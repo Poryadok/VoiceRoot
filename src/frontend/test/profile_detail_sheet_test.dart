@@ -950,6 +950,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byKey(ProfileDetailSheet.blockKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ProfileDetailSheet.blockKey).hitTestable(), findsOneWidget);
     await tester.tap(find.byKey(ProfileDetailSheet.blockKey));
     await tester.pumpAndSettle();
     await tester.tap(
