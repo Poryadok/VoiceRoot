@@ -85,6 +85,8 @@ void main() {
             const VoicePresence(profileId: 'p-target', status: 'offline', gameTitle: game),
           ]) {
             container.read(gameState.notifier).state = revoked;
+            await container.pump();
+            expect(container.read(presenceProvider('p-target')), same(revoked));
             await tester.pumpAndSettle();
             expect(activity, findsNothing);
             expect(find.text(label), findsNothing);
