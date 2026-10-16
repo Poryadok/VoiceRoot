@@ -5,11 +5,13 @@ import '../../l10n/app_localizations.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
 import '../social/social_panel.dart';
 import '../space/space_rail.dart';
 import '../search/global_search_panel.dart';
 import '../onboarding/onboarding_anchor_keys.dart';
 import 'chat_list_body.dart';
+import 'chat_rail_sections.dart';
 
 /// Left navigation column: chats, spaces, and inline social.
 class NavigationPanel extends ConsumerWidget {
@@ -121,6 +123,9 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const GlobalSearchPanel(compact: true),
+            if (section == NavigationSection.chats &&
+                !VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width))
+              const ChatRailFoldersSection(),
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
               child: SegmentedButton<NavigationSection>(
