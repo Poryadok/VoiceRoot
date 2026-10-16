@@ -125,17 +125,20 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(len(public_keys), 12, "issuer and service signing keys must be independent")
 
     def test_matchmaking_public_jwks_matches_both_private_rotation_keys(self):
-        document = json.loads((self.dest / "jwks/matchmaking/jwks.json").read_text(encoding="ascii"))
-        self.assertEqual({key["kid"] for key in document["keys"]}, {"current", "next"})
-        self.assertEqual(len(document["keys"]), 2)
-        for key in document["keys"]:
-            with self.subTest(kid=key["kid"]):
-                self.assertEqual((key["kty"], key["use"], key["alg"]), ("RSA", "sig", "RS256"))
-                modulus = self.openssl("pkey", "-in", self.dest / f"matchmaking/{key['kid']}.pem",
-                                       "-noout", "-modulus").strip().split(b"=", 1)[1]
-                decode = lambda value: base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-                self.assertEqual(decode(key["n"]), bytes.fromhex(modulus.decode("ascii")))
-                self.assertEqual(int.from_bytes(decode(key["e"]), "big"), 65537)
+        for issuer in ("gateway", "matchmaking"):
+            with self.subTest(issuer=issuer):
+                document = json.loads((self.dest / f"jwks/{issuer}/jwks.json").read_text(encoding="ascii"))
+                self.assertEqual({key["kid"] for key in document["keys"]}, {"current", "next"})
+                self.assertEqual(len(document["keys"]), 2)
+                for key in document["keys"]:
+                    with self.subTest(issuer=issuer, kid=key["kid"]):
+                        self.assertEqual(set(key), {"kty", "kid", "use", "alg", "n", "e"})
+                        self.assertEqual((key["kty"], key["use"], key["alg"]), ("RSA", "sig", "RS256"))
+                        modulus = self.openssl("pkey", "-in", self.dest / f"{issuer}/{key['kid']}.pem",
+                                               "-noout", "-modulus").strip().split(b"=", 1)[1]
+                        decode = lambda value: base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+                        self.assertEqual(decode(key["n"]), bytes.fromhex(modulus.decode("ascii")))
+                        self.assertEqual(int.from_bytes(decode(key["e"]), "big"), 65537)
 
     def test_ca_signed_leaf_keys_hostname_and_short_lifetime(self):
         ca = self.dest / "ca/ca.crt"
@@ -483,7 +486,11 @@ class ComposeTests(unittest.TestCase):
                           ("GATEWAY_MATCHMAKING_COMPLETE_CLIENT_KEY_FILE", "tls/gateway-client.key")):
             self.assertEqual(self.source_at("gateway", gateway_env[key]), leaf)
         self.assertEqual(json.loads(matchmaking_env["S2S_JWKS_URLS_JSON"])["gateway"],
+                         "https://phase0-jwks:8443/gateway-bootstrap/jwks.json")
+        self.assertEqual(json.loads(self.merged["auth"]["environment"]["S2S_JWKS_URLS_JSON"])["gateway"],
                          "https://phase0-jwks:8443/gateway/jwks.json")
+        self.assertEqual(self.source_at("phase0-jwks", "/run/phase0/gateway/jwks.json"),
+                         "jwks/gateway/jwks.json")
         self.assertEqual(json.loads(matchmaking_env["S2S_JWKS_URLS_JSON"])["space"],
                          "https://space:8443/.well-known/jwks.json")
         self.assertEqual(self.source_at("matchmaking", matchmaking_env["S2S_JWKS_CA_FILE"]), "ca/ca.crt")
@@ -578,6 +585,10 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("location = /matchmaking/jwks.json", proxy)
         self.assertIn("if ($request_method != GET) { return 405; }", proxy)
         self.assertIn("alias /run/phase0/matchmaking/jwks.json;", proxy)
+        self.assertIn("location = /gateway-bootstrap/jwks.json", proxy)
+        self.assertIn("alias /run/phase0/gateway/jwks.json;", proxy)
+        self.assertIn("location = /gateway/jwks.json", proxy)
+        self.assertIn("proxy_pass http://$gateway_issuer/.well-known/voice-principal-jwks.json;", proxy)
         self.assertIn("location / { return 404; }", proxy)
 
     def media_source_at(self, service, target, merged=None):
@@ -677,6 +688,7 @@ class ComposeTests(unittest.TestCase):
         self.assertIn('startup_status=$?', workflow)
         self.assertIn('python3 scripts/ci/t31-startup-diagnostics.py', workflow)
         self.assertIn('--service voice', workflow)
+        self.assertIn('--include-matchmaking-startup', workflow)
         self.assertIn('|| true', workflow)
         self.assertIn('exit "$startup_status"', workflow)
         self.assertNotIn("logs --no-color --timestamps", workflow)
@@ -738,6 +750,45 @@ class ComposeTests(unittest.TestCase):
         summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
         self.assertEqual(summary["services_seen"], [])
         self.assertEqual(first["result"], "no_error_marker")
+
+    def test_t31_matchmaking_startup_marker_is_service_scoped_and_redacted(self):
+        secret = "private-jwks-url-and-password-sentinel"
+        raw = ("matchmaking-1 | level=error error_code=UNAVAILABLE "
+               "ConnectionError Matchmaking Space principal runtime: gateway JWKS /app/runtime.go:128 endpoint="
+               + secret + "\n").encode("utf-8")
+        requested = ("voice", "matchmaking")
+        summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("matchmaking",), requested)
+        self.assertEqual(summary["services_requested"], ["voice", "matchmaking"])
+        self.assertEqual(summary["services_seen"], ["matchmaking"])
+        self.assertEqual(first["service"], "matchmaking")
+        self.assertEqual(first["startup_category"], "matchmaking_space_principal_runtime")
+        self.assertEqual(first["stage"], "identity_dependency")
+        self.assertEqual(first["error_code"], "UNAVAILABLE")
+        self.assertEqual(first["exception_class"], "ConnectionError")
+        self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
+
+    def test_t31_startup_collection_requests_only_voice_and_matchmaking(self):
+        commands = []
+        status = json.dumps([
+            {"Service": "voice", "State": "running", "Health": "healthy", "ExitCode": 0},
+            {"Service": "matchmaking", "State": "exited", "Health": "none", "ExitCode": 1},
+        ]).encode("ascii")
+        logs = b"matchmaking-1 | level=error Matchmaking Space principal runtime: gateway JWKS unavailable\n"
+
+        def bounded(command, timeout, limit):
+            commands.append(command)
+            if "ps" in command:
+                return status, "complete", None
+            return logs, "complete", None
+
+        with patch.object(startup_diagnostics, "_bounded_command", side_effect=bounded):
+            record = startup_diagnostics.build_diagnostics(
+                ["docker", "compose"], 1, "voice", include_matchmaking_startup=True)
+        self.assertEqual(commands[0][-2:], ["voice", "matchmaking"])
+        self.assertEqual(commands[1][-2:], ["voice", "matchmaking"])
+        self.assertEqual(record["first_error"]["service"], "matchmaking")
+        self.assertEqual(record["first_error"]["startup_category"],
+                         "matchmaking_space_principal_runtime")
 
     def test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text(self):
         source = (ROOT / "src/backend/voice/main.go").read_text()
@@ -857,8 +908,9 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual((ca_stat.st_uid, ca_stat.st_gid), (65532, 65532))
             self.assertEqual(stat.S_IMODE(ca_stat.st_mode), 0o600)
         if os.name == "posix":
-            jwks_mode = stat.S_IMODE(self.fixture.joinpath("jwks/matchmaking/jwks.json").stat().st_mode)
-            self.assertEqual(jwks_mode, 0o644, "nginx worker must be able to read the public JWKS")
+            for issuer in ("gateway", "matchmaking"):
+                jwks_mode = stat.S_IMODE(self.fixture.joinpath(f"jwks/{issuer}/jwks.json").stat().st_mode)
+                self.assertEqual(jwks_mode, 0o644, "nginx worker must be able to read the public JWKS")
         self.assertEqual(self.media_source_at("phase0-matchmaking-jwks-readiness", "/run/phase0/readiness.js"),
                          "scripts/dev/phase0-matchmaking-jwks-readiness.js")
         self.assertEqual(readiness["depends_on"]["phase0-jwks"]["condition"], "service_started")

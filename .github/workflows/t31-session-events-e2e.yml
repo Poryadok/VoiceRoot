@@ -130,6 +130,7 @@ jobs:
               --output tmp/t31-session-event-e2e/startup-diagnostics.json \
               --startup-status "$startup_status" \
               --service voice \
+              --include-matchmaking-startup \
               --compose "${compose[@]}" || true
             exit "$startup_status"
           fi

@@ -35,7 +35,8 @@ def generate(destination):
             root = Path(scratch)
             for directory in ("gateway", "space", "matchmaking", "gameintegration", "voice", "bot", "jwks", "tls", "ca"):
                 (root / directory).mkdir(mode=0o700)
-            (root / "jwks/matchmaking").mkdir(mode=0o700)
+            for issuer in ("gateway", "matchmaking"):
+                (root / "jwks" / issuer).mkdir(mode=0o700)
             for issuer in ("gateway", "space", "matchmaking"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
@@ -63,37 +64,38 @@ def generate(destination):
             def b64url(value):
                 return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 
-            matchmaking_keys = []
-            for kid in ("current", "next"):
-                der = subprocess.run(
-                    [binaries["openssl"], "pkey", "-in", str(root / "matchmaking" / f"{kid}.pem"),
-                     "-pubout", "-outform", "DER"],
-                    capture_output=True, timeout=60, check=False)
-                if der.returncode:
-                    raise ValueError("matchmaking public key export failed")
-                spki, end = der_value(der.stdout, 0, 0x30)
-                if end != len(der.stdout):
-                    raise ValueError("trailing RSA public key data")
-                _, offset = der_value(spki, 0, 0x30)
-                bit_string, offset = der_value(spki, offset, 0x03)
-                if offset != len(spki) or not bit_string or bit_string[0] != 0:
-                    raise ValueError("invalid RSA public key bit string")
-                rsa_key, end = der_value(bit_string[1:], 0, 0x30)
-                if end != len(bit_string) - 1:
-                    raise ValueError("trailing RSA key data")
-                modulus, offset = der_value(rsa_key, 0, 0x02)
-                exponent, offset = der_value(rsa_key, offset, 0x02)
-                if offset != len(rsa_key):
-                    raise ValueError("trailing RSA integer data")
-                modulus = modulus.lstrip(b"\x00")
-                exponent = exponent.lstrip(b"\x00")
-                matchmaking_keys.append({
-                    "kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256",
-                    "n": b64url(modulus), "e": b64url(exponent),
-                })
-            (root / "jwks/matchmaking/jwks.json").write_text(
-                json.dumps({"keys": matchmaking_keys}, separators=(",", ":")) + "\n",
-                encoding="ascii")
+            for issuer in ("gateway", "matchmaking"):
+                issuer_keys = []
+                for kid in ("current", "next"):
+                    der = subprocess.run(
+                        [binaries["openssl"], "pkey", "-in", str(root / issuer / f"{kid}.pem"),
+                         "-pubout", "-outform", "DER"],
+                        capture_output=True, timeout=60, check=False)
+                    if der.returncode:
+                        raise ValueError(f"{issuer} public key export failed")
+                    spki, end = der_value(der.stdout, 0, 0x30)
+                    if end != len(der.stdout):
+                        raise ValueError("trailing RSA public key data")
+                    _, offset = der_value(spki, 0, 0x30)
+                    bit_string, offset = der_value(spki, offset, 0x03)
+                    if offset != len(spki) or not bit_string or bit_string[0] != 0:
+                        raise ValueError("invalid RSA public key bit string")
+                    rsa_key, end = der_value(bit_string[1:], 0, 0x30)
+                    if end != len(bit_string) - 1:
+                        raise ValueError("trailing RSA key data")
+                    modulus, offset = der_value(rsa_key, 0, 0x02)
+                    exponent, offset = der_value(rsa_key, offset, 0x02)
+                    if offset != len(rsa_key):
+                        raise ValueError("trailing RSA integer data")
+                    modulus = modulus.lstrip(b"\x00")
+                    exponent = exponent.lstrip(b"\x00")
+                    issuer_keys.append({
+                        "kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256",
+                        "n": b64url(modulus), "e": b64url(exponent),
+                    })
+                (root / "jwks" / issuer / "jwks.json").write_text(
+                    json.dumps({"keys": issuer_keys}, separators=(",", ":")) + "\n",
+                    encoding="ascii")
             for issuer in ("gameintegration", "voice", "bot"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
@@ -188,7 +190,8 @@ def generate(destination):
             # This JWKS is public and bind-mounted into nginx, whose worker
             # drops root privileges. Make only the public document readable
             # by that worker; keep private fixture keys owner-only.
-            (root / "jwks/matchmaking/jwks.json").chmod(0o644)
+            for issuer in ("gateway", "matchmaking"):
+                (root / "jwks" / issuer / "jwks.json").chmod(0o644)
             fixture_uid = os.environ.get("PHASE0_MATCHSQUAD_FIXTURE_UID")
             if fixture_uid is not None:
                 if os.name != "posix" or fixture_uid != "65532":

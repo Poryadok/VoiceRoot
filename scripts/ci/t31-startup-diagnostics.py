@@ -356,12 +356,14 @@ def _stage_for(line: str, sqlstate: str | None, exception: str | None) -> str:
     return "startup_error"
 
 
-def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, ...]) -> tuple[dict, dict]:
+def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, ...],
+                  requested_services: tuple[str, ...] | None = None) -> tuple[dict, dict]:
+    requested = requested_services or failed_services or SERVICES
     text, decode_result = _decode_bounded(data)
     if text is None:
         return {
             "result": decode_result, "coverage": "unknown", "bytes_read": len(data),
-            "lines_read": 0, "services_requested": list(failed_services or SERVICES),
+            "lines_read": 0, "services_requested": list(requested),
             "services_seen": [], "truncated": command_result == "byte_limit",
             "window": "first_emitted", "window_bytes_limit": MAX_LOG_BYTES,
             "window_lines_limit": MAX_LOG_LINES, "causal_order": "not_established",
@@ -378,7 +380,6 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
         result = "line_limit"
     else:
         result = "complete"
-    requested = failed_services or SERVICES
     seen = set()
     first_error = None
     for line in lines:
@@ -404,6 +405,9 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             startup_category = "phase0_matchmaking_jwks_readiness"
             observed_detail = readiness_match.group(1)
             startup_detail = observed_detail if observed_detail in READINESS_FAILURE_CATEGORIES else "unknown"
+        elif service == "matchmaking" and "Matchmaking Space principal runtime:" in message:
+            startup_category = "matchmaking_space_principal_runtime"
+            startup_detail = "unknown"
         else:
             startup_category = next(
                 (category for prefix, category in VOICE_STARTUP_PREFIXES if prefix in message),
@@ -470,25 +474,30 @@ def _write_record(path: Path, record: dict) -> bool:
         return False
 
 
-def build_diagnostics(compose: list[str], startup_status: int, service: str | None = None) -> dict:
+def build_diagnostics(compose: list[str], startup_status: int, service: str | None = None,
+                      include_matchmaking_startup: bool = False) -> dict:
     record = _base_record(startup_status)
-    if not compose or compose[0] != "docker" or (service is not None and service not in SERVICE_SET):
+    if (not compose or compose[0] != "docker"
+            or (service is not None and service not in SERVICE_SET)
+            or (include_matchmaking_startup and service != "voice")):
         record["status_collection"]["result"] = "invalid_invocation"
         record["log_collection"]["result"] = "invalid_invocation"
         return record
 
-    service_args = [service] if service is not None else []
+    requested = (("voice", "matchmaking") if include_matchmaking_startup else
+                 ((service,) if service is not None else ()))
+    service_args = list(requested)
     ps_bytes, ps_result, _ = _bounded_command(compose + ["ps", "--all", "--format", "json", *service_args], COMMAND_TIMEOUT_SECONDS, MAX_PS_BYTES)
     status, failed_services = sanitize_status(ps_bytes, ps_result)
     record["status_collection"] = status
 
-    requested = (service,) if service is not None else (failed_services or SERVICES)
+    log_services = requested or failed_services or SERVICES
     log_bytes, log_result, _ = _bounded_command(
-        compose + ["logs", "--no-color", "--timestamps", *requested],
+        compose + ["logs", "--no-color", "--timestamps", *log_services],
         COMMAND_TIMEOUT_SECONDS,
         MAX_LOG_BYTES,
     )
-    log_summary, first_error = sanitize_logs(log_bytes, log_result, failed_services)
+    log_summary, first_error = sanitize_logs(log_bytes, log_result, failed_services, log_services)
     record["log_collection"] = log_summary
     record["first_error"] = first_error
     return record
@@ -499,12 +508,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True)
     parser.add_argument("--startup-status", type=int, required=True)
     parser.add_argument("--service", choices=SERVICES)
+    parser.add_argument("--include-matchmaking-startup", action="store_true")
     parser.add_argument("--compose", nargs=argparse.REMAINDER, required=True)
     args = parser.parse_args(argv)
     compose = args.compose[1:] if args.compose[:1] == ["--"] else args.compose
     output = Path(args.output)
     try:
-        record = build_diagnostics(compose, args.startup_status, args.service)
+        record = build_diagnostics(compose, args.startup_status, args.service,
+                                   args.include_matchmaking_startup)
     except Exception:
         record = _base_record(args.startup_status)
         record["status_collection"]["result"] = "collector_error"

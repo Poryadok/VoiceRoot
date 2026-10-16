@@ -41,7 +41,7 @@ services:
     user: "0:0"
     environment:
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
-      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://space:8443/.well-known/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","space":"https://space:8443/.well-known/jwks.json"}'
       MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/matchmaking-complete-grpc.crt
       MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/matchmaking-complete-grpc.key
       MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
@@ -322,3 +322,4 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/space-ca/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/jwks/gateway/jwks.json:/run/phase0/gateway/jwks.json:ro
