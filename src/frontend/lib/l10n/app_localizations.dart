@@ -6625,6 +6625,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not in contacts · messages may be unsafe'**
   String get profileNotInContactsWarning;
+
+  /// No description provided for @contactProfilePlayingGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing {title}'**
+  String contactProfilePlayingGame(String title);
 }
 
 class _AppLocalizationsDelegate

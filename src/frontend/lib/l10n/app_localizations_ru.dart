@@ -3681,4 +3681,9 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get profileNotInContactsWarning =>
       'Не в контактах · сообщения могут быть небезопасны';
+
+  @override
+  String contactProfilePlayingGame(String title) {
+    return 'Играет в $title';
+  }
 }

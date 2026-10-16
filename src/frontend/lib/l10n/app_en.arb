@@ -1562,5 +1562,7 @@
   "e2eBackupDelete": "Delete backup",
   "e2eBackupRestoreCta": "Restore encrypted history",
   "e2eKeyBackupManage": "Manage encrypted key backup",
-  "profileNotInContactsWarning": "Not in contacts · messages may be unsafe"
+  "profileNotInContactsWarning": "Not in contacts · messages may be unsafe",
+  "contactProfilePlayingGame": "Playing {title}",
+  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
 }

@@ -464,6 +464,7 @@ VoicePresence voicePresenceFromProto(user_pb.PresenceStatus status) {
     profileId: status.profileId,
     // Empty status = offline / unknown; do not invent "invisible" (presence.md).
     status: status.status,
+    gameTitle: status.hasGameTitle() ? emptyToNull(status.gameTitle) : null,
     customStatus: status.hasCustomStatus()
         ? emptyToNull(status.customStatus)
         : null,

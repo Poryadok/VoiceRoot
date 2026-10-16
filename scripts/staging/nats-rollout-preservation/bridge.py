@@ -12,6 +12,8 @@ class BridgeError(RuntimeError):pass
 
 FIELDS={
     'prepare':{'source_sha','run_id','mode','changed_services','token'},
+    'prepare-repair':{'source_sha','run_id','mode','changed_services','token','operation'},
+    'accept-provisional':{'operation','run_id','token'},
     'prepare-rollback':{'operation','run_id','token'},
     'resume-cold-backup':{'operation','run_id','token'},
     'resume-cipher-upload':{'operation','run_id','token'},
@@ -40,7 +42,10 @@ def prepare_error(error):
     return 'unexpected'
 
 def validate(row):
-    if not isinstance(row,dict) or row.get('action') not in FIELDS or set(row)-{'run_attempt','report_run_id','report_source_sha'}!={'action','nonce'}|FIELDS[row['action']]:raise BridgeError('bridge_request_invalid')
+    optional={'run_attempt','report_run_id','report_source_sha'}
+    if isinstance(row,dict) and row.get('action') in ('prepare','prepare-repair'):optional.add('provisional_staging')
+    if not isinstance(row,dict) or row.get('action') not in FIELDS or set(row)-optional!={'action','nonce'}|FIELDS[row['action']]:raise BridgeError('bridge_request_invalid')
+    if 'provisional_staging' in row and (type(row['provisional_staging']) is not bool or row['mode']!='images-only'):raise BridgeError('bridge_target_invalid')
     for key in ('run_attempt','report_run_id'):
         if key in row and (type(row[key]) is not int or not 0<row[key]<2**63):raise BridgeError('bridge_identity_invalid')
     if 'report_source_sha' in row and (not isinstance(row['report_source_sha'],str) or not re.fullmatch('[a-f0-9]{40}',row['report_source_sha'])):raise BridgeError('bridge_identity_invalid')
@@ -54,7 +59,7 @@ def validate(row):
     if 'original_artifact_id' in row and row['original_artifact_id']==row['observation_artifact_id']:
         raise BridgeError('bridge_artifact_identity_not_distinct')
     if 'token' in row and (not isinstance(row['token'],str) or not 1<=len(row['token'])<=4096 or any(ord(c)<33 or ord(c)>126 for c in row['token'])):raise BridgeError('bridge_token_invalid')
-    if row['action']=='prepare':
+    if row['action'] in ('prepare','prepare-repair'):
         if row['mode'] not in ('full','app-only','images-only') or not isinstance(row['changed_services'],list) or not 0<=len(row['changed_services'])<=23 or len(set(row['changed_services']))!=len(row['changed_services']) or row['mode']=='images-only' and not row['changed_services']:raise BridgeError('bridge_target_invalid')
         if any(not isinstance(s,str) or not re.fullmatch('[a-z][a-z0-9-]{0,50}',s) for s in row['changed_services']):raise BridgeError('bridge_target_invalid')
     return row
@@ -103,7 +108,7 @@ def dispatch(directory,request,execute,recover,execute_observed=None,reporter=No
         _save(path,state)
         publish(request_status='STARTED')
         def observe(name,status):
-            if request['action'] not in ('prepare','prepare-rollback') or name not in PREPARE_STAGES or status not in ('STARTED','COMPLETE'):
+            if request['action'] not in ('prepare','prepare-rollback','prepare-repair') or name not in PREPARE_STAGES or status not in ('STARTED','COMPLETE'):
                 raise BridgeError('bridge_prepare_stage_invalid')
             state['prepare_stage']={'name':name,'status':status}
             _save(path,state)
@@ -183,7 +188,7 @@ def drain(installed):
                         latest.pop('stage',None)
                     latest.update({k:v for k,v in values.items() if v is not None})
                     snapshot=latest.get('checkpoint',{})
-                    operation=request.get('operation',request['nonce'][:12])
+                    operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback','prepare-repair') else request.get('operation')
                     try:
                         from bridge_root import private_json
                         snapshot=private_json(guard.ROOT/('rollout-'+operation)/'checkpoint.json')
