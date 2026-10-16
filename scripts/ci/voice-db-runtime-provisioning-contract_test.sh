@@ -1878,7 +1878,8 @@ read -r f13_nested_base f13_nested_release _ < <(f13_make_nested_crisscross_fixt
 f13_collect_master_push_contributions "${f13_nested_repo}" push refs/heads/master \
   "${f13_nested_base}" "${f13_nested_base}" "${f13_nested_release}" \
   "${TMP_DIR}/f13-nested-map" "${TMP_DIR}/f13-nested-category" || {
-  printf '%s\n' 'F13 oracle bug: policy-equivalent nested criss-cross sources were rejected' >&2
+  printf 'F13 oracle bug: policy-equivalent nested criss-cross sources were rejected (category=%s)\n' \
+    "$(<"${TMP_DIR}/f13-nested-category")" >&2
   exit 2
 }
 f13_nested_base_sets="$(cut -f8 "${TMP_DIR}/f13-nested-map" | LC_ALL=C sort -u | awk 'index($0, ",") > 0 { count++ } END { print count+0 }')"
