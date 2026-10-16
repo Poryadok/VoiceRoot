@@ -1,11 +1,16 @@
 """Exact active-contract receipt versions accepted by the rollout bridge."""
 import re
 from controller import Blocked
-from nats_contract_plan import DECLARATIONS, MIGRATION_ID as CURRENT_NATS_MIGRATION_ID
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V3_MIGRATION_ID,MIGRATION_ID as CURRENT_NATS_MIGRATION_ID
 
 LEGACY_NATS_MIGRATION_ID='space-chat-social-24h-friend-removed-v1'
 SOURCE_PATHS=('deploy/templates/nats-realtime-bootstrap.yaml',
     'deploy/templates/nats-analytics-chat-bootstrap.yaml')
+VERSIONS={
+    LEGACY_NATS_MIGRATION_ID:('voice-nats-additive-census-proof-v1',(('social_events','rt_realtime1_friend_removed'),)),
+    V3_MIGRATION_ID:('voice-nats-additive-census-proof-v2',tuple((s,c['durable_name']) for s,c in V3_DECLARATIONS)),
+    CURRENT_NATS_MIGRATION_ID:('voice-nats-additive-census-proof-v3',tuple((s,c['durable_name']) for s,c in DECLARATIONS)),
+}
 PROOF_KEYS={'schema','migration_id','before_sha256','after_sha256','messages',
     'old_consumers_preserved','created_consumers'}
 
@@ -73,8 +78,9 @@ def _proof_matches(proof,migration_id):
     if 'ephemeral_recovery_observations' in proof:
         expected=expected|{'ephemeral_recovery_observations'}
     if set(proof)!=expected:return False
-    census_schema=('voice-nats-additive-census-proof-v1'
-        if migration_id==LEGACY_NATS_MIGRATION_ID else 'voice-nats-additive-census-proof-v2')
+    version=VERSIONS.get(migration_id)
+    if version is None:return False
+    census_schema=version[0]
     if proof.get('schema')!=census_schema or proof.get('migration_id')!=migration_id:
         return False
     if not _sha256(proof.get('before_sha256')) or not _sha256(proof.get('after_sha256')):
@@ -89,7 +95,7 @@ def validate_identity(active_contract,expected,baseline_pairs):
         from operator_reset import validate_active
         return validate_active(active_contract,expected,baseline_pairs)
     if (not isinstance(active_contract,dict) or active_contract.get('schema')!='voice-nats-active-contract-v1'
-        or active_contract.get('migration_id') not in (LEGACY_NATS_MIGRATION_ID,CURRENT_NATS_MIGRATION_ID)
+        or active_contract.get('migration_id') not in VERSIONS
         or active_contract.get('generation')!=expected['generation']
         or active_contract.get('namespace_uid')!=expected['namespace_uid']
         or active_contract.get('pvc_uid')!=expected['source_claim_uid']):
@@ -99,9 +105,7 @@ def validate_identity(active_contract,expected,baseline_pairs):
     baseline=_pairs(baseline_pairs)
     actual=_pairs(contract.get('consumer_pairs') if isinstance(contract,dict) else None)
     if baseline is None or actual is None:raise Blocked('nats_active_contract_identity_changed')
-    additions=([('social_events','rt_realtime1_friend_removed')]
-        if migration_id==LEGACY_NATS_MIGRATION_ID
-        else [(stream,declaration['durable_name']) for stream,declaration in DECLARATIONS])
+    additions=VERSIONS[migration_id][1]
     expected_pairs=sorted(set(baseline)|set(additions))
     if sorted(actual)!=expected_pairs:raise Blocked('nats_active_contract_identity_changed')
     sources=active_contract.get('sources')

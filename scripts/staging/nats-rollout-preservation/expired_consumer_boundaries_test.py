@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from controller import Blocked
 from nats_contract_actor import Actor,WRITE
-from nats_contract_plan import execute,SCHEMA,MIGRATION_ID
+from nats_contract_plan import execute,SCHEMA,MIGRATION_ID,DECLARATIONS,digest
 from runtime_stage import RolloutStage
 
 class Runtime:
@@ -39,6 +39,7 @@ class MutationBoundaryTests(unittest.TestCase):
                 actor.mutation_guard=authority
                 before=copy.deepcopy(runtime.config['chat_events']);after=copy.deepcopy(before);after['subjects'].append('chat.new')
                 plan={'schema':SCHEMA,'migration_id':MIGRATION_ID,'actions':[{'api':'$JS.API.STREAM.UPDATE.chat_events','object':'chat_events','before':before,'after':after}]}
+                plan['consumer_targets']=[{'stream':stream,'name':config['durable_name'],'config_sha256':digest(config)} for stream,config in DECLARATIONS]
                 events=[]
                 def journal(row):
                     events.append(row)

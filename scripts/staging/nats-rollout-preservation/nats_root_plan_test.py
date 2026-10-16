@@ -4,7 +4,7 @@ from unittest.mock import patch
 import bootstrap_selection
 from bootstrap_selection_test import fixture as enrollment_fixture
 from nats_contract_plan_test import live
-from nats_contract_plan import DECLARATIONS
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS
 from rollout_census_test import CREATED
 import nats_root_plan as module
 from controller import Blocked
@@ -22,10 +22,10 @@ class Tests(unittest.TestCase):
         role=self.streams['role_events']['config']['subjects']
         common='    stream chat_events '+' '.join(chat)+'\n'
         role_line='    stream role_events '+' '.join(role+['role.voice_policy_invalidated'])+'\n'
-        declarations=''.join('    consumer '+stream+' '+config['name']+' '+config['filter_subject']+' '+config['deliver_subject']+'\n' for stream,config in DECLARATIONS)
+        declarations=''.join('    consumer '+stream+' '+config['name']+' '+config['filter_subject']+' '+config['deliver_subject']+'\n' for stream,config in V3_DECLARATIONS)
         target=common+'    stream_with_duplicate_window social_events 86400000000000 '+' '.join(social)+'\n'+role_line+declarations
         self.files={}
-        for role,text in [('realtime',target),('analytics-chat',common+role_line)]:
+        for role,text in [('realtime',target),('analytics-chat',common+role_line+'    consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata\n')]:
             p=self.source/('deploy/templates/nats-'+role+'-bootstrap.yaml');p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
             self.files[role]=hashlib.sha256(p.read_bytes()).hexdigest()
         self.contract={'scripts':[{'part':part} for part in ('realtime','analytics-chat','notification','search')]}
@@ -34,6 +34,7 @@ class Tests(unittest.TestCase):
         from nats_contract_plan import digest
         self.legacy_auth=copy.deepcopy(self.enrollment['auth_proof'])
         self.fresh_auth=copy.deepcopy(self.legacy_auth)
+        self.fresh_auth['schema']='voice-bootstrap-auth-v4'
         self.fresh_auth['normalized_consumers']=normalized
         self.fresh_auth['normalized_consumers_sha256']=digest(normalized)
     def decode(self,raw):
@@ -48,7 +49,7 @@ class Tests(unittest.TestCase):
             return result
     def test_root_producer_binds_source_existing_enrollment_server_and_plan(self):
         from nats_contract_plan import digest
-        result=self.run_plan();self.assertEqual(len(result['plan']['actions']),6)
+        result=self.run_plan();self.assertEqual(len(result['plan']['actions']),7)
         self.assertEqual(result['binding']['plan_sha256'],digest(result['plan']))
         self.assertEqual(result['binding']['enrollment_sha256'],digest(self.enrollment))
         self.assertEqual(self.enrollment['auth_proof'],self.legacy_auth)
@@ -79,7 +80,7 @@ class Tests(unittest.TestCase):
         ):
             auth=copy.deepcopy(self.fresh_auth);mutate(auth)
             with self.subTest(auth=auth.keys()),self.assertRaises(Blocked):self.run_plan(auth)
-    def test_v3_enrollment_is_supported_only_when_fresh_proof_matches_exactly(self):
+    def test_v4_enrollment_is_supported_only_when_fresh_proof_matches_exactly(self):
         self.enrollment['auth_proof']=copy.deepcopy(self.fresh_auth)
         result=self.run_plan()
         from nats_contract_plan import digest
@@ -145,9 +146,9 @@ class CanonicalBootstrapTests(unittest.TestCase):
             'nats_contract':copy.deepcopy(authority['plan']),
             'nats_target_scripts':copy.deepcopy(authority['scripts']),
             'nats_migration':{'verified':True,'old_record_files_verified':True,'proof':{
-                'schema':'voice-nats-additive-census-proof-v2','migration_id':authority['plan']['migration_id'],
+                'schema':'voice-nats-additive-census-proof-v3','migration_id':authority['plan']['migration_id'],
                 'before_sha256':'a'*64,'after_sha256':'b'*64,'messages':14,
-                'old_consumers_preserved':len(baseline_pairs),'created_consumers':3}}}
+                'old_consumers_preserved':len(baseline_pairs),'created_consumers':4}}}
         # These proof flags stand for the isolated native proof, not staging evidence.
         events=[];guard=Mock()
         active=nats_contract_custody.advance(kube,state,stage,events.append,mutation_guard=guard)

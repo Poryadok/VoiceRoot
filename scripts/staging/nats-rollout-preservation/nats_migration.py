@@ -10,7 +10,7 @@ from controller import Blocked,file_sha
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from native_store import archive_closed_store
 from nats_contract_actor import Actor
-from nats_contract_plan import DECLARATIONS,digest,execute,verify_census
+from nats_contract_plan import declarations_for,ContractError,digest,execute,verify_census
 from preserve import verify_post_apply,isolated_census,canonical,recovered_census
 from scenario import ready
 
@@ -53,11 +53,13 @@ def stream_updates(state,archive,manifest):
 
 def recovered_consumer_create_actions(plan,consumers,events):
     """Recognize only issued, closed, exact-target consumer creates on retry."""
-    declarations={(stream,config['durable_name']) for stream,config in DECLARATIONS}
+    try:version_rows=declarations_for(plan)
+    except ContractError:raise Blocked('nats_migration_retry_consumer_targets_invalid') from None
+    declarations={(stream,config['durable_name']) for stream,config in version_rows}
     rows=plan.get('consumer_targets')
-    if not isinstance(rows,list) or len(rows)!=len(DECLARATIONS):raise Blocked('nats_migration_retry_consumer_targets_invalid')
+    if not isinstance(rows,list) or len(rows)!=len(version_rows):raise Blocked('nats_migration_retry_consumer_targets_invalid')
     targets={}
-    for row,(stream,config) in zip(rows,DECLARATIONS):
+    for row,(stream,config) in zip(rows,version_rows):
         if (not isinstance(row,dict) or set(row)!={'stream','name','config_sha256'}
             or row.get('stream')!=stream or row.get('name')!=config['durable_name']
             or not isinstance(row.get('config_sha256'),str) or not re.fullmatch('[a-f0-9]{64}',row['config_sha256'])):

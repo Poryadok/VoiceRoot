@@ -8,30 +8,28 @@ from bootstrap_selection import select
 from bootstrap_root import secret_bytes
 from controller import Blocked
 from docker_runtime import NATS_IMAGE
-from nats_contract_plan import DECLARATIONS,compile_plan,digest
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,compile_plan,digest
 from rollout_census import census
 from stage_runtime import HUB
 
 TARGET_FILES={'realtime':'1122d97dca3b185aecb43e0ae41d1c255d0adc46090f9f1c3dd8faf4ee294d31',
-    'analytics-chat':'552b9099f0d90424b03cf6fb18ccc9ded76eb58f9a8bfde64405311f8640a738',
+    'analytics-chat':'7f37cdee8a59a245998371a4eddb0d4c80be965086ee06a5f30e8bd75b05d4b1',
     'search':'997b35cc0526eda5bead2a6ecfba95df59423c800fa7e960599466b3ee51334a'}
 def fail():raise Blocked('nats_migration_root_preflight_refused')
 
 _LEGACY_AUTH_KEYS={'verified','server_image','account_sha256','reply_prefix','normalized_consumer','normalized_consumer_sha256'}
 _V3_AUTH_KEYS=_LEGACY_AUTH_KEYS|{'normalized_consumers','normalized_consumers_sha256'}
+_V4_AUTH_KEYS=_V3_AUTH_KEYS|{'schema'}
 def _validated_normalized_consumers(live_auth,enrolled_auth):
-    """Bind v3 scratch defaults while preserving the immutable legacy enrollment."""
-    if not isinstance(enrolled_auth,dict) or set(enrolled_auth) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS):fail()
-    if not isinstance(live_auth,dict) or set(live_auth)!=_V3_AUTH_KEYS:fail()
-    if set(enrolled_auth)==_LEGACY_AUTH_KEYS:
-        if {key:live_auth[key] for key in _LEGACY_AUTH_KEYS}!=enrolled_auth:fail()
-    elif live_auth!=enrolled_auth:
-        fail()
-    def normalized_map(auth):
+    """Extend exact prior defaults without changing immutable enrollment bytes."""
+    if not isinstance(enrolled_auth,dict) or set(enrolled_auth) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS,_V4_AUTH_KEYS):fail()
+    if not isinstance(live_auth,dict) or set(live_auth)!=_V4_AUTH_KEYS or live_auth.get('schema')!='voice-bootstrap-auth-v4':fail()
+    if {key:live_auth[key] for key in _LEGACY_AUTH_KEYS}!={key:enrolled_auth[key] for key in _LEGACY_AUTH_KEYS}:fail()
+    def normalized_map(auth,declarations):
         rows=auth['normalized_consumers']
-        if not isinstance(rows,list) or len(rows)!=len(DECLARATIONS) or digest(rows)!=auth['normalized_consumers_sha256']:fail()
+        if not isinstance(rows,list) or len(rows)!=len(declarations) or digest(rows)!=auth['normalized_consumers_sha256']:fail()
         result={}
-        for row,(stream,declaration) in zip(rows,DECLARATIONS):
+        for row,(stream,declaration) in zip(rows,declarations):
             if (not isinstance(row,dict) or set(row)!={'stream','durable','config'}
                 or row['stream']!=stream or row['durable']!=declaration['durable_name']
                 or not isinstance(row['config'],dict)
@@ -44,8 +42,11 @@ def _validated_normalized_consumers(live_auth,enrolled_auth):
             or digest(legacy)!=auth['normalized_consumer_sha256']):fail()
         return result
     if set(enrolled_auth)==_V3_AUTH_KEYS:
-        normalized_map(enrolled_auth)
-    result=normalized_map(live_auth)
+        normalized_map(enrolled_auth,V3_DECLARATIONS)
+        if live_auth['normalized_consumers'][:len(V3_DECLARATIONS)]!=enrolled_auth['normalized_consumers']:fail()
+    elif set(enrolled_auth)==_V4_AUTH_KEYS:
+        if enrolled_auth!=live_auth:fail()
+    result=normalized_map(live_auth,DECLARATIONS)
     return result
 def monitor(kube):
     hub=kube.get('deployment',HUB)

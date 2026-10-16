@@ -156,6 +156,7 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
     $1.ChatRef? contextChat,
     $core.bool? isE2e,
     $2.StoryRef? contextStory,
+    UploadIntent? intent,
   }) {
     final result = create();
     if (originalName != null) result.originalName = originalName;
@@ -164,6 +165,7 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
     if (contextChat != null) result.contextChat = contextChat;
     if (isE2e != null) result.isE2e = isE2e;
     if (contextStory != null) result.contextStory = contextStory;
+    if (intent != null) result.intent = intent;
     return result;
   }
 
@@ -188,6 +190,8 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
     ..aOB(6, _omitFieldNames ? '' : 'isE2e')
     ..aOM<$2.StoryRef>(7, _omitFieldNames ? '' : 'contextStory',
         subBuilder: $2.StoryRef.create)
+    ..aE<UploadIntent>(8, _omitFieldNames ? '' : 'intent',
+        enumValues: UploadIntent.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -266,6 +270,15 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
   void clearContextStory() => $_clearField(7);
   @$pb.TagNumber(7)
   $2.StoryRef ensureContextStory() => $_ensure(5);
+
+  @$pb.TagNumber(8)
+  UploadIntent get intent => $_getN(6);
+  @$pb.TagNumber(8)
+  set intent(UploadIntent value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasIntent() => $_has(6);
+  @$pb.TagNumber(8)
+  void clearIntent() => $_clearField(8);
 }
 
 class UploadResponse extends $pb.GeneratedMessage {
@@ -437,6 +450,11 @@ class FileMetadata extends $pb.GeneratedMessage {
     FileMediaCategory? fileTypeEnum,
     FileScanOutcome? scanResultEnum,
     $fixnum.Int64? objectRevision,
+    $core.String? musicTitle,
+    $core.String? musicArtist,
+    $core.String? musicAlbum,
+    $fixnum.Int64? musicMetadataRevision,
+    UploadIntent? intent,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -462,6 +480,12 @@ class FileMetadata extends $pb.GeneratedMessage {
     if (fileTypeEnum != null) result.fileTypeEnum = fileTypeEnum;
     if (scanResultEnum != null) result.scanResultEnum = scanResultEnum;
     if (objectRevision != null) result.objectRevision = objectRevision;
+    if (musicTitle != null) result.musicTitle = musicTitle;
+    if (musicArtist != null) result.musicArtist = musicArtist;
+    if (musicAlbum != null) result.musicAlbum = musicAlbum;
+    if (musicMetadataRevision != null)
+      result.musicMetadataRevision = musicMetadataRevision;
+    if (intent != null) result.intent = intent;
     return result;
   }
 
@@ -509,6 +533,14 @@ class FileMetadata extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         24, _omitFieldNames ? '' : 'objectRevision', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(25, _omitFieldNames ? '' : 'musicTitle')
+    ..aOS(26, _omitFieldNames ? '' : 'musicArtist')
+    ..aOS(27, _omitFieldNames ? '' : 'musicAlbum')
+    ..a<$fixnum.Int64>(
+        28, _omitFieldNames ? '' : 'musicMetadataRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aE<UploadIntent>(29, _omitFieldNames ? '' : 'intent',
+        enumValues: UploadIntent.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -744,6 +776,52 @@ class FileMetadata extends $pb.GeneratedMessage {
   $core.bool hasObjectRevision() => $_has(22);
   @$pb.TagNumber(24)
   void clearObjectRevision() => $_clearField(24);
+
+  /// Extracted from admitted plaintext audio only; absent for encrypted files.
+  @$pb.TagNumber(25)
+  $core.String get musicTitle => $_getSZ(23);
+  @$pb.TagNumber(25)
+  set musicTitle($core.String value) => $_setString(23, value);
+  @$pb.TagNumber(25)
+  $core.bool hasMusicTitle() => $_has(23);
+  @$pb.TagNumber(25)
+  void clearMusicTitle() => $_clearField(25);
+
+  @$pb.TagNumber(26)
+  $core.String get musicArtist => $_getSZ(24);
+  @$pb.TagNumber(26)
+  set musicArtist($core.String value) => $_setString(24, value);
+  @$pb.TagNumber(26)
+  $core.bool hasMusicArtist() => $_has(24);
+  @$pb.TagNumber(26)
+  void clearMusicArtist() => $_clearField(26);
+
+  @$pb.TagNumber(27)
+  $core.String get musicAlbum => $_getSZ(25);
+  @$pb.TagNumber(27)
+  set musicAlbum($core.String value) => $_setString(25, value);
+  @$pb.TagNumber(27)
+  $core.bool hasMusicAlbum() => $_has(25);
+  @$pb.TagNumber(27)
+  void clearMusicAlbum() => $_clearField(27);
+
+  @$pb.TagNumber(28)
+  $fixnum.Int64 get musicMetadataRevision => $_getI64(26);
+  @$pb.TagNumber(28)
+  set musicMetadataRevision($fixnum.Int64 value) => $_setInt64(26, value);
+  @$pb.TagNumber(28)
+  $core.bool hasMusicMetadataRevision() => $_has(26);
+  @$pb.TagNumber(28)
+  void clearMusicMetadataRevision() => $_clearField(28);
+
+  @$pb.TagNumber(29)
+  UploadIntent get intent => $_getN(27);
+  @$pb.TagNumber(29)
+  set intent(UploadIntent value) => $_setField(29, value);
+  @$pb.TagNumber(29)
+  $core.bool hasIntent() => $_has(27);
+  @$pb.TagNumber(29)
+  void clearIntent() => $_clearField(29);
 }
 
 /// @voice.unknown_fields=reject

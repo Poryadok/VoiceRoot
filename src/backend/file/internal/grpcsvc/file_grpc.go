@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"voice/backend/file/internal/audioproc"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -63,6 +64,10 @@ type ImageProcessor interface {
 	ProcessImage(ctx context.Context, row store.FileRow) (ImageProcessingResult, error)
 }
 
+type AudioProcessor interface {
+	Extract(context.Context, []byte) (audioproc.Metadata, error)
+}
+
 type ObjectReader interface {
 	ReadObject(ctx context.Context, key string, maxBytes int64) ([]byte, error)
 }
@@ -105,6 +110,7 @@ type Deps struct {
 	Clock                    Clock
 	ChatGuard                ChatGuard
 	Processor                ImageProcessor
+	AudioProcessor           AudioProcessor
 	Reader                   ObjectReader
 	Scanner                  Scanner
 	Events                   fileevents.Publisher
@@ -125,6 +131,7 @@ type FileGRPC struct {
 	clock                     Clock
 	chatGuard                 ChatGuard
 	processor                 ImageProcessor
+	audioProcessor            AudioProcessor
 	reader                    ObjectReader
 	scanner                   Scanner
 	events                    fileevents.Publisher
@@ -159,6 +166,7 @@ func New(deps Deps) *FileGRPC {
 		clock:                     clock,
 		chatGuard:                 deps.ChatGuard,
 		processor:                 processor,
+		audioProcessor:            deps.AudioProcessor,
 		reader:                    deps.Reader,
 		scanner:                   deps.Scanner,
 		events:                    events,
@@ -183,9 +191,23 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 	}
 	originalName := strings.TrimSpace(req.GetOriginalName())
 	mimeType := strings.TrimSpace(strings.ToLower(req.GetMimeType()))
+	intent := ""
+	switch req.GetIntent() {
+	case filev1.UploadIntent_UPLOAD_INTENT_UNSPECIFIED:
+	case filev1.UploadIntent_UPLOAD_INTENT_MUSIC:
+		if r2file.MediaCategory(mimeType) != "audio" || req.GetContextChat() == nil || req.GetContextStory() != nil {
+			return nil, status.Error(codes.InvalidArgument, "music upload requires audio and chat context")
+		}
+		intent = "music"
+	default:
+		return nil, status.Error(codes.InvalidArgument, "unsupported upload intent")
+	}
 	sizeBytes := req.GetSizeBytes()
 	accountID, _ := authctx.AccountID(ctx)
 	maxBytes, premium := s.uploadPolicy(ctx, accountID)
+	if intent == "music" && maxBytes > audioproc.MaxBytes {
+		maxBytes = audioproc.MaxBytes
+	}
 	if err := r2file.ValidateUpload(originalName, mimeType, sizeBytes, maxBytes); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -239,6 +261,7 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 		R2Key:             r2Key,
 		Status:            "pending_upload",
 		FileType:          r2file.MediaCategory(mimeType),
+		UploadIntent:      intent,
 		ChatID:            chatID,
 		ChatType:          chatType,
 		StoryID:           storyID,
@@ -448,6 +471,27 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 			if err := s.deleter.DeleteObject(ctx, originalKey); err != nil {
 				slog.Default().WarnContext(ctx, "processed original cleanup failed", slog.String("file_id", row.ID.String()), slog.String("r2_key", originalKey), slog.String("error", err.Error()))
 			}
+		}
+	} else if row.UploadIntent == "music" && row.FileType == "audio" && !row.IsE2E && row.Status == "processing" {
+		var extracted audioproc.Metadata
+		var extractionErr error
+		if s.audioProcessor == nil {
+			extractionErr = audioproc.ErrAudio
+		} else {
+			extracted, extractionErr = s.audioProcessor.Extract(ctx, uploaded)
+		}
+		if extractionErr != nil {
+			row, err = s.files.ApplyScanResult(ctx, fileID, "failed", row.ScanResult)
+		} else {
+			row, err = s.files.ApplyAudioProcessing(ctx, fileID, extracted.Title, extracted.Artist, extracted.Album, extracted.DurationSeconds)
+		}
+		if err != nil {
+			return nil, status.Error(codes.Internal, "audio processing persistence failed")
+		}
+		// Successful Music metadata is published from the same-transaction
+		// outbox, never through this best-effort legacy notification.
+		if extractionErr != nil {
+			_ = s.events.PublishFileProcessed(ctx, row.ID.String(), row.Status, "", "")
 		}
 	} else if row.Status == "processing" {
 		row, err = s.files.ApplyScanResult(ctx, fileID, "ready", row.ScanResult)
@@ -1075,6 +1119,15 @@ func fileRowToProto(row store.FileRow) *filev1.FileMetadata {
 	}
 	if row.DurationSeconds != nil {
 		meta.DurationSeconds = row.DurationSeconds
+	}
+	if !row.IsE2E {
+		meta.MusicTitle = row.MusicTitle
+		meta.MusicArtist = row.MusicArtist
+		meta.MusicAlbum = row.MusicAlbum
+		meta.MusicMetadataRevision = uint64(row.MusicMetadataRevision)
+	}
+	if row.UploadIntent == "music" {
+		meta.Intent = filev1.UploadIntent_UPLOAD_INTENT_MUSIC
 	}
 	if row.ThumbnailR2Key != nil {
 		meta.ThumbnailR2Key = row.ThumbnailR2Key

@@ -539,6 +539,11 @@ func main() {
 				}
 			}()
 			targets, ok := chatGuard.(dmReceiptVisibilityResolver)
+			go func() {
+				if err := runMusicMetadataConsumer(runCtx, natsURL, &store.MessagesStore{Pool: pool}, &store.SQLChatThreadPolicy{Pool: chatMetaPool}, logger); err != nil && runCtx.Err() == nil {
+					logger.Error("music metadata consumer exited")
+				}
+			}()
 			if !ok {
 				log.Fatalf("chat receipt visibility targets not configured")
 			}

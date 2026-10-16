@@ -149,6 +149,7 @@ class Tests(unittest.TestCase):
             '$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed',
             '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
             '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',
+            '$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata',
         ]
         self.assertEqual([action['api'] for action in state['nats_contract']['actions']],expected_actions)
         self.assertEqual(old.call_count,1);self.assertTrue(result['verified']);self.assertEqual(actor.calls,expected_actions)

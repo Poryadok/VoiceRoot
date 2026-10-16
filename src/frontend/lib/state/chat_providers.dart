@@ -2167,7 +2167,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       var isE2e = false;
       if (_isE2eChat()) {
         final peerId = _dmPeerProfileId();
-        if (peerId != null && outbound.isNotEmpty) {
+        if (peerId == null || retainedAttachments.any((a) => !a.isE2eEncrypted)) {
+          throw E2eEncryptException('e2e_encrypt_failed');
+        }
+        if (outbound.isNotEmpty) {
           outbound = await _ref
               .read(e2eMessageServiceProvider)
               .encryptOutgoing(
@@ -2177,8 +2180,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
                 authorization: auth,
                 chatId: chatId,
               );
-          isE2e = true;
         }
+        // Attachment keys already use the encrypted file envelope. Empty text
+        // must still declare E2E; never downgrade an attachment-only message.
+        isE2e = true;
       }
       if (!_isCurrentImmediateSend(
         identity,

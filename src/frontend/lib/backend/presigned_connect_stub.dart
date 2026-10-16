@@ -23,6 +23,7 @@ Future<GatewayHttpResult<void>> putBytesPreservingHost({
 Future<GatewayHttpResult<Uint8List>> getBytesPreservingHost({
   required Uri connectUri,
   required String signedHostHeader,
+  int? maxBytes,
 }) async {
   return GatewayHttpFailure(
     GatewayApiError(

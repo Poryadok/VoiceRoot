@@ -68,6 +68,7 @@ void main() {
         expect(popup.right, lessThanOrEqualTo(1272));
         final photo = find.byKey(const Key('composer_attach_photo_or_video'));
         final document = find.byKey(const Key('composer_attach_document'));
+        final music = find.byKey(const Key('composer_attach_music'));
         bool focused(Finder item) {
           final key = tester.widget(item).key;
           var inside = false;
@@ -86,12 +87,15 @@ void main() {
         expect(focused(document), isTrue);
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
         await tester.pump();
+        expect(focused(music), isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
         expect(focused(photo), isTrue);
         await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
         await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
         await tester.pump();
-        expect(focused(document), isTrue);
+        expect(focused(music), isTrue);
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pumpAndSettle();
         expect(picked, isNull);
@@ -176,40 +180,47 @@ void main() {
     expect(picked, '👍');
   });
 
-  testWidgets('composer attach menu exposes photo and document actions', (
-    tester,
-  ) async {
-    ComposerAttachAction? picked;
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: voiceTestTheme(),
-        locale: const Locale('en'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: FilledButton(
-              onPressed: () async {
-                picked = await showComposerAttachMenu(context);
-              },
-              child: const Text('attach'),
+  testWidgets(
+    'composer attach menu exposes Music without replacing existing actions',
+    (tester) async {
+      ComposerAttachAction? picked;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: FilledButton(
+                onPressed: () async {
+                  picked = await showComposerAttachMenu(context);
+                },
+                child: const Text('attach'),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('attach'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('attach'));
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(ComposerAttachMenuBody.menuKey), findsOneWidget);
-    expect(find.text('Photo or video'), findsOneWidget);
-    expect(find.text('Document'), findsOneWidget);
+      expect(find.byKey(ComposerAttachMenuBody.menuKey), findsOneWidget);
+      expect(find.text('Photo or video'), findsOneWidget);
+      expect(find.text('Document'), findsOneWidget);
+      expect(find.text('Music'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('composer_attach_document')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('composer_attach_document')));
+      await tester.pumpAndSettle();
 
-    expect(picked, ComposerAttachAction.document);
-  });
+      expect(picked, ComposerAttachAction.document);
+      await tester.tap(find.text('attach'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('composer_attach_music')));
+      await tester.pumpAndSettle();
+      expect(picked, ComposerAttachAction.music);
+    },
+  );
 }

@@ -2836,10 +2836,21 @@ const FileProcessed$json = {
       '10': 'thumbnailR2Key',
       '17': true
     },
+    {
+      '1': 'music',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FileMusicMetadata',
+      '9': 2,
+      '10': 'music',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_converted_r2_key'},
     {'1': '_thumbnail_r2_key'},
+    {'1': '_music'},
   ],
 };
 
@@ -2847,8 +2858,38 @@ const FileProcessed$json = {
 final $typed_data.Uint8List fileProcessedDescriptor = $convert.base64Decode(
     'Cg1GaWxlUHJvY2Vzc2VkEhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZBIWCgZzdGF0dXMYAiABKA'
     'lSBnN0YXR1cxItChBjb252ZXJ0ZWRfcjJfa2V5GAMgASgJSABSDmNvbnZlcnRlZFIyS2V5iAEB'
-    'Ei0KEHRodW1ibmFpbF9yMl9rZXkYBCABKAlIAVIOdGh1bWJuYWlsUjJLZXmIAQFCEwoRX2Nvbn'
-    'ZlcnRlZF9yMl9rZXlCEwoRX3RodW1ibmFpbF9yMl9rZXk=');
+    'Ei0KEHRodW1ibmFpbF9yMl9rZXkYBCABKAlIAVIOdGh1bWJuYWlsUjJLZXmIAQESPQoFbXVzaW'
+    'MYBSABKAsyIi52b2ljZS5ldmVudHMudjEuRmlsZU11c2ljTWV0YWRhdGFIAlIFbXVzaWOIAQFC'
+    'EwoRX2NvbnZlcnRlZF9yMl9rZXlCEwoRX3RodW1ibmFpbF9yMl9rZXlCCAoGX211c2lj');
+
+@$core.Deprecated('Use fileMusicMetadataDescriptor instead')
+const FileMusicMetadata$json = {
+  '1': 'FileMusicMetadata',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'metadata_revision',
+      '3': 2,
+      '4': 1,
+      '5': 4,
+      '10': 'metadataRevision'
+    },
+    {'1': 'size_bytes', '3': 3, '4': 1, '5': 3, '10': 'sizeBytes'},
+    {'1': 'scan_result', '3': 4, '4': 1, '5': 9, '10': 'scanResult'},
+    {'1': 'title', '3': 5, '4': 1, '5': 9, '10': 'title'},
+    {'1': 'artist', '3': 6, '4': 1, '5': 9, '10': 'artist'},
+    {'1': 'album', '3': 7, '4': 1, '5': 9, '10': 'album'},
+    {'1': 'duration_seconds', '3': 8, '4': 1, '5': 5, '10': 'durationSeconds'},
+  ],
+};
+
+/// Descriptor for `FileMusicMetadata`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileMusicMetadataDescriptor = $convert.base64Decode(
+    'ChFGaWxlTXVzaWNNZXRhZGF0YRIXCgdjaGF0X2lkGAEgASgJUgZjaGF0SWQSKwoRbWV0YWRhdG'
+    'FfcmV2aXNpb24YAiABKARSEG1ldGFkYXRhUmV2aXNpb24SHQoKc2l6ZV9ieXRlcxgDIAEoA1IJ'
+    'c2l6ZUJ5dGVzEh8KC3NjYW5fcmVzdWx0GAQgASgJUgpzY2FuUmVzdWx0EhQKBXRpdGxlGAUgAS'
+    'gJUgV0aXRsZRIWCgZhcnRpc3QYBiABKAlSBmFydGlzdBIUCgVhbGJ1bRgHIAEoCVIFYWxidW0S'
+    'KQoQZHVyYXRpb25fc2Vjb25kcxgIIAEoBVIPZHVyYXRpb25TZWNvbmRz');
 
 @$core.Deprecated('Use fileExpiredDescriptor instead')
 const FileExpired$json = {

@@ -15,3 +15,19 @@ Current public surface:
 Compose: `file` + `clamav` services in `--profile app`; set `FILE_R2_*` in `.env` (see `.env.example`). Optional `FILE_RETENTION_DEV` shortens retention TTL in dev (seconds).
 
 Still out of scope: deduplication, full `file.events` fan-out (`uploaded`/`processed`/`downloaded`), subscription downgrade retention adjustment.
+
+Music uses explicit `UPLOAD_INTENT_MUSIC` (6), persisted at upload admission;
+unspecified intent preserves legacy MIME processing. Music requires chat context
+and audio MIME, with a 10 MiB stored-byte limit including E2E overhead. Plaintext
+MP3, FLAC, Ogg (Opus/Vorbis/FLAC) and PCM/IEEE-float WAVE use the bounded ffprobe
+extractor. Unsupported codecs fail processing, even inside an admitted container.
+Optional title/artist/album and duration are committed with a monotonic revision
+and `file.processed` outbox snapshot. Delete/expiry commits a newer metadata-free
+tombstone. Messaging refresh is ordered eventual revocation; File authorization
+remains authoritative for every download.
+
+Encrypted Music bypasses the extractor and publishes no public tags. The client
+decrypts and decodes locally with the same supported-format policy. Music
+consumer/grant activation must precede the new File producer; see the root NATS
+v4 activation runbook. Unit fixtures do not replace native preservation or
+platform playback evidence.

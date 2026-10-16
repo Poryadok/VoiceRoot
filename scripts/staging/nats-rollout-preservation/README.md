@@ -274,6 +274,29 @@ authenticated with its existing reply prefix in a pinned network-none scratch
 broker before an atomic root enrollment. The old Secret and Windows signer
 original remain intact. Never paste seed, JWT or credentials into a receipt.
 
+Music's v4 activation preserves `bootstrap-enrollment.json` and its three
+normalized consumer declarations. The same explicit root command selects that
+already enrolled actor, writes only `bootstrap-renewal-draft-v4.json` and
+`bootstrap-enrollment-v4.json`, and binds the complete prior receipt by digest.
+The new isolated CREATE/INFO proof must retain the prior three normalized
+defaults and all shared account/server/reply authority. Missing v4 enrollment
+blocks current backend preparation; CI cannot renew credentials implicitly.
+The added bootstrap grants are exactly INFO/CREATE for
+`file_events.messaging_music_metadata`. Messaging's existing-actor renewal adds
+only that consumer's INFO and ACK tail, retaining its already owned inbox.
+Neither renewal grants Messaging consumer CREATE or arbitrary publication.
+All Secrets are create-only; historical enrollment and active-contract receipts
+continue to validate through their exact v1/v3 schema dispatch.
+
+The v4 migration adds one `DeliverNew` consumer on the existing `file_events`
+stream. It does not change that stream's subjects, retention or stored records.
+Consumer creation and native preservation proof must finish before applying the
+new File producer or Messaging runtime. Existing consumer ACK/delivery state and
+the new consumer's progressed state on retry remain authoritative; never replay
+bootstrap Jobs or reset the stream to activate Music. New signed credentials,
+isolated server proof and hosted preservation integration are required before
+deployment; an earlier three-consumer PASS is not v4 activation evidence.
+
 Normal backend prepare binds that enrollment, the approved source, pinned
 server and complete current contract. The authoritative closed native cut and
 encrypted full off-node readback precede the three fixed stream UPDATEs and the

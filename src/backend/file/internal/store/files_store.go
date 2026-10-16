@@ -10,28 +10,33 @@ import (
 )
 
 type FileRow struct {
-	ID                uuid.UUID
-	UploaderProfileID uuid.UUID
-	OriginalName      string
-	MimeType          string
-	SizeBytes         int64
-	SHA256Hash        *string
-	R2Key             string
-	Status            string
-	FileType          string
-	Width             *int32
-	Height            *int32
-	DurationSeconds   *int32
-	ThumbnailR2Key    *string
-	ConvertedR2Key    *string
-	ChatID            *uuid.UUID
-	ChatType          *string
-	StoryID           *uuid.UUID
-	IsE2E             bool
-	ExpiresAt         *time.Time
-	ScanResult        string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                    uuid.UUID
+	UploaderProfileID     uuid.UUID
+	OriginalName          string
+	MimeType              string
+	SizeBytes             int64
+	SHA256Hash            *string
+	R2Key                 string
+	Status                string
+	FileType              string
+	Width                 *int32
+	Height                *int32
+	DurationSeconds       *int32
+	MusicTitle            *string
+	MusicArtist           *string
+	MusicAlbum            *string
+	MusicMetadataRevision int64
+	UploadIntent          string
+	ThumbnailR2Key        *string
+	ConvertedR2Key        *string
+	ChatID                *uuid.UUID
+	ChatType              *string
+	StoryID               *uuid.UUID
+	IsE2E                 bool
+	ExpiresAt             *time.Time
+	ScanResult            string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 type FilesStore struct {
@@ -58,14 +63,15 @@ INSERT INTO files (
   story_id,
   is_e2e,
   expires_at,
-  scan_result
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+  scan_result,
+  upload_intent
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-          scan_result, created_at, updated_at
+          scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 `, row.ID, row.UploaderProfileID, row.OriginalName, row.MimeType, row.SizeBytes, row.R2Key,
-		row.Status, row.FileType, row.ChatID, row.ChatType, row.StoryID, row.IsE2E, row.ExpiresAt, row.ScanResult).Scan(
+		row.Status, row.FileType, row.ChatID, row.ChatType, row.StoryID, row.IsE2E, row.ExpiresAt, row.ScanResult, row.UploadIntent).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
 		&row.OriginalName,
@@ -87,6 +93,11 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
 		&row.ScanResult,
 		&row.CreatedAt,
 		&row.UpdatedAt,
+		&row.MusicTitle,
+		&row.MusicArtist,
+		&row.MusicAlbum,
+		&row.MusicMetadataRevision,
+		&row.UploadIntent,
 	)
 	return row, err
 }
@@ -115,7 +126,7 @@ func getFileByID(ctx context.Context, q fileRowQueryer, id uuid.UUID, lockClause
 SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
        r2_key, status, file_type, width, height, duration_seconds,
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-       scan_result, created_at, updated_at
+       scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
 WHERE id = $1
 `+lockClause, id).Scan(
@@ -140,6 +151,11 @@ WHERE id = $1
 		&row.ScanResult,
 		&row.CreatedAt,
 		&row.UpdatedAt,
+		&row.MusicTitle,
+		&row.MusicArtist,
+		&row.MusicAlbum,
+		&row.MusicMetadataRevision,
+		&row.UploadIntent,
 	)
 	return row, err
 }
@@ -157,7 +173,7 @@ WHERE id = $1
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-          scan_result, created_at, updated_at
+          scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 `, id, sha256Hash).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
@@ -180,6 +196,11 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
 		&row.ScanResult,
 		&row.CreatedAt,
 		&row.UpdatedAt,
+		&row.MusicTitle,
+		&row.MusicArtist,
+		&row.MusicAlbum,
+		&row.MusicMetadataRevision,
+		&row.UploadIntent,
 	)
 	return row, err
 }
@@ -199,7 +220,7 @@ WHERE id = $1
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-          scan_result, created_at, updated_at
+          scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 `, id, convertedKey, thumbnailKey, width, height).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
@@ -222,6 +243,11 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
 		&row.ScanResult,
 		&row.CreatedAt,
 		&row.UpdatedAt,
+		&row.MusicTitle,
+		&row.MusicArtist,
+		&row.MusicAlbum,
+		&row.MusicMetadataRevision,
+		&row.UploadIntent,
 	)
 	return row, err
 }
@@ -245,7 +271,7 @@ WHERE id = $1
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-          scan_result, created_at, updated_at
+          scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 `, id, status, scanResult).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
@@ -268,6 +294,11 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
 		&row.ScanResult,
 		&row.CreatedAt,
 		&row.UpdatedAt,
+		&row.MusicTitle,
+		&row.MusicArtist,
+		&row.MusicAlbum,
+		&row.MusicMetadataRevision,
+		&row.UploadIntent,
 	)
 	return row, err
 }
@@ -277,7 +308,7 @@ func (s *FilesStore) GetFilesByIDs(ctx context.Context, ids []uuid.UUID) (map[uu
 SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
        r2_key, status, file_type, width, height, duration_seconds,
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-       scan_result, created_at, updated_at
+       scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
 WHERE id = ANY($1)
 `, ids)
@@ -311,6 +342,11 @@ WHERE id = ANY($1)
 			&row.ScanResult,
 			&row.CreatedAt,
 			&row.UpdatedAt,
+			&row.MusicTitle,
+			&row.MusicArtist,
+			&row.MusicAlbum,
+			&row.MusicMetadataRevision,
+			&row.UploadIntent,
 		); err != nil {
 			return nil, err
 		}
@@ -327,7 +363,7 @@ func (s *FilesStore) ListFilesForChat(ctx context.Context, chatID uuid.UUID, lim
 SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
        r2_key, status, file_type, width, height, duration_seconds,
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-       scan_result, created_at, updated_at
+       scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
 WHERE chat_id = $1
   AND status <> 'deleted'
@@ -364,6 +400,11 @@ LIMIT $2
 			&row.ScanResult,
 			&row.CreatedAt,
 			&row.UpdatedAt,
+			&row.MusicTitle,
+			&row.MusicArtist,
+			&row.MusicAlbum,
+			&row.MusicMetadataRevision,
+			&row.UploadIntent,
 		); err != nil {
 			return nil, err
 		}
@@ -380,7 +421,7 @@ func (s *FilesStore) ListFilesForProfile(ctx context.Context, profileID uuid.UUI
 SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
        r2_key, status, file_type, width, height, duration_seconds,
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-       scan_result, created_at, updated_at
+       scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
 WHERE uploader_profile_id = $1
   AND status <> 'deleted'
@@ -417,6 +458,11 @@ LIMIT $2
 			&row.ScanResult,
 			&row.CreatedAt,
 			&row.UpdatedAt,
+			&row.MusicTitle,
+			&row.MusicArtist,
+			&row.MusicAlbum,
+			&row.MusicMetadataRevision,
+			&row.UploadIntent,
 		); err != nil {
 			return nil, err
 		}
@@ -426,36 +472,11 @@ LIMIT $2
 }
 
 func (s *FilesStore) MarkDeleted(ctx context.Context, id uuid.UUID) error {
-	tag, err := s.Pool.Exec(ctx, `
-UPDATE files
-SET status = 'deleted',
-    updated_at = now()
-WHERE id = $1
-`, id)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	return s.markUnavailableWithMusicEvent(ctx, id, "deleted")
 }
 
 func (s *FilesStore) MarkExpired(ctx context.Context, id uuid.UUID) error {
-	tag, err := s.Pool.Exec(ctx, `
-UPDATE files
-SET status = 'expired',
-    updated_at = now()
-WHERE id = $1
-  AND status = 'ready'
-`, id)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	return s.markUnavailableWithMusicEvent(ctx, id, "expired")
 }
 
 func (s *FilesStore) ListExpiredReadyFiles(ctx context.Context, now time.Time, limit int) ([]FileRow, error) {
@@ -466,7 +487,7 @@ func (s *FilesStore) ListExpiredReadyFiles(ctx context.Context, now time.Time, l
 SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
        r2_key, status, file_type, width, height, duration_seconds,
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
-       scan_result, created_at, updated_at
+       scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
 WHERE status = 'ready'
   AND expires_at IS NOT NULL
@@ -503,6 +524,11 @@ LIMIT $2
 			&row.ScanResult,
 			&row.CreatedAt,
 			&row.UpdatedAt,
+			&row.MusicTitle,
+			&row.MusicArtist,
+			&row.MusicAlbum,
+			&row.MusicMetadataRevision,
+			&row.UploadIntent,
 		); err != nil {
 			return nil, err
 		}

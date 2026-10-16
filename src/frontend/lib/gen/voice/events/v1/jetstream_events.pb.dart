@@ -8320,12 +8320,14 @@ class FileProcessed extends $pb.GeneratedMessage {
     $core.String? status,
     $core.String? convertedR2Key,
     $core.String? thumbnailR2Key,
+    FileMusicMetadata? music,
   }) {
     final result = create();
     if (fileId != null) result.fileId = fileId;
     if (status != null) result.status = status;
     if (convertedR2Key != null) result.convertedR2Key = convertedR2Key;
     if (thumbnailR2Key != null) result.thumbnailR2Key = thumbnailR2Key;
+    if (music != null) result.music = music;
     return result;
   }
 
@@ -8347,6 +8349,8 @@ class FileProcessed extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'status')
     ..aOS(3, _omitFieldNames ? '' : 'convertedR2Key')
     ..aOS(4, _omitFieldNames ? '' : 'thumbnailR2Key')
+    ..aOM<FileMusicMetadata>(5, _omitFieldNames ? '' : 'music',
+        subBuilder: FileMusicMetadata.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8403,6 +8407,159 @@ class FileProcessed extends $pb.GeneratedMessage {
   $core.bool hasThumbnailR2Key() => $_has(3);
   @$pb.TagNumber(4)
   void clearThumbnailR2Key() => $_clearField(4);
+
+  /// File-owned plaintext processing snapshot. Never emitted for E2E files.
+  @$pb.TagNumber(5)
+  FileMusicMetadata get music => $_getN(4);
+  @$pb.TagNumber(5)
+  set music(FileMusicMetadata value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasMusic() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearMusic() => $_clearField(5);
+  @$pb.TagNumber(5)
+  FileMusicMetadata ensureMusic() => $_ensure(4);
+}
+
+class FileMusicMetadata extends $pb.GeneratedMessage {
+  factory FileMusicMetadata({
+    $core.String? chatId,
+    $fixnum.Int64? metadataRevision,
+    $fixnum.Int64? sizeBytes,
+    $core.String? scanResult,
+    $core.String? title,
+    $core.String? artist,
+    $core.String? album,
+    $core.int? durationSeconds,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (metadataRevision != null) result.metadataRevision = metadataRevision;
+    if (sizeBytes != null) result.sizeBytes = sizeBytes;
+    if (scanResult != null) result.scanResult = scanResult;
+    if (title != null) result.title = title;
+    if (artist != null) result.artist = artist;
+    if (album != null) result.album = album;
+    if (durationSeconds != null) result.durationSeconds = durationSeconds;
+    return result;
+  }
+
+  FileMusicMetadata._();
+
+  factory FileMusicMetadata.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FileMusicMetadata.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FileMusicMetadata',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..a<$fixnum.Int64>(
+        2, _omitFieldNames ? '' : 'metadataRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aInt64(3, _omitFieldNames ? '' : 'sizeBytes')
+    ..aOS(4, _omitFieldNames ? '' : 'scanResult')
+    ..aOS(5, _omitFieldNames ? '' : 'title')
+    ..aOS(6, _omitFieldNames ? '' : 'artist')
+    ..aOS(7, _omitFieldNames ? '' : 'album')
+    ..aI(8, _omitFieldNames ? '' : 'durationSeconds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileMusicMetadata clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileMusicMetadata copyWith(void Function(FileMusicMetadata) updates) =>
+      super.copyWith((message) => updates(message as FileMusicMetadata))
+          as FileMusicMetadata;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileMusicMetadata create() => FileMusicMetadata._();
+  @$core.override
+  FileMusicMetadata createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FileMusicMetadata getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FileMusicMetadata>(create);
+  static FileMusicMetadata? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get metadataRevision => $_getI64(1);
+  @$pb.TagNumber(2)
+  set metadataRevision($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasMetadataRevision() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearMetadataRevision() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get sizeBytes => $_getI64(2);
+  @$pb.TagNumber(3)
+  set sizeBytes($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSizeBytes() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSizeBytes() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get scanResult => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set scanResult($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasScanResult() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearScanResult() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get title => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set title($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasTitle() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearTitle() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get artist => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set artist($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasArtist() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearArtist() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get album => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set album($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasAlbum() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearAlbum() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.int get durationSeconds => $_getIZ(7);
+  @$pb.TagNumber(8)
+  set durationSeconds($core.int value) => $_setSignedInt32(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasDurationSeconds() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearDurationSeconds() => $_clearField(8);
 }
 
 class FileExpired extends $pb.GeneratedMessage {

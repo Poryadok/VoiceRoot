@@ -21,7 +21,7 @@ def live():
     role=list(REVIEWED_ROLE_9)
     def info(name,subjects):
         return {'config':{'name':name,'subjects':subjects,'storage':'file','retention':'limits','max_age':604800000000000,'duplicate_window':120000000000,'max_msgs':-1,'metadata':{'preserve':'yes'}},'state':{'messages':7,'first_seq':11,'last_seq':17,'consumer_count':4}}
-    return {'chat_events':info('chat_events',chat),'social_events':info('social_events',social),'role_events':info('role_events',role)}
+    return {'chat_events':info('chat_events',chat),'social_events':info('social_events',social),'role_events':info('role_events',role),'file_events':info('file_events',['file.processed'])}
 class Tests(unittest.TestCase):
     def normalized(self): return {(stream,config['durable_name']):copy.deepcopy(config) for stream,config in DECLARATIONS}
     def plan(self,streams=None,consumers=None): return compile_plan(SOURCE,streams or live(),consumers or {},self.normalized())
@@ -33,12 +33,12 @@ class Tests(unittest.TestCase):
         state=live()
         self.assertEqual(set(state['chat_events']['config']['subjects']),REVIEWED_14)
         self.assertEqual(set(state['role_events']['config']['subjects']),REVIEWED_ROLE_9)
-    def test_exact_six_actions_preserve_other_config(self):
-        p=self.plan();self.assertEqual([a['api'] for a in p['actions']],['$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.STREAM.UPDATE.role_events','$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed','$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat','$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role'])
+    def test_exact_seven_actions_preserve_other_config(self):
+        p=self.plan();self.assertEqual([a['api'] for a in p['actions']],['$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.STREAM.UPDATE.role_events','$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed','$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat','$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role','$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata'])
         for action in p['actions'][:3]:
             self.assertEqual(action['after']['metadata'],{'preserve':'yes'});self.assertEqual(action['after']['max_msgs'],-1)
         self.assertEqual(p['actions'][3]['after']['config']['deliver_policy'],'new')
-        self.assertEqual(len(p['consumer_targets']),3)
+        self.assertEqual(len(p['consumer_targets']),4)
     def test_only_literal_reviewed_chat_subject_shapes_are_accepted(self):
         for subjects,updates in ((REVIEWED_13,1),(REVIEWED_14,1),(REVIEWED_15,1),(TARGET_17,0)):
             with self.subTest(count=len(subjects)):
@@ -89,7 +89,7 @@ class Tests(unittest.TestCase):
             with self.assertRaises(ContractError):self.plan(s)
     def test_nonoverlapping_dynamic_stream_preserved(self):
         s=live();s['dynamic_extra']={'config':{'name':'dynamic_extra','subjects':['space.other','other.>']}}
-        self.assertEqual(len(self.plan(s)['actions']),6)
+        self.assertEqual(len(self.plan(s)['actions']),7)
 class Actor:
     def __init__(self,p):self.current={a['object']:copy.deepcopy(a['before']) for a in p['actions']};self.calls=[];self.safe=True;self.crash=False
     def assert_closed_isolation(self):
@@ -113,11 +113,11 @@ class ExecuteTests(Tests):
             self.assertEqual(j[-1]['api'],api);self.assertEqual(j[-1]['target_sha256'],j[-2]['target_sha256'])
             original(api,payload)
         a.mutate=mutate;execute(p,a,j.append)
-        self.assertEqual([x['kind'] for x in j],['nats_contract_intent','nats_contract_mutation_issued','nats_contract_applied']*6)
+        self.assertEqual([x['kind'] for x in j],['nats_contract_intent','nats_contract_mutation_issued','nats_contract_applied']*7)
     def test_interrupted_after_update_retries_only_remaining_actions(self):
         p=self.plan();a=Actor(p);a.crash=True;j=[]
         with self.assertRaises(RuntimeError):execute(p,a,j.append)
-        execute(p,a,j.append);self.assertEqual(len(a.calls),6)
+        execute(p,a,j.append);self.assertEqual(len(a.calls),7)
     def test_unrelated_config_drift_never_adopted(self):
         p=self.plan();a=Actor(p);a.current['chat_events']['max_msgs']=1
         with self.assertRaises(ContractError):execute(p,a,lambda event:None)
@@ -141,7 +141,7 @@ class CensusTests(Tests):
                 'delivered':{'consumer_seq':0,'stream_seq':last},'ack_floor':{'consumer_seq':0,'stream_seq':0}})
         return p,before,after
     def test_exact_config_delta_preserves_old_records_and_ack(self):
-        p,b,a=self.proof();self.assertEqual(verify_census(p,b,a)['messages'],21)
+        p,b,a=self.proof();self.assertEqual(verify_census(p,b,a)['messages'],28)
     def test_new_durable_wrong_initial_delivery_or_ack_floor_refused(self):
         for field in ('delivered','ack_floor'):
             for seq in ('consumer_seq','stream_seq'):

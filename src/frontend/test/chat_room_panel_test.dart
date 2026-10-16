@@ -372,7 +372,7 @@ void main() {
     tester,
   ) async {
     final pending = Completer<http.Response>();
-    final harness = _ImmediateRetryHarness(send: (_, __) => pending.future);
+    final harness = _ImmediateRetryHarness(send: (_, _) => pending.future);
     addTearDown(harness.container.dispose);
     await harness.pump(tester);
     await tester.enterText(
@@ -1666,7 +1666,7 @@ class _ImmediateRetryHarness {
         ).overrideWith((ref) => _ImmediateRoomController(ref, 'chat-abc')),
       ],
     );
-    container.listen(chatRoomControllerProvider('chat-abc'), (_, __) {});
+    container.listen(chatRoomControllerProvider('chat-abc'), (_, _) {});
   }
 
   late final ProviderContainer container;
