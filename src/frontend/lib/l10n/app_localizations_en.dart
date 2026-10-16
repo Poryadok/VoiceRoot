@@ -957,6 +957,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileMessage => 'Message';
 
   @override
+  String get profileOpenAvatar => 'Open fullscreen avatar';
+
+  @override
+  String get profileAvatarUnavailable => 'Avatar unavailable';
+
+  @override
+  String get profileCommonSpaces => 'Common spaces';
+
+  @override
+  String get profileCommonSpacesLoadError => 'Could not load common spaces';
+
+  @override
   String get profileEditTitle => 'Edit profile';
 
   @override

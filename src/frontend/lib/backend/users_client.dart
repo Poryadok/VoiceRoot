@@ -46,6 +46,7 @@ class VoiceProfile {
     required this.discriminator,
     required this.displayName,
     this.avatarUrl,
+    this.bannerUrl,
     this.bio,
     this.customStatus,
     this.isPrimary = false,
@@ -62,6 +63,7 @@ class VoiceProfile {
   final String discriminator;
   final String displayName;
   final String? avatarUrl;
+  final String? bannerUrl;
   final String? bio;
   final String? customStatus;
   final bool isPrimary;
