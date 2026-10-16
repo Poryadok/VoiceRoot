@@ -70,7 +70,7 @@ func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *test
 	}
 	config := Config{
 		ListenerAddr: "127.0.0.1:0", TLSCertFile: certPath, TLSKeyFile: keyPath,
-		ClientCAFile: clientCAPath, JWKSURL: "https" + strings.TrimPrefix(server.URL, "http") + "/jwks",
+		ClientCAFile: clientCAPath, JWKSURL: server.URL + "/jwks",
 		JWKSCAFile: jwksCAPath, RedisAddr: redisFixture.addr,
 	}
 	runtime, err := New(context.Background(), config)
