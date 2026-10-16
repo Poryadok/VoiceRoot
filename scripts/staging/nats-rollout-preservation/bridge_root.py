@@ -1,5 +1,6 @@
 """Installed root actions: approved source, encrypted off-node custody, restart."""
 import datetime as dt
+import copy
 import grp
 import json
 import re
@@ -126,8 +127,35 @@ class Actions:
 
     def _active_release(self,state,*,authority_guard=None):
         if authority_guard is not None:authority_guard()
-        save(INSTALLED/'active-release.json',{'operation':state['operation'],'namespace_uid':state['context']['expected']['namespace_uid'],
-            'pvc_uid':state['context']['expected']['source_claim_uid'],'target_sha256':state['target']['manifest_sha256']})
+        row={'operation':state['operation'],'namespace_uid':state['context']['expected']['namespace_uid'],
+            'pvc_uid':state['context']['expected']['source_claim_uid'],'target_sha256':state['target']['manifest_sha256']}
+        transition=state.get('gis_first_install_transition_receipt')
+        if transition is not None:
+            row['gis_first_install_transition']={'operation':state['operation'],
+                'receipt_sha256':transition['receipt_sha256']}
+        elif state.get('gis_transition') is None:
+            try:previous=private_json(INSTALLED/'active-release.json')
+            except FileNotFoundError:previous={}
+            if 'gis_first_install_transition' in previous:
+                row['gis_first_install_transition']=previous['gis_first_install_transition']
+        save(INSTALLED/'active-release.json',row)
+
+    def _previous_gis_transition(self,kube):
+        try:active=private_json(INSTALLED/'active-release.json')
+        except FileNotFoundError:return None
+        reference=active.get('gis_first_install_transition')
+        if reference is None:return None
+        if (not isinstance(reference,dict) or set(reference)!={'operation','receipt_sha256'}
+            or not re.fullmatch(r'[a-f0-9]{12}',str(reference.get('operation','')))
+            or not re.fullmatch(r'[a-f0-9]{64}',str(reference.get('receipt_sha256','')))):
+            raise Blocked('gis_first_install_transition_reference_invalid')
+        prior=private_json(guard.ROOT/('rollout-'+reference['operation'])/'checkpoint.json')
+        receipt=prior.get('gis_first_install_transition_receipt')
+        if not isinstance(receipt,dict) or receipt.get('receipt_sha256')!=reference['receipt_sha256']:
+            raise Blocked('gis_first_install_transition_reference_changed')
+        import gis_first_install as gis
+        binding=gis.validate_next_operation(receipt,prior,kube)
+        return {**binding,'receipt':copy.deepcopy(receipt)}
 
     def _prepare(self,request,previous=None,repair=None):
         if repair is None:self._idle()
@@ -161,6 +189,10 @@ class Actions:
         renderer_selected=request['mode']=='full' or previous is not None and not full_story and previous.get('renderer_authority') is not None
         stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else []))
         self._report('workload-capture','COMPLETE')
+        gis_transition=None
+        if (request.get('gis_first_install') is not True and request['mode'] in ('full','app-only')
+            and not provisional_mode and repair is None and previous is None):
+            gis_transition=self._previous_gis_transition(kube)
         self._report('policy-validation','STARTED')
         policy=private_json(INSTALLED/'policy.json')
         optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin'}
@@ -184,6 +216,11 @@ class Actions:
                         raise Blocked('bridge_rollback_current_image_changed')
                     image=(previous['context']['old_images'][key] if not full_story or key=='voice-story/story' else stage.old_images[key])
                 images[key]=image
+        if request.get('gis_first_install') is True:
+            image=approved['images'].get('gameintegration')
+            if not isinstance(image,str) or '@sha256:' not in image:
+                raise Blocked('gis_first_install_source_image_invalid')
+            images['voice-gameintegration/gameintegration']=image
         self._report('image-selection','COMPLETE')
         self._report('contract-selection','STARTED')
         contract=json.loads(public_read(self.code/'nats-known-baseline'/'deployed-contract.json'))
@@ -197,6 +234,10 @@ class Actions:
             'mode':request['mode'],'changed_services':request['changed_services'],'images':images,
             'contract':contract,
             'enrolled':list(stage.snapshots),'generation':marker['data']['generation'],'dataPVC':marker['data']['dataPVC']}
+        if request.get('gis_first_install') is True:
+            if request['mode'] not in ('full','app-only') or 'gameintegration' not in approved['images']:
+                raise Blocked('gis_first_install_admission_invalid')
+            parameters['gis_first_install']=True
         self._report('contract-selection','COMPLETE')
         self._report('nats-preflight','STARTED')
         renderer_authority=None
@@ -256,7 +297,7 @@ class Actions:
             if repair is not None:
                 provisional.link_parent(guard.ROOT/('rollout-'+repair['operation']),repair,operation)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
-        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,**lifecycle_args)
+        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,**lifecycle_args)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority
         state['service_actor_services']=names

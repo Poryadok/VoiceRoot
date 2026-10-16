@@ -39,4 +39,26 @@ class PausedTest(unittest.TestCase):
         self.receipt['target']['template_hashes']['voice-nats-pvc-candidate']=apply.digest(self.row['spec']['template'])
         with self.assertRaises(guard.Blocked):apply.paused_documents([self.row],self.receipt)
 
+    def test_gis_first_install_is_excluded_from_generic_apply(self):
+        operation='d'*12
+        service={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-gameintegration',
+            'namespace':'voice-staging','annotations':{'voice.poryadok.io/gis-first-install-operation':operation}},
+            'spec':{'selector':{'app':'voice-gameintegration'},'ports':[{'name':'http','port':8080}]}}
+        deployment={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-gameintegration',
+            'namespace':'voice-staging','annotations':{'voice.poryadok.io/gis-first-install-operation':operation}},
+            'spec':{'replicas':1,'selector':{'matchLabels':{'app':'voice-gameintegration'}},
+                'template':{'metadata':{'labels':{'app':'voice-gameintegration'}},'spec':{'containers':[
+                    {'name':'gameintegration','image':'gameintegration@sha256:'+'a'*64}]}}}}
+        receipt={'operation':operation,'pvc':{'name':'unused'},'target':{'gis_first_install_sha256':'b'*64}}
+        self.assertEqual(apply.paused_documents([],receipt),[])
+        with self.assertRaisesRegex(guard.Blocked,'gis_first_install_manifest_forbidden'):
+            apply.paused_documents([service,deployment],receipt)
+        self.assertEqual(deployment['spec']['replicas'],1)
+
+    def test_gis_first_install_apply_requires_the_exact_pair(self):
+        receipt={'operation':'d'*12,'target':{'gis_first_install_sha256':'b'*64}}
+        service={'kind':'Service','metadata':{'name':'voice-gameintegration','namespace':'voice-staging'}}
+        with self.assertRaisesRegex(guard.Blocked,'gis_first_install_manifest_forbidden'):
+            apply.paused_documents([service],receipt)
+
 if __name__=='__main__':unittest.main()
