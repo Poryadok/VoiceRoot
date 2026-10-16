@@ -105,6 +105,13 @@ https://voice.gg/dm/{userId}
 | Нет прав доступа к объекту                      | Показывает ошибку "Нет доступа"                                 |
 | Объект удалён                                   | Показывает ошибку "Не найдено"                                  |
 
+The 403/404 recovery screen shows the numeric status, localized title and safe
+explanation, followed by Home. A 404 does not distinguish a deleted account from
+an absent or hidden target; the explanation must not infer which condition
+occurred. The reference layout is centered and width-bounded, with scrolling
+when enlarged text or a short viewport needs it. This rendering slice does not
+activate remote-space/Federation handling or define a deleted-account signal.
+
 ## Шаринг
 
 Из любого объекта (сообщение, профиль, спейс) доступна кнопка "Поделиться", которая копирует ссылку текущего публичного Web-origin в буфер обмена; для нативного клиента без web-origin используется `https://voice.gg/...`.
