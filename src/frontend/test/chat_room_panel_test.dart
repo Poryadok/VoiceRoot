@@ -46,11 +46,18 @@ void main() {
       (tester) async {
         final harness = _ImmediateRetryHarness();
         addTearDown(harness.container.dispose);
+        harness.room.state = harness.room.state.copyWith(
+          messages: const [_preexistingRetryHistory],
+        );
         harness.container
                 .read(chatReplyTargetProvider('chat-abc').notifier)
                 .state =
             _retryReply;
         await harness.pump(tester, locale: locale);
+        expect(harness.room.state.messages.map((message) => message.id), [
+          'history-before-retry',
+        ]);
+        expectMessagePlainText(tester, 'Existing visible history');
         final l10n = AppLocalizations.of(
           tester.element(find.byType(ChatRoomPanel)),
         )!;
@@ -62,6 +69,10 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(harness.bodies, hasLength(1), reason: 'no automatic resend');
+        expect(harness.room.state.messages.map((message) => message.id), [
+          'history-before-retry',
+        ]);
+        expectMessagePlainText(tester, 'Existing visible history');
         expect(find.textContaining(_sendDiagnostic), findsNothing);
         expect(find.text(l10n.commonActionFailed), findsWidgets);
         expect(harness.composer(tester).text, 'Retry draft');
@@ -113,7 +124,11 @@ void main() {
           harness.container.read(chatReplyTargetProvider('chat-abc')),
           isNull,
         );
-        expect(harness.room.state.messages.map((m) => m.id), ['accepted-1']);
+        expect(
+          harness.room.state.messages.map((m) => m.id),
+          unorderedEquals(['history-before-retry', 'accepted-1']),
+        );
+        expectMessagePlainText(tester, 'Existing visible history');
         expectMessagePlainText(tester, 'Accepted text');
         expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
       },
@@ -1570,6 +1585,12 @@ const _retryReply = VoiceMessage(
   chatId: 'chat-abc',
   senderProfileId: 'peer-1',
   content: 'Original reply',
+);
+const _preexistingRetryHistory = VoiceMessage(
+  id: 'history-before-retry',
+  chatId: 'chat-abc',
+  senderProfileId: 'peer-1',
+  content: 'Existing visible history',
 );
 
 http.Response _failedSendResponse() =>
