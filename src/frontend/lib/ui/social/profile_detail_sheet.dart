@@ -327,7 +327,9 @@ class ProfileDetailSheet extends ConsumerWidget {
                                         presence: presence,
                                       ),
                                       const SizedBox(width: 8),
-                                      Text(_presenceLabel(context, l10n, presence)),
+                                      Flexible(
+                                        child: Text(_presenceLabel(context, l10n, presence)),
+                                      ),
                                     ],
                                   ),
                                   if (presence?.customStatus case final status?
@@ -559,19 +561,26 @@ class ProfileDetailSheet extends ConsumerWidget {
       _ =>
         presence.lastSeen == null
             ? l10n.socialPresenceOffline
-            : l10n.socialPresenceLastSeen(
-                _formatLastSeen(context, presence.lastSeen!),
-              ),
+            : profileLastSeenLabel(context, presence.lastSeen!),
     };
   }
 
-  String _formatLastSeen(BuildContext context, DateTime lastSeen) {
-    final local = lastSeen.toLocal();
-    final material = MaterialLocalizations.of(context);
-    final date = material.formatShortDate(local);
-    final time = TimeOfDay.fromDateTime(local).format(context);
-    return '$date $time';
-  }
+}
+
+/// Formats an already viewer-filtered timestamp; [now] permits boundary tests.
+String profileLastSeenLabel(BuildContext context, DateTime lastSeen, {DateTime? now}) {
+  final l10n = AppLocalizations.of(context)!;
+  final age = (now ?? DateTime.now()).difference(lastSeen);
+  if (age < const Duration(minutes: 1)) return l10n.socialPresenceLastSeenJustNow;
+  if (age < const Duration(hours: 1)) return l10n.socialPresenceLastSeenMinutes(age.inMinutes);
+  if (age < const Duration(days: 1)) return l10n.socialPresenceLastSeenHours(age.inHours);
+  if (age < const Duration(days: 7)) return l10n.socialPresenceLastSeenDays(age.inDays);
+  // The canon leaves day 7 unspecified. Preserve the existing absolute date/time
+  // fallback for >=7 days rather than define another product bucket here.
+  final local = lastSeen.toLocal();
+  final date = MaterialLocalizations.of(context).formatShortDate(local);
+  final time = TimeOfDay.fromDateTime(local).format(context);
+  return l10n.socialPresenceLastSeen('$date $time');
 }
 
 enum _ProfileMenuAction { block, report }

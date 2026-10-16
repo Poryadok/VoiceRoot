@@ -184,6 +184,13 @@
       }
     }
   },
+  "socialPresenceLastSeenJustNow": "Был(а) только что",
+  "socialPresenceLastSeenMinutes": "{count, plural, one{Был(а) {count} минуту назад} few{Был(а) {count} минуты назад} many{Был(а) {count} минут назад} other{Был(а) {count} минуты назад}}",
+  "@socialPresenceLastSeenMinutes": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenHours": "{count, plural, one{Был(а) {count} час назад} few{Был(а) {count} часа назад} many{Был(а) {count} часов назад} other{Был(а) {count} часа назад}}",
+  "@socialPresenceLastSeenHours": {"placeholders": {"count": {"type": "int"}}},
+  "socialPresenceLastSeenDays": "{count, plural, one{Был(а) {count} день назад} few{Был(а) {count} дня назад} many{Был(а) {count} дней назад} other{Был(а) {count} дня назад}}",
+  "@socialPresenceLastSeenDays": {"placeholders": {"count": {"type": "int"}}},
   "socialPresenceUnknown": "Неизвестно",
   "socialActionError": "Ошибка: {message}",
   "@socialActionError": {

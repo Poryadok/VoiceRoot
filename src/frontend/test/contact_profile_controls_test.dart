@@ -261,6 +261,84 @@ void main() {
     });
   }
 
+  for (final locale in [const Locale('en'), const Locale('ru')]) {
+    testWidgets('filtered offline last seen remains readable in ${locale.languageCode} H/V', (tester) async {
+      final client = MockClient((request) async => throw StateError('Unexpected $request'));
+      final container = _container(client, overrides: [
+        presenceProvider.overrideWith((ref, id) => VoicePresence(
+          profileId: id, status: 'offline',
+          lastSeen: DateTime.now().subtract(const Duration(hours: 2, minutes: 5)),
+        )),
+      ]);
+      final theme = await _captureTheme(tester);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        for (final variant in [
+          (size: const Size(1280, 800), scale: 1.0),
+          (size: const Size(390, 844), scale: 1.0),
+          (size: const Size(280, 844), scale: 1.0),
+          (size: const Size(390, 844), scale: 2.0),
+        ]) {
+          final size = variant.size;
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          await tester.binding.setSurfaceSize(size);
+          await tester.pumpWidget(_app(container, theme: theme, locale: locale, textScale: variant.scale, plainModal: true));
+          await tester.tap(find.byKey(const Key('open_contact_profile')));
+          await tester.pumpAndSettle();
+          final label = find.text(locale.languageCode == 'ru' ? 'Был(а) 2 часа назад' : 'Last seen 2 hours ago');
+          expect(label, findsOneWidget);
+          final rect = tester.getRect(label);
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(size.width));
+          expect(tester.takeException(), isNull);
+          if (variant.scale == 1 && size.width != 280) {
+            final orientation = size.width > size.height ? 'h' : 'v';
+            await _capture(tester, 'contact-last-seen-${locale.languageCode}-$orientation.png');
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        }
+      } finally {
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  testWidgets('profile last seen preserves filtered absence and live status priority', (tester) async {
+    for (final status in ['unknown', 'offline', 'online', 'idle', 'dnd']) {
+      final client = MockClient((request) async => throw StateError('Unexpected $request'));
+      final container = _container(client, overrides: [
+        presenceProvider.overrideWith((ref, id) => status == 'unknown' ? null : VoicePresence(
+          profileId: id, status: status,
+          lastSeen: status == 'offline' ? null : DateTime.now().subtract(const Duration(hours: 2)),
+        )),
+      ]);
+      try {
+        await _open(tester, container);
+        final l10n = AppLocalizations.of(tester.element(find.byKey(ProfileDetailSheet.sheetKey)))!;
+        final expected = switch (status) {
+          'unknown' => l10n.socialPresenceUnknown,
+          'online' => l10n.socialPresenceOnline,
+          'idle' => l10n.socialPresenceIdle,
+          'dnd' => l10n.socialPresenceDnd,
+          _ => l10n.socialPresenceOffline,
+        };
+        expect(find.text(expected), findsOneWidget);
+        expect(find.text(l10n.socialPresenceLastSeenHours(2)), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        container.dispose();
+        client.close();
+      }
+    }
+  });
+
   for (final favorite in [false, true]) {
     testWidgets('friend Favorites ${favorite ? 'on' : 'off'} stays with communication actions in H/V', (
       tester,

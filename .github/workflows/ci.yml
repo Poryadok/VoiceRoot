@@ -483,6 +483,10 @@ jobs:
             ${{ runner.temp }}/contact-profile-capture/contact-header-title-ru-v.png
             ${{ runner.temp }}/contact-profile-capture/contact-header-menu-h.png
             ${{ runner.temp }}/contact-profile-capture/contact-header-menu-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-en-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-en-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-ru-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-ru-v.png
           if-no-files-found: error
           retention-days: 7
       - name: Capture Deep Links error reference views
