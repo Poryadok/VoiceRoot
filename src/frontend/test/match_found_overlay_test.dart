@@ -607,7 +607,7 @@ void main() {
   });
 
   test(
-    'late accepted response is ignored after the auth session changes',
+    'late accepted response is ignored after the auth principal changes',
     () async {
       final respondStarted = Completer<void>();
       final respondResponse = Completer<http.Response>();
@@ -652,8 +652,8 @@ void main() {
         session: AuthSession(
           accessToken: 'changed-access',
           refreshToken: 'changed-refresh',
-          accountId: 'acc-test',
-          activeProfileId: 'prof-test',
+          accountId: 'acc-other',
+          activeProfileId: 'p2',
           expiresInSeconds: 900,
         ),
       );
@@ -858,7 +858,7 @@ void main() {
   );
 
   testWidgets(
-    'held MatchFound response survives host remount and stale auth flight cannot clear replacement busy state',
+    'stale response cannot clear replacement flight after principal switch',
     (tester) async {
       final firstPostStarted = Completer<void>();
       final secondPostStarted = Completer<void>();
@@ -1014,8 +1014,8 @@ void main() {
         session: AuthSession(
           accessToken: 'replacement-access',
           refreshToken: 'replacement-refresh',
-          accountId: 'acc-test',
-          activeProfileId: 'prof-test',
+          accountId: 'acc-other',
+          activeProfileId: 'p2',
           expiresInSeconds: 900,
         ),
       );
