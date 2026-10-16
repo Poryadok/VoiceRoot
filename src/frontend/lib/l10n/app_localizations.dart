@@ -890,6 +890,30 @@ abstract class AppLocalizations {
   /// **'Last seen {dateTime}'**
   String socialPresenceLastSeen(String dateTime);
 
+  /// No description provided for @socialPresenceLastSeenJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen just now'**
+  String get socialPresenceLastSeenJustNow;
+
+  /// No description provided for @socialPresenceLastSeenMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} minute ago} other{Last seen {count} minutes ago}}'**
+  String socialPresenceLastSeenMinutes(int count);
+
+  /// No description provided for @socialPresenceLastSeenHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} hour ago} other{Last seen {count} hours ago}}'**
+  String socialPresenceLastSeenHours(int count);
+
+  /// No description provided for @socialPresenceLastSeenDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} day ago} other{Last seen {count} days ago}}'**
+  String socialPresenceLastSeenDays(int count);
+
   /// No description provided for @socialPresenceUnknown.
   ///
   /// In en, this message translates to:
@@ -1777,6 +1801,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Message'**
   String get profileMessage;
+
+  /// No description provided for @profileDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get profileDetailTitle;
+
+  /// No description provided for @profileMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get profileMoreActions;
 
   /// No description provided for @profileOpenAvatar.
   ///
