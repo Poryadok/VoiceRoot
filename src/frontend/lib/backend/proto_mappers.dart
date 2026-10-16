@@ -87,6 +87,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
       msg.hasCreatedAt() ? msg.createdAt : null,
     ),
     isPinned: msg.hasIsPinned() && msg.isPinned,
+    contentType: msg.hasContentType() ? msg.contentType : null,
     threadParentId: msg.hasThreadParentId()
         ? emptyToNull(msg.threadParentId)
         : null,
@@ -167,6 +168,8 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   String? clientMessageId,
   String? threadParentId,
   bool isE2e = false,
+  DateTime? scheduledAt,
+  bool sendWhenOnline = false,
 }) {
   final request = messaging_pb.SendMessageRequest(
     chat: chatRefToProto(chatId),
@@ -182,6 +185,11 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   );
   if (isE2e) {
     request.isE2e = true;
+  }
+  if (scheduledAt != null) {
+    request.scheduledAt = dateTimeToProtoTimestamp(scheduledAt.toUtc());
+  } else if (sendWhenOnline) {
+    request.sendWhenOnline = true;
   }
   return request;
 }
@@ -233,8 +241,8 @@ VoiceChat voiceChatFromProto(chat_pb.Chat chat) {
     avatarUrl: chat.hasAvatarUrl() ? emptyToNull(chat.avatarUrl) : null,
     spaceId: chat.hasSpaceId() ? emptyToNull(chat.spaceId) : null,
     slowModeSeconds: chat.slowModeSeconds,
-    threadsEnabled: chat.hasThreadsEnabled() && chat.threadsEnabled,
-    allowUserMainFeed: !chat.hasAllowUserMainFeed() || chat.allowUserMainFeed,
+    threadsEnabled: chat.threadsEnabled,
+    allowUserMainFeed: chat.allowUserMainFeed,
     e2eEnabled: _protoChatE2eEnabled(chat),
     allowGuests: chat.allowGuests,
   );
@@ -324,8 +332,15 @@ chat_pb.CreateDMRequest createDmRequestToProto(String otherProfileId) {
   return chat_pb.CreateDMRequest(otherProfileId: otherProfileId);
 }
 
-chat_pb.CreateChatRequest createGroupRequestToProto({required String name}) {
-  return chat_pb.CreateChatRequest(type: ChatType.CHAT_TYPE_GROUP, name: name);
+chat_pb.CreateChatRequest createGroupRequestToProto({
+  required String name,
+  String? requestId,
+}) {
+  return chat_pb.CreateChatRequest(
+    type: ChatType.CHAT_TYPE_GROUP,
+    name: name,
+    requestId: requestId,
+  );
 }
 
 chat_pb.AddMembersRequest addMembersRequestToProto({
@@ -339,6 +354,8 @@ chat_pb.UpdateChatRequest updateChatRequestToProto({
   String? avatarUrl,
   int? slowModeSeconds,
   bool? allowGuests,
+  bool? threadsEnabled,
+  bool? allowUserMainFeed,
 }) {
   final req = chat_pb.UpdateChatRequest();
   if (name != null) {
@@ -353,6 +370,12 @@ chat_pb.UpdateChatRequest updateChatRequestToProto({
   if (allowGuests != null) {
     req.allowGuests = allowGuests;
   }
+  if (threadsEnabled != null) {
+    req.threadsEnabled = threadsEnabled;
+  }
+  if (allowUserMainFeed != null) {
+    req.allowUserMainFeed = allowUserMainFeed;
+  }
   return req;
 }
 
@@ -364,6 +387,7 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     discriminator: profile.discriminator,
     displayName: profile.displayName,
     avatarUrl: profile.hasAvatarUrl() ? emptyToNull(profile.avatarUrl) : null,
+    bannerUrl: profile.hasBannerUrl() ? emptyToNull(profile.bannerUrl) : null,
     bio: profile.hasBio() ? emptyToNull(profile.bio) : null,
     customStatus: profile.hasCustomStatus()
         ? emptyToNull(profile.customStatus)
@@ -378,6 +402,7 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     accentColor: profile.hasAccentColor()
         ? emptyToNull(profile.accentColor)
         : null,
+    locale: profile.hasLocale() ? profile.locale : '',
     frozenAt: protoTimestampToDateTime(
       profile.hasFrozenAt() ? profile.frozenAt : null,
     ),
@@ -487,12 +512,14 @@ user_pb.UpdateProfileRequest updateProfileRequestToProto({
   String? bio,
   String? avatarUrl,
   String? accentColor,
+  String? locale,
 }) {
   return user_pb.UpdateProfileRequest(
     displayName: displayName,
     bio: bio,
     avatarUrl: avatarUrl,
     accentColor: accentColor,
+    locale: locale,
   );
 }
 

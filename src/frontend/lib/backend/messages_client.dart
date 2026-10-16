@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
+import '../gen/voice/messaging/v1/messaging.pbenum.dart'
+    show MessageContentType;
 import 'api_result.dart';
 import 'gateway_http.dart';
 import 'proto_mappers.dart';
@@ -70,9 +72,7 @@ class MessageMention {
 
   static String encodeJson(List<MessageMention> mentions) {
     if (mentions.isEmpty) return '[]';
-    return jsonEncode(
-      mentions.map((m) => m.toJson()).toList(growable: false),
-    );
+    return jsonEncode(mentions.map((m) => m.toJson()).toList(growable: false));
   }
 }
 
@@ -130,6 +130,7 @@ class VoiceMessage {
     this.deletedAt,
     this.createdAt,
     this.isPinned = false,
+    this.contentType,
     this.threadParentId,
     this.isE2e = false,
     this.decryptionFailed = false,
@@ -149,6 +150,7 @@ class VoiceMessage {
   final DateTime? deletedAt;
   final DateTime? createdAt;
   final bool isPinned;
+  final MessageContentType? contentType;
   final String? threadParentId;
   final bool isE2e;
   final bool decryptionFailed;
@@ -254,6 +256,7 @@ class VoiceMessage {
       deletedAt: deletedAt,
       createdAt: createdAt,
       isPinned: isPinned ?? this.isPinned,
+      contentType: contentType,
       threadParentId: threadParentId,
       isE2e: isE2e ?? this.isE2e,
       decryptionFailed: decryptionFailed ?? this.decryptionFailed,
@@ -413,8 +416,7 @@ class SharedMediaItemData {
 
   bool get isLink => externalUrl != null && externalUrl!.isNotEmpty;
   bool get isVideo => attachmentType == 'video';
-  bool get isE2eEncrypted =>
-      e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
+  bool get isE2eEncrypted => e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 }
 
 class SharedMediaListData {
@@ -480,28 +482,26 @@ class VoiceMessagesClient {
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
 
-    final uri = _gateway.replace(path: '/api/v1/messages', queryParameters: params);
+    final uri = _gateway.replace(
+      path: '/api/v1/messages',
+      queryParameters: params,
+    );
     final result = await _gateway.getProto(
       uri,
       authorization: authorization,
       createEmpty: messaging_pb.GetMessagesResponse.create,
     );
-    return _map(
-      result,
-      (data) {
-        final list = messageListFromProto(
-          data.hasMessageList()
-              ? data.messageList
-              : messaging_pb.MessageList(),
-        );
-        return MessageListData(
-          messages: list.messages,
-          nextCursor: list.nextCursor,
-          hasMore: list.hasMore,
-          dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
-        );
-      },
-    );
+    return _map(result, (data) {
+      final list = messageListFromProto(
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
+      );
+      return MessageListData(
+        messages: list.messages,
+        nextCursor: list.nextCursor,
+        hasMore: list.hasMore,
+        dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
+      );
+    });
   }
 
   Future<MessagesApiResult<MessageListData>> getThreadMessages({
@@ -530,9 +530,7 @@ class VoiceMessagesClient {
     return _map(
       result,
       (data) => messageListFromProto(
-        data.hasMessageList()
-            ? data.messageList
-            : messaging_pb.MessageList(),
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
       ),
     );
   }
@@ -562,7 +560,175 @@ class VoiceMessagesClient {
       body: body,
       createEmpty: messaging_pb.SendMessageResponse.create,
     );
-    return _map(result, (data) => voiceMessageFromProto(data.message));
+    return switch (result) {
+      GatewayHttpOk(:final data)
+          when data.hasMessage() && !data.hasScheduledMessage() =>
+        MessagesApiOk(voiceMessageFromProto(data.message)),
+      GatewayHttpOk() => const MessagesApiFailure(
+        message: 'invalid_send_message_response',
+      ),
+      GatewayHttpFailure(:final error) => MessagesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  /// Creates a sender-owned pending schedule through the existing send route.
+  /// The same [clientMessageId] and exact payload/schedule must be reused for
+  /// an explicit retry after an ambiguous transport failure.
+  Future<MessagesApiResult<messaging_pb.ScheduledMessage>> scheduleMessage({
+    required String authorization,
+    required String chatId,
+    required String content,
+    required String clientMessageId,
+    DateTime? scheduledAt,
+    bool sendWhenOnline = false,
+    List<MessageAttachment> attachments = const [],
+    List<MessageMention> mentions = const [],
+    String? threadParentId,
+    bool isE2e = false,
+  }) async {
+    if ((scheduledAt == null && !sendWhenOnline) ||
+        (scheduledAt != null && sendWhenOnline)) {
+      return const MessagesApiFailure(message: 'invalid_schedule_mode');
+    }
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/messages/send'),
+      authorization: authorization,
+      body: sendMessageRequestToProto(
+        chatId: chatId,
+        content: content,
+        attachments: attachments,
+        mentions: mentions,
+        clientMessageId: clientMessageId,
+        threadParentId: threadParentId,
+        isE2e: isE2e,
+        scheduledAt: scheduledAt,
+        sendWhenOnline: sendWhenOnline,
+      ),
+      createEmpty: messaging_pb.SendMessageResponse.create,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data)
+          when data.hasScheduledMessage() && !data.hasMessage() =>
+        MessagesApiOk(data.scheduledMessage),
+      GatewayHttpOk() => const MessagesApiFailure(
+        message: 'invalid_scheduled_message_response',
+      ),
+      GatewayHttpFailure(:final error) => MessagesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<MessagesApiResult<messaging_pb.ListScheduledMessagesResponse>>
+  listScheduledMessages({
+    required String authorization,
+    required String chatId,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{'chat_id': chatId};
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+    final uri = _gateway.replace(
+      path: '/api/v1/messages/scheduled',
+      queryParameters: params,
+    );
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: messaging_pb.ListScheduledMessagesResponse.create,
+    );
+    return _map(result, (data) => data);
+  }
+
+  Future<MessagesApiResult<messaging_pb.ScheduledMessage>>
+  updateScheduledMessage({
+    required String authorization,
+    required String scheduledMessageId,
+    messaging_pb.ScheduledMessagePayload? payload,
+    DateTime? scheduledAt,
+    bool? sendWhenOnline,
+  }) async {
+    if ((scheduledAt != null && sendWhenOnline != null) ||
+        sendWhenOnline == false) {
+      return const MessagesApiFailure(message: 'invalid_schedule_mode');
+    }
+    final body = messaging_pb.UpdateScheduledMessageRequest(
+      scheduledMessageId: scheduledMessageId,
+      payload: payload,
+      scheduledAt: scheduledAt == null
+          ? null
+          : dateTimeToProtoTimestamp(scheduledAt.toUtc()),
+      sendWhenOnline: sendWhenOnline,
+    );
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve(
+        '/api/v1/messages/scheduled/${Uri.encodeComponent(scheduledMessageId)}',
+      ),
+      authorization: authorization,
+      body: body,
+      createEmpty: messaging_pb.UpdateScheduledMessageResponse.create,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) when data.hasScheduledMessage() =>
+        MessagesApiOk(data.scheduledMessage),
+      GatewayHttpOk() => const MessagesApiFailure(
+        message: 'invalid_scheduled_message_response',
+      ),
+      GatewayHttpFailure(:final error) => MessagesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<MessagesApiResult<void>> cancelScheduledMessage({
+    required String authorization,
+    required String scheduledMessageId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve(
+        '/api/v1/messages/scheduled/${Uri.encodeComponent(scheduledMessageId)}',
+      ),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<MessagesApiResult<VoiceMessage>> sendScheduledMessageNow({
+    required String authorization,
+    required String scheduledMessageId,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve(
+        '/api/v1/messages/scheduled/${Uri.encodeComponent(scheduledMessageId)}/send-now',
+      ),
+      authorization: authorization,
+      body: messaging_pb.SendScheduledMessageNowRequest(
+        scheduledMessageId: scheduledMessageId,
+      ),
+      createEmpty: messaging_pb.SendScheduledMessageNowResponse.create,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) when data.hasMessage() => MessagesApiOk(
+        voiceMessageFromProto(data.message),
+      ),
+      GatewayHttpOk() => const MessagesApiFailure(
+        message: 'invalid_scheduled_message_response',
+      ),
+      GatewayHttpFailure(:final error) => MessagesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
   Future<MessagesApiResult<void>> markRead({
@@ -692,9 +858,7 @@ class VoiceMessagesClient {
     return _map(
       result,
       (data) => messageListFromProto(
-        data.hasMessageList()
-            ? data.messageList
-            : messaging_pb.MessageList(),
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
       ),
     );
   }

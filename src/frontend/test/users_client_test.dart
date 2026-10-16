@@ -41,7 +41,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.searchProfiles(
         authorization: auth,
         query: 'alice',
@@ -67,6 +69,41 @@ void main() {
   });
 
   group('VoiceUsersClient.getProfile', () {
+    for (final banner in [null, '', 'https://cdn.example/banners/bob.png']) {
+      test('preserves the public optional banner_url ($banner)', () async {
+        final mock = MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/api/v1/users/profiles/p-99');
+          expect(request.headers['authorization'], auth);
+          return http.Response(
+            jsonEncode({
+              'profile': {
+                'id': 'p-99',
+                'account_id': 'a-9',
+                'username': 'bob',
+                'discriminator': '0042',
+                'display_name': 'Bob',
+                if (banner != null) 'banner_url': banner,
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceUsersClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        final result = await client.getProfile(
+          authorization: auth,
+          profileId: 'p-99',
+        );
+        expect(result, isA<UsersApiOk<VoiceProfile>>());
+        expect(
+          (result as UsersApiOk<VoiceProfile>).data.bannerUrl,
+          banner == '' ? isNull : banner,
+        );
+      });
+    }
+
     test('GET /api/v1/users/profiles/{id}', () async {
       final mock = MockClient((req) async {
         expect(req.url.path, '/api/v1/users/profiles/p-99');
@@ -87,7 +124,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getProfile(authorization: auth, profileId: 'p-99');
       expect(r, isA<UsersApiOk<VoiceProfile>>());
       expect((r as UsersApiOk<VoiceProfile>).data.displayName, 'Bob');
@@ -102,8 +141,13 @@ void main() {
         expect(req.headers['Authorization'], auth);
         return http.Response('', 204);
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
-      final r = await client.deleteProfile(authorization: auth, profileId: 'p-del');
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final r = await client.deleteProfile(
+        authorization: auth,
+        profileId: 'p-del',
+      );
       expect(r, isA<UsersApiOk<void>>());
     });
   });
@@ -133,7 +177,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getMe(authorization: auth);
       expect(r, isA<UsersApiOk<VoiceProfile>>());
       final profile = (r as UsersApiOk<VoiceProfile>).data;
@@ -155,6 +201,7 @@ void main() {
           'display_name': 'Alice II',
           'bio': 'Ready for ranked',
           'avatar_url': 'https://cdn.example/avatars/p-1/a.png',
+          'locale': 'ru',
         });
         return http.Response(
           jsonEncode({
@@ -166,7 +213,7 @@ void main() {
               'display_name': 'Alice II',
               'avatar_url': 'https://cdn.example/avatars/p-1/a.png',
               'bio': 'Ready for ranked',
-              'locale': 'en',
+              'locale': 'ru',
               'theme': 'dark',
               'is_primary': true,
               'verification_type': 'none',
@@ -175,15 +222,20 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.updateProfile(
         authorization: auth,
         displayName: 'Alice II',
         bio: 'Ready for ranked',
         avatarUrl: 'https://cdn.example/avatars/p-1/a.png',
+        locale: 'ru',
       );
       expect(r, isA<UsersApiOk<VoiceProfile>>());
-      expect((r as UsersApiOk<VoiceProfile>).data.displayName, 'Alice II');
+      final profile = (r as UsersApiOk<VoiceProfile>).data;
+      expect(profile.displayName, 'Alice II');
+      expect(profile.locale, 'ru');
     });
   });
 
@@ -208,7 +260,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.createAvatarPresignedUpload(
         authorization: auth,
         contentType: 'image/png',
@@ -261,7 +315,9 @@ void main() {
         expect(req.bodyBytes, [1, 2, 3]);
         return http.Response('', 204);
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.uploadAvatarBytes(
         uploadUrl: Uri.parse('https://r2.example/presigned'),
         requiredHeaders: const {'Content-Type': 'image/png'},
@@ -286,7 +342,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getPresence(authorization: auth, profileId: 'p-1');
       expect(r, isA<UsersApiOk<VoicePresence>>());
       final presence = (r as UsersApiOk<VoicePresence>).data;
@@ -316,7 +374,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getBulkPresence(
         authorization: auth,
         profileIds: const ['p-1', 'p-2'],

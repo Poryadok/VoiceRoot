@@ -8,8 +8,11 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/pkg/gisowner"
+	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/gameprincipal"
 	"voice/backend/voice/internal/gameprovision"
 	voicestore "voice/backend/voice/internal/store"
@@ -165,7 +168,8 @@ func (s *GameSessionProvisioningGRPC) ApplyGameSessionRoster(ctx context.Context
 	}
 	response, err := s.Roster.ApplyGameSessionRoster(ctx, request, rosterFencer)
 	if errors.Is(err, gameprovision.ErrConflict) {
-		return nil, status.Error(codes.AlreadyExists, "roster operation or revision conflicts")
+		ownerErr := status.Error(codes.AlreadyExists, "roster operation or revision conflicts")
+		return nil, annotateVoiceOwnerConflict(ownerErr, request, gisowner.VoiceRosterRPC)
 	}
 	if errors.Is(err, gameprovision.ErrInvalidRequest) {
 		return nil, status.Error(codes.InvalidArgument, "invalid game session roster request")
@@ -211,7 +215,8 @@ func (s *GameSessionProvisioningGRPC) ProvisionGameSessionRoom(ctx context.Conte
 	}
 	response, err := s.Store.Provision(ctx, request)
 	if errors.Is(err, gameprovision.ErrConflict) {
-		return nil, status.Error(codes.AlreadyExists, "operation or resource binding conflicts")
+		ownerErr := status.Error(codes.AlreadyExists, "operation or resource binding conflicts")
+		return nil, annotateVoiceOwnerConflict(ownerErr, request, gisowner.VoiceProvisionRPC)
 	}
 	if errors.Is(err, gameprovision.ErrInvalidRequest) {
 		return nil, status.Error(codes.InvalidArgument, "invalid game session provisioning request")
@@ -220,4 +225,21 @@ func (s *GameSessionProvisioningGRPC) ProvisionGameSessionRoom(ctx context.Conte
 		return nil, status.Error(codes.Unavailable, "game session provisioning failed")
 	}
 	return response, nil
+}
+
+func annotateVoiceOwnerConflict(err error, request proto.Message, rpc string) error {
+	hash, hashErr := principal.RequestHash(request)
+	if hashErr != nil {
+		return err
+	}
+	var operationID string
+	switch typed := request.(type) {
+	case *callsv1.ProvisionGameSessionRoomRequest:
+		operationID = typed.GetOperationId()
+	case *callsv1.ApplyGameSessionRosterRequest:
+		operationID = typed.GetOperationId()
+	default:
+		return err
+	}
+	return gisowner.Annotate(err, gisowner.VoiceDomain, rpc, gisowner.CategoryOperationConflict, operationID, hash)
 }

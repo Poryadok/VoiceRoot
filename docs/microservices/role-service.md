@@ -76,8 +76,14 @@ RPC full name and deterministic protobuf request hash; `x-request-id` equals
 the request's operation ID for Apply/Revoke. The distinct Voice caller uses
 exact issuer `voice`, audience `role`, exact `CheckGameSessionGrant` RPC and
 request hash; its request ID is a fresh canonical UUID. Role accepts only
-Apply/Revoke from GIS and only Check from Voice. Each JTI authorizes one
-attempt; retries use a fresh JTI and the same request ID/hash. An apply request binds
+Apply/Revoke from GIS and only Check from Voice on the game-session grant
+surface. Voice also calls the Voice-only `ResolveVoiceRoomGrants` RPC on this
+private listener using the same exact issuer/audience/RPC/request-hash binding
+and a fresh canonical request ID. Role validates the Space, Voice room, and
+profile UUIDs, then returns the existing per-Space fenced permission decision
+and policy epoch. The ordinary listener continues to reject this RPC. For
+game-session Apply/Revoke, each JTI authorizes one attempt; retries use a
+fresh JTI and the same request ID/hash. An apply request binds
 `application_id`, `environment_id`, `session_id`, `voice_room_id`,
 `operation_id`, `roster_revision`, and the complete sorted, unique list of
 canonical `profile_id` UUIDs. It grants only `VOICE_JOIN` for that exact
@@ -376,6 +382,14 @@ idempotent по `operation_id`. Unknown caller/RPC, caller с неправиль
 | `role.chat_override_removed` | space_id, chat_id, role_id |
 | `role.voice_override_set` | space_id, voice_room_id, role_id |
 | `role.voice_override_removed` | space_id, voice_room_id, role_id |
+| `role.voice_policy_invalidated` | event_id, space_id, policy_epoch, optional voice_room_id/profile_id; typed `RoleStreamEvent` |
+
+Role persists the immutable policy epoch snapshot in its own transactional
+outbox. Voice consumes the dedicated `role_events` subject with durable
+`voice_space_media_role` delivery and ACKs only after the active Space room
+reconciliation succeeds. Optional room/profile IDs are hints; they do not
+replace the full current-authority scan. Existing Role subjects and their
+payloads are unchanged.
 
 ## Публикуемые события (→ NATS)
 

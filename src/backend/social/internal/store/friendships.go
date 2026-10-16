@@ -236,6 +236,22 @@ WHERE friendship_id = $1 AND delivered_at IS NULL AND cancelled_at IS NULL`, fri
 	return tx.Commit(ctx)
 }
 
+// CancelInvitation removes only the caller's pending outgoing request. The
+// conditional DELETE serializes with accept/decline, and the outbox FK cascade
+// waits for any in-flight dispatcher. Already published notices are not retracted.
+func (s *FriendshipStore) CancelInvitation(ctx context.Context, caller, target uuid.UUID) error {
+	cmd, err := s.Pool.Exec(ctx, `
+DELETE FROM friendships
+WHERE status = 'pending' AND requester_profile_id = $1 AND target_profile_id = $2`, caller, target)
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrFriendshipNotFound
+	}
+	return nil
+}
+
 // PendingFriendIncoming is an incoming pending request (someone invited caller).
 type PendingFriendIncoming struct {
 	RequesterProfileID uuid.UUID

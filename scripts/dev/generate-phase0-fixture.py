@@ -100,6 +100,7 @@ def generate(destination):
                 (f"gameintegration-{service}-client", "gameintegration", gis_ca_cert, gis_ca_key)
                 for service in ("chat", "voice", "messaging")
             ]
+            scoped_clients.append(("gateway-client", "gateway", ca_cert, ca_key))
             scoped_clients.append(("space-lifecycle-client", "space", lifecycle_ca_cert, lifecycle_ca_key))
             for serial, (leaf, service, client_ca_cert, client_ca_key) in enumerate(scoped_clients, 200):
                 client_key = root / f"tls/{leaf}.key"

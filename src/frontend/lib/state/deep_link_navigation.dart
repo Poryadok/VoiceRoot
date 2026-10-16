@@ -7,6 +7,7 @@ import '../routing/app_router.dart';
 import '../routing/deep_link_parser.dart';
 import '../routing/deep_link_urls.dart';
 import '../ui/bots/bot_install_page.dart';
+import '../ui/deep_link_error_screen.dart';
 import '../ui/social/profile_detail_sheet.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
@@ -116,6 +117,8 @@ final deepLinkNavigatorProvider = Provider<DeepLinkNavigator>(
   (ref) => DeepLinkNavigator(ref),
 );
 
+int _deepLinkResolutionGeneration = 0;
+
 /// Widget-tree entry point for deep link navigation.
 Future<void> applyDeepLinkNavigation(WidgetRef ref, DeepLinkTarget target) =>
     ref.read(deepLinkNavigatorProvider).apply(target);
@@ -171,12 +174,26 @@ Future<void> resolveAndNavigateDeepLink(
 ) async {
   final auth = ref.read(authControllerProvider);
   if (!auth.isAuthenticated || auth.session == null) return;
+  final session = auth.session!;
+  final callerContext = ref.context;
+  final generation = ++_deepLinkResolutionGeneration;
 
   final client = ref.read(voiceDeepLinksClientProvider);
   final result = await client.resolve(
-    authorization: 'Bearer ${auth.session!.accessToken}',
+    authorization: 'Bearer ${session.accessToken}',
     url: target.rawUrl,
   );
+  if (!callerContext.mounted || generation != _deepLinkResolutionGeneration) {
+    return;
+  }
+  final currentAuth = ref.read(authControllerProvider);
+  final currentSession = currentAuth.session;
+  if (!currentAuth.isAuthenticated ||
+      currentSession?.accountId != session.accountId ||
+      currentSession?.activeProfileId != session.activeProfileId) {
+    return;
+  }
+
   final navigator = ref.read(deepLinkNavigatorProvider);
   if (result case DeepLinksApiOk(:final data)) {
     if (data.kind == 'invite' && data.inviteCode != null) {
@@ -199,6 +216,18 @@ Future<void> resolveAndNavigateDeepLink(
       );
       return;
     }
+  }
+  if (result case DeepLinksApiFailure(
+    :final statusCode,
+  ) when statusCode == 403 || statusCode == 404) {
+    final context = rootNavigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => DeepLinkErrorScreen(statusCode: statusCode!),
+      ),
+    );
+    return;
   }
   await navigator.apply(target);
 }

@@ -8,7 +8,6 @@ import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
-import '../../settings/theme_preference.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_skeleton.dart';
@@ -22,14 +21,13 @@ import '../../settings/reduced_motion.dart';
 import '../../settings/voice_input_settings.dart';
 import 'help_sheet.dart';
 import 'appeal_sheet.dart';
+import 'appearance_settings_screen.dart';
 import 'verification_settings_sheet.dart';
 
 class SettingsSheet extends ConsumerWidget {
   const SettingsSheet({super.key});
 
   static const Key sheetKey = Key('settings_sheet');
-  static const Key themeKey = Key('settings_theme');
-  static const Key languageKey = Key('settings_language');
   static const Key accentKey = Key('settings_accent');
   static const Key pttModeKey = Key('settings_ptt_mode');
   static const Key pttKeybindKey = Key('settings_ptt_keybind');
@@ -38,8 +36,6 @@ class SettingsSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final themePref = ref.watch(appThemePreferenceProvider);
-    final localePref = ref.watch(appLocalePreferenceProvider);
     final catalogAsync = ref.watch(voiceTokenCatalogProvider);
     final profileId = ref.watch(authControllerProvider).activeProfileId;
     final subscription = ref.watch(subscriptionProvider).valueOrNull;
@@ -74,6 +70,20 @@ class SettingsSheet extends ConsumerWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const SecuritySettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                key: const Key('settings_appearance'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.settingsAppearance),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AppearanceSettingsScreen(),
                     ),
                   );
                 },
@@ -200,67 +210,6 @@ class SettingsSheet extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: 16),
-              Text(
-                l10n.settingsTheme,
-                style: TextStyle(color: voice.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<AppThemePreference>(
-                key: themeKey,
-                segments: [
-                  ButtonSegment(
-                    value: AppThemePreference.system,
-                    label: Text(l10n.settingsThemeSystem),
-                  ),
-                  ButtonSegment(
-                    value: AppThemePreference.light,
-                    label: Text(l10n.settingsThemeLight),
-                  ),
-                  ButtonSegment(
-                    value: AppThemePreference.dark,
-                    label: Text(l10n.settingsThemeDark),
-                  ),
-                  ButtonSegment(
-                    value: AppThemePreference.highContrast,
-                    label: Text(l10n.settingsThemeHighContrast),
-                  ),
-                ],
-                selected: {themePref},
-                onSelectionChanged: (next) => ref
-                    .read(appThemePreferenceProvider.notifier)
-                    .setPreference(next.single),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                l10n.settingsLanguage,
-                style: TextStyle(color: voice.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                key: languageKey,
-                segments: [
-                  ButtonSegment(
-                    value: 'system',
-                    label: Text(l10n.settingsLanguageSystem),
-                  ),
-                  ButtonSegment(
-                    value: 'en',
-                    label: Text(l10n.settingsLanguageEn),
-                  ),
-                  ButtonSegment(
-                    value: 'ru',
-                    label: Text(l10n.settingsLanguageRu),
-                  ),
-                ],
-                selected: {
-                  localePref == null ? 'system' : localePref.languageCode,
-                },
-                onSelectionChanged: (next) {
-                  final v = next.single;
-                  ref.read(appLocalePreferenceProvider.notifier).state =
-                      v == 'system' ? null : Locale(v);
-                },
-              ),
               if (profileId != null) ...[
                 const SizedBox(height: 16),
                 Text(

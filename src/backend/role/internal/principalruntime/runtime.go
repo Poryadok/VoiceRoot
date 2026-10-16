@@ -172,6 +172,7 @@ var gameSessionGrantMethods = []string{
 	rolev1.RoleService_ApplyGameSessionGrants_FullMethodName,
 	rolev1.RoleService_RevokeGameSessionGrants_FullMethodName,
 	rolev1.RoleService_CheckGameSessionGrant_FullMethodName,
+	rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName,
 }
 
 func isOwnershipMethod(method string) bool {
@@ -224,7 +225,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	switch method {
 	case rolev1.RoleService_ApplyGameSessionGrants_FullMethodName, rolev1.RoleService_RevokeGameSessionGrants_FullMethodName:
 		issuer = "gameintegration"
-	case rolev1.RoleService_CheckGameSessionGrant_FullMethodName:
+	case rolev1.RoleService_CheckGameSessionGrant_FullMethodName, rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName:
 		issuer = "voice"
 	default:
 		if isOwnershipMethod(method) {

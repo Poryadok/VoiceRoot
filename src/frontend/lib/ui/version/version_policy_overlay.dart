@@ -30,14 +30,16 @@ class VersionPolicyOverlay extends ConsumerWidget {
         if (policy.phase == VersionPolicyPhase.forceUpdate)
           _ForceUpdateBarrier(
             policy: policy,
-            onUpdate: () => _launchUpdate(ref, launcher, policy, immediate: true),
+            onUpdate: () =>
+                _launchUpdate(ref, launcher, policy, immediate: true),
           ),
         if (policy.phase == VersionPolicyPhase.softUpdate)
           _SoftUpdateBanner(
             policy: policy,
             onDismiss: () =>
                 ref.read(versionPolicyProvider.notifier).dismissSoftUpdate(),
-            onUpdate: () => _launchUpdate(ref, launcher, policy, immediate: false),
+            onUpdate: () =>
+                _launchUpdate(ref, launcher, policy, immediate: false),
           ),
         if (policy.phase == VersionPolicyPhase.desktopReadyToRestart)
           _DesktopRestartBanner(
@@ -77,10 +79,7 @@ class VersionPolicyOverlay extends ConsumerWidget {
 }
 
 class _ForceUpdateBarrier extends StatelessWidget {
-  const _ForceUpdateBarrier({
-    required this.policy,
-    required this.onUpdate,
-  });
+  const _ForceUpdateBarrier({required this.policy, required this.onUpdate});
 
   final VersionPolicyState policy;
   final VoidCallback onUpdate;
@@ -94,45 +93,62 @@ class _ForceUpdateBarrier extends StatelessWidget {
       key: const Key('version_force_update_barrier'),
       color: voice.canvas.withValues(alpha: kVoiceOverlayDimOpacity),
       child: SafeArea(
-        child: Center(
-          child: Container(
-            width: 400,
-            constraints: const BoxConstraints(minHeight: 280),
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: voice.elevated,
-              borderRadius: BorderRadius.circular(radius),
-              border: Border.all(color: voice.borderDefault),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  l10n.versionUpdateRequired,
-                  style: Theme.of(context).textTheme.titleMedium,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final cardWidth = (constraints.maxWidth - 32)
+                .clamp(0.0, 400.0)
+                .toDouble();
+            final cardHeight = (constraints.maxHeight - 32)
+                .clamp(0.0, constraints.maxHeight)
+                .toDouble();
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: cardWidth,
+                  maxHeight: cardHeight,
                 ),
-                if (policy.releaseNotes != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    policy.releaseNotes!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: voice.textSecondary,
+                child: Container(
+                  width: cardWidth,
+                  decoration: BoxDecoration(
+                    color: voice.elevated,
+                    borderRadius: BorderRadius.circular(radius),
+                    border: Border.all(color: voice.borderDefault),
+                  ),
+                  child: SingleChildScrollView(
+                    key: const Key('version_force_update_scroll_view'),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          l10n.versionUpdateRequired,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
+                        if (policy.releaseNotes != null &&
+                            policy.releaseNotes!.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            policy.releaseNotes!,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: voice.textSecondary),
+                          ),
+                        ],
+                        if (policy.updateUrl != null) ...[
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            key: const Key('version_force_update_button'),
+                            onPressed: onUpdate,
+                            child: Text(l10n.versionUpdateNow),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ],
-                if (policy.updateUrl != null) ...[
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    key: const Key('version_force_update_button'),
-                    onPressed: onUpdate,
-                    child: Text(l10n.versionUpdateNow),
-                  ),
-                ],
-              ],
-            ),
-          ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -202,34 +218,108 @@ class _DesktopRestartBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final radius = context.voiceMetrics.corner('md', fallback: 6);
     final message = policy.latestVersion != null
         ? l10n.versionUpdateAvailable(policy.latestVersion!)
         : l10n.versionUpdateAvailableGeneric;
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Material(
-        key: const Key('version_desktop_restart_banner'),
-        color: voice.elevated,
-        elevation: 4,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(child: Text(message)),
-              FilledButton(
-                key: const Key('version_desktop_restart_button'),
-                onPressed: onRestart,
-                child: Text(l10n.versionRestartToUpdate),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardHeight = (constraints.maxHeight - 48)
+            .clamp(0.0, constraints.maxHeight)
+            .toDouble();
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: voice.canvas.withValues(
+                    alpha: kVoiceOverlayDimOpacity,
+                  ),
+                ),
               ),
-              TextButton(
-                key: const Key('version_soft_update_dismiss'),
-                onPressed: onDismiss,
-                child: Text(l10n.versionUpdateLater),
+            ),
+            SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: 420,
+                      maxHeight: cardHeight,
+                    ),
+                    child: Material(
+                      key: const Key('version_desktop_restart_banner'),
+                      color: voice.elevated,
+                      elevation: 8,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(radius),
+                        side: BorderSide(color: voice.borderDefault),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: SingleChildScrollView(
+                        key: const Key('version_desktop_restart_scroll_view'),
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ExcludeSemantics(
+                              child: Icon(
+                                Icons.system_update_alt,
+                                size: 64,
+                                color: voice.profileAccent,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              message,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            if (policy.releaseNotes != null &&
+                                policy.releaseNotes!.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              Container(
+                                key: const Key('version_desktop_release_notes'),
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: voice.surface,
+                                  borderRadius: BorderRadius.circular(radius),
+                                  border: Border.all(
+                                    color: voice.borderDefault,
+                                  ),
+                                ),
+                                child: Text(
+                                  policy.releaseNotes!,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: voice.textSecondary),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+                            FilledButton(
+                              key: const Key('version_desktop_restart_button'),
+                              onPressed: onRestart,
+                              child: Text(l10n.versionRestartToUpdate),
+                            ),
+                            const SizedBox(height: 4),
+                            TextButton(
+                              key: const Key('version_soft_update_dismiss'),
+                              onPressed: onDismiss,
+                              child: Text(l10n.versionUpdateLater),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

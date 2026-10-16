@@ -23,7 +23,14 @@ Future<void> addChatToQuickAccess(
   QuickAccessListData qaList;
   try {
     qaList = await ref.read(quickAccessListProvider.future);
-  } catch (_) {
+  } catch (error) {
+    if (error is StateError && error.message == 'not_authenticated') return;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(commonActionErrorMessage(AppLocalizations.of(context)!)),
+      ),
+    );
     return;
   }
 

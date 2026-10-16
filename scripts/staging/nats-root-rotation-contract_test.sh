@@ -112,14 +112,25 @@ if [[ "$1" == patch && "$*" == *'configmap voice-nats-generation'* ]]; then
   done
   current_phase="${MOCK_GENERATION_STATE:-absent}"
   if [[ -f "${MOCK_KUBE_STATE_DIR:?}/marker" ]]; then current_phase="$(cat "$MOCK_KUBE_STATE_DIR/marker")"; fi
+  # A concurrent independent-storage insertion changes resourceVersion even
+  # when all identity-generation fields remain identical.
+  if [[ "${MOCK_MARKER_RACE:-false}" == true ]]; then
+    jq -e 'any(.[]; .op == "test" and .path == "/metadata/resourceVersion" and .value != "101")' <<<"$marker_patch" >/dev/null || {
+      echo 'FAIL: concurrent data PVC insertion was not fenced by resourceVersion' >&2; exit 2;
+    }
+    echo 'mock resourceVersion CAS rejects concurrent data PVC insertion' >&2
+    exit 1
+  fi
   jq -e --arg phase "$current_phase" --arg generation r20260930a --arg previous legacy '
-    type == "array" and length == 6 and
-    ([.[] | select(.op == "test") | .path] | sort) == ["/data/generation","/data/phase","/data/previousGeneration"] and
+    type == "array" and length == 7 and
+    ([.[] | select(.op == "test") | .path] | sort) == ["/data/generation","/data/phase","/data/previousGeneration","/metadata/resourceVersion"] and
     ([.[] | select(.op == "replace") | .path] | sort) == ["/data/generation","/data/phase","/data/previousGeneration"] and
-    all(.[] | select(.op == "test"); if .path == "/data/phase" then .value == $phase elif .path == "/data/generation" then .value == $generation else .value == $previous end)
+    all(.[] | select(.op == "test"); if .path == "/data/phase" then .value == $phase elif .path == "/data/generation" then .value == $generation elif .path == "/metadata/resourceVersion" then .value == "100" else .value == $previous end)
   ' <<<"$marker_patch" >/dev/null || { echo 'mock kubectl rejects a marker patch without full JSON CAS' >&2; exit 2; }
   next_phase="$(jq -r '.[] | select(.op == "replace" and .path == "/data/phase") | .value' <<<"$marker_patch")"
   printf '%s\n' "$next_phase" >"${MOCK_KUBE_STATE_DIR:?}/marker"
+  jq -r '.[] | select(.op == "replace" and .path == "/data/generation") | .value' <<<"$marker_patch" >"$MOCK_KUBE_STATE_DIR/marker-generation"
+  jq -r '.[] | select(.op == "replace" and .path == "/data/previousGeneration") | .value' <<<"$marker_patch" >"$MOCK_KUBE_STATE_DIR/marker-previous"
   printf 'event phase=%s\n' "$next_phase" >>"$KUBECTL_LOG"
 fi
 if [[ "$1" == patch && "$2" == deployment && "$3" == voice-* ]]; then
@@ -151,12 +162,17 @@ case "$*" in
     printf '%s\n' '{"apiVersion":"v1","kind":"List","items":[]}'
     ;;
   *'get configmap voice-nats-generation'*|*'get configmap/voice-nats-generation'*)
-    if [[ -f "${MOCK_KUBE_STATE_DIR:?}/marker" ]]; then
-      jq -n --rawfile phase "$MOCK_KUBE_STATE_DIR/marker" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging"},data:{phase:($phase|rtrimstr("\n")),generation:"r20260930a",previousGeneration:"legacy"}}'
+    if [[ "${MOCK_DATA_PVC:-false}" == true ]]; then
+      printf '%s\n' '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging","resourceVersion":"100"},"data":{"phase":"active","generation":"r20260930a","previousGeneration":"legacy","dataPVC":"voice-nats-jsdata-d20261004proof"}}'
+    elif [[ -f "${MOCK_KUBE_STATE_DIR:?}/marker" ]]; then
+      gen=r20260930a prev=legacy
+      [[ ! -f "$MOCK_KUBE_STATE_DIR/marker-generation" ]] || gen="$(cat "$MOCK_KUBE_STATE_DIR/marker-generation")"
+      [[ ! -f "$MOCK_KUBE_STATE_DIR/marker-previous" ]] || prev="$(cat "$MOCK_KUBE_STATE_DIR/marker-previous")"
+      jq -n --rawfile phase "$MOCK_KUBE_STATE_DIR/marker" --arg gen "$gen" --arg prev "$prev" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging",resourceVersion:"100"},data:{phase:($phase|rtrimstr("\n")),generation:$gen,previousGeneration:$prev}}'
     elif [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then
-      printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"active","generation":"r20260930a","previousGeneration":"legacy"}}\n'
+      printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging","resourceVersion":"100"},"data":{"phase":"active","generation":"r20260930a","previousGeneration":"legacy"}}\n'
     elif [[ "${MOCK_GENERATION_STATE:-absent}" == rotating ]]; then
-      printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"rotating","generation":"r20260930a","previousGeneration":"legacy"}}\n'
+      printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging","resourceVersion":"100"},"data":{"phase":"rotating","generation":"r20260930a","previousGeneration":"legacy"}}\n'
     elif [[ "$*" != *'--ignore-not-found'* ]]; then
       echo 'Error from server (NotFound): configmaps "voice-nats-generation" not found' >&2
       exit 1
@@ -300,7 +316,7 @@ run_rotation() {
   : >"$work/mutations.log"
   mkdir -p "$work/rendered"
   mkdir -p "$work/state"
-  rm -f "$work/state/marker" "$work/state/target-secrets" "$work/state/target-pvc" "$work/state/user-override" "$work/state"/leaf-*-suffix "$work/state"/leaf-replicas-*
+  rm -f "$work/state/marker" "$work/state/marker-generation" "$work/state/marker-previous" "$work/state/target-secrets" "$work/state/target-pvc" "$work/state/user-override" "$work/state"/leaf-*-suffix "$work/state"/leaf-replicas-*
   if [[ "${MOCK_GENERATION_STATE:-absent}" == rotating ]]; then printf 'rotating\n' >"$work/state/marker"; fi
   : >"$work/rendered/metadata.names"
   PATH="$work/bin:$PATH" \
@@ -321,6 +337,8 @@ run_rotation() {
     MOCK_FAIL_JOB="${MOCK_FAIL_JOB:-}" \
     MOCK_FAIL_STAGE="${MOCK_FAIL_STAGE:-}" \
     MOCK_GENERATION_STATE="${MOCK_GENERATION_STATE:-absent}" \
+    MOCK_DATA_PVC="${MOCK_DATA_PVC:-false}" \
+    MOCK_MARKER_RACE="${MOCK_MARKER_RACE:-false}" \
     MOCK_ACL_SHA="$acl_sha" GITHUB_RUN_ID=123456 GITHUB_RUN_ATTEMPT=1 \
     GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 \
     VOICE_NATS_PROOF_IMAGE_REGISTRY=ghcr.io/poryadok/voiceroot \
@@ -369,6 +387,27 @@ assert_nats_only_mutations() {
     fail "rotation used an unexpected Kubernetes mutation outside its NATS allowlist: ${operation}"
   done <"$work/mutations.log"
 }
+
+for operation in --activate --continue-activate --rollback --recover-legacy; do
+  case "$operation" in
+    --rollback) args=("$operation") ;;
+    --recover-legacy) args=("$operation" r20260930a1) ;;
+    *) args=("$operation" "$generation" "$work/bundle.json" "$work/proof.creds") ;;
+  esac
+  if MOCK_DATA_PVC=true run_rotation "${args[@]}"; then
+    fail "old ${operation} accepted independent data storage"
+  fi
+  grep -Fq 'independent data PVC requires the data-reset recovery workflow' "$work/output" || fail "${operation} did not reach the independent storage guard"
+  assert_no_mutation
+done
+
+if MOCK_GENERATION_STATE=active MOCK_MARKER_RACE=true run_rotation --rollback; then
+  fail 'rollback accepted concurrent data PVC insertion'
+fi
+grep -Fq 'generation marker changed concurrently' "$work/output" || fail 'rollback did not fail its exact marker CAS'
+if grep -E '^(apply|create|delete|replace|scale|set|annotate|label) |^patch (deployment|service) |^rollout restart ' "$work/kubectl.log" | grep -Ev -- '--dry-run'; then
+  fail 'marker race issued a destructive workload mutation'
+fi
 
 if run_rotation --activate '../voice-prod' "$work/bundle.json" "$work/proof.creds"; then
   fail 'path-like generation must fail'

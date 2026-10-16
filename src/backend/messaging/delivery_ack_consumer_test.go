@@ -14,12 +14,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/messaging/internal/store"
 )
 
 type deliveryStoreStub struct{}
 
-func (deliveryStoreStub) UpsertDeliveredCursor(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+func (deliveryStoreStub) UpsertDeliveredCursorWithMutationFence(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) error {
 	return nil
+}
+
+type deliveryPolicyStub struct{}
+
+func (deliveryPolicyStub) Load(context.Context, uuid.UUID) (*store.ChatThreadPolicy, error) {
+	return &store.ChatThreadPolicy{}, nil
 }
 
 func startMessagingJSTestServer(t *testing.T) *server.Server {
@@ -67,10 +74,10 @@ func TestDeliveryAckBindsPreprovisionedQueue(t *testing.T) {
 	require.NoError(t, err)
 	_, err = js.AddConsumer(deliveryAckStreamName, deliveryAckConsumerConfig())
 	require.NoError(t, err)
-	subA, err := subscribeDeliveryAck(context.Background(), js, deliveryStoreStub{}, nil)
+	subA, err := subscribeDeliveryAck(context.Background(), js, deliveryStoreStub{}, deliveryPolicyStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subA.Unsubscribe() })
-	subB, err := subscribeDeliveryAck(context.Background(), js, deliveryStoreStub{}, nil)
+	subB, err := subscribeDeliveryAck(context.Background(), js, deliveryStoreStub{}, deliveryPolicyStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subB.Unsubscribe() })
 }
@@ -114,10 +121,10 @@ func TestMessagingBindsWithoutConsumerCreatePermission(t *testing.T) {
 	t.Cleanup(nc.Close)
 	js, err := nc.JetStream()
 	require.NoError(t, err)
-	deliverySub, err := subscribeDeliveryAck(context.Background(), js, deliveryStoreStub{}, nil)
+	deliverySub, err := subscribeDeliveryAck(context.Background(), js, deliveryStoreStub{}, deliveryPolicyStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = deliverySub.Unsubscribe() })
-	privacySub, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, privacyPublisherStub{}, nil)
+	privacySub, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = privacySub.Unsubscribe() })
 }

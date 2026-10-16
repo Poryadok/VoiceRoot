@@ -1,17 +1,28 @@
 package voice.backend.auth.repository;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
+  private final Clock clock;
   private final Map<String, RefreshTokenRecord> byHash = new ConcurrentHashMap<>();
   private final Map<UUID, String> hashById = new ConcurrentHashMap<>();
+
+  public InMemoryRefreshTokenRepository() {
+    this(Clock.systemUTC());
+  }
+
+  public InMemoryRefreshTokenRepository(Clock clock) {
+    this.clock = Objects.requireNonNull(clock, "clock");
+  }
 
   @Override
   public synchronized RefreshTokenRecord create(
@@ -51,7 +62,7 @@ public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
 
   @Override
   public synchronized List<RefreshTokenRecord> listActiveByAccount(UUID accountId) {
-    Instant now = Instant.now();
+    Instant now = clock.instant();
     List<RefreshTokenRecord> out = new ArrayList<>();
     for (RefreshTokenRecord record : byHash.values()) {
       if (record.accountId().equals(accountId) && !record.revoked() && record.expiresAt().isAfter(now)) {
@@ -83,6 +94,18 @@ public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
         now);
     byHash.put(tokenHash, revoked);
     return revoked;
+  }
+
+  @Override
+  public synchronized boolean revokeIfActive(String tokenHash, Instant now) {
+    RefreshTokenRecord current = byHash.get(tokenHash);
+    if (current == null || current.revoked() || !current.expiresAt().isAfter(now)) {
+      return false;
+    }
+    byHash.put(tokenHash, new RefreshTokenRecord(
+        current.id(), current.accountId(), current.profileId(), current.tokenHash(),
+        current.deviceInfoJson(), current.accessJti(), current.expiresAt(), current.createdAt(), now));
+    return true;
   }
 
   @Override

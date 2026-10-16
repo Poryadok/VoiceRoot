@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/social_providers.dart';
+import '../api_error_messages.dart';
 import '../privacy/privacy_action_errors.dart';
 
 class CallErrorListener extends ConsumerWidget {
@@ -88,7 +89,9 @@ class CallErrorListener extends ConsumerWidget {
 
     if (!context.mounted) return;
     if (confirmed == true) {
-      await ref.read(callControllerProvider.notifier).confirmLeaveCurrentVoiceAndRetry();
+      await ref
+          .read(callControllerProvider.notifier)
+          .confirmLeaveCurrentVoiceAndRetry();
     } else {
       ref.read(callControllerProvider.notifier).dismissVoiceConflict();
     }
@@ -101,7 +104,7 @@ class CallErrorListener extends ConsumerWidget {
       'livekit_connect_failed' => l10n.callLivekitConnectFailed,
       'livekit_url_missing' => l10n.callLivekitConnectFailed,
       'profile already has active call' => l10n.callActiveCallExists,
-      _ => l10n.callFailed(errorMessage),
+      _ => l10n.callFailed(commonActionErrorMessage(l10n)),
     };
   }
 }

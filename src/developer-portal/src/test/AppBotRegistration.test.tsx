@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../App';
 
@@ -28,6 +28,14 @@ function botDetailResponse(id: string, name: string, scopesJson: string) {
   return jsonResponse({
     bot: { id, name, description: `${name} desc`, scopes_json: scopesJson },
   });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 describe('App bot registration and selection', () => {
@@ -142,6 +150,130 @@ describe('App bot registration and selection', () => {
     expect(getCalls.some(([url]) => url.endsWith(BOT_A))).toBe(true);
     expect(getCalls.some(([url]) => url.endsWith(BOT_B))).toBe(true);
   });
+
+  it('keeps the selected bot editor bound to B when A details and manifest finish late', async () => {
+    const aDetail = deferred<Response>();
+    const aCommands = deferred<Response>();
+    const aManifest = deferred<Response>();
+    const bDetail = deferred<Response>();
+    const bCommands = deferred<Response>();
+    const bManifest = deferred<Response>();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [
+        { id: BOT_A, name: 'Bot A' },
+        { id: BOT_B, name: 'Bot B' },
+      ] } }))
+      .mockReturnValueOnce(aDetail.promise)
+      .mockReturnValueOnce(aCommands.promise)
+      .mockReturnValueOnce(aManifest.promise)
+      .mockReturnValueOnce(bDetail.promise)
+      .mockReturnValueOnce(bCommands.promise)
+      .mockReturnValueOnce(bManifest.promise)
+      .mockResolvedValueOnce(jsonResponse({ bot: { id: BOT_B } }))
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [
+        { id: BOT_A, name: 'Bot A' },
+        { id: BOT_B, name: 'Bot B detail' },
+      ] } }))
+      .mockResolvedValueOnce(botDetailResponse(BOT_B, 'Bot B detail', '["TEXT_CHAT_READ_HISTORY"]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await screen.findByRole('button', { name: 'Bot B' });
+    fireEvent.click(screen.getByRole('button', { name: 'Bot B' }));
+    expect(screen.getByRole('button', { name: 'Save bot changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Apply to bot' })).toBeDisabled();
+
+    bDetail.resolve(botDetailResponse(BOT_B, 'Bot B detail', '["TEXT_CHAT_READ_HISTORY"]'));
+    bCommands.resolve(jsonResponse({ command_list: { commands_json: '[]' } }));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Bot B detail')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save bot changes' })).toBeEnabled();
+    });
+    expect(screen.getByRole('button', { name: 'Apply to bot' })).toBeDisabled();
+    bManifest.resolve(jsonResponse({ manifest_yaml: '' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Apply to bot' })).toBeEnabled());
+
+    await act(async () => {
+      aDetail.resolve(botDetailResponse(BOT_A, 'Bot A late detail', '["DM_SEND"]'));
+      aCommands.resolve(jsonResponse({ command_list: { commands_json: '[{"name":"a_late"}]' } }));
+      aManifest.resolve(jsonResponse({ manifest_yaml: 'name: bot-a-late-manifest' }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => expect(screen.queryByDisplayValue('Bot A late detail')).not.toBeInTheDocument());
+    expect(screen.getByDisplayValue('Bot B detail')).toBeInTheDocument();
+    expect(screen.getByLabelText('Manifest YAML')).not.toHaveValue('name: bot-a-late-manifest');
+    expect(screen.queryByText('/a_late')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save bot changes' }));
+    await waitFor(() => expect(screen.getByText('Bot updated')).toBeInTheDocument());
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, init]) => hasPath(url, `/api/v1/bots/${BOT_B}`) &&
+        (init as RequestInit)?.method === 'PATCH',
+    );
+    expect(patchCall).toBeTruthy();
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toMatchObject({
+      name: 'Bot B detail',
+      description: 'Bot B detail desc',
+      scopes_json: '["TEXT_CHAT_READ_HISTORY"]',
+    });
+  });
+
+  it.each(['registration', 'bot token rotation', 'webhook secret rotation'] as const)(
+    'discards a late %s credential response after logout and a new login', async (operation) => {
+      const lateResponse = deferred<Response>();
+      const fetchMock = vi.fn();
+      if (operation === 'registration') {
+        fetchMock
+          .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }))
+          .mockReturnValueOnce(lateResponse.promise);
+      } else {
+        fetchMock
+          .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [{ id: BOT_A, name: 'Bot A' }] } }))
+          .mockResolvedValueOnce(botDetailResponse(BOT_A, 'Bot A', '[]'))
+          .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+          .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+          .mockReturnValueOnce(lateResponse.promise);
+      }
+
+      setupLoggedIn(fetchMock);
+      render(<App />);
+
+      if (operation === 'registration') {
+        await screen.findByTestId('bot-register');
+        fireEvent.change(screen.getByLabelText('Bot name'), { target: { value: 'Late Bot' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Register bot' }));
+      } else {
+        await screen.findByRole('button', { name: 'Revoke & regenerate bot token' });
+        fireEvent.click(screen.getByRole('button', {
+          name: operation === 'bot token rotation'
+            ? 'Revoke & regenerate bot token'
+            : 'Rotate webhook secret',
+        }));
+      }
+
+      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      fetchMock.mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }));
+      fireEvent.change(screen.getByPlaceholderText('Bearer access token'), {
+        target: { value: 'new-user-jwt' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Use JWT' }));
+
+      lateResponse.resolve(jsonResponse({
+        bot: { id: BOT_A, name: 'Late Bot' },
+        token_response: { token: 'old-user-token' },
+        webhook_secret_response: { webhook_secret: 'old-user-webhook-secret' },
+      }));
+
+      await waitFor(() => expect(screen.getByText('No bots yet — register one below.')).toBeInTheDocument());
+      expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument();
+      expect(screen.queryByText('old-user-token')).not.toBeInTheDocument();
+      expect(screen.queryByText('old-user-webhook-secret')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Selected bot:/)).not.toBeInTheDocument();
+    },
+  );
 
   it('clears one-shot secrets when switching bots', async () => {
     const fetchMock = vi

@@ -8,6 +8,7 @@ import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
+import '../api_error_messages.dart';
 import '../core/profile_accent_dot.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_skeleton.dart';
@@ -77,10 +78,10 @@ class _ManageProfilesSheetState extends ConsumerState<ManageProfilesSheet> {
       case UsersApiOk():
         ref.invalidate(myProfilesProvider);
         setState(() => _deletingProfileId = null);
-      case UsersApiFailure(:final message):
+      case UsersApiFailure(:final statusCode):
         setState(() {
           _deletingProfileId = null;
-          _error = message;
+          _error = commonActionErrorMessage(l10n, statusCode: statusCode);
         });
     }
   }

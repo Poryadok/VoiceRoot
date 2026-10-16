@@ -25,6 +25,7 @@ import (
 
 type managedChatPurgeStore interface {
 	StartManagedChatPurge(context.Context, uuid.UUID, uuid.UUID, time.Time, []byte) (*store.ManagedChatPurgeWork, error)
+	RequireManagedChatPurgeEventsPublished(context.Context, uuid.UUID) error
 	CompleteManagedChatPurge(context.Context, uuid.UUID, []byte, []byte) (*store.ManagedChatPurgeWork, error)
 }
 
@@ -80,6 +81,9 @@ func (c *ManagedChatPurgeCoordinator) PurgeManagedChatContent(ctx context.Contex
 			return nil, errors.New("completed Messaging purge lacks persisted owner evidence")
 		}
 		return managedChatPurgeResponse(work, requestHashBytes, request.GetPurgeAfter().AsTime(), 0), nil
+	}
+	if err := c.Store.RequireManagedChatPurgeEventsPublished(ctx, operationID); err != nil {
+		return nil, status.Error(codes.Unavailable, "Messaging event outbox has not confirmed the frozen purge event set")
 	}
 	refs, err := managedChatFileReferences(work)
 	if err != nil {

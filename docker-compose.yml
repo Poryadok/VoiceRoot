@@ -1093,6 +1093,7 @@ services:
       GAME_INTEGRATION_CONSENT_URL: http://gameintegration:8080
       GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64:-cmVhbHRpbWUtd29ya2xvYWQta2V5LTEyMzQ1Njc4OTA=}
       REALTIME_CHAT_GRPC_ADDR: chat:9090
+      REALTIME_MESSAGING_GRPC_ADDR: messaging:9090
       REALTIME_USER_GRPC_ADDR: user:9090
       REALTIME_SOCIAL_GRPC_ADDR: social:9090
     depends_on:
@@ -1105,6 +1106,8 @@ services:
       auth:
         condition: service_healthy
       chat:
+        condition: service_healthy
+      messaging:
         condition: service_healthy
       user:
         condition: service_healthy

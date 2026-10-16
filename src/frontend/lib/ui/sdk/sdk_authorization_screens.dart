@@ -74,16 +74,30 @@ class _SdkAuthorizationConsentScreenState
   }
 
   void _showError(Object error) {
+    final l10n = AppLocalizations.of(context)!;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           error is SdkAuthorizationException
-              ? error.message
-              : 'Authorization failed',
+              ? _authorizationErrorMessage(l10n, error)
+              : l10n.commonActionFailed,
         ),
       ),
     );
   }
+
+  String _authorizationErrorMessage(
+    AppLocalizations l10n,
+    SdkAuthorizationException error,
+  ) => switch (error.presentation) {
+    SdkAuthorizationErrorPresentation.temporary =>
+      l10n.sdkAuthorizationTemporaryFailure,
+    SdkAuthorizationErrorPresentation.authorizationDenied =>
+      l10n.sdkAuthorizationDenied,
+    SdkAuthorizationErrorPresentation.invalidResponse =>
+      l10n.sdkAuthorizationInvalidResponse,
+    null => l10n.commonActionFailed,
+  };
 
   @override
   Widget build(BuildContext context) {

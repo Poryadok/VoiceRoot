@@ -57,7 +57,9 @@ void main() {
     );
   }
 
-  testWidgets('DM chat info shows E2E toggle for direct messages', (tester) async {
+  testWidgets('DM chat info shows E2E toggle for direct messages', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       dmInfoTestApp(
         client: MockClient((req) async {
@@ -84,7 +86,9 @@ void main() {
     expect(find.textContaining('encryption', findRichText: true), findsWidgets);
   });
 
-  testWidgets('tapping E2E toggle opens enable confirmation dialog', (tester) async {
+  testWidgets('tapping E2E toggle opens enable confirmation dialog', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       dmInfoTestApp(
         client: MockClient((req) async {
@@ -107,7 +111,10 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(ChatInfoPanel.e2eToggleKey));
+    final e2eToggle = find.byKey(ChatInfoPanel.e2eToggleKey);
+    await tester.ensureVisible(e2eToggle);
+    await tester.pumpAndSettle();
+    await tester.tap(e2eToggle);
     await tester.pumpAndSettle();
 
     expect(find.byKey(E2eEnableConfirmDialog.dialogKey), findsOneWidget);

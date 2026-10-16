@@ -13,9 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/privacy"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/store"
-	"voice/backend/pkg/integrationtest"
 
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -56,6 +57,7 @@ func TestRespondToLfpStory_publishesJoinResponse(t *testing.T) {
 
 	st := &store.StoryStore{Pool: pool}
 	svc := grpcsvc.NewStoryGRPC(st)
+	svc.Privacy = mockStoryPrivacy{audience: privacy.EveryoneWithGuests()}
 	rec := &lfpRecordingPublisher{}
 	svc.Events = rec
 

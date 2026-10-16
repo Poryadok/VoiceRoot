@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../theme/voice_layout.dart';
+import '../../theme/voice_metrics.dart';
 import '../a11y/focus_trap.dart';
 import '../core/voice_primary_button.dart';
 import 'auth_errors.dart';
@@ -13,6 +16,7 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
   const GuestConvertSheet({super.key});
 
   static const Key modalKey = Key('guest_convert_modal');
+  static const Key cancelButtonKey = Key('guest_convert_cancel');
   static const Key emailFieldKey = Key('guest_convert_email');
   static const Key passwordFieldKey = Key('guest_convert_password');
   static const Key errorKey = Key('guest_convert_error');
@@ -25,13 +29,42 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
 
   static Future<void> show(BuildContext context) {
     final container = ProviderScope.containerOf(context, listen: false);
-    return showModalBottomSheet<void>(
+    final platform = defaultTargetPlatform;
+    final nativeMobile =
+        !kIsWeb &&
+        (platform == TargetPlatform.android || platform == TargetPlatform.iOS);
+    final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final useSheet = narrow || nativeMobile;
+    final metrics = Theme.of(context).extension<VoiceMetrics>();
+    final content = UncontrolledProviderScope(
+      container: container,
+      child: const VoiceFocusTrap(child: GuestConvertSheet()),
+    );
+
+    if (useSheet) {
+      return showModalBottomSheet<void>(
+        context: context,
+        useRootNavigator: true,
+        isScrollControlled: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(metrics?.radius['xl'] ?? 12),
+          ),
+        ),
+        builder: (_) => content,
+      );
+    }
+
+    final radius = metrics?.radius['lg'] ?? 8;
+    return showDialog<void>(
       context: context,
       useRootNavigator: true,
-      isScrollControlled: true,
-      builder: (_) => UncontrolledProviderScope(
-        container: container,
-        child: const VoiceFocusTrap(child: GuestConvertSheet()),
+      builder: (_) => Dialog(
+        constraints: const BoxConstraints(maxWidth: 420),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radius),
+        ),
+        child: content,
       ),
     );
   }
@@ -155,6 +188,9 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final horizontalPadding = narrow ? 20.0 : 24.0;
+    final topPadding = narrow ? 12.0 : 24.0;
     final pendingEmail = ref.watch(
       authControllerProvider.select(
         (state) => state.pendingGuestConversionEmail,
@@ -168,7 +204,12 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
     return SafeArea(
       key: GuestConvertSheet.modalKey,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + bottom),
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          topPadding,
+          horizontalPadding,
+          24 + bottom,
+        ),
         child: Form(
           key: _formKey,
           child: Column(
@@ -253,6 +294,15 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
                   child: Text(l10n.guestConvertResend),
                 ),
               ],
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  key: GuestConvertSheet.cancelButtonKey,
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(l10n.commonCancel),
+                ),
+              ),
             ],
           ),
         ),

@@ -45,6 +45,7 @@ type wsHub struct {
 	byProfile           map[string]map[*connReg]struct{}
 	memberInboxLister   chatMemberInboxLister
 	subscriptionChecker chatSubscriptionChecker
+	deliveryAckReader   deliveryAckMessageReader
 	dmPairByChat        map[string]dmAccountPair
 	dmChatsByPair       map[dmAccountPair]*dmPairIndexEntry
 	presenceViewer      presenceViewer

@@ -3,6 +3,31 @@ name: Staging deploy
 on:
   workflow_call:
     inputs:
+      expired_native_operation:
+        description: Exact reviewed expired native recovery operation, new closed proof and dual custody
+        required: false
+        type: string
+        default: ""
+      expired_finish_operation:
+        description: Exact applied operation, new finish-only proof without apply or migration replay
+        required: false
+        type: string
+        default: ""
+      cipher_upload_operation:
+        description: Exact reviewed awaiting-off-node operation; mutually exclusive with cold backup and rollback
+        required: false
+        type: string
+        default: ""
+      cold_backup_operation:
+        description: Exact reviewed paused cold-backup operation; mutually exclusive with rollback
+        required: false
+        type: string
+        default: ""
+      rollback_operation:
+        description: Latest successful images-only operation to roll back with a fresh cut
+        required: false
+        type: string
+        default: ""
       image_tag:
         description: Git SHA image tag
         required: true
@@ -42,6 +67,31 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      expired_native_operation:
+        description: Exact reviewed expired native recovery operation, new closed proof and dual custody
+        required: false
+        type: string
+        default: ""
+      expired_finish_operation:
+        description: Exact applied operation, new finish-only proof without apply or migration replay
+        required: false
+        type: string
+        default: ""
+      cipher_upload_operation:
+        description: Exact reviewed awaiting-off-node operation; mutually exclusive with cold backup and rollback
+        required: false
+        type: string
+        default: ""
+      cold_backup_operation:
+        description: Exact reviewed paused cold-backup operation; mutually exclusive with rollback
+        required: false
+        type: string
+        default: ""
+      rollback_operation:
+        description: Latest successful images-only operation to roll back with a fresh cut
+        required: false
+        type: string
+        default: ""
       image_tag:
         description: "Image tag (git SHA from CI; required)"
         required: true
@@ -88,12 +138,13 @@ on:
         default: false
 
       mail_only:
-        description: "Patch only Auth mail fields and restart Auth"
+        description: "Disabled: use protected full/app-only deployment with mail_only=false"
         required: false
         type: boolean
         default: false
 
 permissions:
+  actions: read
   contents: read
   packages: read
 
@@ -108,6 +159,9 @@ jobs:
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
     runs-on: [self-hosted, Linux, X64, voice-staging]
     environment: staging
+    env:
+      ROLLOUT_EXPIRED_NATIVE_OPERATION: ${{ inputs.expired_native_operation }}
+      ROLLOUT_EXPIRED_FINISH_OPERATION: ${{ inputs.expired_finish_operation }}
     steps:
       - name: Download exact staging source archive
         env:
@@ -155,8 +209,50 @@ jobs:
             echo 'STAGING_SOURCE_ARCHIVE=FAIL_COMMIT_IDENTITY'
             exit 1
           fi
-          if ! curl --fail --silent --show-error --proto '=https' \
-            --connect-timeout 5 --max-time 120 --max-filesize 104857600 \
+          # Cached bytes remain passive: fresh commit identity and the complete
+          # reconstructed Git tree below are required for every use.
+          cache_status=0
+          python3 -I -S - "$source_sha" "$tmp/source.tar.gz" <<'PY' || cache_status=$?
+          import os,pathlib,stat,sys
+          cache=pathlib.Path('/var/lib/voice-nats-preservation/installed/source-archives')
+          name=sys.argv[1]+'.tar.gz'
+          def identity(row):
+              return (row.st_dev,row.st_ino,row.st_mode,row.st_uid,row.st_gid,row.st_nlink,row.st_size,row.st_mtime_ns,row.st_ctime_ns)
+          parent=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+          fd=None
+          try:
+              for component in cache.parts[1:]:
+                  try:child=os.open(component,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+                  except FileNotFoundError:sys.exit(2)
+                  row=os.fstat(child)
+                  if row.st_uid!=0 or row.st_mode&0o022:
+                      os.close(child);raise SystemExit(1)
+                  os.close(parent);parent=child
+              try:fd=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+              except FileNotFoundError:sys.exit(2)
+              before=os.fstat(fd)
+              if (not stat.S_ISREG(before.st_mode) or before.st_uid!=0 or before.st_nlink!=1
+                  or before.st_mode&0o022 or not 1<=before.st_size<=104857600
+                  or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before)):raise SystemExit(1)
+              out=os.open(sys.argv[2],os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+              with os.fdopen(out,'wb') as output:
+                  count=0
+                  while chunk:=os.read(fd,1<<20):
+                      count+=len(chunk)
+                      if count>before.st_size:raise SystemExit(1)
+                      output.write(chunk)
+              if (count!=before.st_size or identity(os.fstat(fd))!=identity(before)
+                  or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before)):raise SystemExit(1)
+          finally:
+              if fd is not None:os.close(fd)
+              os.close(parent)
+          PY
+          if [[ "$cache_status" != 0 && "$cache_status" != 2 ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_CACHE_CUSTODY'
+            exit 1
+          fi
+          if [[ "$cache_status" == 2 ]] && ! curl --fail --silent --show-error --proto '=https' \
+            --connect-timeout 5 --max-time 600 --speed-limit 1024 --speed-time 30 --max-filesize 104857600 \
             --output "$tmp/source.tar.gz" "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/$source_sha"; then
             echo 'STAGING_SOURCE_ARCHIVE=FAIL_DOWNLOAD'
             exit 1
@@ -231,176 +327,335 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Verify every exact staging image before cluster access
+        env:
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ inputs.image_tag }}
+        run: bash scripts/staging/verify-staging-images.sh
+
       - uses: azure/setup-kubectl@v5
 
-      - name: Configure kubectl (direct or SSH tunnel)
+      - name: Acquire preserved historical target as data before opening the upload window
+        if: inputs.cipher_upload_operation != '' || inputs.cold_backup_operation != '' || inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
         env:
+          STAGING_SOURCE_SHA: 73ca52699ddf6a9182e3407d5bbdedbc29c06dee
+        shell: bash
+        # Helper execution uses the separately admitted installed root code.
+        # The existing bounded downloader supplies only guard-validated target data.
+        run: *download_staging_source
+
+      - name: Prepare cold backup and isolated proof using installed root bridge
+        id: preservation
+        env:
+          VOICE_NATS_ROLLOUT_OPERATION: ""
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          ROLLOUT_COLD_BACKUP_OPERATION: ${{ inputs.cold_backup_operation }}
+          ROLLOUT_CIPHER_UPLOAD_OPERATION: ${{ inputs.cipher_upload_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_MODE: ${{ inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ""
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
           STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
           STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
           STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
           STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
           STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
           STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
-        run: bash scripts/staging/configure-kubectl-ci.sh
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ""
+          ROLLOUT_CLAIM_RV: ""
+          ROLLOUT_ACTION: --bridge-prepare
+        run: &protected_rollout_runner |
+          set +x
+          set -euo pipefail
+          export CHANGED_SERVICES="$(printf '%s' "$ROLLOUT_CHANGED_JSON" | jq -er 'if type == "array" and all(.[]; type == "string" and test("^[a-z0-9-]+$")) then join(",") else error("invalid") end')"
+          if [[ -n "${VOICE_NATS_ROLLOUT_OPERATION:-}" ]]; then export CHANGED_SERVICES="${ROLLOUT_BOUND_CHANGED_SERVICES}"; fi
+          python3 -I -S - <<'PY'
+          import hashlib, json, os, pathlib, re, runpy, stat, sys
+          op=os.environ.get('VOICE_NATS_ROLLOUT_OPERATION','')
+          action=os.environ['ROLLOUT_ACTION']
+          bridge_action=action.startswith('--bridge-')
+          if not bridge_action and not re.fullmatch(r'[a-f0-9]{12}',op):raise SystemExit('NATS_ROLLOUT=AUTHORIZATION_REQUIRED')
+          code=pathlib.Path('/var/lib/voice-nats-preservation')/('installed' if bridge_action else 'rollout-'+op)/'code'
+          for directory in (*code.parents[::-1],code):
+              st=directory.lstat()
+              if not stat.S_ISDIR(st.st_mode) or st.st_uid!=0 or st.st_mode&0o022:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          def read(path,limit):
+              fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+              try:
+                  st=os.fstat(fd)
+                  if not stat.S_ISREG(st.st_mode) or st.st_uid!=0 or st.st_mode&0o022 or st.st_nlink!=1 or not 1<=st.st_size<=limit:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+                  raw=os.read(fd,st.st_size+1)
+                  if len(raw)!=st.st_size:raise SystemExit('NATS_ROLLOUT=CHANGED_CODE')
+                  return raw
+              finally:os.close(fd)
+          manifest=json.loads(read(code/'capture-manifest.json',65536))
+          if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          for relative,wanted in manifest.items():
+              part=pathlib.Path(relative)
+              if part.is_absolute() or '..' in part.parts or not isinstance(wanted,str) or not re.fullmatch(r'[a-f0-9]{64}',wanted):raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+              path=code/part
+              for directory in (path.parent,*path.parent.parents):
+                  st=directory.lstat()
+                  if not stat.S_ISDIR(st.st_mode) or st.st_uid!=0 or st.st_mode&0o022:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+                  if directory==code:break
+              if hashlib.sha256(read(path,16<<20)).hexdigest()!=wanted:raise SystemExit('NATS_ROLLOUT=CHANGED_CODE')
+          entry='nats-rollout-preservation/bridge_client.py' if bridge_action else 'nats-rollout-preservation/workflow_entry.py'
+          if entry not in manifest:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          if action=='--bridge-prepare':
+              prior=os.environ.get('ROLLOUT_ROLLBACK_OPERATION','')
+              cold=os.environ.get('ROLLOUT_COLD_BACKUP_OPERATION','')
+              upload=os.environ.get('ROLLOUT_CIPHER_UPLOAD_OPERATION','')
+              expired_native=os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION','')
+              expired_finish=os.environ.get('ROLLOUT_EXPIRED_FINISH_OPERATION','')
+              mode=os.environ['DEPLOY_MODE']
+              changed=set(filter(None,os.environ['CHANGED_SERVICES'].split(',')))
+              recoveries=[value for value in (prior,cold,upload,expired_native,expired_finish) if value]
+              if len(recoveries)>1:raise SystemExit('NATS_ROLLOUT=RECOVERY_INPUT_INVALID')
+              if cold or upload or expired_native or expired_finish:
+                  if ((cold or upload or expired_native or expired_finish)!='3340764a7d24' or prior or mode!='images-only' or changed!={'story'}
+                      or os.environ['VOICE_IMAGE_TAG']!=os.environ.get('GITHUB_SHA')):
+                      raise SystemExit('NATS_ROLLOUT=RECOVERY_INPUT_INVALID')
+              if mode=='app-only' and os.environ.get('ROLLOUT_NEEDS_FULL_ROLLOUT')=='false' and changed and changed<={'web','admin','developer-portal'}:mode='images-only'
+              arguments=(['prepare-expired-native',expired_native,os.environ['GITHUB_RUN_ID']] if expired_native else
+                  ['prepare-expired-finish',expired_finish,os.environ['GITHUB_RUN_ID']] if expired_finish else
+                  ['resume-cipher-upload',upload,os.environ['GITHUB_RUN_ID']] if upload else
+                  ['resume-cold-backup',cold,os.environ['GITHUB_RUN_ID']] if cold else
+                  ['prepare-rollback',prior,os.environ['GITHUB_RUN_ID']] if prior else
+                  ['prepare',mode,os.environ['CHANGED_SERVICES'],os.environ['VOICE_IMAGE_TAG'],os.environ['GITHUB_RUN_ID']])
+          elif action=='--bridge-authorize':
+              upload_nonce=os.environ.get('ROLLOUT_UPLOAD_NONCE','')
+              expired_native=os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION','')
+              expired_finish=os.environ.get('ROLLOUT_EXPIRED_FINISH_OPERATION','')
+              if expired_native or expired_finish:
+                  arguments=['authorize-expired-finish' if expired_finish else 'authorize-expired-native',op,
+                      os.environ['ROLLOUT_ORIGINAL_ARTIFACT_ID'],os.environ['ROLLOUT_OBSERVATION_ARTIFACT_ID'],upload_nonce,os.environ['GITHUB_RUN_ID']]
+              else:arguments=(['authorize-preserved-upload',op,os.environ['ROLLOUT_ARTIFACT_ID'],upload_nonce,os.environ['GITHUB_RUN_ID']]
+                  if upload_nonce else ['authorize',op,os.environ['ROLLOUT_ARTIFACT_ID']])
+          elif action=='--bridge-finish':
+              arguments=(['finish-expired-native',op,os.environ['ROLLOUT_CLAIM_RV'],os.environ['GITHUB_RUN_ID']]
+                  if os.environ.get('ROLLOUT_EXPIRED_NATIVE_OPERATION') else ['finish',op,os.environ['ROLLOUT_CLAIM_RV']])
+          elif action=='--bridge-status':arguments=['status',op]
+          elif action=='--bridge-collect':arguments=['collect-reports']
+          elif bridge_action:raise SystemExit('NATS_ROLLOUT=ACTION_INVALID')
+          else:arguments=[action]
+          sys.argv=[str(code/entry),*arguments]
+          runpy.run_path(str(code/entry),run_name='__main__')
+          PY
 
-      - name: Reject deployment during NATS root rotation
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-        run: bash scripts/staging/nats-generation.sh --check
+      - name: Upload encrypted backup to off-node GitHub custody
+        id: encrypted_backup
+        if: inputs.expired_native_operation == '' && inputs.expired_finish_operation == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.preservation.outputs.artifact_name }}
+          path: ${{ steps.preservation.outputs.cipher_path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
 
-      - name: Verify NATS ACL proof before staging mutation
-        if: inputs.deploy_mode == 'full' || inputs.deploy_mode == 'app-only'
+      - name: Upload unchanged original encrypted recovery cut
+        id: expired_original
+        if: inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.preservation.outputs.original_artifact_name }}
+          path: ${{ steps.preservation.outputs.original_cipher_path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload distinct fresh closed observation ciphertext
+        id: expired_observation
+        if: inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.preservation.outputs.observation_artifact_name }}
+          path: ${{ steps.preservation.outputs.observation_cipher_path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Verify complete off-node ciphertext readback and authorize paused apply
         env:
+          ROLLOUT_UPLOAD_NONCE: ${{ steps.preservation.outputs.upload_nonce }}
+          ROLLOUT_ORIGINAL_ARTIFACT_ID: ${{ steps.expired_original.outputs.artifact-id }}
+          ROLLOUT_OBSERVATION_ARTIFACT_ID: ${{ steps.expired_observation.outputs.artifact-id }}
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
           VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
           VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
-        run: |
-          set -euo pipefail
-          source scripts/staging/nats-generation.sh
-          nats_generation_load
-          expected="$(sha256sum deploy/nats/acl-intent.yaml | cut -d' ' -f1)"
-          test -n "${VOICE_NATS_ACL_PROOF_SHA:-}" && test "${VOICE_NATS_ACL_PROOF_SHA}" = "$expected"
-          test -n "${VOICE_NATS_ACL_PROOF_GENERATION:-}" && test "${VOICE_NATS_ACL_PROOF_GENERATION}" = "$NATS_GENERATION"
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
+          ROLLOUT_ACTION: --bridge-authorize
+        run: *protected_rollout_runner
 
-      - name: Verify staging images in GHCR
-        id: verify_image
-        run: |
-          set -eux
-          REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-          export VOICE_IMAGE_REGISTRY="${REGISTRY}"
-          export VOICE_IMAGE_TAG="${{ inputs.image_tag }}"
-          if [ -f "${GITHUB_WORKSPACE}/stack.lock.yaml" ]; then
-            export STACK_LOCK_FILE="${GITHUB_WORKSPACE}/stack.lock.yaml"
-          fi
-          bash scripts/staging/verify-staging-images.sh
-
-      - name: Preflight staging NATS storage
-        if: inputs.deploy_mode == 'full'
+      - name: Configure kubectl using protected captured code
+        if: inputs.expired_finish_operation == ''
         env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          VOICE_NATS_STORAGE_CLASS: ${{ inputs.nats_storage_class }}
-          VOICE_NATS_STORAGE_SIZE: ${{ inputs.nats_storage_size }}
-        run: |
-          set -euo pipefail
-          bash scripts/staging/preflight-nats-pvc.sh
-
-      - name: Preflight staging Auth email credential
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
-        run: bash scripts/staging/preflight-resend-key.sh
-
-      - name: Ensure MinIO credentials
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          STAGING_MINIO_ROOT_USER: ${{ secrets.STAGING_MINIO_ROOT_USER }}
-          STAGING_MINIO_ROOT_PASSWORD: ${{ secrets.STAGING_MINIO_ROOT_PASSWORD }}
-        run: bash scripts/staging/ensure-minio-credentials.sh
-
-      - name: Restore principal secrets
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          STAGING_PRINCIPAL_SECRETS_B64: ${{ secrets.STAGING_PRINCIPAL_SECRETS_B64 }}
-        run: bash scripts/staging/restore-principal-secrets.sh
-
-      - name: Restore NATS activation secrets
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          STAGING_NATS_SECRETS_B64: ${{ secrets.STAGING_NATS_SECRETS_B64 }}
-        run: bash scripts/staging/restore-nats-secrets.sh
-
-      - name: Restore active NATS generation secrets
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}
-        run: bash scripts/staging/restore-nats-generation.sh
-
-      - name: Ensure User search cursor key
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          STAGING_USER_SEARCH_CURSOR_HMAC_KEY: ${{ secrets.STAGING_USER_SEARCH_CURSOR_HMAC_KEY }}
-        run: bash scripts/staging/ensure-user-search-projection-secret.sh
-
-      - name: Apply staging manifests
-        env:
-          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
-          STAGING_STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
-          VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_DEVELOPER_PORTAL_INGRESS_HOST }}
-          VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
-          VOICE_STORAGE_INGRESS_HOST: ${{ vars.VOICE_STORAGE_INGRESS_HOST }}
-          VOICE_STORAGE_TLS_SECRET: ${{ vars.VOICE_STORAGE_TLS_SECRET }}
-          VOICE_S3_SIGNING_ENDPOINT: ${{ vars.VOICE_S3_SIGNING_ENDPOINT }}
-          VOICE_WEB_INGRESS_HOST: ${{ vars.VOICE_WEB_INGRESS_HOST }}
-          VOICE_ADMIN_INGRESS_HOST: ${{ vars.VOICE_ADMIN_INGRESS_HOST }}
-          VOICE_LIVEKIT_INGRESS_HOST: ${{ vars.VOICE_LIVEKIT_INGRESS_HOST }}
-          VOICE_GATEWAY_TLS_SECRET: ${{ vars.VOICE_GATEWAY_TLS_SECRET }}
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          VOICE_IMAGE_PULL_SECRET: ${{ vars.VOICE_IMAGE_PULL_SECRET }}
-          VOICE_APPLY_OBSERVABILITY: ${{ github.event_name != 'workflow_dispatch' && vars.VOICE_APPLY_OBSERVABILITY || 'false' }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          NOTIFICATIONS_ENABLED: ${{ vars.STAGING_ALERTMANAGER_NOTIFICATIONS_ENABLED }}
-          DEPLOY_MODE: ${{ inputs.deploy_mode }}
-          VOICE_NATS_STORAGE_CLASS: ${{ inputs.nats_storage_class }}
-          VOICE_NATS_STORAGE_SIZE: ${{ inputs.nats_storage_size }}
-          VOICE_NATS_FRESH_INSTALL: "false"
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
           VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
           VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
-          NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
-          NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
-        run: |
-          set -eux
-          source scripts/staging/load-staging-domains.sh
-          REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-          TAG="${{ steps.verify_image.outputs.deploy_tag }}"
-          if [ -z "${TAG}" ] && [ -f "${GITHUB_WORKSPACE}/stack.lock.yaml" ]; then
-            TAG="$(grep '^tag:' "${GITHUB_WORKSPACE}/stack.lock.yaml" | awk '{print $2}')"
-          fi
-          if [ -z "${TAG}" ]; then
-            TAG="${{ inputs.image_tag }}"
-          fi
-          export VOICE_IMAGE_REGISTRY="${REGISTRY}"
-          export VOICE_IMAGE_TAG="${TAG}"
-          export VOICE_K8S_NAMESPACE="${{ vars.VOICE_K8S_NAMESPACE }}"
-          export DEPLOY_MODE="${{ inputs.deploy_mode }}"
-          CHANGED_JSON='${{ inputs.changed_services }}'
-          export CHANGED_SERVICES="$(echo "${CHANGED_JSON}" | jq -r 'join(",")')"
-          # Ordered user/space tier: always for app-only/full; for images-only when user or space changed.
-          if [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" != "true" ]; then
-            if [ "${DEPLOY_MODE}" != "images-only" ]; then
-              export NEEDS_USER_SPACE_ROLLOUT=true
-            elif echo ",${CHANGED_SERVICES}," | grep -qE ',user,|,space,'; then
-              export NEEDS_USER_SPACE_ROLLOUT=true
-            fi
-          fi
-          bash scripts/staging/render-and-apply.sh
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
+          ROLLOUT_ACTION: --configure
+        run: *protected_rollout_runner
 
-      - name: Staging smoke (optional)
-        if: vars.STAGING_SMOKE_ENABLED == 'true' || inputs.run_smoke
+      - name: Verify root-established preservation authorization
+        if: inputs.expired_finish_operation == ''
         env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
-          VOICE_STORAGE_INGRESS_HOST: ${{ vars.VOICE_STORAGE_INGRESS_HOST }}
-          VOICE_S3_SIGNING_ENDPOINT: ${{ vars.VOICE_S3_SIGNING_ENDPOINT }}
-          VOICE_WEB_INGRESS_HOST: ${{ vars.VOICE_WEB_INGRESS_HOST }}
-          VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_DEVELOPER_PORTAL_INGRESS_HOST }}
-          VOICE_ADMIN_INGRESS_HOST: ${{ vars.VOICE_ADMIN_INGRESS_HOST }}
-          VOICE_LIVEKIT_INGRESS_HOST: ${{ vars.VOICE_LIVEKIT_INGRESS_HOST }}
-          STAGING_STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
-        run: |
-          set -eux
-          source scripts/staging/load-staging-domains.sh
-          export VOICE_STAGING_URL="https://${VOICE_GATEWAY_INGRESS_HOST}"
-          bash scripts/staging/smoke-staging.sh
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
+          ROLLOUT_ACTION: --preflight
+        run: *protected_rollout_runner
 
-      - name: Observability smoke (optional)
-        if: github.event_name != 'workflow_dispatch' && vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'
+      - name: Apply exact frozen target while all consumers remain paused
+        if: inputs.expired_finish_operation == ''
+        id: paused_apply
         env:
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-        run: bash scripts/staging/smoke-observability.sh
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
+          ROLLOUT_ACTION: --apply
+        run: *protected_rollout_runner
+
+      - name: Prove unchanged store and resume through installed root bridge
+        if: inputs.expired_finish_operation == ''
+        env:
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ${{ steps.paused_apply.outputs.claim_rv }}
+          ROLLOUT_ACTION: --bridge-finish
+        run: *protected_rollout_runner
+
+      - name: Record exact operation status after failure
+        if: failure() && steps.preservation.outputs.operation != ''
+        env:
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ${{ steps.paused_apply.outputs.claim_rv }}
+          ROLLOUT_ACTION: --bridge-status
+        run: *protected_rollout_runner
+
+      - name: Collect durable deployment reports without replaying requests
+        id: deployment_diagnostics
+        if: always()
+        continue-on-error: true
+        env:
+          ROLLOUT_ACTION: --bridge-collect
+          ROLLOUT_CHANGED_JSON: '[]'
+        run: *protected_rollout_runner
+
+      - name: Upload safe deployment diagnostics
+        if: always() && steps.deployment_diagnostics.outputs.report_directory != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.deployment_diagnostics.outputs.report_directory }}/*.deployment-report.json
+          if-no-files-found: warn
+          retention-days: 30
 
   nats-search-jetstream-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true && inputs.validate_app_secret_only != true && inputs.mail_only != true
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
-    timeout-minutes: 8
+    timeout-minutes: 15
     environment: staging
     steps:
       - name: Check staging runner can reach GitHub before checkout
@@ -685,27 +940,12 @@ jobs:
           bash scripts/staging/preflight-resend-key.sh
 
   mail-only:
-    if: github.event_name == 'workflow_dispatch' && inputs.mail_only == true && inputs.validate_app_secret_only != true && inputs.nats_probe_only != true
-    runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
-    environment: staging
+    if: github.event_name == 'workflow_dispatch' && inputs.mail_only == true
+    runs-on: ubuntu-latest
     steps:
-      - name: Download exact staging source archive
-        env:
-          STAGING_SOURCE_SHA: ${{ github.sha }}
+      - name: Refuse unprotected mail-only deployment
         shell: bash
-        run: *download_staging_source
-      - uses: azure/setup-kubectl@v5
-      - name: Configure kubectl for Auth-only update
-        env:
-          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
-          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
-          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
-          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
-          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
-        run: bash scripts/staging/configure-kubectl-ci.sh
-      - name: Update Auth mail fields only
-        env:
-          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
-          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
-        run: bash scripts/staging/mail-only-resend.sh
+        run: |
+          echo 'ERROR: mail_only is disabled because it bypasses rollout preservation.' >&2
+          echo 'Use the normal protected staging deployment with deploy_mode=full or app-only and mail_only=false; upload the complete staging app Secret.' >&2
+          exit 1

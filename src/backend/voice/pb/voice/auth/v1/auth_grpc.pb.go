@@ -22,6 +22,7 @@ const (
 	AuthService_IssueOwnershipTransferProof_FullMethodName          = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof"
 	AuthService_ConsumeOwnershipTransferProof_FullMethodName        = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
 	AuthService_GetOwnershipTransferReceipt_FullMethodName          = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
+	AuthService_GetVoiceSessionEpochFloor_FullMethodName            = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor"
 	AuthService_Register_FullMethodName                             = "/voice.auth.v1.AuthService/Register"
 	AuthService_Login_FullMethodName                                = "/voice.auth.v1.AuthService/Login"
 	AuthService_Logout_FullMethodName                               = "/voice.auth.v1.AuthService/Logout"
@@ -40,6 +41,7 @@ const (
 	AuthService_SetAccountStatus_FullMethodName                     = "/voice.auth.v1.AuthService/SetAccountStatus"
 	AuthService_PutE2EKeyBackup_FullMethodName                      = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
 	AuthService_GetE2EKeyBackup_FullMethodName                      = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
+	AuthService_DeleteE2EKeyBackup_FullMethodName                   = "/voice.auth.v1.AuthService/DeleteE2EKeyBackup"
 	AuthService_ResolvePhoneHashes_FullMethodName                   = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
 	AuthService_FilterDeletedAccountIDs_FullMethodName              = "/voice.auth.v1.AuthService/FilterDeletedAccountIDs"
 	AuthService_GetGuestReminder_FullMethodName                     = "/voice.auth.v1.AuthService/GetGuestReminder"
@@ -63,6 +65,8 @@ type AuthServiceClient interface {
 	ConsumeOwnershipTransferProof(ctx context.Context, in *ConsumeOwnershipTransferProofRequest, opts ...grpc.CallOption) (*ConsumeOwnershipTransferProofResponse, error)
 	// Private Space-only read of an already committed receipt; never grants or consumes.
 	GetOwnershipTransferReceipt(ctx context.Context, in *GetOwnershipTransferReceiptRequest, opts ...grpc.CallOption) (*GetOwnershipTransferReceiptResponse, error)
+	// Private Voice-only read of the effective session epoch floor for a verified media actor.
+	GetVoiceSessionEpochFloor(ctx context.Context, in *GetVoiceSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetVoiceSessionEpochFloorResponse, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
@@ -88,6 +92,7 @@ type AuthServiceClient interface {
 	// See docs/features/encryption.md — encrypted key backup (opaque blob).
 	PutE2EKeyBackup(ctx context.Context, in *PutE2EKeyBackupRequest, opts ...grpc.CallOption) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error)
+	DeleteE2EKeyBackup(ctx context.Context, in *DeleteE2EKeyBackupRequest, opts ...grpc.CallOption) (*DeleteE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error)
 	// Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
@@ -140,6 +145,16 @@ func (c *authServiceClient) GetOwnershipTransferReceipt(ctx context.Context, in 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetOwnershipTransferReceiptResponse)
 	err := c.cc.Invoke(ctx, AuthService_GetOwnershipTransferReceipt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetVoiceSessionEpochFloor(ctx context.Context, in *GetVoiceSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetVoiceSessionEpochFloorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetVoiceSessionEpochFloorResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetVoiceSessionEpochFloor_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +341,16 @@ func (c *authServiceClient) GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBa
 	return out, nil
 }
 
+func (c *authServiceClient) DeleteE2EKeyBackup(ctx context.Context, in *DeleteE2EKeyBackupRequest, opts ...grpc.CallOption) (*DeleteE2EKeyBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteE2EKeyBackupResponse)
+	err := c.cc.Invoke(ctx, AuthService_DeleteE2EKeyBackup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authServiceClient) ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResolvePhoneHashesResponse)
@@ -437,6 +462,8 @@ type AuthServiceServer interface {
 	ConsumeOwnershipTransferProof(context.Context, *ConsumeOwnershipTransferProofRequest) (*ConsumeOwnershipTransferProofResponse, error)
 	// Private Space-only read of an already committed receipt; never grants or consumes.
 	GetOwnershipTransferReceipt(context.Context, *GetOwnershipTransferReceiptRequest) (*GetOwnershipTransferReceiptResponse, error)
+	// Private Voice-only read of the effective session epoch floor for a verified media actor.
+	GetVoiceSessionEpochFloor(context.Context, *GetVoiceSessionEpochFloorRequest) (*GetVoiceSessionEpochFloorResponse, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
@@ -462,6 +489,7 @@ type AuthServiceServer interface {
 	// See docs/features/encryption.md — encrypted key backup (opaque blob).
 	PutE2EKeyBackup(context.Context, *PutE2EKeyBackupRequest) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error)
+	DeleteE2EKeyBackup(context.Context, *DeleteE2EKeyBackupRequest) (*DeleteE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error)
 	// Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
@@ -498,6 +526,9 @@ func (UnimplementedAuthServiceServer) ConsumeOwnershipTransferProof(context.Cont
 }
 func (UnimplementedAuthServiceServer) GetOwnershipTransferReceipt(context.Context, *GetOwnershipTransferReceiptRequest) (*GetOwnershipTransferReceiptResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetOwnershipTransferReceipt not implemented")
+}
+func (UnimplementedAuthServiceServer) GetVoiceSessionEpochFloor(context.Context, *GetVoiceSessionEpochFloorRequest) (*GetVoiceSessionEpochFloorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVoiceSessionEpochFloor not implemented")
 }
 func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
@@ -552,6 +583,9 @@ func (UnimplementedAuthServiceServer) PutE2EKeyBackup(context.Context, *PutE2EKe
 }
 func (UnimplementedAuthServiceServer) GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetE2EKeyBackup not implemented")
+}
+func (UnimplementedAuthServiceServer) DeleteE2EKeyBackup(context.Context, *DeleteE2EKeyBackupRequest) (*DeleteE2EKeyBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteE2EKeyBackup not implemented")
 }
 func (UnimplementedAuthServiceServer) ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolvePhoneHashes not implemented")
@@ -654,6 +688,24 @@ func _AuthService_GetOwnershipTransferReceipt_Handler(srv interface{}, ctx conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).GetOwnershipTransferReceipt(ctx, req.(*GetOwnershipTransferReceiptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetVoiceSessionEpochFloor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVoiceSessionEpochFloorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetVoiceSessionEpochFloor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetVoiceSessionEpochFloor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetVoiceSessionEpochFloor(ctx, req.(*GetVoiceSessionEpochFloorRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -982,6 +1034,24 @@ func _AuthService_GetE2EKeyBackup_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_DeleteE2EKeyBackup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteE2EKeyBackupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).DeleteE2EKeyBackup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_DeleteE2EKeyBackup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).DeleteE2EKeyBackup(ctx, req.(*DeleteE2EKeyBackupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthService_ResolvePhoneHashes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResolvePhoneHashesRequest)
 	if err := dec(in); err != nil {
@@ -1182,6 +1252,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthService_GetOwnershipTransferReceipt_Handler,
 		},
 		{
+			MethodName: "GetVoiceSessionEpochFloor",
+			Handler:    _AuthService_GetVoiceSessionEpochFloor_Handler,
+		},
+		{
 			MethodName: "Register",
 			Handler:    _AuthService_Register_Handler,
 		},
@@ -1252,6 +1326,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetE2EKeyBackup",
 			Handler:    _AuthService_GetE2EKeyBackup_Handler,
+		},
+		{
+			MethodName: "DeleteE2EKeyBackup",
+			Handler:    _AuthService_DeleteE2EKeyBackup_Handler,
 		},
 		{
 			MethodName: "ResolvePhoneHashes",

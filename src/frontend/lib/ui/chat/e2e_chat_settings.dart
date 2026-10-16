@@ -11,7 +11,9 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/e2e_providers.dart';
+import '../settings/e2e_key_backup_screen.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 
 /// Opt-in confirmation for enabling E2E in a DM (docs/features/encryption.md).
@@ -108,13 +110,10 @@ class E2eDisableConfirmDialog extends StatelessWidget {
 
 /// Minimal password set/restore UI for encrypted key backup (Auth API).
 class E2eKeyBackupSheet extends StatefulWidget {
-  const E2eKeyBackupSheet({
-    super.key,
-    required this.onSave,
-    this.onRestore,
-  });
+  const E2eKeyBackupSheet({super.key, required this.onSave, this.onRestore});
 
   static const Key sheetKey = Key('e2e_key_backup_sheet');
+  static const Key errorKey = Key('e2e_key_backup_error');
   static const Key passwordFieldKey = Key('e2e_key_backup_password');
   static const Key saveButtonKey = Key('e2e_key_backup_save');
   static const Key restoreButtonKey = Key('e2e_key_backup_restore');
@@ -130,6 +129,7 @@ class _E2eKeyBackupSheetState extends State<E2eKeyBackupSheet> {
   final _password = TextEditingController();
   final _hint = TextEditingController();
   var _busy = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -140,9 +140,25 @@ class _E2eKeyBackupSheetState extends State<E2eKeyBackupSheet> {
 
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _errorMessage = null;
+    });
     try {
       await action();
+    } catch (error) {
+      if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
+        final statusCode = error is _E2eKeyBackupActionFailure
+            ? error.statusCode
+            : null;
+        setState(
+          () => _errorMessage = commonActionErrorMessage(
+            l10n,
+            statusCode: statusCode,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -164,20 +180,35 @@ class _E2eKeyBackupSheetState extends State<E2eKeyBackupSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(l10n.e2eKeyBackupTitle, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            l10n.e2eKeyBackupTitle,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           Text(l10n.e2eKeyBackupHint),
           const SizedBox(height: 12),
+          if (_errorMessage != null) ...[
+            Text(
+              _errorMessage!,
+              key: E2eKeyBackupSheet.errorKey,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 8),
+          ],
           TextField(
             key: E2eKeyBackupSheet.passwordFieldKey,
             controller: _password,
             obscureText: true,
-            decoration: InputDecoration(labelText: l10n.e2eKeyBackupPasswordLabel),
+            decoration: InputDecoration(
+              labelText: l10n.e2eKeyBackupPasswordLabel,
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _hint,
-            decoration: InputDecoration(labelText: l10n.e2eKeyBackupPasswordHintLabel),
+            decoration: InputDecoration(
+              labelText: l10n.e2eKeyBackupPasswordHintLabel,
+            ),
           ),
           const SizedBox(height: 16),
           FilledButton(
@@ -243,10 +274,13 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
         profileId: peerId,
       );
       if (peerBundle is E2eApiFailure &&
-          (peerBundle.statusCode == 404 || peerBundle.errorCode == 'not_found')) {
+          (peerBundle.statusCode == 404 ||
+              peerBundle.errorCode == 'not_found')) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.e2ePeerMissingPreKeys)),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.e2ePeerMissingPreKeys),
+          ),
         );
         return;
       }
@@ -255,7 +289,14 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
     if (upload is E2eApiFailure) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(upload.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(
+              AppLocalizations.of(context)!,
+              statusCode: upload.statusCode,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -266,7 +307,14 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
     if (result is E2eApiFailure) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(
+              AppLocalizations.of(context)!,
+              statusCode: result.statusCode,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -276,14 +324,20 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
   Future<void> _disableE2e() async {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    final result = await ref.read(voiceE2eClientProvider).disableChatE2e(
-      authorization: auth,
-      chatId: widget.chatId,
-    );
+    final result = await ref
+        .read(voiceE2eClientProvider)
+        .disableChatE2e(authorization: auth, chatId: widget.chatId);
     if (result is E2eApiFailure) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(
+              AppLocalizations.of(context)!,
+              statusCode: result.statusCode,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -304,7 +358,9 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
             password: password,
             passwordHint: hint,
           );
-          if (result is E2eApiFailure) throw StateError(result.message);
+          if (result is E2eApiFailure) {
+            throw _E2eKeyBackupActionFailure(result.statusCode);
+          }
           if (mounted) {
             Navigator.of(context).pop();
           }
@@ -313,8 +369,12 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
           final result = await e2e.restoreKeyBackup(
             authorization: auth,
             password: password,
+            isAuthorizationCurrent: () =>
+                mounted && auth == ref.read(authorizationHeaderProvider),
           );
-          if (result is E2eApiFailure) throw StateError(result.message);
+          if (result is E2eApiFailure) {
+            throw _E2eKeyBackupActionFailure(result.statusCode);
+          }
           if (mounted) {
             Navigator.of(context).pop();
           }
@@ -336,7 +396,9 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
           key: const Key('chat_info_e2e_toggle'),
           title: Text(l10n.e2eChatInfoSwitchLabel),
           subtitle: Text(
-            enabled ? l10n.e2eEnableBody.split('\n').first : l10n.e2eEnableTitle,
+            enabled
+                ? l10n.e2eEnableBody.split('\n').first
+                : l10n.e2eEnableTitle,
             style: TextStyle(color: voice.textSecondary, fontSize: 12),
           ),
           value: enabled,
@@ -382,6 +444,12 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
   }
 }
 
+class _E2eKeyBackupActionFailure implements Exception {
+  const _E2eKeyBackupActionFailure(this.statusCode);
+
+  final int? statusCode;
+}
+
 class _EncryptionCodeBlock extends ConsumerStatefulWidget {
   const _EncryptionCodeBlock({required this.chatId});
 
@@ -414,11 +482,11 @@ class _EncryptionCodeBlockState extends ConsumerState<_EncryptionCodeBlock> {
       final adapter = ref.read(e2eCryptoAdapterProvider);
       final localStore = await adapter.sessionManager.storeForProfile(localId);
       final localIdentity = await localStore.getIdentityKeyPair();
-      final peerBundleResult = await ref.read(voiceE2eClientProvider).getPreKeyBundle(
-        authorization: auth,
-        profileId: peerId,
-      );
-      if (peerBundleResult is! E2eApiOk<String> || peerBundleResult.data.isEmpty) {
+      final peerBundleResult = await ref
+          .read(voiceE2eClientProvider)
+          .getPreKeyBundle(authorization: auth, profileId: peerId);
+      if (peerBundleResult is! E2eApiOk<String> ||
+          peerBundleResult.data.isEmpty) {
         if (mounted) setState(() => _loading = false);
         return;
       }
@@ -466,7 +534,10 @@ class _EncryptionCodeBlockState extends ConsumerState<_EncryptionCodeBlock> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l10n.e2eEncryptionCodeTitle, style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            l10n.e2eEncryptionCodeTitle,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
           Text(
             _code!,
@@ -488,10 +559,7 @@ class _EncryptionCodeBlockState extends ConsumerState<_EncryptionCodeBlock> {
 
 /// Undecryptable E2E history placeholder (encryption.md).
 class E2eUndecryptableMessagePlaceholder extends StatelessWidget {
-  const E2eUndecryptableMessagePlaceholder({
-    super.key,
-    this.beforeDate,
-  });
+  const E2eUndecryptableMessagePlaceholder({super.key, this.beforeDate});
 
   final DateTime? beforeDate;
 
@@ -505,12 +573,24 @@ class E2eUndecryptableMessagePlaceholder extends StatelessWidget {
             DateFormat.yMMMd().format(beforeDate!.toLocal()),
           );
 
-    return Text(
-      label,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-        fontStyle: FontStyle.italic,
-        color: voice.textSecondary,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontStyle: FontStyle.italic,
+            color: voice.textSecondary,
+          ),
+        ),
+        TextButton(
+          key: const Key('e2e_backup_restore_cta'),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const E2eKeyBackupScreen()),
+          ),
+          child: Text(l10n.e2eBackupRestoreCta),
+        ),
+      ],
     );
   }
 }

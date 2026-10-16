@@ -53,19 +53,16 @@ class LfpStoryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     l10n.storyLfpTitle,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: voice.textPrimary,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: voice.textPrimary),
                   ),
                 ),
               ],
             ),
             if (story.gameTag != null && story.gameTag!.isNotEmpty) ...[
               const SizedBox(height: 8),
-              _InfoRow(
-                label: l10n.storyLfpGame,
-                value: story.gameTag!,
-              ),
+              _InfoRow(label: l10n.storyLfpGame, value: story.gameTag!),
             ],
             if (criteria.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -86,7 +83,8 @@ class LfpStoryCard extends StatelessWidget {
                 Expanded(
                   child: FilledButton(
                     key: LfpStoryCard.joinKey,
-                    onPressed: onJoin ?? () => LfpStoryActions.join(context, story),
+                    onPressed:
+                        onJoin ?? () => LfpStoryActions.join(context, story),
                     child: Text(l10n.storyLfpJoin),
                   ),
                 ),
@@ -94,7 +92,9 @@ class LfpStoryCard extends StatelessWidget {
                 Expanded(
                   child: FilledButton.tonal(
                     key: LfpStoryCard.inviteKey,
-                    onPressed: onInvite ?? () => LfpStoryActions.invite(context, story),
+                    onPressed:
+                        onInvite ??
+                        () => LfpStoryActions.invite(context, story),
                     child: Text(l10n.storyLfpInvite),
                   ),
                 ),
@@ -102,7 +102,8 @@ class LfpStoryCard extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     key: LfpStoryCard.writeKey,
-                    onPressed: onWrite ?? () => LfpStoryActions.write(context, story),
+                    onPressed:
+                        onWrite ?? () => LfpStoryActions.write(context, story),
                     child: Text(l10n.storyLfpWrite),
                   ),
                 ),
@@ -137,7 +138,9 @@ abstract final class LfpStoryActions {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null || story.id.isEmpty) return;
 
-    final result = await ref.read(voiceStoriesClientProvider).respondToLfpStory(
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .respondToLfpStory(
           authorization: auth,
           storyId: story.id,
           responseType: 'JOIN',
@@ -154,9 +157,9 @@ abstract final class LfpStoryActions {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Join request sent')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Join request sent')));
   }
 
   static Future<void> invite(BuildContext context, StoryData story) async {
@@ -170,7 +173,9 @@ abstract final class LfpStoryActions {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null || story.id.isEmpty) return;
 
-    final result = await ref.read(voiceStoriesClientProvider).respondToLfpStory(
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .respondToLfpStory(
           authorization: auth,
           storyId: story.id,
           responseType: 'INVITE',
@@ -187,9 +192,9 @@ abstract final class LfpStoryActions {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invite sent')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Invite sent')));
   }
 
   static Future<void> write(BuildContext context, StoryData story) async {
@@ -202,14 +207,13 @@ abstract final class LfpStoryActions {
     final ref = _RefReader(container);
     final authorId = story.authorProfileId;
     if (authorId.isEmpty) return;
-    final err = await ref
-        .read(chatActionsProvider)
-        .openDmWithProfile(authorId);
+    final err = await ref.read(chatActionsProvider).openDmWithProfile(authorId);
     if (!context.mounted) return;
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err)),
-      );
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(commonActionErrorMessage(l10n))));
     }
   }
 }

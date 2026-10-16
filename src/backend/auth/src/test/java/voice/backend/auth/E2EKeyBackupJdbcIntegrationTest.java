@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import app.voice.auth.v1.AuthServiceGrpc;
+import app.voice.auth.v1.DeleteE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.PutE2EKeyBackupRequest;
 import app.voice.auth.v1.RegisterRequest;
@@ -167,6 +168,41 @@ class E2EKeyBackupJdbcIntegrationTest {
               Map.of("accountId", accountId),
               String.class);
       assertThat(storedBlob).isEqualTo(encryptedBlob);
+    } finally {
+      channel.shutdownNow();
+      server.shutdownNow();
+    }
+  }
+
+  @Test
+  void deleteE2EKeyBackupRemovesOnlyTheAuthenticatedAccountsJdbcRow() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    Server server =
+        InProcessServerBuilder.forName(serverName)
+            .directExecutor()
+            .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor()))
+            .build()
+            .start();
+    ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+    var client = AuthServiceGrpc.newBlockingStub(channel);
+    try {
+      var registered = client.register(RegisterRequest.newBuilder()
+          .setEmail("e2e-backup-jdbc-delete@example.com")
+          .setPassword("Correct horse battery staple").build()).getSession();
+      UUID accountId = UUID.fromString(registered.getAccountId());
+      var authenticated = withBearer(client, registered.getAccessToken());
+      authenticated.putE2EKeyBackup(PutE2EKeyBackupRequest.newBuilder()
+          .setEncryptedBlob("opaque-jdbc-backup").build());
+
+      authenticated.deleteE2EKeyBackup(DeleteE2EKeyBackupRequest.getDefaultInstance());
+      authenticated.deleteE2EKeyBackup(DeleteE2EKeyBackupRequest.getDefaultInstance());
+
+      Integer remaining = jdbc.queryForObject(
+          "SELECT COUNT(*)::int FROM e2e_key_backups WHERE account_id = :accountId",
+          Map.of("accountId", accountId), Integer.class);
+      assertThat(remaining).isZero();
+      assertThatThrownBy(() -> authenticated.getE2EKeyBackup(GetE2EKeyBackupRequest.getDefaultInstance()))
+          .isInstanceOf(StatusRuntimeException.class);
     } finally {
       channel.shutdownNow();
       server.shutdownNow();

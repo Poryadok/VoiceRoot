@@ -20,6 +20,14 @@
 
 ## API (gRPC)
 
+`CreateChatRequest.request_id` необязателен для совместимости существующих
+клиентов. Канонический UUID связывается с аутентифицированным
+`creator_profile_id`; в той же транзакции Chat сохраняет хэш нормализованных
+полей create и созданный `chat_id`. Тот же ключ и те же поля возвращают тот же
+чат без повторного insert или повторной публикации `chat.created`; тот же ключ
+с другими полями возвращает `AlreadyExists`. При timeout клиент сверяет исход
+повтором с тем же ключом. Запросы без ключа используют прежний путь создания.
+
 Источник истины: [protos/voice/chat/v1/chat.proto](../../protos/voice/chat/v1/chat.proto). Ниже — инвентарь с **статусом реализации** (handler в `src/backend/chat/internal/grpcsvc/`).
 
 ```protobuf
@@ -27,6 +35,7 @@ service ChatService {
   // DM
   rpc CreateDM(CreateDMRequest) returns (CreateDMResponse);       // ✓
   rpc GetDM(GetDMRequest) returns (GetDMResponse);               // ✓ find or create
+  rpc CanCreateDM(CanCreateDMRequest) returns (CanCreateDMResponse); // ✓ read-only {allowed}
 
   // Текстовые групповые чаты (group | channel)
   rpc CreateChat(CreateChatRequest) returns (CreateChatResponse); // ✓
@@ -77,6 +86,8 @@ service ChatService {
   rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse); // ✓ write + list archive inbox
 }
 ```
+
+`CanCreateDM` evaluates the authenticated caller against the selected active target, account blocks, and the target's `allow_dm` audience. A policy denial, blocked pair, guest-ineligible caller, self-target, or missing/inactive target returns `allowed=false` without revealing the specific reason or privacy settings. Missing authentication, malformed identifiers, and unavailable authorization dependencies retain typed errors. This RPC does not depend on the DM store and never creates/promotes/clears a conversation or publishes chat events. `CreateDM` repeats its existing checks and remains authoritative when opening a chat.
 
 ### BE-116 Space audit producer dependency (accepted target; not implemented)
 
@@ -272,9 +283,14 @@ CREATE TABLE quick_access_chats (
 CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, sort_order);
 ```
 
-### Deployed schema (migrations `000001`–`000011`) vs full spec
+### Deployed schema (migrations `000001`–`000021`) vs full spec
 
 **Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` (`000007`, default hardened to `false` and legacy standalone group/channel rows backfilled by `000012`); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Standalone group/channel owners and existing admins configure future guest admission through `UpdateChat`; admission is checked against User's guest marker fail-closed, and disabling it preserves current memberships. Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
+
+Migration `000021` adds `chat_create_requests`, which stores the authenticated
+creator, request UUID, canonical request hash and original create-result snapshot
+in the same transaction as a keyed `CreateChat`. Rows currently have no expiry;
+the repository has no documented retry-retention window or cleanup policy.
 
 ### Guest admission
 
@@ -542,15 +558,12 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 | Событие               | Данные                             |
 |-----------------------|------------------------------------|
 | `chat.created`        | chat_id, type, creator_id, members |
-| `chat.updated`        | chat_id, changed_fields            |
-| `chat.deleted`        | chat_id                            |
-| `chat.member_added`   | chat_id, profile_id, added_by      |
-| `chat.member_removed` | chat_id, profile_id, removed_by    |
-| `chat.member_left`    | chat_id, profile_id                |
+| `chat.updated`        | chat_id, changed_fields — поля успешного `UpdateChat` |
+| `chat.deleted`        | chat_id, space_id, deletion_operation_id, generation, manifest_id, manifest_sha256 — только Chat participant exact P3 purge после commit |
 | `chat.member_changed` | chat_id, profile_id, change (`added` \| `removed` \| `left` \| `owner_transferred` \| `inbox_bucket_changed` \| `role_changed`) |
 | `chat.dm_peer_deleted` | chat_id, recipient_profile_id; только surviving участнику, без deleted identity |
 
-**Note:** JetStream payload for `chat.member_changed` may emit `removed`, `owner_transferred`, and inbox transitions beyond minimal proto comment — consumers must tolerate unknown `change` values.
+`chat.member_changed` is the single membership-change subject; producers do not emit parallel `chat.member_added`, `chat.member_removed`, or `chat.member_left` subjects. Consumers must tolerate unknown `change` values. Caller-relative DM `DeleteChat` is a `left` membership change and is never a permanent `chat.deleted` event. P3 `chat.deleted` envelopes retain a stable event ID, occurrence time, exact Space/operation/generation/manifest binding, and immutable bytes in `chat_db` until JetStream confirms publication; retries publish those same bytes and deduplication ID.
 
 ## Зависимости
 
@@ -620,6 +633,18 @@ waits for Messaging completion and File acceptance of Chat-owned reference
 releases, then removes chats/navigation and returns an immutable completion
 receipt. Full request/receipt bytes retain 30 days from this participant's
 completion; compact terminal fence is permanent.
+
+The same successful local PURGE transaction writes one immutable
+`chat.deleted` envelope to `chat_deleted_event_outbox` for each manifest chat.
+Each envelope binds the Space, operation, purge generation and Chat manifest
+ID/hash. A deterministic event UUID is both the envelope ID and JetStream
+`Nats-Msg-Id`; replay during retained evidence never mints different bytes.
+The worker leases rows with a fresh token, publishes outside the transaction,
+and records PubAck only if that token is still current. Failures persist a
+bounded backoff and continue retrying without dropping the event. Pending rows
+are never cleaned up. A confirmed row can be removed only after the parent
+PURGE receipt's `retain_until`; the parent receipt/manifest have no cleaner in
+this change. Migration DOWN refuses while any outbox evidence remains.
 
 ### P3 terminal purge prerequisite proof contract (accepted)
 

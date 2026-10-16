@@ -125,6 +125,16 @@ public class JdbcRefreshTokenRepository implements RefreshTokenRepository {
   }
 
   @Override
+  public boolean revokeIfActive(String tokenHash, Instant now) {
+    return jdbc.update(
+        """
+        UPDATE refresh_tokens SET revoked_at = :now
+        WHERE token_hash = :tokenHash AND revoked_at IS NULL AND expires_at > :now
+        """,
+        new MapSqlParameterSource().addValue("now", Timestamp.from(now)).addValue("tokenHash", tokenHash)) == 1;
+  }
+
+  @Override
   public RefreshTokenRecord revokeById(UUID id, Instant now) {
     int updated =
         jdbc.update(

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	filev1 "voice.app/voice/file/v1"
+	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/principal"
 )
@@ -92,7 +93,11 @@ func attachmentAcquisitionRequest(raw string) (*filev1.AcquireFileReferencesRequ
 	return request, nil
 }
 
-func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row store.MessageRow) (*store.MessageRow, error) {
+func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row store.MessageRow, events []messageevents.OutboxEvent) (*store.MessageRow, error) {
+	policy, err := s.loadMutationChatPolicy(ctx, row.ChatID)
+	if err != nil {
+		return nil, err
+	}
 	request, err := attachmentAcquisitionRequest(row.AttachmentsJSON)
 	if err != nil {
 		return nil, err
@@ -101,19 +106,10 @@ func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row st
 		if len(request.References) > 0 && s.SpaceFileProducer != nil {
 			return nil, status.Error(codes.Unavailable, "attachment reference acquisition unavailable")
 		}
-		return s.Messages.InsertMessage(ctx, row)
+		saved, _, err := s.Messages.InsertMessageWithOutbox(ctx, row, policy.SpaceID, events)
+		return saved, err
 	}
-	if s.ChatThreadPolicy == nil {
-		return nil, status.Error(codes.Unavailable, "attachment scope authority unavailable")
-	}
-	policy, err := s.ChatThreadPolicy.Load(ctx, row.ChatID)
-	if err != nil {
-		return nil, err
-	}
-	if policy == nil {
-		return nil, status.Error(codes.NotFound, "chat not found")
-	}
-	saved, err := s.Messages.InsertMessageWithReferences(ctx, row, policy.SpaceID, request, s.AttachmentReferences.Acquire)
+	saved, err := s.Messages.InsertMessageWithReferencesAndOutbox(ctx, row, policy.SpaceID, request, s.AttachmentReferences.Acquire, events)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrAttachmentIntentConflict):

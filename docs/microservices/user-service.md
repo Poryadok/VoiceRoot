@@ -60,6 +60,7 @@ service UserService {
   rpc UpdatePresence(UpdatePresenceRequest) returns (Empty);
   rpc GetPresence(GetPresenceRequest) returns (PresenceStatus);
   rpc GetBulkPresence(GetBulkPresenceRequest) returns (GetBulkPresenceResponse); // map profile_id -> PresenceStatus
+  rpc GetNotificationRoutingPresence(GetNotificationRoutingPresenceRequest) returns (GetNotificationRoutingPresenceResponse); // Notification-only active-session boolean
 
   // Настройки
   rpc GetSettings(GetSettingsRequest) returns (UserSettings);
@@ -122,13 +123,16 @@ requires a later release after all writers send the field.
 ### Social privacy principal boundary
 
 The dedicated TLS listener (9091) registers only `GetPrivacySettings`,
-`GetProfile` and `ListProfileIDsForAccount`; each requires a verified
+`GetProfile`, `GetProfiles` and `ListProfileIDsForAccount`; each requires a verified
 request-bound `service:social` credential and shared Redis replay admission
 before store access. The domain entrypoint verifies the Social identity and
 exact RPC/request binding again. On ordinary 9090, a raw Social caller marker
 is rejected and Social has no ordinary path for these lookups. The protected
 `GetProfile` retains its public/viewerless projection; the protected account
 lookup returns only profile IDs for Social's account-level block cascade.
+The protected `GetProfiles` batch is limited to 500 profile IDs per request
+and returns the existing profile projection for Social's ownership resolution;
+the ordinary public listener and profile privacy projection are unchanged.
 Configuration and rotation: [DEPLOYMENT.md](../DEPLOYMENT.md#social-privacy-principals).
 
 ### File retention-owner principal boundary
@@ -141,6 +145,64 @@ the complete `USER_FILE_PRINCIPAL_TLS_CERT_FILE`,
 `USER_FILE_PRINCIPAL_TLS_KEY_FILE`, and
 `USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR` set plus the `file` HTTPS entry in
 `S2S_JWKS_URLS_JSON`; any explicit partial File configuration fails startup.
+
+### Notification routing-presence principal boundary
+
+Notification reaches `GetNotificationRoutingPresence` only on the separate
+TLS listener at `:9095`. The listener accepts the exact request-bound
+`service:notification` principal with audience `user`; the RPC request hash
+binds the full deterministic protobuf request and a unique request ID. It
+returns only `has_active_session`, never status text, last-seen, game or call
+metadata. The ordinary User gRPC service and public/viewer-filtered presence
+methods do not register this internal RPC. With no listener configuration it
+remains absent; a partial configuration fails startup. A presence/store error
+is returned to Notification rather than converted into an offline result.
+
+The boolean is true for live `online`, `idle` and `dnd` sessions. Explicit
+`offline` and `invisible` are false for routing purposes. A live snapshot with
+an unknown status is unavailable, not offline, so Notification does not send a
+push from an unrecognized state.
+
+### Messaging scheduled-delivery presence principal boundary
+
+Messaging reaches `GetScheduledMessageDispatchPresence` only through the
+separate signed-principal mTLS listener configured by
+`USER_MESSAGING_PRINCIPAL_TLS_CERT_FILE`,
+`USER_MESSAGING_PRINCIPAL_TLS_KEY_FILE`, and
+`USER_MESSAGING_PRINCIPAL_CLIENT_CA_FILE` (the trusted client certificate
+authority bundle), and `USER_MESSAGING_PRINCIPAL_REPLAY_REDIS_ADDR`; the optional listener address is
+`USER_MESSAGING_PRINCIPAL_GRPC_LISTEN` (default `:9096`). The listener admits
+only issuer `messaging`, audience `user`, and this exact method. Its signed
+request binds the claimed schedule ID and positive persisted dispatch
+generation, sender account/profile, authoritative Chat type, and closed `at`
+or `when_online` mode. A recipient profile is present only for a DM and is
+derived by Messaging from current authoritative membership. The request cannot
+be used as a general presence or profile lookup. The ordinary User listener
+does not implement this method.
+
+The User `messaging` principal runtime also fetches Messaging's principal JWKS
+over mTLS. Its outbound identity is the separate pair
+`USER_PRINCIPAL_JWKS_CLIENT_CERT_FILE` and
+`USER_PRINCIPAL_JWKS_CLIENT_KEY_FILE`; these are not the inbound User listener
+certificate/key above. The Messaging JWKS listener's client-CA configuration
+must trust this User client identity. User continues to verify the JWKS server
+using the configured `S2S_JWKS_CA_FILE` and the HTTPS endpoint hostname.
+
+User verifies that the sender profile still belongs to the bound account and
+is active, then returns its persisted `sender_is_guest` fact. For non-DM `at`
+dispatch, `user_policy_allows_dispatch` means only this sender check passed;
+Messaging remains responsible for Chat, Space, Role, moderation, and all
+other delivery guards. For a DM, both modes additionally apply current DM
+audience, guest-DM, and block policy. `at` does not consult presence or
+`show_online`; `when_online` additionally checks current `show_online`
+visibility and the peer's live status, with `recipient_online` true only for
+exact `online`. `idle`, `dnd`, offline, invisible, or hidden peers are not
+reported online. A missing/deleted peer or denied DM policy returns a false
+User policy result. An unknown live state or unavailable authority, privacy,
+block, or presence dependency returns an error so Messaging retains and
+retries the durable schedule rather than interpreting uncertainty as
+offline or eligible. Neither mode replaces Messaging's ordinary send-time
+guards.
 
 ```
 profiles

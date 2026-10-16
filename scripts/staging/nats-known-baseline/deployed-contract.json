@@ -1,0 +1,222 @@
+{
+  "consumer_pairs": [
+    [
+      "analytics_events",
+      "analytics_v2_telemetry"
+    ],
+    [
+      "bot_events",
+      "analytics_v2_bot"
+    ],
+    [
+      "chat_events",
+      "analytics_v2_chat"
+    ],
+    [
+      "chat_events",
+      "rt_realtime1_chat"
+    ],
+    [
+      "chat_events",
+      "search-indexer-chat-v1"
+    ],
+    [
+      "file_events",
+      "analytics_v2_file"
+    ],
+    [
+      "matchmaking_events",
+      "analytics_v2_mm"
+    ],
+    [
+      "matchmaking_events",
+      "notif_mm"
+    ],
+    [
+      "matchmaking_events",
+      "rt_realtime1_matchmaking"
+    ],
+    [
+      "message_events",
+      "analytics_v2_msg"
+    ],
+    [
+      "message_events",
+      "bot_message_events"
+    ],
+    [
+      "message_events",
+      "chat_message_activity"
+    ],
+    [
+      "message_events",
+      "messaging_delivery_ack"
+    ],
+    [
+      "message_events",
+      "notif_msg_v2"
+    ],
+    [
+      "message_events",
+      "rt_realtime1_msg"
+    ],
+    [
+      "message_events",
+      "search-indexer-message-v1"
+    ],
+    [
+      "moderation_events",
+      "analytics_v2_moderation"
+    ],
+    [
+      "moderation_events",
+      "notif_mod"
+    ],
+    [
+      "role_events",
+      "analytics_v2_role"
+    ],
+    [
+      "role_events",
+      "rt_realtime1_role"
+    ],
+    [
+      "social_events",
+      "analytics_v2_social"
+    ],
+    [
+      "social_events",
+      "chat_friend_accepted"
+    ],
+    [
+      "social_events",
+      "notif_social"
+    ],
+    [
+      "social_events",
+      "rt_realtime1_friend_request"
+    ],
+    [
+      "social_events",
+      "rt_realtime1_social"
+    ],
+    [
+      "story_events",
+      "analytics_v2_story"
+    ],
+    [
+      "story_events",
+      "matchmaking_story_lfp_v2"
+    ],
+    [
+      "story_events",
+      "notif_story"
+    ],
+    [
+      "subscription_events",
+      "analytics_v2_subscription"
+    ],
+    [
+      "subscription_events",
+      "auth_subscription_tier"
+    ],
+    [
+      "subscription_events",
+      "notif_subscription"
+    ],
+    [
+      "subscription_events",
+      "space_subscription_entitlement"
+    ],
+    [
+      "user_events",
+      "analytics_v2_user"
+    ],
+    [
+      "user_events",
+      "chat_account_deleted"
+    ],
+    [
+      "user_events",
+      "messaging_receipt_privacy"
+    ],
+    [
+      "user_events",
+      "rt_realtime1_user"
+    ],
+    [
+      "user_events",
+      "search-indexer-user-v1"
+    ],
+    [
+      "user_events",
+      "user-account-deletion-v1"
+    ],
+    [
+      "user_profile_projection",
+      "search-user-profile-projection-v1"
+    ],
+    [
+      "voice_events",
+      "analytics_v2_voice"
+    ],
+    [
+      "voice_events",
+      "notif_voice"
+    ],
+    [
+      "voice_events",
+      "rt_realtime1_voice"
+    ]
+  ],
+  "namespace": "voice-staging",
+  "scripts": [
+    {
+      "bytes": 6518,
+      "configMapResourceVersion": "2839952",
+      "configMapUID": "10f27ab3-4e27-4081-96d0-398db89a7650",
+      "part": "realtime",
+      "sha256": "a22a6739aa9cbcf27a2f3680e6dbe29c82ebe2769f9eb3c202e5783ac02740fa"
+    },
+    {
+      "bytes": 4572,
+      "configMapResourceVersion": "2616185",
+      "configMapUID": "c410461d-f328-4a2a-a00e-0226f4b56a91",
+      "part": "notification",
+      "sha256": "1cc7ef5cbcf5bbcbc05ce46c49a9b811dc71afbd02879988ef390897fb9da26c"
+    },
+    {
+      "bytes": 4134,
+      "configMapResourceVersion": "2616208",
+      "configMapUID": "a311baea-30f5-4e7d-a674-eae53e68a3b1",
+      "part": "search",
+      "sha256": "2ac580d2afb2f111d4fef2b97a54e96ddf4135e44ad66eb3cc000a795a34b4b3"
+    },
+    {
+      "bytes": 12088,
+      "configMapResourceVersion": "2840047",
+      "configMapUID": "8554483d-79b3-4d6a-90c8-339e262fe659",
+      "part": "analytics-chat",
+      "sha256": "556040d71737c912213dbb52658bd7bf8dd0a61e4f11c3f13505471b01dd4c60"
+    }
+  ],
+  "source_compare_sha": "9e77bfe1df5cebf0553bab28e739c831ea3cb785",
+  "source_manifest_sha256": "a60677cc3e3e5516cec40f775fa5f8a34a6f5b8c67fc0a5c8e3dee4ff0d2ae34",
+  "streams": [
+    "analytics_events",
+    "bot_events",
+    "chat_events",
+    "file_events",
+    "matchmaking_events",
+    "message_events",
+    "moderation_events",
+    "role_events",
+    "social_events",
+    "story_events",
+    "subscription_auth_quarantine",
+    "subscription_events",
+    "user_events",
+    "user_profile_projection",
+    "voice_events"
+  ]
+}

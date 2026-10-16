@@ -2,6 +2,31 @@ import 'dart:async';
 
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
+final RegExp _canonicalProfileUuid = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+);
+final RegExp _spaceMediaParticipantIdentity = RegExp(
+  r'^profile:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):media:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$',
+);
+const String _nilUuid = '00000000-0000-0000-0000-000000000000';
+
+bool _isCanonicalProfileUuid(String value) =>
+    value != _nilUuid && _canonicalProfileUuid.hasMatch(value);
+
+String? _profileIdFromLiveKitIdentity(String identity) {
+  if (_isCanonicalProfileUuid(identity)) return identity;
+
+  final match = _spaceMediaParticipantIdentity.firstMatch(identity);
+  if (match == null) return null;
+  final profileId = match.group(1)!;
+  final generationId = match.group(2)!;
+  if (!_isCanonicalProfileUuid(profileId) ||
+      !_isCanonicalProfileUuid(generationId)) {
+    return null;
+  }
+  return profileId;
+}
+
 abstract interface class VoiceLiveKitRoom {
   /// Called when the browser blocks remote audio playback (web autoplay policy).
   void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
@@ -18,6 +43,7 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> ensureAudioPlayback();
   Future<void> setMuted(bool muted);
   Future<void> setSpeakerMuted(bool muted);
+
   /// Client-side commander ducking (voice-chat.md): lower non-commander remote audio.
   Future<void> setCommanderDucking({
     required bool enabled,
@@ -25,10 +51,7 @@ abstract interface class VoiceLiveKitRoom {
     double duckedVolume,
   });
   Future<void> setVideoEnabled(bool enabled);
-  Future<void> startScreenShare({
-    double maxFrameRate,
-    bool captureSystemAudio,
-  });
+  Future<void> startScreenShare({double maxFrameRate, bool captureSystemAudio});
   Future<void> pauseScreenShare(bool paused);
   Future<void> stopScreenShare();
   bool get isScreenSharing;
@@ -197,9 +220,15 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     // livekit_client 2.8 has no RemoteAudioTrack.setVolume; approximate ducking
     // by muting non-commander remotes while broadcast is active (spec: client ducking).
     final muteOthers = enabled && duckedVolume < 1.0;
+    final commanderProfileId =
+        commanderIdentity != null && _isCanonicalProfileUuid(commanderIdentity)
+        ? commanderIdentity
+        : null;
     for (final participant in _room.remoteParticipants.values) {
-      final isCommander = commanderIdentity != null &&
-          participant.identity == commanderIdentity;
+      final isCommander =
+          commanderProfileId != null &&
+          _profileIdFromLiveKitIdentity(participant.identity) ==
+              commanderProfileId;
       final audible = !(muteOthers && !isCommander);
       for (final publication in participant.audioTrackPublications) {
         final track = publication.track;
@@ -337,10 +366,15 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
   List<livekit.RemoteVideoTrack> remoteScreenShareTracks({
     String? participantIdentity,
   }) {
+    if (participantIdentity != null &&
+        !_isCanonicalProfileUuid(participantIdentity)) {
+      return const [];
+    }
     final tracks = <livekit.RemoteVideoTrack>[];
     for (final remote in _room.remoteParticipants.values) {
       if (participantIdentity != null &&
-          remote.identity != participantIdentity) {
+          _profileIdFromLiveKitIdentity(remote.identity) !=
+              participantIdentity) {
         continue;
       }
       for (final publication in remote.videoTrackPublications) {

@@ -29,10 +29,17 @@ RENDER="${ROOT}/scripts/staging/render-and-apply.sh"
 WORKFLOW="${ROOT}/.github/workflows/staging-deploy.yml"
 grep -Fq 'nats_bootstrap_action "${clean_install_mode_value}" "${nats_service_selector}" "${fresh_install}"' "${APPLY}" || fail 'ordinary PVC deploy must use bootstrap policy'
 grep -Fq 'run_nats_bootstrap_jobs' "${APPLY}" || fail 'accepted PVC must reconcile fixed consumers'
-grep -Fq 'VOICE_NATS_FRESH_INSTALL: "false"' "${WORKFLOW}" || fail 'ordinary deploy must preserve NATS data'
-infra_line="$(grep -nF 'apply-infra.sh' "${RENDER}" | head -1 | cut -d: -f1)"
-app_line="$(grep -nF 'apply-app-manifests.sh' "${RENDER}" | tail -1 | cut -d: -f1)"
-[ -n "${infra_line}" ] && [ -n "${app_line}" ] && [ "${infra_line}" -lt "${app_line}" ] || fail 'NATS bootstrap must precede app rollout'
+grep -Fq 'VOICE_NATS_PRESERVATION_RECEIPT' "${RENDER}" || fail 'ordinary deploy must require fresh preservation authority'
+grep -Fq 'nats-rollout-preservation/runner.py' "${RENDER}" || fail 'ordinary deploy must use the paused protected runner'
+! grep -Eq 'apply-infra.sh|apply-app-manifests.sh|run_nats_bootstrap_jobs' "${RENDER}" || fail 'ordinary rollout must not replay bootstrap'
+python3 - "$WORKFLOW" <<'PY' || fail 'off-node preservation must precede paused apply and verified restart'
+from pathlib import Path
+import sys
+source=Path(sys.argv[1]).read_text()
+steps=['Prepare cold backup and isolated proof using installed root bridge','Upload encrypted backup to off-node GitHub custody','Verify complete off-node ciphertext readback and authorize paused apply','Apply exact frozen target while all consumers remain paused','Prove unchanged store and resume through installed root bridge']
+positions=[source.index('name: '+name) for name in steps]
+assert positions==sorted(positions)
+PY
 grep -Fq 'consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request' "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" || fail 'friend durable is missing from bootstrap template'
 
 PREFLIGHT="${ROOT}/deploy/templates/nats-realtime-permissions-preflight.yaml"
@@ -61,7 +68,7 @@ preflight_source="$(sed -n '/^func preflightFriendRequestConsumerWithWait(/,/^}/
 grep -Fq 'set -euo pipefail' "${APPLY}" || fail 'preflight failure must abort infra apply'
 grep -Fq 'kubectl wait --for=condition=complete job/voice-nats-realtime-permissions-preflight' "${APPLY}" || fail 'preflight must block app rollout on credential failure'
 grep -Fq 'values: [voice-auth, voice-analytics' "${ROOT}/deploy/templates/network-policy-nats-hub.yaml" || fail 'hub leaf network policy is missing'
-grep -Fq 'VOICE_NATS_REQUIRE_APP_READY=true bash "${ROOT}/scripts/staging/apply-infra.sh"' "${RENDER}" || fail 'full deploy must require accepted NATS state before app rollout'
+grep -Fq 'guard.anchor(receipt' "${ROOT}/scripts/staging/nats-rollout-preservation/runner.py" || fail 'paused apply must bind accepted marker identity'
 grep -Fq 'nats_acl_proof_valid "${acl_intent_sha}" "${VOICE_NATS_ACL_PROOF_SHA:-}"' "${APPLY}" || fail 'full deploy must reject absent or stale ACL activation proof'
 grep -Fq '"${VOICE_NATS_ACL_PROOF_GENERATION:-}" != "$NATS_GENERATION"' "${APPLY}" || fail 'full deploy must reject ACL proof for a different NATS generation'
 grep -Fq 'VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}' "${WORKFLOW}" || fail 'staging workflow must pass reviewed ACL proof'

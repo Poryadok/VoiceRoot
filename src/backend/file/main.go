@@ -145,12 +145,9 @@ func main() {
 				log.Fatalf("messaging grpc: %v", err)
 			}
 			defer func() { _ = mconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			if err := waitForGRPCReady(waitCtx, mconn); err != nil {
-				waitCancel()
-				log.Fatalf("messaging grpc dial: %v", err)
-			}
-			waitCancel()
+			// Messaging also waits for File at startup; connect without blocking our listener.
+			// The channel reconnects when Messaging becomes available.
+			mconn.Connect()
 			if chatClient != nil {
 				chatGuard = s2s.NewGRPCChatGuard(chatClient, messagingv1.NewMessagingServiceClient(mconn))
 			}

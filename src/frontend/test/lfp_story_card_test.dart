@@ -5,8 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/stories_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/ui/stories/lfp_story_card.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -23,6 +27,29 @@ void main() {
     isLookingForParty: true,
     visibility: 'everyone',
   );
+
+  Widget appWithRealChatsClient(http.Client client) {
+    return ProviderScope(
+      overrides: [
+        ...voiceAppTestOverrides(client: client),
+        voiceChatsClientProvider.overrideWithValue(
+          VoiceChatsClient(
+            gateway: GatewayHttpClient(
+              httpClient: client,
+              config: const GatewayConfig(baseUrl: 'http://localhost:9999'),
+            ),
+          ),
+        ),
+      ],
+      child: MaterialApp(
+        theme: voiceTestTheme(),
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(body: LfpStoryCard(story: story)),
+      ),
+    );
+  }
 
   testWidgets('LfpStoryCard shows join action per stories.md', (tester) async {
     await tester.pumpWidget(
@@ -104,5 +131,51 @@ void main() {
       findsOneWidget,
     );
     expect(find.text(upstreamDetail), findsNothing);
+  });
+
+  testWidgets('LFP write hides upstream DM failure details', (tester) async {
+    const upstreamDetail = 'private chat service diagnostic';
+    final client = MockClient(
+      (_) async => http.Response(
+        jsonEncode({'error_code': 'internal_error', 'message': upstreamDetail}),
+        500,
+      ),
+    );
+    await tester.pumpWidget(appWithRealChatsClient(client));
+
+    await tester.tap(find.byKey(LfpStoryCard.writeKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text(upstreamDetail), findsNothing);
+  });
+
+  testWidgets('LFP write opens the existing DM on success', (tester) async {
+    http.Request? createRequest;
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v1/chats/dm') {
+        createRequest = request;
+        return http.Response(
+          jsonEncode({
+            'chat': {'id': 'dm-created'},
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 404);
+    });
+    await tester.pumpWidget(appWithRealChatsClient(client));
+
+    await tester.tap(find.byKey(LfpStoryCard.writeKey));
+    await tester.pumpAndSettle();
+
+    expect(createRequest, isNotNull);
+    expect(createRequest!.method, 'POST');
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(LfpStoryCard)),
+    );
+    expect(container.read(selectedChatIdProvider), 'dm-created');
+    expect(find.byType(SnackBar), findsNothing);
   });
 }

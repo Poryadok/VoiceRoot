@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -86,12 +88,43 @@ func TestNotificationJetStreamRestartDrainsBacklogForEachReadyDurable(t *testing
 		voiceMemberJoinedRestartSpec(),
 		matchFoundRestartSpec(),
 		storyMentionRestartSpec(),
+		moderationSanctionRestartSpec(),
 	} {
 		spec := spec
 		t.Run(spec.name, func(t *testing.T) {
 			runNotificationConsumerRestartProof(t, fixture, spec)
 		})
 	}
+}
+
+func startNotificationAcceptanceConsumer(t *testing.T, service string, run func(context.Context) error) *notificationConsumerRun {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	readiness := newNotificationConsumerReadiness(service)
+	runner := &notificationConsumerRun{cancel: cancel, done: make(chan error, 1), exited: make(chan struct{})}
+	go func() {
+		defer close(runner.exited)
+		runner.done <- run(withNotificationConsumerReadiness(ctx, readiness, service))
+	}()
+	t.Cleanup(func() {
+		if _, joined := runner.stop(); !joined {
+			t.Errorf("%s consumer did not stop during cleanup", service)
+		}
+	})
+	require.Eventually(t, readiness.ready, 5*time.Second, 10*time.Millisecond,
+		"%s consumer binds its preprovisioned durable before events publish", service)
+	return runner
+}
+
+func waitNotificationConsumerPushBound(t *testing.T, js nats.JetStreamContext, stream, durable string, bound bool) {
+	t.Helper()
+	// A joined consumer has only initiated its asynchronous NATS drain. Observe
+	// server interest before publishing so the stopped backlog cannot race UNSUB.
+	require.Eventually(t, func() bool {
+		info, err := js.ConsumerInfo(stream, durable)
+		return err == nil && info.PushBound == bound
+	}, 5*time.Second, 10*time.Millisecond,
+		"%s/%s server push interest becomes %t before the next lifecycle phase", stream, durable, bound)
 }
 
 func newNotificationConsumerRestartFixture(t *testing.T) *notificationConsumerRestartFixture {
@@ -138,7 +171,7 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	_, err = fixture.js.AddStream(&nats.StreamConfig{Name: spec.stream, Subjects: []string{spec.filter}})
 	require.NoError(t, err)
 	durable := consumer.SharedDurable(spec.service)
-	_, err = fixture.js.AddConsumer(spec.stream, &nats.ConsumerConfig{
+	preprovisioned, err := fixture.js.AddConsumer(spec.stream, &nats.ConsumerConfig{
 		Durable: durable, FilterSubject: spec.filter, DeliverSubject: spec.deliverSubject,
 		AckPolicy: nats.AckExplicitPolicy, DeliverPolicy: nats.DeliverNewPolicy,
 	})
@@ -161,6 +194,7 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 		})
 		require.Eventually(t, readiness.ready, 5*time.Second, 10*time.Millisecond,
 			"%s consumer binds its preprovisioned durable before events publish", spec.service)
+		waitNotificationConsumerPushBound(t, fixture.js, spec.stream, durable, true)
 		return runner
 	}
 
@@ -168,15 +202,47 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	firstErr, firstJoined := first.stop()
 	require.True(t, firstJoined, "%s first consumer is joined before publishing", spec.service)
 	require.ErrorIs(t, firstErr, context.Canceled, "%s consumer exits normally on cancellation", spec.service)
+	waitNotificationConsumerPushBound(t, fixture.js, spec.stream, durable, false)
 
 	encoded, err := proto.Marshal(spec.event)
 	require.NoError(t, err)
 	publishAck, err := fixture.js.Publish(spec.subject, encoded)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	type consumerInfoObservation struct {
+		querySucceeded bool
+		numPending     int64
+		numAckPending  int64
+		errorType      string
+	}
+	var observationMu sync.Mutex
+	lastCompletedObservation := consumerInfoObservation{
+		numPending:    -1,
+		numAckPending: -1,
+		errorType:     "not observed",
+	}
+	pendingObserved := assert.Eventually(t, func() bool {
 		info, infoErr := fixture.js.ConsumerInfo(spec.stream, durable)
+		observation := consumerInfoObservation{}
+		if infoErr != nil {
+			observation.numPending, observation.numAckPending = -1, -1
+			observation.errorType = fmt.Sprintf("%T", infoErr)
+		} else {
+			observation.querySucceeded = true
+			observation.numPending = int64(info.NumPending)
+			observation.numAckPending = int64(info.NumAckPending)
+		}
+		observationMu.Lock()
+		lastCompletedObservation = observation
+		observationMu.Unlock()
 		return infoErr == nil && info.NumPending == 1 && info.NumAckPending == 0
-	}, 5*time.Second, 20*time.Millisecond, "%s event stays pending while its durable consumer is stopped", spec.service)
+	}, 5*time.Second, 20*time.Millisecond)
+	if !pendingObserved {
+		observationMu.Lock()
+		lastCompleted := lastCompletedObservation
+		observationMu.Unlock()
+		t.Fatalf("%s event stays pending while its durable consumer is stopped; last completed ConsumerInfo observation query_succeeded=%t num_pending=%d num_ack_pending=%d error_type=%q",
+			spec.service, lastCompleted.querySucceeded, lastCompleted.numPending, lastCompleted.numAckPending, lastCompleted.errorType)
+	}
 
 	second := start()
 	select {
@@ -189,7 +255,7 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	require.Eventually(t, func() bool {
 		info, infoErr := fixture.js.ConsumerInfo(spec.stream, durable)
 		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0 &&
-			info.AckFloor.Stream >= publishAck.Sequence && info.NumRedelivered == 0
+			info.AckFloor.Stream >= publishAck.Sequence && info.NumRedelivered == 0 && info.Created.Equal(preprovisioned.Created)
 	}, 5*time.Second, 20*time.Millisecond, "%s successful push is acknowledged and backlog drains", spec.service)
 	select {
 	case duplicate := <-deliveries:

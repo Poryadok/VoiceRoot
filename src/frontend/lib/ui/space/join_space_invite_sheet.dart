@@ -5,6 +5,7 @@ import '../../routing/deep_link_parser.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 
 /// Bottom sheet: paste invite code and join a space.
@@ -56,15 +57,21 @@ class _JoinSpaceInviteSheetState extends ConsumerState<JoinSpaceInviteSheet> {
 
     setState(() => _submitting = true);
     final l10n = AppLocalizations.of(context)!;
-    final joinResult = await ref.read(spaceInviteActionsProvider).joinByInvite(
-      code: code,
-    );
+    final joinResult = await ref
+        .read(spaceInviteActionsProvider)
+        .joinByInvite(code: code);
     if (!mounted) return;
     setState(() => _submitting = false);
 
     if (joinResult.error != null) {
+      final error = joinResult.error!;
+      final safeError = switch (error) {
+        'code_required' => error,
+        'not_authenticated' => commonActionErrorMessage(l10n),
+        _ => commonActionErrorMessage(l10n),
+      };
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceInviteJoinError(joinResult.error!))),
+        SnackBar(content: Text(l10n.spaceInviteJoinError(safeError))),
       );
       return;
     }
@@ -92,7 +99,10 @@ class _JoinSpaceInviteSheetState extends ConsumerState<JoinSpaceInviteSheet> {
           children: [
             Text(l10n.spaceInviteJoinTitle, style: theme.textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text(l10n.spaceInviteJoinSubtitle, style: theme.textTheme.bodyMedium),
+            Text(
+              l10n.spaceInviteJoinSubtitle,
+              style: theme.textTheme.bodyMedium,
+            ),
             const SizedBox(height: 16),
             TextField(
               key: JoinSpaceInviteSheet.codeFieldKey,

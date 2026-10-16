@@ -19,6 +19,18 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось загрузить сведения об авторизации.';
 
   @override
+  String get sdkAuthorizationTemporaryFailure =>
+      'Voice временно недоступен. Попробуйте подтвердить запрос ещё раз или начните подключение заново в игре.';
+
+  @override
+  String get sdkAuthorizationDenied =>
+      'Авторизация отклонена. Начните подключение заново в игре.';
+
+  @override
+  String get sdkAuthorizationInvalidResponse =>
+      'Ответ авторизации некорректен. Начните подключение заново в игре.';
+
+  @override
   String get sdkAuthorizationApplication => 'Приложение';
 
   @override
@@ -448,6 +460,48 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Был(а) только что';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count минуты назад',
+      many: 'Был(а) $count минут назад',
+      few: 'Был(а) $count минуты назад',
+      one: 'Был(а) $count минуту назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count часа назад',
+      many: 'Был(а) $count часов назад',
+      few: 'Был(а) $count часа назад',
+      one: 'Был(а) $count час назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count дня назад',
+      many: 'Был(а) $count дней назад',
+      few: 'Был(а) $count дня назад',
+      one: 'Был(а) $count день назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Неизвестно';
 
   @override
@@ -532,6 +586,41 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatListLoadMore => 'Загрузить ещё чаты';
+
+  @override
+  String get chatScheduleMessage => 'Запланировать сообщение';
+
+  @override
+  String get chatSendWhenOnline => 'Отправить, когда будет в сети';
+
+  @override
+  String get chatSchedulePickerTitle => 'Запланировать сообщение';
+
+  @override
+  String get chatSchedulePending => 'Ожидает отправки';
+
+  @override
+  String get chatScheduleEdit => 'Изменить запланированное сообщение';
+
+  @override
+  String get chatScheduleCancel => 'Отменить запланированное сообщение';
+
+  @override
+  String get chatScheduleSendNow => 'Отправить сейчас';
+
+  @override
+  String get chatScheduleRetry => 'Повторить';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Выберите время в пределах следующих 365 дней';
+
+  @override
+  String get chatScheduleFailure =>
+      'Не удалось выполнить запрос для запланированного сообщения. Попробуйте ещё раз.';
+
+  @override
+  String get chatScheduleLoadMore => 'Загрузить ещё запланированные сообщения';
 
   @override
   String chatListUnreadCount(int count) {
@@ -801,6 +890,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatRealtimeReconnecting => 'Переподключение…';
 
   @override
+  String get networkReconnectDetails =>
+      'Черновики остаются на устройстве. Обновления чата продолжатся после подключения.';
+
+  @override
   String get chatRealtimeOffline => 'Офлайн';
 
   @override
@@ -906,6 +999,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileMessage => 'Написать';
 
   @override
+  String get profileDetailTitle => 'Профиль';
+
+  @override
+  String get profileMoreActions => 'Ещё';
+
+  @override
+  String get profileOpenAvatar => 'Открыть аватар на весь экран';
+
+  @override
+  String get profileAvatarUnavailable => 'Аватар недоступен';
+
+  @override
+  String get profileCommonSpaces => 'Общие пространства';
+
+  @override
+  String get profileCommonSpacesLoadError =>
+      'Не удалось загрузить общие пространства';
+
+  @override
   String get profileEditTitle => 'Редактировать профиль';
 
   @override
@@ -961,6 +1073,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get createProfileTitle => 'Добавить профиль';
+
+  @override
+  String get profileCreateUsernameLabel => 'Тег профиля';
+
+  @override
+  String get profileCreateSessionChanged =>
+      'Аккаунт или активный профиль изменился. Откройте создание профиля снова.';
+
+  @override
+  String get profileCreateRecoveryFailed =>
+      'Профиль создан, но настройка не завершена. Попробуйте снова, чтобы закончить.';
 
   @override
   String get createProfileSubmit => 'Создать профиль';
@@ -1050,6 +1173,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatInboxRequests => 'Запросы';
+
+  @override
+  String get chatMessageRequestsTitle => 'Запросы сообщений';
 
   @override
   String get chatMessageRequestsEmpty => 'Нет запросов сообщений';
@@ -1145,7 +1271,52 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessagePin => 'Закрепить сообщение';
 
   @override
+  String get chatPinnedMessagesTitle => 'Закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesOpen => 'Открыть все закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesHide => 'Скрыть закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesRestore => 'Показать закреплённые сообщения';
+
+  @override
+  String get chatPinnedTypePhoto => 'Фото';
+
+  @override
+  String get chatPinnedTypeVideo => 'Видео';
+
+  @override
+  String get chatPinnedTypeFile => 'Файл';
+
+  @override
+  String get chatPinnedTypeVoice => 'Голосовое';
+
+  @override
+  String get chatPinnedTypeSticker => 'Стикер';
+
+  @override
+  String get chatPinnedTypeGif => 'GIF';
+
+  @override
+  String get chatPinnedTypeArticle => 'Статья';
+
+  @override
+  String get chatPinnedTypeLocation => 'Геопозиция';
+
+  @override
+  String get chatPinnedTypeMusic => 'Музыка';
+
+  @override
+  String get chatPinnedTypeVideoMessage => 'Видеосообщение';
+
+  @override
   String get chatMessageUnpin => 'Открепить сообщение';
+
+  @override
+  String get chatPinnedLimitReached => 'Можно закрепить не более 5 сообщений.';
 
   @override
   String chatPinnedBar(int count) {
@@ -1167,7 +1338,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatCopyAsNewTitle => 'Копировать как новое в';
 
   @override
-  String get chatForwardSearchHint => 'Поиск чатов';
+  String get chatForwardSearchHint => 'Поиск чатов и контактов';
 
   @override
   String chatForwardFrom(String sender) {
@@ -1467,6 +1638,51 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get spaceInviteExpiryLabel => 'Срок действия';
+
+  @override
+  String get spaceInviteExpiry30Minutes => '30 минут';
+
+  @override
+  String get spaceInviteExpiry1Hour => '1 час';
+
+  @override
+  String get spaceInviteExpiry6Hours => '6 часов';
+
+  @override
+  String get spaceInviteExpiry12Hours => '12 часов';
+
+  @override
+  String get spaceInviteExpiry1Day => '1 день';
+
+  @override
+  String get spaceInviteExpiry7Days => '7 дней';
+
+  @override
+  String get spaceInviteExpiryNever => 'Без срока';
+
+  @override
+  String spaceInviteExpiresAt(String date) {
+    return 'Истекает: $date';
+  }
+
+  @override
+  String get spaceInviteShowQr => 'Показать QR-код';
+
+  @override
+  String get spaceInviteQrTitle => 'QR-код приглашения';
+
+  @override
+  String get spaceInviteQrSemanticLabel => 'QR-код приглашения в спейс';
+
+  @override
+  String get spaceInviteRevokeConfirmTitle => 'Отозвать ссылку-приглашение?';
+
+  @override
+  String get spaceInviteRevokeConfirmBody =>
+      'После отзыва эту ссылку больше нельзя будет использовать.';
+
+  @override
   String get spaceInviteJoinTooltip => 'Вступить по инвайту';
 
   @override
@@ -1684,7 +1900,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatGroupMembersSubtitle =>
-      'Владелец может удалять участников. Участники могут выйти из группы.';
+      'Владелец и администраторы могут удалять участников. Участники могут выйти из группы.';
 
   @override
   String get chatGroupMembersLoadError => 'Не удалось загрузить участников';
@@ -1720,6 +1936,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatGroupRoleOwner => 'Владелец';
 
   @override
+  String get chatGroupRoleAdmin => 'Администратор';
+
+  @override
+  String get chatGroupAddMembers => 'Добавить участников';
+
+  @override
+  String get chatGroupMembersLimitReached =>
+      'Группа заполнена (500/500). Для больших сообществ создайте спейс.';
+
+  @override
   String chatGroupMemberYou(String name) {
     return '$name (вы)';
   }
@@ -1746,6 +1972,16 @@ class AppLocalizationsRu extends AppLocalizations {
       'Вы больше не будете получать сообщения из этой группы.';
 
   @override
+  String get chatChannelLeave => 'Выйти из канала';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Выйти из канала?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'Вы больше не будете получать сообщения из этого канала.';
+
+  @override
   String get chatGroupOwnerLeaveHint =>
       'Передайте владение другому участнику перед выходом.';
 
@@ -1770,6 +2006,72 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsTooltip => 'Настройки';
+
+  @override
+  String get settingsAppearance => 'Оформление';
+
+  @override
+  String get settingsChatThemes => 'Темы чатов';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Эксклюзивные темы доступны подписчикам Voice Plus.';
+
+  @override
+  String get chatThemesSelected => 'Выбрана';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Применить $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Сбросить';
+
+  @override
+  String get appIconTitle => 'Значок приложения';
+
+  @override
+  String get appIconDeviceNotice =>
+      'Этот выбор применяется только на этом устройстве.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Для применения этого значка нужна подписка Voice Plus.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Сохранённый значок вернётся, когда Voice Plus снова будет активен.';
+
+  @override
+  String get appIconUnavailable =>
+      'На этом устройстве нельзя изменить значок работающего приложения.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Не удалось проверить статус Voice Plus. Повторите попытку или выберите Voice Sky.';
+
+  @override
+  String get appIconSubscriptionStatusChecking =>
+      'Проверяем статус Voice Plus…';
+
+  @override
+  String get appIconApplyFailure =>
+      'Не удалось применить значок. Выбор сохранён; попробуйте применить его ещё раз.';
+
+  @override
+  String get appIconRetry => 'Повторить';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Применить: $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Выбран';
 
   @override
   String get settingsTheme => 'Тема';
@@ -1823,6 +2125,31 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsHelpTitle => 'Помощь';
 
   @override
+  String get settingsHelpSubtitle =>
+      'Найдите ответ или свяжитесь с командой Voice.';
+
+  @override
+  String get settingsHelpHeading => 'Чем помочь?';
+
+  @override
+  String get settingsHelpBackLabel => 'Назад';
+
+  @override
+  String get settingsHelpSearchHint => 'Например, войс-комнаты';
+
+  @override
+  String get settingsHelpDocsLabel => 'Документация проекта';
+
+  @override
+  String get settingsHelpSupportLabel => 'Связаться с поддержкой';
+
+  @override
+  String get settingsHelpNoResults => 'По запросу ничего не найдено.';
+
+  @override
+  String get settingsHelpLaunchError => 'Не удалось открыть ссылку.';
+
+  @override
   String get settingsHelpChatsTitle => 'Чаты';
 
   @override
@@ -1853,6 +2180,44 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsHelpFooter =>
       'Нужна помощь? Напишите в поддержку через настройки аккаунта.';
+
+  @override
+  String get settingsHelpShortcutsTitle => 'Сочетания клавиш';
+
+  @override
+  String get settingsHelpCloseLabel => 'Закрыть справку';
+
+  @override
+  String get settingsHelpShortcutSearch => 'Открыть поиск';
+
+  @override
+  String get settingsHelpShortcutSettings => 'Открыть настройки';
+
+  @override
+  String get settingsHelpShortcutUnreadChats =>
+      'Переключаться между непрочитанными чатами';
+
+  @override
+  String get settingsHelpShortcutFocusComposer =>
+      'Перейти к полю ввода сообщения';
+
+  @override
+  String get settingsHelpShortcutSelectMessage => 'Выбрать сообщение';
+
+  @override
+  String get settingsHelpShortcutMessageActions =>
+      'Открыть действия для выбранного сообщения';
+
+  @override
+  String get settingsHelpShortcutReply => 'Ответить на выбранное сообщение';
+
+  @override
+  String get settingsHelpShortcutReact =>
+      'Поставить реакцию на выбранное сообщение';
+
+  @override
+  String get settingsHelpShortcutPushToTalk =>
+      'Удерживать клавишу для разговора в режиме push-to-talk';
 
   @override
   String get settingsSubscription => 'Подписка';
@@ -1979,6 +2344,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get securitySettingsTitle => 'Безопасность';
 
   @override
+  String get securityChangePasswordAction => 'Изменить пароль';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Пароль изменён. Войдите с новым паролем.';
+
+  @override
   String get appealSettingsTitle => 'Апелляция на санкцию';
 
   @override
@@ -2072,6 +2444,26 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get security2faEnabled => 'Двухфакторная аутентификация включена.';
+
+  @override
+  String get security2faStatusUnavailable =>
+      'Не удалось загрузить статус двухфакторной аутентификации. Повторите попытку, прежде чем менять эту настройку.';
+
+  @override
+  String get security2faManualSecretLabel => 'Ключ настройки';
+
+  @override
+  String get security2faCopyBackupCodes => 'Скопировать резервные коды';
+
+  @override
+  String get security2faDownloadBackupCodes => 'Скачать резервные коды';
+
+  @override
+  String get security2faBackupCodesCopied => 'Резервные коды скопированы.';
+
+  @override
+  String get security2faBackupCodesDownloadFailed =>
+      'Не удалось сохранить резервные коды. Попробуйте ещё раз.';
 
   @override
   String get security2faDisableTitle =>
@@ -2576,6 +2968,15 @@ class AppLocalizationsRu extends AppLocalizations {
       'Разрешить приглашённым гостевым аккаунтам входить в этот чат.';
 
   @override
+  String get channelSettingsTitle => 'Настройки канала';
+
+  @override
+  String get channelSettingsThreads => 'Включить треды';
+
+  @override
+  String get channelSettingsMemberPosts => 'Разрешить публикации участников';
+
+  @override
   String get privacyShowOnlineIncludeGuests =>
       'Гостевые аккаунты видят мой онлайн-статус';
 
@@ -2800,7 +3201,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get matchHistoryEntry => 'Match history';
 
   @override
-  String get matchHistoryLoadError => 'Could not load match history';
+  String get matchHistoryLoadError => 'Не удалось загрузить историю матчей';
 
   @override
   String get matchHistoryEmpty => 'No match squads yet';
@@ -3201,4 +3602,63 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingWrapUpStart => 'Начать';
+
+  @override
+  String get deepLinkAccessDenied => 'Нет доступа';
+
+  @override
+  String get deepLinkResourceNotFound => 'Не найдено';
+
+  @override
+  String get deepLinkAccessDeniedDescription =>
+      'У вас нет разрешения открыть эту ссылку. Возможно, она предназначена для другого профиля.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'Ссылка недоступна или больше не действует.';
+
+  @override
+  String get deepLinkReturnHome => 'На главную';
+
+  @override
+  String get e2eBackupStatusChecking => 'Проверяем резервную копию ключей…';
+
+  @override
+  String get e2eBackupStatusPresent =>
+      'В этом аккаунте доступна зашифрованная резервная копия ключей.';
+
+  @override
+  String get e2eBackupStatusAbsent =>
+      'В этом аккаунте нет сохранённой зашифрованной копии ключей.';
+
+  @override
+  String get e2eBackupActionFailed =>
+      'Не удалось обновить зашифрованную копию ключей. Попробуйте ещё раз.';
+
+  @override
+  String get e2eBackupRestoreFailed =>
+      'Не удалось восстановить копию. Проверьте пароль и попробуйте ещё раз.';
+
+  @override
+  String get e2eBackupChange => 'Изменить пароль копии';
+
+  @override
+  String get e2eBackupDeleteTitle => 'Удалить зашифрованную копию?';
+
+  @override
+  String get e2eBackupDeleteConfirm =>
+      'Зашифрованная копия будет удалена из аккаунта. Ключи на этом устройстве останутся без изменений.';
+
+  @override
+  String get e2eBackupDelete => 'Удалить копию';
+
+  @override
+  String get e2eBackupRestoreCta => 'Восстановить зашифрованную историю';
+
+  @override
+  String get e2eKeyBackupManage => 'Управление резервной копией ключей';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Не в контактах · сообщения могут быть небезопасны';
 }

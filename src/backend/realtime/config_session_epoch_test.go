@@ -188,7 +188,7 @@ func TestRealtimeMainUsesCheckedSessionEpochBootstrapBeforeDependencies(t *testi
 		switch realtimeCallName(call.Fun) {
 		case "newRealtimeServerFromEnv":
 			bootstrapPos = call.Pos()
-		case "dialChatBootstrapLister", "dialChatMemberInboxLister", "dialPresenceUpdater", "dialFriendLister", "redis.NewClient", "nats.Connect":
+		case "dialChatBootstrapLister", "dialChatMemberInboxLister", "dialPresenceUpdater", "dialFriendLister", "dialDeliveryAckMessageReader", "redis.NewClient", "nats.Connect":
 			dependencyPositions[realtimeCallName(call.Fun)] = call.Pos()
 		}
 		return true

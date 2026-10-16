@@ -33,6 +33,7 @@ smoke_gateway:
   - TestComposeDeveloperPortal_live
   - TestComposeMultiProfileDelete_live
   - TestComposeMultiProfileDowngrade_live
+  - TestComposeMultiProfileSpaceMembership_live
 
 smoke_flutter:
   - test/gateway_dm_ws_live_integration_test.dart

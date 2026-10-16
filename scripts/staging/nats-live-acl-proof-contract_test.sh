@@ -101,8 +101,13 @@ fi
 if [[ "$1" == patch && "$2" == configmap && "$3" == voice-nats-generation ]]; then
   patch=''
   for ((i=1; i<=$#; i++)); do if [[ "${!i}" == -p ]] && ((i < $#)); then next=$((i+1)); patch="${!next}"; fi; done
+  version="$(cat "$STATE/marker-version" 2>/dev/null || printf 100)"
+  jq -e --arg rv "$version" 'any(.[]; .op == "test" and .path == "/metadata/resourceVersion" and .value == $rv)' <<<"$patch" >/dev/null || exit 2
   phase="$(jq -r '.[] | select(.op == "replace" and .path == "/data/phase") | .value' <<<"$patch")"
   printf '%s\n' "$phase" >"$STATE/marker"
+  jq -r '.[] | select(.op == "replace" and .path == "/data/generation") | .value' <<<"$patch" >"$STATE/marker-generation"
+  jq -r '.[] | select(.op == "replace" and .path == "/data/previousGeneration") | .value' <<<"$patch" >"$STATE/marker-previous"
+  printf '%s\n' "$((version+1))" >"$STATE/marker-version"
   printf 'marker phase %s\n' "$phase" >>"$RENDERED/all"
 fi
 if [[ "$1" == patch && "$2" == deployment && "$3" == voice-* ]]; then
@@ -171,7 +176,11 @@ case "$*" in
     ;;
   *'get configmap voice-nats-generation'*)
     if [[ "${MOCK_GENERATION_STATE:-absent}" == rotating || -f "$STATE/marker" ]]; then
-      printf '%s\n' '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"rotating","generation":"r20260930a","previousGeneration":"legacy"}}'
+      jq -cn --arg phase "$(cat "$STATE/marker" 2>/dev/null || printf rotating)" \
+        --arg gen "$(cat "$STATE/marker-generation" 2>/dev/null || printf r20260930a)" \
+        --arg prev "$(cat "$STATE/marker-previous" 2>/dev/null || printf legacy)" \
+        --arg rv "$(cat "$STATE/marker-version" 2>/dev/null || printf 100)" \
+        '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging",resourceVersion:$rv},data:{phase:$phase,generation:$gen,previousGeneration:$prev}}'
       exit 0
     fi
     echo 'Error from server (NotFound): configmaps "voice-nats-generation" not found' >&2; exit 1 ;;
@@ -290,7 +299,8 @@ run_rotation() {
   : >"$work/go.log"
   : >"$work/docker.log"
   : >"$work/rendered/all"
-  rm -f "$work/state/marker" "$work/state/proof-secret-names" "$work/state/proof-secret-delete-attempted" \
+  rm -f "$work/state/marker" "$work/state/marker-version" "$work/state/marker-generation" "$work/state/marker-previous" \
+    "$work/state/proof-secret-names" "$work/state/proof-secret-delete-attempted" \
     "$work/state/leftover-job-deleted" "$work/state/leftover-networkpolicy-deleted" "$work/state/leftover-secret-deleted" \
     "$work/state/user-override" "$work/state"/leaf-*-suffix
   PATH="$work/bin:$PATH" KUBECTL_LOG="$work/kubectl.log" MUTATION_LOG="$work/mutations.log" \
@@ -473,18 +483,20 @@ policy_delete_line="$(grep -nF "delete networkpolicy ${leftover_name} " "$work/k
 secret_delete_line="$(grep -nF "delete secret ${leftover_name} " "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
 marker_patch_line="$(grep -n '^patch configmap voice-nats-generation ' "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
 first_scale_line="$(grep -n '^scale deployment/' "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
-((job_delete_line < policy_delete_line && policy_delete_line < secret_delete_line && secret_delete_line < marker_patch_line && secret_delete_line < first_scale_line)) || fail 'rollback did not clean proof Job, policy, Secret before changing marker or workloads'
+((marker_patch_line < job_delete_line && job_delete_line < policy_delete_line && policy_delete_line < secret_delete_line && secret_delete_line < first_scale_line)) || fail 'rollback did not claim marker CAS before proof cleanup and clean Job/policy/Secret before workloads'
 [[ "$(grep -c '^get jobs,networkpolicies,secrets -n voice-staging -l voice.io/nats-proof=true,voice.io/nats-proof-generation=r20260930a -o json$' "$work/kubectl.log" || true)" -ge 2 ]] || fail 'rollback must re-list and prove no owned proof resource remains'
 ! grep -Eq '^delete (job|networkpolicy|secret) (voice-postgres|voice-minio|voice-app)' "$work/kubectl.log" || fail 'rollback deleted an unrelated resource'
 
 assert_rollback_stopped_before_workloads() {
-  ! grep -Eq '^patch configmap voice-nats-generation |^scale deployment/|^patch deployment ' "$work/kubectl.log" || fail 'unsafe proof cleanup reached marker or workload mutation'
+  ! grep -Eq '^scale deployment/|^patch deployment ' "$work/kubectl.log" || fail 'unsafe proof cleanup reached workload mutation'
+  [[ "$(grep -c '^patch configmap voice-nats-generation ' "$work/kubectl.log" || true)" == 1 ]] || fail 'cleanup failure must retain only the initial same-phase ownership CAS'
 }
 for bad in mismatch duplicate; do
   if MOCK_LEFTOVER_MODE="$bad" MOCK_GENERATION_STATE=rotating run_rotation --rollback; then
     fail "rollback accepted ${bad} proof resource identity"
   fi
-  assert_no_mutation
+  assert_rollback_stopped_before_workloads
+  ! grep -Eq '^delete (job|networkpolicy|secret) ' "$work/kubectl.log" || fail 'invalid proof identity reached cleanup mutation'
 done
 if MOCK_LEFTOVER_MODE=delete_fail MOCK_GENERATION_STATE=rotating run_rotation --rollback; then
   fail 'rollback accepted proof NetworkPolicy deletion failure'

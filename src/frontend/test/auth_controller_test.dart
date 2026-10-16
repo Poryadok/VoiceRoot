@@ -57,6 +57,19 @@ class _DeferredAuthSessionStorage implements AuthSessionStorage {
   }
 }
 
+class _GatedConditionalAuthSessionStorage extends InMemoryAuthSessionStorage
+    implements ConditionalAuthSessionStorage {
+  final clearStarted = Completer<void>();
+  final clearGate = Completer<void>();
+
+  @override
+  Future<bool> clearIfUnchanged(AuthSession expected) async {
+    clearStarted.complete();
+    await clearGate.future;
+    return super.clearIfUnchanged(expected);
+  }
+}
+
 class _ReadGatedAuthSessionStorage extends InMemoryAuthSessionStorage {
   _ReadGatedAuthSessionStorage(AuthSession initial) : _snapshot = initial {
     unawaited(write(initial));
@@ -250,6 +263,160 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'conditional logout leaves a replacement session installed during the network await',
+    () async {
+      final logoutRequested = Completer<void>();
+      final logoutResponse = Completer<http.Response>();
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/logout') {
+          logoutRequested.complete();
+          return logoutResponse.future;
+        }
+        return http.Response('not found', 404);
+      });
+      final storage = InMemoryAuthSessionStorage();
+      const original = AuthSession(
+        accessToken: 'original-access',
+        refreshToken: 'original-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+      const replacement = AuthSession(
+        accessToken: 'replacement-access',
+        refreshToken: 'replacement-refresh',
+        accountId: 'acc-2',
+        activeProfileId: 'prof-2',
+        expiresInSeconds: 900,
+      );
+      await storage.write(original);
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(session: original);
+
+      final pending = controller.logoutIfCurrent(original);
+      await logoutRequested.future;
+      controller.state = const AuthState(session: replacement);
+      await storage.write(replacement);
+      logoutResponse.complete(http.Response('', 204));
+
+      expect(await pending, isFalse);
+      expect(container.read(authControllerProvider).session, replacement);
+      expect(await storage.read(), replacement);
+    },
+  );
+
+  test(
+    'conditional logout leaves a replacement session installed during storage clear',
+    () async {
+      final mock = MockClient((_) async => http.Response('not found', 404));
+      final storage = _GatedConditionalAuthSessionStorage();
+      const original = AuthSession(
+        accessToken: 'original-access',
+        refreshToken: 'original-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+      const replacement = AuthSession(
+        accessToken: 'replacement-access',
+        refreshToken: 'replacement-refresh',
+        accountId: 'acc-2',
+        activeProfileId: 'prof-2',
+        expiresInSeconds: 900,
+      );
+      await storage.write(original);
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(session: original);
+
+      final pending = controller.logoutIfCurrent(
+        original,
+        serverAlreadyRevoked: true,
+      );
+      await storage.clearStarted.future;
+      controller.state = const AuthState(session: replacement);
+      await storage.write(replacement);
+      storage.clearGate.complete();
+
+      expect(await pending, isFalse);
+      expect(container.read(authControllerProvider).session, replacement);
+      expect(await storage.read(), replacement);
+    },
+  );
+
+  test(
+    'conditional logout rejects a newer login for the same account and profile',
+    () async {
+      final mock = MockClient((_) async => http.Response('not found', 404));
+      final storage = InMemoryAuthSessionStorage();
+      const original = AuthSession(
+        accessToken: 'original-access',
+        refreshToken: 'original-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+      const replacement = AuthSession(
+        accessToken: 'new-login-access',
+        refreshToken: 'new-login-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+      await storage.write(original);
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(session: original);
+      final installGeneration = controller.sessionInstallGeneration;
+
+      await controller.applySession(replacement);
+
+      expect(
+        await controller.logoutIfCurrent(
+          original,
+          serverAlreadyRevoked: true,
+          sessionInstallGeneration: installGeneration,
+        ),
+        isFalse,
+      );
+      expect(controller.state.session, replacement);
+      expect(await storage.read(), replacement);
+    },
+  );
+
+  test(
+    'conditional logout fails closed for storage without compare-and-clear',
+    () async {
+      const original = AuthSession(
+        accessToken: 'original-access',
+        refreshToken: 'original-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+      final storage = _DeferredAuthSessionStorage(persisted: original);
+      final container = buildContainer(
+        mock: MockClient((_) async => http.Response('', 204)),
+        storage: storage,
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(session: original);
+
+      expect(
+        await controller.logoutIfCurrent(original, serverAlreadyRevoked: true),
+        isFalse,
+      );
+      expect(container.read(authControllerProvider).session, original);
+      expect(await storage.read(), original);
+    },
+  );
 
   test(
     'late email verification response cannot resurrect after logout',
@@ -1861,7 +2028,7 @@ void main() {
     refreshResponse.complete(
       http.Response(jsonEncode({'session': refreshedA.toJson()}), 200),
     );
-    expect(await refresh, isTrue);
+    expect(await refresh, isFalse);
 
     final current = container.read(authControllerProvider).session;
     expect(current?.activeProfileId, sessionB.activeProfileId);
@@ -2040,7 +2207,7 @@ void main() {
       refreshResponse.complete(
         http.Response(jsonEncode({'session': refreshedA.toJson()}), 200),
       );
-      expect(await refreshing, isTrue);
+      expect(await refreshing, isFalse);
 
       final current = container.read(authControllerProvider).session;
       expect(current?.activeProfileId, sessionB.activeProfileId);
@@ -2252,7 +2419,7 @@ void main() {
       refreshResponse.complete(
         http.Response(jsonEncode(refreshedA.toJson()), 200),
       );
-      expect(await refresh, isTrue);
+      expect(await refresh, isFalse);
 
       expect(container.read(authControllerProvider).session, isNull);
       expect(container.read(authorizationHeaderProvider), isNull);

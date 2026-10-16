@@ -291,14 +291,14 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 	}
 }
 
-func TestBootstrapGrantAllowsOnlyScopedSocialStreamUpdate(t *testing.T) {
-	for _, subject := range []string{"$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.message_events", "$JS.API.STREAM.UPDATE.>"} {
+func TestBootstrapGrantAllowsOnlyFixedMigrationStreamUpdates(t *testing.T) {
+	for _, subject := range []string{"$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.chat_events", "$JS.API.STREAM.UPDATE.message_events", "$JS.API.STREAM.UPDATE.>"} {
 		acl := fixtureACL()
 		acl.Bootstrap.Publish = append(acl.Bootstrap.Publish, subject)
 		err := validateACL(acl)
-		if subject == "$JS.API.STREAM.UPDATE.social_events" {
+		if subject == "$JS.API.STREAM.UPDATE.social_events" || subject == "$JS.API.STREAM.UPDATE.chat_events" {
 			if err != nil {
-				t.Errorf("scoped social stream update rejected: %v", err)
+				t.Errorf("fixed migration stream update rejected: %v", err)
 			}
 		} else if err == nil {
 			t.Errorf("unscoped or unrelated stream update accepted: %s", subject)

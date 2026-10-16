@@ -46,10 +46,9 @@ final botBySlugProvider = FutureProvider.autoDispose
       if (auth == null) {
         throw StateError('not_authenticated');
       }
-      final result = await ref.read(voiceBotsClientProvider).getBotBySlug(
-        authorization: auth,
-        slug: slug,
-      );
+      final result = await ref
+          .read(voiceBotsClientProvider)
+          .getBotBySlug(authorization: auth, slug: slug);
       return switch (result) {
         BotsApiOk(:final data) => data,
         BotsApiFailure(:final message) => throw Exception(message),
@@ -72,7 +71,9 @@ final slashCommandsForChatProvider = FutureProvider.autoDispose
           );
       return switch (result) {
         BotsApiOk(:final data) => data,
-        BotsApiFailure(:final message) => throw BotsCommandsLoadException(message),
+        BotsApiFailure(:final message) => throw BotsCommandsLoadException(
+          message,
+        ),
       };
     });
 
@@ -92,12 +93,14 @@ final botsInChatProvider = FutureProvider.autoDispose
 
       final chatType =
           ref.watch(chatTypeForChatProvider(key.chatId)) ?? 'CHAT_TYPE_CHANNEL';
-      final result = await ref.read(voiceBotsClientProvider).listBotsInChat(
-        authorization: auth,
-        chatId: key.chatId,
-        chatType: chatType,
-        spaceId: key.spaceId,
-      );
+      final result = await ref
+          .read(voiceBotsClientProvider)
+          .listBotsInChat(
+            authorization: auth,
+            chatId: key.chatId,
+            chatType: chatType,
+            spaceId: key.spaceId,
+          );
       return switch (result) {
         BotsApiOk(:final data) => data,
         BotsApiFailure(:final message) => throw Exception(message),
@@ -109,30 +112,28 @@ final installedBotsProvider = FutureProvider.autoDispose
       final auth = ref.watch(authorizationHeaderProvider);
       if (auth == null) return const [];
 
-      final result = await ref.read(voiceBotsClientProvider).listInstalledBots(
-        authorization: auth,
-        spaceId: spaceId,
-      );
+      final result = await ref
+          .read(voiceBotsClientProvider)
+          .listInstalledBots(authorization: auth, spaceId: spaceId);
       return switch (result) {
         BotsApiOk(:final data) => data,
         BotsApiFailure(:final message) => throw Exception(message),
       };
     });
 
-final discoverableBotsProvider = FutureProvider.autoDispose<List<VoiceBotSummary>>((
-  ref,
-) async {
-  final auth = ref.watch(authorizationHeaderProvider);
-  if (auth == null) return const [];
+final discoverableBotsProvider =
+    FutureProvider.autoDispose<List<VoiceBotSummary>>((ref) async {
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) return const [];
 
-  final result = await ref.read(voiceBotsClientProvider).listBots(
-    authorization: auth,
-  );
-  return switch (result) {
-    BotsApiOk(:final data) => data,
-    BotsApiFailure(:final message) => throw Exception(message),
-  };
-});
+      final result = await ref
+          .read(voiceBotsClientProvider)
+          .listBots(authorization: auth);
+      return switch (result) {
+        BotsApiOk(:final data) => data,
+        BotsApiFailure(:final message) => throw Exception(message),
+      };
+    });
 
 class EphemeralBotMessage {
   EphemeralBotMessage({
@@ -148,7 +149,8 @@ class EphemeralBotMessage {
   final DateTime createdAt;
 }
 
-class EphemeralMessagesNotifier extends StateNotifier<List<EphemeralBotMessage>> {
+class EphemeralMessagesNotifier
+    extends StateNotifier<List<EphemeralBotMessage>> {
   EphemeralMessagesNotifier() : super(const []);
 
   void add(EphemeralBotMessage message) {
@@ -188,20 +190,25 @@ class SlashInteractionExecutor {
 
     final chatType =
         _ref.read(chatTypeForChatProvider(chatId)) ?? 'CHAT_TYPE_CHANNEL';
-    final result = await _ref.read(voiceBotsClientProvider).executeSlashInteraction(
-      authorization: auth,
-      chatId: chatId,
-      chatType: chatType,
-      botId: command.botId,
-      commandName: command.fullCommandName,
-      optionsJson: optionsJson,
-    );
-
+    final result = await _ref
+        .read(voiceBotsClientProvider)
+        .executeSlashInteraction(
+          authorization: auth,
+          chatId: chatId,
+          chatType: chatType,
+          botId: command.botId,
+          commandName: command.fullCommandName,
+          optionsJson: optionsJson,
+        );
+    if (_ref.read(authorizationHeaderProvider) != auth) {
+      return SlashInteractionFailure.requestFailed;
+    }
     return switch (result) {
       BotsApiOk(:final data) => _handleOutcome(chatId, command, data),
       BotsApiFailure(:final errorCode) when errorCode == kBotTimeoutErrorCode =>
         SlashInteractionFailure.botTimeout,
-      BotsApiFailure(:final errorCode) when errorCode == kBotUnavailableErrorCode =>
+      BotsApiFailure(:final errorCode)
+          when errorCode == kBotUnavailableErrorCode =>
         SlashInteractionFailure.botUnavailable,
       BotsApiFailure() => SlashInteractionFailure.requestFailed,
     };
@@ -219,22 +226,26 @@ class SlashInteractionExecutor {
       return SlashInteractionFailure.botUnavailable;
     }
     if (data.deferred) {
-      _ref.read(deferredBotInteractionProvider(chatId).notifier).setDeferred(
-        botName: command.botName,
-        interactionToken: data.interactionToken,
-      );
+      _ref
+          .read(deferredBotInteractionProvider(chatId).notifier)
+          .setDeferred(
+            botName: command.botName,
+            interactionToken: data.interactionToken,
+          );
       return null;
     }
     if (data.isEphemeral) {
       final content = data.content?.trim();
       if (content != null && content.isNotEmpty) {
-        _ref.read(ephemeralMessagesProvider(chatId).notifier).add(
-          EphemeralBotMessage(
-            id: data.interactionToken,
-            content: content,
-            botName: command.botName,
-          ),
-        );
+        _ref
+            .read(ephemeralMessagesProvider(chatId).notifier)
+            .add(
+              EphemeralBotMessage(
+                id: data.interactionToken,
+                content: content,
+                botName: command.botName,
+              ),
+            );
       }
       return null;
     }

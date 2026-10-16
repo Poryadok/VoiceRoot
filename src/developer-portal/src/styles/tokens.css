@@ -1,0 +1,24 @@
+/* Developer Portal's dark mode values from design/tokens/voice.tokens.json. */
+:root {
+  --color-background-canvas: #1e1e1e;
+  --color-background-surface: #2b2b2b;
+  --color-background-muted: #252525;
+  --color-background-overlay: rgba(0,0,0,0.55);
+  --color-text-primary: #f0f0f0;
+  --color-text-secondary: #a8a8a8;
+  --color-border-default: #3d3d3d;
+  --color-semantic-error: #ef9a9a;
+  --color-focus-ring: #7ec8e3;
+  --profile-accent-0: #7ec8e3;
+
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}

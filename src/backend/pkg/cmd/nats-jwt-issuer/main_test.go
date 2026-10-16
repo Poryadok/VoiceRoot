@@ -22,6 +22,19 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
+func TestBootstrapGrantAllowsOnlyFixedMigrationStreamUpdates(t *testing.T) {
+	for _, subject := range []string{"$JS.API.STREAM.UPDATE.chat_events", "$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.message_events", "$JS.API.STREAM.UPDATE.*", "$JS.API.STREAM.UPDATE.>"} {
+		g := grant{Publish: []string{subject}, NoResponse: true}
+		want := subject == "$JS.API.STREAM.UPDATE.chat_events" || subject == "$JS.API.STREAM.UPDATE.social_events"
+		if got := validGrant(g, "bootstrap", true); got != want {
+			t.Errorf("bootstrap scoped update %s: got %v want %v", subject, got, want)
+		}
+		if validGrant(g, "chat", false) {
+			t.Errorf("service mutation accepted: %s", subject)
+		}
+	}
+}
+
 func TestIssueWritesProtectedFourSecretRestoreList(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("0600 issuance requires Linux")

@@ -19,6 +19,7 @@ import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../state/trust_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_primary_button.dart';
 import '../matchmaking/game_catalog_screen.dart';
 import 'story_audience_picker.dart';
@@ -68,10 +69,9 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
 
-    final result =
-        await ref.read(voiceUserPrivacyClientProvider).getPrivacy(
-              authorization: auth,
-            );
+    final result = await ref
+        .read(voiceUserPrivacyClientProvider)
+        .getPrivacy(authorization: auth);
     if (!mounted) return;
     if (result case UserPrivacyApiOk(:final data)) {
       setState(() {
@@ -249,10 +249,13 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
       case StoriesApiOk():
         ref.invalidate(storyFeedProvider);
         Navigator.of(context).pop(true);
-      case StoriesApiFailure(:final message):
+      case StoriesApiFailure(:final statusCode):
         setState(() {
           _submitting = false;
-          _error = message;
+          _error = commonActionErrorMessage(
+            AppLocalizations.of(context)!,
+            statusCode: statusCode,
+          );
         });
     }
   }
@@ -334,18 +337,16 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
               ),
               TextButton(
                 onPressed: _submitting ? null : _pickGameTag,
-                child: Text(
-                  _gameTagLabel ?? l10n.storyCreateGameTagPick,
-                ),
+                child: Text(_gameTagLabel ?? l10n.storyCreateGameTagPick),
               ),
               if (_gameTag != null)
                 TextButton(
                   onPressed: _submitting
                       ? null
                       : () => setState(() {
-                            _gameTag = null;
-                            _gameTagLabel = null;
-                          }),
+                          _gameTag = null;
+                          _gameTagLabel = null;
+                        }),
                   child: Text(l10n.storyCreateGameTagClear),
                 ),
             ],

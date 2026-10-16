@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
@@ -228,6 +227,8 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	runCtx, runCancel := context.WithCancel(context.Background())
+	defer runCancel()
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -524,26 +525,28 @@ func main() {
 			}
 			jsPub.Logger = logger
 			msgEvents = jsPub
+			outboxDone := make(chan struct{})
+			defer func() { runCancel(); <-outboxDone }()
 			go func() {
-				if err := runDeliveryAckConsumer(context.Background(), natsURL, &store.MessagesStore{Pool: pool}, logger); err != nil {
+				defer close(outboxDone)
+				if err := (&messageevents.OutboxDispatcher{Store: &store.MessagesStore{Pool: pool}, Publisher: jsPub, Logger: logger}).Run(runCtx); err != nil && runCtx.Err() == nil {
+					logger.Error("message event outbox dispatcher exited", slog.String("error", err.Error()))
+				}
+			}()
+			go func() {
+				if err := runDeliveryAckConsumer(runCtx, natsURL, &store.MessagesStore{Pool: pool}, &store.SQLChatThreadPolicy{Pool: chatMetaPool}, logger); err != nil && runCtx.Err() == nil {
 					logger.Error("delivery ack consumer exited", slog.String("error", err.Error()))
 				}
 			}()
-			if revoker, ok := msgEvents.(interface {
-				PublishReadReceiptRevoked(context.Context, string, string, string, string) error
-			}); ok {
-				targets, ok := chatGuard.(interface {
-					DMReceiptVisibilityTargets(context.Context, uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
-				})
-				if !ok {
-					log.Fatalf("chat receipt visibility targets not configured")
-				}
-				go func() {
-					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, &store.MessagesStore{Pool: pool}, targets, revoker, logger); err != nil {
-						logger.Error("receipt privacy consumer exited", slog.String("error", err.Error()))
-					}
-				}()
+			targets, ok := chatGuard.(dmReceiptVisibilityResolver)
+			if !ok {
+				log.Fatalf("chat receipt visibility targets not configured")
 			}
+			go func() {
+				if err := runReceiptPrivacyConsumer(runCtx, natsURL, &store.MessagesStore{Pool: pool}, targets, logger); err != nil && runCtx.Err() == nil {
+					logger.Error("receipt privacy consumer exited", slog.String("error", err.Error()))
+				}
+			}()
 		}
 
 		var platformMod grpcsvc.PlatformModerationChecker

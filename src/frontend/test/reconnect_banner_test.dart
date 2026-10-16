@@ -4,6 +4,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/connectivity_providers.dart';
 
 void main() {
   group('reconnectBannerVisibleProvider', () {
@@ -22,6 +23,19 @@ void main() {
       return container;
     }
 
+    ProviderContainer newContainerWithConnectivity({
+      required bool offline,
+      RealtimeLinkStatus status = RealtimeLinkStatus.disconnected,
+    }) {
+      final container = ProviderContainer(
+        overrides: [isDeviceOfflineProvider.overrideWith((ref) => offline)],
+      );
+      addTearDown(container.dispose);
+      container.read(realtimeLinkStatusProvider.notifier).state = status;
+      container.listen(reconnectBannerVisibleProvider, (_, _) {});
+      return container;
+    }
+
     test('initial connected status is hidden without a provider error', () {
       fakeAsync((async) {
         final errors = <Object>[];
@@ -34,7 +48,10 @@ void main() {
         }, (error, _) => errors.add(error));
 
         expect(errors, isEmpty);
-        expect(container!.read(reconnectBannerVisibleProvider), isFalse);
+        expect(
+          container!.read(reconnectBannerVisibleProvider).visible,
+          isFalse,
+        );
       });
     });
 
@@ -49,15 +66,27 @@ void main() {
               RealtimeLinkStatus.reconnecting,
             );
             async.elapse(const Duration(seconds: 1));
-            expect(container!.read(reconnectBannerVisibleProvider), isFalse);
+            expect(
+              container!.read(reconnectBannerVisibleProvider).visible,
+              isFalse,
+            );
             async.elapse(const Duration(seconds: 1));
-            expect(container!.read(reconnectBannerVisibleProvider), isTrue);
+            expect(
+              container!.read(reconnectBannerVisibleProvider).visible,
+              isTrue,
+            );
             container!.read(realtimeLinkStatusProvider.notifier).state =
                 RealtimeLinkStatus.connected;
             async.elapse(const Duration(milliseconds: 999));
-            expect(container!.read(reconnectBannerVisibleProvider), isTrue);
+            expect(
+              container!.read(reconnectBannerVisibleProvider).visible,
+              isTrue,
+            );
             async.elapse(const Duration(milliseconds: 1));
-            expect(container!.read(reconnectBannerVisibleProvider), isFalse);
+            expect(
+              container!.read(reconnectBannerVisibleProvider).visible,
+              isFalse,
+            );
           }, (error, _) => errors.add(error));
 
           expect(errors, isEmpty);
@@ -82,9 +111,15 @@ void main() {
               container.read(realtimeLinkStatusProvider.notifier).state =
                   status;
               async.elapse(const Duration(seconds: 1));
-              expect(container.read(reconnectBannerVisibleProvider), isFalse);
+              expect(
+                container.read(reconnectBannerVisibleProvider).visible,
+                isFalse,
+              );
               async.elapse(const Duration(seconds: 1));
-              expect(container.read(reconnectBannerVisibleProvider), isTrue);
+              expect(
+                container.read(reconnectBannerVisibleProvider).visible,
+                isTrue,
+              );
             }, (error, _) => errors.add(error));
 
             expect(errors, isEmpty);
@@ -108,7 +143,10 @@ void main() {
               async.elapse(reconnectBannerShowDelay);
             }, (error, _) => errors.add(error));
             expect(errors, isEmpty);
-            expect(container!.read(reconnectBannerVisibleProvider), isFalse);
+            expect(
+              container!.read(reconnectBannerVisibleProvider).visible,
+              isFalse,
+            );
           }
         });
       },
@@ -121,15 +159,15 @@ void main() {
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.connected;
         async.elapse(Duration.zero);
-        expect(container.read(reconnectBannerVisibleProvider), isFalse);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isFalse);
 
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.reconnecting;
         async.elapse(const Duration(seconds: 1));
-        expect(container.read(reconnectBannerVisibleProvider), isFalse);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isFalse);
 
         async.elapse(const Duration(seconds: 1));
-        expect(container.read(reconnectBannerVisibleProvider), isTrue);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isTrue);
       });
     });
 
@@ -142,15 +180,15 @@ void main() {
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.reconnecting;
         async.elapse(reconnectBannerShowDelay);
-        expect(container.read(reconnectBannerVisibleProvider), isTrue);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isTrue);
 
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.connected;
         async.elapse(const Duration(milliseconds: 500));
-        expect(container.read(reconnectBannerVisibleProvider), isTrue);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isTrue);
 
         async.elapse(const Duration(milliseconds: 500));
-        expect(container.read(reconnectBannerVisibleProvider), isFalse);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isFalse);
       });
     });
 
@@ -167,7 +205,7 @@ void main() {
             RealtimeLinkStatus.connected;
         async.elapse(const Duration(seconds: 2));
 
-        expect(container.read(reconnectBannerVisibleProvider), isFalse);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isFalse);
       });
     });
 
@@ -178,13 +216,23 @@ void main() {
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.connecting;
         async.elapse(reconnectBannerShowDelay);
-        expect(container.read(reconnectBannerVisibleProvider), isFalse);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isFalse);
 
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.connected;
         async.elapse(Duration.zero);
-        expect(container.read(reconnectBannerVisibleProvider), isFalse);
+        expect(container.read(reconnectBannerVisibleProvider).visible, isFalse);
       });
+    });
+
+    test('shows an offline banner before the first Realtime connection', () {
+      final container = newContainerWithConnectivity(offline: true);
+
+      expect(
+        container.read(reconnectBannerVisibleProvider).visible,
+        isTrue,
+        reason: 'device connectivity is an independent offline trigger',
+      );
     });
   });
 }

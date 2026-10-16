@@ -90,6 +90,54 @@ void main() {
     });
   });
 
+  group('VoiceChatsClient.listGroupMembers', () {
+    test('requests cursor pages and preserves every role value', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        expect(req.url.path, '/api/v1/chats/chat-1/members');
+        expect(req.url.queryParameters, {
+          'cursor': 'next-page',
+          'page_size': '500',
+        });
+        expect(req.headers['Authorization'], auth);
+        return http.Response(
+          jsonEncode({
+            'member_list': {
+              'members': [
+                {'profile_id': 'profile-owner', 'role': 'owner'},
+                {'profile_id': 'profile-admin', 'role': 'admin'},
+                {'profile_id': 'profile-member', 'role': 'member'},
+                {'profile_id': 'profile-future-role', 'role': 'future-role'},
+              ],
+              'next_cursor': 'more-members',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+
+      final result = await client.listGroupMembers(
+        authorization: auth,
+        chatId: 'chat-1',
+        cursor: 'next-page',
+        pageSize: 500,
+      );
+
+      expect(result, isA<ChatsApiOk<MemberListData>>());
+      final members = (result as ChatsApiOk<MemberListData>).data;
+      expect(members.members.map((member) => member.role), [
+        kChatRoleOwner,
+        kChatRoleAdmin,
+        kChatRoleMember,
+        'future-role',
+      ]);
+      expect(members.nextCursor, 'more-members');
+    });
+  });
+
   group('VoiceChatsClient.createDm', () {
     test('POST /api/v1/chats/dm', () async {
       String? body;
@@ -118,6 +166,44 @@ void main() {
       expect(r, isA<ChatsApiOk<VoiceChat>>());
       expect((r as ChatsApiOk<VoiceChat>).data.id, 'chat-dm');
       expect(jsonDecode(body!)['other_profile_id'], 'profile-b');
+    });
+  });
+
+  group('VoiceChatsClient.canCreateDm', () {
+    test(
+      'GETs the selected target and parses only the allowed boolean',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/chats/dm-permission/target-profile');
+          expect(req.headers['Authorization'], auth);
+          return http.Response(jsonEncode({'allowed': false}), 200);
+        });
+        final client = VoiceChatsClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.canCreateDm(
+          authorization: auth,
+          otherProfileId: 'target-profile',
+        );
+        expect(result, isA<ChatsApiOk<bool>>());
+        expect((result as ChatsApiOk<bool>).data, isFalse);
+      },
+    );
+
+    test('malformed permission payload fails closed', () async {
+      final mock = MockClient((_) async => http.Response('{}', 200));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+
+      final result = await client.canCreateDm(
+        authorization: auth,
+        otherProfileId: 'target-profile',
+      );
+      expect(result, isA<ChatsApiFailure>());
+      expect((result as ChatsApiFailure).errorCode, 'invalid_response');
     });
   });
 

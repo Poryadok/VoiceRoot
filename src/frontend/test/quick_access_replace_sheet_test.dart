@@ -172,6 +172,58 @@ void main() {
     expect(find.text('Quick Access unavailable'), findsNothing);
   });
 
+  testWidgets('failed pre-picker load shows a safe error without adding', (
+    tester,
+  ) async {
+    const raw = 'private quick-access diagnostic';
+    final client = _ScriptedQuickAccessClient([const ChatsApiOk(null)]);
+    await tester.pumpWidget(
+      _actionApp(client, () async => throw Exception(raw)),
+    );
+
+    await tester.tap(find.text('replace'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text(raw), findsNothing);
+    expect(client.replacedChatIds, isEmpty);
+    expect(find.byKey(QuickAccessReplaceSheet.sheetKey), findsNothing);
+  });
+
+  testWidgets('local provider auth guard stays silent', (tester) async {
+    final client = _ScriptedQuickAccessClient([const ChatsApiOk(null)]);
+    await tester.pumpWidget(
+      _actionApp(client, () async => throw StateError('not_authenticated')),
+    );
+
+    await tester.tap(find.text('replace'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBar), findsNothing);
+    expect(client.replacedChatIds, isEmpty);
+    expect(find.byKey(QuickAccessReplaceSheet.sheetKey), findsNothing);
+  });
+
+  testWidgets('missing authorization stays silent before loading', (
+    tester,
+  ) async {
+    var loads = 0;
+    final client = _ScriptedQuickAccessClient([const ChatsApiOk(null)]);
+    await tester.pumpWidget(
+      _actionApp(client, () async {
+        loads++;
+        return QuickAccessListData(items: _slots(0));
+      }, authorization: null),
+    );
+
+    await tester.tap(find.text('replace'));
+    await tester.pumpAndSettle();
+
+    expect(loads, 0);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(client.replacedChatIds, isEmpty);
+  });
+
   testWidgets('failed replacement refreshes a stale picker', (tester) async {
     final client = _ScriptedQuickAccessClient([
       const ChatsApiFailure(
@@ -238,10 +290,11 @@ List<VoiceQuickAccessItem> _slots(int count) => List.generate(
 
 Widget _actionApp(
   VoiceChatsClient client,
-  Future<QuickAccessListData> Function() load,
-) => ProviderScope(
+  Future<QuickAccessListData> Function() load, {
+  String? authorization = 'Bearer test',
+}) => ProviderScope(
   overrides: [
-    authorizationHeaderProvider.overrideWithValue('Bearer test'),
+    authorizationHeaderProvider.overrideWithValue(authorization),
     voiceChatsClientProvider.overrideWithValue(client),
     quickAccessListProvider.overrideWith((ref) => load()),
   ],

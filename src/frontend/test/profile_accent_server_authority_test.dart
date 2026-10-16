@@ -299,6 +299,7 @@ class _AccentUsersClient extends VoiceUsersClient {
     String? bio,
     String? avatarUrl,
     String? accentColor,
+    String? locale,
   }) async {
     updates.add(accentColor ?? '');
     final targetProfile = activeProfileId;

@@ -23,9 +23,14 @@ import '../../state/bot_providers.dart';
 import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
+import 'channel_settings_panel.dart';
+import 'pinned_messages_panel.dart';
+import 'create_group_sheet.dart';
 import '../settings/notification_settings_screen.dart';
+import '../settings/chat_themes_settings_screen.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
+import '../../state/channel_settings_provider.dart';
 
 /// Chat info with shared media tabs (roles/threads (docs/features/roles.md)).
 class ChatInfoPanel extends ConsumerStatefulWidget {
@@ -44,6 +49,10 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key linksTabKey = Key('chat_info_tab_links');
   static const Key voiceTabKey = Key('chat_info_tab_voice');
   static const Key e2eVideoTileKey = Key('chat_info_e2e_video_tile');
+  static const Key pinnedMessagesKey = Key('chat_info_pinned_messages');
+  static const Key chatThemesKey = Key('chat_info_chat_themes');
+  static const Key createGroupKey = Key('chat_info_create_group');
+  static const Key leaveChannelKey = Key('chat_info_leave_channel');
 
   final String chatId;
   final String? groupName;
@@ -56,6 +65,14 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
 class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
+  (String, String?, String?)? _standalonePinsKey;
+  int _standalonePinsGeneration = 0;
+  List<VoiceMessage> _standalonePinnedMessages = const [];
+  bool _standalonePinsLoading = false;
+  bool _standalonePinsFailed = false;
+  int? _standalonePinsStatusCode;
+  bool _showChannelSettings = false;
+  bool _leavingChannel = false;
 
   @override
   void initState() {
@@ -65,6 +82,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
 
   @override
   void dispose() {
+    _standalonePinsGeneration++;
     _tabs.dispose();
     super.dispose();
   }
@@ -72,8 +90,53 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    if (_showChannelSettings) {
+      return ChannelSettingsPanel(
+        chatId: widget.chatId,
+        onClose: () => setState(() => _showChannelSettings = false),
+      );
+    }
     final voice = VoiceColors.of(context);
     final spaceId = _spaceIdForChat(ref, widget.chatId);
+    final roomProvider = chatRoomControllerProvider(widget.chatId);
+    final roomExists = ref.exists(roomProvider);
+    final auth = ref.watch(authControllerProvider);
+    final authorization = ref.watch(authorizationHeaderProvider);
+    final chatList = ref.watch(chatListControllerProvider);
+    final viewerProfileId = auth.activeProfileId;
+    final listBelongsToViewer =
+        viewerProfileId != null && chatList.profileId == viewerProfileId;
+    final chat = listBelongsToViewer
+        ? chatMetadataForId(chatList.items, widget.chatId)
+        : null;
+    final isStandaloneChannel =
+        chat?.isChannel == true && !chat!.isSpaceChannel;
+    final pinsKey = (widget.chatId, auth.activeProfileId, authorization);
+    PendingPinnedMessageJump? pendingPinnedJump;
+    final roomState = roomExists ? ref.watch(roomProvider) : null;
+    final roomBelongsToViewer =
+        viewerProfileId != null &&
+        roomState?.historyProfileId == viewerProfileId;
+    final dmPeerProfileId = widget.isGroup
+        ? null
+        : viewerProfileId == null
+        ? null
+        : resolveDmPeerForChatId(
+            chatId: widget.chatId,
+            knownPeers: const {},
+            listItems: listBelongsToViewer ? chatList.items : const [],
+            activeProfileId: viewerProfileId,
+            messages: roomBelongsToViewer ? roomState!.messages : const [],
+          );
+    final pinnedMessages = roomExists
+        ? roomState!.pinnedMessages
+        : _standaloneMessagesFor(pinsKey);
+    if (!roomExists) {
+      _ensureStandalonePinnedMessagesLoaded(
+        pinsKey,
+        authorization: authorization,
+      );
+    }
 
     final header = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -89,9 +152,161 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
           Divider(height: 1, color: voice.borderDefault),
         ],
+        if (isStandaloneChannel)
+          ListTile(
+            key: ChatInfoPanel.leaveChannelKey,
+            leading: const Icon(Icons.exit_to_app),
+            title: Text(l10n.chatChannelLeave),
+            trailing: _leavingChannel
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : null,
+            onTap: _leavingChannel ? null : _confirmLeaveChannel,
+          ),
+        if (pinnedMessages.isNotEmpty)
+          ListTile(
+            key: ChatInfoPanel.pinnedMessagesKey,
+            leading: const Icon(Icons.push_pin_outlined),
+            title: Text(l10n.chatPinnedMessagesTitle),
+            subtitle: Text(l10n.chatPinnedBar(pinnedMessages.length)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => PinnedMessagesPanel.show(
+              context,
+              chatId: widget.chatId,
+              spaceId: spaceId,
+              isGroup: widget.isGroup,
+              messages: pinnedMessages,
+              onUnpin: (messageId) => roomExists
+                  ? ref
+                        .read(roomProvider.notifier)
+                        .togglePinWithResult(messageId, currentlyPinned: true)
+                  : _unpinStandalonePinnedMessage(
+                      messageId,
+                      pinsKey,
+                      authorization: authorization,
+                    ),
+              onOpenMessage: (messageId) {
+                // A standalone Chat Info panel can be opened without mounting
+                // the room. Initialize it only when the user explicitly jumps
+                // to a pinned message.
+                if (!ref.exists(roomProvider)) ref.read(roomProvider);
+                final request = PendingPinnedMessageJump(messageId);
+                pendingPinnedJump = request;
+                ref
+                        .read(
+                          pendingPinnedMessageJumpProvider(
+                            widget.chatId,
+                          ).notifier,
+                        )
+                        .state =
+                    request;
+                return request.result;
+              },
+              onCancel: () {
+                final request = pendingPinnedJump;
+                if (request == null) return;
+                request.cancelled = true;
+                request.complete(false);
+              },
+              onMessageOpened: () {
+                ref.read(shellNavigationProvider).closeSidePanel();
+                if (context.mounted) Navigator.of(context).maybePop();
+              },
+            ),
+          ),
+        ListTile(
+          leading: const Icon(Icons.search),
+          title: Text(l10n.inChatSearchOpen),
+          onTap: () {
+            ref
+                .read(chatInfoSearchRequestProvider.notifier)
+                .state = ChatInfoSearchRequest(
+              chatId: widget.chatId,
+              viewerProfileId: ref.read(authControllerProvider).activeProfileId,
+            );
+            ref.read(shellNavigationProvider).closeSidePanel();
+            if (context.mounted) Navigator.of(context).maybePop();
+          },
+        ),
+        if (dmPeerProfileId != null && dmPeerProfileId.isNotEmpty)
+          ListTile(
+            key: ChatInfoPanel.createGroupKey,
+            leading: const Icon(Icons.group_add_outlined),
+            title: Text(l10n.chatCreateGroupTitle),
+            onTap: () => CreateGroupSheet.show(
+              context,
+              requiredMemberProfileId: dmPeerProfileId,
+              expectedViewerProfileId: viewerProfileId!,
+            ),
+          ),
+        if ((roomExists &&
+                roomState!.pinnedMessagesStatus ==
+                    PinnedMessagesLoadStatus.loading &&
+                pinnedMessages.isEmpty) ||
+            (!roomExists &&
+                _standalonePinsLoading &&
+                _standalonePinsKey == pinsKey))
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: VoiceListSkeleton(rowCount: 1),
+          ),
+        if ((roomExists &&
+                roomState!.pinnedMessagesStatus ==
+                    PinnedMessagesLoadStatus.failed) ||
+            (!roomExists &&
+                _standalonePinsFailed &&
+                _standalonePinsKey == pinsKey))
+          ListTile(
+            key: const Key('chat_info_pins_error'),
+            leading: const Icon(Icons.cloud_off_outlined),
+            title: Text(l10n.chatPinnedMessagesTitle),
+            subtitle: Text(
+              commonActionErrorMessage(
+                l10n,
+                statusCode: roomExists
+                    ? roomState!.pinnedMessagesErrorStatusCode
+                    : _standalonePinsStatusCode,
+              ),
+            ),
+            trailing: IconButton(
+              tooltip: l10n.commonRetry,
+              onPressed: roomExists
+                  ? () => ref.read(roomProvider.notifier).retryPinnedMessages()
+                  : () => _loadStandalonePinnedMessages(
+                      pinsKey,
+                      authorization: authorization,
+                    ),
+              icon: const Icon(Icons.refresh),
+            ),
+          ),
         StandaloneChatGuestSettingsSection(
           key: ValueKey(widget.chatId),
           chatId: widget.chatId,
+        ),
+        StandaloneChannelSettingsEntry(
+          chatId: widget.chatId,
+          onOpen: () {
+            if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+              unawaited(
+                ChannelSettingsPanel.show(context, chatId: widget.chatId),
+              );
+            } else {
+              setState(() => _showChannelSettings = true);
+            }
+          },
+        ),
+        ListTile(
+          key: ChatInfoPanel.chatThemesKey,
+          leading: const Icon(Icons.palette_outlined),
+          title: Text(l10n.settingsChatThemes),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ChatThemesSettingsScreen(chatId: widget.chatId),
+            ),
+          ),
         ),
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
@@ -164,6 +379,216 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         );
       },
     );
+  }
+
+  List<VoiceMessage> _standaloneMessagesFor((String, String?, String?) key) =>
+      _standalonePinsKey == key && !_standalonePinsFailed
+      ? _standalonePinnedMessages
+      : const <VoiceMessage>[];
+
+  void _ensureStandalonePinnedMessagesLoaded(
+    (String, String?, String?) key, {
+    required String? authorization,
+  }) {
+    if (authorization == null || _standalonePinsKey == key) return;
+    _loadStandalonePinnedMessages(key, authorization: authorization);
+  }
+
+  void _loadStandalonePinnedMessages(
+    (String, String?, String?) key, {
+    required String? authorization,
+  }) {
+    if (authorization == null) return;
+    final generation = ++_standalonePinsGeneration;
+    _standalonePinsKey = key;
+    _standalonePinsLoading = true;
+    _standalonePinsFailed = false;
+    _standalonePinsStatusCode = null;
+    _standalonePinnedMessages = const [];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _standalonePinsGeneration) return;
+      setState(() {});
+      unawaited(
+        _fetchStandalonePinnedMessages(
+          key,
+          generation: generation,
+          authorization: authorization,
+        ),
+      );
+    });
+  }
+
+  Future<void> _fetchStandalonePinnedMessages(
+    (String, String?, String?) key, {
+    required int generation,
+    required String authorization,
+  }) async {
+    MessagesApiResult<MessageListData> result;
+    try {
+      result = await ref
+          .read(voiceMessagesClientProvider)
+          .getPinnedMessages(authorization: authorization, chatId: key.$1);
+    } catch (_) {
+      if (!_isCurrentStandalonePinsRequest(key, generation, authorization)) {
+        return;
+      }
+      setState(() {
+        _standalonePinsLoading = false;
+        _standalonePinsFailed = true;
+      });
+      return;
+    }
+    if (!_isCurrentStandalonePinsRequest(key, generation, authorization)) {
+      return;
+    }
+    setState(() {
+      _standalonePinsLoading = false;
+      switch (result) {
+        case MessagesApiOk(:final data):
+          _standalonePinnedMessages = data.messages;
+        case MessagesApiFailure(:final statusCode):
+          // Error copy stays generic for this load path; never show the
+          // server-provided message in Chat Info.
+          _standalonePinsFailed = true;
+          _standalonePinsStatusCode = statusCode;
+      }
+    });
+  }
+
+  bool _isCurrentStandalonePinsRequest(
+    (String, String?, String?) key,
+    int generation,
+    String authorization,
+  ) {
+    final currentAuth = ref.read(authControllerProvider);
+    return mounted &&
+        generation == _standalonePinsGeneration &&
+        widget.chatId == key.$1 &&
+        currentAuth.activeProfileId == key.$2 &&
+        currentAuth.session?.authorizationHeader == authorization;
+  }
+
+  Future<PinMutationResult> _unpinStandalonePinnedMessage(
+    String messageId,
+    (String, String?, String?) key, {
+    required String? authorization,
+  }) async {
+    final profileId = key.$2;
+    if (authorization == null || profileId == null || profileId.isEmpty) {
+      return const PinMutationResult.failure(message: 'not_authenticated');
+    }
+    final generation = _standalonePinsGeneration;
+    final result = await ref
+        .read(voiceMessagesClientProvider)
+        .unpinMessage(
+          authorization: authorization,
+          chatId: key.$1,
+          messageId: messageId,
+        );
+    if (!_isCurrentStandalonePinsRequest(key, generation, authorization)) {
+      return const PinMutationResult.stale();
+    }
+    return switch (result) {
+      MessagesApiOk<void>() => () {
+        setState(() {
+          _standalonePinnedMessages = _standalonePinnedMessages
+              .where((message) => message.id != messageId)
+              .toList(growable: false);
+        });
+        return const PinMutationResult.success();
+      }(),
+      MessagesApiFailure(:final message, :final errorCode, :final statusCode) =>
+        PinMutationResult.failure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        ),
+    };
+  }
+
+  Future<void> _confirmLeaveChannel() async {
+    final session = ref.read(authControllerProvider).session;
+    if (session == null || session.activeProfileId.isEmpty) return;
+    final chatId = widget.chatId;
+    final selectionBeforeDialog = ref.read(selectedChatIdProvider);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final dialogL10n = AppLocalizations.of(dialogContext)!;
+        return AlertDialog(
+          title: Text(dialogL10n.chatChannelLeaveConfirmTitle),
+          content: Text(dialogL10n.chatChannelLeaveConfirmMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(dialogL10n.commonCancel),
+            ),
+            FilledButton(
+              key: const Key('chat_info_leave_channel_confirm'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(dialogL10n.chatChannelLeave),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted || !context.mounted) return;
+    if (!_isCurrentLeaveActor(session.accountId, session.activeProfileId) ||
+        widget.chatId != chatId) {
+      return;
+    }
+
+    final currentSession = ref.read(authControllerProvider).session;
+    if (currentSession == null) return;
+    setState(() => _leavingChannel = true);
+
+    ChatsApiResult<void> result;
+    try {
+      result = await ref
+          .read(voiceChatsClientProvider)
+          .leaveGroup(
+            authorization: currentSession.authorizationHeader,
+            chatId: chatId,
+          );
+    } catch (_) {
+      result = const ChatsApiFailure(message: 'unknown_error');
+    }
+
+    if (!mounted || !context.mounted) return;
+    setState(() => _leavingChannel = false);
+    if (!_isCurrentLeaveActor(session.accountId, session.activeProfileId) ||
+        widget.chatId != chatId) {
+      return;
+    }
+
+    switch (result) {
+      case ChatsApiFailure(:final statusCode):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(
+                AppLocalizations.of(context)!,
+                statusCode: statusCode,
+              ),
+            ),
+          ),
+        );
+      case ChatsApiOk<void>():
+        ref.invalidate(chatListControllerProvider);
+        if (ref.read(selectedChatIdProvider) != selectionBeforeDialog) return;
+        if (selectionBeforeDialog == chatId) {
+          ref.read(selectedChatIdProvider.notifier).state = null;
+        }
+        ref.read(shellNavigationProvider).closeSidePanel();
+        if (context.mounted) Navigator.of(context).maybePop();
+    }
+  }
+
+  bool _isCurrentLeaveActor(String accountId, String profileId) {
+    final current = ref.read(authControllerProvider).session;
+    return current != null &&
+        current.accountId == accountId &&
+        current.activeProfileId == profileId;
   }
 }
 
@@ -634,6 +1059,49 @@ class _ChatOverrideBar extends ConsumerWidget {
         icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
         label: Text(l10n.spaceChatOverrideTitle),
       ),
+    );
+  }
+}
+
+/// Entry shown in Chat Info only when the current profile manages a standalone
+/// channel. Membership is resolved across every member page by the scoped
+/// channel settings authority provider.
+class StandaloneChannelSettingsEntry extends ConsumerWidget {
+  const StandaloneChannelSettingsEntry({
+    super.key,
+    required this.chatId,
+    required this.onOpen,
+  });
+
+  static const Key entryKey = Key('chat_info_channel_settings');
+
+  final String chatId;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chat = chatMetadataForId(
+      ref.watch(chatListControllerProvider).items,
+      chatId,
+    );
+    if (chat == null || !chat.isChannel || chat.isSpaceChannel) {
+      return const SizedBox.shrink();
+    }
+    final authority = ref.watch(channelSettingsAuthorityProvider(chatId));
+    if (authority.valueOrNull != true) return const SizedBox.shrink();
+
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      children: [
+        Divider(height: 1, color: VoiceColors.of(context).borderDefault),
+        ListTile(
+          key: StandaloneChannelSettingsEntry.entryKey,
+          leading: const Icon(Icons.tune_outlined),
+          title: Text(l10n.channelSettingsTitle),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onOpen,
+        ),
+      ],
     );
   }
 }

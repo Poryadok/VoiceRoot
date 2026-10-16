@@ -1,15 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
+import 'package:uuid/uuid.dart';
 
 import '../backend/api_errors.dart';
 import '../backend/auth_session.dart';
 import '../backend/chats_client.dart';
 import '../backend/files_client.dart';
 import '../backend/gateway_request_id.dart';
+import '../backend/gateway_http.dart';
 import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/message_cache/message_cache_store.dart';
@@ -182,6 +185,21 @@ final e2eDecryptedAttachmentThumbProvider =
 
 /// Active DM chat id in the main column, or null.
 final selectedChatIdProvider = StateProvider<String?>((ref) => null);
+
+/// One-shot handoff from Chat Info to the mounted room's existing search UI.
+/// Auto-dispose ensures an unconsumed request cannot survive room teardown.
+class ChatInfoSearchRequest {
+  const ChatInfoSearchRequest({
+    required this.chatId,
+    required this.viewerProfileId,
+  });
+
+  final String chatId;
+  final String? viewerProfileId;
+}
+
+final chatInfoSearchRequestProvider =
+    StateProvider.autoDispose<ChatInfoSearchRequest?>((ref) => null);
 
 /// Changes when a successful block/unblock may change the visible DM history.
 final socialBlockVisibilityRevisionProvider = StateProvider<int>((ref) => 0);
@@ -752,8 +770,34 @@ class ChatListController extends StateNotifier<ChatListState> {
     state = state.copyWith(
       items: state.items.where((item) => item.chatId != chatId).toList(),
     );
-    _ref.invalidate(messageRequestsSummaryProvider);
+    final isRequestsSelection =
+        _ref.read(chatInboxProvider) == 'requests' &&
+        isMessageRequestsFolderSelected(
+          _ref.read(selectedChatFolderIdProvider),
+        );
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
+    final container = _ref.container;
+    final Future<MessageRequestsSummary>? summaryFuture;
+    if (isRequestsSelection) {
+      summaryFuture = container.refresh(messageRequestsSummaryProvider.future);
+    } else {
+      summaryFuture = null;
+      container.invalidate(messageRequestsSummaryProvider);
+    }
     _invalidateChatLists(_ref);
+    if (summaryFuture != null) {
+      unawaited(
+        restorePreviousChatFolderAfterFinalRequest(
+          container,
+          summaryFuture: summaryFuture,
+          expectedGeneration: navigationGeneration,
+          expectedAuthorization: expectedAuthorization,
+          expectedProfileId: expectedProfileId,
+        ),
+      );
+    }
     return null;
   }
 
@@ -988,6 +1032,7 @@ class ChatRoomState {
     this.isSending = false,
     this.isLoadingOlder = false,
     this.errorMessage,
+    this.errorOwnerToken,
     this.realtimeStatus = RealtimeLinkStatus.disconnected,
     this.nextCursor,
     this.hasMore = false,
@@ -995,6 +1040,15 @@ class ChatRoomState {
     this.deliveredMessageIds = const {},
     this.readMessageIds = const {},
     this.pinnedMessages = const [],
+    this.pinnedMessagesStatus = PinnedMessagesLoadStatus.idle,
+    this.pinnedMessagesErrorStatusCode,
+    this.scheduledMessages = const [],
+    this.isLoadingScheduledMessages = false,
+    this.scheduledMessagesError,
+    this.scheduledMessagesFailedLoadMore = false,
+    this.scheduledActionError,
+    this.scheduledMessagesNextCursor,
+    this.hasMoreScheduledMessages = false,
     this.isOfflineCache = false,
     this.isDmPeerDeleted = false,
     this.historyProfileId,
@@ -1005,6 +1059,10 @@ class ChatRoomState {
   final bool isSending;
   final bool isLoadingOlder;
   final String? errorMessage;
+
+  /// Ephemeral ownership of this error write, even when its text is unchanged.
+  @internal
+  final Object? errorOwnerToken;
   final RealtimeLinkStatus realtimeStatus;
   final String? nextCursor;
   final bool hasMore;
@@ -1012,6 +1070,15 @@ class ChatRoomState {
   final Set<String> deliveredMessageIds;
   final Set<String> readMessageIds;
   final List<VoiceMessage> pinnedMessages;
+  final PinnedMessagesLoadStatus pinnedMessagesStatus;
+  final int? pinnedMessagesErrorStatusCode;
+  final List<messaging_pb.ScheduledMessage> scheduledMessages;
+  final bool isLoadingScheduledMessages;
+  final String? scheduledMessagesError;
+  final bool scheduledMessagesFailedLoadMore;
+  final String? scheduledActionError;
+  final String? scheduledMessagesNextCursor;
+  final bool hasMoreScheduledMessages;
   final bool isOfflineCache;
   final bool isDmPeerDeleted;
 
@@ -1037,6 +1104,20 @@ class ChatRoomState {
     Set<String>? deliveredMessageIds,
     Set<String>? readMessageIds,
     List<VoiceMessage>? pinnedMessages,
+    PinnedMessagesLoadStatus? pinnedMessagesStatus,
+    int? pinnedMessagesErrorStatusCode,
+    bool clearPinnedMessagesErrorStatusCode = false,
+    List<messaging_pb.ScheduledMessage>? scheduledMessages,
+    bool? isLoadingScheduledMessages,
+    String? scheduledMessagesError,
+    bool? scheduledMessagesFailedLoadMore,
+    bool clearScheduledMessagesError = false,
+    String? scheduledActionError,
+    bool clearScheduledActionError = false,
+    String? scheduledMessagesNextCursor,
+    bool clearScheduledMessagesNextCursor = false,
+    bool? hasMoreScheduledMessages,
+    bool clearScheduledMessages = false,
     bool? isOfflineCache,
     bool? isDmPeerDeleted,
     String? historyProfileId,
@@ -1047,6 +1128,11 @@ class ChatRoomState {
       isSending: isSending ?? this.isSending,
       isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      errorOwnerToken: clearError
+          ? null
+          : errorMessage != null
+          ? Object()
+          : errorOwnerToken,
       realtimeStatus: realtimeStatus ?? this.realtimeStatus,
       nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
       hasMore: hasMore ?? this.hasMore,
@@ -1054,6 +1140,32 @@ class ChatRoomState {
       deliveredMessageIds: deliveredMessageIds ?? this.deliveredMessageIds,
       readMessageIds: readMessageIds ?? this.readMessageIds,
       pinnedMessages: pinnedMessages ?? this.pinnedMessages,
+      pinnedMessagesStatus: pinnedMessagesStatus ?? this.pinnedMessagesStatus,
+      pinnedMessagesErrorStatusCode: clearPinnedMessagesErrorStatusCode
+          ? null
+          : (pinnedMessagesErrorStatusCode ??
+                this.pinnedMessagesErrorStatusCode),
+      scheduledMessages: clearScheduledMessages
+          ? const []
+          : (scheduledMessages ?? this.scheduledMessages),
+      isLoadingScheduledMessages:
+          isLoadingScheduledMessages ?? this.isLoadingScheduledMessages,
+      scheduledMessagesError: clearScheduledMessagesError
+          ? null
+          : (scheduledMessagesError ?? this.scheduledMessagesError),
+      scheduledMessagesFailedLoadMore:
+          scheduledMessagesFailedLoadMore ??
+          (clearScheduledMessagesError
+              ? false
+              : this.scheduledMessagesFailedLoadMore),
+      scheduledActionError: clearScheduledActionError
+          ? null
+          : (scheduledActionError ?? this.scheduledActionError),
+      scheduledMessagesNextCursor: clearScheduledMessagesNextCursor
+          ? null
+          : (scheduledMessagesNextCursor ?? this.scheduledMessagesNextCursor),
+      hasMoreScheduledMessages:
+          hasMoreScheduledMessages ?? this.hasMoreScheduledMessages,
       isOfflineCache: isOfflineCache ?? this.isOfflineCache,
       isDmPeerDeleted: isDmPeerDeleted ?? this.isDmPeerDeleted,
       historyProfileId: historyProfileId ?? this.historyProfileId,
@@ -1061,7 +1173,135 @@ class ChatRoomState {
   }
 }
 
+enum PinnedMessagesLoadStatus { idle, loading, loaded, failed }
+
+class PinMutationResult {
+  const PinMutationResult.success()
+    : succeeded = true,
+      stale = false,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  const PinMutationResult.failure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  }) : succeeded = false,
+       stale = false;
+
+  const PinMutationResult.stale()
+    : succeeded = false,
+      stale = true,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  final bool succeeded;
+  final bool stale;
+  final String? message;
+  final String? errorCode;
+  final int? statusCode;
+
+  bool get permissionDenied =>
+      statusCode == 403 || errorCode == 'permission_denied';
+
+  bool get pinLimitReached =>
+      statusCode == 429 && errorCode == 'resource_exhausted';
+}
+
+class PendingPinnedMessageJump {
+  PendingPinnedMessageJump(this.messageId);
+
+  final String messageId;
+  final Completer<bool> _completion = Completer<bool>();
+  bool cancelled = false;
+
+  Future<bool> get result => _completion.future;
+
+  void complete(bool opened) {
+    if (!_completion.isCompleted) _completion.complete(opened);
+  }
+}
+
+final pendingPinnedMessageJumpProvider = StateProvider.autoDispose
+    .family<PendingPinnedMessageJump?, String>((ref, chatId) => null);
+
 enum RealtimeLinkStatus { disconnected, connecting, connected, reconnecting }
+
+class _ScheduledActionContext {
+  const _ScheduledActionContext({
+    required this.authorization,
+    required this.profileId,
+    required this.generation,
+  });
+
+  final String authorization;
+  final String profileId;
+  final int generation;
+}
+
+class _ScheduledEncryptedAttempt {
+  const _ScheduledEncryptedAttempt({
+    required this.profileId,
+    required this.authGeneration,
+    required this.peerProfileId,
+    required this.clientMessageId,
+    required this.plaintext,
+    required this.requestFingerprint,
+    required this.ciphertext,
+  });
+
+  final String profileId;
+  final int authGeneration;
+  final String peerProfileId;
+  final String clientMessageId;
+  final String plaintext;
+  final String requestFingerprint;
+  final String ciphertext;
+
+  bool matches({
+    required String profileId,
+    required int authGeneration,
+    required String peerProfileId,
+    required String clientMessageId,
+    required String plaintext,
+    required String requestFingerprint,
+  }) =>
+      this.profileId == profileId &&
+      this.authGeneration == authGeneration &&
+      this.peerProfileId == peerProfileId &&
+      this.clientMessageId == clientMessageId &&
+      this.plaintext == plaintext &&
+      this.requestFingerprint == requestFingerprint;
+}
+
+/// One prepared immediate payload, retained only for an explicit retry.
+/// In particular, an E2E envelope must never be encrypted a second time.
+class _ImmediateSendAttempt {
+  _ImmediateSendAttempt({
+    required this.identity,
+    required this.sessionInstallGeneration,
+    required this.generation,
+    required this.clientMessageId,
+    required this.content,
+    required List<MessageAttachment> attachments,
+    required List<MessageMention> mentions,
+    required this.threadParentId,
+    required this.isE2e,
+  }) : attachments = List.unmodifiable(attachments),
+       mentions = List.unmodifiable(mentions);
+
+  final GatewayRequestIdentity identity;
+  final int sessionInstallGeneration;
+  final int generation;
+  final String clientMessageId;
+  final String content;
+  final List<MessageAttachment> attachments;
+  final List<MessageMention> mentions;
+  final String? threadParentId;
+  final bool isE2e;
+}
 
 class ChatRoomController extends StateNotifier<ChatRoomState> {
   ChatRoomController(this._ref, this.chatId) : super(const ChatRoomState()) {
@@ -1071,25 +1311,76 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       final profileChanged = previousProfileId != nextProfileId;
       final sessionChanged =
           previous?.session?.accessToken != next.session?.accessToken ||
-          previous?.session?.refreshToken != next.session?.refreshToken;
+          previous?.session?.refreshToken != next.session?.refreshToken ||
+          previous?.session?.accountId != next.session?.accountId;
       if (!profileChanged && !sessionChanged) {
         return;
       }
+      final authController = _ref.read(authControllerProvider.notifier);
+      if (_immediateSendIdentity != authController.gatewayRequestIdentity ||
+          _immediateSendSessionInstallGeneration !=
+              authController.sessionInstallGeneration) {
+        _cancelImmediateSend(clearState: true);
+      }
+      _scheduledEncryptedAttempt = null;
+      _authGeneration++;
+      _scheduledCreateGeneration++;
+      _scheduledCreateInFlight = false;
       _loadGeneration++;
       if (!profileChanged && nextProfileId != null) {
+        _pinnedMessagesGeneration++;
+        _seenScheduledMessagesCursors.clear();
+        if (mounted) {
+          state = state.copyWith(
+            isSending: false,
+            isLoadingOlder: false,
+            scheduledMessages: const [],
+            isLoadingScheduledMessages: false,
+            clearScheduledMessagesError: true,
+            scheduledMessagesFailedLoadMore: false,
+            clearScheduledActionError: true,
+            clearScheduledMessagesNextCursor: true,
+            hasMoreScheduledMessages: false,
+            pinnedMessagesStatus: state.pinnedMessages.isEmpty
+                ? PinnedMessagesLoadStatus.idle
+                : PinnedMessagesLoadStatus.loaded,
+            clearPinnedMessagesErrorStatusCode: true,
+          );
+        }
+        if (_scheduledMessagesWasLoaded &&
+            _ref.read(selectedChatIdProvider) == chatId) {
+          unawaited(loadScheduledMessages());
+        }
         return;
       }
       _historyGeneration++;
       _loadedHistoryProfileId = null;
+      _pinnedMessagesGeneration++;
+      _seenScheduledMessagesCursors.clear();
       if (mounted) {
         // Keep the snapshot/cursor for lifecycle fencing while panel
         // presentation waits for the new profile's bound history.
         state = state.copyWith(
+          isSending: false,
           isLoading: true,
           isOfflineCache: false,
           clearError: true,
           isDmPeerDeleted: false,
+          scheduledMessages: const [],
+          isLoadingScheduledMessages: false,
+          clearScheduledMessagesError: true,
+          scheduledMessagesFailedLoadMore: false,
+          clearScheduledActionError: true,
+          clearScheduledMessagesNextCursor: true,
+          hasMoreScheduledMessages: false,
+          pinnedMessages: const [],
+          pinnedMessagesStatus: PinnedMessagesLoadStatus.idle,
+          clearPinnedMessagesErrorStatusCode: true,
         );
+      }
+      if (_scheduledMessagesWasLoaded &&
+          _ref.read(selectedChatIdProvider) == chatId) {
+        unawaited(loadScheduledMessages());
       }
     });
     _realtimeSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
@@ -1254,6 +1545,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       previous,
       next,
     ) {
+      if (previous != next && next != chatId) {
+        _cancelImmediateSend(clearState: true);
+      }
       if (next == chatId && previous != chatId) {
         _scheduleAutomaticActivation();
       }
@@ -1300,6 +1594,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   ProviderSubscription<int>? _socialBlockVisibilitySub;
   ProviderSubscription<SocialBlockVisibilityBarrier>? _socialBlockBarrierSub;
   ProviderSubscription<int>? _socialBlockCacheEpochSub;
+  bool _scheduledMessagesWasLoaded = false;
+  _ScheduledEncryptedAttempt? _scheduledEncryptedAttempt;
+  bool _scheduledCreateInFlight = false;
+  int _scheduledCreateGeneration = 0;
+  var _authGeneration = 0;
+  int _scheduledMessagesGeneration = 0;
+  final Set<String> _seenScheduledMessagesCursors = <String>{};
   String? _lastMarkedReadMessageId;
   bool _automaticActivationStarted = false;
   final Set<String> _hiddenMessageSenderProfileIds = <String>{};
@@ -1397,6 +1698,8 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   String? _loadedHistoryProfileId;
   var _historyGeneration = 0;
   var _loadGeneration = 0;
+  var _pinnedMessagesGeneration = 0;
+  var _olderPageGeneration = 0;
 
   bool _isE2eChat() => _ref.read(chatE2eEnabledProvider(chatId));
 
@@ -1430,6 +1733,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   @override
   void dispose() {
+    _cancelImmediateSend();
+    _scheduledEncryptedAttempt = null;
+    _scheduledCreateGeneration++;
+    _scheduledCreateInFlight = false;
     _authSub?.close();
     _realtimeSub?.close();
     _eventSub?.close();
@@ -1543,21 +1850,46 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     required String profileId,
     required int generation,
   }) async {
+    final requestGeneration = ++_pinnedMessagesGeneration;
+    state = state.copyWith(
+      pinnedMessagesStatus: PinnedMessagesLoadStatus.loading,
+      clearPinnedMessagesErrorStatusCode: true,
+    );
     final pinned = await _ref
         .read(voiceMessagesClientProvider)
         .getPinnedMessages(authorization: auth, chatId: chatId);
     if (!_isCurrentMutation(
-      profileId: profileId,
-      authorization: auth,
-      generation: generation,
-    )) {
+          profileId: profileId,
+          authorization: auth,
+          generation: generation,
+        ) ||
+        requestGeneration != _pinnedMessagesGeneration) {
       return;
     }
-    if (pinned case MessagesApiOk(:final data)) {
-      state = state.copyWith(
-        pinnedMessages: _visibleForCurrentBlockPolicy(data.messages),
-      );
+    switch (pinned) {
+      case MessagesApiOk(:final data):
+        state = state.copyWith(
+          pinnedMessages: _visibleForCurrentBlockPolicy(data.messages),
+          pinnedMessagesStatus: PinnedMessagesLoadStatus.loaded,
+          clearPinnedMessagesErrorStatusCode: true,
+        );
+      case MessagesApiFailure(:final statusCode):
+        state = state.copyWith(
+          pinnedMessagesStatus: PinnedMessagesLoadStatus.failed,
+          pinnedMessagesErrorStatusCode: statusCode,
+        );
     }
+  }
+
+  Future<void> retryPinnedMessages() async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final profileId = _activeProfileId();
+    if (auth == null || profileId == null) return;
+    await _refreshPinnedMessages(
+      auth,
+      profileId: profileId,
+      generation: _loadGeneration,
+    );
   }
 
   Future<void> _catchUpAfterReconnect() async {
@@ -1634,14 +1966,15 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
   }
 
-  Future<void> loadOlderMessages() async {
-    if (_isDeviceOffline()) return;
+  Future<bool> loadOlderMessages() async {
+    if (_isDeviceOffline()) return false;
     final cursor = state.nextCursor;
-    if (cursor == null || cursor.isEmpty || state.isLoadingOlder) return;
+    if (cursor == null || cursor.isEmpty || state.isLoadingOlder) return false;
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final historyGeneration = _historyGeneration;
-    if (auth == null || profileId == null) return;
+    final pageGeneration = ++_olderPageGeneration;
+    if (auth == null || profileId == null) return false;
     state = state.copyWith(isLoadingOlder: true, clearError: true);
     final result = await _ref
         .read(voiceMessagesClientProvider)
@@ -1651,7 +1984,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       authorization: auth,
       generation: historyGeneration,
     )) {
-      return;
+      if (mounted &&
+          pageGeneration == _olderPageGeneration &&
+          state.isLoadingOlder) {
+        state = state.copyWith(isLoadingOlder: false);
+      }
+      return false;
     }
     switch (result) {
       case MessagesApiOk(:final data):
@@ -1659,7 +1997,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (data.dmPeerState ==
             messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
           state = state.copyWith(isLoadingOlder: false);
-          return;
+          return false;
         }
         final merged = [...state.messages];
         for (final m in data.messages) {
@@ -1675,7 +2013,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           authorization: auth,
           generation: historyGeneration,
         )) {
-          return;
+          if (mounted &&
+              pageGeneration == _olderPageGeneration &&
+              state.isLoadingOlder) {
+            state = state.copyWith(isLoadingOlder: false);
+          }
+          return false;
         }
         state = state.copyWith(
           messages: sorted,
@@ -1687,8 +2030,51 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           clearError: true,
         );
         unawaited(_writeCache(sorted, profileId: profileId));
+        return true;
       case MessagesApiFailure(:final message):
         state = state.copyWith(isLoadingOlder: false, errorMessage: message);
+        return false;
+    }
+  }
+
+  /// Loads existing cursor pages until [messageId] is present or the current
+  /// history reaches an explicit end/failure. It never repeats a cursor.
+  Future<bool> loadHistoryUntilMessage(
+    String messageId, {
+    required bool Function() isCancelled,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final profileId = _activeProfileId();
+    final historyGeneration = _historyGeneration;
+    if (auth == null || profileId == null) return false;
+    final visitedCursors = <String>{};
+    while (true) {
+      if (isCancelled() ||
+          !_isSelectedForAutomaticHistory() ||
+          !_isCurrentHistory(
+            profileId: profileId,
+            authorization: auth,
+            generation: historyGeneration,
+          )) {
+        return false;
+      }
+      if (state.messages.any((message) => message.id == messageId)) return true;
+      final cursor = state.nextCursor;
+      if (!state.hasMore || cursor == null || cursor.isEmpty) return false;
+      if (!visitedCursors.add(cursor) || state.isLoadingOlder) return false;
+      final loaded = await loadOlderMessages();
+      if (!loaded || isCancelled() || !_isSelectedForAutomaticHistory()) {
+        return false;
+      }
+      if (!_isCurrentHistory(
+        profileId: profileId,
+        authorization: auth,
+        generation: historyGeneration,
+      )) {
+        return false;
+      }
+      if (state.messages.any((message) => message.id == messageId)) return true;
+      if (state.nextCursor == cursor) return false;
     }
   }
 
@@ -1700,59 +2086,502 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return null;
+    if (_immediateSendInFlight) return 'send_in_progress';
     final auth = _ref.read(authorizationHeaderProvider);
-    final profileId = _activeProfileId();
-    final generation = _loadGeneration;
-    if (auth == null || profileId == null) return 'not_authenticated';
+    final authController = _ref.read(authControllerProvider.notifier);
+    final identity = authController.gatewayRequestIdentity;
+    if (auth == null || identity == null) return 'not_authenticated';
     if (_isDeviceOffline()) {
       return kChatOfflineBlockedError;
     }
-
-    var outbound = trimmed;
-    var isE2e = false;
-    if (_isE2eChat()) {
-      final peerId = _dmPeerProfileId();
-      final localId = _activeProfileId();
-      if (peerId != null && localId != null && outbound.isNotEmpty) {
-        try {
+    final generation = ++_immediateSendGeneration;
+    final requestGeneration = _loadGeneration;
+    final sessionInstallGeneration = authController.sessionInstallGeneration;
+    _failedImmediateSend = null;
+    _immediateSendFailureMessage = null;
+    _immediateSendFailureOwnerToken = null;
+    _immediateSendIdentity = identity;
+    _immediateSendSessionInstallGeneration = sessionInstallGeneration;
+    _immediateSendInFlight = true;
+    state = state.copyWith(isSending: true, clearError: true);
+    final retainedAttachments = List<MessageAttachment>.unmodifiable(
+      attachments,
+    );
+    final retainedMentions = List<MessageMention>.unmodifiable(mentions);
+    try {
+      var outbound = trimmed;
+      var isE2e = false;
+      if (_isE2eChat()) {
+        final peerId = _dmPeerProfileId();
+        if (peerId != null && outbound.isNotEmpty) {
           outbound = await _ref
               .read(e2eMessageServiceProvider)
               .encryptOutgoing(
-                localProfileId: localId,
+                localProfileId: identity.profileId,
                 peerProfileId: peerId,
                 plaintext: outbound,
                 authorization: auth,
                 chatId: chatId,
               );
-          if (!_isCurrentMutation(
-            profileId: profileId,
-            authorization: auth,
-            generation: generation,
-          )) {
-            return null;
-          }
           isE2e = true;
-        } on E2eEncryptException catch (e) {
-          if (!_isCurrentMutation(
-            profileId: profileId,
-            authorization: auth,
-            generation: generation,
-          )) {
-            return null;
-          }
-          state = state.copyWith(isSending: false, errorMessage: e.message);
-          return e.message;
+        }
+      }
+      if (!_isCurrentImmediateSend(
+        identity,
+        sessionInstallGeneration,
+        generation,
+      )) {
+        return kChatActionStaleContext;
+      }
+      final attempt = _ImmediateSendAttempt(
+        identity: identity,
+        sessionInstallGeneration: sessionInstallGeneration,
+        generation: generation,
+        clientMessageId: const Uuid().v4(),
+        content: outbound,
+        attachments: retainedAttachments,
+        mentions: retainedMentions,
+        threadParentId: threadParentId,
+        isE2e: isE2e,
+      );
+      _failedImmediateSend = attempt;
+      return await _submitImmediateSend(attempt);
+    } on E2eEncryptException catch (e) {
+      if (!_isCurrentImmediateSend(
+            identity,
+            sessionInstallGeneration,
+            generation,
+          ) ||
+          _loadGeneration != requestGeneration ||
+          _ref.read(authorizationHeaderProvider) != auth) {
+        return kChatActionStaleContext;
+      }
+      state = state.copyWith(isSending: false, errorMessage: e.message);
+      return e.message;
+    } finally {
+      if (_isCurrentImmediateSend(
+        identity,
+        sessionInstallGeneration,
+        generation,
+      )) {
+        _immediateSendInFlight = false;
+        if (_loadGeneration == requestGeneration &&
+            _ref.read(authorizationHeaderProvider) == auth &&
+            state.isSending) {
+          state = state.copyWith(isSending: false);
         }
       }
     }
+  }
 
-    state = state.copyWith(isSending: true, clearError: true);
+  _ImmediateSendAttempt? _failedImmediateSend;
+  String? _immediateSendFailureMessage;
+  Object? _immediateSendFailureOwnerToken;
+  GatewayRequestIdentity? _immediateSendIdentity;
+  int? _immediateSendSessionInstallGeneration;
+  var _immediateSendGeneration = 0;
+  var _immediateSendInFlight = false;
+
+  int get immediateSendGeneration => _immediateSendGeneration;
+
+  String? get failedMessageError => _immediateSendFailureMessage;
+
+  bool get failedMessageOwnsRoomError =>
+      _immediateSendFailureOwnerToken != null &&
+      identical(state.errorOwnerToken, _immediateSendFailureOwnerToken);
+
+  bool get canRetryFailedMessage =>
+      _failedImmediateSend != null && !_immediateSendInFlight && mounted;
+
+  bool _isCurrentImmediateSend(
+    GatewayRequestIdentity identity,
+    int install,
+    int generation,
+  ) =>
+      mounted &&
+      _immediateSendGeneration == generation &&
+      _ref.read(authControllerProvider.notifier).gatewayRequestIdentity ==
+          identity &&
+      _ref.read(authControllerProvider.notifier).sessionInstallGeneration ==
+          install;
+
+  void _cancelImmediateSend({bool clearState = false}) {
+    final wasSending = _immediateSendInFlight;
+    final ownsError = failedMessageOwnsRoomError;
+    _immediateSendGeneration++;
+    _failedImmediateSend = null;
+    _immediateSendFailureMessage = null;
+    _immediateSendFailureOwnerToken = null;
+    _immediateSendIdentity = null;
+    _immediateSendSessionInstallGeneration = null;
+    _immediateSendInFlight = false;
+    if (clearState && (wasSending || ownsError) && mounted) {
+      state = state.copyWith(
+        isSending: wasSending ? false : state.isSending,
+        clearError: ownsError,
+      );
+    }
+  }
+
+  /// Explicitly replays the same prepared body and UUID, with current auth.
+  Future<String?> retryFailedMessage({int? expectedGeneration}) async {
+    if (!mounted) return kChatActionStaleContext;
+    if (_immediateSendInFlight) return 'send_in_progress';
+    final attempt = _failedImmediateSend;
+    if (expectedGeneration != null &&
+        expectedGeneration != attempt?.generation) {
+      return kChatActionStaleContext;
+    }
+    if (attempt == null ||
+        !_isCurrentImmediateSend(
+          attempt.identity,
+          attempt.sessionInstallGeneration,
+          attempt.generation,
+        )) {
+      _cancelImmediateSend();
+      return kChatActionStaleContext;
+    }
+    if (_isDeviceOffline()) return kChatOfflineBlockedError;
+    final auth = _ref.read(authorizationHeaderProvider);
+    final requestGeneration = _loadGeneration;
+    _immediateSendInFlight = true;
+    try {
+      return await _submitImmediateSend(attempt, retry: true);
+    } finally {
+      if (_isCurrentImmediateSend(
+        attempt.identity,
+        attempt.sessionInstallGeneration,
+        attempt.generation,
+      )) {
+        _immediateSendInFlight = false;
+        if (_loadGeneration == requestGeneration &&
+            _ref.read(authorizationHeaderProvider) == auth &&
+            state.isSending) {
+          state = state.copyWith(isSending: false);
+        }
+      }
+    }
+  }
+
+  Future<String?> _submitImmediateSend(
+    _ImmediateSendAttempt attempt, {
+    bool retry = false,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider)!;
+    final requestGeneration = _loadGeneration;
+    bool isCurrentRequest() =>
+        _isCurrentImmediateSend(
+          attempt.identity,
+          attempt.sessionInstallGeneration,
+          attempt.generation,
+        ) &&
+        _loadGeneration == requestGeneration &&
+        _ref.read(authorizationHeaderProvider) == auth;
+    final preserveHistoryError =
+        retry && state.errorMessage != null && !failedMessageOwnsRoomError;
+    state = state.copyWith(isSending: true, clearError: !preserveHistoryError);
+    _immediateSendFailureMessage = null;
+    _immediateSendFailureOwnerToken = null;
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .sendMessage(
           authorization: auth,
           chatId: chatId,
+          clientMessageId: attempt.clientMessageId,
+          content: attempt.content,
+          attachments: attempt.attachments,
+          mentions: attempt.mentions,
+          threadParentId: attempt.threadParentId,
+          isE2e: attempt.isE2e,
+        );
+    if (!isCurrentRequest()) {
+      return kChatActionStaleContext;
+    }
+    switch (result) {
+      case MessagesApiOk(:final data):
+        final merged = [...state.messages];
+        if (!merged.any((m) => m.id == data.id)) {
+          merged.add(data);
+        }
+        final sorted = await _finalizeMessages(
+          _sortMessages(_visibleForCurrentBlockPolicy(merged)),
+        );
+        if (!isCurrentRequest()) {
+          return kChatActionStaleContext;
+        }
+        state = state.copyWith(
+          messages: sorted,
+          isSending: false,
+          isOfflineCache: false,
+          clearError: !preserveHistoryError,
+        );
+        _failedImmediateSend = null;
+        _immediateSendFailureMessage = null;
+        _immediateSendFailureOwnerToken = null;
+        _immediateSendIdentity = null;
+        _immediateSendSessionInstallGeneration = null;
+        unawaited(_writeCache(sorted, profileId: attempt.identity.profileId));
+        unawaited(_markLatestRead());
+        _invalidateChatLists(_ref);
+        return null;
+      case MessagesApiFailure(:final message):
+        _immediateSendFailureMessage = message;
+        state = preserveHistoryError
+            ? state.copyWith(isSending: false)
+            : state.copyWith(isSending: false, errorMessage: message);
+        _immediateSendFailureOwnerToken = preserveHistoryError
+            ? null
+            : state.errorOwnerToken;
+        return message;
+    }
+  }
+
+  Future<void> loadScheduledMessages({bool loadMore = false}) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final profileId = _activeProfileId();
+    final generation = _loadGeneration;
+    final requestGeneration = ++_scheduledMessagesGeneration;
+    if (auth == null || profileId == null) {
+      _seenScheduledMessagesCursors.clear();
+      state = state.copyWith(
+        scheduledMessages: const [],
+        isLoadingScheduledMessages: false,
+        clearScheduledMessagesError: true,
+        scheduledMessagesFailedLoadMore: false,
+        clearScheduledMessagesNextCursor: true,
+        hasMoreScheduledMessages: false,
+      );
+      return;
+    }
+    if (loadMore &&
+        (!state.hasMoreScheduledMessages ||
+            state.scheduledMessagesNextCursor == null ||
+            state.scheduledMessagesNextCursor!.isEmpty)) {
+      return;
+    }
+    if (!loadMore) _seenScheduledMessagesCursors.clear();
+    final cursor = loadMore ? state.scheduledMessagesNextCursor : null;
+    state = state.copyWith(
+      isLoadingScheduledMessages: true,
+      clearScheduledMessagesError: true,
+      scheduledMessagesFailedLoadMore: false,
+      clearScheduledActionError: true,
+    );
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .listScheduledMessages(
+          authorization: auth,
+          chatId: chatId,
+          cursor: cursor,
+        );
+    if (!_isCurrentMutation(
+          profileId: profileId,
+          authorization: auth,
+          generation: generation,
+        ) ||
+        requestGeneration != _scheduledMessagesGeneration) {
+      return;
+    }
+    switch (result) {
+      case MessagesApiOk(:final data):
+        final page = data.hasPage() ? data.page : null;
+        final nextCursor = page?.nextCursor;
+        if (page == null ||
+            (page.hasMore && (nextCursor == null || nextCursor.isEmpty)) ||
+            (nextCursor != null &&
+                nextCursor.isNotEmpty &&
+                (nextCursor == cursor ||
+                    _seenScheduledMessagesCursors.contains(nextCursor)))) {
+          state = state.copyWith(
+            isLoadingScheduledMessages: false,
+            scheduledMessagesError: 'scheduled_message_cursor_stalled',
+            scheduledMessagesFailedLoadMore: false,
+            hasMoreScheduledMessages: false,
+          );
+          return;
+        }
+        if (nextCursor != null && nextCursor.isNotEmpty) {
+          _seenScheduledMessagesCursors.add(nextCursor);
+        }
+        final merged = loadMore
+            ? [...state.scheduledMessages]
+            : <messaging_pb.ScheduledMessage>[];
+        for (final item in data.scheduledMessages) {
+          final existing = merged.indexWhere((row) => row.id == item.id);
+          if (existing < 0) {
+            merged.add(item);
+          } else {
+            merged[existing] = item;
+          }
+        }
+        state = state.copyWith(
+          scheduledMessages: merged,
+          isLoadingScheduledMessages: false,
+          scheduledMessagesFailedLoadMore: false,
+          scheduledMessagesNextCursor: nextCursor,
+          clearScheduledMessagesNextCursor: nextCursor == null,
+          hasMoreScheduledMessages:
+              page.hasMore && nextCursor != null && nextCursor.isNotEmpty,
+          clearScheduledMessagesError: true,
+        );
+        _scheduledMessagesWasLoaded = true;
+      case MessagesApiFailure(:final message):
+        state = state.copyWith(
+          isLoadingScheduledMessages: false,
+          scheduledMessagesError: message,
+          scheduledMessagesFailedLoadMore: loadMore,
+        );
+    }
+  }
+
+  Future<String?> createScheduledMessage({
+    required String content,
+    required String clientMessageId,
+    required DateTime? scheduledAt,
+    required bool sendWhenOnline,
+    List<MessageAttachment> attachments = const [],
+    List<MessageMention> mentions = const [],
+    String? threadParentId,
+  }) {
+    if (_scheduledCreateInFlight) {
+      return Future.value('scheduled_send_in_progress');
+    }
+    _scheduledCreateInFlight = true;
+    final requestGeneration = ++_scheduledCreateGeneration;
+    state = state.copyWith(isSending: true, clearScheduledActionError: true);
+    final request = _createScheduledMessage(
+      content: content,
+      clientMessageId: clientMessageId,
+      scheduledAt: scheduledAt,
+      sendWhenOnline: sendWhenOnline,
+      attachments: attachments,
+      mentions: mentions,
+      threadParentId: threadParentId,
+    );
+    return request.whenComplete(() {
+      if (requestGeneration != _scheduledCreateGeneration) return;
+      _scheduledCreateInFlight = false;
+      if (mounted) state = state.copyWith(isSending: false);
+    });
+  }
+
+  Future<String?> _createScheduledMessage({
+    required String content,
+    required String clientMessageId,
+    required DateTime? scheduledAt,
+    required bool sendWhenOnline,
+    List<MessageAttachment> attachments = const [],
+    List<MessageMention> mentions = const [],
+    String? threadParentId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final profileId = _activeProfileId();
+    final generation = _loadGeneration;
+    if (auth == null || profileId == null) return 'not_authenticated';
+    if (_isDeviceOffline()) return kChatOfflineBlockedError;
+
+    var outbound = content.trim();
+    var isE2e = false;
+    _ScheduledEncryptedAttempt? encryptedAttemptForRequest;
+    if (_isE2eChat()) {
+      final peerId = _dmPeerProfileId();
+      if (peerId != null && peerId.isNotEmpty && outbound.isNotEmpty) {
+        final requestFingerprint = jsonEncode({
+          'scheduled_at': scheduledAt?.toUtc().toIso8601String(),
+          'send_when_online': sendWhenOnline,
+          'attachments': attachments.map((item) => item.toJson()).toList(),
+          'mentions': mentions.map((item) => item.toJson()).toList(),
+          'thread_parent_id': threadParentId,
+        });
+        final priorAttempt = _scheduledEncryptedAttempt;
+        if (priorAttempt != null &&
+            !priorAttempt.matches(
+              profileId: profileId,
+              authGeneration: _authGeneration,
+              peerProfileId: peerId,
+              clientMessageId: clientMessageId,
+              plaintext: outbound,
+              requestFingerprint: requestFingerprint,
+            )) {
+          _scheduledEncryptedAttempt = null;
+        }
+        final reusableAttempt =
+            priorAttempt != null &&
+                priorAttempt.matches(
+                  profileId: profileId,
+                  authGeneration: _authGeneration,
+                  peerProfileId: peerId,
+                  clientMessageId: clientMessageId,
+                  plaintext: outbound,
+                  requestFingerprint: requestFingerprint,
+                )
+            ? priorAttempt
+            : null;
+        if (reusableAttempt != null) {
+          outbound = reusableAttempt.ciphertext;
+          isE2e = true;
+          encryptedAttemptForRequest = reusableAttempt;
+        } else {
+          try {
+            outbound = await _ref
+                .read(e2eMessageServiceProvider)
+                .encryptOutgoing(
+                  localProfileId: profileId,
+                  peerProfileId: peerId,
+                  plaintext: outbound,
+                  authorization: auth,
+                  chatId: chatId,
+                );
+            if (!_isCurrentMutation(
+              profileId: profileId,
+              authorization: auth,
+              generation: generation,
+            )) {
+              return null;
+            }
+            isE2e = true;
+            final encryptedAttempt = _ScheduledEncryptedAttempt(
+              profileId: profileId,
+              authGeneration: _authGeneration,
+              peerProfileId: peerId,
+              clientMessageId: clientMessageId,
+              plaintext: content.trim(),
+              requestFingerprint: requestFingerprint,
+              ciphertext: outbound,
+            );
+            _scheduledEncryptedAttempt = encryptedAttempt;
+            encryptedAttemptForRequest = encryptedAttempt;
+          } on E2eEncryptException catch (error) {
+            if (!_isCurrentMutation(
+              profileId: profileId,
+              authorization: auth,
+              generation: generation,
+            )) {
+              return null;
+            }
+            state = state.copyWith(
+              isSending: false,
+              scheduledActionError: error.message,
+            );
+            return error.message;
+          }
+        }
+      } else {
+        _scheduledEncryptedAttempt = null;
+      }
+    } else {
+      _scheduledEncryptedAttempt = null;
+    }
+
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .scheduleMessage(
+          authorization: auth,
+          chatId: chatId,
           content: outbound,
+          clientMessageId: clientMessageId,
+          scheduledAt: scheduledAt,
+          sendWhenOnline: sendWhenOnline,
           attachments: attachments,
           mentions: mentions,
           threadParentId: threadParentId,
@@ -1767,35 +2596,153 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
     switch (result) {
       case MessagesApiOk(:final data):
+        if (identical(_scheduledEncryptedAttempt, encryptedAttemptForRequest)) {
+          _scheduledEncryptedAttempt = null;
+        }
+        final merged = [...state.scheduledMessages];
+        final index = merged.indexWhere((item) => item.id == data.id);
+        if (index < 0) {
+          merged.insert(0, data);
+        } else {
+          merged[index] = data;
+        }
+        state = state.copyWith(
+          scheduledMessages: merged,
+          isSending: false,
+          clearError: true,
+          clearScheduledActionError: true,
+        );
+        _invalidateChatLists(_ref);
+        return null;
+      case MessagesApiFailure(:final message):
+        state = state.copyWith(isSending: false, scheduledActionError: message);
+        return message;
+    }
+  }
+
+  Future<String?> updateScheduledMessage({
+    required String scheduledMessageId,
+    messaging_pb.ScheduledMessagePayload? payload,
+    DateTime? scheduledAt,
+    bool? sendWhenOnline,
+  }) async {
+    final context = _captureScheduledActionContext();
+    if (context == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .updateScheduledMessage(
+          authorization: context.authorization,
+          scheduledMessageId: scheduledMessageId,
+          payload: payload,
+          scheduledAt: scheduledAt,
+          sendWhenOnline: sendWhenOnline,
+        );
+    if (!_isCurrentScheduledAction(context)) return null;
+    switch (result) {
+      case MessagesApiOk(:final data):
+        state = state.copyWith(
+          scheduledMessages: _replaceScheduledMessage(data),
+          clearScheduledActionError: true,
+        );
+        return null;
+      case MessagesApiFailure(:final message):
+        state = state.copyWith(scheduledActionError: message);
+        return message;
+    }
+  }
+
+  Future<String?> cancelScheduledMessage(String scheduledMessageId) async {
+    final context = _captureScheduledActionContext();
+    if (context == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .cancelScheduledMessage(
+          authorization: context.authorization,
+          scheduledMessageId: scheduledMessageId,
+        );
+    if (!_isCurrentScheduledAction(context)) return null;
+    switch (result) {
+      case MessagesApiOk():
+        state = state.copyWith(
+          scheduledMessages: state.scheduledMessages
+              .where((item) => item.id != scheduledMessageId)
+              .toList(growable: false),
+          clearScheduledActionError: true,
+        );
+        return null;
+      case MessagesApiFailure(:final message):
+        state = state.copyWith(scheduledActionError: message);
+        return message;
+    }
+  }
+
+  Future<String?> sendScheduledMessageNow(String scheduledMessageId) async {
+    final context = _captureScheduledActionContext();
+    if (context == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .sendScheduledMessageNow(
+          authorization: context.authorization,
+          scheduledMessageId: scheduledMessageId,
+        );
+    if (!_isCurrentScheduledAction(context)) return null;
+    switch (result) {
+      case MessagesApiOk(:final data):
         final merged = [...state.messages];
-        if (!merged.any((m) => m.id == data.id)) {
+        if (!merged.any((message) => message.id == data.id)) {
           merged.add(data);
         }
         final sorted = await _finalizeMessages(
           _sortMessages(_visibleForCurrentBlockPolicy(merged)),
         );
-        if (!_isCurrentMutation(
-          profileId: profileId,
-          authorization: auth,
-          generation: generation,
-        )) {
-          return null;
-        }
+        if (!_isCurrentScheduledAction(context)) return null;
         state = state.copyWith(
           messages: sorted,
-          isSending: false,
-          isOfflineCache: false,
+          scheduledMessages: state.scheduledMessages
+              .where((item) => item.id != scheduledMessageId)
+              .toList(growable: false),
+          clearScheduledActionError: true,
           clearError: true,
         );
-        unawaited(_writeCache(sorted, profileId: profileId));
-        unawaited(_markLatestRead());
+        unawaited(_writeCache(sorted, profileId: context.profileId));
         _invalidateChatLists(_ref);
         return null;
       case MessagesApiFailure(:final message):
-        state = state.copyWith(isSending: false, errorMessage: message);
+        state = state.copyWith(scheduledActionError: message);
         return message;
     }
   }
+
+  List<messaging_pb.ScheduledMessage> _replaceScheduledMessage(
+    messaging_pb.ScheduledMessage replacement,
+  ) {
+    final items = [...state.scheduledMessages];
+    final index = items.indexWhere((item) => item.id == replacement.id);
+    if (index < 0) {
+      items.insert(0, replacement);
+    } else {
+      items[index] = replacement;
+    }
+    return items;
+  }
+
+  _ScheduledActionContext? _captureScheduledActionContext() {
+    final authorization = _ref.read(authorizationHeaderProvider);
+    final profileId = _activeProfileId();
+    if (authorization == null || profileId == null) return null;
+    return _ScheduledActionContext(
+      authorization: authorization,
+      profileId: profileId,
+      generation: _loadGeneration,
+    );
+  }
+
+  bool _isCurrentScheduledAction(_ScheduledActionContext context) =>
+      _isCurrentMutation(
+        profileId: context.profileId,
+        authorization: context.authorization,
+        generation: context.generation,
+      );
 
   bool _isDeviceOffline() => _ref.read(isDeviceOfflineProvider);
 
@@ -2149,11 +3096,27 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     String messageId, {
     required bool currentlyPinned,
   }) async {
+    final result = await togglePinWithResult(
+      messageId,
+      currentlyPinned: currentlyPinned,
+    );
+    return result.message;
+  }
+
+  Future<PinMutationResult> togglePinWithResult(
+    String messageId, {
+    required bool currentlyPinned,
+  }) async {
+    final initialSession = _ref.read(authControllerProvider).session;
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final generation = _loadGeneration;
-    if (auth == null || profileId == null) return 'not_authenticated';
+    final refreshToken = initialSession?.refreshToken;
+    if (auth == null || profileId == null) {
+      return const PinMutationResult.failure(message: 'not_authenticated');
+    }
     _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
+    final optimisticPinnedMessages = state.pinnedMessages;
     final client = _ref.read(voiceMessagesClientProvider);
     final result = currentlyPinned
         ? await client.unpinMessage(
@@ -2171,7 +3134,49 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       authorization: auth,
       generation: generation,
     )) {
-      return null;
+      final currentSession = _ref.read(authControllerProvider).session;
+      final currentProfileId = _activeProfileId();
+      final currentAuth = _ref.read(authorizationHeaderProvider);
+      final sameProfileRefreshed =
+          mounted &&
+          currentProfileId == profileId &&
+          currentAuth != null &&
+          (currentAuth != auth || currentSession?.refreshToken != refreshToken);
+      if (sameProfileRefreshed) {
+        // The old mutation result is no longer authoritative after token
+        // rotation. Roll back only our own optimistic snapshot; if a newer
+        // same-viewer pin update already replaced it, preserve that update
+        // while a post-mutation read reconciles the current server state.
+        if (identical(state.pinnedMessages, optimisticPinnedMessages)) {
+          _applyPinDelta(messageId: messageId, pinned: currentlyPinned);
+        }
+        final refreshedAuth = currentAuth;
+        final refreshedProfileId = currentProfileId!;
+        final currentGeneration = _loadGeneration;
+        await _refreshPinnedMessages(
+          refreshedAuth,
+          profileId: refreshedProfileId,
+          generation: currentGeneration,
+        );
+        if (!_isCurrentMutation(
+          profileId: refreshedProfileId,
+          authorization: refreshedAuth,
+          generation: currentGeneration,
+        )) {
+          return const PinMutationResult.stale();
+        }
+        if (state.pinnedMessagesStatus == PinnedMessagesLoadStatus.loaded) {
+          final authoritativePinned = state.pinnedMessages.any(
+            (message) => message.id == messageId,
+          );
+          _applyPinDelta(messageId: messageId, pinned: authoritativePinned);
+          if (authoritativePinned == !currentlyPinned) {
+            return const PinMutationResult.success();
+          }
+          return const PinMutationResult.failure(message: 'unknown_error');
+        }
+      }
+      return const PinMutationResult.stale();
     }
     switch (result) {
       case MessagesApiOk<void>():
@@ -2182,11 +3187,19 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             generation: generation,
           ),
         );
-        return null;
-      case MessagesApiFailure(:final message):
+        return const PinMutationResult.success();
+      case MessagesApiFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         unawaited(loadInitial());
         state = state.copyWith(errorMessage: message);
-        return message;
+        return PinMutationResult.failure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        );
     }
   }
 
@@ -2434,6 +3447,7 @@ class RealtimeHub {
   RealtimeHelloBinding? _helloBinding;
   int? _lastSequence;
   int? _resumeLastSequence;
+  Future<void>? _manualRetry;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
@@ -2452,6 +3466,45 @@ class RealtimeHub {
     if (auth == null || !config.hasBaseUrl) return;
     final binding = _activateBinding(auth);
     await _connect(binding, config.baseUrl);
+  }
+
+  bool get canRetryCurrentSession =>
+      !_disposed &&
+      _manualRetry == null &&
+      _connectingBinding == null &&
+      (_connection == null || identical(_helloAcceptedConnection, _connection));
+
+  /// Immediately retries the currently authenticated session without using
+  /// the profile-switch path or resetting automatic backoff state.
+  Future<void> retryCurrentSession() {
+    final pending = _manualRetry;
+    if (pending != null) return pending;
+    if (!canRetryCurrentSession) return Future<void>.value();
+    final session = _ref.read(authControllerProvider).session;
+    final config = _ref.read(gatewayConfigProvider);
+    if (session == null || !config.hasBaseUrl) return Future<void>.value();
+    if (_status == RealtimeLinkStatus.connected) return Future<void>.value();
+
+    final currentBinding = _binding;
+    final binding = currentBinding != null && currentBinding.session == session
+        ? currentBinding
+        : _activateBinding(session);
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    final operation = () async {
+      await _tearDownConnection(preserveLastSequence: true);
+      if (!_isCurrent(binding) ||
+          _ref.read(authControllerProvider).session != session) {
+        return;
+      }
+      final latestConfig = _ref.read(gatewayConfigProvider);
+      if (!latestConfig.hasBaseUrl) return;
+      await _connect(binding, latestConfig.baseUrl, isReconnectAttempt: true);
+    }();
+    _manualRetry = operation;
+    return operation.whenComplete(() {
+      if (identical(_manualRetry, operation)) _manualRetry = null;
+    });
   }
 
   _RealtimeHubBinding _activateBinding(AuthSession session, {int? generation}) {
@@ -2510,7 +3563,6 @@ class RealtimeHub {
       }
       _connection = connection;
       _frameSub = frameSub;
-      _reconnectAttempt = 0;
       for (final chatId in _subscribedChats) {
         if (!_isActive(binding, connection)) return;
         connection.sendSubscribe(chatId);
@@ -2582,6 +3634,7 @@ class RealtimeHub {
       if (identical(_helloAcceptedConnection, connection)) return;
       _helloAcceptedConnection = connection;
       _helloAcceptedBinding = binding;
+      _reconnectAttempt = 0;
       _setStatus(RealtimeLinkStatus.connected, binding: binding);
       final helloBinding = RealtimeHelloBinding(
         generation: ++_nextHelloGeneration,
@@ -2802,19 +3855,34 @@ final profileBoundRealtimeEventProvider =
 const reconnectBannerShowDelay = Duration(seconds: 2);
 const reconnectBannerHideDelay = Duration(seconds: 1);
 
-class ReconnectBannerController extends Notifier<bool> {
+class NetworkStatusBannerState {
+  const NetworkStatusBannerState({
+    this.visible = false,
+    this.dismissed = false,
+    this.retrying = false,
+  });
+
+  final bool visible;
+  final bool dismissed;
+  final bool retrying;
+}
+
+class ReconnectBannerController extends Notifier<NetworkStatusBannerState> {
   Timer? _showTimer;
   Timer? _hideTimer;
   var _wasConnected = false;
   var _disposed = false;
 
+  bool _isOffline = false;
+
   @override
-  bool build() {
+  NetworkStatusBannerState build() {
     ref.onDispose(() {
       _disposed = true;
       _cancelTimers();
     });
     final initialStatus = ref.read(realtimeLinkStatusProvider);
+    _isOffline = ref.read(isDeviceOfflineProvider);
     if (initialStatus == RealtimeLinkStatus.connected) {
       _wasConnected = true;
     } else if (_isUnhealthy(initialStatus)) {
@@ -2824,7 +3892,82 @@ class ReconnectBannerController extends Notifier<bool> {
     ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (prev, next) {
       _onLinkStatusChanged(prev, next);
     });
-    return false;
+    ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      if (previous?.session == next.session) return;
+      _cancelTimers();
+      _wasConnected =
+          ref.read(realtimeLinkStatusProvider) == RealtimeLinkStatus.connected;
+      state = NetworkStatusBannerState(
+        visible:
+            _isOffline || _isUnhealthy(ref.read(realtimeLinkStatusProvider)),
+      );
+    });
+    ref.listen<bool>(isDeviceOfflineProvider, (_, offline) {
+      _isOffline = offline;
+      if (offline) {
+        _showTimer?.cancel();
+        _showTimer = null;
+        _hideTimer?.cancel();
+        _hideTimer = null;
+        state = NetworkStatusBannerState(
+          visible: !state.dismissed,
+          dismissed: state.dismissed,
+          retrying: state.retrying,
+        );
+      } else if (_isUnhealthy(ref.read(realtimeLinkStatusProvider))) {
+        state = NetworkStatusBannerState(
+          visible: !state.dismissed,
+          dismissed: state.dismissed,
+          retrying: state.retrying,
+        );
+      } else if (!_isUnhealthy(ref.read(realtimeLinkStatusProvider))) {
+        state = NetworkStatusBannerState(
+          visible: false,
+          dismissed: false,
+          retrying: state.retrying,
+        );
+      }
+    });
+    return NetworkStatusBannerState(visible: _isOffline);
+  }
+
+  void dismiss() {
+    _showTimer?.cancel();
+    _showTimer = null;
+    _hideTimer?.cancel();
+    _hideTimer = null;
+    state = NetworkStatusBannerState(dismissed: true, retrying: state.retrying);
+  }
+
+  Future<void> retry() async {
+    if (_isOffline || state.retrying) return;
+    final auth = ref.read(authControllerProvider).session;
+    final hub = ref.read(realtimeHubProvider);
+    if (auth == null || !hub.canRetryCurrentSession) return;
+    state = NetworkStatusBannerState(
+      visible: state.visible,
+      dismissed: state.dismissed,
+      retrying: true,
+    );
+    try {
+      await hub.retryCurrentSession();
+    } finally {
+      if (!_disposed && ref.read(authControllerProvider).session == auth) {
+        state = NetworkStatusBannerState(
+          visible: state.visible,
+          dismissed: state.dismissed,
+          retrying: false,
+        );
+      }
+    }
+  }
+
+  void _setVisible(bool visible, {bool? dismissed}) {
+    state = NetworkStatusBannerState(
+      visible: visible,
+      dismissed: dismissed ?? state.dismissed,
+      retrying: state.retrying,
+    );
   }
 
   void _cancelTimers() {
@@ -2845,7 +3988,7 @@ class ReconnectBannerController extends Notifier<bool> {
       _showTimer = null;
       if (_disposed) return;
       if (_isUnhealthy(ref.read(realtimeLinkStatusProvider))) {
-        state = true;
+        if (!state.dismissed && !_isOffline) _setVisible(true);
       }
     });
   }
@@ -2855,12 +3998,12 @@ class ReconnectBannerController extends Notifier<bool> {
       _wasConnected = true;
       _showTimer?.cancel();
       _showTimer = null;
-      if (state) {
+      if (state.visible || state.dismissed) {
         _hideTimer?.cancel();
         _hideTimer = Timer(reconnectBannerHideDelay, () {
           _hideTimer = null;
-          if (_disposed) return;
-          state = false;
+          if (_disposed || _isOffline) return;
+          _setVisible(false, dismissed: false);
         });
       } else {
         _hideTimer?.cancel();
@@ -2872,7 +4015,7 @@ class ReconnectBannerController extends Notifier<bool> {
     if (next == RealtimeLinkStatus.disconnected) {
       _cancelTimers();
       _wasConnected = false;
-      state = false;
+      _setVisible(_isOffline, dismissed: false);
       return;
     }
 
@@ -2882,7 +4025,7 @@ class ReconnectBannerController extends Notifier<bool> {
 
     final lostConnection = prev == RealtimeLinkStatus.connected;
     if (_isUnhealthy(next) &&
-        (lostConnection || (!state && _showTimer == null))) {
+        (lostConnection || (!state.visible && _showTimer == null))) {
       _hideTimer?.cancel();
       _hideTimer = null;
       _scheduleShow();
@@ -2891,7 +4034,7 @@ class ReconnectBannerController extends Notifier<bool> {
 }
 
 final reconnectBannerVisibleProvider =
-    NotifierProvider<ReconnectBannerController, bool>(
+    NotifierProvider<ReconnectBannerController, NetworkStatusBannerState>(
       ReconnectBannerController.new,
     );
 
@@ -2908,6 +4051,9 @@ class ChatActions {
   Future<String?> openDmWithProfile(String otherProfileId) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null) return 'not_authenticated';
+    if (_ref.read(profileSwitchInProgressProvider)) {
+      return kChatActionStaleContext;
+    }
     final result = await _ref
         .read(voiceChatsClientProvider)
         .createDm(
@@ -2915,7 +4061,9 @@ class ChatActions {
           otherProfileId: otherProfileId,
         );
     final current = _ref.read(authControllerProvider).session;
-    if (current?.activeProfileId != session.activeProfileId ||
+    if (_ref.read(profileSwitchInProgressProvider) ||
+        current?.accountId != session.accountId ||
+        current?.activeProfileId != session.activeProfileId ||
         current?.authorizationHeader != session.authorizationHeader) {
       return kChatActionStaleContext;
     }
@@ -2935,14 +4083,19 @@ class ChatActions {
     required String name,
     required List<String> memberProfileIds,
   }) async {
+    final session = _ref.read(authControllerProvider).session;
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    if (session == null || auth == null) return 'not_authenticated';
     final createResult = await _ref
         .read(voiceChatsClientProvider)
         .createGroup(authorization: auth, name: name);
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     return switch (createResult) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk(:final data) => _inviteGroupMembers(
+        session: session,
         auth: auth,
         chatId: data.id,
         memberProfileIds: memberProfileIds,
@@ -2951,10 +4104,14 @@ class ChatActions {
   }
 
   Future<String?> _inviteGroupMembers({
+    required AuthSession session,
     required String auth,
     required String chatId,
     required List<String> memberProfileIds,
   }) async {
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     final inviteResult = await _ref
         .read(voiceChatsClientProvider)
         .addGroupMembers(
@@ -2962,10 +4119,19 @@ class ChatActions {
           chatId: chatId,
           profileIds: memberProfileIds,
         );
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     return switch (inviteResult) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk() => _selectGroupChat(chatId),
     };
+  }
+
+  bool _isCurrentGroupActionSession(AuthSession expected) {
+    final current = _ref.read(authControllerProvider).session;
+    return current?.activeProfileId == expected.activeProfileId &&
+        current?.authorizationHeader == expected.authorizationHeader;
   }
 
   String? _selectGroupChat(String chatId) {
@@ -3017,8 +4183,18 @@ class ChatActions {
     required String targetChatId,
     String? commentary,
     bool withoutAttribution = false,
+    String? expectedProfileId,
+    String? expectedAuthorization,
   }) async {
-    final auth = _ref.read(authorizationHeaderProvider);
+    final session = _ref.read(authControllerProvider).session;
+    if (expectedProfileId != null || expectedAuthorization != null) {
+      if (session?.activeProfileId != expectedProfileId ||
+          session?.authorizationHeader != expectedAuthorization) {
+        return kChatActionStaleContext;
+      }
+    }
+    final auth =
+        expectedAuthorization ?? _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
     final trimmedCommentary = commentary?.trim();
     final result = await _ref
@@ -3032,6 +4208,13 @@ class ChatActions {
               : trimmedCommentary,
           withoutAttribution: withoutAttribution,
         );
+    if (expectedProfileId != null || expectedAuthorization != null) {
+      final current = _ref.read(authControllerProvider).session;
+      if (current?.activeProfileId != expectedProfileId ||
+          current?.authorizationHeader != expectedAuthorization) {
+        return kChatActionStaleContext;
+      }
+    }
     return switch (result) {
       MessagesApiOk(:final data) => () {
         _invalidateChatLists(_ref);
@@ -3053,6 +4236,8 @@ class ChatActions {
     required String targetChatId,
     String? commentary,
     bool withoutAttribution = false,
+    String? expectedProfileId,
+    String? expectedAuthorization,
   }) async {
     if (sourceMessageIds.isEmpty) return null;
     for (var i = 0; i < sourceMessageIds.length; i++) {
@@ -3061,6 +4246,8 @@ class ChatActions {
         targetChatId: targetChatId,
         commentary: i == 0 ? commentary : null,
         withoutAttribution: withoutAttribution,
+        expectedProfileId: expectedProfileId,
+        expectedAuthorization: expectedAuthorization,
       );
       if (err != null) return err;
     }

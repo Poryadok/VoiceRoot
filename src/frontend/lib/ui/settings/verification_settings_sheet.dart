@@ -5,6 +5,7 @@ import '../../backend/auth_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_primary_button.dart';
 
 /// Profile-scoped linked accounts and verification entry points.
@@ -22,11 +23,14 @@ class VerificationSettingsSheet extends ConsumerStatefulWidget {
       _VerificationSettingsSheetState();
 }
 
+enum _VerificationErrorSource { load, link, unlink }
+
 class _VerificationSettingsSheetState
     extends ConsumerState<VerificationSettingsSheet> {
   List<LinkedAccount>? _accounts;
   var _loading = true;
   String? _error;
+  _VerificationErrorSource? _errorSource;
   String? _selectedProfileId;
   String? _busyPlatform;
 
@@ -42,6 +46,7 @@ class _VerificationSettingsSheetState
       setState(() {
         _loading = false;
         _error = 'not_authenticated';
+        _errorSource = _VerificationErrorSource.load;
       });
       return;
     }
@@ -59,9 +64,16 @@ class _VerificationSettingsSheetState
               .where((account) => account.profileId == selectedProfileId)
               .toList(growable: false);
           _error = null;
-        case AuthApiFailure(:final message):
+          _errorSource = null;
+        case AuthApiFailure(:final message, :final statusCode):
           _accounts = const [];
-          _error = message;
+          _error = settingsLoadErrorMessage(
+            AppLocalizations.of(context)!,
+            message,
+            statusCode: statusCode,
+            fallback: AppLocalizations.of(context)!.commonActionFailed,
+          );
+          _errorSource = _VerificationErrorSource.load;
       }
     });
   }
@@ -69,7 +81,13 @@ class _VerificationSettingsSheetState
   Future<void> _linkProvider(String platform) async {
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
-    setState(() => _busyPlatform = platform);
+    setState(() {
+      _busyPlatform = platform;
+      if (_errorSource == _VerificationErrorSource.link) {
+        _error = null;
+        _errorSource = null;
+      }
+    });
     final result = await ref
         .read(voiceAuthClientProvider)
         .startLinkedAccountLink(
@@ -81,13 +99,25 @@ class _VerificationSettingsSheetState
     setState(() => _busyPlatform = null);
     switch (result) {
       case AuthApiOk(:final data):
+        if (_errorSource == _VerificationErrorSource.link) {
+          setState(() {
+            _error = null;
+            _errorSource = null;
+          });
+        }
         if (data.isNotEmpty) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('OAuth: $data')));
         }
-      case AuthApiFailure(:final message):
-        setState(() => _error = message);
+      case AuthApiFailure(:final statusCode):
+        setState(() {
+          _error = commonActionErrorMessage(
+            AppLocalizations.of(context)!,
+            statusCode: statusCode,
+          );
+          _errorSource = _VerificationErrorSource.link;
+        });
     }
   }
 
@@ -102,8 +132,14 @@ class _VerificationSettingsSheetState
     switch (result) {
       case AuthApiOk<void>():
         await _loadLinkedAccounts();
-      case AuthApiFailure(:final message):
-        setState(() => _error = message);
+      case AuthApiFailure(:final statusCode):
+        setState(() {
+          _error = commonActionErrorMessage(
+            AppLocalizations.of(context)!,
+            statusCode: statusCode,
+          );
+          _errorSource = _VerificationErrorSource.unlink;
+        });
     }
     if (mounted) setState(() => _busyPlatform = null);
   }
@@ -147,7 +183,12 @@ class _VerificationSettingsSheetState
               if (_loading)
                 const Center(child: CircularProgressIndicator())
               else if (_error != null)
-                Text(_error!, style: TextStyle(color: voice.error))
+                Text(
+                  _error == 'not_authenticated'
+                      ? l10n.settingsNotAuthenticated
+                      : _error!,
+                  style: TextStyle(color: voice.error),
+                )
               else
                 KeyedSubtree(
                   key: VerificationSettingsSheet.linkedAccountsKey,
