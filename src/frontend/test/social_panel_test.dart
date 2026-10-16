@@ -983,6 +983,8 @@ void main() {
     tester,
   ) async {
     final pending = Completer<http.Response>();
+    final declineMethods = <String>[];
+    var acceptCalls = 0;
     var calls = 0;
     var declined = false;
     await tester.pumpWidget(
@@ -1001,14 +1003,14 @@ void main() {
             );
           }
           if (request.url.path == '/api/v1/friends/invitations/p-in/decline') {
-            expect(request.method, 'POST');
+            declineMethods.add(request.method);
             calls++;
             if (calls == 1) return pending.future;
             declined = true;
             return http.Response('{}', 200);
           }
           if (request.url.path.endsWith('/accept')) {
-            fail('Decline must not accept the request');
+            acceptCalls++;
           }
           return http.Response('{}', 200);
         }),
@@ -1021,6 +1023,8 @@ void main() {
     staleTap();
     await tester.pump();
     expect(calls, 1);
+    expect(declineMethods, ['POST']);
+    expect(acceptCalls, 0);
     expect(tester.widget<IconButton>(decline).onPressed, isNull);
     expect(
       tester.widget<IconButton>(
@@ -1039,6 +1043,8 @@ void main() {
     await tester.tap(decline);
     await tester.pumpAndSettle();
     expect(calls, 2);
+    expect(declineMethods, ['POST', 'POST']);
+    expect(acceptCalls, 0);
     expect(decline, findsNothing);
     expect(find.text('No friend requests'), findsOneWidget);
   });

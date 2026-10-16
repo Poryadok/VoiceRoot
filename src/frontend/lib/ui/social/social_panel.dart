@@ -905,7 +905,7 @@ class _IncomingRequestTileState extends ConsumerState<_IncomingRequestTile> {
             IconButton(
               key: SocialPanel.requestAcceptKey(profileId),
               tooltip: l10n.socialAcceptRequest,
-              icon: const Icon(Icons.check),
+              icon: Icon(Icons.check, semanticLabel: l10n.socialAcceptRequest),
               onPressed: _busy || !widget.canMutate
                   ? null
                   : () => _runAction(widget.onAccept),
@@ -913,7 +913,7 @@ class _IncomingRequestTileState extends ConsumerState<_IncomingRequestTile> {
             IconButton(
               key: SocialPanel.requestDeclineKey(profileId),
               tooltip: l10n.socialDeclineRequest,
-              icon: const Icon(Icons.close),
+              icon: Icon(Icons.close, semanticLabel: l10n.socialDeclineRequest),
               onPressed: _busy || !widget.canMutate
                   ? null
                   : () => _runAction(widget.onDecline),
