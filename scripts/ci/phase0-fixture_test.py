@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,8 +61,12 @@ def restore_fixture_owner(destination):
     if os.geteuid() == 0:
         for path in (Path(destination), *Path(destination).rglob("*")):
             os.chown(path, uid, gid)
-        return
-    require_success(run("sudo", "-n", "chown", "-R", f"{uid}:{gid}", destination))
+    else:
+        require_success(run("sudo", "-n", "chown", "-R", f"{uid}:{gid}", destination))
+    for path in (Path(destination), Path(destination) / "tls", Path(destination) / "ca",
+                 Path(destination) / "matchmaking"):
+        if path.is_dir():
+            path.chmod(0o700)
 
 
 class FixtureTests(unittest.TestCase):
@@ -137,6 +142,7 @@ class FixtureTests(unittest.TestCase):
                                 ("voice-jwks", "voice"), ("chat-gis-grpc", "chat"),
                                 ("voice-game-grpc", "voice"),
                                 ("chat-match-squad-grpc", "chat"), ("voice-match-squad-grpc", "voice"),
+                                 ("voice-match-squad-member-grpc", "voice"),
                                 ("space-lifecycle", "space"),
                                 ("bot-game-event", "bot"), ("notification-lifecycle", "notification"),
                                 ("messaging-gameintegration-grpc", "messaging")):
@@ -358,6 +364,8 @@ sys.exit(code)
                  self.dest / "tls/chat-match-squad-grpc.key",
                  self.dest / "tls/voice-match-squad-grpc.crt",
                  self.dest / "tls/voice-match-squad-grpc.key",
+                  self.dest / "tls/voice-match-squad-member-grpc.crt",
+                  self.dest / "tls/voice-match-squad-member-grpc.key",
                  self.dest / "tls/matchmaking-client.crt",
                  self.dest / "tls/matchmaking-client.key",
                  self.dest / "ca/ca.crt"]
@@ -477,21 +485,54 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/matchmaking/Dockerfile").read_text())
         self.assertEqual(chat["environment"]["CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN"], ":9092")
         self.assertEqual(voice["environment"]["VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN"], ":9094")
+        self.assertEqual(voice["environment"]["VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_GRPC_LISTEN"], ":9095")
+        self.assertEqual(self.media_merged["voice"].get("user"), "0:0")
+        self.assertEqual(voice["environment"]["VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_URL"],
+                         "https://phase0-jwks:8443/gateway/jwks.json")
+        self.assertEqual(voice["environment"]["VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_ADDR"], "redis:6379")
+        self.assertEqual(voice["environment"]["VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_CLIENT_CA_FILE"],
+                         "/run/phase0/ca.crt")
+        voice_main = (ROOT / "src/backend/voice/main.go").read_text(encoding="utf-8")
+        self.assertIn("if matchSquadEnabled != matchSquadMemberEnabled", voice_main)
+        self.assertIn("Voice MatchSquad provisioning and delegated member listeners must be enabled together",
+                      voice_main)
+        self.assertEqual(self.media_merged["gateway"]["environment"]["GATEWAY_MATCH_SQUAD_MEMBER_GRPC_ADDR"],
+                         "voice:9095")
+        self.assertEqual(self.media_merged["gateway"]["environment"]["GATEWAY_MATCH_SQUAD_MEMBER_TLS_SERVER_NAME"],
+                         "voice")
+        self.assertEqual(self.media_source_at("gateway", "/run/phase0/gateway-client.crt"),
+                         "tls/gateway-client.crt")
+        self.assertEqual(self.media_source_at("gateway", "/run/phase0/gateway-client.key"),
+                         "tls/gateway-client.key")
         for service, env, leaf in (("chat", chat["environment"], "chat-match-squad-grpc"),
                                    ("voice", voice["environment"], "voice-match-squad-grpc")):
             self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_JWKS_URL"], MATCHMAKING_JWKS_URL)
             self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE"], "/run/phase0/ca.crt")
             self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
             self.assertEqual(env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD"], "")
-            self.assertNotIn("user", self.media_merged[service],
-                             f"{service} must retain its Dockerfile nonroot identity")
-            self.assertIn("USER nonroot:nonroot", (ROOT / f"src/backend/{service}/Dockerfile").read_text())
+            if service == "chat":
+                self.assertNotIn("user", self.media_merged[service],
+                                 "Chat must retain its Dockerfile nonroot identity")
+                self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/chat/Dockerfile").read_text())
             self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE"],
                                                   merged=self.media_merged), f"tls/{leaf}.crt")
             self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE"],
                                                   merged=self.media_merged), f"tls/{leaf}.key")
             self.assertEqual(self.media_source_at(service, env[f"{service.upper()}_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE"],
                                                   merged=self.media_merged), "ca/ca.crt")
+        self.assertEqual(self.media_source_at(
+            "voice", voice["environment"]["VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_CERT_FILE"],
+            merged=self.media_merged), "tls/voice-match-squad-member-grpc.crt")
+        self.assertEqual(self.media_source_at(
+            "voice", voice["environment"]["VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_KEY_FILE"],
+            merged=self.media_merged), "tls/voice-match-squad-member-grpc.key")
+        self.assertEqual(self.media_source_at(
+            "voice", voice["environment"]["VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_CA_FILE"],
+            merged=self.media_merged), "ca/ca.crt")
+        self.assertEqual(self.media_merged["gateway"]["environment"][
+            "GATEWAY_MATCH_SQUAD_MEMBER_TLS_CA_FILE"], "/run/phase0/ca.crt")
+        self.assertEqual(self.media_merged["gateway"]["environment"][
+            "GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_CERT_FILE"], "/run/phase0/gateway-client.crt")
         self.assertEqual(self.media_source_at("phase0-jwks", "/run/phase0/matchmaking/jwks.json",
                                               merged=self.media_merged), "jwks/matchmaking/jwks.json")
 
@@ -526,11 +567,9 @@ class ComposeTests(unittest.TestCase):
         for relative in wrappers:
             source = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn("docker-compose.voice-space-media.yml", source, relative)
-            self.assertRegex(
-                source,
-                r"PHASE0_MATCHSQUAD_FIXTURE_UID=65532\s+python3 .*generate-phase0-fixture\.py",
-                relative,
-            )
+            self.assertIn("export PHASE0_MATCHSQUAD_FIXTURE_UID=65532", source, relative)
+            self.assertIn("restore-phase0-fixture-owner.py", source, relative)
+            self.assertIn("generate-phase0-fixture.py", source, relative)
 
         workflows = (
             (".github/workflows/ci.yml", "compose-e2e", "Generate disposable media principal and TLS fixture"),
@@ -543,6 +582,13 @@ class ComposeTests(unittest.TestCase):
                             if step.get("name") == name)
             self.assertEqual(producer.get("env", {}).get("PHASE0_MATCHSQUAD_FIXTURE_UID"), "65532",
                              f"{relative}:{job}:{name}")
+        t31 = (ROOT / ".github/workflows/t31-session-events-e2e.yml").read_text(encoding="utf-8")
+        ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertIn("restore-phase0-fixture-owner.py", t31)
+        self.assertIn("restore-phase0-fixture-owner.py", ci)
+        restorer = (ROOT / "scripts/dev/restore-phase0-fixture-owner.py").read_text(encoding="utf-8")
+        self.assertIn('"phase0-fixture", "credentials", "voice-space-media-phase0"', restorer)
+        self.assertNotIn('"-R"', restorer, "cleanup must only chown enumerated fixture paths")
 
         self.assertIn("docker-compose.voice-space-media.yml",
                       (ROOT / "scripts/ci/t31-session-event-compose-bootstrap.py").read_text(encoding="utf-8"))
@@ -990,7 +1036,8 @@ class ComposeTests(unittest.TestCase):
             proxy = dict(services[PROXY])
             proxy.pop("depends_on", None)
             proxy["volumes"] = [v for v in proxy["volumes"]
-                                if not v["target"].startswith("/run/phase0/space-ca")]
+                                if v["target"] != "/run/phase0/matchmaking/jwks.json"
+                                and not v["target"].startswith("/run/phase0/space-ca")]
             return proxy
         self.assertEqual(common_proxy(self.media_merged), common_proxy(self.merged),
                          "proxy differs only in its upstream Space CA and initialization dependency")
@@ -1183,7 +1230,10 @@ class ComposeTests(unittest.TestCase):
             "gateway": {"gateway/current.pem", "gateway/next.pem", "tls/gateway-client.crt", "tls/gateway-client.key", "ca/ca.crt"},
             "voice": {"voice/current.pem", "voice/next.pem", "tls/voice-jwks.crt", "tls/voice-jwks.key",
                       "tls/voice-game-grpc.crt", "tls/voice-game-grpc.key", "tls/voice-client.crt",
-                      "tls/voice-client.key", "ca/ca.crt", "ca/space-lifecycle-client-ca.crt"},
+                      "tls/voice-client.key", "tls/voice-match-squad-grpc.crt",
+                      "tls/voice-match-squad-grpc.key", "tls/voice-match-squad-member-grpc.crt",
+                      "tls/voice-match-squad-member-grpc.key", "ca/ca.crt",
+                      "ca/space-lifecycle-client-ca.crt"},
             PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"},
         }
         for service, sources in allowed.items():

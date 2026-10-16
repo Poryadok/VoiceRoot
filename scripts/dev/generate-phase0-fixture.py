@@ -122,6 +122,7 @@ def generate(destination):
                      ("gameintegration-jwks", "gameintegration"), ("voice-jwks", "voice"),
                      ("chat-gis-grpc", "chat"), ("voice-game-grpc", "voice"),
                      ("chat-match-squad-grpc", "chat"), ("voice-match-squad-grpc", "voice"),
+                     ("voice-match-squad-member-grpc", "voice"),
                      ("space-lifecycle", "space"), ("bot-game-event", "bot"),
                      ("notification-lifecycle", "notification"),
                      ("messaging-gameintegration-grpc", "messaging")), 1):
@@ -193,6 +194,8 @@ def generate(destination):
                     root / "tls/chat-match-squad-grpc.key",
                     root / "tls/voice-match-squad-grpc.crt",
                     root / "tls/voice-match-squad-grpc.key",
+                    root / "tls/voice-match-squad-member-grpc.crt",
+                    root / "tls/voice-match-squad-member-grpc.key",
                     root / "tls/matchmaking-client.crt",
                     root / "tls/matchmaking-client.key",
                     root / "ca/ca.crt",

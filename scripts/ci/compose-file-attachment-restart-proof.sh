@@ -68,6 +68,12 @@ cleanup() {
   if [[ "$compose_down_succeeded" == "false" ]]; then
     echo "Compose cleanup failed; disposable fixture retained at $state_dir" >&2
   elif [[ "${VOICE_FILE_ATTACHMENT_RESTART_CLEANUP:-false}" == "true" || "$compose_started" == "false" ]]; then
+    if [[ "${PHASE0_MATCHSQUAD_FIXTURE_UID:-}" == "65532" && -d "$phase0_fixture_dir" ]] && \
+      ! python3 "$ROOT/scripts/dev/restore-phase0-fixture-owner.py" "$phase0_fixture_dir"; then
+      echo "could not restore fixture ownership; retaining $state_dir" >&2
+      status=1
+      return "$status"
+    fi
     rm -rf -- "$state_dir"
   else
     echo "disposable fixture retained with Compose project at $state_dir" >&2
@@ -76,7 +82,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-PHASE0_MATCHSQUAD_FIXTURE_UID=65532 python3 "$ROOT/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
+export PHASE0_MATCHSQUAD_FIXTURE_UID=65532
+python3 "$ROOT/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
 printf 'PHASE0_FIXTURE_DIR=%s\n' "$phase0_fixture_dir" >"$compose_env"
 export PHASE0_FIXTURE_DIR="$phase0_fixture_dir"
 

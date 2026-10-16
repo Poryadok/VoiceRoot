@@ -1788,6 +1788,13 @@ jobs:
           bash scripts/ci/compose-e2e-smoke.sh
           cd src/backend/gateway
           CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^(TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*|TestRequestComposeJoinToken.*)$' ./...
+      - name: Restore and remove disposable Phase0 fixture ownership
+        if: always()
+        run: |
+          if [[ -d "$RUNNER_TEMP/voice-space-media-phase0" ]]; then
+            python scripts/dev/restore-phase0-fixture-owner.py "$RUNNER_TEMP/voice-space-media-phase0"
+            rm -rf -- "$RUNNER_TEMP/voice-space-media-phase0"
+          fi
 
   a1-e2e:
     needs: changes
