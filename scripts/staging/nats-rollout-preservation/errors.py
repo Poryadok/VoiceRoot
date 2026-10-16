@@ -14,6 +14,11 @@ CLIENT_CODES=frozenset(('bridge_client_arguments_invalid','bridge_workflow_run_c
     'bridge_workflow_source_changed','bridge_client_directory_invalid','bridge_client_response_invalid',
     'bridge_root_request_blocked','bridge_response_timeout_operation_requires_status','bridge_output_invalid'))
 CODES=CODES|CLIENT_CODES|frozenset(('rollout_nonnats_live_object_identity_changed',))
+CODES=CODES|frozenset(('provisional_dispatch_required','provisional_binding_invalid',
+    'provisional_released_parent_required','provisional_active_release_changed',
+    'provisional_released_marker_changed','provisional_runtime_changed',
+    'provisional_child_already_bound','provisional_chain_invalid',
+    'provisional_helper_source_changed','provisional_migration_forbidden','provisional_repair_scope_missing'))
 
 def safe_error(error):
     if isinstance(error,(Blocked,BridgeError)) and len(error.args)==1 and isinstance(error.args[0],str) and error.args[0] in CODES:

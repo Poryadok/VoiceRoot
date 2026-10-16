@@ -1,5 +1,49 @@
 # Окружения и выкат
 
+## Explicit provisional staging (implementation contract)
+
+An explicit master `workflow_dispatch` may opt into `provisional_staging=true`
+for a nonreset `images-only` deployment while that exact master push CI attempt
+is still pending. A successful exact `staging-stack-lock`, independently resolved
+immutable images, and no observed failed/cancelled job remain prerequisites.
+Automatic workflow calls and ordinary deployments retain the strict CI gate.
+The flag is bound by the bridge request, checkpoint and apply authorization;
+changing runner environment variables cannot change an admitted operation.
+
+Successful preservation and restart in this mode mean
+`PROVISIONAL_READY / POST_RESTART / RELEASED`, not release acceptance. Explicit
+same-operation acceptance must prove the original CI attempt now passes the
+ordinary gate and recheck the exact live target, images, marker and storage.
+It does not reapply or restart workloads. Pending or failed acceptance leaves
+the durable operation unchanged. Safe reports distinguish provisional runtime
+readiness from final acceptance; a green provisional workflow is not CI PASS.
+
+If candidate CI fails or master advances, an explicit repair-forward transaction
+may name that exact released provisional parent. It captures the actual current
+state, takes a fresh protected backup and uses fresh source/custody/apply
+authority. Only one child may claim a parent; linked history is preserved and
+the child must cover every image service selected by its unaccepted parent;
+the parent is superseded only after verified child completion. A failed child
+keeps the chain unresolved. Final acceptance requires healthy workloads and
+unchanged preserved non-NATS resources. Repair admission permits an unhealthy
+application only when its released marker, exact specs/images, identities,
+preserved resources and storage remain bound; fresh transaction guards still apply.
+This exception cannot admit a fenced, BLOCKED or
+UNKNOWN operation, bypass another active operation, restore old data, or turn
+failed CI into PASS. Existing recovery rules handle those other states.
+GitHub may omit the dependency-blocked `ci-gate` from the job inventory; this
+counts as pending only for an in-progress exact CI attempt. Final acceptance
+always requires the actual successful gate. A partial fence failure remains
+truthfully BLOCKED and requires existing operator recovery; this mode does not
+introduce automatic recovery from arbitrary runtime failures.
+
+When correlating a protected finish with GitHub, use its journal request's
+`report_run_id` for the deployment workflow run. `source_authority.run_id`
+identifies the CI provenance run; checkpoint `context` has no `run_id`.
+A completed prepare report describes that request's observed snapshot, not the
+operation's current finish progress. Read the finish request report or a fresh
+status report and bind its operation, source and helper before judging acceptance.
+
 Согласуется со стеком в [MICROSERVICES.md](MICROSERVICES.md) и [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (k3s / Kubernetes, ClusterDNS). Политика релизов, canary и откат — [OPERATIONS.md](OPERATIONS.md).
 
 ---
