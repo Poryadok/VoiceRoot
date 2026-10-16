@@ -22,6 +22,7 @@ const (
 	SocialService_SendFriendInvitation_FullMethodName    = "/voice.social.v1.SocialService/SendFriendInvitation"
 	SocialService_AcceptFriendInvitation_FullMethodName  = "/voice.social.v1.SocialService/AcceptFriendInvitation"
 	SocialService_DeclineFriendInvitation_FullMethodName = "/voice.social.v1.SocialService/DeclineFriendInvitation"
+	SocialService_CancelFriendInvitation_FullMethodName  = "/voice.social.v1.SocialService/CancelFriendInvitation"
 	SocialService_RemoveFriend_FullMethodName            = "/voice.social.v1.SocialService/RemoveFriend"
 	SocialService_ListFriends_FullMethodName             = "/voice.social.v1.SocialService/ListFriends"
 	SocialService_ListFriendRequests_FullMethodName      = "/voice.social.v1.SocialService/ListFriendRequests"
@@ -52,6 +53,8 @@ type SocialServiceClient interface {
 	SendFriendInvitation(ctx context.Context, in *SendFriendInvitationRequest, opts ...grpc.CallOption) (*SendFriendInvitationResponse, error)
 	AcceptFriendInvitation(ctx context.Context, in *AcceptFriendInvitationRequest, opts ...grpc.CallOption) (*AcceptFriendInvitationResponse, error)
 	DeclineFriendInvitation(ctx context.Context, in *DeclineFriendInvitationRequest, opts ...grpc.CallOption) (*DeclineFriendInvitationResponse, error)
+	// Sender cancels only its own pending invitation.
+	CancelFriendInvitation(ctx context.Context, in *CancelFriendInvitationRequest, opts ...grpc.CallOption) (*CancelFriendInvitationResponse, error)
 	RemoveFriend(ctx context.Context, in *RemoveFriendRequest, opts ...grpc.CallOption) (*RemoveFriendResponse, error)
 	ListFriends(ctx context.Context, in *ListFriendsRequest, opts ...grpc.CallOption) (*ListFriendsResponse, error)
 	ListFriendRequests(ctx context.Context, in *ListFriendRequestsRequest, opts ...grpc.CallOption) (*ListFriendRequestsResponse, error)
@@ -108,6 +111,16 @@ func (c *socialServiceClient) DeclineFriendInvitation(ctx context.Context, in *D
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeclineFriendInvitationResponse)
 	err := c.cc.Invoke(ctx, SocialService_DeclineFriendInvitation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *socialServiceClient) CancelFriendInvitation(ctx context.Context, in *CancelFriendInvitationRequest, opts ...grpc.CallOption) (*CancelFriendInvitationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelFriendInvitationResponse)
+	err := c.cc.Invoke(ctx, SocialService_CancelFriendInvitation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -313,6 +326,8 @@ type SocialServiceServer interface {
 	SendFriendInvitation(context.Context, *SendFriendInvitationRequest) (*SendFriendInvitationResponse, error)
 	AcceptFriendInvitation(context.Context, *AcceptFriendInvitationRequest) (*AcceptFriendInvitationResponse, error)
 	DeclineFriendInvitation(context.Context, *DeclineFriendInvitationRequest) (*DeclineFriendInvitationResponse, error)
+	// Sender cancels only its own pending invitation.
+	CancelFriendInvitation(context.Context, *CancelFriendInvitationRequest) (*CancelFriendInvitationResponse, error)
 	RemoveFriend(context.Context, *RemoveFriendRequest) (*RemoveFriendResponse, error)
 	ListFriends(context.Context, *ListFriendsRequest) (*ListFriendsResponse, error)
 	ListFriendRequests(context.Context, *ListFriendRequestsRequest) (*ListFriendRequestsResponse, error)
@@ -353,6 +368,9 @@ func (UnimplementedSocialServiceServer) AcceptFriendInvitation(context.Context, 
 }
 func (UnimplementedSocialServiceServer) DeclineFriendInvitation(context.Context, *DeclineFriendInvitationRequest) (*DeclineFriendInvitationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeclineFriendInvitation not implemented")
+}
+func (UnimplementedSocialServiceServer) CancelFriendInvitation(context.Context, *CancelFriendInvitationRequest) (*CancelFriendInvitationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelFriendInvitation not implemented")
 }
 func (UnimplementedSocialServiceServer) RemoveFriend(context.Context, *RemoveFriendRequest) (*RemoveFriendResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveFriend not implemented")
@@ -482,6 +500,24 @@ func _SocialService_DeclineFriendInvitation_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SocialServiceServer).DeclineFriendInvitation(ctx, req.(*DeclineFriendInvitationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SocialService_CancelFriendInvitation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelFriendInvitationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).CancelFriendInvitation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_CancelFriendInvitation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).CancelFriendInvitation(ctx, req.(*CancelFriendInvitationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -846,6 +882,10 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeclineFriendInvitation",
 			Handler:    _SocialService_DeclineFriendInvitation_Handler,
+		},
+		{
+			MethodName: "CancelFriendInvitation",
+			Handler:    _SocialService_CancelFriendInvitation_Handler,
 		},
 		{
 			MethodName: "RemoveFriend",
