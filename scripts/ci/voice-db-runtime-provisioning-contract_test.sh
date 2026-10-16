@@ -1344,6 +1344,55 @@ f13_path_is_guarded() {
   return 1
 }
 
+# Criss-cross topic merges can have several best merge bases even when their
+# guarded/runtime inputs have one unambiguous shared state. In that narrow case
+# use the common ancestor of all best bases, but only after proving every path
+# governed by this collector has the same complete tree entry at each best
+# base. Differences in those paths remain ambiguous and fail closed.
+f13_resolve_source_base() {
+  local repo="$1" first_parent="$2" source_head="$3" output_file="$4"
+  local bases canonical base path first_entry entry first_entry_set
+  local paths="${TMP_DIR}/f13-ambiguous-base-paths-${first_parent}-${source_head}"
+  bases="$(git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" 2>/dev/null)" || return 1
+  [[ -n "${bases}" ]] || return 1
+  if [[ "$(wc -l <<<"${bases}" | tr -d '[:space:]')" == 1 ]]; then
+    canonical="${bases}"
+  else
+    canonical="$(git -C "${repo}" merge-base --octopus "${first_parent}" "${source_head}" 2>/dev/null)" || return 1
+    [[ "${canonical}" =~ ^[0-9a-f]{40}$ ]] || return 1
+    git -C "${repo}" diff --name-only "${canonical}" "${first_parent}" >"${paths}" || return 1
+    git -C "${repo}" diff --name-only "${canonical}" "${source_head}" >>"${paths}" || return 1
+    while IFS= read -r base; do
+      [[ -n "${base}" ]] || continue
+      git -C "${repo}" diff --name-only "${canonical}" "${base}" >>"${paths}" || return 1
+    done <<<"${bases}"
+
+    while IFS= read -r path; do
+      [[ -n "${path}" ]] || continue
+      if ! f13_path_is_guarded "${path}" && ! printf '%s\n' "${path}" | voice_r22_runtime_changed; then
+        continue
+      fi
+      first_entry=""
+      first_entry_set=false
+      while IFS= read -r base; do
+        [[ -n "${base}" ]] || continue
+        entry="$(git -C "${repo}" ls-tree "${base}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+        if [[ "${first_entry_set}" != true ]]; then
+          first_entry="${entry}"
+          first_entry_set=true
+        elif [[ "${entry}" != "${first_entry}" ]]; then
+          return 1
+        fi
+      done <<<"${bases}"
+    done < <(LC_ALL=C sort -u "${paths}")
+  fi
+  [[ "${canonical}" =~ ^[0-9a-f]{40}$ ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${canonical}" "${first_parent}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${canonical}" "${source_head}" 2>/dev/null || return 1
+  printf '%s\n' "${canonical}" >"${output_file}"
+  printf '%s\n' "${bases}" >"${output_file}.candidates"
+}
+
 f13_cross_scope_path_allowed() {
   local path="$1" runtime_trigger="$2"
   [[ "${runtime_trigger}" == true ]] || return 0
@@ -1390,11 +1439,11 @@ f13_collect_develop_contributions() {
   local allow_direct_followup="${6:-false}"
   local partition_source_history="${7:-false}"
   local commit parent_count first_parent source_head source_base delta first_parent_commits is_direct
-  local source_parent_index contribution_id
+  local source_parent_index contribution_id source_base_file
   local sync_boundary boundary_commit
   local path source_entry result_entry target_entry blob trigger incremental_merge
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
-  local previous_source_head previous_source_entry base_entry source_lineage
+  local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates
   local -a commit_line
   local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=()
   : >"${output}"
@@ -1453,18 +1502,13 @@ f13_collect_develop_contributions() {
     is_direct=false
     if ((parent_count >= 2)); then
       source_head="${commit_line[${source_parent_index}]}"
-      source_base="$(git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" 2>/dev/null)" || {
+      source_base_file="${TMP_DIR}/f13-source-base-${contribution_id}"
+      f13_resolve_source_base "${repo}" "${first_parent}" "${source_head}" "${source_base_file}" || {
         f13_collect_failure "${diagnostic_file}" source_base
         return 1
       }
-      # A crisscross history has no unique source base. Attribution must not
-      # depend on whichever base Git happens to print first.
-      [[ "${source_base}" =~ ^[0-9a-f]{40}$ ]] &&
-        git -C "${repo}" merge-base --is-ancestor "${source_base}" "${first_parent}" 2>/dev/null &&
-        git -C "${repo}" merge-base --is-ancestor "${source_base}" "${source_head}" 2>/dev/null || {
-        f13_collect_failure "${diagnostic_file}" source_base
-        return 1
-      }
+      source_base="$(<"${source_base_file}")"
+      source_base_candidates="$(tr '\n' ',' <"${source_base_file}.candidates" | sed 's/,$//')"
       git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${contribution_id}" || {
         f13_collect_failure "${diagnostic_file}" source_delta
         return 1
@@ -1473,6 +1517,7 @@ f13_collect_develop_contributions() {
       is_direct=true
       source_head="${commit}"
       source_base="${first_parent}"
+      source_base_candidates="${source_base}"
       git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${contribution_id}" || {
         f13_collect_failure "${diagnostic_file}" source_delta
         return 1
@@ -1582,8 +1627,8 @@ f13_collect_develop_contributions() {
       owner_content_bases["${path}"]="${content_base}"
       owner_source_heads["${path}"]="${nested_head}"
       owner_source_entries["${path}"]="${source_entry}"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" >>"${output}"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" >>"${output}"
     done <"${delta}"
     done
     if ((parent_count > 2)); then
@@ -1696,6 +1741,23 @@ f13_collect_master_release_pr_contributions() {
   }
 }
 
+# Share the full push-event gate with producer-shaped fixtures so master-push
+# provenance is tested through the same event-before and PR-merge validation.
+f13_collect_master_push_contributions() {
+  local repo="$1" event_name="$2" event_ref="$3" event_before="$4"
+  local resolved_base="$5" target="$6" output="$7" diagnostic_file="${8:-}"
+  f13_master_merge_push_enabled "${event_name}" "${event_ref}" || {
+    f13_collect_failure "${diagnostic_file}" push_event
+    return 1
+  }
+  f13_master_push_before_matches "${event_before}" "${resolved_base}" || {
+    f13_collect_failure "${diagnostic_file}" push_before_mismatch
+    return 1
+  }
+  f13_collect_master_release_pr_contributions \
+    "${repo}" "${event_before}" "${target}" "${output}" "${diagnostic_file}"
+}
+
  f13_base_origin_class() {
   if [[ -n "${VOICE_R22_BASE_SHA:-}" ]]; then
     printf '%s\n' push-before
@@ -1735,6 +1797,120 @@ f13_collect_develop_contributions \
 }
 grep -Fqx $'src/backend/voice/main.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-fixture-map") || {
   printf '%s\n' 'F13 oracle bug: R22 contribution lost its own runtime trigger' >&2
+  exit 2
+}
+
+f13_make_nested_crisscross_fixture() {
+  local repo="$1" label="$2" guarded="$3" base left right left_merge right_merge first_bases
+  local nested_base first_side second_side source tree release
+  mkdir -p "${repo}"
+  git -C "${repo}" init -q
+  git -C "${repo}" config user.name 'Voice CI fixture'
+  git -C "${repo}" config user.email 'voice-ci@example.invalid'
+  git -C "${repo}" config commit.gpgsign false
+  printf '%s\n' base >"${repo}/README.md"
+  git -C "${repo}" add README.md
+  git -C "${repo}" commit -qm "${label} base"
+  base="$(git -C "${repo}" rev-parse HEAD)"
+
+  git -C "${repo}" checkout -qb "${label}-left" "${base}"
+  printf '%s\n' left >"${repo}/left.txt"
+  git -C "${repo}" add left.txt
+  git -C "${repo}" commit -qm "${label} left contribution"
+  left="$(git -C "${repo}" rev-parse HEAD)"
+  git -C "${repo}" checkout -qb "${label}-right" "${base}"
+  printf '%s\n' right >"${repo}/right.txt"
+  git -C "${repo}" add right.txt
+  git -C "${repo}" commit -qm "${label} right contribution"
+  right="$(git -C "${repo}" rev-parse HEAD)"
+
+  git -C "${repo}" checkout -q "${label}-left"
+  git -C "${repo}" merge --no-ff -qm "${label} left sync" "${label}-right"
+  left_merge="$(git -C "${repo}" rev-parse HEAD)"
+  git -C "${repo}" checkout -q "${label}-right"
+  git -C "${repo}" merge --no-ff -qm "${label} right sync" "${label}-left^"
+  right_merge="$(git -C "${repo}" rev-parse HEAD)"
+  git -C "${repo}" checkout -q "${label}-left"
+  git -C "${repo}" merge --no-ff -qm "${label} first cross merge" "${right_merge}"
+  nested_base="$(git -C "${repo}" rev-parse HEAD)"
+  first_bases="$(git -C "${repo}" merge-base --all "${left_merge}" "${right_merge}")"
+  [[ "$(wc -l <<<"${first_bases}" | tr -d '[:space:]')" == 2 ]] || {
+    printf '%s\n' "F13 fixture oracle bug: ${label} first source pair is not criss-cross" >&2
+    exit 2
+  }
+
+  git -C "${repo}" checkout -qb "${label}-first" "${nested_base}"
+  printf '%s\n' first >"${repo}/first.txt"
+  git -C "${repo}" add first.txt
+  git -C "${repo}" commit -qm "${label} first nested contribution"
+  first_side="$(git -C "${repo}" rev-parse HEAD)"
+  git -C "${repo}" checkout -qb "${label}-second" "${nested_base}"
+  printf '%s\n' second >"${repo}/second.txt"
+  git -C "${repo}" add second.txt
+  if [[ "${guarded}" == true ]]; then
+    mkdir -p "${repo}/src/backend/voice"
+    printf '%s\n' 'package main' >"${repo}/src/backend/voice/main.go"
+    git -C "${repo}" add src/backend/voice/main.go
+  fi
+  git -C "${repo}" commit -qm "${label} second nested contribution"
+  second_side="$(git -C "${repo}" rev-parse HEAD)"
+
+  git -C "${repo}" checkout -q "${label}-first"
+  git -C "${repo}" merge --no-ff -qm "${label} first nested sync" "${label}-second"
+  git -C "${repo}" checkout -q "${label}-second"
+  git -C "${repo}" merge --no-ff -qm "${label} second nested sync" "${first_side}"
+  git -C "${repo}" checkout -q "${label}-first"
+  git -C "${repo}" merge --no-ff -qm "${label} nested criss-cross integration" "${label}-second"
+  source="$(git -C "${repo}" rev-parse HEAD)"
+  [[ "$(git -C "${repo}" merge-base --all "$(git -C "${repo}" rev-parse "${label}-first^")" "$(git -C "${repo}" rev-parse "${label}-second")" | wc -l | tr -d '[:space:]')" == 2 ]] || {
+    printf '%s\n' "F13 fixture oracle bug: ${label} did not create two best merge bases" >&2
+    exit 2
+  }
+  tree="$(git -C "${repo}" rev-parse "${source}^{tree}")"
+  release="$(printf '%s\n' "${label} release merge" | git -C "${repo}" commit-tree "${tree}" -p "${base}" -p "${source}")"
+  printf '%s\n' "${base}" "${release}" "${source}"
+}
+
+# The accepted graph mirrors the two nested criss-cross source merges present
+# in the release PR: a shared historical source merge and a later refresh merge.
+f13_nested_repo="${TMP_DIR}/f13-nested-crisscross-fixture"
+read -r f13_nested_base f13_nested_release _ < <(f13_make_nested_crisscross_fixture "${f13_nested_repo}" f13-nested false)
+f13_collect_master_push_contributions "${f13_nested_repo}" push refs/heads/master \
+  "${f13_nested_base}" "${f13_nested_base}" "${f13_nested_release}" \
+  "${TMP_DIR}/f13-nested-map" "${TMP_DIR}/f13-nested-category" || {
+  printf '%s\n' 'F13 oracle bug: policy-equivalent nested criss-cross sources were rejected' >&2
+  exit 2
+}
+f13_nested_base_sets="$(cut -f8 "${TMP_DIR}/f13-nested-map" | LC_ALL=C sort -u | awk 'index($0, ",") > 0 { count++ } END { print count+0 }')"
+[[ "${f13_nested_base_sets}" -ge 2 ]] || {
+  printf '%s\n' 'F13 oracle bug: complete best-base sets were not retained as contribution evidence' >&2
+  exit 2
+}
+if f13_collect_master_push_contributions "${f13_nested_repo}" pull_request refs/heads/master \
+  "${f13_nested_base}" "${f13_nested_base}" "${f13_nested_release}" \
+  "${TMP_DIR}/f13-nested-bad-map" "${TMP_DIR}/f13-nested-bad-category"; then
+  printf '%s\n' 'F13 oracle bug: non-push event passed the master-push gate' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-nested-bad-category")" == push_event ]] || exit 2
+if f13_collect_master_push_contributions "${f13_nested_repo}" push refs/heads/master \
+  "${f13_nested_base}" 0000000000000000000000000000000000000000 "${f13_nested_release}" \
+  "${TMP_DIR}/f13-nested-bad-map" "${TMP_DIR}/f13-nested-bad-category"; then
+  printf '%s\n' 'F13 oracle bug: mismatched push-before base passed the master-push gate' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-nested-bad-category")" == push_before_mismatch ]] || exit 2
+
+# A guarded source path that differs across best bases remains ambiguous.
+f13_nested_bad_repo="${TMP_DIR}/f13-nested-guarded-crisscross-fixture"
+read -r f13_nested_bad_base f13_nested_bad_release _ < <(f13_make_nested_crisscross_fixture "${f13_nested_bad_repo}" f13-nested-guarded true)
+if f13_collect_master_release_pr_contributions "${f13_nested_bad_repo}" "${f13_nested_bad_base}" \
+  "${f13_nested_bad_release}" "${TMP_DIR}/f13-nested-bad-map" "${TMP_DIR}/f13-nested-bad-category"; then
+  printf '%s\n' 'F13 oracle bug: guarded criss-cross provenance was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-nested-bad-category")" == source_base ]] || {
+  printf '%s\n' 'F13 oracle bug: guarded criss-cross ambiguity lost its fixed failure category' >&2
   exit 2
 }
 
@@ -2602,18 +2778,14 @@ fi
 if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]] || \
   f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
   if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]]; then
-    f13_master_base="${VOICE_R22_BASE_SHA:-}"
     if [[ "${f13_master_merge_push}" == true ]]; then
-      f13_master_before="${VOICE_CI_PUSH_BEFORE_SHA:-}"
-      if ! f13_master_push_before_matches "${f13_master_before}" "${f13_master_base}"; then
-        f13_collect_failure "${TMP_DIR}/f13-failure-category" push_before_mismatch || true
-        f13_collect_status=1
-      fi
-      f13_master_base="${f13_master_before}"
-    fi
-    if [[ "${f13_collect_status}" == 0 ]]; then
+      f13_collect_master_push_contributions \
+        "${ROOT}" "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}" \
+        "${VOICE_CI_PUSH_BEFORE_SHA:-}" "${VOICE_R22_BASE_SHA:-}" HEAD \
+        "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
+    else
       f13_collect_master_release_pr_contributions \
-        "${ROOT}" "${f13_master_base}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
+        "${ROOT}" "${VOICE_R22_BASE_SHA:-}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
     fi
   else
     f13_collect_develop_contributions \
