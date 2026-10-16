@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Voice dev signaling certificate renewal daily
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+Unit=voice-dev-signaling-tls-renew.service
+
+[Install]
+WantedBy=timers.target
