@@ -748,6 +748,49 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(first["startup_category"], "voice_match_squad_principal_runtime")
         self.assertEqual(first["startup_detail"], "voice_match_squad_jwks_refresh_unavailable")
 
+    def test_t31_readiness_failure_is_allowlisted_and_redacted(self):
+        secret = "private-endpoint-or-certificate-value"
+        readiness = "phase0-matchmaking-jwks-readiness"
+        status = json.dumps([{
+            "Service": readiness, "State": "exited", "Health": "none", "ExitCode": 1,
+            "Name": secret, "ID": secret,
+        }]).encode("utf-8")
+        status_summary, failed = startup_diagnostics.sanitize_status(status, "complete")
+        self.assertEqual(failed, (readiness,))
+        self.assertEqual(status_summary["services"], [
+            {"service": readiness, "state": "exited", "health": "none", "exit_code": 1},
+        ])
+
+        raw = (readiness + "-1 | 2026-10-16T12:58:00Z "
+               "phase0_matchmaking_jwks_readiness_failed category=jwks_tls_verification_failed\n").encode("utf-8")
+        log_summary, first = startup_diagnostics.sanitize_logs(raw, "complete", failed)
+        self.assertEqual(log_summary["services_seen"], [readiness])
+        self.assertEqual(first["service"], readiness)
+        self.assertEqual(first["stage"], "identity_dependency")
+        self.assertEqual(first["startup_category"], "phase0_matchmaking_jwks_readiness")
+        self.assertEqual(first["startup_detail"], "jwks_tls_verification_failed")
+        self.assertNotIn(secret, json.dumps({"status": status_summary, "logs": log_summary, "first": first}))
+
+        unknown = (readiness + " | phase0_matchmaking_jwks_readiness_failed "
+                   "category=private_value\n").encode("utf-8")
+        _, first = startup_diagnostics.sanitize_logs(unknown, "complete", (readiness,))
+        self.assertEqual(first["startup_category"], "phase0_matchmaking_jwks_readiness")
+        self.assertEqual(first["startup_detail"], "unknown")
+        self.assertNotIn("private_value", json.dumps(first))
+
+        calls = []
+
+        def bounded(command, _timeout, _limit):
+            calls.append(command)
+            return (status if "ps" in command else raw, "complete", 0)
+
+        with patch.object(startup_diagnostics, "_bounded_command", side_effect=bounded):
+            record = startup_diagnostics.build_diagnostics(["docker", "compose"], 1)
+        self.assertIn(readiness, calls[1])
+        self.assertEqual(record["first_error"]["startup_category"], "phase0_matchmaking_jwks_readiness")
+        self.assertEqual(record["first_error"]["startup_detail"], "jwks_tls_verification_failed")
+        self.assertNotIn(secret, json.dumps(record))
+
     def test_media_voice_waits_for_verified_public_match_squad_jwks(self):
         readiness = self.media_merged["phase0-matchmaking-jwks-readiness"]
         self.assertEqual(readiness["image"], "node:24-alpine")
@@ -766,6 +809,9 @@ class ComposeTests(unittest.TestCase):
             ca_stat = self.fixture.joinpath("ca/ca.crt").stat()
             self.assertEqual((ca_stat.st_uid, ca_stat.st_gid), (65532, 65532))
             self.assertEqual(stat.S_IMODE(ca_stat.st_mode), 0o600)
+        if os.name == "posix":
+            jwks_mode = stat.S_IMODE(self.fixture.joinpath("jwks/matchmaking/jwks.json").stat().st_mode)
+            self.assertEqual(jwks_mode, 0o644, "nginx worker must be able to read the public JWKS")
         self.assertEqual(self.media_source_at("phase0-matchmaking-jwks-readiness", "/run/phase0/readiness.js"),
                          "scripts/dev/phase0-matchmaking-jwks-readiness.js")
         self.assertEqual(readiness["depends_on"]["phase0-jwks"]["condition"], "service_started")
@@ -777,10 +823,14 @@ class ComposeTests(unittest.TestCase):
         for marker in ("https.get", "ca,", "servername: endpoint.hostname", "response.statusCode !== 200",
                        "document.keys", 'key.kty === "RSA"', 'key.alg === "RS256"',
                        'Object.hasOwn(key, privateField)', '"dp", "dq", "qi", "oth"',
-                       "phase0_matchmaking_jwks_readiness_failed", "const ATTEMPT_TIMEOUT_MS = 2000",
+                       "phase0_matchmaking_jwks_readiness_failed category=", "ca_file_unavailable",
+                       "jwks_tls_verification_failed", "jwks_endpoint_unavailable",
+                       "jwks_http_response_invalid", "jwks_document_invalid", "jwks_response_too_large",
+                       "jwks_request_timeout", "jwks_transport_failed", "const ATTEMPT_TIMEOUT_MS = 2000",
                        "deadline = setTimeout(", "clearTimeout(deadline)", "request.destroy()"):
             self.assertIn(marker, probe)
         self.assertNotIn("timeout: 2000", probe)
+        self.assertIn("phase0-matchmaking-jwks-readiness", startup_diagnostics.SERVICES)
 
     def test_startup_diagnostics_can_scope_status_and_logs_to_voice(self):
         status = json.dumps([{

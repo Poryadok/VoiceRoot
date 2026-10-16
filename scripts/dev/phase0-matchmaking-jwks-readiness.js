@@ -5,10 +5,31 @@ const fs = require("node:fs");
 const https = require("node:https");
 
 const endpoint = new URL("https://phase0-jwks:8443/matchmaking/jwks.json");
-const ca = fs.readFileSync("/run/phase0/ca.crt");
 const ATTEMPT_TIMEOUT_MS = 2000;
+const FAILURE_CATEGORIES = new Set([
+  "ca_file_unavailable",
+  "jwks_tls_verification_failed",
+  "jwks_endpoint_unavailable",
+  "jwks_http_response_invalid",
+  "jwks_document_invalid",
+  "jwks_response_too_large",
+  "jwks_request_timeout",
+  "jwks_transport_failed",
+]);
 
-function fetchPublicJwks() {
+function safeRequestFailure(error) {
+  const code = error && typeof error.code === "string" ? error.code : "";
+  if (["CERT_HAS_EXPIRED", "ERR_TLS_CERT_ALTNAME_INVALID", "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+       "SELF_SIGNED_CERT_IN_CHAIN", "DEPTH_ZERO_SELF_SIGNED_CERT"].includes(code)) {
+    return "jwks_tls_verification_failed";
+  }
+  if (["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "ENOTFOUND", "EAI_AGAIN"].includes(code)) {
+    return "jwks_endpoint_unavailable";
+  }
+  return "jwks_transport_failed";
+}
+
+function fetchPublicJwks(ca) {
   return new Promise((resolve, reject) => {
     let request;
     let settled = false;
@@ -35,7 +56,7 @@ function fetchPublicJwks() {
         if (response.statusCode !== 200 || response.headers.location ||
             !String(response.headers["content-type"] || "").toLowerCase().startsWith("application/json")) {
           response.resume();
-          finish(new Error("jwks_response_invalid"));
+        finish(new Error("jwks_http_response_invalid"));
           return;
         }
         const chunks = [];
@@ -70,27 +91,39 @@ function fetchPublicJwks() {
         });
         response.on("error", finish);
       });
-      request.on("error", finish);
-    } catch (_error) {
-      finish(new Error("jwks_request_failed"));
+      request.on("error", (error) => finish(new Error(safeRequestFailure(error))));
+    } catch (error) {
+      finish(new Error(safeRequestFailure(error)));
     }
   });
 }
 
 async function main() {
+  let ca;
+  try {
+    ca = fs.readFileSync("/run/phase0/ca.crt");
+  } catch (_error) {
+    emitFailure("ca_file_unavailable");
+    return;
+  }
+  let lastFailure = "jwks_transport_failed";
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
-      await fetchPublicJwks();
+      await fetchPublicJwks(ca);
       return;
-    } catch (_error) {
+    } catch (error) {
+      const category = error instanceof Error ? error.message : "";
+      lastFailure = FAILURE_CATEGORIES.has(category) ? category : "jwks_transport_failed";
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
-  process.stderr.write("phase0_matchmaking_jwks_readiness_failed\n");
+  emitFailure(lastFailure);
+}
+
+function emitFailure(category) {
+  const safe = FAILURE_CATEGORIES.has(category) ? category : "jwks_transport_failed";
+  process.stderr.write(`phase0_matchmaking_jwks_readiness_failed category=${safe}\n`);
   process.exitCode = 1;
 }
 
-main().catch(() => {
-  process.stderr.write("phase0_matchmaking_jwks_readiness_failed\n");
-  process.exitCode = 1;
-});
+main().catch(() => emitFailure("jwks_transport_failed"));

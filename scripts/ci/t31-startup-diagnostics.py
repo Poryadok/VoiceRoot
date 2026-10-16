@@ -19,7 +19,7 @@ SERVICES = (
     "auth", "user", "role", "chat", "space", "messaging", "voice", "bot",
     "notification", "gameintegration", "gateway", "matchmaking", "search",
     "file", "moderation", "social", "subscription", "story", "realtime",
-    "analytics", "t31-session-event-receiver-db",
+    "analytics", "t31-session-event-receiver-db", "phase0-matchmaking-jwks-readiness",
 )
 SERVICE_SET = frozenset(SERVICES)
 STATES = frozenset({"created", "running", "restarting", "paused", "exited", "dead", "removing", "unknown"})
@@ -119,9 +119,20 @@ VOICE_STARTUP_DETAILS = (
     ("voice MatchSquad JWKS key is too small", "voice_match_squad_jwks_key_invalid"),
     ("voice MatchSquad replay Redis unavailable", "voice_match_squad_replay_dependency_unavailable"),
 )
+READINESS_FAILURE_CATEGORIES = frozenset({
+    "ca_file_unavailable", "jwks_tls_verification_failed", "jwks_endpoint_unavailable",
+    "jwks_http_response_invalid", "jwks_document_invalid", "jwks_response_too_large",
+    "jwks_request_timeout", "jwks_transport_failed",
+})
+READINESS_FAILURE_MARKER = "phase0_matchmaking_jwks_readiness_failed"
+_READINESS_FAILURE = re.compile(
+    r"^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z )?"
+    r"phase0_matchmaking_jwks_readiness_failed category=([a-z0-9_]{1,64})$"
+)
 _ERROR_MARKER = re.compile(
     r"(?:\blevel\s*[=:]\s*error\b|\bERROR\b|\bFATAL\b|\bPANIC\b|\bSQLSTATE\b|\bexception\b|"
     + "|".join(re.escape(prefix) for prefix, _ in VOICE_STARTUP_PREFIXES)
+    + "|" + re.escape(READINESS_FAILURE_MARKER)
     + r")",
     re.IGNORECASE,
 )
@@ -381,14 +392,20 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             continue
         code_match = _ERROR_CODE.search(message)
         code = code_match.group(1) if code_match and code_match.group(1) in ERROR_CODES else None
-        startup_category = next(
-            (category for prefix, category in VOICE_STARTUP_PREFIXES if prefix in message),
-            "unknown",
-        )
-        startup_detail = next(
-            (category for prefix, category in VOICE_STARTUP_DETAILS if prefix in message),
-            "unknown",
-        )
+        readiness_match = _READINESS_FAILURE.fullmatch(message.strip()) if service == "phase0-matchmaking-jwks-readiness" else None
+        if readiness_match:
+            startup_category = "phase0_matchmaking_jwks_readiness"
+            observed_detail = readiness_match.group(1)
+            startup_detail = observed_detail if observed_detail in READINESS_FAILURE_CATEGORIES else "unknown"
+        else:
+            startup_category = next(
+                (category for prefix, category in VOICE_STARTUP_PREFIXES if prefix in message),
+                "unknown",
+            )
+            startup_detail = next(
+                (category for prefix, category in VOICE_STARTUP_DETAILS if prefix in message),
+                "unknown",
+            )
         state_match = _SQLSTATE.search(message)
         sqlstate = state_match.group(1).upper() if state_match and state_match.group(1).upper() in SQLSTATES else None
         exception_match = _EXCEPTION.search(message)

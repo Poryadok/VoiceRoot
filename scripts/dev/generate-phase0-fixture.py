@@ -184,6 +184,10 @@ def generate(destination):
                     "-storetype", "PKCS12", "-storepass", "phase0-fixture")
             for path in root.rglob("*"):
                 path.chmod(0o700 if path.is_dir() else 0o600)
+            # This JWKS is public and bind-mounted into nginx, whose worker
+            # drops root privileges. Make only the public document readable
+            # by that worker; keep private fixture keys owner-only.
+            (root / "jwks/matchmaking/jwks.json").chmod(0o644)
             fixture_uid = os.environ.get("PHASE0_MATCHSQUAD_FIXTURE_UID")
             if fixture_uid is not None:
                 if os.name != "posix" or fixture_uid != "65532":
