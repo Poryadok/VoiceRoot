@@ -116,6 +116,13 @@ def main(args,*,producer=None):
         bootstrap_paths=compatible_bootstrap(source,p['contract'],decode_yaml,p.get('bootstrap_target_scripts'))
         rows=rendered_source(source,p,decode_yaml)
         source_paths=SOURCE_MANIFESTS
+        if p['mode']=='images-only':
+            # Backend manifests do not contain frontend Deployments. Preserve
+            # selected live frontend templates just as the frontend-only path.
+            fronts=sorted(set(p['changed_services'])&{'web','admin','developer-portal'})
+            rows.extend(producer.get('Deployment','voice-'+name) for name in fronts)
+            source_paths=(*source_paths,*(
+                'deploy/staging/'+({'web':'flutter-web'}.get(name,name))+'.yaml' for name in fronts))
     import source_plan
     plan=source_plan.compile_plan(source,p,decode_yaml,producer)
     if frontend_only and plan['actions']:raise Blocked('rollout_frontend_auxiliary_action_forbidden')
