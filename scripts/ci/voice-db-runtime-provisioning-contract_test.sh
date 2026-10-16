@@ -427,11 +427,13 @@ base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
 # and Git blobs; the original R22.2 oracle still checks every remaining delta.
 accepted_game_checkpoint='5ff441e04422e3ff1a4c0e1e7e81e3d17b8470eb'
-# Empty until a separately accepted, immutable source snapshot is reviewed and
-# activated. These are source constants, never environment-provided proof.
-game_checkpoint_snapshot_base=''
-game_checkpoint_snapshot_head=''
-game_checkpoint_snapshot_record=''
+# This immutable text record pins the owner-approved source implementation
+# checkpoint. The record is a descendant of H and does not self-hash. These are
+# source constants, never environment-provided proof; producer checks still
+# validate the actual PR rows before merge and the actual master push afterward.
+game_checkpoint_snapshot_base='e88d6c9b03c6b4a0147a847aadeedd2c1bbc3b87'
+game_checkpoint_snapshot_head='bfadf672528d696abea1e1299c6429bed9d58f17'
+game_checkpoint_snapshot_record='d97e8acd6824c5dd08d4f70be93fc7f91d6f6fce'
 game_checkpoint_aggregate_active=false
 game_checkpoint_aggregate_base=''
 game_checkpoint_aggregate_head=''
