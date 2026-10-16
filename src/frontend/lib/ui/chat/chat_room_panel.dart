@@ -59,6 +59,9 @@ import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
 import 'chat_composer_text_field.dart';
 import 'composer_panels.dart';
+import 'music_format.dart';
+import 'music_attachment_player.dart';
+import 'music_playback.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
@@ -295,6 +298,7 @@ class _PendingAttachmentUpload {
     required this.isE2e,
     required this.e2eKeyWire,
     required this.imagesOnly,
+    required this.music,
   });
 
   final ChatAttachmentFile file;
@@ -306,6 +310,7 @@ class _PendingAttachmentUpload {
   final bool isE2e;
   final String? e2eKeyWire;
   final bool imagesOnly;
+  final bool music;
 
   _PendingAttachmentUpload withAuthorization(String value) =>
       _PendingAttachmentUpload(
@@ -318,6 +323,7 @@ class _PendingAttachmentUpload {
         isE2e: isE2e,
         e2eKeyWire: e2eKeyWire,
         imagesOnly: imagesOnly,
+        music: music,
       );
 }
 
@@ -2386,8 +2392,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }) async {
     if (_textSendInFlight ||
         !identical(_pendingTextSend, attempt) ||
-        !_isCurrentTextSend(attempt))
+        !_isCurrentTextSend(attempt)) {
       return;
+    }
     final controller = ref.read(
       chatRoomControllerProvider(attempt.chatId).notifier,
     );
@@ -2409,7 +2416,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _pendingTextSendControllerGeneration = controller.immediateSendGeneration;
     }
     final err = await submission;
-    if (!_isCurrentTextSend(attempt)) return;
+    if (!mounted || !_isCurrentTextSend(attempt)) return;
     setState(() {
       _textSendInFlight = false;
       _textSendFailed =
@@ -2417,8 +2424,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           controller.canRetryFailedMessage &&
           _pendingTextSendControllerGeneration ==
               controller.immediateSendGeneration;
-      if (err == null || (err == kChatActionStaleContext && !_textSendFailed))
+      if (err == null || (err == kChatActionStaleContext && !_textSendFailed)) {
         _pendingTextSend = null;
+      }
     });
     if (err == kChatOfflineBlockedError) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2430,8 +2438,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (_composer.text == attempt.content) {
         _composer.clear();
         final key = attempt.draftKey;
-        if (key != null)
+        if (key != null) {
           unawaited(ref.read(chatDraftProvider(key).notifier).clear());
+        }
       }
       if (attempt.replyTarget != null &&
           ref.read(chatReplyTargetProvider(attempt.chatId))?.id ==
@@ -2456,20 +2465,36 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     await _attachAndSend(
       imagesOnly: action == ComposerAttachAction.photoOrVideo,
+      music: action == ComposerAttachAction.music,
     );
   }
 
-  Future<void> _attachAndSend({bool imagesOnly = false}) async {
+  Future<void> _attachAndSend({
+    bool imagesOnly = false,
+    bool music = false,
+  }) async {
     final chatId = widget.chatId;
     if (_isDmPeerDeleted()) {
       return;
     }
     final picker =
         widget.attachmentPicker ??
-        () => _defaultPickChatAttachment(imagesOnly: imagesOnly);
-    final picked = await picker();
+        () => _defaultPickChatAttachment(imagesOnly: imagesOnly, music: music);
+    final ChatAttachmentFile? picked;
+    try {
+      picked = await picker();
+    } on _MusicFileRejected {
+      if (_isCurrentChat(chatId)) _showMusicFileRejected();
+      return;
+    }
     if (picked == null || !_isCurrentChat(chatId)) return;
     final mimeType = _attachmentMimeType(picked.contentType, picked.name);
+    if (music &&
+        (!mimeType.startsWith('audio/') ||
+            !hasSupportedMusicSignature(picked.bytes))) {
+      _showMusicFileRejected();
+      return;
+    }
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     final operation = ++_attachmentOperation;
@@ -2506,6 +2531,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         if (!_isCurrentAttachmentOperation(operation, chatId)) return;
       }
       if (!_isCurrentAttachmentOperation(operation, chatId)) return;
+      if (music && uploadBytes.length > 10 * 1024 * 1024) {
+        _showMusicFileRejected();
+        return;
+      }
       await _runAttachmentUpload(
         _PendingAttachmentUpload(
           file: picked,
@@ -2517,6 +2546,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           isE2e: isE2eChat,
           e2eKeyWire: e2eKeyWire,
           imagesOnly: imagesOnly,
+          music: music,
         ),
         operation,
       );
@@ -2527,6 +2557,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
   }
 
+  void _showMusicFileRejected() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.chatMusicInvalidFile),
+      ),
+    );
+  }
+
   Future<void> _runAttachmentUpload(
     _PendingAttachmentUpload attempt,
     int operation,
@@ -2534,12 +2572,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final files = ref.read(voiceFilesClientProvider);
     final ticket = await files.requestUpload(
       authorization: attempt.authorization,
-      originalName: attempt.file.name,
+      originalName: attempt.music && attempt.isE2e
+          ? 'encrypted-audio'
+          : attempt.file.name,
       mimeType: attempt.mimeType,
       sizeBytes: attempt.bytes.length,
       chatId: attempt.chatId,
       chatType: attempt.chatType,
       isE2e: attempt.isE2e,
+      music: attempt.music,
     );
     if (!_isCurrentAttachmentOperation(operation, attempt.chatId)) return;
     if (ticket case FilesApiFailure()) {
@@ -2589,7 +2630,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           attachments: [
             MessageAttachment(
               fileId: metadata.fileId,
-              type: metadata.fileType,
+              type: attempt.music ? 'music' : metadata.fileType,
               name: metadata.originalName,
               sizeBytes: metadata.sizeBytes,
               e2eKeyWire: attempt.e2eKeyWire,
@@ -2666,7 +2707,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
     });
-    unawaited(_attachAndSend(imagesOnly: imagesOnly));
+    unawaited(_attachAndSend(imagesOnly: imagesOnly, music: pending.music));
   }
 
   bool _isCurrentChat(String chatId) =>
@@ -3201,6 +3242,7 @@ class _DeliveryTick extends StatelessWidget {
 
 Future<ChatAttachmentFile?> _defaultPickChatAttachment({
   bool imagesOnly = false,
+  bool music = false,
 }) async {
   final XFile? file;
   if (imagesOnly) {
@@ -3212,16 +3254,36 @@ Future<ChatAttachmentFile?> _defaultPickChatAttachment({
         ),
       ],
     );
+  } else if (music) {
+    file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'audio',
+          extensions: ['mp3', 'ogg', 'flac', 'wav'],
+          mimeTypes: ['audio/*'],
+        ),
+      ],
+    );
   } else {
     file = await openFile();
   }
   if (file == null) return null;
+  if (music) {
+    final length = await file.length();
+    if (length <= 0 || length > 10 * 1024 * 1024) {
+      throw const _MusicFileRejected();
+    }
+  }
   final bytes = await file.readAsBytes();
   return ChatAttachmentFile(
     bytes: bytes,
     contentType: _attachmentMimeType(file.mimeType, file.name),
     name: file.name,
   );
+}
+
+class _MusicFileRejected implements Exception {
+  const _MusicFileRejected();
 }
 
 String _attachmentMimeType(String? mimeType, String name) {
@@ -3244,6 +3306,12 @@ String _contentTypeFromName(String name) {
   if (lower.endsWith('.mp4')) return 'video/mp4';
   if (lower.endsWith('.mov')) return 'video/quicktime';
   if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.m4a')) return 'audio/mp4';
+  if (lower.endsWith('.aac')) return 'audio/aac';
+  if (lower.endsWith('.ogg')) return 'audio/ogg';
+  if (lower.endsWith('.flac')) return 'audio/flac';
+  if (lower.endsWith('.wav')) return 'audio/wav';
   return 'application/octet-stream';
 }
 
@@ -3354,6 +3422,85 @@ class _AttachmentPreview extends ConsumerWidget {
             ),
           ),
         ),
+      );
+    }
+    if (attachment.isMusic) {
+      if (!metadata.isLoading &&
+          (metadata.hasError || metadata.valueOrNull?.status != 'ready')) {
+        return Text(AppLocalizations.of(context)!.chatAttachmentDownloadFailed);
+      }
+      final viewer = ref.watch(authControllerProvider);
+      final switching = ref.watch(profileSwitchInProgressProvider);
+      final controller = ref.read(authControllerProvider.notifier);
+      final generation = controller.sessionInstallGeneration;
+      final session = viewer.session;
+      final profile = viewer.activeProfileId;
+      if (session == null || profile == null || switching) {
+        return Text(AppLocalizations.of(context)!.chatAttachmentDownloadFailed);
+      }
+      bool viewerIsCurrent() =>
+          context.mounted &&
+          identical(ref.read(authControllerProvider.notifier), controller) &&
+          controller.sessionInstallGeneration == generation &&
+          !ref.read(profileSwitchInProgressProvider) &&
+          ref.read(authControllerProvider).session?.accountId ==
+              session.accountId &&
+          ref.read(authControllerProvider).activeProfileId == profile;
+      return MusicAttachmentPlayer(
+        key: ValueKey((attachment.fileId, profile, generation, controller)),
+        attachment: attachment,
+        createPlayback: ref.watch(musicPlaybackFactoryProvider),
+        loadBytes: () async {
+          final auth = ref.read(authorizationHeaderProvider);
+          if (auth == null || !viewerIsCurrent()) {
+            throw const FormatException('music_access_missing');
+          }
+          final files = ref.read(voiceFilesClientProvider);
+          final metadata = await files.getFileMetadata(
+            authorization: auth,
+            fileId: attachment.fileId,
+          );
+          if (!viewerIsCurrent() ||
+              metadata is! FilesApiOk<FileMetadataData> ||
+              metadata.data.status != 'ready' ||
+              metadata.data.fileType != 'audio' ||
+              !metadata.data.isMusic ||
+              metadata.data.isE2e != attachment.isE2eEncrypted ||
+              metadata.data.sizeBytes == null ||
+              metadata.data.sizeBytes! > musicMaxStoredBytes) {
+            throw const FormatException('music_file_unavailable');
+          }
+          final downloaded = await files.fetchFileBytes(
+            authorization: auth,
+            fileId: attachment.fileId,
+            maxBytes: musicMaxStoredBytes,
+          );
+          if (downloaded is! FilesApiOk<Uint8List>) {
+            throw const FormatException('music_download_unavailable');
+          }
+          if (!viewerIsCurrent()) {
+            downloaded.data.fillRange(0, downloaded.data.length, 0);
+            throw const FormatException('music_load_cancelled');
+          }
+          if (!attachment.isE2eEncrypted) return downloaded.data;
+          try {
+            final plaintext = await const E2eFileCrypto().decryptBytes(
+              ciphertext: downloaded.data,
+              keyWire: attachment.e2eKeyWire!,
+              messageService: ref.read(e2eMessageServiceProvider),
+              localProfileId: profile,
+              peerProfileId: senderProfileId,
+              authorization: auth,
+            );
+            if (!viewerIsCurrent()) {
+              plaintext.fillRange(0, plaintext.length, 0);
+              throw const FormatException('music_load_cancelled');
+            }
+            return plaintext;
+          } finally {
+            downloaded.data.fillRange(0, downloaded.data.length, 0);
+          }
+        },
       );
     }
     if (attachment.isImage) {

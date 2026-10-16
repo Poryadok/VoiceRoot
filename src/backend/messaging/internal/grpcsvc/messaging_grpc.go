@@ -208,6 +208,10 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err != nil {
 		return nil, err
 	}
+	attachments, musicBinding, err := s.enrichMusicAttachment(ctx, attachments, contentType, isE2E)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.checkAttachmentPrivacyForSend(ctx, chatID, profileID, attachments); err != nil {
 		return nil, err
 	}
@@ -303,6 +307,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		Type:            typeStr,
 		ThreadParentID:  threadParent,
 		AttachmentsJSON: attachments,
+		MusicBinding:    musicBinding,
 		MentionsJSON:    mentionsJSON,
 		ClientMessageID: clientID,
 		GhostOnly:       ghostOnly,
@@ -1597,6 +1602,10 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	if _, err := s.validateForwardAttachments(ctx, attachments, contentType); err != nil {
 		return nil, err
 	}
+	attachments, musicBinding, err := s.enrichMusicAttachment(ctx, attachments, contentType, source.IsE2E)
+	if err != nil {
+		return nil, err
+	}
 
 	withoutAttribution := req.GetWithoutAttribution()
 
@@ -1704,6 +1713,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		DisplayChatID:   displayChatID,
 		Content:         source.Content,
 		AttachmentsJSON: attachments,
+		MusicBinding:    musicBinding,
 		MentionsJSON:    "[]",
 		GhostOnly:       ghostOnly,
 		IsE2E:           source.IsE2E,

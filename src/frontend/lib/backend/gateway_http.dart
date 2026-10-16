@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -304,8 +305,106 @@ class GatewayHttpClient {
     }
   }
 
-  Future<GatewayHttpResult<Uint8List>> getBytes({required Uri uri}) async {
+  Future<GatewayHttpResult<Uint8List>> getBytes({
+    required Uri uri,
+    int? maxBytes,
+  }) async {
+    Completer<void>? abort;
     try {
+      if (maxBytes != null) {
+        if (maxBytes <= 0 || maxBytes > 10 * 1024 * 1024) {
+          return const GatewayHttpFailure(
+            GatewayApiError(
+              errorCode: 'download_size_invalid',
+              message: 'Invalid download limit',
+              statusCode: 0,
+            ),
+          );
+        }
+        abort = Completer<void>();
+        final cancellation = abort;
+        final request = http.AbortableRequest(
+          'GET',
+          uri,
+          abortTrigger: cancellation.future,
+        )..followRedirects = false;
+        final response = await _http
+            .send(request)
+            .then((response) async {
+              // Also retire a late response from an injected/custom client that
+              // does not implement Abortable, without retaining signed URL errors.
+              if (cancellation.isCompleted) {
+                await response.stream.listen((_) {}).cancel();
+                throw http.RequestAbortedException();
+              }
+              return response;
+            })
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                if (!cancellation.isCompleted) cancellation.complete();
+                throw TimeoutException('download_headers_timeout');
+              },
+            );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          await response.stream.listen((_) {}).cancel();
+          return GatewayHttpFailure(
+            GatewayApiError(
+              errorCode: 'download_failed',
+              message: 'Download failed',
+              statusCode: response.statusCode,
+            ),
+          );
+        }
+        if ((response.contentLength ?? 0) > maxBytes) {
+          await response.stream.listen((_) {}).cancel();
+          return const GatewayHttpFailure(
+            GatewayApiError(
+              errorCode: 'download_too_large',
+              message: 'Download exceeds limit',
+              statusCode: 0,
+            ),
+          );
+        }
+        final bytes = BytesBuilder(copy: false);
+        final elapsed = Stopwatch()..start();
+        await for (final chunk in response.stream.timeout(
+          const Duration(seconds: 10),
+        )) {
+          if (elapsed.elapsed > const Duration(seconds: 30)) {
+            return const GatewayHttpFailure(
+              GatewayApiError(
+                errorCode: 'download_timeout',
+                message: 'Download timed out',
+                statusCode: 0,
+              ),
+            );
+          }
+          if (bytes.length + chunk.length > maxBytes) {
+            return const GatewayHttpFailure(
+              GatewayApiError(
+                errorCode: 'download_too_large',
+                message: 'Download exceeds limit',
+                statusCode: 0,
+              ),
+            );
+          }
+          bytes.add(chunk);
+        }
+        if ((response.headers['content-encoding'] ?? 'identity') ==
+                'identity' &&
+            response.contentLength != null &&
+            response.contentLength != bytes.length) {
+          return const GatewayHttpFailure(
+            GatewayApiError(
+              errorCode: 'download_incomplete',
+              message: 'Incomplete download',
+              statusCode: 0,
+            ),
+          );
+        }
+        return GatewayHttpOk(bytes.takeBytes());
+      }
       final res = await _http.get(uri);
       if (res.statusCode >= 200 && res.statusCode < 300) {
         return GatewayHttpOk(Uint8List.fromList(res.bodyBytes));
@@ -323,10 +422,12 @@ class GatewayHttpClient {
       return GatewayHttpFailure(
         GatewayApiError(
           errorCode: 'network_error',
-          message: '$e',
+          message: maxBytes == null ? '$e' : 'Download unavailable',
           statusCode: 0,
         ),
       );
+    } finally {
+      if (abort != null && !abort.isCompleted) abort.complete();
     }
   }
 

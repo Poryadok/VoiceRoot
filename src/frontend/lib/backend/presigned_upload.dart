@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'gateway_http.dart';
 import 'presigned_connect_stub.dart'
-    if (dart.library.io) 'presigned_connect_io.dart' as connect;
+    if (dart.library.io) 'presigned_connect_io.dart'
+    as connect;
 
 /// Maps compose object-storage hosts so host-side clients can PUT/GET MinIO.
 ///
@@ -18,10 +19,7 @@ Uri rewritePresignedUrlForHost(Uri uri) {
 
 /// Connect URI plus optional signed Host when it differs from the connect host.
 class PresignConnectTarget {
-  const PresignConnectTarget({
-    required this.connectUri,
-    this.signedHostHeader,
-  });
+  const PresignConnectTarget({required this.connectUri, this.signedHostHeader});
 
   final Uri connectUri;
   final String? signedHostHeader;
@@ -31,7 +29,8 @@ String signedAuthority(Uri uri) {
   if (!uri.hasPort) {
     return uri.host;
   }
-  final defaultPort = (uri.scheme == 'https' && uri.port == 443) ||
+  final defaultPort =
+      (uri.scheme == 'https' && uri.port == 443) ||
       (uri.scheme == 'http' && uri.port == 80);
   if (defaultPort) {
     return uri.host;
@@ -81,14 +80,16 @@ Future<GatewayHttpResult<void>> putPresigned({
 Future<GatewayHttpResult<Uint8List>> getPresignedBytes({
   required GatewayHttpClient gateway,
   required Uri downloadUrl,
+  int? maxBytes,
 }) {
   final target = presignConnectTarget(downloadUrl);
   final signedHost = target.signedHostHeader;
   if (signedHost == null) {
-    return gateway.getBytes(uri: target.connectUri);
+    return gateway.getBytes(uri: target.connectUri, maxBytes: maxBytes);
   }
   return connect.getBytesPreservingHost(
     connectUri: target.connectUri,
     signedHostHeader: signedHost,
+    maxBytes: maxBytes,
   );
 }

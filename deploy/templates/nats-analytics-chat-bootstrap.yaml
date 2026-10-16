@@ -132,6 +132,7 @@ data:
     consumer social_events chat_friend_accepted social.friend_accepted _INBOX.voice.chat.chat_friend_accepted all chat_friend_accepted
     consumer message_events messaging_delivery_ack message.delivery_ack _INBOX.voice.messaging.messaging_delivery_ack all messaging_delivery_ack
     consumer user_events messaging_receipt_privacy user.settings_changed _INBOX.voice.messaging.messaging_receipt_privacy all messaging_receipt_privacy
+    consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata
     consumer message_events bot_message_events message.sent _INBOX.voice.bot.bot_message_events all ''
     consumer_filters story_events matchmaking_story_lfp_v2 _INBOX.voice.matchmaking.matchmaking_story_lfp_v2 all story.lfp_created story.lfp_response
     consumer_filters subscription_events space_subscription_entitlement _INBOX.voice.space.space_subscription_entitlement new subscription.space_pro_started subscription.space_pro_expired

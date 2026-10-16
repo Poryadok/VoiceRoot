@@ -122,9 +122,11 @@ services:
       - $JS.API.STREAM.INFO.message_events
       - $JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack
       - $JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy
+      - $JS.API.CONSUMER.INFO.file_events.messaging_music_metadata
       - $JS.ACK.message_events.messaging_delivery_ack.>
       - $JS.ACK.user_events.messaging_receipt_privacy.>
-    subscribe: [_INBOX.voice.messaging.>, _INBOX.voice.messaging.messaging_delivery_ack, _INBOX.voice.messaging.messaging_receipt_privacy]
+      - $JS.ACK.file_events.messaging_music_metadata.>
+    subscribe: [_INBOX.voice.messaging.>, _INBOX.voice.messaging.messaging_delivery_ack, _INBOX.voice.messaging.messaging_receipt_privacy, _INBOX.voice.messaging.messaging_music_metadata]
   moderation:
     no_response: true
     publish:
@@ -408,6 +410,8 @@ bootstrap:
     - $JS.API.CONSUMER.CREATE.message_events.messaging_delivery_ack
     - $JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy
     - $JS.API.CONSUMER.CREATE.user_events.messaging_receipt_privacy
+    - $JS.API.CONSUMER.INFO.file_events.messaging_music_metadata
+    - $JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata
     - $JS.API.CONSUMER.INFO.message_events.bot_message_events
     - $JS.API.CONSUMER.CREATE.message_events.bot_message_events
     - $JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2

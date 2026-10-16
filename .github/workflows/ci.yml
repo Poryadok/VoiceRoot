@@ -303,6 +303,46 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: Set up Node for Music decoder browser check
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Capture Music inline controls
+        working-directory: src/frontend
+        env:
+          VOICE_MUSIC_CAPTURE_DIR: ${{ runner.temp }}/music-capture
+        run: timeout 180s flutter test --no-pub --reporter expanded --concurrency=1 test/music_attachment_player_test.dart
+      - name: Retain Music inline controls
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: music-controls-${{ github.run_id }}
+          path: ${{ runner.temp }}/music-capture/*.png
+          if-no-files-found: error
+      - name: Install FFmpeg for Music probe fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+      - name: Verify Music codecs and E2E local playback in Chrome
+        timeout-minutes: 10
+        run: timeout 540s bash scripts/ci/music-playback-web.sh
+      - name: Retain Music decoder result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: music-playback-${{ github.run_id }}
+          path: src/frontend/build/web/music-playback-result.json
+          if-no-files-found: warn
+      - name: Retain hosted Music dependency resolution
+        if: >-
+          always() &&
+          (github.head_ref == 'feature/attach-menu-music' ||
+           github.ref == 'refs/heads/feature/attach-menu-music')
+        uses: actions/upload-artifact@v4
+        with:
+          name: music-dependency-lock-${{ github.run_id }}
+          path: src/frontend/pubspec.lock
+          if-no-files-found: error
       - name: AppIcon Chrome favicon DOM regression
         if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
         working-directory: src/frontend

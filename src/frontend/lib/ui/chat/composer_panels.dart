@@ -7,7 +7,7 @@ import '../a11y/focus_trap.dart';
 import '../core/voice_bottom_sheet.dart';
 
 /// Attach menu actions per [screen-controls.md] §3.6a (subset shipped in client).
-enum ComposerAttachAction { photoOrVideo, document }
+enum ComposerAttachAction { photoOrVideo, document, music }
 
 /// Transient emoji panel (§3.6b) — not SideHost.
 Future<void> showComposerEmojiPanel(
@@ -38,6 +38,7 @@ Future<ComposerAttachAction?> showComposerAttachMenu(
     onSelected: (action) => Navigator.of(routeContext).pop(action),
     photoOrVideoLabel: l10n.composerAttachPhotoOrVideo,
     documentLabel: l10n.composerAttachDocument,
+    musicLabel: l10n.chatPinnedTypeMusic,
   );
   if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
     return _showComposerOverlay<ComposerAttachAction>(
@@ -201,6 +202,7 @@ class ComposerAttachMenuBody extends StatelessWidget {
     required this.onSelected,
     required this.photoOrVideoLabel,
     required this.documentLabel,
+    required this.musicLabel,
   });
 
   static const menuKey = Key('composer_attach_menu');
@@ -208,6 +210,7 @@ class ComposerAttachMenuBody extends StatelessWidget {
   final ValueChanged<ComposerAttachAction> onSelected;
   final String photoOrVideoLabel;
   final String documentLabel;
+  final String musicLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -236,6 +239,12 @@ class ComposerAttachMenuBody extends StatelessWidget {
                 leading: const Icon(Icons.description_outlined),
                 title: Text(documentLabel),
                 onTap: () => onSelected(ComposerAttachAction.document),
+              ),
+              ListTile(
+                key: const Key('composer_attach_music'),
+                leading: const Icon(Icons.music_note_outlined),
+                title: Text(musicLabel),
+                onTap: () => onSelected(ComposerAttachAction.music),
               ),
             ],
           ),

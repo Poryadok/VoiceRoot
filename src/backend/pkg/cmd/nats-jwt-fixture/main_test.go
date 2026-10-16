@@ -253,7 +253,7 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 	}
 	for service, grants := range map[string][]string{
 		"chat":        {"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.ACK.message_events.chat_message_activity.>"},
-		"messaging":   {"$JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack", "$JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy", "$JS.ACK.message_events.messaging_delivery_ack.>", "$JS.ACK.user_events.messaging_receipt_privacy.>"},
+		"messaging":   {"$JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack", "$JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy", "$JS.ACK.message_events.messaging_delivery_ack.>", "$JS.ACK.user_events.messaging_receipt_privacy.>", "$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata", "$JS.ACK.file_events.messaging_music_metadata.>"},
 		"bot":         {"$JS.API.CONSUMER.INFO.message_events.bot_message_events", "$JS.ACK.message_events.bot_message_events.>"},
 		"matchmaking": {"$JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2", "$JS.ACK.story_events.matchmaking_story_lfp_v2.>"},
 		"space":       {"$JS.API.CONSUMER.INFO.subscription_events.space_subscription_entitlement", "$JS.ACK.subscription_events.space_subscription_entitlement.>"},

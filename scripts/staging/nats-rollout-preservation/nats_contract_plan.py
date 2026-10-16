@@ -10,8 +10,10 @@ import json
 from pathlib import Path
 import re
 
-SCHEMA='voice-nats-additive-contract-v3'
-MIGRATION_ID='chat-space-social-role-media-consumers-v3'
+V3_SCHEMA='voice-nats-additive-contract-v3'
+V3_MIGRATION_ID='chat-space-social-role-media-consumers-v3'
+SCHEMA='voice-nats-additive-contract-v4'
+MIGRATION_ID='chat-space-social-role-media-music-consumers-v4'
 CHAT_SUBJECTS_13=frozenset({
     'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created',
     'voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left',
@@ -40,14 +42,33 @@ ROLE_SUBJECTS_9=frozenset({
 })
 ROLE_ADDITIONS=frozenset({'role.voice_policy_invalidated'})
 ROLE_SUBJECTS_10=ROLE_SUBJECTS_9|ROLE_ADDITIONS
-DECLARATIONS=(
+V3_DECLARATIONS=(
     ('social_events', {'name':'rt_realtime1_friend_removed','durable_name':'rt_realtime1_friend_removed','filter_subject':'social.friend_removed','deliver_subject':'_INBOX.voice.realtime1.friend_removed','deliver_policy':'new','ack_policy':'explicit'}),
     ('chat_events', {'name':'voice_space_media_chat','durable_name':'voice_space_media_chat','filter_subject':'space.voice_room_access_invalidated','deliver_subject':'_INBOX.voice.voice.space_media_chat','deliver_policy':'new','ack_policy':'explicit'}),
     ('role_events', {'name':'voice_space_media_role','durable_name':'voice_space_media_role','filter_subject':'role.voice_policy_invalidated','deliver_subject':'_INBOX.voice.voice.space_media_role','deliver_policy':'new','ack_policy':'explicit'}),
 )
+DECLARATIONS=V3_DECLARATIONS+(
+    ('file_events', {'name':'messaging_music_metadata','durable_name':'messaging_music_metadata','filter_subject':'file.processed','deliver_subject':'_INBOX.voice.messaging.messaging_music_metadata','deliver_group':'messaging_music_metadata','deliver_policy':'new','ack_policy':'explicit'}),
+)
 DECLARATION=DECLARATIONS[0][1]  # Compatibility for the existing friend-removal fixture.
 class ContractError(ValueError): pass
 def fail(): raise ContractError('nats_additive_contract_unsupported')
+def declarations_for(plan):
+    if not isinstance(plan,dict):fail()
+    key=(plan.get('schema'),plan.get('migration_id'))
+    if key==(V3_SCHEMA,V3_MIGRATION_ID):return V3_DECLARATIONS
+    if key==(SCHEMA,MIGRATION_ID):return DECLARATIONS
+    fail()
+def validated_targets(plan):
+    declarations=declarations_for(plan)
+    rows=plan.get('consumer_targets')
+    if not isinstance(rows,list) or len(rows)!=len(declarations):fail()
+    for row,(stream,config) in zip(rows,declarations):
+        if (not isinstance(row,dict) or set(row)!={'stream','name','config_sha256'}
+            or row.get('stream')!=stream or row.get('name')!=config['durable_name']
+            or not isinstance(row.get('config_sha256'),str)
+            or re.fullmatch(r'[a-f0-9]{64}',row['config_sha256']) is None):fail()
+    return declarations
 def digest(value): return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
 def subject_overlap(left,right):
     def tokens(subject):
@@ -102,13 +123,18 @@ def compile_plan(source,streams,consumers,normalized_consumers):
         if not isinstance(config,dict) or config.get('name')!=name or not isinstance(config.get('subjects'),list):fail()
         own={'chat_events':CHAT_ADDITIONS|{'space.voice_room_access_invalidated'},'role_events':ROLE_ADDITIONS}.get(name,set())
         if any(subject_overlap(added,subject) for added in ({*CHAT_ADDITIONS,'space.voice_room_access_invalidated','role.voice_policy_invalidated'}-own) for subject in config['subjects']):fail()
-    for stream,config in DECLARATIONS:
+    for stream,config in V3_DECLARATIONS:
         line='    consumer '+stream+' '+config['name']+' '+config['filter_subject']+' '+config['deliver_subject']
         if texts['realtime'].splitlines().count(line)!=1:fail()
+    music_line='    consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata'
+    if texts['analytics-chat'].splitlines().count(music_line)!=1:fail()
+    file_stream=streams.get('file_events',{}).get('config',{})
+    if (file_stream.get('name')!='file_events' or file_stream.get('storage')!='file'
+        or file_stream.get('retention')!='limits' or 'file.processed' not in file_stream.get('subjects',[])):fail()
     normalized_hashes=_consumer_hashes(normalized_consumers)
     # Defaults must come from the isolated pinned server, not caller-selected
     # arbitrary desired state. Root binds their full hash in its authority.
-    actions=[];observed={}
+    actions=[];observed={'file_events':{'config_sha256':digest(file_stream)}}
     for name,expected in [('chat_events',chat),('social_events',social),('role_events',role)]:
         info=streams.get(name); config=info.get('config') if isinstance(info,dict) else None
         if not isinstance(config,dict) or config.get('name')!=name:fail()
@@ -145,10 +171,10 @@ def execute(plan,actor,journal):
     Root owns immutable plan binding and authenticated isolated actor; this is
     not a callable CLI or generic privileged mutation interface.
     """
-    if plan.get('schema')!=SCHEMA or plan.get('migration_id')!=MIGRATION_ID:fail()
+    declarations=validated_targets(plan)
     fixed={'$JS.API.STREAM.UPDATE.chat_events':'chat_events','$JS.API.STREAM.UPDATE.social_events':'social_events',
         '$JS.API.STREAM.UPDATE.role_events':'role_events'}
-    for stream,config in DECLARATIONS:
+    for stream,config in declarations:
         fixed['$JS.API.CONSUMER.CREATE.'+stream+'.'+config['durable_name']]=stream+'/'+config['durable_name']
     seen=set();receipt=[]
     for action in plan['actions']:
@@ -180,8 +206,9 @@ def verify_census(plan,before,after):
     byte identity is a separate mandatory root proof, not established here.
     """
     from rollout_census import semantic
+    declarations=validated_targets(plan)
     before,after=semantic(before),semantic(after)
-    if (plan.get('schema')!=SCHEMA or before.get('schema')!='voice-nats-census-v1'
+    if (before.get('schema')!='voice-nats-census-v1'
         or after.get('schema')!=before['schema'] or after.get('account')!=before.get('account')):fail()
     def indexed(rows,key):
         result={key(row):row for row in rows}
@@ -193,7 +220,8 @@ def verify_census(plan,before,after):
     old_consumers=indexed(before['consumers'],lambda row:(row['stream'],row['name']))
     new_consumers=indexed(after['consumers'],lambda row:(row['stream'],row['name']))
     target_by_key={(row['stream'],row['name']):row['config_sha256'] for row in plan.get('consumer_targets',[])}
-    if len(target_by_key)!=len(DECLARATIONS) or set(target_by_key)!={(stream,config['durable_name']) for stream,config in DECLARATIONS}:fail()
+    if (len(plan.get('consumer_targets',[]))!=len(declarations) or len(target_by_key)!=len(declarations)
+        or set(target_by_key)!={(stream,config['durable_name']) for stream,config in declarations}):fail()
     create_actions=[a for a in plan['actions'] if a['api'].startswith('$JS.API.CONSUMER.CREATE.')]
     created_actions={tuple(a['object'].split('/',1)):a for a in create_actions}
     if len(created_actions)!=len(create_actions):fail()
@@ -220,7 +248,7 @@ def verify_census(plan,before,after):
             expected['config_sha256']=digest(action['after'])
         expected['state']['consumer_count']+=sum(1 for key in created_actions if key[0]==name)
         if new_streams[name]!=expected:fail()
-    return {'schema':'voice-nats-additive-census-proof-v2','migration_id':plan['migration_id'],
+    return {'schema':('voice-nats-additive-census-proof-v2' if plan['schema']==V3_SCHEMA else 'voice-nats-additive-census-proof-v3'),'migration_id':plan['migration_id'],
         'before_sha256':digest(before),'after_sha256':digest(after),
         'messages':sum(row['state']['messages'] for row in new_streams.values()),
         'old_consumers_preserved':len(old_consumers),'created_consumers':len(create_actions)}

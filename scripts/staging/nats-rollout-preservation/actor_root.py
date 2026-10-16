@@ -6,7 +6,7 @@ import actor_auth,actor_verification
 from bootstrap_root import secret_bytes,hash_bytes,ACCOUNT_SHA
 from controller import Blocked
 
-ROLES={'realtime','space','social','story'}
+ROLES={'realtime','space','social','story','messaging'}
 STORY_IMAGES={
  'ghcr.io/poryadok/voiceroot/story@sha256:8b142297965b3121fc19e0d970b137ad4ff8c8afa2c79eb49e490d59324f3c5f':('900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7','46192e1ca61e898df57a2aac07657e574b9d209d91106dc0e18ef8a735684970','ab957f054b081573447888ed9550323bd413cbbf'),
  'ghcr.io/poryadok/voiceroot/story@sha256:900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7':('900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7','46192e1ca61e898df57a2aac07657e574b9d209d91106dc0e18ef8a735684970','ab957f054b081573447888ed9550323bd413cbbf'),

@@ -13,7 +13,21 @@ from controller import Blocked
 
 def select(kube,receipt,generation):
     def fail():raise Blocked('enrolled_bootstrap_selection_refused')
-    if receipt.get('schema')!='voice-nats-bootstrap-enrollment-v1' or receipt.get('verified') is not True:fail()
+    if receipt.get('schema') not in ('voice-nats-bootstrap-enrollment-v1','voice-nats-bootstrap-enrollment-v4') or receipt.get('verified') is not True:fail()
+    if receipt['schema']=='voice-nats-bootstrap-enrollment-v4':
+        previous=receipt.get('previous_enrollment')
+        if (not isinstance(previous,dict) or previous.get('schema')!='voice-nats-bootstrap-enrollment-v1'
+            or digest(previous)!=receipt.get('previous_enrollment_sha256')
+            or receipt.get('binding',{}).get('previous_enrollment_sha256')!=digest(previous)):fail()
+        select(kube,previous,generation)
+        # Local import avoids a module-initialization cycle; the same exact
+        # prior-one/prior-three to new-four rule governs enrollment and capture.
+        # A later proof never rewrites a historical single-row enrollment.
+        from nats_root_plan import _validated_normalized_consumers,_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS
+        if set(previous.get('auth_proof',{})) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS):fail()
+        _validated_normalized_consumers(receipt['auth_proof'],previous['auth_proof'])
+        for key in ('generation','marker_uid','old_secret','operator_secret','actor_sha256','account_sha256'):
+            if receipt['binding'].get(key)!=previous['binding'].get(key):fail()
     binding=receipt['binding'];auth=receipt['auth_proof'];chosen=receipt['secret']
     if generation!=GENERATION or binding.get('generation')!=generation:fail()
     marker=kube.get('configmap','voice-nats-generation')

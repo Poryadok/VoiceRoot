@@ -78,6 +78,20 @@ final $typed_data.Uint8List fileScanOutcomeDescriptor = $convert.base64Decode(
     'AhIeChpGSUxFX1NDQU5fT1VUQ09NRV9JTkZFQ1RFRBADEhsKF0ZJTEVfU0NBTl9PVVRDT01FX0'
     'VSUk9SEAQSHQoZRklMRV9TQ0FOX09VVENPTUVfU0tJUFBFRBAF');
 
+@$core.Deprecated('Use uploadIntentDescriptor instead')
+const UploadIntent$json = {
+  '1': 'UploadIntent',
+  '2': [
+    {'1': 'UPLOAD_INTENT_UNSPECIFIED', '2': 0},
+    {'1': 'UPLOAD_INTENT_MUSIC', '2': 6},
+  ],
+};
+
+/// Descriptor for `UploadIntent`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List uploadIntentDescriptor = $convert.base64Decode(
+    'CgxVcGxvYWRJbnRlbnQSHQoZVVBMT0FEX0lOVEVOVF9VTlNQRUNJRklFRBAAEhcKE1VQTE9BRF'
+    '9JTlRFTlRfTVVTSUMQBg==');
+
 @$core.Deprecated('Use fileURLVariantDescriptor instead')
 const FileURLVariant$json = {
   '1': 'FileURLVariant',
@@ -231,6 +245,14 @@ const RequestUploadRequest$json = {
       '10': 'contextStory',
       '17': true
     },
+    {
+      '1': 'intent',
+      '3': 8,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.UploadIntent',
+      '10': 'intent'
+    },
   ],
   '8': [
     {'1': '_context_chat'},
@@ -250,8 +272,9 @@ final $typed_data.Uint8List requestUploadRequestDescriptor = $convert.base64Deco
     'aXplQnl0ZXMSPgoMY29udGV4dF9jaGF0GAQgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmSA'
     'BSC2NvbnRleHRDaGF0iAEBEhoKBmlzX2UyZRgGIAEoCEgBUgVpc0UyZYgBARJCCg1jb250ZXh0'
     'X3N0b3J5GAcgASgLMhgudm9pY2Uuc3RvcnkudjEuU3RvcnlSZWZIAlIMY29udGV4dFN0b3J5iA'
-    'EBQg8KDV9jb250ZXh0X2NoYXRCCQoHX2lzX2UyZUIQCg5fY29udGV4dF9zdG9yeUoECAUQBlIJ'
-    'Y2hhdF90eXBl');
+    'EBEjMKBmludGVudBgIIAEoDjIbLnZvaWNlLmZpbGUudjEuVXBsb2FkSW50ZW50UgZpbnRlbnRC'
+    'DwoNX2NvbnRleHRfY2hhdEIJCgdfaXNfZTJlQhAKDl9jb250ZXh0X3N0b3J5SgQIBRAGUgljaG'
+    'F0X3R5cGU=');
 
 @$core.Deprecated('Use uploadResponseDescriptor instead')
 const UploadResponse$json = {
@@ -399,6 +422,48 @@ const FileMetadata$json = {
       '17': true
     },
     {'1': 'object_revision', '3': 24, '4': 1, '5': 4, '10': 'objectRevision'},
+    {
+      '1': 'music_title',
+      '3': 25,
+      '4': 1,
+      '5': 9,
+      '9': 10,
+      '10': 'musicTitle',
+      '17': true
+    },
+    {
+      '1': 'music_artist',
+      '3': 26,
+      '4': 1,
+      '5': 9,
+      '9': 11,
+      '10': 'musicArtist',
+      '17': true
+    },
+    {
+      '1': 'music_album',
+      '3': 27,
+      '4': 1,
+      '5': 9,
+      '9': 12,
+      '10': 'musicAlbum',
+      '17': true
+    },
+    {
+      '1': 'music_metadata_revision',
+      '3': 28,
+      '4': 1,
+      '5': 4,
+      '10': 'musicMetadataRevision'
+    },
+    {
+      '1': 'intent',
+      '3': 29,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.UploadIntent',
+      '10': 'intent'
+    },
   ],
   '8': [
     {'1': '_width'},
@@ -411,6 +476,9 @@ const FileMetadata$json = {
     {'1': '_status_enum'},
     {'1': '_file_type_enum'},
     {'1': '_scan_result_enum'},
+    {'1': '_music_title'},
+    {'1': '_music_artist'},
+    {'1': '_music_album'},
   ],
   '9': [
     {'1': 16, '2': 17},
@@ -437,10 +505,15 @@ final $typed_data.Uint8List fileMetadataDescriptor = $convert.base64Decode(
     'RW51bYgBARJLCg5maWxlX3R5cGVfZW51bRgWIAEoDjIgLnZvaWNlLmZpbGUudjEuRmlsZU1lZG'
     'lhQ2F0ZWdvcnlICFIMZmlsZVR5cGVFbnVtiAEBEk0KEHNjYW5fcmVzdWx0X2VudW0YFyABKA4y'
     'Hi52b2ljZS5maWxlLnYxLkZpbGVTY2FuT3V0Y29tZUgJUg5zY2FuUmVzdWx0RW51bYgBARInCg'
-    '9vYmplY3RfcmV2aXNpb24YGCABKARSDm9iamVjdFJldmlzaW9uQggKBl93aWR0aEIJCgdfaGVp'
-    'Z2h0QhMKEV9kdXJhdGlvbl9zZWNvbmRzQhMKEV90aHVtYm5haWxfcjJfa2V5QhMKEV9jb252ZX'
-    'J0ZWRfcjJfa2V5QgcKBV9jaGF0Qg0KC19leHBpcmVzX2F0Qg4KDF9zdGF0dXNfZW51bUIRCg9f'
-    'ZmlsZV90eXBlX2VudW1CEwoRX3NjYW5fcmVzdWx0X2VudW1KBAgQEBFSCWNoYXRfdHlwZQ==');
+    '9vYmplY3RfcmV2aXNpb24YGCABKARSDm9iamVjdFJldmlzaW9uEiQKC211c2ljX3RpdGxlGBkg'
+    'ASgJSApSCm11c2ljVGl0bGWIAQESJgoMbXVzaWNfYXJ0aXN0GBogASgJSAtSC211c2ljQXJ0aX'
+    'N0iAEBEiQKC211c2ljX2FsYnVtGBsgASgJSAxSCm11c2ljQWxidW2IAQESNgoXbXVzaWNfbWV0'
+    'YWRhdGFfcmV2aXNpb24YHCABKARSFW11c2ljTWV0YWRhdGFSZXZpc2lvbhIzCgZpbnRlbnQYHS'
+    'ABKA4yGy52b2ljZS5maWxlLnYxLlVwbG9hZEludGVudFIGaW50ZW50QggKBl93aWR0aEIJCgdf'
+    'aGVpZ2h0QhMKEV9kdXJhdGlvbl9zZWNvbmRzQhMKEV90aHVtYm5haWxfcjJfa2V5QhMKEV9jb2'
+    '52ZXJ0ZWRfcjJfa2V5QgcKBV9jaGF0Qg0KC19leHBpcmVzX2F0Qg4KDF9zdGF0dXNfZW51bUIR'
+    'Cg9fZmlsZV90eXBlX2VudW1CEwoRX3NjYW5fcmVzdWx0X2VudW1CDgoMX211c2ljX3RpdGxlQg'
+    '8KDV9tdXNpY19hcnRpc3RCDgoMX211c2ljX2FsYnVtSgQIEBARUgljaGF0X3R5cGU=');
 
 @$core.Deprecated('Use getFileURLRequestDescriptor instead')
 const GetFileURLRequest$json = {

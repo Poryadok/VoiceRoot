@@ -5,15 +5,16 @@ untouched. An interrupted CAS is recognized only with its owned annotation.
 """
 import copy,hashlib,re
 from controller import Blocked
-from nats_contract_plan import DECLARATIONS,SCHEMA,MIGRATION_ID,digest
+from nats_contract_plan import declarations_for,ContractError,digest
 
 ANNOTATION='voice-nats-preservation/contract-operation'
 def _validated_target_pairs(plan):
-    if not isinstance(plan,dict) or plan.get('schema')!=SCHEMA or plan.get('migration_id')!=MIGRATION_ID:raise Blocked('nats_contract_targets_unbound')
+    try:declarations=declarations_for(plan)
+    except ContractError:raise Blocked('nats_contract_targets_unbound') from None
     targets=plan.get('consumer_targets')
-    if not isinstance(targets,list) or len(targets)!=len(DECLARATIONS):raise Blocked('nats_contract_targets_unbound')
+    if not isinstance(targets,list) or len(targets)!=len(declarations):raise Blocked('nats_contract_targets_unbound')
     pairs=[]
-    for row,(stream,declaration) in zip(targets,DECLARATIONS):
+    for row,(stream,declaration) in zip(targets,declarations):
         if (not isinstance(row,dict) or set(row)!={'stream','name','config_sha256'}
             or row.get('stream')!=stream or row.get('name')!=declaration['durable_name']
             or not isinstance(row.get('config_sha256'),str) or not re.fullmatch('[a-f0-9]{64}',row['config_sha256'])):

@@ -144,7 +144,7 @@ file_references (дедупликация)
 | `article_thumb` | OG/thumb for Article attach | ≤2 MB |
 | `location_map` | Static map tile | ≤500 KB |
 
-**`intent` field (spec — not yet in proto):** distinguishes processing branch on `ConfirmUpload`. Extends shipped `RequestUploadRequest` / `ConfirmUploadRequest`:
+**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing) and `MUSIC` (6); Music is persisted at request admission and cannot be changed at confirm. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
 
 ```protobuf
 enum UploadIntent {

@@ -702,6 +702,19 @@ message FileProcessed {
   string status = 2;
   optional string converted_r2_key = 3;
   optional string thumbnail_r2_key = 4;
+  // File-owned plaintext processing snapshot. Never emitted for E2E files.
+  optional FileMusicMetadata music = 5;
+}
+
+message FileMusicMetadata {
+  string chat_id = 1;
+  uint64 metadata_revision = 2;
+  int64 size_bytes = 3;
+  string scan_result = 4;
+  string title = 5;
+  string artist = 6;
+  string album = 7;
+  int32 duration_seconds = 8;
 }
 
 message FileExpired {
