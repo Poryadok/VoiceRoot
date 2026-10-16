@@ -18,6 +18,7 @@ import (
 	authv1 "voice.app/voice/auth/v1"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/principal"
+	"voice/backend/voice/internal/principalgrpc"
 )
 
 const (
@@ -108,6 +109,7 @@ func (c *Client) RequireCurrent(ctx context.Context, accountID string, sessionEp
 // CurrentFloor reads positive Auth authority for one account. It retains no
 // value between calls; bounded reconciliation may reuse it only within a pass.
 func (c *Client) CurrentFloor(ctx context.Context, accountID string) (int64, error) {
+	started := time.Now()
 	if c == nil || c.service == nil || c.issuer == nil || ctx == nil {
 		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
@@ -125,6 +127,7 @@ func (c *Client) CurrentFloor(ctx context.Context, accountID string) (int64, err
 		Audience: Audience, RPC: RPC, RequestID: requestID, RequestHash: hash,
 	})
 	if err != nil {
+		principalgrpc.DependencyFailure(ctx, "auth_floor_sign", err, started)
 		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
 	callCtx, cancel := context.WithTimeout(ctx, c.deadline)
@@ -138,10 +141,12 @@ func (c *Client) CurrentFloor(ctx context.Context, accountID string) (int64, err
 		if status.Code(err) == codes.NotFound {
 			return 0, status.Error(codes.Unauthenticated, "delegated account is unavailable")
 		}
+		principalgrpc.DependencyFailure(ctx, "auth_floor_call", err, started)
 		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
 	floor := response.GetSessionEpochFloor()
 	if floor <= 0 {
+		principalgrpc.DependencyFailure(ctx, "auth_floor_response", nil, started)
 		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
 	return floor, nil
