@@ -183,6 +183,9 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 	if err = lockMessageMutation(ctx, commit, row.ChatID, space, &row.ID); err != nil {
 		return nil, err
 	}
+	if err = s.reconcileMusicInsert(ctx, commit, &row); err != nil {
+		return nil, err
+	}
 	saved, err := insertMessageDB(ctx, commit, row)
 	if err != nil {
 		return nil, err

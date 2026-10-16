@@ -6,7 +6,45 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	eventsv1 "voice.app/voice/events/v1"
+	filev1 "voice.app/voice/file/v1"
 )
+
+func TestMusicTombstoneBeforeFirstMessageDoesNotPersistStaleTags(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForStoreTest(t, ctx)
+	defer pool.Close()
+	seedMessagingSchema(t, ctx, pool)
+	messages := &MessagesStore{Pool: pool}
+	file, chat := uuid.New(), uuid.New()
+	tombstone := &eventsv1.FileProcessed{FileId: file.String(), Status: "deleted", Music: &eventsv1.FileMusicMetadata{ChatId: chat.String(), MetadataRevision: 2}}
+	latest, err := messages.PersistMusicSnapshot(ctx, tombstone)
+	require.NoError(t, err)
+	chats, err := messages.MusicRefreshChats(ctx, latest)
+	require.NoError(t, err)
+	require.Empty(t, chats)
+
+	row := MessageRow{
+		ID: uuid.New(), ChatID: chat, SenderProfileID: uuid.New(), Content: "Music", Type: "regular",
+		ContentType: "music", AttachmentsJSON: `[{"file_id":"` + file.String() + `","type":"music","title":"stale title","artist":"stale artist","duration_seconds":7}]`,
+		MentionsJSON: "[]", MusicBinding: &MusicAttachmentBinding{
+			FileID: file, SourceChatID: chat, Revision: 1, Status: "ready", SizeBytes: 42,
+			ScanResult: "clean", Duration: 7, Title: "stale title", Artist: "stale artist",
+		},
+	}
+	request := &filev1.AcquireFileReferencesRequest{
+		ProtocolVersion: 1,
+		ProducerId:      filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING,
+		References: []*filev1.FileReferenceKey{{
+			FileId: file.String(), OwnerType: filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE,
+		}},
+	}
+	saved, err := messages.InsertMessageWithReferences(ctx, row, nil, request, func(context.Context, *filev1.AcquireFileReferencesRequest) error { return nil })
+	require.NoError(t, err)
+	require.JSONEq(t, `[{"file_id":"`+file.String()+`","type":"music"}]`, saved.AttachmentsJSON)
+	var revision int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT music_metadata_revision FROM messages WHERE id=$1`, row.ID).Scan(&revision))
+	require.EqualValues(t, 2, revision)
+}
 
 func TestMusicRefreshAndTombstoneReachForwardedCopiesAtomically(t *testing.T) {
 	ctx := context.Background()

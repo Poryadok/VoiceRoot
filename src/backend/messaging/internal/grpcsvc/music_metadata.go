@@ -71,5 +71,9 @@ func (s *MessagingGRPC) enrichMusicAttachment(ctx context.Context, raw, contentT
 	if fileErr != nil || chatErr != nil || fileID == uuid.Nil || chatID == uuid.Nil || meta.GetMusicMetadataRevision() == 0 || meta.GetMusicMetadataRevision() > uint64(1<<63-1) || meta.GetDurationSeconds() <= 0 {
 		return "", nil, status.Error(codes.FailedPrecondition, "music metadata unavailable")
 	}
-	return canonical, &store.MusicAttachmentBinding{FileID: fileID, SourceChatID: chatID, Revision: meta.GetMusicMetadataRevision()}, nil
+	return canonical, &store.MusicAttachmentBinding{
+		FileID: fileID, SourceChatID: chatID, Revision: meta.GetMusicMetadataRevision(),
+		Status: meta.GetStatus(), SizeBytes: int64(meta.GetSizeBytes()), ScanResult: meta.GetScanResult(),
+		Duration: int64(meta.GetDurationSeconds()), Title: meta.GetMusicTitle(), Artist: meta.GetMusicArtist(), Album: meta.GetMusicAlbum(),
+	}, nil
 }

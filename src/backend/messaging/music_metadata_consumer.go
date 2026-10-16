@@ -17,6 +17,7 @@ const musicMetadataDurable = "messaging_music_metadata"
 const musicMetadataSubject = "file.processed"
 
 type musicMetadataStore interface {
+	PersistMusicSnapshot(context.Context, *eventsv1.FileProcessed) (*eventsv1.FileProcessed, error)
 	MusicRefreshChats(context.Context, *eventsv1.FileProcessed) ([]uuid.UUID, error)
 	RefreshMusicMetadata(context.Context, uuid.UUID, *uuid.UUID, *eventsv1.FileProcessed) (int, error)
 }
@@ -54,7 +55,11 @@ func decodeMusicSnapshot(data []byte) (*eventsv1.FileProcessed, error) {
 }
 
 func applyMusicSnapshot(ctx context.Context, messages musicMetadataStore, policy musicChatPolicy, event *eventsv1.FileProcessed) error {
-	chats, err := messages.MusicRefreshChats(ctx, event)
+	current, err := messages.PersistMusicSnapshot(ctx, event)
+	if err != nil {
+		return err
+	}
+	chats, err := messages.MusicRefreshChats(ctx, current)
 	if err != nil {
 		return err
 	}
@@ -70,7 +75,7 @@ func applyMusicSnapshot(ctx context.Context, messages musicMetadataStore, policy
 			return errors.New("music destination policy unavailable")
 		}
 		for {
-			n, err := messages.RefreshMusicMetadata(ctx, chat, scope.SpaceID, event)
+			n, err := messages.RefreshMusicMetadata(ctx, chat, scope.SpaceID, current)
 			if err != nil {
 				return err
 			}

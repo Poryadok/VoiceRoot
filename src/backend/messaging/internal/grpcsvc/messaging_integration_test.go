@@ -76,6 +76,7 @@ func applyBaseMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpo
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000026_attachment_send_intents.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000027_message_event_outbox.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000028_music_metadata.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000029_music_file_snapshot.up.sql")
 }
 
 // applyChatDBForBufconnChat applies chat_db schema needed when wiring real Chat gRPC

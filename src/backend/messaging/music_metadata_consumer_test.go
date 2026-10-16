@@ -43,8 +43,13 @@ func TestMusicConsumerContractAndBoundedEventAdmission(t *testing.T) {
 type musicRefreshFake struct {
 	chat, scope uuid.UUID
 	calls       int
+	persisted   int
 }
 
+func (f *musicRefreshFake) PersistMusicSnapshot(_ context.Context, event *eventsv1.FileProcessed) (*eventsv1.FileProcessed, error) {
+	f.persisted++
+	return event, nil
+}
 func (f *musicRefreshFake) MusicRefreshChats(context.Context, *eventsv1.FileProcessed) ([]uuid.UUID, error) {
 	return []uuid.UUID{f.chat}, nil
 }
@@ -68,4 +73,5 @@ func TestMusicConsumerUsesDestinationScopeForEveryBatch(t *testing.T) {
 	fake := &musicRefreshFake{chat: uuid.New(), scope: uuid.New()}
 	require.NoError(t, applyMusicSnapshot(context.Background(), fake, musicPolicyFake{scope: fake.scope}, &eventsv1.FileProcessed{}))
 	require.Equal(t, 2, fake.calls)
+	require.Equal(t, 1, fake.persisted)
 }

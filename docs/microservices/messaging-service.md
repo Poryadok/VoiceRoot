@@ -671,6 +671,13 @@ atomically under the chat/Space mutation fence. List/history reads use the
 updated attachment data; the event reaches the existing `message_update` client
 path. It does not change message identity, creation time or Chat-owned sort keys.
 
+Messaging persists the latest per-file snapshot in
+`messaging_music_file_snapshots` before enumerating destinations. The
+send/forward insert transaction locks that snapshot and reconciles its admitted
+tags against a newer stored revision before inserting. This covers a
+`file.processed` tombstone delivered after File reference acquisition but before
+the first message row exists.
+
 Only ready plaintext Music with the existing clean-or-skipped scan policy can
 gain tags. Missing fields clear previous tags. Delete/expiry emits a newer
 metadata-free snapshot; Messaging retains that revision so replayed ready events

@@ -20,6 +20,154 @@ type MusicAttachmentBinding struct {
 	FileID       uuid.UUID `json:"file_id"`
 	SourceChatID uuid.UUID `json:"source_chat_id"`
 	Revision     uint64    `json:"revision"`
+	Status       string    `json:"status"`
+	SizeBytes    int64     `json:"size_bytes"`
+	ScanResult   string    `json:"scan_result"`
+	Duration     int64     `json:"duration_seconds"`
+	Title        string    `json:"title"`
+	Artist       string    `json:"artist"`
+	Album        string    `json:"album"`
+}
+
+type musicFileSnapshot struct {
+	FileID       uuid.UUID
+	SourceChatID uuid.UUID
+	Revision     int64
+	Status       string
+	SizeBytes    int64
+	ScanResult   string
+	Duration     int64
+	Title        string
+	Artist       string
+	Album        string
+}
+
+func musicSnapshotFromEvent(e *eventsv1.FileProcessed) (musicFileSnapshot, error) {
+	if err := ValidateMusicSnapshot(e); err != nil {
+		return musicFileSnapshot{}, err
+	}
+	file, _ := uuid.Parse(e.GetFileId())
+	chat, _ := uuid.Parse(e.GetMusic().GetChatId())
+	m := e.GetMusic()
+	return musicFileSnapshot{
+		FileID: file, SourceChatID: chat, Revision: int64(m.GetMetadataRevision()), Status: e.GetStatus(),
+		SizeBytes: int64(m.GetSizeBytes()), ScanResult: m.GetScanResult(), Duration: int64(m.GetDurationSeconds()),
+		Title: m.GetTitle(), Artist: m.GetArtist(), Album: m.GetAlbum(),
+	}, nil
+}
+
+func (s musicFileSnapshot) event() *eventsv1.FileProcessed {
+	return &eventsv1.FileProcessed{
+		FileId: s.FileID.String(), Status: s.Status,
+		Music: &eventsv1.FileMusicMetadata{
+			ChatId: s.SourceChatID.String(), MetadataRevision: uint64(s.Revision), SizeBytes: s.SizeBytes,
+			ScanResult: s.ScanResult, DurationSeconds: int32(s.Duration), Title: s.Title, Artist: s.Artist, Album: s.Album,
+		},
+	}
+}
+
+func (s musicFileSnapshot) equal(other musicFileSnapshot) bool {
+	return s.FileID == other.FileID && s.SourceChatID == other.SourceChatID && s.Revision == other.Revision &&
+		s.Status == other.Status && s.SizeBytes == other.SizeBytes && s.ScanResult == other.ScanResult &&
+		s.Duration == other.Duration && s.Title == other.Title && s.Artist == other.Artist && s.Album == other.Album
+}
+
+func musicSnapshotFromBinding(b *MusicAttachmentBinding) (musicFileSnapshot, error) {
+	if b == nil || b.Revision == 0 || b.Revision > math.MaxInt64 || b.FileID == uuid.Nil || b.SourceChatID == uuid.Nil || b.SizeBytes < 0 || b.Duration < 0 || b.Duration > math.MaxInt32 {
+		return musicFileSnapshot{}, errors.New("invalid music admission snapshot")
+	}
+	return musicSnapshotFromEvent(&eventsv1.FileProcessed{
+		FileId: b.FileID.String(), Status: b.Status,
+		Music: &eventsv1.FileMusicMetadata{
+			ChatId: b.SourceChatID.String(), MetadataRevision: b.Revision, SizeBytes: b.SizeBytes,
+			ScanResult: b.ScanResult, DurationSeconds: int32(b.Duration), Title: b.Title, Artist: b.Artist, Album: b.Album,
+		},
+	})
+}
+
+// PersistMusicSnapshot keeps the latest authoritative File snapshot even when
+// the event arrives before the first message or forwarded copy is inserted.
+// The returned value is the current revision, so a delayed event still drives
+// convergence from a newer snapshot already stored here.
+func (s *MessagesStore) PersistMusicSnapshot(ctx context.Context, e *eventsv1.FileProcessed) (*eventsv1.FileProcessed, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	incoming, err := musicSnapshotFromEvent(e)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(context.Background())
+	current, err := persistMusicSnapshotTx(ctx, tx, incoming)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return current.event(), nil
+}
+
+func persistMusicSnapshotTx(ctx context.Context, tx pgx.Tx, incoming musicFileSnapshot) (musicFileSnapshot, error) {
+	_, err := tx.Exec(ctx, `INSERT INTO messaging_music_file_snapshots
+ (file_id,source_chat_id,metadata_revision,status,size_bytes,scan_result,duration_seconds,title,artist,album)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+ ON CONFLICT(file_id) DO UPDATE SET source_chat_id=EXCLUDED.source_chat_id,
+ metadata_revision=EXCLUDED.metadata_revision,status=EXCLUDED.status,size_bytes=EXCLUDED.size_bytes,
+ scan_result=EXCLUDED.scan_result,duration_seconds=EXCLUDED.duration_seconds,title=EXCLUDED.title,
+ artist=EXCLUDED.artist,album=EXCLUDED.album,updated_at=clock_timestamp()
+ WHERE messaging_music_file_snapshots.source_chat_id=EXCLUDED.source_chat_id
+ AND messaging_music_file_snapshots.metadata_revision<EXCLUDED.metadata_revision`,
+		incoming.FileID, incoming.SourceChatID, incoming.Revision, incoming.Status, incoming.SizeBytes,
+		incoming.ScanResult, incoming.Duration, incoming.Title, incoming.Artist, incoming.Album)
+	if err != nil {
+		return musicFileSnapshot{}, err
+	}
+	var current musicFileSnapshot
+	err = tx.QueryRow(ctx, `SELECT file_id,source_chat_id,metadata_revision,status,size_bytes,scan_result,duration_seconds,title,artist,album
+ FROM messaging_music_file_snapshots WHERE file_id=$1 FOR UPDATE`, incoming.FileID).Scan(
+		&current.FileID, &current.SourceChatID, &current.Revision, &current.Status, &current.SizeBytes,
+		&current.ScanResult, &current.Duration, &current.Title, &current.Artist, &current.Album)
+	if err != nil {
+		return musicFileSnapshot{}, err
+	}
+	if current.SourceChatID != incoming.SourceChatID || current.Revision < incoming.Revision ||
+		(current.Revision == incoming.Revision && !current.equal(incoming)) {
+		return musicFileSnapshot{}, errors.New("conflicting music file snapshot")
+	}
+	return current, nil
+}
+
+func (s *MessagesStore) reconcileMusicInsert(ctx context.Context, tx pgx.Tx, row *MessageRow) error {
+	if row.MusicBinding == nil || row.IsE2E || row.ContentType != "music" {
+		return nil
+	}
+	binding := *row.MusicBinding
+	incoming, err := musicSnapshotFromBinding(&binding)
+	if err != nil {
+		return err
+	}
+	current, err := persistMusicSnapshotTx(ctx, tx, incoming)
+	if err != nil {
+		return err
+	}
+	if current.Revision > int64(binding.Revision) {
+		updated, changed, err := refreshMusicAttachment(row.AttachmentsJSON, binding, current.event())
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return errors.New("latest music snapshot did not advance admission")
+		}
+		row.AttachmentsJSON = updated
+		binding.Revision = uint64(current.Revision)
+	}
+	row.MusicBinding = &binding
+	return nil
 }
 
 // ValidateMusicSnapshot shares the same closed status/size/tag validation as
