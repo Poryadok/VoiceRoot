@@ -1,16 +1,31 @@
 package matchsquadmemberprincipal
 
 import (
+	"bufio"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
+	"io"
 	"math/big"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,61 +36,250 @@ import (
 	"voice/backend/pkg/principal"
 )
 
-func TestColdJWKSFailureRejectsMemberCallAndLaterKeyCanResolve(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := big.NewInt(int64(privateKey.PublicKey.E)).Bytes()
 	document, err := json.Marshal(map[string]any{"keys": []any{map[string]any{
 		"kty": "RSA", "kid": "current", "use": "sig", "alg": "RS256",
-		"n": base64.RawURLEncoding.EncodeToString(privateKey.PublicKey.N.Bytes()),
-		"e": base64.RawURLEncoding.EncodeToString(e),
+		"n": base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
+		"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes()),
 	}}})
 	if err != nil {
 		t.Fatal(err)
 	}
+	available := atomic.Bool{}
+	var jwksRequests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		jwksRequests.Add(1)
+		if !available.Load() {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(document)
+	}))
+	defer server.Close()
 
-	available := false
-	resolver, err := principal.NewJWKSResolverWithConfig(principal.JWKSResolverConfig{
-		Fetch: func(context.Context, string) ([]byte, error) {
-			if !available {
-				return nil, errors.New("fixture JWKS unavailable")
-			}
-			return document, nil
-		},
-		RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute,
-	})
+	redisFixture := startPrincipalRedis(t)
+	certPath, keyPath, clientCAPath := writePrincipalTLSFiles(t)
+	jwksCAPath := filepath.Join(t.TempDir(), "jwks-ca.pem")
+	jwksCertificate := server.TLS.Certificates[0].Certificate[0]
+	if err := os.WriteFile(jwksCAPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: jwksCertificate}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := Config{
+		ListenerAddr: "127.0.0.1:0", TLSCertFile: certPath, TLSKeyFile: keyPath,
+		ClientCAFile: clientCAPath, JWKSURL: "https" + strings.TrimPrefix(server.URL, "http") + "/jwks",
+		JWKSCAFile: jwksCAPath, RedisAddr: redisFixture.addr,
+	}
+	runtime, err := New(context.Background(), config)
+	if err != nil {
+		t.Fatalf("member verifier startup required unavailable JWKS: %v", err)
+	}
+	defer func() { _ = runtime.Close() }()
+	if got := jwksRequests.Load(); got != 0 {
+		t.Fatalf("constructor fetched Gateway JWKS %d times; want empty-cache startup", got)
+	}
+	if got := redisFixture.pings.Load(); got != 1 {
+		t.Fatalf("Redis readiness pings=%d, want one", got)
+	}
+
+	accountID := "00000000-0000-4000-8000-000000000010"
+	profileID := "00000000-0000-4000-8000-000000000020"
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := &Runtime{resolver: resolver, redis: redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})}
-	defer func() { _ = runtime.redis.Close() }()
-
-	requestID := "00000000-0000-4000-8000-000000000001"
-	request := &callsv1.JoinMatchSquadRoomRequest{ProtocolVersion: 1, OperationId: requestID}
-	// This token has a parseable issuer and kid so key resolution is reached;
-	// the unavailable cold cache must reject it before signature/replay/handler work.
-	token := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","kid":"current"}`)) + "." +
-		base64.RawURLEncoding.EncodeToString([]byte(`{"iss":"gateway"}`)) + ".invalid"
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
-		"authorization", "Bearer "+token, "x-request-id", requestID,
-	))
-	called := false
-	_, err = StrictUnaryInterceptor(runtime)(ctx, request, &grpc.UnaryServerInfo{FullMethod: JoinMethod}, func(context.Context, any) (any, error) {
-		called = true
-		return nil, nil
-	})
-	if status.Code(err) != codes.Unavailable || called {
-		t.Fatalf("cold JWKS call code=%v handler called=%v; want unavailable before handler", status.Code(err), called)
+	invoke := func(keyIssuer *principal.Issuer, operation string) (bool, error) {
+		t.Helper()
+		request := &callsv1.JoinMatchSquadRoomRequest{ProtocolVersion: 1, OperationId: operation}
+		hash, err := principal.RequestHash(request)
+		if err != nil {
+			return false, err
+		}
+		token, err := keyIssuer.IssueDelegatedUser(principal.DelegatedUserInput{
+			Audience: audience, RPC: JoinMethod, RequestID: operation, RequestHash: hash,
+			AccountID: accountID, ProfileID: profileID, SessionEpoch: 9, ClientExpiresAt: time.Now().Add(25 * time.Second),
+		})
+		if err != nil {
+			return false, err
+		}
+		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+			"authorization", "Bearer "+token, "x-request-id", operation,
+		))
+		called := false
+		_, err = StrictUnaryInterceptor(runtime)(ctx, request, &grpc.UnaryServerInfo{FullMethod: JoinMethod}, func(ctx context.Context, _ any) (any, error) {
+			called = true
+			verified, ok := principal.FromContext(ctx)
+			if !ok || verified.AccountID != accountID || verified.ProfileID != profileID || verified.SessionEpoch != 9 || verified.RequestID != operation || verified.RequestHash != hash {
+				return nil, errors.New("handler received an unbound principal")
+			}
+			return nil, nil
+		})
+		return called, err
 	}
 
-	available = true
-	key, err := runtime.resolveKey(context.Background(), issuer, "current")
-	if err != nil || key == nil || key.N.Cmp(privateKey.PublicKey.N) != 0 {
-		t.Fatalf("resolver did not recover after JWKS became available: key=%v err=%v", key != nil, err)
+	called, err := invoke(issuer, uuid.MustParse("00000000-0000-4000-8000-000000000001").String())
+	if status.Code(err) != codes.Unavailable || called {
+		t.Fatalf("cold-cache call code=%v handler called=%v; want unavailable before effects", status.Code(err), called)
+	}
+	if redisFixture.sets.Load() != 0 || redisFixture.gets.Load() != 0 {
+		t.Fatalf("cold-cache denial reached Redis side effects: SET=%d GET=%d", redisFixture.sets.Load(), redisFixture.gets.Load())
+	}
+
+	available.Store(true)
+	if err := runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// A fresh process cache models recovery by the normal next startup. It
+	// must still avoid an eager fetch, then lazily resolve the now-available key
+	// while verifying the correctly signed and request-bound protected call.
+	runtime, err = New(context.Background(), config)
+	if err != nil {
+		t.Fatalf("member verifier startup failed after Gateway recovered: %v", err)
+	}
+	if got := jwksRequests.Load(); got != 1 {
+		t.Fatalf("recovered constructor made an eager JWKS request; request count=%d", got)
+	}
+	called, err = invoke(issuer, uuid.MustParse("00000000-0000-4000-8000-000000000002").String())
+	if err != nil || !called {
+		t.Fatalf("valid bound call after JWKS recovery called=%v err=%v", called, err)
+	}
+	if redisFixture.sets.Load() != 1 || redisFixture.gets.Load() != 1 {
+		t.Fatalf("verified call replay/epoch checks SET=%d GET=%d; want one each", redisFixture.sets.Load(), redisFixture.gets.Load())
+	}
+
+	unknownKidIssuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "unknown", PrivateKey: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	called, err = invoke(unknownKidIssuer, uuid.MustParse("00000000-0000-4000-8000-000000000003").String())
+	if status.Code(err) != codes.Unavailable || called {
+		t.Fatalf("unknown kid call code=%v handler called=%v; want denial before handler", status.Code(err), called)
 	}
 	if _, err := runtime.resolveKey(context.Background(), "untrusted", "current"); err == nil {
-		t.Fatal("untrusted issuer resolved after recovery")
+		t.Fatal("untrusted issuer resolved")
 	}
+}
+
+type principalRedisFixture struct {
+	addr  string
+	pings atomic.Int32
+	sets  atomic.Int32
+	gets  atomic.Int32
+}
+
+func startPrincipalRedis(t *testing.T) *principalRedisFixture {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := &principalRedisFixture{addr: listener.Addr().String()}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go fixture.serve(conn)
+		}
+	}()
+	return fixture
+}
+
+func (f *principalRedisFixture) serve(conn net.Conn) {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	for {
+		command, err := readPrincipalRedisCommand(reader)
+		if err != nil {
+			return
+		}
+		if len(command) == 0 {
+			_, _ = io.WriteString(conn, "-ERR empty command\r\n")
+			continue
+		}
+		switch strings.ToUpper(command[0]) {
+		case "HELLO":
+			_, _ = io.WriteString(conn, "%7\r\n+server\r\n+redis\r\n+version\r\n+7.0.0\r\n+proto\r\n:3\r\n+id\r\n:1\r\n+mode\r\n+standalone\r\n+role\r\n+master\r\n+modules\r\n*0\r\n")
+		case "PING":
+			f.pings.Add(1)
+			_, _ = io.WriteString(conn, "+PONG\r\n")
+		case "SET":
+			f.sets.Add(1)
+			_, _ = io.WriteString(conn, "+OK\r\n")
+		case "GET":
+			f.gets.Add(1)
+			_, _ = io.WriteString(conn, "$1\r\n9\r\n")
+		case "CLIENT":
+			_, _ = io.WriteString(conn, "+OK\r\n")
+		default:
+			_, _ = io.WriteString(conn, "+OK\r\n")
+		}
+	}
+}
+
+func readPrincipalRedisCommand(reader *bufio.Reader) ([]string, error) {
+	header, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	if len(header) < 4 || header[0] != '*' {
+		return nil, errors.New("invalid Redis command frame")
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(header[1:]))
+	if err != nil || count < 1 || count > 32 {
+		return nil, errors.New("invalid Redis command count")
+	}
+	command := make([]string, count)
+	for i := range command {
+		bulk, err := reader.ReadString('\n')
+		if err != nil || len(bulk) < 4 || bulk[0] != '$' {
+			return nil, errors.New("invalid Redis bulk header")
+		}
+		length, err := strconv.Atoi(strings.TrimSpace(bulk[1:]))
+		if err != nil || length < 0 || length > 4096 {
+			return nil, errors.New("invalid Redis bulk length")
+		}
+		value := make([]byte, length+2)
+		if _, err := io.ReadFull(reader, value); err != nil || string(value[length:]) != "\r\n" {
+			return nil, errors.New("invalid Redis bulk value")
+		}
+		command[i] = string(value[:length])
+	}
+	return command, nil
+}
+
+func writePrincipalTLSFiles(t *testing.T) (string, string, string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	dir := t.TempDir()
+	certPath, keyPath, caPath := filepath.Join(dir, "voice-cert.pem"), filepath.Join(dir, "voice-key.pem"), filepath.Join(dir, "client-ca.pem")
+	for path, value := range map[string][]byte{certPath: certPEM, keyPath: keyPEM, caPath: certPEM} {
+		if err := os.WriteFile(path, value, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return certPath, keyPath, caPath
 }
