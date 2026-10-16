@@ -30,7 +30,7 @@ MAX_API_PAGES = (MAX_API_ITEMS + MAX_API_PAGE_SIZE - 1) // MAX_API_PAGE_SIZE
 SOURCE_CACHE_DIR = Path('/var/lib/voice-nats-preservation/installed/source-archives')
 IMAGE_NAMES = frozenset(('analytics', 'bot', 'chat', 'file', 'gateway', 'matchmaking', 'messaging',
     'moderation', 'notification', 'realtime', 'role', 'search', 'social', 'space', 'story', 'subscription',
-    'user', 'voice', 'auth', 'web', 'developer-portal', 'admin', 'nats-hub-config-renderer'))
+    'user', 'voice', 'auth', 'web', 'developer-portal', 'admin', 'gameintegration', 'nats-hub-config-renderer'))
 
 class SourceError(ValueError):
     pass

@@ -24,7 +24,7 @@ import sys
 
 NS = 'voice-dev'
 LABELS = {'voice.environment':'dev', 'app.kubernetes.io/managed-by':'voice-dev'}
-SERVICES = {name:name for name in 'auth user social role space chat file messaging voice matchmaking search notification realtime bot subscription moderation story analytics gateway web admin'.split()}
+SERVICES = {name:name for name in 'auth user social role space chat file messaging voice matchmaking search notification realtime bot subscription moderation story analytics gateway gameintegration web admin'.split()}
 SERVICES['developer-portal'] = 'portal'
 LOCK = 'voice-dev-image-update-lock'
 

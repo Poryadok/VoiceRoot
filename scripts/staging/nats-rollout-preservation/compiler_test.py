@@ -48,7 +48,7 @@ class CompilerTest(unittest.TestCase):
                 p.update(generation='r20260930a4',dataPVC='voice-nats-jsdata-d202610040049430b',changed_services=[])
                 p['images']={}
                 import runtime_stage
-                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal'}
+                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration'}
                 for (kind,name),obj in kube.objects.items():
                     if kind!='Deployment' or name not in targets:continue
                     for c in obj['spec']['template']['spec'].get('initContainers',[])+obj['spec']['template']['spec']['containers']:

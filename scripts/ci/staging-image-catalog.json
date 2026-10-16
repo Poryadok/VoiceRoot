@@ -34,6 +34,15 @@
       "dockerfile": "./src/backend/file/Dockerfile"
     },
     {
+      "name": "gameintegration",
+      "deployment": "voice-gameintegration",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/gameintegration/Dockerfile",
+      "environments": ["dev", "staging"]
+    },
+    {
       "name": "gateway",
       "deployment": "voice-gateway",
       "k8s_manifest": "deploy/staging/gateway-deployment.yaml",

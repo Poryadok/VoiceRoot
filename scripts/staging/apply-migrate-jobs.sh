@@ -8,6 +8,11 @@ source "${ROOT}/scripts/staging/lib/kubectl-configmap.sh"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 MIGRATE_TAG="${VOICE_MIGRATE_IMAGE_TAG:-v4.18.1}"
 PG_USER="${POSTGRES_USER:-voice}"
+GIS_MIGRATIONS_ENABLED="${VOICE_ENABLE_GAME_INTEGRATION_DB:-false}"
+case "${GIS_MIGRATIONS_ENABLED}" in
+  true|false) ;;
+  *) echo 'ERROR: VOICE_ENABLE_GAME_INTEGRATION_DB must be true or false' >&2; exit 2 ;;
+esac
 
 postgres_migrate_dsn() {
   local db="$1"
@@ -25,6 +30,99 @@ substitute() {
   sed -e "s|__K_NAMESPACE__|${NS}|g" \
       -e "s|__MIGRATE_IMAGE_TAG__|${MIGRATE_TAG}|g" \
       -e "s|__DATABASE_URL__|${esc_dsn}|g"
+}
+
+provision_gameintegration_runtime_role() {
+  local job_name='voice-provision-gameintegration-runtime-role'
+  local active
+  local role_password_key runtime_url_key role_password runtime_url
+  role_password_key="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.GAME_INTEGRATION_DB_PASSWORD}' 2>/dev/null || true)"
+  runtime_url_key="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.GAME_INTEGRATION_DATABASE_URL}' 2>/dev/null || true)"
+  if [ -z "${role_password_key}" ] || [ -z "${runtime_url_key}" ]; then
+    echo 'ERROR: voice-app-secrets must contain operator-provisioned GIS runtime password and database URL keys' >&2
+    exit 1
+  fi
+  if ! role_password="$(printf '%s' "${role_password_key}" | base64 -d 2>/dev/null)" || \
+     ! runtime_url="$(printf '%s' "${runtime_url_key}" | base64 -d 2>/dev/null)" || \
+     [[ ! "${role_password}" =~ ^[a-f0-9]{64}$ ]] || \
+     [ "${runtime_url}" != "postgres://gameintegration_runtime:${role_password}@voice-postgres:5432/game_integration_db?sslmode=disable" ]; then
+    echo 'ERROR: GIS runtime Secret must use a 64-character random hex password and the restricted game_integration_db URL' >&2
+    exit 1
+  fi
+
+  kubectl_apply_configmap voice-gameintegration-runtime-role-sql "${NS}" \
+    --from-file="provision.sql=${ROOT}/docker/postgres/provision-gameintegration-runtime-role.sql"
+  if kubectl get job "${job_name}" -n "${NS}" >/dev/null 2>&1; then
+    active="$(kubectl get job "${job_name}" -n "${NS}" -o jsonpath='{.status.active}' 2>/dev/null || echo 0)"
+    if [ "${active:-0}" != 0 ]; then
+      echo "ERROR: GIS runtime-role provision Job is already active: ${job_name}" >&2
+      exit 1
+    fi
+    kubectl delete job "${job_name}" -n "${NS}" --wait=true
+  fi
+  substitute '' < "${ROOT}/deploy/templates/provision-gameintegration-runtime-role-job.yaml" | kubectl apply -f -
+  if ! kubectl wait --for=condition=complete "job/${job_name}" -n "${NS}" --timeout=300s; then
+    dump_migrate_job_logs "${job_name}"
+    exit 1
+  fi
+}
+
+finalize_gameintegration_runtime_role() {
+  local job_name='voice-verify-gameintegration-db'
+  local configmap_name='voice-gameintegration-db-verifier-sql'
+  local active manifest dry_run
+
+  if kubectl get job "${job_name}" -n "${NS}" >/dev/null 2>&1; then
+    active="$(kubectl get job "${job_name}" -n "${NS}" -o jsonpath='{.status.active}' 2>/dev/null || echo 0)"
+    if [ "${active:-0}" != 0 ]; then
+      echo "ERROR: GIS privilege verifier Job is already active: ${job_name}" >&2
+      exit 1
+    fi
+    kubectl delete job "${job_name}" -n "${NS}" --wait=true
+  fi
+
+  # Recreate the fixed source ConfigMap only after the prior Job has stopped,
+  # so each verifier executes the current SQL as an immutable input.
+  kubectl delete configmap "${configmap_name}" -n "${NS}" --ignore-not-found
+  manifest="$(mktemp)"
+  dry_run="$(kubectl_configmap_dry_run_flag)"
+  if ! kubectl create configmap "${configmap_name}" --namespace="${NS}" \
+    --from-file="verify.sql=${ROOT}/docker/postgres/verify-gameintegration-runtime-role.sql" \
+    "${dry_run}" -o yaml >"${manifest}"; then
+    rm -f "${manifest}"
+    return 1
+  fi
+  if [ ! -s "${manifest}" ]; then
+    echo "ERROR: kubectl generated an empty GIS verifier ConfigMap" >&2
+    rm -f "${manifest}"
+    return 1
+  fi
+  sed -i '/^data:/i immutable: true' "${manifest}"
+  if kubectl apply -f "${manifest}"; then
+    rm -f "${manifest}"
+  else
+    local status=$?
+    rm -f "${manifest}"
+    return "${status}"
+  fi
+
+  substitute '' < "${ROOT}/deploy/templates/verify-game-integration-db-job.yaml" | kubectl apply -f -
+  if ! kubectl wait --for=condition=complete "job/${job_name}" -n "${NS}" --timeout=300s; then
+    dump_migrate_job_logs "${job_name}"
+    exit 1
+  fi
+}
+
+apply_gameintegration_migrations() {
+  provision_gameintegration_runtime_role
+  apply_migrate game_integration_db \
+    "${ROOT}/src/backend/migrations/game_integration_db" \
+    "${ROOT}/deploy/templates/migrate-game-integration-db-job.yaml" \
+    voice-migrate-gameintegration-db \
+    voice-gameintegration-db-migrations
+  # apply_migrate may return early for an unchanged successful Job. Always
+  # finalize grants after it returns, on both fresh and no-op migration paths.
+  finalize_gameintegration_runtime_role
 }
 
 dump_migrate_job_logs() {
@@ -208,5 +306,13 @@ apply_migrate voice_db \
   "${ROOT}/deploy/templates/migrate-voice-db-job.yaml" \
   voice-migrate-voice-db \
   voice-voice-db-migrations
+
+if [ "${GIS_MIGRATIONS_ENABLED}" = true ]; then
+  # The GIS runtime role is provisioned with the existing least-privilege SQL
+  # before its schema grants are created by the privileged migration Job.
+  apply_gameintegration_migrations
+else
+  echo 'Skipping internal Game Integration migrations (VOICE_ENABLE_GAME_INTEGRATION_DB=false)'
+fi
 
 echo "Staging DB migrate jobs complete."

@@ -287,7 +287,7 @@ def rotate_postgres():
 def activate():
     dev.validate_target(json.loads(run('kubectl', 'get', 'namespace', dev.NS, '-o', 'json').stdout))
     rendered = json.loads((WORK / 'prepared.json').read_text())['items']
-    env = dict(os.environ, VOICE_K8S_NAMESPACE=dev.NS)
+    env = dict(os.environ, VOICE_K8S_NAMESPACE=dev.NS, VOICE_ENABLE_GAME_INTEGRATION_DB='true')
     initial = subprocess.run(['bash', str(ROOT / 'scripts/staging/init-postgres-databases.sh')], env=env, capture_output=True, timeout=600)
     (WORK / 'init-postgres-databases.sh.log').write_bytes(initial.stdout + initial.stderr)
     if initial.returncode:

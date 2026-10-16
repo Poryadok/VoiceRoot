@@ -101,6 +101,33 @@ class PlanTests(unittest.TestCase):
             with self.subTest(row_id=row_id):
                 with self.assertRaises(subject.PlanError): subject.preflight(kube, plan, 'full')
 
+    def test_principal_secrets_require_both_gis_workload_keys(self):
+        kube, plan = self.full_fixture()
+        row = next(row for row in plan['checks'] if row['id'] == 'principal-secrets')
+        expected = {
+            'voice-gameintegration-workload-credentials': {
+                'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64',
+                'GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64',
+            },
+            'voice-gameintegration-principal-signing': {'current.pem', 'next.pem'},
+            'voice-gameintegration-jwks-tls': {'tls.crt', 'tls.key'},
+        }
+        actual = {obj['name']: set(obj['desired']['required_keys'])
+                  for obj in row['objects'] if obj['name'] in expected}
+        self.assertEqual(actual, expected)
+        for secret_name, missing_key in (
+            ('voice-gameintegration-workload-credentials', 'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64'),
+            ('voice-gameintegration-principal-signing', 'next.pem'),
+            ('voice-gameintegration-jwks-tls', 'tls.key'),
+        ):
+            with self.subTest(secret_name=secret_name):
+                candidate_kube, candidate = self.full_fixture()
+                candidate_row = next(item for item in candidate['checks'] if item['id'] == 'principal-secrets')
+                secret = next(obj for obj in candidate_row['objects'] if obj['name'] == secret_name)
+                secret['desired']['required_keys'].remove(missing_key)
+                with self.assertRaises(subject.PlanError):
+                    subject.preflight(candidate_kube, candidate, 'full')
+
     def test_bounded_action_binds_baseline_and_rejects_nats_action(self):
         kube, plan = self.full_fixture()
         row = next(row for row in plan['checks'] if row['id'] == 'domains')

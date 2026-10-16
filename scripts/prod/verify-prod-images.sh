@@ -51,7 +51,7 @@ elif [ -n "${TAG}" ]; then
     name="$(echo "${name}" | tr -d '[:space:]')"
     [ -z "${name}" ] && continue
     check_image "${name}" "${REGISTRY}/${name}:${TAG}" || true
-  done < <(jq -r '.images[].name' "${ROOT}/scripts/ci/staging-image-catalog.json")
+  done < <(jq -r '.images[] | select((.environments // ["dev", "staging", "prod"]) | index("prod")) | .name' "${ROOT}/scripts/ci/staging-image-catalog.json")
   check_image "nats-hub-config-renderer" "${REGISTRY}/nats-hub-config-renderer:${TAG}" || true
 else
   echo "ERROR: set STACK_LOCK_FILE or VOICE_IMAGE_TAG" >&2

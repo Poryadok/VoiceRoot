@@ -288,7 +288,7 @@ sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
   "${ROOT}/deploy/staging/minio.yaml" | kubectl apply -f -
 
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
-bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
+VOICE_ENABLE_GAME_INTEGRATION_DB=true bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
 bash "${ROOT}/scripts/staging/sync-postgres-password.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
 
@@ -297,6 +297,6 @@ if ! kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=18
   exit 1
 fi
 bash "${ROOT}/scripts/staging/apply-clickhouse-init.sh"
-bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
+VOICE_ENABLE_GAME_INTEGRATION_DB=true bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
 
 echo "Staging infra apply complete."
