@@ -79,6 +79,13 @@ def plan_patch(service, image, deployment):
 class Client:
     def call(self, *args, body=None):
         payload = None if body is None else json.dumps(body).encode()
+        if args and args[0] == 'patch' and '--patch-file=-' in args:
+            if not isinstance(body,list):
+                raise ValueError('JSON image patch required')
+            # kubectl patch does not support stdin as --patch-file=-. These
+            # patches contain only image and CAS metadata, never Secret values.
+            args = tuple('--patch='+json.dumps(body) if arg == '--patch-file=-' else arg for arg in args)
+            payload = None
         command = ['kubectl','--namespace',NS,*args]
         try:
             result = subprocess.run(command,input=payload,capture_output=True,timeout=660)

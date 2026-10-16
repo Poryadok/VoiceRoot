@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parent))
 import update_images as update
@@ -18,6 +20,16 @@ def deployment():
 
 
 class UpdateTests(unittest.TestCase):
+    def test_kubectl_patch_uses_argument_not_unsupported_stdin_filename(self):
+        operations=[{'op':'replace','path':'/spec/template/spec/containers/0/image',
+                     'value':'registry/user@sha256:'+'c'*64}]
+        with patch.object(update.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=b'{}')) as run:
+            update.Client().call('patch','deployment','voice-user','--type=json','--patch-file=-','-o','json',body=operations)
+        args,kwargs=run.call_args
+        self.assertNotIn('--patch-file=-',args[0])
+        self.assertIn('--patch='+json.dumps(operations),args[0])
+        self.assertIsNone(kwargs['input'])
+
     def test_only_dev_and_explicit_app_targets(self):
         update.validate_namespace({'metadata':{'name':'voice-dev','labels':dict(update.LABELS)}}, 'voice-dev')
         for name in ('voice-staging','voice-prod'):
