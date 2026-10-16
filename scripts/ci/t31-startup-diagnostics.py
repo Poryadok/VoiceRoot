@@ -14,7 +14,7 @@ import subprocess
 import time
 
 
-SCHEMA = "voice-t31-startup-diagnostics-v2"
+SCHEMA = "voice-t31-startup-diagnostics-v3"
 SERVICES = (
     "auth", "user", "role", "chat", "space", "messaging", "voice", "bot",
     "notification", "gameintegration", "gateway", "matchmaking", "search",
@@ -107,6 +107,18 @@ VOICE_STARTUP_PREFIXES = (
     ("Space media initial reconciliation:", "space_media_initial_reconciliation"),
     ("Space media invalidation consumer startup:", "space_media_invalidation_consumer_startup"),
 )
+VOICE_STARTUP_DETAILS = (
+    ("voice MatchSquad TLS certificate/key unavailable", "voice_match_squad_tls_server_identity"),
+    ("voice MatchSquad client CA unavailable", "voice_match_squad_tls_client_ca_unavailable"),
+    ("voice MatchSquad client CA is invalid", "voice_match_squad_tls_client_ca_invalid"),
+    ("system CA roots unavailable for Voice MatchSquad JWKS", "voice_match_squad_jwks_system_trust_unavailable"),
+    ("voice MatchSquad JWKS CA unavailable", "voice_match_squad_jwks_ca_unavailable"),
+    ("voice MatchSquad JWKS CA contains no certificates", "voice_match_squad_jwks_ca_invalid"),
+    ("voice MatchSquad JWKS unavailable", "voice_match_squad_jwks_refresh_unavailable"),
+    ("voice MatchSquad JWKS has no usable key", "voice_match_squad_jwks_document_invalid"),
+    ("voice MatchSquad JWKS key is too small", "voice_match_squad_jwks_key_invalid"),
+    ("voice MatchSquad replay Redis unavailable", "voice_match_squad_replay_dependency_unavailable"),
+)
 _ERROR_MARKER = re.compile(
     r"(?:\blevel\s*[=:]\s*error\b|\bERROR\b|\bFATAL\b|\bPANIC\b|\bSQLSTATE\b|\bexception\b|"
     + "|".join(re.escape(prefix) for prefix, _ in VOICE_STARTUP_PREFIXES)
@@ -137,7 +149,8 @@ def _base_record(startup_status: int) -> dict:
 def _error_record(result: str = "unknown") -> dict:
     return {
         "result": result, "service": "unknown", "stage": "unknown",
-        "error_code": "unknown", "startup_category": "unknown", "exception_class": "unknown",
+        "error_code": "unknown", "startup_category": "unknown", "startup_detail": "unknown",
+        "exception_class": "unknown",
         "sqlstate": "unknown", "source_basename": "unknown", "source_line": None,
         "selection": "unknown", "causal_order": "not_established",
     }
@@ -372,6 +385,10 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             (category for prefix, category in VOICE_STARTUP_PREFIXES if prefix in message),
             "unknown",
         )
+        startup_detail = next(
+            (category for prefix, category in VOICE_STARTUP_DETAILS if prefix in message),
+            "unknown",
+        )
         state_match = _SQLSTATE.search(message)
         sqlstate = state_match.group(1).upper() if state_match and state_match.group(1).upper() in SQLSTATES else None
         exception_match = _EXCEPTION.search(message)
@@ -383,6 +400,7 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             "result": "observed_in_bounded_window", "service": service,
             "stage": _stage_for(message, sqlstate, exception),
             "error_code": code or "unknown", "startup_category": startup_category,
+            "startup_detail": startup_detail,
             "exception_class": exception or "unknown",
             "sqlstate": sqlstate or "unknown", "source_basename": source or "unknown",
             "source_line": source_line, "selection": "first_marker_in_bounded_head",

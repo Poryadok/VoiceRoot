@@ -681,11 +681,13 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(first["source_basename"], "main.go")
         self.assertEqual(first["source_line"], 42)
         self.assertEqual(first["startup_category"], "unknown")
+        self.assertEqual(first["startup_detail"], "unknown")
         self.assertEqual(first["selection"], "first_marker_in_bounded_head")
         self.assertEqual(first["causal_order"], "not_established")
         self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
         self.assertEqual(set(first), {
-            "result", "service", "stage", "error_code", "startup_category", "exception_class", "sqlstate",
+            "result", "service", "stage", "error_code", "startup_category", "startup_detail",
+            "exception_class", "sqlstate",
             "source_basename", "source_line", "selection", "causal_order",
         })
 
@@ -720,6 +722,55 @@ class ComposeTests(unittest.TestCase):
             summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
             self.assertEqual(first["startup_category"], prefixes[prefix])
             self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
+
+    def test_t31_match_squad_runtime_detail_is_allowlisted_and_redacted(self):
+        secret = "private-certificate-or-endpoint-detail"
+        cases = {
+            "voice MatchSquad TLS certificate/key unavailable": "voice_match_squad_tls_server_identity",
+            "voice MatchSquad client CA unavailable": "voice_match_squad_tls_client_ca_unavailable",
+            "voice MatchSquad JWKS unavailable": "voice_match_squad_jwks_refresh_unavailable",
+            "voice MatchSquad JWKS has no usable key": "voice_match_squad_jwks_document_invalid",
+        }
+        for message, expected in cases.items():
+            with self.subTest(expected=expected):
+                raw = ("voice-1 | voice MatchSquad principal runtime: " + message + " " + secret + "\n").encode()
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+                self.assertEqual(summary["lines_read"], 1)
+                self.assertEqual(first["startup_category"], "voice_match_squad_principal_runtime")
+                self.assertEqual(first["startup_detail"], expected)
+                self.assertNotIn(secret, json.dumps({"summary": summary, "first": first}))
+
+        line = "voice | voice MatchSquad principal runtime: voice MatchSquad JWKS unavailable".ljust(131) + "\n"
+        raw = line.encode("utf-8")
+        self.assertEqual(len(raw), 132)
+        summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+        self.assertEqual(summary["lines_read"], 1)
+        self.assertEqual(first["startup_category"], "voice_match_squad_principal_runtime")
+        self.assertEqual(first["startup_detail"], "voice_match_squad_jwks_refresh_unavailable")
+
+    def test_media_voice_waits_for_verified_public_match_squad_jwks(self):
+        readiness = self.media_merged["phase0-matchmaking-jwks-readiness"]
+        self.assertEqual(readiness["image"], "node:24-alpine")
+        self.assertTrue(readiness["read_only"])
+        self.assertEqual(readiness["cap_drop"], ["ALL"])
+        self.assertEqual(readiness["security_opt"], ["no-new-privileges:true"])
+        self.assertEqual(readiness["command"], ["node", "/run/phase0/readiness.js"])
+        self.assertIn("app", readiness.get("profiles", []))
+        self.assertEqual(self.media_source_at("phase0-matchmaking-jwks-readiness", "/run/phase0/ca.crt"),
+                         "ca/ca.crt")
+        self.assertEqual(self.media_source_at("phase0-matchmaking-jwks-readiness", "/run/phase0/readiness.js"),
+                         "scripts/dev/phase0-matchmaking-jwks-readiness.js")
+        self.assertEqual(readiness["depends_on"]["phase0-jwks"]["condition"], "service_started")
+        self.assertEqual(self.media_merged["voice"]["depends_on"][
+            "phase0-matchmaking-jwks-readiness"]["condition"], "service_completed_successfully")
+        self.assertEqual(self.media_merged["voice"]["environment"]["VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL"],
+                         MATCHMAKING_JWKS_URL)
+        probe = (ROOT / "scripts/dev/phase0-matchmaking-jwks-readiness.js").read_text(encoding="utf-8")
+        for marker in ("https.get", "ca,", "servername: endpoint.hostname", "response.statusCode !== 200",
+                       "document.keys", 'key.kty === "RSA"', 'key.alg === "RS256"',
+                       'Object.hasOwn(key, privateField)', '"dp", "dq", "qi", "oth"',
+                       "phase0_matchmaking_jwks_readiness_failed"):
+            self.assertIn(marker, probe)
 
     def test_startup_diagnostics_can_scope_status_and_logs_to_voice(self):
         status = json.dumps([{

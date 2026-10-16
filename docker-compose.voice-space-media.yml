@@ -148,6 +148,8 @@ services:
     depends_on:
       phase0-jwks:
         condition: service_started
+      phase0-matchmaking-jwks-readiness:
+        condition: service_completed_successfully
       role:
         condition: service_healthy
       auth:
@@ -207,3 +209,20 @@ services:
       # The full Phase0 overlay supplies a nested file mount when it replaces
       # Space's certificate with the generated fixture certificate instead.
       - social_principal_ca:/run/phase0/space-ca:ro
+
+  phase0-matchmaking-jwks-readiness:
+    # Voice performs a synchronous, certificate-verified JWKS refresh at startup.
+    # Gate it on the real public document instead of a timing delay.
+    profiles: ["app"]
+    image: node:24-alpine
+    user: "0:0"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ./scripts/dev/phase0-matchmaking-jwks-readiness.js:/run/phase0/readiness.js:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+    command: ["node", "/run/phase0/readiness.js"]
