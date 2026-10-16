@@ -957,6 +957,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileMessage => 'Message';
 
   @override
+  String get profileDetailTitle => 'Profile';
+
+  @override
+  String get profileMoreActions => 'More actions';
+
+  @override
   String get profileOpenAvatar => 'Open fullscreen avatar';
 
   @override

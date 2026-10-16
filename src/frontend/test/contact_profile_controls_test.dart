@@ -32,6 +32,7 @@ import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/state/stories_providers.dart';
 import 'package:voice_frontend/ui/core/voice_bottom_sheet.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
+import 'package:voice_frontend/ui/report/report_sheet.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 
@@ -43,6 +44,222 @@ import 'support/voice_test_theme.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  for (final locale in [const Locale('en'), const Locale('ru')]) {
+    testWidgets('profile header title and copy link remain usable in ${locale.languageCode} H/V', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final client = MockClient((request) async => throw StateError('Unexpected $request'));
+      final container = _container(client);
+      final theme = await _captureTheme(tester);
+      final copied = <String>[];
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied.add((call.arguments as Map<Object?, Object?>)['text'] as String);
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        for (final variant in [
+          (size: const Size(1280, 800), scale: 1.0),
+          (size: const Size(390, 844), scale: 1.0),
+          (size: const Size(280, 844), scale: 1.0),
+          (size: const Size(390, 844), scale: 2.0),
+        ]) {
+          tester.view.physicalSize = variant.size;
+          tester.view.devicePixelRatio = 1;
+          await tester.binding.setSurfaceSize(variant.size);
+          await tester.pumpWidget(_app(container, theme: theme, locale: locale, textScale: variant.scale, plainModal: true));
+          await tester.tap(find.byKey(const Key('open_contact_profile')));
+          await tester.pumpAndSettle();
+          final header = find.byKey(const Key('profile_header_controls'));
+          final title = find.byKey(const Key('profile_header_title'));
+          final l10n = AppLocalizations.of(tester.element(header))!;
+          expect(find.descendant(of: title, matching: find.text(locale.languageCode == 'ru' ? 'Профиль' : 'Profile')), findsOneWidget);
+          expect(tester.getSemantics(title).flagsCollection.isHeader, isTrue);
+          final paragraph = tester.renderObject<RenderParagraph>(find.descendant(of: title, matching: find.byType(Text)));
+          expect(paragraph.didExceedMaxLines, isFalse);
+          final share = find.descendant(of: header, matching: find.byTooltip(l10n.shareLinkAction));
+          expect(share.hitTestable(), findsOneWidget);
+          expect(find.byTooltip(l10n.shareLinkAction), findsOneWidget);
+          final titleRect = tester.getRect(title);
+          final shareRect = tester.getRect(share);
+          final dismissRect = tester.getRect(find.byKey(const Key('profile_dismiss')));
+          expect(titleRect.right, lessThanOrEqualTo(shareRect.left));
+          if (variant.size.width > variant.size.height) {
+            expect(shareRect.right, lessThanOrEqualTo(dismissRect.left));
+          } else {
+            expect(dismissRect.right, lessThanOrEqualTo(titleRect.left));
+          }
+          expect(tester.getRect(header).bottom, lessThanOrEqualTo(tester.getRect(find.byKey(ProfileDetailSheet.avatarKey)).top));
+          expect(titleRect.left, greaterThanOrEqualTo(0));
+          expect(shareRect.right, lessThanOrEqualTo(variant.size.width));
+          if (variant.scale == 1 && variant.size.width != 280) {
+            final orientation = variant.size.width > variant.size.height ? 'h' : 'v';
+            await _capture(tester, 'contact-header-title-${locale.languageCode}-$orientation.png');
+          }
+          final previousCopies = copied.length;
+          await tester.tap(share);
+          await tester.pumpAndSettle();
+          expect(copied.length, previousCopies + 1);
+          expect(copied.last, 'https://voice.gg/u/alex');
+          expect(find.text(l10n.shareLinkCopied), findsOneWidget);
+          expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        }
+      } finally {
+        semantics.dispose();
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+    testWidgets('profile More reuses Block confirmation and exact Report target at ${size.width}', (tester) async {
+      var requests = 0;
+      final client = MockClient((request) async { requests++; throw StateError('Unexpected $request'); });
+      final container = _container(client);
+      final theme = await _captureTheme(tester);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.binding.setSurfaceSize(size);
+        await tester.pumpWidget(_app(container, theme: theme, plainModal: true));
+        await tester.tap(find.byKey(const Key('open_contact_profile')));
+        await tester.pumpAndSettle();
+        final more = find.byKey(const Key('profile_more'));
+        final l10n = AppLocalizations.of(tester.element(more))!;
+        await tester.tap(more);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('profile_more_block')).hitTestable(), findsOneWidget);
+        expect(find.byKey(const Key('profile_more_report')).hitTestable(), findsOneWidget);
+        final orientation = size.width > size.height ? 'h' : 'v';
+        await _capture(tester, 'contact-header-menu-$orientation.png');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('profile_more_block')), findsNothing);
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+        await tester.tap(more);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('profile_more_block')));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.profileBlockConfirmTitle), findsOneWidget);
+        await tester.tap(find.text(l10n.commonCancel));
+        await tester.pumpAndSettle();
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+        expect(requests, 0);
+        await tester.tap(more);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('profile_more_report')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsNothing);
+        final report = tester.widget<ReportSheet>(find.byType(ReportSheet));
+        expect(report.target, isA<ReportUserTarget>());
+        expect(report.target.targetId, 'p-target');
+        expect(report.target.targetType, 'user');
+        expect(requests, 0);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  testWidgets('header actions follow profile visibility during authorization reload', (tester) async {
+    final pending = Completer<http.Response>();
+    final authorizations = <String?>[];
+    final client = MockClient((request) async {
+      expect(request.url.path, '/api/v1/users/profiles/p-target');
+      authorizations.add(request.headers['authorization']);
+      if (authorizations.length > 1) return pending.future;
+      return _json({'profile': {
+        'id': 'p-target', 'account_id': 'a-target', 'username': 'alex',
+        'discriminator': '0001', 'display_name': 'Alex',
+      }});
+    });
+    final container = _container(client, realProfile: true);
+    try {
+      await _open(tester, container);
+      final title = find.byKey(const Key('profile_header_title'));
+      final l10n = AppLocalizations.of(tester.element(title))!;
+      expect(find.byTooltip(l10n.shareLinkAction), findsOneWidget);
+      expect(find.byKey(const Key('profile_more')), findsOneWidget);
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'other-access', refreshToken: 'other-refresh',
+          accountId: 'acc-other', activeProfileId: 'other-profile',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(title, findsOneWidget);
+      expect(find.byTooltip(l10n.shareLinkAction), findsNothing);
+      expect(find.byKey(const Key('profile_more')), findsNothing);
+      pending.complete(_json({'code': 5, 'message': 'not found'}, status: 404));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip(l10n.shareLinkAction), findsNothing);
+      expect(find.byKey(const Key('profile_more')), findsNothing);
+      expect(find.text(l10n.socialProfileUnavailable), findsOneWidget);
+      expect(authorizations, ['Bearer test-access', 'Bearer other-access']);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    } finally {
+      if (!pending.isCompleted) pending.complete(_json({'profile': {}}));
+      container.dispose();
+      client.close();
+    }
+  });
+
+  for (final target in ['guest', 'self', 'no-username']) {
+    testWidgets('header preserves copy-link gate for $target', (tester) async {
+      final client = MockClient((request) async => throw StateError('Unexpected $request'));
+      final container = _container(client, overrides: [
+        if (target == 'no-username')
+          profileProvider.overrideWith((ref, id) async => const VoiceProfile(
+            id: 'p-target', accountId: 'a-target', username: '',
+            discriminator: '0001', displayName: 'Alex',
+          )),
+      ]);
+      if (target != 'no-username') {
+        container.read(authControllerProvider.notifier).state = AuthState(
+          isGuest: target == 'guest',
+          session: AuthSession(
+            accessToken: 'test-access', refreshToken: 'test-refresh',
+            accountId: 'acc-test', activeProfileId: target == 'self' ? 'p-target' : 'prof-test',
+            expiresInSeconds: 900, accountType: target == 'guest' ? 'guest' : 'regular',
+          ),
+        );
+      }
+      try {
+        await _open(tester, container);
+        final title = find.byKey(const Key('profile_header_title'));
+        final l10n = AppLocalizations.of(tester.element(title))!;
+        expect(find.byTooltip(l10n.shareLinkAction), findsNothing);
+        expect(find.byKey(const Key('profile_more')), target == 'self' ? findsNothing : findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        container.dispose();
+        client.close();
+      }
+    });
+  }
 
   for (final favorite in [false, true]) {
     testWidgets('friend Favorites ${favorite ? 'on' : 'off'} stays with communication actions in H/V', (
@@ -406,6 +623,11 @@ void main() {
           }
           final dismiss = find.byKey(const Key('profile_dismiss'));
           expect(dismiss.hitTestable(), findsOneWidget);
+          final title = find.byKey(const Key('profile_header_title'));
+          expect(find.descendant(of: title, matching: find.text('Profile')), findsOneWidget);
+          expect(find.byKey(const Key('profile_more')), findsNothing);
+          final l10n = AppLocalizations.of(tester.element(title))!;
+          expect(find.byTooltip(l10n.shareLinkAction), findsNothing);
           final icon = find.descendant(of: dismiss, matching: find.byType(Icon));
           final iconContext = tester.element(icon);
           final foreground = tester.widget<Icon>(icon).color ??

@@ -1778,6 +1778,18 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get profileMessage;
 
+  /// No description provided for @profileDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get profileDetailTitle;
+
+  /// No description provided for @profileMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get profileMoreActions;
+
   /// No description provided for @profileOpenAvatar.
   ///
   /// In en, this message translates to:

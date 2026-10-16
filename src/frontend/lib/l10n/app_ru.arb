@@ -413,6 +413,8 @@
   "callGroupVoiceActive": "Групповой голос активен",
   "callGroupVoiceInProgress": "В группе идёт голосовой звонок",
   "profileMessage": "Написать",
+  "profileDetailTitle": "Профиль",
+  "profileMoreActions": "Ещё",
   "profileOpenAvatar": "Открыть аватар на весь экран",
   "profileAvatarUnavailable": "Аватар недоступен",
   "profileCommonSpaces": "Общие пространства",

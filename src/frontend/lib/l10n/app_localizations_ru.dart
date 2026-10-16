@@ -957,6 +957,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileMessage => 'Написать';
 
   @override
+  String get profileDetailTitle => 'Профиль';
+
+  @override
+  String get profileMoreActions => 'Ещё';
+
+  @override
   String get profileOpenAvatar => 'Открыть аватар на весь экран';
 
   @override

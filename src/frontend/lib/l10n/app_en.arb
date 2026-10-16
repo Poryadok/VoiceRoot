@@ -450,6 +450,8 @@
   "callGroupVoiceActive": "Group voice active",
   "callGroupVoiceInProgress": "Voice call in progress in this group",
   "profileMessage": "Message",
+  "profileDetailTitle": "Profile",
+  "profileMoreActions": "More actions",
   "profileOpenAvatar": "Open fullscreen avatar",
   "profileAvatarUnavailable": "Avatar unavailable",
   "profileCommonSpaces": "Common spaces",
