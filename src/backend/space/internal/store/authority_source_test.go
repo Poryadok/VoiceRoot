@@ -17,7 +17,7 @@ func spaceSourceStore(t *testing.T) (context.Context, *SpaceStore) {
 	ctx, st := authorityRevisionSpace(t)
 	// Complete DDL fixture with private matching marker. Actual deployment-loader
 	// proof is separate; this helper never rewrites a live runtime's history.
-	_, err := st.Pool.Exec(ctx, `CREATE TABLE schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(24,false)`)
+	_, err := st.Pool.Exec(ctx, `CREATE TABLE schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(25,false)`)
 	require.NoError(t, err)
 	return ctx, st
 }
