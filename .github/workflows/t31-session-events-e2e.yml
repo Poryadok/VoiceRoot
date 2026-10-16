@@ -291,6 +291,7 @@ jobs:
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" down --volumes --remove-orphans || true
           if [[ -d tmp/phase0-t31-ci-fixture/credentials ]]; then
-            python3 scripts/dev/restore-phase0-fixture-owner.py tmp/phase0-t31-ci-fixture/credentials
+            PHASE0_FIXTURE_DIR="$GITHUB_WORKSPACE/tmp/phase0-t31-ci-fixture/credentials" \
+              python3 scripts/dev/restore-phase0-fixture-owner.py tmp/phase0-t31-ci-fixture/credentials
           fi
           rm -rf tmp/phase0-t31-ci-fixture tmp/t31-session-event-e2e

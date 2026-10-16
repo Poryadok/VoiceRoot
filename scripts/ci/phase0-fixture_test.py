@@ -29,8 +29,13 @@ URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
 MATCHMAKING_JWKS_URL = f"https://{PROXY}:8443/matchmaking/jwks.json"
 STARTUP_DIAGNOSTICS = ROOT / "scripts/ci/t31-startup-diagnostics.py"
+FIXTURE_RESTORER = ROOT / "scripts/dev/restore-phase0-fixture-owner.py"
 CAN_SET_MATCHSQUAD_UID = os.name == "posix" and (os.geteuid() == 0 or shutil.which("sudo"))
 sys.dont_write_bytecode = True
+RESTORER_SPEC = importlib.util.spec_from_file_location("phase0_fixture_restorer", FIXTURE_RESTORER)
+assert RESTORER_SPEC and RESTORER_SPEC.loader
+fixture_restorer = importlib.util.module_from_spec(RESTORER_SPEC)
+RESTORER_SPEC.loader.exec_module(fixture_restorer)
 STARTUP_SPEC = importlib.util.spec_from_file_location("t31_startup_diagnostics", STARTUP_DIAGNOSTICS)
 assert STARTUP_SPEC and STARTUP_SPEC.loader
 startup_diagnostics = importlib.util.module_from_spec(STARTUP_SPEC)
@@ -588,6 +593,8 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("restore-phase0-fixture-owner.py", ci)
         restorer = (ROOT / "scripts/dev/restore-phase0-fixture-owner.py").read_text(encoding="utf-8")
         self.assertIn('"phase0-fixture", "credentials", "voice-space-media-phase0"', restorer)
+        self.assertIn('os.environ.get("PHASE0_FIXTURE_DIR")', restorer)
+        self.assertIn("declared_root != root", restorer)
         self.assertNotIn('"-R"', restorer, "cleanup must only chown enumerated fixture paths")
 
         self.assertIn("docker-compose.voice-space-media.yml",
@@ -1258,6 +1265,31 @@ class ComposeTests(unittest.TestCase):
             match = re.search(rf"\b{directive}\s+([^;\s]+)\s*;", config)
             self.assertIsNotNone(match)
             self.assertEqual(self.source_at(PROXY, match.group(1)), source)
+
+
+class RestorerPathTests(unittest.TestCase):
+    def test_owner_restorer_accepts_only_declared_generated_fixture_locations(self):
+        with tempfile.TemporaryDirectory(prefix="phase0-restorer-paths-") as tmp:
+            base = Path(tmp)
+            runner_temp = base / "runner-temp"
+            runner_temp.mkdir()
+            accepted = (
+                base / "voice-a1-flutter-profile-handoff.abcdefgh" / "phase0-fixture",
+                base / "voice-a1-multi-account-proof.abcdefgh" / "phase0-fixture",
+                base / "voice-file-restart-proof.abcdefgh" / "phase0-fixture",
+                base / "phase0-t31-ci-fixture" / "credentials",
+                runner_temp / "voice-space-media-phase0",
+            )
+            for path in accepted:
+                path.mkdir(parents=True)
+            self.assertTrue(all(fixture_restorer.supported_root(path, runner_temp, path) for path in accepted))
+            self.assertFalse(fixture_restorer.supported_root(accepted[0], runner_temp, accepted[1]))
+            self.assertFalse(fixture_restorer.supported_root(base / "unrelated" / "credentials",
+                                                             runner_temp, None))
+            self.assertFalse(fixture_restorer.supported_root(base / "unrelated" / "phase0-fixture",
+                                                             runner_temp, None))
+            wrong_temp = base / "wrong-temp" / "voice-space-media-phase0"
+            self.assertFalse(fixture_restorer.supported_root(wrong_temp, runner_temp, wrong_temp))
 
 
 if __name__ == "__main__":

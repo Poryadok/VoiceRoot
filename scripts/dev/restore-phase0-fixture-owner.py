@@ -7,13 +7,37 @@ import sys
 from pathlib import Path
 
 
+def supported_root(root: Path, runner_temp: Path | None, declared_root: Path | None) -> bool:
+    if declared_root is None or declared_root != root:
+        return False
+    if root.name == "phase0-fixture":
+        parents = (
+            "voice-a1-flutter-profile-handoff.",
+            "voice-a1-multi-account-proof.",
+            "voice-file-restart-proof.",
+        )
+        return any(root.parent.name.startswith(prefix)
+                   and len(root.parent.name) == len(prefix) + 8
+                   and root.parent.name[len(prefix):].isalnum()
+                   for prefix in parents)
+    if root.name == "credentials":
+        return root.parent.name == "phase0-t31-ci-fixture"
+    if root.name == "voice-space-media-phase0" and runner_temp is not None:
+        return root.parent == runner_temp
+    return False
+
+
 def restore(destination: Path) -> None:
     if os.name != "posix":
         raise RuntimeError("Phase0 fixture ownership can only be restored on POSIX")
     if destination.is_symlink():
         raise RuntimeError("fixture destination must not be a symlink")
     root = destination.resolve(strict=True)
-    if root.name not in {"phase0-fixture", "credentials", "voice-space-media-phase0"}:
+    fixture_value = os.environ.get("PHASE0_FIXTURE_DIR")
+    declared_root = Path(fixture_value).resolve(strict=True) if fixture_value else None
+    runner_temp_value = os.environ.get("RUNNER_TEMP")
+    runner_temp = Path(runner_temp_value).resolve(strict=True) if runner_temp_value else None
+    if not supported_root(root, runner_temp, declared_root):
         raise RuntimeError("fixture destination is outside the supported disposable paths")
     matchmaking = root / "matchmaking"
     if any(path.is_symlink() for path in (root / "tls", root / "ca", matchmaking)):
