@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'music_format.dart';
+import 'music_flac_metadata.dart';
 import 'music_module_ready.dart'
     if (dart.library.js_interop) 'music_module_ready_web.dart';
 
@@ -82,6 +83,7 @@ class PullMusicPlayback extends MusicPlayback {
       throw const FormatException('music_format_invalid');
     }
     final activation = ++_activation;
+    final nativeFlacTags = nativeFlacMusicTags(bytes);
     final previous = _active;
     if (previous != null && previous != this) await previous.close();
     if (_closed || activation != _activation) {
@@ -186,9 +188,21 @@ class PullMusicPlayback extends MusicPlayback {
             return values.length == 1 ? values.single.value : null;
           }
 
-          _title = _tag(metadata.mp3Metadata?.title ?? comment('title'));
-          _artist = _tag(metadata.mp3Metadata?.artist ?? comment('artist'));
-          _album = _tag(metadata.mp3Metadata?.album ?? comment('album'));
+          _title = _tag(
+            metadata.mp3Metadata?.title ??
+                comment('title') ??
+                nativeFlacTags['title'],
+          );
+          _artist = _tag(
+            metadata.mp3Metadata?.artist ??
+                comment('artist') ??
+                nativeFlacTags['artist'],
+          );
+          _album = _tag(
+            metadata.mp3Metadata?.album ??
+                comment('album') ??
+                nativeFlacTags['album'],
+          );
           notifyListeners();
         },
       );
