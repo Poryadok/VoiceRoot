@@ -52,7 +52,8 @@ class TransactionFailureTest(unittest.TestCase):
             'template_hashes':{'voice-'+name:'a'*64 for name in names}},'renderer_authority':{'fixed':'bound'}}
         previous['input_target']['template_hashes'][transaction.renderer_root.HUB]='b'*64
         self.assertEqual(transaction.rollback_services(previous),names)
-        self.assertEqual(len(names),22)
+        self.assertEqual(len(names),23)
+        self.assertIn('gameintegration',names)
         # Selection never authorizes the unproven full-schema rollback itself.
         with self.assertRaises(transaction.Blocked):transaction.rollback_package(previous)
         for change in ('missing','unknown','hub-unbound'):

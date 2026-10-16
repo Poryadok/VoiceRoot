@@ -94,7 +94,7 @@ class CompositionTests(unittest.TestCase):
                 base=Path(directory);installed=base/'installed';(installed/'sources').mkdir(parents=True)
                 kube,p=fixtures.SourceTests().canonical_fixture(mode)
                 p.update(generation='r20260930a4',dataPVC='voice-nats-jsdata-d202610040049430b')
-                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal'}
+                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration'}
                 snapshots={name:copy.deepcopy(obj) for (kind,name),obj in kube.objects.items() if kind=='Deployment' and name in targets}
                 renderer_repo=bridge_root.source_authority.REGISTRY+'/nats-hub-config-renderer'
                 snapshots[bridge_root.HUB]={'apiVersion':'apps/v1','kind':'Deployment',
