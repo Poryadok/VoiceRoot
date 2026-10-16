@@ -821,11 +821,12 @@ game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
 }
 game_projection_metadata_row="$(awk -F '\t' '$1 == "scripts/ci/follow-up.fixture" { row = $0 } END { print row }' \
   "${TMP_DIR}/game-projection-map")"
-IFS=$'\t' read -r _ game_projection_metadata_trigger game_projection_metadata_target _ \
+IFS=$'\t' read -r _ game_projection_metadata_trigger game_projection_metadata_owner game_projection_metadata_target \
   game_projection_metadata_base game_projection_metadata_head _ _ <<<"${game_projection_metadata_row}"
 [[ "${game_projection_metadata_trigger}" == false && \
+  "${game_projection_metadata_owner}" == "${game_projection_equal_source_head}" && \
   -n "${game_projection_metadata_target}" && \
-  "${game_projection_metadata_base}" == "${game_projection_base}" && \
+  "${game_projection_metadata_base}" == "${game_projection_record}" && \
   "${game_projection_metadata_head}" == "${game_projection_equal_source_head}" ]] || {
   printf '%s\n' 'F13 oracle bug: metadata-only path lost its ordinary contribution provenance' >&2
   exit 2
