@@ -28,6 +28,7 @@ service SocialService {
   rpc SendFriendInvitation(SendFriendInvitationRequest) returns (SendFriendInvitationResponse);
   rpc AcceptFriendInvitation(AcceptFriendInvitationRequest) returns (AcceptFriendInvitationResponse);
   rpc DeclineFriendInvitation(DeclineFriendInvitationRequest) returns (DeclineFriendInvitationResponse);
+  rpc CancelFriendInvitation(CancelFriendInvitationRequest) returns (CancelFriendInvitationResponse);
   rpc RemoveFriend(RemoveFriendRequest) returns (RemoveFriendResponse);
   rpc ListFriends(ListFriendsRequest) returns (ListFriendsResponse);
   rpc ListFriendRequests(ListFriendRequestsRequest) returns (ListFriendRequestsResponse);
@@ -57,6 +58,21 @@ service SocialService {
 ```
 
 ## Модель данных
+
+### Sender cancellation
+
+`CancelFriendInvitation(target_profile_id)` is exposed as
+`POST /api/v1/friends/invitations/{target_profile_id}/cancel`. The requester is
+the authenticated active profile, never a caller-supplied sender field. It
+atomically deletes only that sender-to-target `pending` row. Missing, reverse,
+accepted and declined rows return `NotFound` without changing them. Concurrent
+accept and cancel serialize on the row: only one pending transition wins.
+Existing foreign-key cascades delete the request outbox; cancellation before
+dispatch suppresses publication. A publication already acknowledged by NATS is
+not retracted, so consumers reconcile against `ListFriendRequests`. A new send
+after cancellation creates a fresh request/event identity. No new event type or
+schema migration is required; cancellation is distinct from receiver decline
+and accepted-friend removal.
 
 ```
 friendships
