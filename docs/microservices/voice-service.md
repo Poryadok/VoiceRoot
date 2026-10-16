@@ -50,6 +50,31 @@ is a migration path and cannot race over the revisioned projection after
 activation. Snapshot/replay tests are specified in
 [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
 
+### Trust dependency diagnostics
+
+Voice emits `voice_trust_dependency_failure` before its existing fail-closed
+error mapping discards dependency detail. `stage` identifies `jwks_request`,
+`jwks_status`, `jwks_body`, `jwks_parse`, `jwks_keys`, `replay_write`, or the Auth
+floor boundary (`auth_floor`, `auth_floor_call`, `auth_floor_sign`,
+`auth_floor_response`). `cause` is a closed label such as `timeout`,
+`tls_unknown_authority`, `tls_hostname`, `tls_certificate`, `dns`,
+`connection_refused`, `connection_reset`, or a bounded gRPC status class;
+`duration_ms` measures that dependency attempt. `http_status` preserves only
+100–599 for a non-success JWKS response and is zero for other failures or an
+invalid status. Logs exclude raw error text,
+URLs, credentials, account/profile IDs, request bodies and key material.
+
+The two-second dependency budgets, TLS verification, replay checks and fresh
+Auth session-floor authority remain unchanged. A cold Go JWKS request can fail
+while a later warm-cache request passes; neither a successful BusyBox GET nor
+one successful audio attempt proves the original failure's cause or stable
+post-restart acceptance. The 2026-10-15 initial and post-restart audio failures
+both reached Voice and returned generic verifier `Unavailable` after 2000 ms,
+with a successful audio attempt between them. Those historical logs do not
+distinguish JWKS, replay Redis and Auth-floor failures. Preserve all outcomes;
+use the dependency event from a subsequent controlled acceptance attempt to
+identify the failing stage before changing trust or transport configuration.
+
 ## API (gRPC)
 
 Источник истины: [protos/voice/calls/v1/calls.proto](../../protos/voice/calls/v1/calls.proto) (`VoiceService`). Важные ответы: **`GetJoinTokenResponse`** — поля `jwt` и `expires_at` (`google.protobuf.Timestamp`, UTC); **`GetVoiceStatesResponse`** — `repeated VoiceParticipantState participants` (без промежуточной обёртки-списка).

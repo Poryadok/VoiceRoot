@@ -41,6 +41,25 @@ PENDING_ABANDONMENT_NAME='operator-pending-abandonment-v1.json'
 def fail():raise Blocked('operator_retirement_binding_invalid')
 def canonical(row):return hashlib.sha256(json.dumps(row,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
+def media_monitor(role):
+    """Fixed read-only monitoring request with safe failure identity for recovery."""
+    import commands
+    if role not in {'hub',*LEAVES}:fail()
+    name=HUB if role=='hub' else 'voice-'+role
+    container='nats' if role=='hub' else 'nats-leaf'
+    endpoint='varz' if role=='hub' else 'leafz'
+    try:
+        output=commands.capture(['/usr/local/bin/k3s','kubectl','--namespace',guard.NS,
+            'exec','deployment/'+name,'-c',container,'--','/bin/busybox','wget','-q','-O','-',
+            'http://127.0.0.1:8222/'+endpoint],timeout=30,limit=2<<20,
+            env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'})
+        return json.loads(output)
+    except Blocked as error:
+        diagnostic=dict(getattr(error,'diagnostic',{}))
+        diagnostic['monitor']={'role':role,'endpoint':endpoint}
+        error.diagnostic=diagnostic
+        raise
+
 def private_bytes(path,limit=128<<20,*,group_read=False):
     path=Path(path);before=path.lstat();fd=os.open(path,READ)
     identity=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
@@ -241,6 +260,7 @@ def verify_readonly_terminal(base,state):
 
 
 def verify_terminal(base,state):
+    if 'operator_media_abort' in state:return verify_media_abort_terminal(base,state)
     if 'operator_reset' in state:
         from operator_reset import verify_terminal as verify_reset
         return verify_reset(base,state)
@@ -871,6 +891,561 @@ def verify_applied_terminal(base,state):
     return receipt
 
 
+MEDIA_ABORT_OPERATION='0e2be62a3326'
+MEDIA_ABORT_CHECKPOINT='157ae4eb5f7b78ded15a2caf5e9eea27f335e3d72a38be0c173f69297a632c56'
+MEDIA_ABORT_COMPATIBILITY='36d7e663535c86ff3624b559596db58e5f692d767d5357440d24366f8b58d8a4'
+MEDIA_ABORT_ACTIVE='e9d46f0aa438cc5142fb48a363aa0286d3ff71e09736c431665133a36fa54fbf'
+MEDIA_ABORT_FINISH='b708d69b20bb6401f628ab9adb6cf4d4cb68cbc1e8d0f360e55475856a62264f.json'
+MEDIA_ABORT_JOURNAL='c820f48bb7c2cfcd5b4199fde2584f7ada103e1c51655e7805d5260758a6f7af'
+MEDIA_ABORT_PREFIX='operator-media-abort'
+MEDIA_TARGET_PREFIX='operator-media-target'
+MEDIA_TARGET_BLOCKED='790a980a0f53a031ca1688f7e9f7535661d9b2fb66fc3efe16feda332d5f2fbd'
+MEDIA_TARGET_PROGRESS='96965ef71b1f0e787caa20646e9023d804e4736184fd3dd1a84bddc43973c3a9'
+MEDIA_TARGET_BASIS='VERIFIED_GATED_TARGET_BASELINE'
+MEDIA_RECONCILED_PREFIX='operator-media-target-reconciled'
+MEDIA_RECONCILED_SCHEMA='voice-media-target-reconciled-closure-v1'
+MEDIA_RECONCILED_REFERENCE='voice-media-target-reconciled-reference-v1'
+# Exact failed target apply, not a generic resume or alternative checkpoint.
+MEDIA_FAILED_APPLY={
+    'operator-media-target-reconciled-origin-runner.py':{'bytes':30352,'sha256':'1fd0fd44572e5dcaea938e6f694d04d32fb5f09982d61ddc06f44dd3be786fb0'},
+    'operator-media-target-reconciled-blocked.json':{'bytes':3352567,'sha256':'ab06554cf7f8f39d2c6c347129910c13911c00e94b2ef91acb8b863a6a16500b'},
+    'operator-media-target-blocked.json':{'bytes':3342669,'sha256':'790a980a0f53a031ca1688f7e9f7535661d9b2fb66fc3efe16feda332d5f2fbd'},
+    'operator-media-target-compiled.json':{'bytes':1076345,'sha256':'aab7efac28191be56b95768e13f2995467360a97af4c38a7f124658760698c83'},
+    'operator-media-target-failure-1792043444801386280/failure.json':{'bytes':123,'sha256':'915f5c4237ddffb3f68fd7ad995cfb2ec1c424fb1361907f43f32f88e3f245ba'},
+    'operator-media-target-normalized.json':{'bytes':213957,'sha256':'3e873536b81a61a1a9c8310d0a0ec4f9d7f3849b9b5e4828ef24985beeff221b'},
+    'operator-media-target-parameters.json':{'bytes':9099,'sha256':'c9dc098d59c8860ff222c87f02458d6fe5bb474e9d185fa65417b31c0cfdc259'},
+    'operator-media-target-prepared.json':{'bytes':317635,'sha256':'88025c41c1ca94caf4ab9ed948ecd2b12627c6cde54d946490c9dc2162a26277'},
+    'operator-media-target-progress.json':{'bytes':609487,'sha256':'90ffab5b4850d88665116c9094447945d054914daf030914285cd76e30d6024a'},
+    'operator-media-target-source-authority.json':{'bytes':704136,'sha256':'eb763ba5a03be9e60796e10ec5541a50ec63fc73fb9f706db4374c320758797b'}}
+MEDIA_FAILED_APPLIED=tuple('Service/voice-'+name for name in (
+    'social','user','space','chat','file','messaging','matchmaking','search','notification','realtime','bot',
+    'subscription','moderation','story','analytics','gateway'))+tuple('NetworkPolicy/voice-'+name for name in (
+    'social-privacy-consumers','social-principal-jwks','file-user-principal-listener','file-principal-jwks',
+    'search-user-projection','search-projection-jwks'))
+MEDIA_FAILED_ADMIN={
+    'Deployment/voice-admin':{'uid':'e84f2e89-22e6-4d49-a665-9753131935d8','semantic_sha256':'9bd121c2f96316b8cf56a1ab94267f1ae683e193f909c590de7caf0f985bd11e'},
+    'Service/voice-admin':{'uid':'603a3855-f197-4026-b50f-561a95cd0974','semantic_sha256':'9a26a59631e494097267463b98601c5322786681f21f3f4a32dd2477722cb958'},
+    'Ingress/voice-admin-http':{'uid':'5fc523bb-106e-45df-8499-0ac6327ba64a','semantic_sha256':'3121a166f08535e241687610eee69a7faf4c49cfa4d95dc57a8daec6b2804f56'}}
+
+
+def media_failed_apply(base):
+    """Validate immutable failed bytes; UNKNOWN is history, never fence authority."""
+    base=Path(base)
+    for name,pin in MEDIA_FAILED_APPLY.items():
+        value=private_bytes(base/name,128<<20)
+        if {'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()}!=pin:fail()
+    old=media_target_failed(base)
+    state=document(base/(MEDIA_RECONCILED_PREFIX+'-blocked.json'))
+    progress=document(base/(MEDIA_TARGET_PREFIX+'-progress.json'))
+    if (state.get('operation')!=MEDIA_ABORT_OPERATION or state.get('status')!='BLOCKED'
+        or state.get('phase')!='OPERATOR_RETIRING' or state.get('fence_status')!='UNKNOWN'
+        or progress.get('phase')!='BLOCKED' or progress.get('context')!=state.get('context')
+        or tuple(e.get('resource') for e in progress.get('events',[]) if e.get('kind')=='target_resource_applied')!=MEDIA_FAILED_APPLIED
+        or any(state.get(k)!=old.get(k) for k in ('migrations','migration_jobs','active_contract'))):fail()
+    for name in ('receipt','verified'):
+        if (base/(MEDIA_TARGET_PREFIX+'-'+name+'.json')).exists():fail()
+    return state
+
+
+def media_failed_reconciliation(base,observed):
+    """Exact historical partial apply: 22 recorded effects, Auth CAS, untouched rest."""
+    from nonnats_plan import semantic
+    media_failed_apply(base)
+    normalized=document(Path(base)/(MEDIA_TARGET_PREFIX+'-normalized.json'))
+    prepared=document(Path(base)/(MEDIA_TARGET_PREFIX+'-prepared.json'))
+    media_target_prepared(normalized,prepared)
+    keys=[row['kind']+'/'+row['metadata']['name'] for row in normalized]
+    if len(keys)!=len(set(keys)) or set(keys)!=set(prepared['before']) or set(keys)!=set(observed):fail()
+    if set(MEDIA_FAILED_APPLIED)-set(keys) or keys[len(MEDIA_FAILED_APPLIED)]!='Deployment/voice-auth':fail()
+    result={}
+    for key,target in zip(keys,normalized):
+        before=prepared['before'][key];live=observed[key]
+        expected=target if key in MEDIA_FAILED_APPLIED or key=='Deployment/voice-auth' else before
+        if (live['metadata']['uid']!=before['metadata']['uid'] or target['metadata']['uid']!=before['metadata']['uid']
+            or semantic(live)!=semantic(expected)):fail()
+        result[key]={'uid':live['metadata']['uid'],'semantic_sha256':canonical(semantic(live))}
+    if len({row['uid'] for row in result.values()})!=len(result):fail()
+    return result
+
+
+def media_failed_admin(base):
+    """Derive new semantics only from the hash-bound old preserve descriptors."""
+    from nonnats_plan import semantic
+    media_failed_apply(base)
+    prepared=document(Path(base)/(MEDIA_TARGET_PREFIX+'-prepared.json'))
+    if prepared.get('outside_owned')!=MEDIA_FAILED_ADMIN:fail()
+    result={}
+    for row in prepared['preflight']['objects']:
+        key=row['kind']+'/'+row['name']
+        if key not in MEDIA_FAILED_ADMIN:continue
+        old={'uid':row['uid'],'semantic_sha256':canonical(row['desired'])}
+        if key in result or row.get('disposition')!='preserve' or old!=MEDIA_FAILED_ADMIN[key]:fail()
+        result[key]={'uid':row['uid'],'semantic_sha256':canonical(semantic(row['desired']))}
+    if set(result)!=set(MEDIA_FAILED_ADMIN):fail()
+    return result
+
+
+MEDIA_GATEWAY_PREFIX='operator-media-target-gateway'
+MEDIA_GATEWAY_SCHEMA='voice-media-target-gateway-closure-v1'
+MEDIA_GATEWAY_REFERENCE='voice-media-target-gateway-reference-v1'
+# Exact successfully refenced Gateway startup failure; never retry authority.
+MEDIA_FAILED_RESTART={'operator-media-target-failure-1792085273718754214/failure.json': {'bytes': 351,
+                                                                    'sha256': 'a49d22e4be642440d7f66cec26bcb7e73f94cd6d5602296dce807dff97b0f667'},
+ 'operator-media-target-failure-1792085273718754214/voice-gateway-gateway-previous.log': {'bytes': 215,
+                                                                                          'sha256': '9df31641e38dca808133933fc5228856f70ca46fae73ab67cf53ce739fdb0da8'},
+ 'operator-media-target-failure-1792085273718754214/voice-gateway-gateway.log': {'bytes': 215,
+                                                                                 'sha256': '9df31641e38dca808133933fc5228856f70ca46fae73ab67cf53ce739fdb0da8'},
+ 'operator-media-target-gateway-blocked.json': {'bytes': 3385477,
+                                                'sha256': 'b3077aef17197008868e7225a0aa42a2a8c247c82bed765a4dee10caae17cae9'},
+ 'operator-media-target-gateway-origin-runner.py': {'bytes': 32624,
+                                                    'sha256': '5ab5a024c19c9250174474f6692aba0a9de21e3a84877efb97188d6350656b82'},
+ 'operator-media-target-reconciled-blocked.json': {'bytes': 3352567,
+                                                   'sha256': 'ab06554cf7f8f39d2c6c347129910c13911c00e94b2ef91acb8b863a6a16500b'},
+ 'operator-media-target-reconciled-compiled.json': {'bytes': 1076311,
+                                                    'sha256': 'cc3650d4cb199c952e88cb33ac7ed20783a76b52af182a82f68b02b62552e794'},
+ 'operator-media-target-reconciled-normalized.json': {'bytes': 214040,
+                                                      'sha256': '122f004a44d03133037d7f9d890224e359ecb5a28832a30c62cda36ac6cdbb21'},
+ 'operator-media-target-reconciled-origin-runner.py': {'bytes': 30352,
+                                                       'sha256': '1fd0fd44572e5dcaea938e6f694d04d32fb5f09982d61ddc06f44dd3be786fb0'},
+ 'operator-media-target-reconciled-parameters.json': {'bytes': 9099,
+                                                      'sha256': 'd8f32cf76f6e966692fa44cddd1651a548db8c904d6f2f512109985766fc090a'},
+ 'operator-media-target-reconciled-prepared.json': {'bytes': 329800,
+                                                    'sha256': '5b8ab75c1fa7fe068db7cb890f6527e9963f3d21d112df8dd0b49804b29f6f5d'},
+ 'operator-media-target-reconciled-progress.json': {'bytes': 637774,
+                                                    'sha256': 'a4157129ea0b1c06a18ed545cb018bbb36a7d24c0dedc615a2c491eaa30fca2f'},
+ 'operator-media-target-reconciled-source-authority.json': {'bytes': 704276,
+                                                            'sha256': '5b7a45c1647bde55d75f8fb4da407d4ade2884fd2513f9afdd221b04034a8ae1'}}
+
+
+def media_restart_pins():
+    result=dict(MEDIA_FAILED_APPLY)
+    for name,pin in MEDIA_FAILED_RESTART.items():
+        if name in result and result[name]!=pin:fail()
+        result[name]=pin
+    return result
+
+
+def media_restart_failed(base):
+    base=Path(base)
+    for name,pin in media_restart_pins().items():
+        value=private_bytes(base/name,128<<20)
+        if {'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()}!=pin:fail()
+    old=media_failed_apply(base)
+    state=document(base/(MEDIA_GATEWAY_PREFIX+'-blocked.json'))
+    progress=document(base/(MEDIA_RECONCILED_PREFIX+'-progress.json'))
+    prepared=document(base/(MEDIA_RECONCILED_PREFIX+'-prepared.json'))
+    normalized=document(base/(MEDIA_RECONCILED_PREFIX+'-normalized.json'))
+    authority=document(base/(MEDIA_RECONCILED_PREFIX+'-source-authority.json'))
+    media_target_prepared(normalized,prepared)
+    expected=copy.deepcopy(old)
+    expected.update(context=progress.get('context'),fence_status='VERIFIED',events=old['events']+progress.get('events',[]))
+    final={'kind':'target_baseline_blocked','stage':'target-restart','class':'Blocked',
+        'failure':'MEDIA_TARGET_BLOCKED stage=target-restart error=restart_readiness_timeout',
+        'refence':{'verified':True,'hub_zero_pods':True,'recovery_failures':[]}}
+    if (state!=expected or progress.get('phase')!='BLOCKED' or not progress.get('events')
+        or progress['events'][-1]!=final or prepared.get('failed_apply')!=MEDIA_FAILED_APPLY
+        or prepared.get('reconciliation')!=media_failed_reconciliation(base,prepared.get('before',{}))
+        or prepared.get('outside_owned')!=media_failed_admin(base)
+        or prepared.get('source_sha')!='ca7304dcaa613bba4d1e7d08087de2839e0a3b66'
+        or prepared.get('binding_sha256')!='8fae034af1c05abed5373f17beba4633e6922ad389e8d7ccb68353a2d3ebaa4e'
+        or authority.get('source_sha')!=prepared['source_sha'] or authority.get('run_id')!=38698269484):fail()
+    for suffix in ('receipt','verified'):
+        if (base/(MEDIA_RECONCILED_PREFIX+'-'+suffix+'.json')).exists():fail()
+    snapshots=state['context']['snapshots'];original=state['context']['original_snapshots']
+    names=CORE|{'voice-web','voice-developer-portal'}
+    if (set(snapshots)!=names or set(original)!=names
+        or snapshots[HUB]['metadata']['uid']!=original[HUB]['metadata']['uid']
+        or snapshots[HUB]['spec']['template']!=old['context']['snapshots'][HUB]['spec']['template']):fail()
+    targets={row['metadata']['name']:row for row in normalized if row['kind']=='Deployment'}
+    if set(targets)!=names-{HUB}:fail()
+    for name,row in snapshots.items():
+        if row['spec'].get('replicas')!=0 or row['metadata']['uid']!=original[name]['metadata']['uid']:fail()
+        if name!=HUB and row['spec']['template']!=targets[name]['spec']['template']:fail()
+    if 'voice.io/nats-user-space-bootstrap' in snapshots['voice-user']['spec']['template'].get('metadata',{}).get('annotations',{}):fail()
+    return state
+
+
+def media_restart_reconciliation(base,observed):
+    from nonnats_plan import semantic
+    media_restart_failed(base)
+    normalized=document(Path(base)/(MEDIA_RECONCILED_PREFIX+'-normalized.json'))
+    prepared=document(Path(base)/(MEDIA_RECONCILED_PREFIX+'-prepared.json'))
+    media_target_prepared(normalized,prepared)
+    keys=[row['kind']+'/'+row['metadata']['name'] for row in normalized]
+    if len(keys)!=46 or len(set(keys))!=46 or set(keys)!=set(prepared['before']) or set(keys)!=set(observed):fail()
+    result={}
+    for key,row in zip(keys,normalized):
+        target=copy.deepcopy(row)
+        if target['kind']=='Deployment':target['spec']['replicas']=0
+        live=observed[key];uid=prepared['before'][key]['metadata']['uid']
+        if live['metadata']['uid']!=uid or target['metadata']['uid']!=uid or semantic(live)!=semantic(target):fail()
+        result[key]={'uid':uid,'semantic_sha256':canonical(semantic(live))}
+    if len({row['uid'] for row in result.values()})!=46:fail()
+    return result
+
+
+def media_restart_workloads(base,observed):
+    state=media_restart_failed(base);expected=state['context']['snapshots']
+    if set(observed)!=set(expected) or len(observed)!=22:fail()
+    for name,row in observed.items():
+        if (row['metadata']['uid']!=expected[name]['metadata']['uid'] or row['spec'].get('replicas')!=0
+            or row['spec']['template']!=expected[name]['spec']['template']):fail()
+    return {name:{'uid':row['metadata']['uid'],'template_sha256':canonical(row['spec']['template'])} for name,row in observed.items()}
+
+
+
+MEDIA_MONITOR_PREFIX='operator-media-target-monitor'
+MEDIA_MONITOR_SCHEMA='voice-media-target-monitor-closure-v1'
+MEDIA_MONITOR_REFERENCE='voice-media-target-monitor-reference-v1'
+# Exact all-ready, monitoring-refused boundary. Historical bytes are immutable.
+MEDIA_FAILED_MONITOR={'operator-media-target-failure-1792089890783937891/failure.json': {'bytes': 115,
+                                                                    'sha256': 'c54ef0f2f884997303f6a13229329bcee68b559176c95cb98b09943244fc0889'},
+ 'operator-media-target-gateway-blocked.json': {'bytes': 3385477,
+                                                'sha256': 'b3077aef17197008868e7225a0aa42a2a8c247c82bed765a4dee10caae17cae9'},
+ 'operator-media-target-gateway-compiled.json': {'bytes': 1071733,
+                                                 'sha256': 'fdd5f97a1114530575d5d755286000181e269594fbe7234f938a6eb4fdefc83d'},
+ 'operator-media-target-gateway-normalized.json': {'bytes': 214214,
+                                                   'sha256': '595fb73fa265383cadd095f6cb35a4a9fbcfc2a231bdef35406ed39329e62478'},
+ 'operator-media-target-gateway-origin-runner.py': {'bytes': 32624,
+                                                    'sha256': '5ab5a024c19c9250174474f6692aba0a9de21e3a84877efb97188d6350656b82'},
+ 'operator-media-target-gateway-parameters.json': {'bytes': 9099,
+                                                   'sha256': 'cd4b3fb47dffba24b75e18293035a01745e00888eeeea4f3740a7581c25e5f58'},
+ 'operator-media-target-gateway-prepared.json': {'bytes': 350997,
+                                                 'sha256': '14b618229cd8c73d03fc660f4448ee80584a77b8701e0eb9a42b036e60f92624'},
+ 'operator-media-target-gateway-progress.json': {'bytes': 638223,
+                                                 'sha256': '06116fb3e9c1d385144878513b13f04f88da63dd0707d0b015aa6d921fbdbd49'},
+ 'operator-media-target-gateway-source-authority.json': {'bytes': 704418,
+                                                         'sha256': '78abaec5151162a069b0b81976f45a7be944b7fc060739fc61b092e46df9cf64'},
+ 'operator-media-target-monitor-blocked.json': {'bytes': 3395722,
+                                                'sha256': 'cf937983714eacda294218a5e18bdef39f0161a76ba2a70b9a32af80e084858e'},
+ 'operator-media-target-monitor-origin-runner.py': {'bytes': 32973,
+                                                    'sha256': '202e7413e4a77ed5a84d13bb0a55d3e29ce820cb67ac1fc6baa41c01145a06ca'}}
+
+def media_monitor_pins():
+    result=media_restart_pins()
+    for name,pin in MEDIA_FAILED_MONITOR.items():
+        if name in result and result[name]!=pin:fail()
+        result[name]=pin
+    return result
+
+
+def media_monitor_failed(base):
+    base=Path(base)
+    for name,pin in media_monitor_pins().items():
+        value=private_bytes(base/name,128<<20)
+        if {'bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()}!=pin:fail()
+    old=media_restart_failed(base)
+    state=document(base/(MEDIA_MONITOR_PREFIX+'-blocked.json'))
+    progress=document(base/(MEDIA_GATEWAY_PREFIX+'-progress.json'))
+    prepared=document(base/(MEDIA_GATEWAY_PREFIX+'-prepared.json'))
+    normalized=document(base/(MEDIA_GATEWAY_PREFIX+'-normalized.json'))
+    authority=document(base/(MEDIA_GATEWAY_PREFIX+'-source-authority.json'))
+    media_target_prepared(normalized,prepared)
+    expected=copy.deepcopy(old)
+    expected.update(context=progress.get('context'),fence_status='VERIFIED',events=old['events']+progress.get('events',[]))
+    final={'kind':'target_baseline_blocked','stage':'ready-baseline-proof','class':'Blocked',
+        'failure':'MEDIA_TARGET_BLOCKED stage=ready-baseline-proof error=command_failed',
+        'refence':{'verified':True,'hub_zero_pods':True,'recovery_failures':[]}}
+    if (state!=expected or progress.get('phase')!='BLOCKED' or not progress.get('events')
+        or progress['events'][-1]!=final or prepared.get('failed_restart')!=media_restart_pins()
+        or prepared.get('reconciliation')!=media_restart_reconciliation(base,prepared.get('before',{}))
+        or prepared.get('outside_owned')!=media_failed_admin(base)
+        or prepared.get('source_sha')!='0917eaeac80830e4e83f0538bd1f06be26b07881'
+        or prepared.get('binding_sha256')!='a426e34e1900d81a774a4b102b5da120a0e29035151a74a1495850334d0d9cd1'
+        or authority.get('source_sha')!=prepared['source_sha'] or authority.get('run_id')!=38784502351):fail()
+    for suffix in ('receipt','verified'):
+        if (base/(MEDIA_GATEWAY_PREFIX+'-'+suffix+'.json')).exists():fail()
+    snapshots=state['context']['snapshots'];original=state['context']['original_snapshots']
+    names=CORE|{'voice-web','voice-developer-portal'}
+    if (set(snapshots)!=names or set(original)!=names
+        or snapshots[HUB]['metadata']['uid']!=original[HUB]['metadata']['uid']
+        or snapshots[HUB]['spec']['template']!=old['context']['snapshots'][HUB]['spec']['template']):fail()
+    targets={row['metadata']['name']:row for row in normalized if row['kind']=='Deployment'}
+    if set(targets)!=names-{HUB}:fail()
+    for name,row in snapshots.items():
+        if row['spec'].get('replicas')!=0 or row['metadata']['uid']!=original[name]['metadata']['uid']:fail()
+        if name!=HUB and row['spec']['template']!=targets[name]['spec']['template']:fail()
+    if 'voice.io/nats-user-space-bootstrap' in snapshots['voice-user']['spec']['template'].get('metadata',{}).get('annotations',{}):fail()
+    return state
+
+
+def media_monitor_reconciliation(base,observed):
+    from nonnats_plan import semantic
+    media_monitor_failed(base)
+    normalized=document(Path(base)/(MEDIA_GATEWAY_PREFIX+'-normalized.json'))
+    prepared=document(Path(base)/(MEDIA_GATEWAY_PREFIX+'-prepared.json'))
+    media_target_prepared(normalized,prepared)
+    keys=[row['kind']+'/'+row['metadata']['name'] for row in normalized]
+    if len(keys)!=46 or len(set(keys))!=46 or set(keys)!=set(prepared['before']) or set(keys)!=set(observed):fail()
+    result={}
+    for key,row in zip(keys,normalized):
+        target=copy.deepcopy(row)
+        if target['kind']=='Deployment':target['spec']['replicas']=0
+        live=observed[key];uid=prepared['before'][key]['metadata']['uid']
+        if live['metadata']['uid']!=uid or target['metadata']['uid']!=uid or semantic(live)!=semantic(target):fail()
+        result[key]={'uid':uid,'semantic_sha256':canonical(semantic(live))}
+    if len({row['uid'] for row in result.values()})!=46:fail()
+    return result
+
+
+def media_monitor_workloads(base,observed):
+    state=media_monitor_failed(base);expected=state['context']['snapshots']
+    if set(observed)!=set(expected) or len(observed)!=22:fail()
+    for name,row in observed.items():
+        if (row['metadata']['uid']!=expected[name]['metadata']['uid'] or row['spec'].get('replicas')!=0
+            or row['spec']['template']!=expected[name]['spec']['template']):fail()
+    return {name:{'uid':row['metadata']['uid'],'template_sha256':canonical(row['spec']['template'])} for name,row in observed.items()}
+
+
+def media_target_failed(base):
+    """The failed original-image attempt remains immutable, not a retry token."""
+    raw=private_bytes(Path(base)/(MEDIA_TARGET_PREFIX+'-blocked.json'))
+    progress=private_bytes(Path(base)/(MEDIA_ABORT_PREFIX+'-progress.json'))
+    if hashlib.sha256(raw).hexdigest()!=MEDIA_TARGET_BLOCKED or hashlib.sha256(progress).hexdigest()!=MEDIA_TARGET_PROGRESS:fail()
+    state=json.loads(raw);row=json.loads(progress)
+    if (state.get('operation')!=MEDIA_ABORT_OPERATION or state.get('phase')!='OPERATOR_RETIRING'
+        or state.get('status')!='BLOCKED' or state.get('fence_status')!='VERIFIED'
+        or row.get('phase')!='BLOCKED' or row.get('context')!=state.get('context')
+        or row.get('snapshot_sha256')!=MEDIA_ABORT_CHECKPOINT):fail()
+    for name in ('receipt.json','verified.json'):
+        try:(Path(base)/(MEDIA_ABORT_PREFIX+'-'+name)).lstat()
+        except FileNotFoundError:pass
+        else:fail()
+    return state
+
+
+def media_target_templates(snapshot,authority,pack,normalized):
+    """Bind the manual baseline to independently captured master CI and images."""
+    import source_authority
+    try:
+        target=pack['target'];source=authority['source_sha'];snapshots=snapshot['context']['snapshots']
+        if (authority.get('schema')!='voice-source-authority-v1' or authority.get('verified') is not True
+            or authority.get('repository')!=source_authority.REPO or authority.get('workflow_id')!=source_authority.WORKFLOW
+            or any(type(authority.get(k)) is not int or authority[k]<=0 for k in ('run_id','run_attempt','lock_artifact_id'))
+            or not re.fullmatch('[a-f0-9]{40}',source) or not re.fullmatch('[a-f0-9]{40}',authority.get('tree_sha',''))
+            or not re.fullmatch('[a-f0-9]{64}',authority.get('lock_sha256',''))
+            or authority.get('image_provenance')!='independently resolved trusted CI tag'
+            or set(authority['images'])!=set(source_authority.IMAGE_NAMES)
+            or target.get('tag')!=source or target.get('mode')!='app-only' or target.get('changed_services')!=[]
+            or target.get('manifest_sha256')!=canonical(pack['manifests'])
+            or target.get('migration_sha256')!=canonical(pack['migrations'])
+            or pack['migrations']!=snapshot['migrations'] or pack['contract']!=snapshot['active_contract']['contract']
+            or not target.get('source_hashes')
+            or any(authority['source_files'].get(k)!=v for k,v in target['source_hashes'].items())):fail()
+        for name,image in authority['images'].items():
+            if not re.fullmatch(re.escape(source_authority.REGISTRY+'/'+name)+r'@sha256:[a-f0-9]{64}',image):fail()
+        def inventory(rows):
+            result={}
+            for row in rows:
+                key=(row.get('kind'),row.get('metadata',{}).get('name'))
+                if (key in result or key[0] not in ('Deployment','Service','ConfigMap','NetworkPolicy','Ingress')
+                    or not isinstance(key[1],str) or key[1].startswith('voice-nats')
+                    or row.get('metadata',{}).get('namespace')!=guard.NS):fail()
+                result[key]=row
+            return result
+        source_rows=inventory(pack['manifests']);actual_rows=inventory(normalized)
+        if source_rows.keys()!=actual_rows.keys():fail()
+        result={HUB:copy.deepcopy(snapshots[HUB]['spec']['template'])};used={}
+        for (kind,name),row in actual_rows.items():
+            if kind!='Deployment':continue
+            if name not in snapshots or name==HUB:fail()
+            original=source_rows[(kind,name)]['spec']['template'];template=row['spec']['template']
+            if target['template_hashes'].get(name)!=canonical(original):fail()
+            old={c['name']:c['image'] for c in snapshots[name]['spec']['template']['spec'].get('initContainers',[])+snapshots[name]['spec']['template']['spec']['containers']}
+            expected={c['name']:c['image'] for c in original['spec'].get('initContainers',[])+original['spec']['containers']}
+            actual={c['name']:c['image'] for c in template['spec'].get('initContainers',[])+template['spec']['containers']}
+            if actual!=expected:fail()
+            service=name.removeprefix('voice-')
+            for container,image in actual.items():
+                wanted=authority['images'][service] if image.split('@')[0]==source_authority.REGISTRY+'/'+service else old.get(container)
+                if image!=wanted or not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):fail()
+                used[name+'/'+container]=image
+            if authority['images'][service] not in actual.values():fail()
+            result[name]=template
+        if len(result)!=22 or set(result)!=set(snapshots) or used!=target['images']:fail()
+        return result
+    except (KeyError,TypeError,AttributeError):fail()
+
+
+def media_target_prepared(normalized,prepared):
+    """Bind every normalized resource to the immutable prepare-time capture."""
+    if prepared.get('normalized_sha256')!=canonical(normalized):fail()
+
+
+def media_target_resources(normalized):
+    """Every applied resource, including service/configuration semantics, at release."""
+    from nonnats_plan import semantic
+    result={}
+    for row in normalized:
+        wanted=copy.deepcopy(row);metadata=wanted.get('metadata',{})
+        key=wanted.get('kind','')+'/'+metadata.get('name','');uid=metadata.get('uid')
+        if key in result or not isinstance(uid,str) or not uid:fail()
+        if wanted.get('kind')=='Deployment':wanted['spec']['replicas']=1
+        result[key]={'uid':uid,'semantic_sha256':canonical(semantic(wanted))}
+    return result
+
+
+def media_abort_snapshot(raw):
+    """Only the independently inspected, refenced failed FULL may be restored."""
+    if hashlib.sha256(raw).hexdigest()!=MEDIA_ABORT_CHECKPOINT:fail()
+    value=json.loads(raw)
+    if (value.get('operation')!=MEDIA_ABORT_OPERATION or value.get('phase')!='RESTART'
+        or value.get('status')!='BLOCKED' or value.get('fence_status')!='VERIFIED'
+        or value.get('error')!='restart_readiness_timeout' or len(value.get('migration_jobs',[]))!=16
+        or canonical(value.get('active_contract'))!=MEDIA_ABORT_ACTIVE
+        or value.get('preservation',{}).get('native_files_verified') is not True
+        or value.get('nats_migration',{}).get('verified') is not True):fail()
+    return value
+
+
+def media_abort_templates(snapshot):
+    """Restore reviewed application images; retain the already proved HUB target."""
+    result={}
+    for name,row in snapshot['context']['original_snapshots'].items():
+        template=copy.deepcopy((snapshot['context']['snapshots'][name] if name==HUB else row)['spec']['template'])
+        if name!=HUB:
+            for container in template['spec'].get('initContainers',[])+template['spec']['containers']:
+                image=snapshot['context']['old_images'].get(name+'/'+container['name'],'')
+                if not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):fail()
+                container['image']=image
+        result[name]=template
+    if len(result)!=22 or HUB not in result:fail()
+    return result
+
+
+def media_abort_journal(installed):
+    path=Path(installed)/'journal'/MEDIA_ABORT_FINISH
+    raw=private_bytes(path,2<<20);row=json.loads(raw);request=row.get('request',{})
+    if (hashlib.sha256(raw).hexdigest()!=MEDIA_ABORT_JOURNAL or row.get('phase')!='STARTED'
+        or request.get('action')!='finish' or request.get('operation')!=MEDIA_ABORT_OPERATION
+        or request.get('nonce')+'.json'!=MEDIA_ABORT_FINISH or canonical(request)!=row.get('request_sha256')):fail()
+    # The root-direct continuation wrote no public response. Preserve that fact.
+    try:(Path(installed)/'responses'/MEDIA_ABORT_FINISH).lstat()
+    except FileNotFoundError:pass
+    else:fail()
+    return {'name':MEDIA_ABORT_FINISH,'journal_sha256':MEDIA_ABORT_JOURNAL,'response_absent':True}
+
+
+def media_abort_terminal(snapshot,receipt):
+    state=copy.deepcopy(snapshot)
+    state.update(phase='OPERATOR_RETIRED',status='ABORTED',fence_status='RELEASED')
+    state['operator_media_abort']={'schema':'voice-media-original-restore-reference-v1',
+        'snapshot_sha256':MEDIA_ABORT_CHECKPOINT,'receipt_sha256':canonical(receipt)}
+    if receipt.get('configuration_basis')==MEDIA_TARGET_BASIS:
+        state['operator_media_abort'].update(schema='voice-media-target-baseline-reference-v1',
+            blocked_sha256=MEDIA_TARGET_BLOCKED,progress_sha256=MEDIA_TARGET_PROGRESS)
+        if receipt.get('schema')==MEDIA_RECONCILED_SCHEMA:
+            state['operator_media_abort'].update(schema=MEDIA_RECONCILED_REFERENCE,
+                blocked_sha256=MEDIA_FAILED_APPLY[MEDIA_RECONCILED_PREFIX+'-blocked.json']['sha256'],
+                progress_sha256=MEDIA_FAILED_APPLY[MEDIA_TARGET_PREFIX+'-progress.json']['sha256'])
+        if receipt.get('schema')==MEDIA_GATEWAY_SCHEMA:
+            state['operator_media_abort'].update(schema=MEDIA_GATEWAY_REFERENCE,
+                blocked_sha256=MEDIA_FAILED_RESTART[MEDIA_GATEWAY_PREFIX+'-blocked.json']['sha256'],
+                progress_sha256=MEDIA_FAILED_RESTART[MEDIA_RECONCILED_PREFIX+'-progress.json']['sha256'])
+        if receipt.get('schema')==MEDIA_MONITOR_SCHEMA:
+            state['operator_media_abort'].update(schema=MEDIA_MONITOR_REFERENCE,
+                blocked_sha256=MEDIA_FAILED_MONITOR[MEDIA_MONITOR_PREFIX+'-blocked.json']['sha256'],
+                progress_sha256=MEDIA_FAILED_MONITOR[MEDIA_GATEWAY_PREFIX+'-progress.json']['sha256'])
+    state['events']=snapshot['events']+[{'kind':'operator_media_abort_completed',
+        'deployment_pass':False,'rollback_eligible':False,'forward_migrations_retained':True}]
+    return state
+
+
+def verify_media_abort_terminal(base,state):
+    """Exact operator abort, not successful deployment or generic rollback authority."""
+    base=Path(base);reference=state.get('operator_media_abort',{}).get('schema')
+    reconciled=reference==MEDIA_RECONCILED_REFERENCE
+    gateway=reference==MEDIA_GATEWAY_REFERENCE
+    monitor=reference==MEDIA_MONITOR_REFERENCE
+    target_baseline=monitor or gateway or reconciled or reference=='voice-media-target-baseline-reference-v1'
+    prefix=MEDIA_MONITOR_PREFIX if monitor else MEDIA_GATEWAY_PREFIX if gateway else MEDIA_RECONCILED_PREFIX if reconciled else MEDIA_TARGET_PREFIX if target_baseline else MEDIA_ABORT_PREFIX
+    if base!=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION):fail()
+    snapshot=media_abort_snapshot(private_bytes(base/(MEDIA_ABORT_PREFIX+'-snapshot.json')))
+    blocked=media_monitor_failed(base) if monitor else media_restart_failed(base) if gateway else media_failed_apply(base) if reconciled else media_target_failed(base) if target_baseline else snapshot
+    receipt=document(base/(prefix+'-receipt.json'))
+    if (set(receipt)!={'schema','operation','waiver','snapshot_sha256','compatibility_sha256',
+        'deployment_pass','rollback_eligible','configuration_basis','migration_jobs_sha256',
+        'active_contract_sha256','setup','released_marker','retained_files','journal'}
+        or receipt.get('schema')!=(MEDIA_MONITOR_SCHEMA if monitor else MEDIA_GATEWAY_SCHEMA if gateway else MEDIA_RECONCILED_SCHEMA if reconciled else 'voice-media-target-baseline-closure-v1' if target_baseline else 'voice-media-original-restore-closure-v1')
+        or receipt.get('operation')!=MEDIA_ABORT_OPERATION or receipt.get('waiver')!=WAIVER
+        or receipt.get('snapshot_sha256')!=MEDIA_ABORT_CHECKPOINT
+        or receipt.get('compatibility_sha256')!=MEDIA_ABORT_COMPATIBILITY
+        or receipt.get('deployment_pass') is not False or receipt.get('rollback_eligible') is not False
+        or receipt.get('configuration_basis')!=(MEDIA_TARGET_BASIS if target_baseline else 'ORIGINAL_APPLICATION_IMAGES_RETAIN_MIGRATED_NATS_AND_DATABASES')
+        or receipt.get('migration_jobs_sha256')!=canonical(snapshot['migration_jobs'])
+        or receipt.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
+        or root_cli.code_binding(base/'code')!=snapshot['code_capture']
+        or receipt.get('journal')!=media_abort_journal(guard.ROOT/'installed')
+        or state!=media_abort_terminal(blocked,receipt)):fail()
+    if target_baseline:
+        authority=document(base/(prefix+'-source-authority.json'))
+        pack=document(base/(prefix+'-compiled.json'))
+        normalized=document(base/(prefix+'-normalized.json'))
+        prepared=document(base/(prefix+'-prepared.json'))
+        media_target_prepared(normalized,prepared)
+        if reconciled:
+            if (prepared.get('failed_apply')!=MEDIA_FAILED_APPLY
+                or prepared.get('reconciliation')!=media_failed_reconciliation(base,prepared.get('before',{}))
+                or prepared.get('outside_owned')!=media_failed_admin(base)):fail()
+        if gateway:
+            if (prepared.get('failed_restart')!=media_restart_pins()
+                or prepared.get('reconciliation')!=media_restart_reconciliation(base,prepared.get('before',{}))
+                or prepared.get('outside_owned')!=media_failed_admin(base)):fail()
+        if monitor:
+            if (prepared.get('failed_monitor')!=media_monitor_pins()
+                or prepared.get('reconciliation')!=media_monitor_reconciliation(base,prepared.get('before',{}))
+                or prepared.get('outside_owned')!=media_failed_admin(base)):fail()
+        if (blocked.get('migrations')!=snapshot.get('migrations') or blocked.get('migration_jobs')!=snapshot.get('migration_jobs')
+            or blocked.get('active_contract')!=snapshot.get('active_contract')
+            or precut_retained_setup(blocked)!=precut_retained_setup(snapshot)):fail()
+        templates=media_target_templates(blocked,authority,pack,normalized)
+    else:templates=media_abort_templates(snapshot)
+    expected={name:{'uid':snapshot['context']['original_snapshots'][name]['metadata']['uid'],
+        'template_sha256':canonical(template),'replicas':1,'ready':True} for name,template in templates.items()}
+    if receipt.get('setup')!=expected:fail()
+    marker=snapshot['context']['marker'];after=receipt.get('released_marker',{})
+    data=dict(marker['data'],phase='active');data.pop('knownRolloutOperation')
+    if (set(after)!={'uid','resourceVersion','data'} or after.get('uid')!=marker['metadata']['uid']
+        or after.get('data')!=data or not re.fullmatch('[0-9]+',after.get('resourceVersion',''))
+        or after['resourceVersion']==marker['metadata']['resourceVersion']):fail()
+    required={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json','rollout-backup.cms',
+        'decrypted-restore.json','apply-manifests.json','apply-authorization.json',
+        prefix+'-compatibility.md',prefix+'-active-contract.json',prefix+'-verified.json',snapshot['preservation']['archive']}
+    if target_baseline:
+        required|={prefix+'-blocked.json',MEDIA_ABORT_PREFIX+'-progress.json',MEDIA_ABORT_PREFIX+'-snapshot.json',
+            prefix+'-source-authority.json',prefix+'-compiled.json',prefix+'-normalized.json',prefix+'-parameters.json',prefix+'-prepared.json'}
+    if reconciled:required|=set(MEDIA_FAILED_APPLY)
+    if gateway:required|=set(media_restart_pins())
+    if monitor:required|=set(media_monitor_pins())
+    files=receipt.get('retained_files',{})
+    if set(files)!=required:fail()
+    for name,pin in files.items():
+        path=base/name
+        if path.resolve()!=path or not path.is_relative_to(base):fail()
+        raw=private_bytes(path,128<<20,group_read=True)
+        if pin!={'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}:fail()
+    if files[prefix+'-compatibility.md']['sha256']!=MEDIA_ABORT_COMPATIBILITY:fail()
+    if canonical(document(base/(prefix+'-active-contract.json')))!=MEDIA_ABORT_ACTIVE:fail()
+    proof=document(base/(prefix+'-verified.json'))
+    if (reconciled or gateway or monitor) and proof.get('outside_owned')!=media_failed_admin(base):fail()
+    if target_baseline and proof.get('resources')!=media_target_resources(normalized):fail()
+    if (proof.get('setup')!=expected or proof.get('storage')!=precut_retained_setup(snapshot)
+        or proof.get('active_contract_sha256')!=MEDIA_ABORT_ACTIVE
+        or proof.get('migration_jobs_sha256')!=receipt['migration_jobs_sha256']
+        or proof.get('no_migration_replay') is not True):fail()
+    actors=proof.get('actors',{});connections=proof.get('leaf_connections',{})
+    roles=set(LEAVES)|{'gateway'}
+    if actors.get('roles')!=sorted(roles) or set(actors.get('proofs',{}))!=roles or set(connections)!=set(LEAVES):fail()
+    for role in roles:
+        actor=actors['proofs'][role].get('proof',{})
+        if (any(actor.get(key) is not True for key in ('signed_chain_verified','server_authentication_verified',
+                'signed_effective_permissions_verified','broker_grant_compatibility_verified'))):fail()
+    for role in LEAVES:
+        if (connections[role].get('connected') is not True
+            or not re.fullmatch('[a-f0-9]{64}',connections[role].get('remote_server_sha256',''))):fail()
+    return receipt
+
+
 def idle_state(base,state):
     if state.get('status') in ('PASS','ROLLED_BACK'):return True
     verify_terminal(base,state)
@@ -1019,12 +1594,184 @@ def _verify_search_bootstrap_rejection(installed,path,row):
         'source':_retained_prepare_tree(installed/'sources'/operation,spec['source_tree']),
         'build':_retained_prepare_tree(installed/'sources'/(operation+'-build'),spec['build_tree'])}
 
+STORY_PREFENCE_NONCE='8d65ee47ce1bb71bbe325eb9b020749ec015fdf5c920270b54ecb0cdd5bc4cf0'
+STORY_PREFENCE_FILES={
+    'journal':('bfafa1fcaaaa787f21ae1d6f46fd4c5c67f25f78cd87650e1277cf680c5f0a5b',563),
+    'responses':('35afa798fcd405b6568e043d48fedb94aefc41e7ca9fd00eec39a40fe1cec3a5',48),
+    'reports':('79d0eeae729d92906f55cfee786c083a2e4de63343169d4ba7b85d2fb63f9c2f',928)}
+STORY_PREFENCE_SOURCE={'files':5607,'bytes':68552714,'sha256':'298f19aedec66b164f2408ae40598736c259496ec662d9c152a5f934e0b30e90'}
+STORY_PREFENCE_CUSTODY='4fae73c6dbd74980ff694cc1e596072c94a143414cc44937eb7f20792c3ce9e9'
+STORY_PREFENCE_CHECKPOINT='bfa1426b858a4cb9c367dc7ec81a3418b194a75985542899b6e932d2056f86c2'
+STORY_PREFENCE_RECEIPT='f951ce8711b383a9e7c2bb9da33869b79798b5b447225d5e31779e503d20bd4b'
+
+def _verify_story_prefence_rejection(installed,path,row):
+    """One failed pre-fence request remains BLOCKED evidence, never a rollout."""
+    if path.name!=STORY_PREFENCE_NONCE+'.json':fail()
+    for directory,(wanted,length) in STORY_PREFENCE_FILES.items():
+        member=installed/'responses'/(STORY_PREFENCE_NONCE+'.report.json') if directory=='reports' else installed/directory/path.name
+        raw=private_bytes(member,2<<20,group_read=directory!='journal')
+        if len(raw)!=length or hashlib.sha256(raw).hexdigest()!=wanted:fail()
+    sha='b25087c728cdfeb40b9e4f8cb37cb8e441e122fa'
+    request={'action':'prepare','nonce':STORY_PREFENCE_NONCE,'source_sha':sha,'run_id':38798032967,
+        'run_attempt':1,'report_run_id':38798032967,'report_source_sha':sha,'mode':'full','changed_services':[]}
+    if row!={'schema':'voice-nats-bridge-request-v1','request_sha256':'4f69074c5bbf08f05a327f7e3e00fd69a8c6fbdbb631271a8c02e8755d673311',
+        'request':request,'phase':'STARTED','prepare_stage':{'name':'nats-preflight','status':'STARTED'},'prepare_error':'guard_rejected'}:fail()
+    operation=STORY_PREFENCE_NONCE[:12]
+    for candidate in (guard.ROOT/('rollout-'+operation),installed/'sources'/(operation+'-build')):
+        try:candidate.lstat()
+        except FileNotFoundError:continue
+        fail()
+    source=_retained_prepare_tree(installed/'sources'/operation,STORY_PREFENCE_SOURCE)
+    # The shared sources parent's timestamps change when later operations add
+    # siblings. Content/policy are historical invariants; this full metadata
+    # fingerprint is transient and the installer compares it across the swap.
+    base=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION)
+    if (hashlib.sha256(private_bytes(base/'checkpoint.json')).hexdigest()!=STORY_PREFENCE_CHECKPOINT
+        or hashlib.sha256(private_bytes(base/(MEDIA_MONITOR_PREFIX+'-receipt.json'))).hexdigest()!=STORY_PREFENCE_RECEIPT):fail()
+    verify_media_abort_terminal(base,document(base/'checkpoint.json'))
+    return {'disposition':'ABANDONED_PRECHECKPOINT','status':'BLOCKED','operation':operation,
+        'files':STORY_PREFENCE_FILES,'source':source,'checkpoint_sha256':STORY_PREFENCE_CHECKPOINT,
+        'receipt_sha256':STORY_PREFENCE_RECEIPT}
+
+def terminal_finish_disposition(installed,path):
+    """Read-only admission of a failed finish superseded by the same completed finish.
+
+    A root-attested, closed file map preserves both transport outcomes. PASS alone
+    never admits a pending request, and this receipt grants no replay authority.
+    """
+    import bridge
+    installed=Path(installed);path=Path(path)
+    receipt_path=installed/('terminal-finish-disposition-'+path.stem+'.json')
+    try:receipt_path.lstat()
+    except FileNotFoundError:return None
+    try:return _terminal_finish_disposition(installed,path,receipt_path)
+    except (KeyError,IndexError,TypeError,ValueError,OSError,bridge.BridgeError):fail()
+
+
+def _terminal_finish_disposition(installed,path,receipt_path):
+    import bridge
+    receipt_raw=private_bytes(receipt_path,2<<20);receipt=json.loads(receipt_raw)
+    if set(receipt)!={'schema','operation','failed_nonce','completed_nonce','code_binding_sha256','files'}:fail()
+    if receipt['schema']!='voice-terminal-finish-disposition-v1':fail()
+    operation=receipt['operation'];failed=receipt['failed_nonce'];completed=receipt['completed_nonce']
+    if (not re.fullmatch('[a-f0-9]{12}',operation) or not re.fullmatch('[a-f0-9]{64}',completed)
+        or failed!=path.stem or failed==completed or path!=installed/'journal'/(failed+'.json')):fail()
+    base=guard.ROOT/('rollout-'+operation)
+    paths={'checkpoint':base/'checkpoint.json','authorization':base/'apply-authorization.json'}
+    for label,nonce in (('failed',failed),('completed',completed)):
+        paths[label+'_journal']=installed/'journal'/(nonce+'.json')
+        paths[label+'_response']=installed/'responses'/(nonce+'.json')
+        paths[label+'_report']=installed/'responses'/(nonce+'.report.json')
+    repair_names={'repair_before':base/'operator-service-rv-before.json','repair_receipt':base/'operator-service-rv-reconciliation.json'}
+    pins=receipt['files']
+    if set(pins) not in (set(paths),set(paths)|set(repair_names)):fail()
+    paths.update({k:v for k,v in repair_names.items() if k in pins})
+    raw={};values={}
+    for name,member in paths.items():
+        raw[name]=private_bytes(member,group_read=name=='authorization' or member.parent==installed/'responses')
+        if pins[name]!={'sha256':hashlib.sha256(raw[name]).hexdigest(),'bytes':len(raw[name])}:fail()
+        values[name]=json.loads(raw[name])
+    old=values['failed_journal'];new=values['completed_journal']
+    if (set(old)!={'schema','request','request_sha256','phase','prepare_error'} or old['phase']!='STARTED'
+        or old['prepare_error']!='guard_rejected' or set(new)!={'schema','request','request_sha256','phase','result'}
+        or new['phase']!='COMPLETE'):fail()
+    request=old['request']
+    for row,nonce in ((old,failed),(new,completed)):
+        bridge.validate(row['request'])
+        if (row['schema']!='voice-nats-bridge-request-v1' or row['request_sha256']!=canonical(row['request'])
+            or row['request']!={**request,'nonce':nonce}):fail()
+    if set(request)!={'action','nonce','operation','claim_rv','report_run_id','report_source_sha','run_attempt'} or request['action']!='finish' or request['operation']!=operation:fail()
+    state=values['checkpoint'];auth=values['authorization']
+    result={'operation':operation,'phase':'POST_RESTART','status':'PASS','fence_status':'RELEASED'}
+    if (state.get('schema')!='nats-rollout-root-v1' or any(state.get(k)!=v for k,v in result.items())
+        or state.get('error') is not None or new['result']!=result or values['completed_response']!=result
+        or values['failed_response']!={'status':'BLOCKED','error':'exception_Blocked'}):fail()
+    binding=root_cli.code_binding(base/'code')
+    if state['code_capture']!=binding or receipt['code_binding_sha256']!=canonical(binding):fail()
+    execution=state['execution_authority'];source=state['source_authority']
+    if (execution['dispatcher_run_id']!=request['report_run_id'] or execution['run_attempt']!=request['run_attempt']
+        or execution['head_sha']!=request['report_source_sha'] or source['source_sha']!=request['report_source_sha']
+        or source.get('verified') is not True or state['authorization']!=auth
+        or auth['schema']!='nats-rollout-preservation-v1' or auth['operation']!=operation or auth['target']!=state['target']):fail()
+    observed=[e['marker'] for e in state['events'] if e.get('kind')=='rollout_target_observed']
+    verified=[e['marker'] for e in state['events'] if e.get('kind')=='rollout_verified']
+    if not observed or not verified:fail()
+    for marker in observed:
+        if (marker['metadata']['uid']!=auth['marker']['uid'] or marker['metadata']['resourceVersion']!=request['claim_rv']
+            or marker['data'].get('phase')!='rollout-applying' or marker['data'].get('knownRolloutOperation')!=operation):fail()
+    for marker in verified:
+        if marker['metadata']['uid']!=auth['marker']['uid'] or marker['data'].get('phase')!='rollout-verified' or marker['data'].get('knownRolloutOperation')!=operation:fail()
+    released=state['context']['marker']
+    if (released['metadata']['uid']!=auth['marker']['uid'] or released['data'].get('phase')!='active'
+        or any(k in released['data'] for k in ('knownRolloutOperation','knownBaselineOperation'))
+        or any(released['data'].get(k)!=auth['marker'][k] for k in ('generation','previousGeneration','dataPVC'))):fail()
+    if not state.get('preservation') or not state.get('restart'):fail()
+    for label,nonce,status in (('failed',failed,'BLOCKED'),('completed',completed,'COMPLETE')):
+        report=values[label+'_report']
+        expected={'schema':'voice-deployment-report-v1','request_action':'finish','request_nonce':nonce,'request_status':status,
+            'operation':operation,'run_id':request['report_run_id'],'run_attempt':request['run_attempt'],
+            'source_sha':request['report_source_sha'],'helper_binding':canonical(binding)}
+        if any(report.get(k)!=v for k,v in expected.items()) or report['effects']['apply']!='RECORDED':fail()
+    if (values['completed_report']['operation_status']!='PASS' or values['completed_report']['stage']!='POST_RESTART'
+        or values['completed_report']['error_code']!='none'
+        or any(values['completed_report']['effects'].get(k)!=v for k,v in {'release':'RECORDED','preservation':'PRESENT','restart':'PRESENT','fence':'RELEASED'}.items())
+        or values['failed_report']['operation_status']!='WAITING' or values['failed_report']['stage']!='PAUSED_APPLY'
+        or values['failed_report']['effects'].get('fence')!='VERIFIED'):fail()
+    repairs=[e for e in state['events'] if e.get('kind')=='operator_preserved_service_rv_reconciled']
+    if bool(repairs)!=('repair_before' in pins) or len(repairs)>1:fail()
+    if repairs:_terminal_finish_service_repair(values,raw,repairs[0],request,receipt)
+    if private_bytes(receipt_path,2<<20)!=receipt_raw:fail()
+    return {'disposition':'SUPERSEDED_FAILED_FINISH','status':'BLOCKED','operation':operation,
+        'receipt_sha256':hashlib.sha256(receipt_raw).hexdigest(),'files':pins}
+
+
+def _terminal_finish_service_repair(values,raw,event,request,disposition):
+    before=values['repair_before'];repair=values['repair_receipt'];after=copy.deepcopy(before)
+    versions={'voice-auth':('3310867','3320022'),'voice-role':('3310882','3320032'),'voice-voice':('3310907','3320048')}
+    if (repair.get('schema')!='voice-exact-5e-service-rv-reconciliation-v1' or repair.get('operation')!=request['operation']
+        or request['operation']!='5e48553f3105' or before.get('operation')!=request['operation']
+        or repair.get('before_checkpoint_sha256')!=hashlib.sha256(raw['repair_before']).hexdigest()
+        or repair.get('authorization_sha256')!=hashlib.sha256(raw['authorization']).hexdigest()
+        or repair.get('code_binding_sha256')!=disposition['code_binding_sha256'] or repair.get('claim_rv')!=request['claim_rv']
+        or repair.get('workload_writes') is not False or repair.get('deployment_pass') is not False
+        or before.get('phase')!='PAUSED_APPLY' or before.get('status')!='WAITING'
+        or before.get('authorization')!=values['authorization'] or before.get('target')!=values['authorization']['target']
+        or before.get('code_capture')!=values['checkpoint']['code_capture']):fail()
+    wanted={'kind':'operator_preserved_service_rv_reconciled','before_checkpoint_sha256':repair['before_checkpoint_sha256'],
+        'authorization_sha256':repair['authorization_sha256'],'claim_rv':repair['claim_rv'],'changes':repair['changes'],
+        'reason':'FULL_APPLY_BOOKKEEPING_ONLY_FULL_SERVICE_SEMANTICS_UNCHANGED'}
+    if event!=wanted or not repair['changes']:fail()
+    seen=set()
+    for change in repair['changes']:
+        if set(change)!={'index','name','uid','before_rv','after_rv','semantic_sha256'} or type(change['index']) is not int or change['index'] in seen:fail()
+        seen.add(change['index']);obj=after['nonnats_binding']['objects'][change['index']]
+        if (change['index']<0 or obj['kind']!='Service' or obj['disposition']!='preserve' or obj['name']!=change['name']
+            or versions.get(change['name'])!=(change['before_rv'],change['after_rv'])
+            or obj['uid']!=change['uid'] or obj['resourceVersion']!=change['before_rv']
+            or canonical(obj['desired'])!=change['semantic_sha256'] or not re.fullmatch('[0-9]{1,20}',change['after_rv'])):fail()
+        obj['resourceVersion']=change['after_rv']
+    required={i for i,obj in enumerate(before['nonnats_binding']['objects']) if obj['kind']=='Service' and obj['name'] in versions}
+    if seen!=required or {change['name'] for change in repair['changes']}!=set(versions):fail()
+    after['events'].append(event)
+    deterministic=json.dumps(after,sort_keys=True,indent=2).encode()+b'\n'
+    if hashlib.sha256(deterministic).hexdigest()!=repair['after_checkpoint_sha256']:fail()
+    if after['nonnats_binding']!=values['checkpoint']['nonnats_binding'] or after['nonnats']!=values['checkpoint']['nonnats']:fail()
+    if values['checkpoint']['events'][:len(after['events'])]!=after['events']:fail()
+
+
 def pending_request_accepted(installed,path,closure):
     installed=Path(installed);path=Path(path)
     if path.parent!=installed/'journal' or not re.fullmatch('[a-f0-9]{64}\\.json',path.name):fail()
     row=document(path)
     if row.get('phase')=='COMPLETE':return
+    terminal=terminal_finish_disposition(installed,path)
+    if terminal is not None:return terminal
     request=row.get('request',{})
+    if request.get('operation')==MEDIA_ABORT_OPERATION:
+        base=guard.ROOT/('rollout-'+MEDIA_ABORT_OPERATION)
+        verify_media_abort_terminal(base,document(base/'checkpoint.json'))
+        if path.name!=MEDIA_ABORT_FINISH:fail()
+        return
     if request.get('operation')=='a83c5bdb26f1':
         from operator_reset import verify_terminal as verify_reset,verify_journals
         base=guard.ROOT/'rollout-a83c5bdb26f1'
@@ -1056,6 +1803,8 @@ def pending_request_accepted(installed,path,closure):
         journal_binding(installed,{path.name:closure['journals'][path.name]})
         return
     operation=path.stem[:12];wanted=PREBUILD_RECEIPTS.get(operation)
+    if operation==STORY_PREFENCE_NONCE[:12]:
+        return _verify_story_prefence_rejection(installed,path,row)
     if operation==SOURCE_CAPTURE_REJECTION['operation']:
         return _verify_source_capture_rejection(installed,path,row)
     if operation in SEARCH_BOOTSTRAP_REJECTIONS:
@@ -1182,7 +1931,11 @@ def pending_abandonment_names(installed):
         phase=row.get('phase')
         if phase=='COMPLETE':continue
         if phase!='STARTED':fail()
-        if row.get('request',{}).get('operation')=='a83c5bdb26f1':
+        if terminal_finish_disposition(installed,path) is not None:continue
+        if path.name==STORY_PREFENCE_NONCE+'.json':
+            _verify_story_prefence_rejection(installed,path,row)
+            continue
+        if row.get('request',{}).get('operation') in ('a83c5bdb26f1',MEDIA_ABORT_OPERATION):
             pending_request_accepted(installed,path,{'journals':{}})
             continue
         # Separately verified exact dispositions do not rewrite the old inventory.

@@ -53,5 +53,49 @@ class OwnedPlanTest(unittest.TestCase):
         with self.assertRaisesRegex(nonnats_runtime.Blocked,'owned_workload_changed'):
             nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage,applied=True)
 
+class PreservedServiceTest(unittest.TestCase):
+    def setUp(self):
+        self.current={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-auth','namespace':'voice-staging',
+            'uid':'same-uid','resourceVersion':'3320022','labels':{'app':'voice-auth'}},
+            'spec':{'selector':{'app':'voice-auth'},'ports':[{'port':8080,'targetPort':8080}],
+                    'clusterIP':'10.43.1.2','type':'ClusterIP'}}
+        desired=nonnats_plan.semantic(self.current)
+        self.plan={'checks':[{'objects':[{'kind':'Service','name':'voice-auth','desired':desired}]}]}
+        self.binding={'schema':nonnats_plan.BINDING_SCHEMA,'plan_sha256':nonnats_plan.digest(self.plan),
+            'objects':[{'kind':'Service','name':'voice-auth','namespace':'voice-staging','uid':'same-uid',
+                'resourceVersion':'3310867','disposition':'preserve','desired':desired}]}
+        self.stage=SimpleNamespace(snapshots={})
+        self.kube=SimpleNamespace(get=lambda *args:copy.deepcopy(self.current))
+
+    def test_full_apply_bookkeeping_rv_change_keeps_preserved_service(self):
+        self.current['metadata']['annotations']={'kubectl.kubernetes.io/last-applied-configuration':'updated'}
+        before=copy.deepcopy(self.binding)
+        result=nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage,applied=True)
+        self.assertTrue(result['verified'])
+        self.assertEqual(result['owned_resources'][0]['resourceVersion'],'3320022')
+        self.assertEqual(self.binding,before)
+
+    def test_preapply_and_secret_version_checks_remain_strict(self):
+        with self.assertRaisesRegex(nonnats_runtime.Blocked,'live_object_identity_changed'):
+            nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage)
+        self.current['kind']='Secret';self.binding['objects'][0]['kind']='Secret'
+        self.plan['checks'][0]['objects'][0]['kind']='Secret'
+        self.binding['plan_sha256']=nonnats_plan.digest(self.plan)
+        with self.assertRaisesRegex(nonnats_runtime.Blocked,'live_object_identity_changed'):
+            nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage,applied=True)
+
+    def test_service_identity_and_full_semantic_drift_still_refuse(self):
+        for field in ('uid','namespace','name','labels','annotations','ownerReferences','finalizers','selector','ports','clusterIP'):
+            with self.subTest(field=field):
+                before=copy.deepcopy(self.current)
+                if field in ('selector','ports','clusterIP'):self.current['spec'][field]='changed'
+                elif field in ('annotations','labels'):self.current['metadata'][field]={'foreign':'changed'}
+                elif field=='ownerReferences':self.current['metadata'][field]=[{'uid':'foreign'}]
+                elif field=='finalizers':self.current['metadata'][field]=['foreign']
+                else:self.current['metadata'][field]='changed'
+                with self.assertRaises(nonnats_runtime.Blocked):
+                    nonnats_runtime.verify(self.kube,self.plan,self.binding,self.stage,applied=True)
+                self.current=before
+
 def setitem(mapping,key,value):mapping[key]=value
 if __name__=='__main__':unittest.main()

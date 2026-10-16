@@ -5,6 +5,97 @@ the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.
 The selected PVC/PV UID and physical path remain bound throughout the operation.
 
+### Explicit baseline restoration after media startup failure
+
+The separate, exact `0e2be62a3326` original-application restoration failed during
+startup and was refenced. Its original checkpoint, failed restoration checkpoint,
+private progress, compatibility note and absent finish response remain unchanged
+evidence. The frozen original-image runner must not be rerun.
+
+The reviewed alternative establishes a `VERIFIED_GATED_TARGET_BASELINE` using
+current master source captured through the existing CI/image-lock authority,
+canonical rendered manifests and dedicated
+[media principal material](../../../deploy/staging/media-principal.md). It retains
+the existing Hub/PVC, 45-consumer contract and all 16 completed database Jobs;
+neither NATS nor database migrations are replayed. Before releasing the marker,
+it proves the exact 22 target templates/UIDs and readiness, all 19 signed service
+actors and 18 live leaf connections, and restores the owned User/Space startup
+override. A bounded private error/status/container-log capture precedes refencing
+if startup fails; public output contains only fixed stage and safe error fields.
+The immutable prepare record binds the canonical full normalized resource set;
+both apply admission and terminal verification reject any subsequent change,
+including non-Deployment configuration, even if closure hashes are recomputed.
+
+The single terminal remains `ABORTED`, with deployment PASS and rollback
+eligibility both false. It admits the existing `--install --upgrade-idle-media-v1`
+transition from the exact retained 1295 helper. A fresh ordinary populated FULL
+and actual application/principal checks provide new-build acceptance separately;
+the ignored recovery runner is not a permanent installed CLI.
+Any nonzero recovery result after mutation requires stopping and reconciling the
+saved private progress manually. Do not rerun it: the exact checkpoint admission
+refuses a changed or partially restored state.
+
+A request reported as `BLOCKED` may already have completed migrations or other
+side effects. Correlate its journal, checkpoint and resource identities before
+choosing recovery; retain private failure evidence before cleanup or refencing.
+Passing source/image gates does not prove runtime readiness or product usability.
+Revalidate current source authority and the one-hour prepared binding at execution;
+never reuse expired authority. The [deployment diagnostics runbook](../../../docs/DEPLOYMENT.md)
+provides the bounded status/report commands for that investigation.
+
+The subsequent target apply stopped after 22 Service/NetworkPolicy responses and
+an Auth Deployment CAS: Kubernetes added its controller-owned
+`deployment.kubernetes.io/revision` annotation after the template changed.
+Canonical resource semantics exclude that top-level annotation only on
+Deployments; application annotations and the complete Pod template remain bound.
+An absent completion event does not prove that its preceding CAS had no effect.
+
+The exact failed-apply successor uses the distinct
+`operator-media-target-reconciled` evidence namespace. It preserves the original
+target files, failed checkpoint and frozen runner, reconciles every resource
+against the retained before/target inventory, and obtains fresh source/CI
+authority. The canonical terminal verifier checks this fixed boundary and rejects
+cross-schema replay, mixed partial states and changed retained evidence. Admin's
+three outside-owned objects remain preserved; their updated semantic digests are
+derived from retained descriptors, never repinned from live state. Ordinary FULL
+still includes Admin normally. Capture, cleanup and refence outcomes are recorded
+separately: a cleanup error cannot discard a completed refence proof, and zero
+replicas alone cannot establish that proof. Historical UNKNOWN is not rewritten
+merely because a later read-only physical fence check succeeds.
+
+Recovery inventory fixtures must use independently recorded literal resource
+names. A successor admission initially omitted `voice-` from six NetworkPolicy
+names; tests generated their inventory from that same incorrect constant and
+therefore missed the mismatch. The corrected regression uses all 22 names from
+the retained failed progress, including their prefixes and order, and rejects
+missing-prefix aliases and reordered events. That admission refusal created only
+the byte-identical retained checkpoint and original-runner copies; these files
+are preserved and accepted only when `retain()` confirms exact existing bytes.
+
+The subsequent target restart reached readiness for 21 workloads, but Gateway
+refused startup because its staging manifest omitted
+`GATEWAY_SESSION_EPOCH_STRICT=true`. Compose's wiring test already required this
+flag; it did not cover the staging rendered target. Canonical staging compilation
+now requires the explicit strict value, existing Redis ConfigMap reference and
+Gateway signer Secret references/mount before planning application changes.
+This static check does not prove runtime readiness or authenticated product flows;
+acceptance still needs fresh Auth tokens carrying the required session epoch.
+The failed restart was refenced successfully. Preserve its checkpoint, progress,
+private failure captures and all earlier evidence; the existing reconciliation
+runner cannot be replayed against that new boundary.
+
+The fixed `operator-media-target-gateway` successor separately retains the exact
+successfully refenced restart checkpoint, prior prepared/normalized/source and
+progress bytes, original runner and both Gateway failure logs. Its canonical
+verifier retains the earlier failure chain, requires all 46 resources to match
+the previous target while fenced (21 Deployment targets, 19 Services and six
+NetworkPolicies), and checks all 22 workloads including the independently
+retained Hub. UID drift, an old/target mixture or a residual User bootstrap
+override blocks admission. A fresh accepted source capture and exclusive build
+directory bind the corrected Gateway configuration; the old authority is never
+reused. Its distinct terminal schema retains the same full readiness, signed
+actor, storage, resource and migration checks and does not claim deployment PASS.
+
 ### Explicit reset after retained records expire
 
 The native `/msgs/` boundary includes `index.db`. A retention expiry can change
@@ -974,3 +1065,108 @@ the application is not Ready: a current container attempt and unique immutable
 runtime imageID must match its owned ReplicaSet and current deployment template.
 Missing or ambiguous attempts, foreign ownership and changed templates refuse
 capture. HUB live census and graceful shutdown health requirements are unchanged.
+
+
+Leaf readiness and monitoring are separate checks. The October 15 recovery
+reached Ready for all 22 workloads but its leaf monitoring request failed because
+the shared leaf configuration did not enable HTTP monitoring. Staging leaf
+Deployment arguments now bind both the client and monitor to 127.0.0.1, with
+monitor port 8222; the shared ConfigMap is preserved. The Realtime dual-leaf proof
+uses client/monitor ports 4222/8222 and 4223/8223. Canonical target preflight rejects
+missing, duplicate, public-host, or alternate leaf-monitor arguments and changed
+config mounts before applying a target. An isolated pinned-image linked-Hub/two-
+leaf proof verifies the actual listener addresses and the leafz response contract.
+
+The fixed media_monitor helper identifies the Hub varz or allowlisted leaf leafz
+request in command failure diagnostics. Command failures retain exit/timeout,
+a fixed stderr reason, and the hash/length of bounded stderr, never its contents
+in public output. Recovery consumers must retain that diagnostic with the current
+failure and update the current checkpoint error; copied historical checkpoint
+errors are not the cause of a newer failure. The ready-baseline-proof failure at
+checkpoint cf937 must be read from its retained progress/failure records (the
+historical error field still names the earlier Gateway timeout). Preserve those
+bytes. Neither all-ready snapshots nor this monitoring correction authorizes
+replaying an old runner or claims terminal deployment acceptance.
+
+
+The exact cf937 monitoring-failure successor uses the separate
+operator-media-target-monitor namespace and voice-media-target-monitor-closure-v1
+receipt. Admission binds all 30 retained members, including the prior 21-member
+history, cf937 bytes, gateway source/prepared/normalized/progress artifacts, the
+202e runner and current command_failed record. It reconstructs the failed state
+from the prior boundary plus progress, requires verified refence, all 46 resources
+at the prior target with unchanged UIDs, and all 22 paused workload snapshots
+including Hub separately. User bootstrap overrides, foreign rows, changed history,
+old terminal namespaces and source/CI mismatch refuse admission. A fresh accepted
+source capture and full normalized digest are required; only the new Deployment
+templates enable monitoring. Existing ConfigMaps, storage, migrations and prior
+runner/artifact bytes are retained. The new runner records current failure error
+and safe monitor diagnostics without altering historical checkpoints. Independent
+terminal readback and live Admin preservation remain mandatory before and after
+helper installation; this closure still does not mean ordinary FULL or product
+acceptance passed.
+
+The subsequent ordinary FULL request `8d65ee47ce1b` failed before fencing: its
+isolated Story writer called the real `CreateStory` RPC without a User privacy
+provider and received `Unavailable`. HTTP health did not prove writer readiness.
+The disposable probe now supplies `GetPrivacySettings` only for its generated
+author and the `story` caller on loopback port 9091; the fixture sets
+`USER_GRPC_ADDR` to that endpoint. The production Story privacy check remains
+fail-closed. A successful writer must observe that RPC, preserve SQL/schema
+assertions, and pass the independent wrong-count negative control (exit 17).
+Rebuild `story-current4-probe` when changing this fixture; replacing Python alone
+does not activate the dependency. Safe fixed writer failure labels and the
+original command action are captured before Docker cleanup.
+
+After reviewing the new bundle, `installer.py --upgrade-idle-story-fixture-v1`
+accepts only installed binding `7f5b901d8429f2d560bb7f71481baabfd90ad2303cfd1b06c8569d94ff87920b`.
+It requires the successful monitor checkpoint `bfa1426b` / receipt `f951ce87`
+and the exact failed pre-fence request, source tree/custody, journal, response and
+public report bytes. The request is classified `ABANDONED_PRECHECKPOINT` with
+`BLOCKED` status; its STARTED journal and all retained evidence remain unchanged.
+Any operation/build directory, changed source, request or terminal evidence
+refuses admission. This upgrade authorizes no rollback or replay and makes no
+ordinary FULL acceptance claim. Root must submit a fresh ordinary request and
+complete deployment and product acceptance after installation.
+
+Before swapping helpers, validate every installed journal together. The exact
+Story disposition is excluded from the legacy abandonment census only after its
+strict retained-evidence verifier succeeds; the legacy 29-entry receipt stays
+byte-identical. An isolated new-request test misses this interaction: regression
+coverage must include both inventories, corrupt Story evidence and an unknown
+STARTED nonce, plus the complete installer admission path.
+
+Check the reviewed ACL proof digest and generation before costly preparation.
+When the source ACL changes, retain the reviewed delta and its signed-grant,
+server-authentication and bootstrap API evidence before updating proof variables;
+ACL compatibility does not establish business publication, ACK or product acceptance.
+After full apply, preserved Services may have new resource versions from kubectl
+bookkeeping. Finish still requires their original UID and complete desired
+semantics, including labels, annotations, selectors and ports. Pre-apply version
+checks and Secret preservation remain strict; this is not a general version waiver.
+
+A failed finish request can remain STARTED after a separate finish completes the
+same operation. Do not rewrite its journal, response or public report to make an
+idle helper upgrade pass. Root may retain a private immutable
+`terminal-finish-disposition-<failed-nonce>.json` with schema
+`voice-terminal-finish-disposition-v1`. Its closed file map pins both finish
+journals/responses/reports, terminal checkpoint and apply authorization; it binds
+the operation and captured helper. Admission requires the same source, dispatcher
+run, attempt and apply claim, a successful completion and released terminal marker.
+The failed request remains BLOCKED. This grants no replay or new deployment authority.
+Any retained Service RV reconciliation must include its original checkpoint and
+receipt and reproduce the exact recorded metadata-only change. Both the legacy
+pending census and per-journal admission verify this disposition, and the existing
+idle upgrade transaction rechecks it after the code swap. Use that internal
+transaction with reviewed exact predecessor/destination bindings and fresh immutable
+receipt names; no new public upgrade command or failed-nonce exception is needed.
+
+Historical source admission pins content and enforces safe live custody. Its
+full metadata fingerprint is valid only within a read or across the locked
+helper swap: `installed/sources` is shared, so a later operation legitimately
+changes that parent's timestamps and link count. Do not persist that mutable
+parent fingerprint as a permanent historical equality or repin it after each
+operation. The Story boundary retains exact content, ownership/mode/link checks
+and per-read race checks; the installer still refuses metadata changes during
+its swap. Original per-entry metadata was not retained, so this does not claim
+historical inode/timestamp equality.

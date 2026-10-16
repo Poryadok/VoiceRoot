@@ -12,11 +12,31 @@ import guard,story_witness
 POSTGRES='docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb'
 IMAGE='ghcr.io/poryadok/voiceroot/story@sha256:'
 LABEL='voice.story-current4.fixture'
+WRITER_ERRORS=frozenset(('story_compatibility_fixture_create_story_unavailable',
+    'story_compatibility_fixture_positive_failed','story_compatibility_fixture_negative_control_failed'))
 CALLER='nats-rollout-preservation/story-current4-probe'
 FIXTURE='nats-rollout-preservation/story_fixture.py'
 SQL='src/backend/migrations/story_db/'
 CONTRACT='health/text-writer/sql-defaults/missing-profile/wrong-count/schema-preservation/cleanup/current4-v1'
 CATALOG="SELECT 'R|'||c.relname||'|'||c.relkind::text FROM pg_class c WHERE c.relnamespace='public'::regnamespace\nUNION ALL SELECT 'A|'||c.relname||'|'||a.attnum||'|'||a.attname||'|'||format_type(a.atttypid,a.atttypmod)||'|'||a.attnotnull||'|'||a.attidentity::text||'|'||a.attgenerated::text||'|'||COALESCE(pg_get_expr(d.adbin,d.adrelid),'') FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum WHERE c.relnamespace='public'::regnamespace AND a.attnum>0 AND NOT a.attisdropped\nUNION ALL SELECT 'C|'||conname||'|'||pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace='public'::regnamespace\nUNION ALL SELECT 'I|'||indexname||'|'||indexdef FROM pg_indexes WHERE schemaname='public'\nUNION ALL SELECT 'T|'||tgname||'|'||pg_get_triggerdef(oid) FROM pg_trigger WHERE NOT tgisinternal\nUNION ALL SELECT 'F|'||proname||'|'||pg_get_function_identity_arguments(oid)||'|'||pg_get_functiondef(oid) FROM pg_proc WHERE pronamespace='public'::regnamespace AND prokind IN ('f','p') ORDER BY 1"
+
+def validate_writer(positive,positive_exit,negative,negative_exit):
+    wanted={'status':'PASS','create_grpc_code':'OK','response_identity_type_verified':True,
+        'sql_fields_verified':True,'story_count':1,'default_ttl_24h_verified':True,
+        'archive_plus30d_verified':True,'missing_profile_code':'Unauthenticated',
+        'negative_count_unchanged':True,'unrelated_row_count':0,'row_retained':True}
+    if positive=={'status':'FAIL','phase':'create_story','grpc_code':'Unavailable'} and positive_exit==17:
+        raise Blocked('story_compatibility_fixture_create_story_unavailable')
+    if positive!=wanted or positive_exit!=0:raise Blocked('story_compatibility_fixture_positive_failed')
+    if negative!={'status':'FAIL','phase':'wrong_expected_row_count'} or negative_exit!=17:
+        raise Blocked('story_compatibility_fixture_negative_control_failed')
+
+def fixture_failure(error,phase,*,invalid=False):
+    from deployment_report import capture_failure
+    result=error if not invalid and error.args in [(label,) for label in WRITER_ERRORS] else Blocked('story_compatibility_fixture_'+phase+('_invalid' if invalid else '_blocked'))
+    if hasattr(error,'diagnostic'):result.diagnostic=error.diagnostic.copy()
+    capture_failure(result) # Snapshot the failing action before finally runs Docker cleanup.
+    return result
 
 def prove(child,config,source,code,binding,unchanged):
     """Return evidence only after real probe PASS and complete owned cleanup."""
@@ -86,7 +106,8 @@ def prove(child,config,source,code,binding,unchanged):
         phase='story'
         app=start('app',image,['--network','container:'+pg,'--user','65532:65532',
             '-e','DATABASE_URL=postgres://voice:voice@127.0.0.1:5432/story_db?sslmode=disable',
-            '-e','LISTEN_ADDR=:8080','-e','STORY_GRPC_LISTEN=:9090'])
+            '-e','LISTEN_ADDR=:8080','-e','STORY_GRPC_LISTEN=:9090',
+            '-e','USER_GRPC_ADDR=127.0.0.1:9091'])
         binary=docker(['exec',app,'sha256sum','/service']).split()[0];story_witness.digest(binary)
         for _ in range(45):
             try:
@@ -110,12 +131,7 @@ def prove(child,config,source,code,binding,unchanged):
             if not separator or not exit_code.isdigit():raise Blocked('story_compatibility_fixture_probe_invalid')
             return json.loads(value.strip()),int(exit_code)
         positive,positive_exit=invoke('positive');negative,negative_exit=invoke('negative',True)
-        wanted={'status':'PASS','create_grpc_code':'OK','response_identity_type_verified':True,
-            'sql_fields_verified':True,'story_count':1,'default_ttl_24h_verified':True,
-            'archive_plus30d_verified':True,'missing_profile_code':'Unauthenticated',
-            'negative_count_unchanged':True,'unrelated_row_count':0,'row_retained':True}
-        if positive!=wanted or positive_exit!=0 or negative!={'status':'FAIL','phase':'wrong_expected_row_count'} or negative_exit!=17:
-            raise Blocked('story_compatibility_fixture_writer_failed')
+        validate_writer(positive,positive_exit,negative,negative_exit)
         phase='schema_after';after=schema()
         if before!=after or sql('SELECT count(*) FROM stories')!='1':raise Blocked('story_compatibility_fixture_schema_changed')
         unchanged()
@@ -134,9 +150,11 @@ def prove(child,config,source,code,binding,unchanged):
             'tools':{'postgres':POSTGRES,'caller':image},
             'execution':{'helper_binding_sha256':canonical(binding),'caller_sha256':binding[CALLER],'fixture_sha256':binding[FIXTURE]}}
     except Blocked as error:
-        raise Blocked('story_compatibility_fixture_'+phase+'_blocked') from error
-    except (OSError,ValueError,KeyError,TypeError):
-        raise Blocked('story_compatibility_fixture_'+phase+'_invalid') from None
+        captured=fixture_failure(error,phase)
+        if captured is error:raise
+        raise captured from error
+    except (OSError,ValueError,KeyError,TypeError) as error:
+        raise fixture_failure(error,phase,invalid=True) from None
     finally:
         cleanup=True
         for name in reversed(owned):

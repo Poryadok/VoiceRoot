@@ -1078,7 +1078,56 @@ After independent terminal-reset readback, install the reviewed helper successor
 
 To accept the new build after reset, create recent application message/file data, run an ordinary nonreset FULL with its required source/image/stack-lock gates, then verify the same data after fresh login and again after a deliberate restart with recorded workload identity/readiness. Bind the final FULL checkpoint to its adopted target templates, not the old rollback templates. A rollout restart changes its restart annotation: record the exact owned annotation and require all other template fields and images to remain unchanged. Prove replacement through Pod owner chains and old/new UIDs. The empty baseline proves baseline creation, not application quality or preservation of later writes.
 
-Safe agent-visible deployment diagnostics remain follow-up work under `CI-A1-DEPLOY-DIAGNOSTICS`; do not describe them as implemented. Use the existing bounded journal/checkpoint correlation and protected evidence. Empty output or a wrapper exception is not a root cause and does not authorize a blind retry; keep credentials, Secret bodies and backups out of public diagnostics.
+The rollout bridge publishes the versioned `voice-deployment-report-v1` projection
+under `installed/responses/<request-nonce>.report.json`. Each atomic root-owned
+`root:pmd` mode `0440` report is bound to one request nonce, run ID/attempt and
+source SHA. Reports remain on the host with the existing request journal (no
+automatic deletion); CI artifacts retain them for 30 days. Root-private journals,
+checkpoints, command output and credentials remain private.
+
+An agent can read an exact existing report without a GitHub token or a running
+bridge service:
+
+```sh
+python3 /var/lib/voice-nats-preservation/installed/code/nats-rollout-preservation/bridge_client.py report REQUEST_NONCE
+```
+
+The client `collect-reports` command reads the current job's retained request
+index in `RUNNER_TEMP`, verifies run/attempt/source identity and exports bounded
+JSON. Staging CI runs collection and artifact upload with `always()` and
+`continue-on-error`; diagnostic failure cannot replace the original deployment
+result. Missing/invalid reports print `NATS_DEPLOYMENT_REPORT=UNAVAILABLE`.
+Cancellation or a host outage can prevent upload; the last host report remains
+the durable record. A report's `updated_at` is Unix UTC seconds: check its age
+before treating a `STARTED` record as current progress.
+
+The schema contains only request identity/status, operation identity/status/error,
+helper binding digest, timestamp, finite stage/current action/last completed
+action, stable error code, command exit/timeout/cause and finite effect states.
+`UNKNOWN` means evidence is absent; `PRESENT` means a receipt is recorded, not
+that a new verification has occurred. Maintenance, fencing, original broker
+orderly exit, finalizer removal, cut, preservation, apply, restart and release
+are reported separately. Request failure is distinct from operation failure.
+`recovery_authorized` is always false; no report authorizes a retry or weakens
+preservation guards. An application permission violation is distinct from an
+OS permission error; arbitrary stderr and exception text are never exported.
+The original failure action is captured before safety cleanup; later commands
+cannot overwrite that exception's finite action/exit/cause.
+
+For historical failures, root can use the same reviewed module from captured
+source before upgrading the installed helper:
+
+```sh
+python3 CAPTURED_CODE/nats-rollout-preservation/deployment_report.py --export-historical REQUEST_NONCE OPERATION
+```
+
+This validates the exact retained journal/operation binding, reads the checkpoint
+under the existing operation lock and writes only its sanitized report. It does
+not replay prepare, modify checkpoints or authorization, or mutate workloads.
+Historical current-exception causes remain `unknown`; a checkpoint's older
+`operation_error` is not the current request error. Independent installation,
+agent readback and an ordinary rollout remain acceptance requirements for
+`CI-A1-DEPLOY-DIAGNOSTICS`; isolated failure tests do not prove live deployment.
 
 For application smoke, use the existing truthful smoke `User-Agent` consistently for API/object/WebSocket transport where applicable. Pace login attempts against the existing five-attempts-per-IP/15-minute limit and honor rate-limit responses; shared runner attempts count against the same budget. See [testing guidance](TESTING.md) and [authentication limits](features/auth-and-contacts.md#сессии-и-безопасность). Do not spoof a browser, rotate identities to evade limits, or weaken WAF/auth/rate-limit policy to obtain a passing smoke.
 

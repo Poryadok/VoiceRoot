@@ -7,8 +7,11 @@ import re
 import stat
 import sys
 import time
+import tempfile
 sys.path.insert(0,str(Path(__file__).resolve().parent))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
 import bridge
+import deployment_report
 
 INSTALLED=Path('/var/lib/voice-nats-preservation/installed')
 
@@ -31,6 +34,7 @@ def request(args,environment):
         row={'action':action,'operation':args[1],'claim_rv':args[2],'run_id':int(args[3]),'token':environment['GITHUB_TOKEN']}
     elif action=='status' and len(args)==2:row={'action':action,'operation':args[1]}
     else:raise bridge.BridgeError('bridge_client_arguments_invalid')
+    row.update(run_attempt=int(environment['GITHUB_RUN_ATTEMPT']),report_run_id=int(environment['GITHUB_RUN_ID']),report_source_sha=environment['GITHUB_SHA'])
     # Same job/attempt/action payload always resumes the same request. Status
     # is observational, so each poll has a distinct nonce and fresh result.
     public={k:v for k,v in row.items() if k!='token'}
@@ -65,13 +69,67 @@ def submit(row,installed=INSTALLED,timeout=2400):
             if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022 or info.st_nlink!=1 or not 1<=info.st_size<=65536:raise bridge.BridgeError('bridge_client_response_invalid')
             result=json.loads(os.read(fd,65537))
         finally:os.close(fd)
-        if result.get('status')=='BLOCKED':raise bridge.BridgeError('bridge_root_request_blocked')
+        if result.get('status')=='BLOCKED':
+            error=bridge.BridgeError('bridge_root_request_blocked')
+            error.safe_result={'status':'BLOCKED','error':deployment_report.code(result.get('error'))}
+            raise error
         return result
     raise bridge.BridgeError('bridge_response_timeout_operation_requires_status')
 
+def output_directory(environment):
+    base=Path(environment['RUNNER_TEMP'])
+    info=base.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or info.st_mode&0o022:raise ValueError('report_output_directory_invalid')
+    return Path(tempfile.mkdtemp(prefix='voice-deployment-reports-',dir=base))
+
+def collect(nonce,environment,installed=INSTALLED,*,target=None):
+    if not re.fullmatch('[a-f0-9]{64}',nonce):raise ValueError('report_nonce_invalid')
+    row=deployment_report.read(Path(installed)/'responses'/(nonce+'.report.json'),nonce=nonce,
+        run_id=int(environment['GITHUB_RUN_ID']),run_attempt=int(environment['GITHUB_RUN_ATTEMPT']),source_sha=environment['GITHUB_SHA'])
+    target=output_directory(environment) if target is None else Path(target)
+    info=target.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or info.st_mode&0o077:raise ValueError('report_output_directory_invalid')
+    destination=target/(nonce+'.deployment-report.json')
+    # Never follow runner workspace links or retain a previous attempt's file.
+    fd=os.open(destination,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+    with os.fdopen(fd,'w') as output:json.dump(row,output,sort_keys=True)
+    line='NATS_DEPLOYMENT_REPORT request='+row['request_status']+' stage='+row['stage']+' error='+row['error_code']+' operation='+str(row['operation'])+' state='+row['operation_status']+' fence='+row['effects']['fence']+' updated_at='+str(row['updated_at'])
+    print(line)
+    if environment.get('GITHUB_STEP_SUMMARY'):
+        with open(environment['GITHUB_STEP_SUMMARY'],'a') as output:output.write(line+'\n\n')
+    return row
+
+def collect_all(environment):
+    index=Path(environment['RUNNER_TEMP'])/('voice-deployment-'+environment['GITHUB_RUN_ID']+'-'+environment['GITHUB_RUN_ATTEMPT']+'.requests')
+    if index.is_symlink() or index.stat().st_size>8192:raise ValueError('report_index_invalid')
+    nonces=index.read_text().splitlines()
+    if not 1<=len(nonces)<=64:raise ValueError('report_index_invalid')
+    failed=False
+    target=output_directory(environment)
+    for nonce in dict.fromkeys(nonces):
+        try:collect(nonce,environment,target=target)
+        except Exception:
+            failed=True;print('NATS_DEPLOYMENT_REPORT=UNAVAILABLE')
+    if environment.get('GITHUB_OUTPUT'):
+        with open(environment['GITHUB_OUTPUT'],'a') as output:output.write('report_directory='+str(target)+'\n')
+    if failed:raise ValueError('report_collection_incomplete')
+
 if __name__=='__main__':
     try:
-        result=submit(request(sys.argv[1:],os.environ))
+        if sys.argv[1:]==['collect-reports']:
+            collect_all(os.environ);sys.exit(0)
+        if len(sys.argv)==3 and sys.argv[1]=='report':
+            if not re.fullmatch('[a-f0-9]{64}',sys.argv[2]):raise ValueError('report_nonce_invalid')
+            print(json.dumps(deployment_report.read(INSTALLED/'responses'/(sys.argv[2]+'.report.json'),nonce=sys.argv[2]),sort_keys=True));sys.exit(0)
+        row=request(sys.argv[1:],os.environ)
+        if os.environ.get('RUNNER_TEMP'):
+            index=Path(os.environ['RUNNER_TEMP'])/('voice-deployment-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT']+'.requests')
+            fd=os.open(index,os.O_WRONLY|os.O_CREAT|os.O_APPEND|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,'w') as output:output.write(row['nonce']+'\n')
+        try:result=submit(row)
+        finally:
+            try:collect(row['nonce'],os.environ)
+            except Exception:print('NATS_DEPLOYMENT_REPORT=UNAVAILABLE',file=sys.stderr)
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as output:
                 for key in ('operation','cipher_path','artifact_name','challenge','authorization','changed_services','deploy_mode','source_sha','upload_nonce',
@@ -81,4 +139,6 @@ if __name__=='__main__':
                         if not isinstance(value,str) or '\n' in value or '\r' in value:raise bridge.BridgeError('bridge_output_invalid')
                         output.write(key+'='+value+'\n')
         print(json.dumps(result,sort_keys=True))
-    except Exception:print('NATS_ROLLOUT_BRIDGE=BLOCKED',file=sys.stderr);sys.exit(1)
+    except Exception as error:
+        if hasattr(error,'safe_result'):print(json.dumps(error.safe_result,sort_keys=True))
+        print('NATS_ROLLOUT_BRIDGE=BLOCKED',file=sys.stderr);sys.exit(1)

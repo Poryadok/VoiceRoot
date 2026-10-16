@@ -1,10 +1,12 @@
 package sessionfloor
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"io"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -79,8 +81,25 @@ func TestRequireCurrentUsesRequestBoundVoiceServicePrincipalAndRejectsStaleFloor
 	require.True(t, serverImpl.seen)
 	require.Error(t, client.RequireCurrent(context.Background(), accountID, 4))
 	require.Error(t, client.RequireCurrent(context.Background(), "not-an-account", 5))
-	serverImpl.err = status.Error(codes.Unavailable, "floor lookup unavailable")
-	require.Equal(t, codes.Unavailable, status.Code(client.RequireCurrent(context.Background(), accountID, 5)))
+	var logs bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	defer slog.SetDefault(old)
+	for _, test := range []struct {
+		code  codes.Code
+		cause string
+	}{
+		{codes.Unavailable, "grpc_unavailable"}, {codes.DeadlineExceeded, "timeout"},
+		{codes.Unauthenticated, "grpc_unauthenticated"},
+	} {
+		logs.Reset()
+		serverImpl.err = status.Error(test.code, "private-auth-error-canary")
+		require.Equal(t, codes.Unavailable, status.Code(client.RequireCurrent(context.Background(), accountID, 5)))
+		require.Contains(t, logs.String(), `"stage":"auth_floor_call"`)
+		require.Contains(t, logs.String(), `"cause":"`+test.cause+`"`)
+		require.NotContains(t, logs.String(), "private-auth-error-canary")
+		require.NotContains(t, logs.String(), accountID)
+	}
 }
 
 func TestCanonicalAccountIDRequiresLowercaseCanonicalUUID(t *testing.T) {
