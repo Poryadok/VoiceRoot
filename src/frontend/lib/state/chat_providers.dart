@@ -683,6 +683,9 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (session == null) return 'not_authenticated';
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
     ChatListItem? archivedItem = sourceItem;
     if (archived) {
       if (archivedItem == null) {
@@ -711,7 +714,14 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (!mounted) return kChatActionStaleContext;
     return switch (result) {
       ChatsApiOk<void>() => () {
-        if (!archived) return _afterRequestAction(chatId, profileId, auth);
+        if (!archived) {
+          return _afterRequestAction(
+            chatId,
+            profileId,
+            auth,
+            expectedNavigationGeneration: navigationGeneration,
+          );
+        }
         if (!_matchesSession(profileId, auth)) {
           return kChatActionStaleContext;
         }
