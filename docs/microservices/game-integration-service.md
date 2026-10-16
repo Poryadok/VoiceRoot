@@ -638,10 +638,35 @@ after restart when GIS and dependencies are healthy. Retries use exponential
 backoff from one second to a 30-second cap. Timeouts, connection loss, and
 owner `Unavailable`/`DeadlineExceeded` are unknown outcomes: keep the stage,
 retry the exact same operation ID and request, and require the owner receipt
-before advancing. Permanent owner rejection is durably reported at its stage;
-it never marks the session active. An exact same-operation request can resume
-after the underlying cause is corrected. No dependency-outage completion SLA
-is implied.
+before advancing. Only an allow-listed durable owner rejection is terminal:
+the private RPC returns `google.rpc.ErrorInfo` reason
+`GIS_PERMANENT_OWNER_REJECTION` bound to the exact owner domain, RPC,
+category, operation ID, and canonical request hash. GIS validates every
+field against the request it sent; generic gRPC codes, malformed requests,
+principal/setup failures, and persistence errors remain retryable or
+unknown. Chat operation/resource conflicts are terminal; a Chat roster
+`NOT_FOUND` is terminal only after the durable Chat-create receipt has been
+recorded. Voice provisioning conflicts and Role operation conflicts or
+terminal-revoked grants are terminal. A typed rejection marks the create
+operation failed and creates a deterministic failure operation; when Voice
+resources exist, that operation persists Voice-close and Role-revoke receipts
+before the session reaches `failed`. An error never marks the session active.
+If close wins while a create-stage owner call may have
+committed, the close operation replays that same owner key and persists its
+receipt before terminal cleanup. If no Voice room exists after reconciliation,
+it closes without Voice/Role calls; otherwise it runs the terminal cleanup
+stages and retains the durable receipts. No
+dependency-outage completion SLA is implied.
+
+During close reconciliation, an exact typed Chat-roster `resource_missing`
+after the saved Chat-create receipt and Role-apply `terminal_revoked` are the
+only rejections that prove no effect for the rejected stage. GIS durably records
+that classification and advances without inventing a receipt; normal close
+cleanup still runs when a Voice room exists. A typed operation or Chat resource
+conflict may hide a prior effect, so GIS records an explicit
+`create_reconcile_unresolved:<stage>:<category>` close stage, keeps the session
+`closing`, sets no automatic retry, and returns that same custody on replay.
+Unknown and generic errors retain exact-request retry behavior.
 
 Party Chat provisioning is keyed by the party external key and produces one
 stable mapping/receipt shared by its matches. A match or fleet session keeps
@@ -710,11 +735,8 @@ part of this delivery lane; no game server receives master NATS access. The
 controlled receiver remains test infrastructure, not a public SDK product.
 
 GIS uses forward recovery after any possibly committed owner effect. Chat and
-Voice provide no deletion API, so GIS never deletes resources. A permanent
-create failure with Voice or Role resources enters durable
-`failure_voice_close_pending` then `failure_role_revoke_pending`; GIS persists
-both owner receipts before marking the session terminal `failed`. Explicit
-close and permanent failure compete on one transactionally stored
+Voice provide no deletion API, so GIS never deletes resources. Explicit
+close and failure compete on one transactionally stored
 `terminalization_operation_id` compare-and-set. The winner selects the only
 Voice close/Role revoke owner operation IDs. A losing operation coalesces onto
 the winner and exposes its ID/status/receipt IDs; it never sends a second close

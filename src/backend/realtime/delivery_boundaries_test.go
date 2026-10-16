@@ -10,8 +10,10 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 
 	chatv1 "voice.app/voice/chat/v1"
+	eventsv1 "voice.app/voice/events/v1"
 )
 
 func TestSubscribeRoleEvents_DoesNotRouteVoiceOrUnknownThroughChatID(t *testing.T) {
@@ -39,10 +41,22 @@ func TestSubscribeRoleEvents_DoesNotRouteVoiceOrUnknownThroughChatID(t *testing.
 		_, publishErr := js.Publish(subject, b)
 		require.NoError(t, publishErr)
 	}
+	publishRaw := func(subject string, payload []byte) {
+		_, publishErr := js.Publish(subject, payload)
+		require.NoError(t, publishErr)
+	}
 	p := roleEventJSON{SpaceID: "33333333-3333-3333-3333-333333333333", VoiceRoomID: "44444444-4444-4444-4444-444444444444", ChatID: smuggledChat, RoleID: "55555555-5555-5555-5555-555555555555"}
 	for _, subject := range []string{"role.voice_override_set", "role.voice_override_removed", "role.created", "role.updated", "role.deleted", "role.future_unknown", "role.future.role.chat_override_set"} {
 		publish(subject, p)
 	}
+	typedInvalidation, err := proto.Marshal(&eventsv1.RoleStreamEvent{
+		EventId: "66666666-6666-6666-6666-666666666666",
+		Payload: &eventsv1.RoleStreamEvent_VoiceRoomPolicyInvalidated{
+			VoiceRoomPolicyInvalidated: &eventsv1.VoiceRoomPolicyInvalidated{SpaceId: p.SpaceID, PolicyEpoch: 4},
+		},
+	})
+	require.NoError(t, err)
+	publishRaw("role.voice_policy_invalidated", typedInvalidation)
 	// This final valid event is an ordered barrier on the same serial consumer.
 	publish("role.chat_override_removed", roleEventJSON{SpaceID: p.SpaceID, ChatID: allowedChat, RoleID: p.RoleID})
 	select {

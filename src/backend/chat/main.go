@@ -110,6 +110,7 @@ func main() {
 	var matchSquadGRPCSrv *grpc.Server
 	var matchSquadPrincipalRuntime *matchsquadprincipal.Runtime
 	var accountDeletedConsumerDone <-chan error
+	var chatDeletedOutboxDone <-chan error
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 	if dbURL != "" {
@@ -282,6 +283,15 @@ func main() {
 			defer func() { _ = jsPub.Close() }()
 			jsPub.Logger = logger
 			chatEvents = jsPub
+			outboxDone := make(chan error, 1)
+			chatDeletedOutboxDone = outboxDone
+			go func() {
+				err := (&chatevents.ChatDeletedOutbox{Pool: pool, Publisher: jsPub}).Run(runCtx)
+				if err != nil && !errors.Is(err, context.Canceled) {
+					logger.Error("chat deleted outbox stopped", slog.String("error", err.Error()))
+				}
+				outboxDone <- err
+			}()
 			go func() {
 				if err := runMessageActivityConsumer(runCtx, natsURL, dmStore, logger); err != nil && !errors.Is(err, context.Canceled) {
 					logger.Error("message activity consumer stopped", slog.String("error", err.Error()))
@@ -478,6 +488,7 @@ func main() {
 	runCancel()
 	ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 	defer cancel()
+	waitForChatDeletedOutboxShutdown(ctx, chatDeletedOutboxDone, logger)
 	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
 	if shutdownServer {
 		if matchSquadGRPCSrv != nil {
@@ -503,5 +514,19 @@ func main() {
 				log.Fatal(err)
 			}
 		}
+	}
+}
+
+func waitForChatDeletedOutboxShutdown(ctx context.Context, done <-chan error, logger *slog.Logger) {
+	if done == nil {
+		return
+	}
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("chat deleted outbox shutdown", slog.String("error", err.Error()))
+		}
+	case <-ctx.Done():
+		logger.Error("chat deleted outbox did not stop before shutdown deadline")
 	}
 }

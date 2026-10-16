@@ -6,6 +6,7 @@ on:
       - ".github/workflows/t31-session-events-e2e.yml"
       - "docker-compose.yml"
       - "docker-compose.phase0.yml"
+      - "docker-compose.voice-space-media.yml"
       - "docker-compose.t31-session-events-e2e.yml"
       - "docs/testing/game-integrations-acceptance.md"
       - "docs/testing/game-integrations-exec-plan.md"
@@ -107,6 +108,7 @@ jobs:
           docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" config --quiet
 
@@ -115,12 +117,19 @@ jobs:
           compose=(docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env
             --env-file tmp/t31-session-event-e2e/compose.env --profile app
             -f docker-compose.yml -f docker-compose.phase0.yml
+            -f docker-compose.voice-space-media.yml
             -f docker-compose.t31-session-events-e2e.yml -p "$T31_COMPOSE_PROJECT")
-          if ! "${compose[@]}" up -d --build --wait \
+          if "${compose[@]}" up -d --build --wait \
             gateway chat gameintegration t31-session-event-receiver-db; then
-            "${compose[@]}" ps --all || true
-            "${compose[@]}" logs --no-color --timestamps --tail=100 auth user role chat space messaging voice bot notification gameintegration gateway matchmaking search file moderation social subscription story realtime analytics || true
-            exit 1
+            :
+          else
+            startup_status=$?
+            python3 scripts/ci/t31-startup-diagnostics.py \
+              --output tmp/t31-session-event-e2e/startup-diagnostics.json \
+              --startup-status "$startup_status" \
+              --service voice \
+              --compose "${compose[@]}" || true
+            exit "$startup_status"
           fi
 
       - name: Rebuild Gateway from this T31 worktree
@@ -128,6 +137,7 @@ jobs:
           docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" up -d --no-deps --build --force-recreate gateway
 
@@ -136,6 +146,7 @@ jobs:
           docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" up -d --no-deps --wait t31-session-event-gateway-tls
 
@@ -156,6 +167,7 @@ jobs:
           docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --build --rm --no-deps \
             t31-session-event-runner go test -c \
@@ -170,6 +182,7 @@ jobs:
           T31_ACCEPTANCE_PHASE=claim-before-gis-restart docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
@@ -183,6 +196,7 @@ jobs:
           compose=(docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env
             --env-file tmp/t31-session-event-e2e/compose.env --profile app
             -f docker-compose.yml -f docker-compose.phase0.yml
+            -f docker-compose.voice-space-media.yml
             -f docker-compose.t31-session-events-e2e.yml -p "$T31_COMPOSE_PROJECT")
           "${compose[@]}" restart gameintegration
           "${compose[@]}" up -d --no-deps --wait gameintegration
@@ -194,6 +208,7 @@ jobs:
           T31_ACCEPTANCE_PHASE=reclaim-and-commit-before-ack docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
@@ -207,6 +222,7 @@ jobs:
           compose=(docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env
             --env-file tmp/t31-session-event-e2e/compose.env --profile app
             -f docker-compose.yml -f docker-compose.phase0.yml
+            -f docker-compose.voice-space-media.yml
             -f docker-compose.t31-session-events-e2e.yml -p "$T31_COMPOSE_PROJECT")
           "${compose[@]}" restart gameintegration
           "${compose[@]}" up -d --no-deps --wait gameintegration
@@ -218,6 +234,7 @@ jobs:
           T31_ACCEPTANCE_PHASE=drop-ack-response-after-receiver-restart docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
@@ -231,6 +248,7 @@ jobs:
           T31_ACCEPTANCE_PHASE=replay-ack-after-runner-restart docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
@@ -244,6 +262,7 @@ jobs:
           docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --build --rm --no-deps \
             t30-chat-retry-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
@@ -256,6 +275,7 @@ jobs:
           path: |
             tmp/t31-session-event-e2e/bootstrap-result.json
             tmp/t31-session-event-e2e/acceptance.log
+            tmp/t31-session-event-e2e/startup-diagnostics.json
           if-no-files-found: ignore
 
       - name: Remove this run's isolated Compose project and fixtures
@@ -265,6 +285,7 @@ jobs:
           docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" down --volumes --remove-orphans || true
           rm -rf tmp/phase0-t31-ci-fixture tmp/t31-session-event-e2e

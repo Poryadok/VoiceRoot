@@ -130,12 +130,15 @@ func (s *VoiceGRPC) voicePublishGrant(ctx context.Context, call voicestore.Call,
 		return nil, nil
 	}
 	if s.Roles == nil {
-		return nil, status.Error(codes.PermissionDenied, "voice speak permission check unavailable")
+		return nil, status.Error(codes.Unavailable, "voice speak permission check unavailable")
 	}
 	if err := s.Roles.EnsureVoiceSpeak(ctx, call.SpaceID, profileID, call.VoiceRoomID); err != nil {
 		if errors.Is(err, ErrVoiceSpeakDenied) {
 			denied := false
 			return &denied, nil
+		}
+		if status.Code(err) == codes.Unavailable {
+			return nil, status.Error(codes.Unavailable, "voice speak permission check unavailable")
 		}
 		return nil, status.Error(codes.PermissionDenied, "voice speak permission check unavailable")
 	}

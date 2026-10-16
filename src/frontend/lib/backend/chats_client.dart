@@ -132,8 +132,9 @@ class ChatListData {
   final String? nextCursor;
 }
 
-/// Simple group roles (groups (docs/features/text-chat.md)): creator is [kChatRoleOwner], invitees [kChatRoleMember].
+/// Standalone group roles from ListMembers (`owner`, `admin`, `member`).
 const String kChatRoleOwner = 'owner';
+const String kChatRoleAdmin = 'admin';
 const String kChatRoleMember = 'member';
 
 class ChatMember {
@@ -373,14 +374,38 @@ class VoiceChatsClient {
     return _map(result, (data) => voiceChatFromProto(data.chat));
   }
 
+  Future<ChatsApiResult<bool>> canCreateDm({
+    required String authorization,
+    required String otherProfileId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/chats/dm-permission/$otherProfileId'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) when data['allowed'] is bool =>
+        ChatsApiOk<bool>(data['allowed']! as bool),
+      GatewayHttpOk() => const ChatsApiFailure(
+        message: 'invalid DM permission response',
+        errorCode: 'invalid_response',
+      ),
+      GatewayHttpFailure(:final error) => ChatsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   Future<ChatsApiResult<VoiceChat>> createGroup({
     required String authorization,
     required String name,
+    String? requestId,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/chats'),
       authorization: authorization,
-      body: createGroupRequestToProto(name: name),
+      body: createGroupRequestToProto(name: name, requestId: requestId),
       createEmpty: chat_pb.CreateChatResponse.create,
     );
     return _map(result, (data) => voiceChatFromProto(data.chat));
@@ -662,6 +687,8 @@ class VoiceChatsClient {
     String? avatarUrl,
     int? slowModeSeconds,
     bool? allowGuests,
+    bool? threadsEnabled,
+    bool? allowUserMainFeed,
   }) async {
     final result = await _gateway.patchProto(
       uri: _gateway.resolve('/api/v1/chats/$chatId'),
@@ -671,6 +698,8 @@ class VoiceChatsClient {
         avatarUrl: avatarUrl,
         slowModeSeconds: slowModeSeconds,
         allowGuests: allowGuests,
+        threadsEnabled: threadsEnabled,
+        allowUserMainFeed: allowUserMainFeed,
       ),
       createEmpty: chat_pb.UpdateChatResponse.create,
     );

@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import app.voice.auth.v1.AuthServiceGrpc;
+import app.voice.auth.v1.Disable2FARequest;
 import app.voice.auth.v1.Enable2FARequest;
 import app.voice.auth.v1.LoginRequest;
 import app.voice.auth.v1.RegisterRequest;
+import app.voice.auth.v1.ValidateTokenRequest;
 import app.voice.auth.v1.Verify2FARequest;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -23,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import voice.backend.auth.grpc.AuthGrpcService;
 import voice.backend.auth.grpc.AuthorizationServerInterceptor;
+import voice.backend.auth.repository.AccountRepository;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -31,6 +34,7 @@ class AuthGrpc2FATest {
       Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
 
   @Autowired AuthGrpcService grpcService;
+  @Autowired AccountRepository accounts;
 
   @Test
   void enable2FAReturnsTotpUriAndBackupCodesOverGrpc() throws Exception {
@@ -146,6 +150,169 @@ class AuthGrpc2FATest {
       channel.shutdownNow();
       server.shutdownNow();
     }
+  }
+
+  @Test
+  void repeatedEnable2FAIsRejectedWithoutReplacingConfirmedFactorOrBackupCodesOverGrpc() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    Server server = InProcessServerBuilder.forName(serverName).directExecutor()
+        .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor())).build().start();
+    ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+    var client = AuthServiceGrpc.newBlockingStub(channel);
+    String email = "grpc-2fa-reenroll@voice-qa.test";
+    String password = "Correct horse battery staple";
+    try {
+      var registered = client.register(RegisterRequest.newBuilder()
+          .setEmail(email)
+          .setPassword(password)
+          .build());
+      var authenticated = withBearer(client, registered.getSession().getAccessToken());
+      var enrollment = authenticated.enable2FA(Enable2FARequest.newBuilder()
+          .setPassword(password)
+          .build());
+      byte[] storedSecret = accounts.findById(registered.getSession().getAccountId()).orElseThrow().totpSecret();
+      String backupCode = enrollment.getBackupCodes(0);
+      authenticated.verify2FA(Verify2FARequest.newBuilder().setTotpCode("000000").build());
+
+      assertThatThrownBy(() -> authenticated.enable2FA(Enable2FARequest.newBuilder()
+          .setPassword(password)
+          .build()))
+          .isInstanceOf(StatusRuntimeException.class)
+          .satisfies(ex -> {
+            Status status = ((StatusRuntimeException) ex).getStatus();
+            assertThat(status.getCode()).isEqualTo(Status.Code.ALREADY_EXISTS);
+            assertThat(status.getDescription()).isEqualTo("totp_already_enabled");
+          });
+      assertThat(accounts.findById(registered.getSession().getAccountId()).orElseThrow().totpSecret())
+          .containsExactly(storedSecret);
+
+      assertThat(client.validateToken(ValidateTokenRequest.newBuilder()
+          .setAccessToken(registered.getSession().getAccessToken())
+          .build()).getClaims().getUserId()).isEqualTo(registered.getSession().getAccountId());
+      assertThatThrownBy(() -> client.login(LoginRequest.newBuilder()
+          .setEmail(email)
+          .setPassword(password)
+          .setDeviceInfoJson("{}")
+          .build()))
+          .isInstanceOf(StatusRuntimeException.class)
+          .satisfies(ex -> assertThat(((StatusRuntimeException) ex).getStatus().getCode())
+              .isEqualTo(Status.Code.UNAUTHENTICATED));
+
+      var backupLogin = client.login(LoginRequest.newBuilder()
+          .setEmail(email)
+          .setPassword(password)
+          .setTotpCode(backupCode)
+          .setDeviceInfoJson("{}")
+          .build());
+      assertThat(backupLogin.getSession().getAccessToken()).isNotBlank();
+    } finally {
+      channel.shutdownNow();
+      server.shutdownNow();
+    }
+  }
+
+  @Test
+  void disable2FARequiresCurrentRpcCredentialAndRevokesTheUsedSession() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    Server server = InProcessServerBuilder.forName(serverName).directExecutor()
+        .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor())).build().start();
+    ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+    var client = AuthServiceGrpc.newBlockingStub(channel);
+    try {
+      var registered = client.register(RegisterRequest.newBuilder()
+          .setEmail("grpc-2fa-disable@voice-qa.test")
+          .setPassword("Correct horse battery staple")
+          .build());
+      var initialSession = registered.getSession();
+      var authenticated = withBearer(client, initialSession.getAccessToken());
+      authenticated.enable2FA(Enable2FARequest.newBuilder()
+          .setPassword("Correct horse battery staple")
+          .build());
+      var verified = authenticated.verify2FA(Verify2FARequest.newBuilder().setTotpCode("000000").build());
+      String currentAccess = verified.getSession().getAccessToken();
+      var request = Disable2FARequest.newBuilder()
+          .setPassword("Correct horse battery staple")
+          .setTotpCode("000000")
+          .build();
+
+      assertThatThrownBy(() -> client.disable2FA(request))
+          .isInstanceOf(StatusRuntimeException.class)
+          .satisfies(ex -> assertThat(((StatusRuntimeException) ex).getStatus().getCode())
+              .isEqualTo(Status.Code.UNAUTHENTICATED));
+
+      withBearer(client, currentAccess).disable2FA(request);
+
+      assertThatThrownBy(() -> client.validateToken(ValidateTokenRequest.newBuilder()
+          .setAccessToken(currentAccess)
+          .build()))
+          .isInstanceOf(StatusRuntimeException.class)
+          .hasMessageContaining("token_revoked");
+    } finally {
+      channel.shutdownNow();
+      server.shutdownNow();
+    }
+  }
+
+  @Test
+  void failedDisable2FAFactorsLeaveEnrollmentSessionAndBackupCodeUsable() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    Server server = InProcessServerBuilder.forName(serverName).directExecutor()
+        .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor())).build().start();
+    ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+    var client = AuthServiceGrpc.newBlockingStub(channel);
+    try {
+      var registered = client.register(RegisterRequest.newBuilder()
+          .setEmail("grpc-2fa-disable-rejected@voice-qa.test")
+          .setPassword("Correct horse battery staple")
+          .build());
+      var authenticated = withBearer(client, registered.getSession().getAccessToken());
+      var enrollment = authenticated.enable2FA(Enable2FARequest.newBuilder()
+          .setPassword("Correct horse battery staple")
+          .build());
+      var verified = authenticated.verify2FA(Verify2FARequest.newBuilder().setTotpCode("000000").build());
+      String currentAccess = verified.getSession().getAccessToken();
+
+      assertDisable2FARejected(client, currentAccess, Disable2FARequest.newBuilder()
+          .setPassword("Correct horse battery staple")
+          .build());
+      assertDisable2FARejected(client, currentAccess, Disable2FARequest.newBuilder()
+          .setPassword("Correct horse battery staple")
+          .setTotpCode("not-a-totp-code")
+          .build());
+
+      assertThat(client.validateToken(ValidateTokenRequest.newBuilder()
+          .setAccessToken(currentAccess)
+          .build()).getClaims().getUserId()).isEqualTo(registered.getSession().getAccountId());
+
+      assertThatThrownBy(() -> client.login(LoginRequest.newBuilder()
+          .setEmail("grpc-2fa-disable-rejected@voice-qa.test")
+          .setPassword("Correct horse battery staple")
+          .setDeviceInfoJson("{}")
+          .build()))
+          .isInstanceOf(StatusRuntimeException.class)
+          .satisfies(ex -> assertThat(((StatusRuntimeException) ex).getStatus().getCode())
+              .isEqualTo(Status.Code.UNAUTHENTICATED));
+
+      String backupCode = enrollment.getBackupCodes(0);
+      var backupLogin = client.login(LoginRequest.newBuilder()
+          .setEmail("grpc-2fa-disable-rejected@voice-qa.test")
+          .setPassword("Correct horse battery staple")
+          .setTotpCode(backupCode)
+          .setDeviceInfoJson("{}")
+          .build());
+      assertThat(backupLogin.getSession().getAccessToken()).isNotBlank();
+    } finally {
+      channel.shutdownNow();
+      server.shutdownNow();
+    }
+  }
+
+  private static void assertDisable2FARejected(
+      AuthServiceGrpc.AuthServiceBlockingStub client, String accessToken, Disable2FARequest request) {
+    assertThatThrownBy(() -> withBearer(client, accessToken).disable2FA(request))
+        .isInstanceOf(StatusRuntimeException.class)
+        .satisfies(ex -> assertThat(((StatusRuntimeException) ex).getStatus().getCode())
+            .isEqualTo(Status.Code.UNAUTHENTICATED));
   }
 
   private static AuthServiceGrpc.AuthServiceBlockingStub withBearer(

@@ -136,7 +136,15 @@ class MobileShellDrawer extends ConsumerWidget {
                 );
               },
               loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, _) => const SizedBox.shrink(),
+              error: (_, _) => ListTile(
+                title: Text(l10n.chatListLoadError),
+                trailing: IconButton(
+                  key: const Key('mobile_drawer_quick_access_retry'),
+                  tooltip: l10n.commonRetry,
+                  onPressed: () => ref.invalidate(quickAccessListProvider),
+                  icon: const Icon(Icons.refresh),
+                ),
+              ),
             ),
             const Divider(),
             ListTile(

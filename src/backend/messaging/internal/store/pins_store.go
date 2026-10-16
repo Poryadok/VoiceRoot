@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/messaging/internal/messageevents"
 )
 
 const MaxPinsPerChat = 5
@@ -69,6 +70,55 @@ func (s *PinsStore) DeletePin(ctx context.Context, chatID, messageID uuid.UUID) 
 DELETE FROM pins WHERE chat_id = $1 AND message_id = $2
 `, chatID, messageID)
 	return err
+}
+
+func (s *PinsStore) MutatePinWithOutbox(ctx context.Context, chatID, spaceID, messageID, pinnedBy uuid.UUID, pin bool, event messageevents.OutboxEvent) error {
+	if s == nil || s.Pool == nil {
+		return ErrStoreNotConfigured
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var scope *uuid.UUID
+	if spaceID != uuid.Nil {
+		scope = &spaceID
+	}
+	if err := lockMessageMutation(ctx, tx, chatID, scope, &messageID); err != nil {
+		return err
+	}
+	if err := requireLiveMessage(ctx, tx, chatID, messageID); err != nil {
+		return err
+	}
+	if pin {
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pins WHERE chat_id=$1 AND message_id=$2)`, chatID, messageID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			var count int
+			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM pins WHERE chat_id=$1`, chatID).Scan(&count); err != nil {
+				return err
+			}
+			if count >= MaxPinsPerChat {
+				return ErrPinLimitReached
+			}
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO pins(chat_id,message_id,pinned_by,pinned_at) VALUES($1,$2,$3,now()) ON CONFLICT(chat_id,message_id) DO UPDATE SET pinned_by=EXCLUDED.pinned_by,pinned_at=now()`, chatID, messageID, pinnedBy)
+	} else {
+		_, err = tx.Exec(ctx, `DELETE FROM pins WHERE chat_id=$1 AND message_id=$2`, chatID, messageID)
+	}
+	if err != nil {
+		return err
+	}
+	if event.MessageID != messageID || event.ChatID != chatID {
+		return errors.New("pin outbox event identity mismatch")
+	}
+	if err := enqueueMessageEvent(ctx, tx, event); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ListPins returns pins for a chat ordered by pinned_at descending.

@@ -11,8 +11,10 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import voice.backend.auth.config.AuthProperties;
@@ -31,6 +33,7 @@ import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.BackupCodeService;
 import voice.backend.auth.service.InMemoryAccountRestoreTokenStore;
 import voice.backend.auth.service.InMemorySubscriptionTierStore;
+import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.RegisterCommand;
 import voice.backend.auth.service.TotpService;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
@@ -101,6 +104,207 @@ class OAuth2SessionEpochExchangeTest {
     assertThat(validatedDirect.normalizedAccountType()).isEqualTo(session.accountType());
     assertThat(harness.floor.calls).isEqualTo(1);
     assertThat(harness.accounts.advanceCalls).isEqualTo(1);
+  }
+
+  @Test
+  void staleAndLegacyAuthorizationCodesAreRejectedBeforeFloorOrConsume() {
+    Harness harness = new Harness(new RecordingCodeStore());
+    String email = "oauth-stale-code@example.com";
+    String oldPassword = "Correct horse battery staple";
+    var session = harness.auth.register(
+        new RegisterCommand(email, null, oldPassword, false, "{}"));
+    harness.codes.save(
+        harness.record("code-stale", session.accountId(), session.profileId()),
+        Duration.ofMinutes(1));
+
+    harness.auth.changePassword(
+        session.accessToken(), oldPassword, "A longer replacement password", null);
+    int floorCallsAfterChange = harness.floor.calls;
+    assertThatThrownBy(() -> harness.oauth.exchangeAuthorizationCode(
+            harness.request("code-stale")))
+        .isInstanceOf(OAuthException.class)
+        .hasMessage("invalid_grant");
+    assertThat(harness.codes.consumeCalls).isZero();
+    assertThat(harness.floor.calls).isEqualTo(floorCallsAfterChange);
+
+    OAuthAuthorizationCode legacy = new OAuthAuthorizationCode(
+        "code-legacy", session.accountId(), session.profileId(), CLIENT, REDIRECT,
+        PkceVerifier.s256Challenge(VERIFIER), "S256", CLOCK.instant().plusSeconds(60));
+    harness.codes.save(legacy, Duration.ofMinutes(1));
+    assertThatThrownBy(() -> harness.oauth.exchangeAuthorizationCode(
+            harness.request("code-legacy")))
+        .isInstanceOf(OAuthException.class)
+        .hasMessage("invalid_grant");
+    assertThat(harness.codes.consumeCalls).isZero();
+    assertThat(harness.floor.calls).isEqualTo(floorCallsAfterChange);
+  }
+
+  @Test
+  void interactiveAuthorizationCodeCapturesTheSuccessfulLoginEpoch() {
+    Harness harness = new Harness(new RecordingCodeStore());
+    String email = "oauth-authorize-epoch@example.com";
+    String password = "Correct horse battery staple";
+    harness.auth.register(new RegisterCommand(email, null, password, false, "{}"));
+    var login = new LoginCommand(email, null, password, null, "{}");
+    var session = harness.auth.login(login);
+    long expectedEpoch = harness.auth.validate(session.accessToken()).sessionEpoch();
+    OAuthAuthorizeRequest request = new OAuthAuthorizeRequest(
+        "code", CLIENT, REDIRECT, "test-state",
+        PkceVerifier.s256Challenge(VERIFIER), "S256");
+
+    harness.oauth.completeAuthorizeAfterLogin(request, login);
+
+    assertThat(((RecordingCodeStore) harness.codes).lastSaved.originSessionEpoch())
+        .isEqualTo(expectedEpoch);
+  }
+
+  @Test
+  void aheadFloorRecoveryIsPreservedAndPasswordChangeRevokesPreparedAuthority() throws Exception {
+    Harness harness = new Harness(new RecordingCodeStore());
+    String email = "oauth-ahead-floor-password@example.com";
+    String oldPassword = "Correct horse battery staple";
+    var session = harness.auth.register(
+        new RegisterCommand(email, null, oldPassword, false, "{}"));
+    harness.codes.save(
+        harness.record("code-ahead", session.accountId(), session.profileId()),
+        Duration.ofMinutes(1));
+    harness.floor.result = 7L;
+
+    OAuthTokenResponse ahead =
+        harness.oauth.exchangeAuthorizationCode(harness.request("code-ahead"));
+    assertThat(com.nimbusds.jwt.SignedJWT.parse(ahead.accessToken())
+            .getJWTClaimsSet().getLongClaim("session_epoch"))
+        .isEqualTo(7L);
+    harness.auth.changePassword(
+        ahead.accessToken(), oldPassword, "A longer replacement password", null);
+    assertThat(harness.accounts.findById(session.accountId()).orElseThrow().sessionEpoch())
+        .isEqualTo(8L);
+    assertThatThrownBy(() -> harness.auth.validate(ahead.accessToken()))
+        .isInstanceOf(voice.backend.auth.service.AuthException.class)
+        .hasMessage("token_revoked");
+
+    var renewed = harness.auth.login(new LoginCommand(
+        email, null, "A longer replacement password", null, "{}"));
+    long renewedEpoch = harness.auth.validate(renewed.accessToken()).sessionEpoch();
+    harness.codes.save(
+        harness.record("code-fresh", renewed.accountId(), renewed.profileId(), renewedEpoch),
+        Duration.ofMinutes(1));
+    OAuthTokenResponse fresh =
+        harness.oauth.exchangeAuthorizationCode(harness.request("code-fresh"));
+    assertThat(com.nimbusds.jwt.SignedJWT.parse(fresh.accessToken())
+            .getJWTClaimsSet().getLongClaim("session_epoch"))
+        .isEqualTo(renewedEpoch);
+  }
+
+  @Test
+  void passwordChangeFailsClosedWhenFloorCannotBeAdvancedPastMaximum() {
+    Harness harness = new Harness(new RecordingCodeStore());
+    String password = "Correct horse battery staple";
+    var session = harness.auth.register(
+        new RegisterCommand("oauth-floor-exhausted@example.com", null, password, false, "{}"));
+    var before = harness.accounts.findById(session.accountId()).orElseThrow();
+    harness.floor.result = Long.MAX_VALUE;
+
+    assertThatThrownBy(() -> harness.auth.changePassword(
+            session.accessToken(), password, "A longer replacement password", null))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    var after = harness.accounts.findById(session.accountId()).orElseThrow();
+    assertThat(after.sessionEpoch()).isEqualTo(before.sessionEpoch());
+    assertThat(after.passwordHash()).isEqualTo(before.passwordHash());
+  }
+
+  @Test
+  void passwordChangeFailsClosedWhenAuthoritativeFloorIsMissing() {
+    Harness harness = new Harness(new RecordingCodeStore());
+    String password = "Correct horse battery staple";
+    var session = harness.auth.register(
+        new RegisterCommand("oauth-floor-missing@example.com", null, password, false, "{}"));
+    var before = harness.accounts.findById(session.accountId()).orElseThrow();
+    harness.floor.result = 0;
+
+    assertThatThrownBy(() -> harness.auth.changePassword(
+            session.accessToken(), password, "A longer replacement password", null))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    var after = harness.accounts.findById(session.accountId()).orElseThrow();
+    assertThat(after.sessionEpoch()).isEqualTo(before.sessionEpoch());
+    assertThat(after.passwordHash()).isEqualTo(before.passwordHash());
+  }
+
+  @Test
+  void passwordChangeRetriesWhenFloorAdvancesDuringRevocation() {
+    Harness harness = new Harness(new RecordingCodeStore());
+    String password = "Correct horse battery staple";
+    var session = harness.auth.register(
+        new RegisterCommand("oauth-floor-race@example.com", null, password, false, "{}"));
+    harness.floor.result = 1;
+    harness.floor.scriptedFloors.addLast(9L);
+
+    harness.auth.changePassword(
+        session.accessToken(), password, "A longer replacement password", null);
+
+    assertThat(harness.accounts.findById(session.accountId()).orElseThrow().sessionEpoch())
+        .isEqualTo(10L);
+    assertThat(harness.floor.recordedFloor).isEqualTo(10L);
+  }
+
+  @Test
+  void passwordChangeFailsClosedWhenFloorKeepsAdvancingBeyondRetryBound() {
+    Harness harness = new Harness(new RecordingCodeStore());
+    String password = "Correct horse battery staple";
+    var session = harness.auth.register(
+        new RegisterCommand("oauth-floor-keeps-moving@example.com", null, password, false, "{}"));
+    var before = harness.accounts.findById(session.accountId()).orElseThrow();
+    harness.floor.result = 1;
+    harness.floor.scriptedFloors.addLast(9L);
+    harness.floor.scriptedFloors.addLast(11L);
+    harness.floor.scriptedFloors.addLast(13L);
+
+    assertThatThrownBy(() -> harness.auth.changePassword(
+            session.accessToken(), password, "A longer replacement password", null))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    var after = harness.accounts.findById(session.accountId()).orElseThrow();
+    assertThat(after.passwordHash()).isEqualTo(before.passwordHash());
+    assertThat(harness.floor.calls).isEqualTo(4);
+  }
+
+  @Test
+  void passwordChangeWaitsForPreparedOAuthExchangeThenRevokesItsToken() throws Exception {
+    PausingCodeStore codes = new PausingCodeStore();
+    Harness harness = new Harness(codes);
+    String password = "Correct horse battery staple";
+    var session = harness.auth.register(
+        new RegisterCommand("oauth-password-serial@example.com", null, password, false, "{}"));
+    codes.save(harness.record("code-serial", session.accountId(), session.profileId()),
+        Duration.ofMinutes(1));
+
+    ExecutorService workers = Executors.newFixedThreadPool(2);
+    Future<OAuthTokenResponse> exchange = null;
+    Future<?> passwordChange = null;
+    try {
+      exchange = workers.submit(
+          () -> harness.oauth.exchangeAuthorizationCode(harness.request("code-serial")));
+      assertThat(codes.consumeEntered.await(5, TimeUnit.SECONDS)).isTrue();
+      passwordChange = workers.submit(() -> harness.auth.changePassword(
+          session.accessToken(), password, "A longer replacement password", null));
+      Future<?> pendingChange = passwordChange;
+      assertThatThrownBy(() -> pendingChange.get(100, TimeUnit.MILLISECONDS))
+          .isInstanceOf(java.util.concurrent.TimeoutException.class);
+
+      codes.releaseConsume.countDown();
+      OAuthTokenResponse issued = exchange.get(5, TimeUnit.SECONDS);
+      passwordChange.get(5, TimeUnit.SECONDS);
+      assertThatThrownBy(() -> harness.auth.validate(issued.accessToken()))
+          .isInstanceOf(voice.backend.auth.service.AuthException.class)
+          .hasMessage("token_revoked");
+      assertThat(harness.accounts.findById(session.accountId()).orElseThrow().sessionEpoch())
+          .isEqualTo(2L);
+    } finally {
+      codes.releaseConsume.countDown();
+      workers.shutdownNow();
+    }
   }
 
   @Test
@@ -190,7 +394,13 @@ class OAuth2SessionEpochExchangeTest {
       auth = new AuthService(accounts, new InMemoryRefreshTokenRepository(), new RefreshTokenCodec(), new BCryptPasswordHasher(), JwtService.forTests("voice-auth", "voice-client", "key", Duration.ofMinutes(15), CLOCK), new InMemoryTokenBlacklist(CLOCK), new TotpService(memory()), new BackupCodeService(new InMemoryBackupCodeRepository()), CLOCK, Duration.ofDays(30), profiles, new InMemoryPhoneHashResolver(accounts, profiles), new InMemorySubscriptionTierStore(), new NoOpProfileSwitchValidator(), new InMemoryE2EKeyBackupRepository(), new NoopAuthEventPublisher(), new SimpleMeterRegistry(), new InMemoryAccountRestoreTokenStore(), new NoopMailSender(), floor);
       oauth = new OAuth2Service(properties, auth, codes, CLOCK);
     }
-    OAuthAuthorizationCode record(String code, String account, String profile) { return new OAuthAuthorizationCode(code, account, profile, CLIENT, REDIRECT, PkceVerifier.s256Challenge(VERIFIER), "S256", CLOCK.instant().plusSeconds(60)); }
+    OAuthAuthorizationCode record(String code, String account, String profile) {
+      return record(code, account, profile, 1);
+    }
+    OAuthAuthorizationCode record(String code, String account, String profile, long epoch) {
+      return new OAuthAuthorizationCode(code, account, profile, CLIENT, REDIRECT,
+          PkceVerifier.s256Challenge(VERIFIER), "S256", CLOCK.instant().plusSeconds(60), epoch);
+    }
     OAuthTokenRequest request(String code) { return new OAuthTokenRequest("authorization_code", code, REDIRECT, CLIENT, VERIFIER, null); }
   }
 
@@ -200,7 +410,49 @@ class OAuth2SessionEpochExchangeTest {
   }
   private static AuthProperties properties() { AuthProperties p = memory(); p.getOauth().getDeveloperPortal().setEnabled(true); p.getOauth().getDeveloperPortal().setClientId(CLIENT); p.getOauth().getDeveloperPortal().setRedirectUris(List.of(REDIRECT)); return p; }
   private static AuthProperties memory() { AuthProperties p = new AuthProperties(); p.setPersistence(AuthProperties.PersistenceMode.MEMORY); return p; }
-  private static class RecordingCodeStore extends InMemoryOAuthAuthorizationCodeStore { int consumeCalls; RecordingCodeStore(){super(CLOCK);} @Override public Optional<OAuthAuthorizationCode> consume(String code){consumeCalls++; return super.consume(code);} }
+  private static class RecordingCodeStore extends InMemoryOAuthAuthorizationCodeStore {
+    int consumeCalls;
+    OAuthAuthorizationCode lastSaved;
+    RecordingCodeStore(){super(CLOCK);}
+    @Override public void save(OAuthAuthorizationCode code, Duration ttl) {
+      lastSaved = code;
+      super.save(code, ttl);
+    }
+    @Override public Optional<OAuthAuthorizationCode> consume(String code) {
+      consumeCalls++;
+      return super.consume(code);
+    }
+  }
+  private static final class PausingCodeStore extends RecordingCodeStore {
+    final CountDownLatch consumeEntered = new CountDownLatch(1);
+    final CountDownLatch releaseConsume = new CountDownLatch(1);
+    @Override public Optional<OAuthAuthorizationCode> consume(String code) {
+      consumeEntered.countDown();
+      try {
+        if (!releaseConsume.await(5, TimeUnit.SECONDS)) {
+          throw new IllegalStateException("test consume pause timed out");
+        }
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException("test consume pause interrupted", interrupted);
+      }
+      return super.consume(code);
+    }
+  }
   private static final class SwappingCodeStore extends RecordingCodeStore { OAuthAuthorizationCode peeked; OAuthAuthorizationCode consumed; @Override public Optional<OAuthAuthorizationCode> peek(String code){return Optional.ofNullable(peeked);} @Override public Optional<OAuthAuthorizationCode> consume(String code){consumeCalls++; return Optional.ofNullable(consumed);} }
-  private static final class RecordingFloor implements SessionEpochFloorStore { RuntimeException failure; long result=1; int calls; public long recordAtLeast(UUID id,long epoch){calls++; if(failure!=null)throw failure; return result;} public long requireFloor(UUID id){throw new AssertionError();} }
+  private static final class RecordingFloor implements SessionEpochFloorStore {
+    RuntimeException failure;
+    long result=1;
+    long recordedFloor;
+    int calls;
+    final java.util.ArrayDeque<Long> scriptedFloors = new java.util.ArrayDeque<>();
+    public long recordAtLeast(UUID id,long epoch){
+      calls++;
+      if(failure!=null)throw failure;
+      long scripted=scriptedFloors.isEmpty()?result:scriptedFloors.removeFirst();
+      recordedFloor=Math.max(scripted, epoch);
+      return recordedFloor;
+    }
+    public long requireFloor(UUID id){if(failure!=null)throw failure; return result;}
+  }
 }

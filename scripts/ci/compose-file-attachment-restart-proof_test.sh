@@ -41,6 +41,8 @@ if [[ "${1:-}" == inspect ]]; then
   exit 0
 fi
 if [[ "${1:-}" == compose ]]; then
+  printf 'fixture_env=%s\n' "${PHASE0_FIXTURE_DIR:-}" >>"$log"
+  [[ -d "${PHASE0_FIXTURE_DIR:-}" ]] || exit 98
   line="$*"
   if [[ "$line" == *' config '* ]]; then exit 0; fi
   if [[ "$line" == *' up '* ]]; then exit "${FAKE_UP_RC:?FAKE_UP_RC required}"; fi
@@ -85,6 +87,14 @@ printf '\n' >>"${FAKE_LOG}"
 exit 0
 EOF
   chmod +x "$bin/bash" "$bin/docker" "$bin/go" "$bin/curl"
+  cat >"$bin/python3" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == */scripts/dev/generate-phase0-fixture.py ]] || exit 99
+mkdir -p "$2"
+printf 'fixture=%s\n' "$2" >>"${FAKE_LOG:?}"
+EOF
+  chmod +x "$bin/python3"
 }
 
 new_case() {
@@ -172,9 +182,23 @@ done < <(grep '^docker <compose> ' "$case_dir/commands.log")
 
 echo '== cleanup is disabled by default =='
 case_dir="$(new_case no-cleanup)"
-FAKE_UP_RC=37 run_runner "$case_dir"
+FAKE_UP_RC=37 PHASE0_FIXTURE_DIR=hostile run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 37
 assert_not_contains "$case_dir/commands.log" 'compose.*<down>'
+assert_contains "$case_dir/commands.log" '^fixture_env=.*/phase0-fixture$'
+assert_not_contains "$case_dir/commands.log" '^fixture_env=hostile$'
+assert_contains "$case_dir/commands.log" 'compose.*<-f> <.*/docker-compose.voice-space-media.yml>'
+[[ -n "$(find "$case_dir/tmp" -type d -name phase0-fixture -print -quit)" ]] || fail 'retain mounted fixture without teardown'
+
+echo '== fixture lifetime follows successful teardown =='
+case_dir="$(new_case cleanup-success)"
+FAKE_UP_RC=37 VOICE_FILE_ATTACHMENT_RESTART_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "$case_dir/rc")" 37
+[[ -z "$(find "$case_dir/tmp" -type d -name phase0-fixture -print -quit)" ]] || fail 'remove fixture after teardown'
+case_dir="$(new_case cleanup-failure)"
+FAKE_UP_RC=37 FAKE_DOWN_RC=73 VOICE_FILE_ATTACHMENT_RESTART_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "$case_dir/rc")" 37
+[[ -n "$(find "$case_dir/tmp" -type d -name phase0-fixture -print -quit)" ]] || fail 'retain mounted fixture on failed teardown'
 
 echo '== successful path probes File→User then restarts User and File =='
 case_dir="$(new_case success)"

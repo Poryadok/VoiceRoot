@@ -33,6 +33,37 @@ void main() {
       expect(reopenedRegistration, firstRegistration);
       expect(await reopened.containsSignedPreKey(1), isTrue);
     });
+
+    test(
+      'imports a valid backup payload through the same persisted state format',
+      () async {
+        const profileId = 'profile-backup-import';
+        final source = await SecureSignalStore.exportForBackup(
+          profileId,
+          storage: InMemorySecureSignalStorage(),
+        );
+        final storage = InMemorySecureSignalStorage();
+
+        await SecureSignalStore.importFromBackup(
+          profileId,
+          source,
+          storage: storage,
+        );
+
+        final encoded = await storage.read(key: 'state_v1');
+        expect(encoded, isNotNull);
+        expect(jsonDecode(encoded!), source);
+        final restored = await SecureSignalStore.open(
+          profileId: profileId,
+          storage: storage,
+        );
+        expect(
+          await restored.getLocalRegistrationId(),
+          source['registration_id'],
+        );
+        await restored.close();
+      },
+    );
   });
 }
 

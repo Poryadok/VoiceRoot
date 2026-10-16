@@ -28,6 +28,7 @@ service SocialService {
   rpc SendFriendInvitation(SendFriendInvitationRequest) returns (SendFriendInvitationResponse);
   rpc AcceptFriendInvitation(AcceptFriendInvitationRequest) returns (AcceptFriendInvitationResponse);
   rpc DeclineFriendInvitation(DeclineFriendInvitationRequest) returns (DeclineFriendInvitationResponse);
+  rpc CancelFriendInvitation(CancelFriendInvitationRequest) returns (CancelFriendInvitationResponse);
   rpc RemoveFriend(RemoveFriendRequest) returns (RemoveFriendResponse);
   rpc ListFriends(ListFriendsRequest) returns (ListFriendsResponse);
   rpc ListFriendRequests(ListFriendRequestsRequest) returns (ListFriendRequestsResponse);
@@ -48,6 +49,7 @@ service SocialService {
   rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse); // internal account-pair policy
   rpc IsProfilePairBlocked(IsProfilePairBlockedRequest) returns (IsProfilePairBlockedResponse); // internal directional history visibility; account IDs stay in Social
+  rpc IsProfilePairsBlocked(IsProfilePairsBlockedRequest) returns (IsProfilePairsBlockedResponse); // same decision, max 500 profiles, batched User ownership + Social block lookup
 
   // Граф
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse); // internal
@@ -56,6 +58,21 @@ service SocialService {
 ```
 
 ## Модель данных
+
+### Sender cancellation
+
+`CancelFriendInvitation(target_profile_id)` is exposed as
+`POST /api/v1/friends/invitations/{target_profile_id}/cancel`. The requester is
+the authenticated active profile, never a caller-supplied sender field. It
+atomically deletes only that sender-to-target `pending` row. Missing, reverse,
+accepted and declined rows return `NotFound` without changing them. Concurrent
+accept and cancel serialize on the row: only one pending transition wins.
+Existing foreign-key cascades delete the request outbox; cancellation before
+dispatch suppresses publication. A publication already acknowledged by NATS is
+not retracted, so consumers reconcile against `ListFriendRequests`. A new send
+after cancellation creates a fresh request/event identity. No new event type or
+schema migration is required; cancellation is distinct from receiver decline
+and accepted-friend removal.
 
 ```
 friendships
@@ -165,10 +182,12 @@ fresh request ID and JWT ID; incoming identity metadata is never forwarded.
 User/Space verify the signature, exact RPC/request hash/audience, expiry and
 shared Redis replay admission before accessing their stores.
 
-Social's `GetPrivacySettings`, `GetProfile` and `ListProfileIDsForAccount`
+Social's `GetPrivacySettings`, `GetProfile`, `GetProfiles` and `ListProfileIDsForAccount`
 lookups use the User protected TLS listener with a fresh request-bound RS256
-service credential. The protected listener exposes exactly these three User
-methods to `service:social`; Social has no ordinary User 9090 lookup path.
+service credential. The protected listener exposes exactly these four User
+methods to `service:social`; `GetProfiles` accepts at most 500 profile IDs per
+request for batched ownership resolution. Social has no ordinary User 9090
+lookup path.
 Friends, phone contacts and account-level block cascades therefore fail closed
 when signing, TLS, verification, replay admission, or the lookup response is
 unavailable or malformed. This does not authorize raw metadata on either

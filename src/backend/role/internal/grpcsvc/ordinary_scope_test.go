@@ -223,8 +223,9 @@ func TestOrdinaryHandlerFences(t *testing.T) {
 		"ApplyGameSessionGrants":  true,
 		"RevokeGameSessionGrants": true,
 		"CheckGameSessionGrant":   true,
+		"ResolveVoiceRoomGrants":  true,
 	}
-	trustedUnregistered := map[string]bool{"ResolveVoiceRoomGrants": true}
+	trustedUnregistered := map[string]bool{}
 	for _, method := range rolev1.RoleService_ServiceDesc.Methods {
 		require.True(t, covered[method.MethodName] || excluded[method.MethodName] || trustedServiceMethods[method.MethodName] || trustedUnregistered[method.MethodName], method.MethodName)
 	}

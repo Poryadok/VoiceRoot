@@ -9,6 +9,7 @@ import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/screen_share_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/platform_capability_hints.dart';
 
 class ScreenSharePanel extends ConsumerWidget {
@@ -159,7 +160,7 @@ class ScreenSharePanel extends ConsumerWidget {
             child: Text(
               share.errorMessage == 'screen_share_limit'
                   ? l10n.screenShareLimitReached
-                  : share.errorMessage!,
+                  : commonActionErrorMessage(l10n),
               style: TextStyle(color: voice.error),
             ),
           ),

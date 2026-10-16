@@ -357,7 +357,13 @@ void main() {
       expect(avatarUploadRequests, 0);
       expect(avatarUpdateRequests, 0);
       expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
-      expect(find.text('switch denied'), findsOneWidget);
+      expect(
+        find.text(
+          'Profile created, but setup is incomplete. Try again to finish.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('switch denied'), findsNothing);
       expect(authController!.state.session!.activeProfileId, 'profile-primary');
       expect(storage._session, oldSession);
       expect(realtime.handoffs, isEmpty);

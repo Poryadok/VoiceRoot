@@ -1,0 +1,553 @@
+"""Owned Linux fixture: pinned server defaults and additive native preservation.
+
+Synthetic realm only. Same-host copy is a mechanism fixture, not off-node live
+custody or accepted staging rollout. No live credentials or PVC are referenced.
+"""
+import ast,base64,copy,hashlib,json,os,re,subprocess,sys
+from pathlib import Path
+import shutil,tempfile,time,uuid
+import rollout_census_integration as fixture
+from nats_contract_plan import DECLARATIONS
+
+
+def select_transport(args, environ=None, platform=None):
+    env=os.environ if environ is None else environ
+    system=sys.platform if platform is None else platform
+    if not args:return 'pmdebook'
+    if args!=['--github-hosted']:
+        raise SystemExit('owned_contract_fixture_arguments_invalid')
+    if (system!='linux' or env.get('RUNNER_ENVIRONMENT')!='github-hosted'
+            or env.get('GITHUB_ACTIONS')!='true'):
+        raise SystemExit('github_hosted_fixture_runner_required')
+    return 'github-hosted'
+
+def fixture_bootstrap_grants(contract):
+    """Exact disposable credentials for baseline resources plus v3 consumers."""
+    streams=contract['streams'];pairs={tuple(pair) for pair in contract['consumer_pairs']}
+    pairs.update((stream,config['durable_name']) for stream,config in DECLARATIONS)
+    if (not isinstance(streams,list) or not streams or len(set(streams))!=len(streams)
+        or any(not isinstance(name,str) or not name for name in streams)
+        or any(len(pair)!=2 or any(not isinstance(value,str) or not value for value in pair) for pair in pairs)):
+        raise ValueError('fixture_bootstrap_contract_invalid')
+    grants=['$JS.API.INFO']+[prefix+name for name in streams for prefix in ('$JS.API.STREAM.CREATE.','$JS.API.STREAM.INFO.')]
+    grants += ['$JS.API.STREAM.UPDATE.'+name for name in ('chat_events','social_events','role_events')]
+    grants += [prefix+stream+'.'+durable for stream,durable in sorted(pairs) for prefix in ('$JS.API.CONSUMER.CREATE.','$JS.API.CONSUMER.INFO.')]
+    if len(grants)!=len(set(grants)):raise ValueError('fixture_bootstrap_grants_duplicate')
+    return grants
+
+
+def _set_archive_base_custody(base):
+    base=Path(base)
+    os.chown(base,0,65532)
+    base.chmod(0o750)
+
+
+def _private_fixture_store_descriptor(base,store,fenced):
+    root=Path(base).resolve(strict=True)
+    original=Path(store)
+    path=original.resolve(strict=True)
+    if path==root or path!=original or not path.is_relative_to(root):
+        raise RuntimeError('fixture_private_store_binding_invalid')
+    fenced()
+    return None
+
+
+def _postmigration_plan_inputs(actor,stream_details):
+    """Combine JSZ stream configs with only the declared Consumer.INFO objects."""
+    streams={};consumer_keys=set()
+    for row in stream_details:
+        name=row.get('name')
+        if not isinstance(name,str) or not name or name in streams:
+            raise RuntimeError('postmigration_stream_census_invalid')
+        config=row.get('config');state=row.get('state');details=row.get('consumer_detail',[])
+        if not isinstance(config,dict) or config.get('name')!=name or not isinstance(state,dict) or not isinstance(details,list):
+            raise RuntimeError('postmigration_stream_census_invalid')
+        streams[name]={'config':copy.deepcopy(config),'state':copy.deepcopy(state),
+            'consumer_detail':copy.deepcopy(details)}
+        for consumer in details:
+            durable=(consumer.get('durable') or consumer.get('name')) if isinstance(consumer,dict) else None
+            if not isinstance(durable,str) or not durable:
+                raise RuntimeError('postmigration_consumer_census_invalid')
+            key=(name,durable)
+            if key in consumer_keys:raise RuntimeError('postmigration_consumer_census_invalid')
+            consumer_keys.add(key)
+    consumers={}
+    for stream,declaration in DECLARATIONS:
+        durable=declaration['durable_name'];key=(stream,durable)
+        if key not in consumer_keys:
+            raise RuntimeError('postmigration_declared_consumer_missing_from_census')
+        config=actor.info_config(stream+'/'+durable)
+        if not isinstance(config,dict):
+            raise RuntimeError('postmigration_declared_consumer_info_missing')
+        consumers[key]={'config':copy.deepcopy(config)}
+    return streams,consumers
+
+
+def inner(base):
+    base=Path(base)
+    code=base/'scripts/staging'
+    sys.path[:0]=[str(code/'nats-rollout-preservation'),str(code/'nats-known-baseline'),
+        '/bundle','/source/scripts/staging/nats-known-baseline']
+    from docker_runtime import DockerRuntime,NATS_IMAGE
+    from scenario import ready
+    from native_store import archive_closed_store,verify_archive
+    from nats_migration import apply_contract
+    import nats_migration
+    from preserve import verify_post_apply,canonical,capture_cut
+    from nats_contract_actor import Actor
+    from nats_contract_plan import compile_plan,execute,verify_census,DECLARATIONS
+    from nats_contract_plan import CHAT_SUBJECTS_14,ROLE_SUBJECTS_9
+    from rollout_census import census
+    from bootstrap_renewal import invoke
+    import bootstrap_auth,guard
+    fixture.call(['/bundle/helper','prepare',str(base)])
+    for name in ('kernel','helper'):
+        shutil.copyfile('/bundle/'+name,base/name);(base/name).chmod(0o550);os.chown(base/name,0,65532)
+    for role in ('realtime','notification','analytics-chat','search'):
+        path=base/('bootstrap-'+role+'.sh')
+        shutil.copyfile('/source/scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/'+role+'-bootstrap.sh',path)
+        path.chmod(0o440);os.chown(path,0,65532)
+    baseline=json.loads(Path('/bundle/nats-9ae-predecessor.json').read_text())
+    if (baseline.get('schema')!='voice-nats-reviewed-predecessor-v1'
+            or baseline.get('source_commit')!='9ae2e0c259e5e039109f7331aaf62b3607e549dd'
+            or baseline.get('sources')!={'deploy/templates/nats-realtime-bootstrap.yaml':'59099dea8f129c1300b31c7441fc9cc393875108',
+                'deploy/templates/nats-analytics-chat-bootstrap.yaml':'a88ed972161f7445ad26886cf194d1a3b4f78125'}
+            or len(set(baseline.get('chat_subjects',[])))!=14
+            or len(set(baseline.get('role_subjects',[])))!=9
+            or set(baseline['chat_subjects'])!=CHAT_SUBJECTS_14
+            or set(baseline['role_subjects'])!=ROLE_SUBJECTS_9
+            or baseline.get('social_subjects')!=['social.friend_request','social.friend_accepted','social.friend_removed','social.user_blocked','social.contacts_synced']
+            or baseline.get('social_max_age_ns')!=604800000000000
+            or baseline.get('social_duplicate_window_ns')!=86400000000000
+            or baseline.get('friend_removed_consumer')!={'stream':'social_events','name':'rt_realtime1_friend_removed',
+                'filter_subject':'social.friend_removed','deliver_subject':'_INBOX.voice.realtime1.friend_removed',
+                'deliver_policy':'new','ack_policy':'explicit'}):
+        raise RuntimeError('reviewed_nats_predecessor_fixture_invalid')
+    shutil.copyfile('/bundle/nats-9ae-predecessor.json',base/'inputs/predecessor.json')
+    os.chmod(base/'inputs/predecessor.json',0o440);os.chown(base/'inputs/predecessor.json',0,65532)
+    for p in [base/'inputs',base/'server.conf',*list((base/'inputs').iterdir())]:os.chown(p,0,65532)
+    _set_archive_base_custody(base)
+    # These are disposable fixture identities, created inside this volume.
+    # No installed signer, live credentials, or production authority is read.
+    old=(base/'inputs/bootstrap.creds').read_text()
+    token=old.split('-----BEGIN NATS USER JWT-----\n',1)[1].split('\n',1)[0]
+    claims=json.loads(base64.urlsafe_b64decode(token.split('.')[1]+'=='))
+    actor_sha=hashlib.sha256(claims['sub'].encode()).hexdigest()
+    public=(base/'inputs/account.public').read_text().strip();account_sha=hashlib.sha256(public.encode()).hexdigest()
+    request={'schema':'voice-nats-existing-bootstrap-renewal-v1','old_creds':old,
+        'account_jwt':(base/'inputs/account.jwt').read_text().strip(),'operator_jwt':(base/'inputs/operator.jwt').read_text().strip(),
+        'signer_seed':(base/'inputs/synthetic-account.seed').read_text(),'actor_sha256':actor_sha,'account_sha256':account_sha}
+    binary=base/'bootstrap-renewer';shutil.copyfile('/bundle/bootstrap-renewer',binary);binary.chmod(0o550)
+    renewed=invoke(binary,request)
+    operator={'data':{key:base64.b64encode((base/'inputs'/key).read_bytes()).decode() for key in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}}
+    guard.ROOT=base/'root-custody';guard.ROOT.mkdir(mode=0o700)
+    bootstrap_auth.ACCOUNT_SHA=account_sha
+    auth=bootstrap_auth.prove(renewed,operator,lambda:None)
+    assert auth['verified'] and auth['reply_prefix']=='_INBOX.voice.bootstrap.reply'
+    (base/'inputs/bootstrap.creds').write_bytes(renewed)
+    fixture_id=os.environ.get('VOICE_CENSUS_FIXTURE_ID') or uuid.uuid4().hex[:12]
+    if not re.fullmatch(r'[0-9a-f]{12}',fixture_id):raise RuntimeError('owned_contract_fixture_identity_invalid')
+    operation='contract'+fixture_id
+    runtime=DockerRuntime(base,operation);removed=[];fresh_runtime=None
+    try:
+        store=base/'store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
+        broker=runtime.start_broker('original',store);ready(runtime,broker);runtime.bootstrap(broker)
+        seeded=runtime.kernel(broker,'seed')/'fixture.json'
+        snapshot=base/'inputs/fixture.json';snapshot.write_bytes(seeded.read_bytes());snapshot.chmod(0o440);os.chown(snapshot,0,65532)
+        baseline_seed=runtime.create('baseline-record-seed',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','seed-contract'],broker)
+        runtime.run(['start',baseline_seed]);assert runtime.run(['wait',baseline_seed])=='0'
+        extra=runtime.create('extra-seed',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','extra'],broker)
+        runtime.run(['start',extra]);assert runtime.run(['wait',extra])=='0'
+        precut_verifier=runtime.create('precut-record-verify',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','verify'],broker)
+        runtime.run(['start',precut_verifier]);assert runtime.run(['wait',precut_verifier])=='0'
+        account=(base/'inputs/account.public').read_text().strip()
+        before=census(runtime,broker,account);assert sum(s['state']['messages'] for s in before['streams'])==7
+        if len(before['consumers'])!=45:raise RuntimeError('reviewed_predecessor_consumer_count_mismatch')
+        raw=runtime.monitor_jsz(broker);details=next(a for a in raw['account_details'] if a['id']==account)['stream_detail']
+        infos={s['name']:{'config':s['config'],'state':s['state']} for s in details}
+        existing_actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,lambda:None)
+        existing_consumers={}
+        for stream,declaration in DECLARATIONS:
+            durable=declaration['durable_name'];obj=stream+'/'+durable
+            config=existing_actor.info_config(obj)
+            if config is not None:existing_consumers[(stream,durable)]={'config':config}
+        if set(existing_consumers)!={('social_events','rt_realtime1_friend_removed')}:
+            raise RuntimeError('reviewed_predecessor_consumer_set_mismatch')
+        runtime.stop(broker)
+        assert not runtime.inspect(broker)['State']['Running']
+        native=archive_closed_store(store,base/'before.tar')
+        shutil.copyfile(base/'before.tar',base/'copy.tar');assert verify_archive(base/'copy.tar',native)
+        def fenced():assert not runtime.inspect(broker)['State']['Running']
+        # Defaults originate from this exact pinned server, account and source
+        # declaration on an empty owned scratch store, never a supplied hash.
+        scratch=base/'auth-store';scratch.mkdir(mode=0o700);os.chown(scratch,65532,65532)
+        normalizer=runtime.start_broker('normalizer',scratch);ready(runtime,normalizer)
+        actor=Actor(runtime,normalizer,runtime.owned[normalizer]['id'],scratch,fenced)
+        for stream in ('chat_events','social_events','role_events'):
+            actor._request('$JS.API.STREAM.CREATE.'+stream,copy.deepcopy(infos[stream]['config']))
+        normalized_consumers={}
+        for stream,declaration in DECLARATIONS:
+            durable=declaration['durable_name']
+            actor.mutate('$JS.API.CONSUMER.CREATE.'+stream+'.'+durable,{'stream_name':stream,'action':'create','config':copy.deepcopy(declaration)})
+            normalized=actor.info_config(stream+'/'+durable)
+            assert normalized['deliver_policy']=='new' and normalized['ack_policy']=='explicit'
+            assert len(normalized)>len(declaration)
+            normalized_consumers[(stream,durable)]=normalized
+        runtime.stop(normalizer)
+        plan=compile_plan('/source',infos,existing_consumers,normalized_consumers)
+        expected_actions={
+            '$JS.API.STREAM.UPDATE.chat_events',
+            '$JS.API.STREAM.UPDATE.role_events',
+            '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
+            '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',
+        }
+        if {action['api'] for action in plan['actions']}!=expected_actions:
+            raise RuntimeError('v3_migration_delta_unexpected')
+        from nats_contract_plan import digest
+        enrollment={'fixture_authenticated_existing_actor':auth}
+        state={'operation':operation,'events':[],'custody':{'verified':True,'scope':'same-host-fixture-only'},
+            'bootstrap_enrollment':enrollment,'nats_contract':plan,
+            'nats_contract_binding':{'plan_sha256':digest(plan),'server_image':NATS_IMAGE,'enrollment_sha256':digest(enrollment),'sources':plan['sources']},
+            'cut':{'manifest':native,'manifest_sha256':digest(native),'census':before,'census_sha256':canonical(before)}}
+        class Stage:
+            final_path=store
+            final_claim={};final_pv={} # private fixture store already inside runtime.base
+            def verify_final_storage(self):fenced()
+            def selected_store_descriptor(self):
+                return _private_fixture_store_descriptor(base,self.final_path,fenced)
+        original_verify=nats_migration.verify_census
+        def diagnostic(plan,before,after):
+            new=[c for c in after['consumers'] if (c['stream'],c.get('durable') or c['name']) not in {(c['stream'],c['name']) for c in before['consumers']}]
+            if new:
+                floors=[]
+                for row in new:
+                    last=next(s for s in before['streams'] if s['name']==row['stream'])['state']['last_seq']
+                    floors.append({'stream':row['stream'],'durable':row.get('durable') or row['name'],'delivered':row['delivered'],'ack_floor':row['ack_floor'],'old_last_seq':last})
+                print('FIXTURE_NEW_DURABLE_INITIAL_FLOORS='+json.dumps(floors,sort_keys=True),file=sys.stderr,flush=True)
+            try:return original_verify(plan,before,after)
+            except Exception:
+                from rollout_census import semantic
+                closed=archive_closed_store(store,base/'drift-diagnostic.tar')
+                original={row['path']:row for row in native['files']}
+                current_files={row['path']:row for row in closed['files']}
+                consumer_paths=[path for path in original if '/obs/' in path]
+                changed=[path for path in consumer_paths if original[path]!=current_files.get(path)]
+                # Names and basenames only; no bytes, credentials or payloads.
+                changed_kinds=sorted(set(Path(path).name for path in changed))
+                state_paths=[path for path in consumer_paths if Path(path).name=='o.dat']
+                print(json.dumps({'diagnostic_old_consumer_state_files':len(state_paths),
+                    'diagnostic_old_consumer_state_bytes_equal':bool(state_paths) and all(original[path]==current_files.get(path) for path in state_paths),
+                    'diagnostic_changed_consumer_file_kinds':changed_kinds}),flush=True)
+                old=semantic(before);new=semantic(after);byname={(c['stream'],c['name']):c for c in new['consumers']}
+                for row in old['consumers']:
+                    current=byname.get((row['stream'],row['name']),{})
+                    fields=sorted(k for k in set(row)|set(current) if row.get(k)!=current.get(k))
+                    if fields:raise ValueError('fixture_old_consumer_drift name='+row['name']+' fields='+','.join(fields)+' old_state_files='+str(len(state_paths))+' state_bytes_equal='+str(bool(state_paths) and all(original[path]==current_files.get(path) for path in state_paths))+' changed_kinds='+','.join(changed_kinds)) from None
+                stream_rows={s['name']:s for s in new['streams']}
+                for original_row in old['streams']:
+                    expected=copy.deepcopy(original_row)
+                    for action in plan['actions']:
+                        if action['object']==expected['name'] and '.STREAM.UPDATE.' in action['api']:expected['config_sha256']=digest(action['after'])
+                        if action['api'].startswith('$JS.API.CONSUMER.CREATE.') and action['object'].startswith(expected['name']+'/'):expected['state']['consumer_count']+=1
+                    observed=stream_rows[expected['name']]
+                    fields=sorted(k for k in set(expected)|set(observed) if expected.get(k)!=observed.get(k))
+                    states=sorted(k for k in set(expected['state'])|set(observed['state']) if expected['state'].get(k)!=observed['state'].get(k))
+                    if fields:raise ValueError('fixture_old_stream_drift name='+expected['name']+' fields='+','.join(fields)+' state_fields='+','.join(states)) from None
+                raise
+        nats_migration.verify_census=diagnostic
+        real_mutate=Actor.mutate
+        def interrupted_update(actor,api,body):
+            result=real_mutate(actor,api,body)
+            if api=='$JS.API.STREAM.UPDATE.chat_events':raise RuntimeError('fixture_interrupted_after_update_before_info')
+            return result
+        Actor.mutate=interrupted_update
+        try:
+            apply_contract(base,state,Stage(),state['events'].append)
+        except RuntimeError as error:
+            assert str(error)=='fixture_interrupted_after_update_before_info'
+        else:raise AssertionError('fixture_interruption_not_exercised')
+        finally:Actor.mutate=real_mutate
+        assert not any(e['kind']=='nats_contract_applied' for e in state['events'])
+        assert any(e['kind']=='nats_contract_mutation_issued' for e in state['events'])
+        migration=apply_contract(base,state,Stage(),state['events'].append)
+        assert migration['verified'] and migration['old_record_files_verified']
+        if migration['proof']['old_consumers_preserved']!=45 or migration['proof']['created_consumers']!=2:
+            raise RuntimeError('v3_consumer_census_unexpected')
+        postproof=verify_post_apply(runtime,store,migration['cut'],fenced)
+        assert postproof['native_files_verified'] and postproof['census_verified']
+        proof=migration['proof'];events=state['events']
+        runtime.restart(broker);ready(runtime,broker)
+        # The old reset kernel compares an unchanged stream configuration;
+        # our exact additive config delta is checked above instead. GetMsg
+        # below verifies the original records without deliveries or ACKs.
+        verifier=runtime.create('payload-verify',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','verify'],broker)
+        runtime.run(['start',verifier]);assert runtime.run(['wait',verifier])=='0'
+        publish=runtime.create('post-release-record',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','post'],broker)
+        runtime.run(['start',publish]);assert runtime.run(['wait',publish])=='0'
+        current_actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,lambda:None)
+        current_tree=runtime.monitor_jsz(broker)
+        current_details=next(a for a in current_tree['account_details'] if a['id']==account)['stream_detail']
+        current_infos,current_consumers=_postmigration_plan_inputs(current_actor,current_details)
+        rollback_plan=compile_plan('/source',current_infos,current_consumers,normalized_consumers)
+        assert rollback_plan['actions']==[]
+        runtime.stop(broker)
+        fresh_base=base/'fresh-operation';fresh_base.mkdir(mode=0o750);os.chown(fresh_base,0,65532)
+        shutil.copytree(base/'inputs',fresh_base/'inputs')
+        for path in [fresh_base/'inputs',*(fresh_base/'inputs').rglob('*')]:os.chown(path,0,65532)
+        for name in ('kernel','server.conf'):
+            shutil.copyfile(base/name,fresh_base/name);os.chown(fresh_base/name,0,65532);(fresh_base/name).chmod(0o550 if name=='kernel' else 0o440)
+        fresh_runtime=DockerRuntime(fresh_base,'freshrollback'+fixture_id)
+        fresh_cut=capture_cut(fresh_runtime,store,fenced)
+        assert sum(row['state']['messages'] for row in fresh_cut['census']['streams'])==8
+        fresh_cut['manifest_sha256']=digest(fresh_cut['manifest'])
+        fresh={'operation':fresh_runtime.operation,'events':[],'custody':{'verified':True,'scope':'same-host-fixture-only'},
+            'bootstrap_enrollment':enrollment,'nats_contract':rollback_plan,
+            'nats_contract_binding':{'plan_sha256':digest(rollback_plan),'server_image':NATS_IMAGE,'enrollment_sha256':digest(enrollment),'sources':rollback_plan['sources']},'cut':fresh_cut}
+        # Rollback captures the current postrelease record and retains the
+        # additive contract; it never restores the earlier pre-release cut.
+        fresh_migration=apply_contract(fresh_base,fresh,Stage(),fresh['events'].append)
+        assert fresh_migration['verified'] and fresh_migration['applied']==[]
+        fresh_proof=verify_post_apply(fresh_runtime,store,fresh_migration['cut'],fenced)
+        assert fresh_proof['messages']==8
+        for name in list(fresh_runtime.owned):
+            row=fresh_runtime.inspect(name);fresh_runtime.run(['rm','-f',row['Id']]);removed.append(row['Id'])
+            assert not fresh_runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}'])
+        fresh_runtime.owned.clear()
+        runtime.restart(broker);ready(runtime,broker)
+        post_verifier=runtime.create('post-record-verify',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','verify-post'],broker)
+        runtime.run(['start',post_verifier]);assert runtime.run(['wait',post_verifier])=='0'
+        runtime.stop(broker);post=runtime.cold_archive(broker,store,base/'after.tar')
+        def records(manifest):return {row['path']:row for row in manifest['files'] if '/msgs/' in row['path']}
+        assert records(native) and records(fresh_cut['manifest'])==records(post)
+        receipt={'schema':'voice-nats-contract-fixture-v1','messages':proof['messages'],
+            'old_consumers_preserved':proof['old_consumers_preserved'],'created_consumers':proof['created_consumers'],
+            'normalized_consumers_sha256':digest(plan['consumer_targets']),'native_record_files_equal':True,
+            'known_payloads_verified':True,'same_original_store':True,'renewed_existing_actor_auth_verified':True,'normal_migration_phase_and_postapply_proof_verified':True,
+            'fresh_rollback_current_cut_records':8,'post_release_record_payload_verified':True,'rollback_retained_additive_contract':True,
+            'actual_update_before_info_interruption_recovered':True,
+            'new_durable_initial_delivery_ack_floors_verified':True,
+            'events':[e['kind'] for e in events]}
+    finally:
+        for owned_runtime in ([fresh_runtime] if fresh_runtime is not None else [])+[runtime]:
+            for name in reversed(list(owned_runtime.owned)):
+                row=owned_runtime.inspect(name);owned_runtime.run(['rm','-f',row['Id']]);removed.append(row['Id'])
+                assert not owned_runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}'])
+    receipt['removed_container_ids']=removed;print(json.dumps(receipt,sort_keys=True))
+
+_CAPTURE_STARTS=(
+    'nats-rollout-preservation/contract_fixture_entry.py',
+    'nats-rollout-preservation/nats_contract_integration.py',
+    'nats-rollout-preservation/rollout_census.py',
+    'nats-rollout-preservation/rollout_census_integration.py',
+    'nats-rollout-preservation/nats_contract_actor.py',
+    'nats-rollout-preservation/nats_contract_plan.py',
+    'nats-rollout-preservation/nats_migration.py',
+    'nats-rollout-preservation/preserve.py',
+    'nats-rollout-preservation/native_store.py',
+    'nats-rollout-preservation/bootstrap_auth.py',
+    'nats-rollout-preservation/bootstrap_root.py',
+    'nats-rollout-preservation/bootstrap_enrollment.py',
+    'nats-rollout-preservation/bootstrap_renewal.py',
+    'nats-rollout-preservation/guard.py',
+    'nats-known-baseline/docker_runtime.py',
+    'nats-known-baseline/scenario.py',
+    'nats-known-baseline/controller.py',
+    'nats-known-baseline/commands.py',
+    'nats-known-baseline/stage_runtime.py',
+)
+
+
+def _captured_python_sources(source):
+    roots={name:Path(source)/'scripts/staging'/name for name in (
+        'nats-rollout-preservation','nats-known-baseline')}
+    pending=[Path(source)/'scripts/staging'/relative for relative in _CAPTURE_STARTS]
+    captured={}
+
+    def local_module(name):
+        parts=name.split('.')
+        for root_name,root in roots.items():
+            candidate=root.joinpath(*parts).with_suffix('.py')
+            if candidate.is_file():
+                return root_name+'/'+candidate.relative_to(root).as_posix(),candidate
+            package=root.joinpath(*parts,'__init__.py')
+            if package.is_file():
+                return root_name+'/'+package.relative_to(root).as_posix(),package
+        return None
+
+    while pending:
+        path=pending.pop().resolve()
+        relative=None
+        for root_name,root in roots.items():
+            try:
+                relative=root_name+'/'+path.relative_to(root.resolve()).as_posix()
+                break
+            except ValueError:
+                pass
+        if relative is None or relative in captured:
+            continue
+        if not path.is_file():
+            raise RuntimeError('captured_python_source_missing')
+        captured[relative]=path
+        tree=ast.parse(path.read_text(encoding='utf-8'),filename=relative)
+        imported=set()
+        for node in ast.walk(tree):
+            if isinstance(node,ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node,ast.ImportFrom) and node.level==0 and node.module:
+                imported.add(node.module)
+                imported.update(node.module+'.'+alias.name for alias in node.names if alias.name!='*')
+            elif (isinstance(node,ast.Call) and isinstance(node.func,ast.Name)
+                    and node.func.id=='__import__' and node.args
+                    and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str)):
+                imported.add(node.args[0].value)
+            elif (isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)
+                    and node.func.attr=='import_module' and node.args
+                    and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str)):
+                imported.add(node.args[0].value)
+        for name in sorted(imported):
+            found=local_module(name)
+            if found is not None:
+                pending.append(found[1])
+    return dict(sorted(captured.items()))
+
+
+def build_fixture_records(bundle):
+    source=Path(__file__).resolve().parents[3];module=source/'scripts/staging/nats-known-baseline'
+    helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "fmt"; "os"; "reflect";')
+    contract=json.loads((module/'deployed-contract.json').read_text())
+    grants=fixture_bootstrap_grants(contract)
+    grant_text=json.dumps(grants,separators=(',',':'))
+    old_actor='''
+ bootstrap,e:=nkeys.CreateUser();must(e);defer bootstrap.Wipe();bootstrapPublic,e:=bootstrap.PublicKey();must(e)
+ restricted:=jwt.NewUserClaims(bootstrapPublic);must(json.Unmarshal([]byte(`GRANTS`),&restricted.Pub.Allow));restricted.Sub.Allow=[]string{"_INBOX.voice.bootstrap.reply.>"}
+ restrictedToken,e:=restricted.Encode(app);must(e);bootstrapSeed,e:=bootstrap.Seed();must(e)
+ restrictedCreds,e:=jwt.FormatUserConfig(restrictedToken,bootstrapSeed);must(e);write(base,"inputs/bootstrap.creds",string(restrictedCreds))
+ accountSeed,e:=app.Seed();must(e);write(base,"inputs/synthetic-account.seed",string(accountSeed))
+ write(base,"inputs/operator.jwt",operator);write(base,"inputs/account.jwt",account);write(base,"inputs/system-account.jwt",system);write(base,"inputs/system-account.public",sysPub)
+'''.replace('GRANTS',grant_text)
+    helper=helper.replace('\n}\nfunc extra()',old_actor+'\n}\nfunc extra()')
+    # Payload/extra-fixture validation uses its separate disposable broad
+    # role; the migration actor retains the exact limited old grant list.
+    helper=helper.replace('"/inputs/bootstrap.creds"','"/inputs/social.creds"')
+    seed_contract=r'''
+func seedContract() {
+ nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/social.creds"),nats.Timeout(2*time.Second),nats.NoReconnect());must(e);defer nc.Close()
+ js,e:=nc.JetStream();must(e)
+ raw,e:=os.ReadFile("/inputs/predecessor.json");must(e)
+  var baseline struct {
+   ChatSubjects []string `json:"chat_subjects"`; RoleSubjects []string `json:"role_subjects"`
+   SocialSubjects []string `json:"social_subjects"`; SocialMaxAge int64 `json:"social_max_age_ns"`
+   SocialDuplicateWindow int64 `json:"social_duplicate_window_ns"`
+   FriendRemovedConsumer struct {Stream string `json:"stream"`; Name string `json:"name"`; FilterSubject string `json:"filter_subject"`; DeliverSubject string `json:"deliver_subject"`; DeliverPolicy string `json:"deliver_policy"`; AckPolicy string `json:"ack_policy"`} `json:"friend_removed_consumer"`
+  }
+  must(json.Unmarshal(raw,&baseline));if len(baseline.ChatSubjects)!=14 || len(baseline.RoleSubjects)!=9 || len(baseline.SocialSubjects)!=5 || baseline.SocialMaxAge!=604800000000000 || baseline.SocialDuplicateWindow!=86400000000000 {panic("reviewed_predecessor_shape")}
+  chat,e:=js.StreamInfo("chat_events");must(e);chat.Config.Subjects=baseline.ChatSubjects
+  _,e=js.UpdateStream(&chat.Config);must(e)
+  chat,e=js.StreamInfo("chat_events");must(e);if !reflect.DeepEqual(chat.Config.Subjects,baseline.ChatSubjects) {panic("chat_predecessor_subjects")}
+  role,e:=js.StreamInfo("role_events");must(e);if !reflect.DeepEqual(role.Config.Subjects,baseline.RoleSubjects) {panic("role_predecessor_subjects")}
+  social,e:=js.StreamInfo("social_events");must(e)
+  if social.Config.MaxAge!=time.Duration(baseline.SocialMaxAge) || !reflect.DeepEqual(social.Config.Subjects,baseline.SocialSubjects) {panic("social_predecessor_source_mismatch")}
+  social.Config.Duplicates=time.Duration(baseline.SocialDuplicateWindow)
+  _,e=js.UpdateStream(&social.Config);must(e)
+  social,e=js.StreamInfo("social_events");must(e)
+  if social.Config.MaxAge!=time.Duration(baseline.SocialMaxAge) || social.Config.Duplicates!=time.Duration(baseline.SocialDuplicateWindow) || !reflect.DeepEqual(social.Config.Subjects,baseline.SocialSubjects) {panic("social_predecessor_config")}
+  expected:=baseline.FriendRemovedConsumer
+  if expected.Stream!="social_events" || expected.Name!="rt_realtime1_friend_removed" || expected.FilterSubject!="social.friend_removed" || expected.DeliverSubject!="_INBOX.voice.realtime1.friend_removed" || expected.DeliverPolicy!="new" || expected.AckPolicy!="explicit" {panic("friend_removed_predecessor_source_mismatch")}
+  _,e=js.AddConsumer(expected.Stream,&nats.ConsumerConfig{Durable:expected.Name,FilterSubject:expected.FilterSubject,DeliverSubject:expected.DeliverSubject,DeliverPolicy:nats.DeliverNewPolicy,AckPolicy:nats.AckExplicitPolicy});must(e)
+  consumer,e:=js.ConsumerInfo(expected.Stream,expected.Name);must(e)
+  if consumer.Config.Durable!=expected.Name || consumer.Config.FilterSubject!=expected.FilterSubject || consumer.Config.DeliverSubject!=expected.DeliverSubject || consumer.Config.DeliverPolicy!=nats.DeliverNewPolicy || consumer.Config.AckPolicy!=nats.AckExplicitPolicy {panic("friend_removed_predecessor_consumer")}
+ for _,record:=range []struct{stream,subject,id,payload string}{{"chat_events","chat.created","fixture-chat-created-9ae","nats-9ae-fixture-chat-created-v1"},{"role_events","role.created","fixture-role-created-9ae","nats-9ae-fixture-role-created-v1"}} {
+  message:=nats.NewMsg(record.subject);message.Header.Set(nats.MsgIdHdr,record.id);message.Data=[]byte(record.payload)
+  _,e=js.PublishMsg(message);must(e)
+ }
+ must(nc.Flush())
+}
+'''
+    helper=helper.replace('func extra()',seed_contract+'\nfunc extra()')
+    helper=helper.replace('func main() {','func main() { if len(os.Args)==2 && os.Args[1]=="seed-contract" {seedContract();return};')
+    payload_check=r'''
+ raw,e:=os.ReadFile("/inputs/fixture.json");must(e)
+ var snapshot struct {Records []struct {Subject string `json:"subject"`;Sequence uint64 `json:"sequence"`;Payload string `json:"payload_sha256"`;Headers string `json:"headers_sha256"`;Event string `json:"event_id"`} `json:"records"`}
+ must(json.Unmarshal(raw,&snapshot));if len(snapshot.Records)!=3 {panic("known_record_count")}
+ for _,record:=range snapshot.Records {
+  message,e:=js.GetMsg("social_events",record.Sequence);must(e)
+  payload:=sha256.Sum256(message.Data);headers,e:=json.Marshal(message.Header);must(e);header:=sha256.Sum256(headers)
+  if message.Subject!=record.Subject || message.Header.Get(nats.MsgIdHdr)!=record.Event || hex.EncodeToString(payload[:])!=record.Payload || hex.EncodeToString(header[:])!=record.Headers {panic("known_record_changed")}
+ }
+ for _,record:=range []struct{stream,subject,id,payload,digest string}{{"chat_events","chat.created","fixture-chat-created-9ae","nats-9ae-fixture-chat-created-v1","dfe6e978552b85640f75370dbedda5ead2f1211c466ccee1ba761f8fe54cfe27"},{"role_events","role.created","fixture-role-created-9ae","nats-9ae-fixture-role-created-v1","3038d7d6ca69d5b69dcc1c9baee9a905972ccd4f2d77be7cbfe293cfc313a372"}} {
+  message,e:=js.GetMsg(record.stream,1);must(e);payload:=sha256.Sum256(message.Data)
+  if message.Subject!=record.subject || message.Header.Get(nats.MsgIdHdr)!=record.id || string(message.Data)!=record.payload || hex.EncodeToString(payload[:])!=record.digest {panic("baseline_record_changed")}
+ }
+'''
+    helper=helper.replace('for index,payload:=range []string',payload_check+'\n for index,payload:=range []string')
+    post=r'''
+func post(check bool) {
+ nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/social.creds"),nats.Timeout(2*time.Second),nats.NoReconnect());must(e);defer nc.Close()
+ js,e:=nc.JetStream();must(e)
+ if check {verify();message,e:=js.GetMsg("rollout_extra",3);must(e);if string(message.Data)!="known-post-release-record" {panic("post_release_record_changed")};return}
+ _,e=js.Publish("rollout.extra",[]byte("known-post-release-record"));must(e)
+}
+'''
+    helper=helper.replace('func main() {',post+'\nfunc main() { if len(os.Args)==2 && os.Args[1]=="post" {post(false);return};if len(os.Args)==2 && os.Args[1]=="verify-post" {post(true);return};')
+    (bundle/'helper.go').write_text(helper)
+    env=dict(os.environ,GOOS='linux',GOARCH='amd64',CGO_ENABLED='0')
+    fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env)
+    fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env)
+    fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env)
+    records={n:base64.b64encode((bundle/n).read_bytes()).decode() for n in ('helper','kernel','bootstrap-renewer')}
+    records['nats-9ae-predecessor.json']=base64.b64encode((Path(__file__).parent/'testdata/nats-9ae-predecessor.json').read_bytes()).decode()
+    records['contract_fixture_entry.py']=base64.b64encode((Path(__file__).parent/'contract_fixture_entry.py').read_bytes()).decode()
+    captured=_captured_python_sources(source)
+    captured_bytes={relative:path.read_bytes() for relative,path in captured.items()}
+    captured_bytes['nats-known-baseline/kernel']=(bundle/'kernel').read_bytes()
+    manifest={relative:hashlib.sha256(content).hexdigest() for relative,content in sorted(captured_bytes.items())}
+    records['capture/capture-manifest.json']=base64.b64encode(
+        (json.dumps(manifest,sort_keys=True,separators=(',',':'))+'\n').encode()).decode()
+    for relative,content in captured_bytes.items():
+        records['capture/'+relative]=base64.b64encode(content).decode()
+    # Existing bounded outer fixture invokes this entry; it owns cleanup.
+    transport=(Path(__file__).parent/'rollout_census_integration.py').read_bytes().replace(b'inner(sys.argv[2])',b"__import__('contract_fixture_entry').inner(sys.argv[2])")
+    records['rollout_census_integration.py']=base64.b64encode(transport).decode()
+    for n in ('docker_runtime.py','scenario.py','controller.py','commands.py','stage_runtime.py'):
+        records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
+    for role in ('realtime','notification','analytics-chat','search'):
+        n='testdata/deployed-bootstrap-20261004/'+role+'-bootstrap.sh';records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
+    for role in ('realtime','analytics-chat'):
+        n='deploy/templates/nats-'+role+'-bootstrap.yaml';records['source/'+n]=base64.b64encode((source/n).read_bytes()).decode()
+    for name, encoded in records.items():
+        path=bundle/name
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_bytes(base64.b64decode(encoded))
+        path.chmod(0o755 if name in ('helper','kernel','bootstrap-renewer') or name=='capture/nats-known-baseline/kernel' else 0o644)
+def run_fixture(transport, bundle, environ=None):
+    env=os.environ if environ is None else environ
+    if transport=='github-hosted':
+        if select_transport(['--github-hosted'],env,'linux')!='github-hosted':
+            raise SystemExit('github_hosted_fixture_runner_required')
+        fixture.remote_run(bundle,transport='github-hosted')
+        return
+    if transport!='pmdebook':
+        raise SystemExit('owned_contract_fixture_transport_invalid')
+    records={path.relative_to(bundle).as_posix():base64.b64encode(path.read_bytes()).decode()
+             for path in bundle.rglob('*') if path.is_file()}
+    script='import base64,pathlib,tempfile,sys,os,socket\nassert sys.platform=="linux" and os.getuid()==1000 and socket.gethostname()=="pmdebook"\n'
+    script+='with tempfile.TemporaryDirectory(prefix="voice-contract-fixture-") as td:\n bundle=pathlib.Path(td)\n'
+    script+=' for n,data in '+repr(records)+'.items():\n  p=bundle/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(data));p.chmod(0o755 if n in ("helper","kernel","bootstrap-renewer") else 0o644)\n'
+    script+=' bundle.chmod(0o755);sys.path.insert(0,str(bundle));import rollout_census_integration as f;f.remote_run(bundle,transport="pmdebook")\n'
+    result=subprocess.run(['ssh','voice-staging','python3 -'],input=script.encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=180)
+    if result.returncode:
+        print(result.stdout.decode(),flush=True)
+        print('\n'.join(x for x in result.stderr.decode(errors='replace').splitlines()[-30:] if x.lstrip().startswith(('File ','AssertionError','TypeError','ValueError','KeyError','ContractError','Blocked','RuntimeError','FIXTURE_NEW_DURABLE_INITIAL_FLOORS='))),file=sys.stderr)
+        raise RuntimeError('owned_contract_fixture_failed')
+    print(result.stdout.decode())
+
+
+def main(argv=None):
+    argv=sys.argv[1:] if argv is None else argv
+    transport=select_transport(argv)
+    source=Path(__file__).resolve().parents[3]
+    with tempfile.TemporaryDirectory(prefix='voice-contract-build-') as td:
+        bundle=Path(td)
+        build_fixture_records(bundle)
+        run_fixture(transport,bundle)
+if __name__=='__main__':main()

@@ -23,6 +23,39 @@ MARKER = 'voice-nats-generation'
 NAMESPACE = 'voice-staging'
 
 
+def selected_store_descriptor(hub, claim, pv):
+    """Fixed captured Kubernetes group authority for the selected live volume."""
+    try:
+        pod=hub['spec']['template']['spec'];metadata=hub['metadata']
+        broker=[c for c in pod['containers'] if c['name']=='nats']
+        volumes=[v for v in pod['volumes'] if v['name']=='jsdata']
+        if (metadata['name']!=HUB or metadata['namespace']!=NAMESPACE or not metadata['uid']
+            or pod['securityContext'].get('fsGroup')!=10000
+            or pod['securityContext'].get('fsGroupChangePolicy')!='OnRootMismatch'
+            or len(broker)!=1 or len(volumes)!=1
+            or broker[0]['securityContext'].get('runAsUser')!=10000
+            or broker[0]['securityContext'].get('runAsGroup')!=10000
+            or broker[0]['securityContext'].get('runAsNonRoot') is not True
+            or volumes[0].get('persistentVolumeClaim')!={'claimName':claim['metadata']['name']}
+            or [m for m in broker[0]['volumeMounts'] if m['name']=='jsdata']!=[{'name':'jsdata','mountPath':'/data'}]):
+            raise ValueError()
+        return {'schema':'voice-selected-store-custody-v1','hub_uid':metadata['uid'],
+                'claim_uid':claim['metadata']['uid'],'pv_uid':pv['metadata']['uid'],
+                'path':pv_storage_path(pv,claim['metadata']['uid'],claim['metadata']['name'],pv['metadata']['uid']),
+                'uid':65532,'gid':10000,'mode':0o2770}
+    except (KeyError,TypeError,ValueError):
+        raise Blocked('selected_store_security_context_invalid') from None
+
+
+def verify_selected_store_leaf(row, descriptor):
+    if (not isinstance(descriptor,dict) or set(descriptor)!={'schema','hub_uid','claim_uid','pv_uid','path','uid','gid','mode'}
+        or descriptor['schema']!='voice-selected-store-custody-v1'
+        or (descriptor['uid'],descriptor['gid'],descriptor['mode'])!=(65532,10000,0o2770)
+        or not stat.S_ISDIR(row.st_mode) or row.st_uid!=descriptor['uid']
+        or row.st_gid!=descriptor['gid'] or stat.S_IMODE(row.st_mode)!=descriptor['mode']):
+        raise Blocked('selected_store_custody_invalid')
+
+
 def pv_storage_path(pv, claim_uid, claim_name, pv_uid):
     """One UID-bound local-path volume on the captured staging node."""
     uid=r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}'
@@ -359,16 +392,20 @@ class Staging:
             {'op':'test','path':annotation,'value':self.operation},
             {'op':'test','path':'/spec/template','value':self.snapshots['voice-user']['spec']['template']},
             {'op':'replace','path':'/spec/template','value':original}])
+        self.save({'kind':'user_cycle_restored','owner':self.operation})
         self.wait_ready('voice-user')
         for service in LEAVES: self.wait_ready('voice-'+service)
         self.scale('voice-gateway',1); self.wait_ready('voice-gateway')
+        self.release_marker()
+        return {'verified':True,'active_claim':self.final_claim['metadata']['name'],
+                'generation':self.expected['generation'],'user_cycle_restored':True}
+
+    def release_marker(self):
         marker=self.owned_marker()
         self.marker=self.kube.cas('configmap',marker,[
             {'op':'test','path':'/data/dataPVC','value':self.final_claim['metadata']['name']},
             {'op':'replace','path':'/data/phase','value':'active'},
             {'op':'remove','path':'/data/knownBaselineOperation'}])
-        return {'verified':True,'active_claim':self.final_claim['metadata']['name'],
-                'generation':self.expected['generation'],'user_cycle_restored':True}
 
     def refence(self):
         # Used only on an incomplete owned restart. No rollback, data replay,

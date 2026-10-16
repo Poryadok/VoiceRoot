@@ -53,6 +53,38 @@ type secretMetadata struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--renew-existing-service" {
+		if runPrivateRenewalPipe(os.Args[2], renewServicePipe) != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS service renewal refused; no credentials printed")
+			os.Exit(1)
+		}
+		fmt.Println("Existing NATS service renewed through private controller pipe")
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--authenticate-existing-actor" {
+		if authenticateExistingActor() != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS actor scratch authentication refused")
+			os.Exit(1)
+		}
+		fmt.Println("NATS_EXISTING_ACTOR_SERVER_AUTHENTICATION=VERIFIED")
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--verify-existing-actor" {
+		if runVerifyActorPipe(os.Args[2]) != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS actor verification refused")
+			os.Exit(1)
+		}
+		fmt.Println("Existing NATS actor verified through private controller pipe")
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--renew-existing-bootstrap" {
+		if runRenewBootstrapPipe(os.Args[2]) != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS bootstrap renewal refused; no credentials printed")
+			os.Exit(1)
+		}
+		fmt.Println("Existing NATS bootstrap renewed through private controller pipe")
+		return
+	}
 	namespace := flag.String("namespace", "", "voice-staging or voice-prod")
 	cert := flag.String("tls-cert", "", "TLS certificate PEM with voice-nats SAN")
 	key := flag.String("tls-key", "", "matching TLS private key PEM")
@@ -205,7 +237,7 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 			allowed := bootstrap && subject == "$JS.API.INFO" ||
 				strings.HasPrefix(subject, "$JS.API.STREAM.INFO.") ||
 				strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO.") ||
-				bootstrap && (strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") || subject == "$JS.API.STREAM.UPDATE.social_events" || strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.")) ||
+				bootstrap && (strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") || subject == "$JS.API.STREAM.UPDATE.social_events" || subject == "$JS.API.STREAM.UPDATE.chat_events" || strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.")) ||
 				!bootstrap && strings.HasPrefix(subject, "$JS.API.CONSUMER.MSG.NEXT.")
 			if !allowed {
 				return false

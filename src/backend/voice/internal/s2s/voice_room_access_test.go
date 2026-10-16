@@ -26,17 +26,21 @@ const voiceRoomAccessBufSize = 1024 * 1024
 
 type recordingSpaceResolverServer struct {
 	spacev1.UnimplementedSpaceServiceServer
-	request       *spacev1.ResolveVoiceRoomAccessRequest
-	metadata      metadata.MD
-	result        *spacev1.ResolveVoiceRoomAccessResponse
-	resolverError error
-	calls         int
+	expectedSpaceID string
+	request         *spacev1.ResolveVoiceRoomAccessRequest
+	metadata        metadata.MD
+	result          *spacev1.ResolveVoiceRoomAccessResponse
+	resolverError   error
+	calls           int
 }
 
 func (s *recordingSpaceResolverServer) ResolveVoiceRoomAccess(ctx context.Context, req *spacev1.ResolveVoiceRoomAccessRequest) (*spacev1.ResolveVoiceRoomAccessResponse, error) {
 	s.calls++
 	s.request = req
 	s.metadata, _ = metadata.FromIncomingContext(ctx)
+	if s.expectedSpaceID != "" && req.GetSpace().GetId() != s.expectedSpaceID {
+		return nil, status.Error(codes.NotFound, "voice room is not bound to expected Space")
+	}
 	if s.resolverError != nil {
 		return nil, s.resolverError
 	}
@@ -85,7 +89,7 @@ func TestGRPCVoiceRoomAccessResolver_UsesDedicatedBearerForGeneratedCanonicalRPC
 	spaceID := uuid.NewString()
 	voiceRoomID := uuid.NewString()
 	profileID := uuid.NewString()
-	spaceServer := &recordingSpaceResolverServer{result: &spacev1.ResolveVoiceRoomAccessResponse{
+	spaceServer := &recordingSpaceResolverServer{expectedSpaceID: spaceID, result: &spacev1.ResolveVoiceRoomAccessResponse{
 		SpaceId: spaceID,
 		Member:  true,
 		Active:  true,
@@ -97,13 +101,26 @@ func TestGRPCVoiceRoomAccessResolver_UsesDedicatedBearerForGeneratedCanonicalRPC
 		"authorization", "Bearer attacker-controlled-token",
 		"x-voice-profile-id", uuid.NewString(),
 	))
-	access, err := resolver.ResolveVoiceRoomAccess(forgedCtx, voiceRoomID, profileID)
+	access, err := resolver.ResolveVoiceRoomAccess(forgedCtx, spaceID, voiceRoomID, profileID)
 
 	require.NoError(t, err)
-	require.True(t, proto.Equal(&spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: voiceRoomID, ProfileId: profileID}, spaceServer.request))
+	require.True(t, proto.Equal(&spacev1.ResolveVoiceRoomAccessRequest{Space: &spacev1.SpaceRef{Id: spaceID}, VoiceRoomId: voiceRoomID, ProfileId: profileID}, spaceServer.request))
 	require.Equal(t, []string{"Bearer " + trustedToken}, spaceServer.metadata.Get("authorization"))
 	require.Empty(t, spaceServer.metadata.Get("x-voice-profile-id"), "caller metadata cannot cross the S2S authentication boundary")
 	require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true}, access)
+}
+
+func TestGRPCVoiceRoomAccessResolver_MismatchedExpectedSpaceIsDenied(t *testing.T) {
+	expectedSpaceID := uuid.NewString()
+	resolver := s2s.NewGRPCVoiceRoomAccessResolver(startVoiceResolverServer(t, "trusted-voice-service-token", &recordingSpaceResolverServer{
+		expectedSpaceID: expectedSpaceID,
+		result:          &spacev1.ResolveVoiceRoomAccessResponse{SpaceId: expectedSpaceID, Member: true, Active: true},
+	}), "trusted-voice-service-token")
+
+	access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString(), uuid.NewString())
+
+	require.Equal(t, codes.NotFound, status.Code(err))
+	require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{}, access)
 }
 
 func TestGRPCVoiceRoomAccessResolver_BlankTokenFailsBeforeGeneratedRPC(t *testing.T) {
@@ -112,7 +129,7 @@ func TestGRPCVoiceRoomAccessResolver_BlankTokenFailsBeforeGeneratedRPC(t *testin
 			spaceServer := &recordingSpaceResolverServer{result: &spacev1.ResolveVoiceRoomAccessResponse{SpaceId: uuid.NewString(), Member: true, Active: true}}
 			resolver := s2s.NewGRPCVoiceRoomAccessResolver(startVoiceResolverServer(t, "trusted-voice-service-token", spaceServer), token)
 
-			access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString())
+			access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString(), uuid.NewString())
 
 			require.Equal(t, codes.FailedPrecondition, status.Code(err))
 			require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{}, access)
@@ -125,7 +142,7 @@ func TestGRPCVoiceRoomAccessResolver_PropagatesSpaceUnavailable(t *testing.T) {
 	spaceServer := &recordingSpaceResolverServer{resolverError: status.Error(codes.Unavailable, "space database unavailable")}
 	resolver := s2s.NewGRPCVoiceRoomAccessResolver(startVoiceResolverServer(t, "trusted-voice-service-token", spaceServer), "trusted-voice-service-token")
 
-	access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString())
+	access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString(), uuid.NewString())
 
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{}, access)

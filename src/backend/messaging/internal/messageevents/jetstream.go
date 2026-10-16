@@ -135,26 +135,49 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 }
 
 func (p *JetStreamPublisher) publishProtoWithHeaders(ctx context.Context, subject string, env *eventsv1.MessageStreamEvent, extra nats.Header) error {
-	if err := p.ensureStream(); err != nil {
-		return err
-	}
-	b, err := proto.Marshal(env)
-	if err != nil {
-		return fmt.Errorf("marshal MessageStreamEvent: %w", err)
-	}
-	requestID := correlation.FromGRPC(ctx)
-	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
-	for k, vals := range extra {
-		for _, v := range vals {
-			msg.Header.Add(k, v)
+	headers := make(map[string]string, len(extra))
+	for key, values := range extra {
+		if len(values) > 0 {
+			headers[key] = values[0]
 		}
 	}
-	natslog.SetRequestIDHeader(msg.Header, requestID)
-	if _, err := p.js.PublishMsg(msg); err != nil {
-		return fmt.Errorf("jetstream publish %s: %w", subject, err)
+	event, err := encodeOutboxEvent(subject, env, headers)
+	if err != nil {
+		return err
 	}
-	natslog.LogPublish(p.Logger, subject, requestID, "message event published", messageEventLogAttrs(env)...)
-	return nil
+	_, err = p.PublishOutboxEvent(ctx, event)
+	return err
+}
+
+// PublishOutboxEvent publishes exact persisted bytes with JetStream's stable
+// message ID. A returned sequence is positive only after a successful PubAck.
+func (p *JetStreamPublisher) PublishOutboxEvent(ctx context.Context, event OutboxEvent) (uint64, error) {
+	if err := p.ensureStream(); err != nil {
+		return 0, err
+	}
+	if event.EventID == uuid.Nil || len(event.Payload) == 0 || event.Subject == "" {
+		return 0, fmt.Errorf("message outbox request is incomplete")
+	}
+	requestID := correlation.FromGRPC(ctx)
+	msg := &nats.Msg{Subject: event.Subject, Data: append([]byte(nil), event.Payload...), Header: nats.Header{}}
+	for key, value := range event.Headers {
+		msg.Header.Set(key, value)
+	}
+	msg.Header.Set(nats.MsgIdHdr, event.EventID.String())
+	natslog.SetRequestIDHeader(msg.Header, requestID)
+	ack, err := p.js.PublishMsg(msg)
+	if err != nil {
+		return 0, fmt.Errorf("jetstream publish %s: %w", event.Subject, err)
+	}
+	if ack == nil || ack.Sequence == 0 {
+		return 0, fmt.Errorf("jetstream publish %s returned no durable PubAck sequence", event.Subject)
+	}
+	envelope := &eventsv1.MessageStreamEvent{}
+	if err := proto.Unmarshal(event.Payload, envelope); err != nil {
+		return 0, fmt.Errorf("decode persisted MessageStreamEvent for logging: %w", err)
+	}
+	natslog.LogPublish(p.Logger, event.Subject, requestID, "message event published", messageEventLogAttrs(envelope)...)
+	return ack.Sequence, nil
 }
 
 func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {

@@ -767,6 +767,7 @@ const CreateChatRequest$json = {
     },
     {'1': 'name', '3': 3, '4': 1, '5': 9, '9': 1, '10': 'name', '17': true},
     {'1': 'topic', '3': 4, '4': 1, '5': 9, '9': 2, '10': 'topic', '17': true},
+    {'1': 'request_id', '3': 5, '4': 1, '5': 9, '10': 'requestId'},
   ],
   '8': [
     {'1': '_space_id'},
@@ -779,8 +780,8 @@ const CreateChatRequest$json = {
 final $typed_data.Uint8List createChatRequestDescriptor = $convert.base64Decode(
     'ChFDcmVhdGVDaGF0UmVxdWVzdBIrCgR0eXBlGAEgASgOMhcudm9pY2UuY2hhdC52MS5DaGF0VH'
     'lwZVIEdHlwZRIeCghzcGFjZV9pZBgCIAEoCUgAUgdzcGFjZUlkiAEBEhcKBG5hbWUYAyABKAlI'
-    'AVIEbmFtZYgBARIZCgV0b3BpYxgEIAEoCUgCUgV0b3BpY4gBAUILCglfc3BhY2VfaWRCBwoFX2'
-    '5hbWVCCAoGX3RvcGlj');
+    'AVIEbmFtZYgBARIZCgV0b3BpYxgEIAEoCUgCUgV0b3BpY4gBARIdCgpyZXF1ZXN0X2lkGAUgAS'
+    'gJUglyZXF1ZXN0SWRCCwoJX3NwYWNlX2lkQgcKBV9uYW1lQggKBl90b3BpYw==');
 
 @$core.Deprecated('Use updateChatRequestDescriptor instead')
 const UpdateChatRequest$json = {
@@ -2593,3 +2594,29 @@ final $typed_data.Uint8List getSpacePurgeManifestPageResponseDescriptor =
     $convert.base64Decode(
         'CiFHZXRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVzcG9uc2USOQoEcGFnZRgBIAEoCzIlLnZvaW'
         'NlLmNoYXQudjEuU3BhY2VQdXJnZU1hbmlmZXN0UGFnZVIEcGFnZQ==');
+
+@$core.Deprecated('Use canCreateDMRequestDescriptor instead')
+const CanCreateDMRequest$json = {
+  '1': 'CanCreateDMRequest',
+  '2': [
+    {'1': 'other_profile_id', '3': 1, '4': 1, '5': 9, '10': 'otherProfileId'},
+  ],
+};
+
+/// Descriptor for `CanCreateDMRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List canCreateDMRequestDescriptor = $convert.base64Decode(
+    'ChJDYW5DcmVhdGVETVJlcXVlc3QSKAoQb3RoZXJfcHJvZmlsZV9pZBgBIAEoCVIOb3RoZXJQcm'
+    '9maWxlSWQ=');
+
+@$core.Deprecated('Use canCreateDMResponseDescriptor instead')
+const CanCreateDMResponse$json = {
+  '1': 'CanCreateDMResponse',
+  '2': [
+    {'1': 'allowed', '3': 1, '4': 1, '5': 8, '10': 'allowed'},
+  ],
+};
+
+/// Descriptor for `CanCreateDMResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List canCreateDMResponseDescriptor =
+    $convert.base64Decode(
+        'ChNDYW5DcmVhdGVETVJlc3BvbnNlEhgKB2FsbG93ZWQYASABKAhSB2FsbG93ZWQ=');

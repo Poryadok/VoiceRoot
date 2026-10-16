@@ -22,6 +22,35 @@ void main() {
     expect(colors.textSecondary, const Color(0xFFE0E0E0));
     expect(colors.focusRing, const Color(0xFFFFFFFF));
     expect(colors.borderDefault, const Color(0xFFFFFFFF));
+    expect(colors.dividerRail, const Color(0xFFFFFFFF));
+    expect(colors.copyWith().dividerRail, colors.dividerRail);
+    expect(
+      colors.copyWith(dividerRail: const Color(0xFF123456)).dividerRail,
+      const Color(0xFF123456),
+    );
+    final lightColors = VoiceColors.fromTokenMap(
+      testVoiceTokenCatalog.colorsFor('light'),
+      profileAccent: testVoiceTokenCatalog.profileAccentAt(0),
+    );
+    expect(
+      colors.lerp(lightColors, 0.5).dividerRail,
+      Color.lerp(colors.dividerRail, lightColors.dividerRail, 0.5),
+    );
+  });
+
+  test('divider rail maps each canonical theme token', () {
+    const expected = {
+      'light': Color(0xFFC8C8C8),
+      'dark': Color(0xFF505050),
+      'highContrast': Color(0xFFFFFFFF),
+    };
+    for (final entry in expected.entries) {
+      final colors = VoiceColors.fromTokenMap(
+        testVoiceTokenCatalog.colorsFor(entry.key),
+        profileAccent: testVoiceTokenCatalog.profileAccentAt(0),
+      );
+      expect(colors.dividerRail, entry.value, reason: entry.key);
+    }
   });
 
   test('AppThemePreference.highContrast resolves to highContrast mode', () {

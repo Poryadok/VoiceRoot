@@ -58,6 +58,16 @@ class SocialServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Sender cancels only its own pending invitation.
+  $grpc.ResponseFuture<$0.CancelFriendInvitationResponse>
+      cancelFriendInvitation(
+    $0.CancelFriendInvitationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$cancelFriendInvitation, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.RemoveFriendResponse> removeFriend(
     $0.RemoveFriendRequest request, {
     $grpc.CallOptions? options,
@@ -186,6 +196,14 @@ class SocialServiceClient extends $grpc.Client {
     return $createUnaryCall(_$isProfilePairBlocked, request, options: options);
   }
 
+  /// Internal S2S: bounded batch of directional profile-pair visibility decisions.
+  $grpc.ResponseFuture<$0.IsProfilePairsBlockedResponse> isProfilePairsBlocked(
+    $0.IsProfilePairsBlockedRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$isProfilePairsBlocked, request, options: options);
+  }
+
   // method descriptors
 
   static final _$sendFriendInvitation = $grpc.ClientMethod<
@@ -204,6 +222,11 @@ class SocialServiceClient extends $grpc.Client {
       '/voice.social.v1.SocialService/DeclineFriendInvitation',
       ($0.DeclineFriendInvitationRequest value) => value.writeToBuffer(),
       $0.DeclineFriendInvitationResponse.fromBuffer);
+  static final _$cancelFriendInvitation = $grpc.ClientMethod<
+          $0.CancelFriendInvitationRequest, $0.CancelFriendInvitationResponse>(
+      '/voice.social.v1.SocialService/CancelFriendInvitation',
+      ($0.CancelFriendInvitationRequest value) => value.writeToBuffer(),
+      $0.CancelFriendInvitationResponse.fromBuffer);
   static final _$removeFriend =
       $grpc.ClientMethod<$0.RemoveFriendRequest, $0.RemoveFriendResponse>(
           '/voice.social.v1.SocialService/RemoveFriend',
@@ -294,6 +317,11 @@ class SocialServiceClient extends $grpc.Client {
       '/voice.social.v1.SocialService/IsProfilePairBlocked',
       ($0.IsProfilePairBlockedRequest value) => value.writeToBuffer(),
       $0.IsProfilePairBlockedResponse.fromBuffer);
+  static final _$isProfilePairsBlocked = $grpc.ClientMethod<
+          $0.IsProfilePairsBlockedRequest, $0.IsProfilePairsBlockedResponse>(
+      '/voice.social.v1.SocialService/IsProfilePairsBlocked',
+      ($0.IsProfilePairsBlockedRequest value) => value.writeToBuffer(),
+      $0.IsProfilePairsBlockedResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.social.v1.SocialService')
@@ -328,6 +356,15 @@ abstract class SocialServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.DeclineFriendInvitationRequest.fromBuffer(value),
         ($0.DeclineFriendInvitationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CancelFriendInvitationRequest,
+            $0.CancelFriendInvitationResponse>(
+        'CancelFriendInvitation',
+        cancelFriendInvitation_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CancelFriendInvitationRequest.fromBuffer(value),
+        ($0.CancelFriendInvitationResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.RemoveFriendRequest, $0.RemoveFriendResponse>(
             'RemoveFriend',
@@ -482,6 +519,15 @@ abstract class SocialServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.IsProfilePairBlockedRequest.fromBuffer(value),
         ($0.IsProfilePairBlockedResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.IsProfilePairsBlockedRequest,
+            $0.IsProfilePairsBlockedResponse>(
+        'IsProfilePairsBlocked',
+        isProfilePairsBlocked_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.IsProfilePairsBlockedRequest.fromBuffer(value),
+        ($0.IsProfilePairsBlockedResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.SendFriendInvitationResponse> sendFriendInvitation_Pre(
@@ -510,6 +556,15 @@ abstract class SocialServiceBase extends $grpc.Service {
 
   $async.Future<$0.DeclineFriendInvitationResponse> declineFriendInvitation(
       $grpc.ServiceCall call, $0.DeclineFriendInvitationRequest request);
+
+  $async.Future<$0.CancelFriendInvitationResponse> cancelFriendInvitation_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CancelFriendInvitationRequest> $request) async {
+    return cancelFriendInvitation($call, await $request);
+  }
+
+  $async.Future<$0.CancelFriendInvitationResponse> cancelFriendInvitation(
+      $grpc.ServiceCall call, $0.CancelFriendInvitationRequest request);
 
   $async.Future<$0.RemoveFriendResponse> removeFriend_Pre(
       $grpc.ServiceCall $call,
@@ -665,4 +720,13 @@ abstract class SocialServiceBase extends $grpc.Service {
 
   $async.Future<$0.IsProfilePairBlockedResponse> isProfilePairBlocked(
       $grpc.ServiceCall call, $0.IsProfilePairBlockedRequest request);
+
+  $async.Future<$0.IsProfilePairsBlockedResponse> isProfilePairsBlocked_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.IsProfilePairsBlockedRequest> $request) async {
+    return isProfilePairsBlocked($call, await $request);
+  }
+
+  $async.Future<$0.IsProfilePairsBlockedResponse> isProfilePairsBlocked(
+      $grpc.ServiceCall call, $0.IsProfilePairsBlockedRequest request);
 }

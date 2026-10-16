@@ -890,6 +890,30 @@ abstract class AppLocalizations {
   /// **'Last seen {dateTime}'**
   String socialPresenceLastSeen(String dateTime);
 
+  /// No description provided for @socialPresenceLastSeenJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen just now'**
+  String get socialPresenceLastSeenJustNow;
+
+  /// No description provided for @socialPresenceLastSeenMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} minute ago} other{Last seen {count} minutes ago}}'**
+  String socialPresenceLastSeenMinutes(int count);
+
+  /// No description provided for @socialPresenceLastSeenHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} hour ago} other{Last seen {count} hours ago}}'**
+  String socialPresenceLastSeenHours(int count);
+
+  /// No description provided for @socialPresenceLastSeenDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} day ago} other{Last seen {count} days ago}}'**
+  String socialPresenceLastSeenDays(int count);
+
   /// No description provided for @socialPresenceUnknown.
   ///
   /// In en, this message translates to:
@@ -1045,6 +1069,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Load more chats'**
   String get chatListLoadMore;
+
+  /// No description provided for @chatScheduleMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatScheduleMessage;
+
+  /// No description provided for @chatSendWhenOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online'**
+  String get chatSendWhenOnline;
+
+  /// No description provided for @chatSchedulePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatSchedulePickerTitle;
+
+  /// No description provided for @chatSchedulePending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get chatSchedulePending;
+
+  /// No description provided for @chatScheduleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit scheduled message'**
+  String get chatScheduleEdit;
+
+  /// No description provided for @chatScheduleCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel scheduled message'**
+  String get chatScheduleCancel;
+
+  /// No description provided for @chatScheduleSendNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Send now'**
+  String get chatScheduleSendNow;
+
+  /// No description provided for @chatScheduleRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatScheduleRetry;
+
+  /// No description provided for @chatScheduleDateInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a time within the next 365 days'**
+  String get chatScheduleDateInvalid;
+
+  /// No description provided for @chatScheduleFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the scheduled-message request. Try again.'**
+  String get chatScheduleFailure;
+
+  /// No description provided for @chatScheduleLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more scheduled messages'**
+  String get chatScheduleLoadMore;
 
   /// No description provided for @chatListUnreadCount.
   ///
@@ -1508,6 +1598,12 @@ abstract class AppLocalizations {
   /// **'Reconnecting…'**
   String get chatRealtimeReconnecting;
 
+  /// No description provided for @networkReconnectDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Drafts stay on this device. Realtime updates resume after reconnection.'**
+  String get networkReconnectDetails;
+
   /// No description provided for @chatRealtimeOffline.
   ///
   /// In en, this message translates to:
@@ -1706,6 +1802,42 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get profileMessage;
 
+  /// No description provided for @profileDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get profileDetailTitle;
+
+  /// No description provided for @profileMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get profileMoreActions;
+
+  /// No description provided for @profileOpenAvatar.
+  ///
+  /// In en, this message translates to:
+  /// **'Open fullscreen avatar'**
+  String get profileOpenAvatar;
+
+  /// No description provided for @profileAvatarUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar unavailable'**
+  String get profileAvatarUnavailable;
+
+  /// No description provided for @profileCommonSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Common spaces'**
+  String get profileCommonSpaces;
+
+  /// No description provided for @profileCommonSpacesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load common spaces'**
+  String get profileCommonSpacesLoadError;
+
   /// No description provided for @profileEditTitle.
   ///
   /// In en, this message translates to:
@@ -1801,6 +1933,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add profile'**
   String get createProfileTitle;
+
+  /// No description provided for @profileCreateUsernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile tag'**
+  String get profileCreateUsernameLabel;
+
+  /// No description provided for @profileCreateSessionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed-in account or active profile changed. Reopen profile creation to continue.'**
+  String get profileCreateSessionChanged;
+
+  /// No description provided for @profileCreateRecoveryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile created, but setup is incomplete. Try again to finish.'**
+  String get profileCreateRecoveryFailed;
 
   /// No description provided for @createProfileSubmit.
   ///
@@ -2227,6 +2377,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unpin message'**
   String get chatMessageUnpin;
+
+  /// No description provided for @chatPinnedLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'You can pin up to 5 messages.'**
+  String get chatPinnedLimitReached;
 
   /// No description provided for @chatPinnedBar.
   ///
@@ -2780,6 +2936,90 @@ abstract class AppLocalizations {
   /// **'{used} uses{maxSuffix}'**
   String spaceInviteUses(int used, String maxSuffix);
 
+  /// No description provided for @spaceInviteExpiryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires after'**
+  String get spaceInviteExpiryLabel;
+
+  /// No description provided for @spaceInviteExpiry30Minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'30 minutes'**
+  String get spaceInviteExpiry30Minutes;
+
+  /// No description provided for @spaceInviteExpiry1Hour.
+  ///
+  /// In en, this message translates to:
+  /// **'1 hour'**
+  String get spaceInviteExpiry1Hour;
+
+  /// No description provided for @spaceInviteExpiry6Hours.
+  ///
+  /// In en, this message translates to:
+  /// **'6 hours'**
+  String get spaceInviteExpiry6Hours;
+
+  /// No description provided for @spaceInviteExpiry12Hours.
+  ///
+  /// In en, this message translates to:
+  /// **'12 hours'**
+  String get spaceInviteExpiry12Hours;
+
+  /// No description provided for @spaceInviteExpiry1Day.
+  ///
+  /// In en, this message translates to:
+  /// **'1 day'**
+  String get spaceInviteExpiry1Day;
+
+  /// No description provided for @spaceInviteExpiry7Days.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days'**
+  String get spaceInviteExpiry7Days;
+
+  /// No description provided for @spaceInviteExpiryNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Never'**
+  String get spaceInviteExpiryNever;
+
+  /// No description provided for @spaceInviteExpiresAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires {date}'**
+  String spaceInviteExpiresAt(String date);
+
+  /// No description provided for @spaceInviteShowQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Show QR code'**
+  String get spaceInviteShowQr;
+
+  /// No description provided for @spaceInviteQrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite QR code'**
+  String get spaceInviteQrTitle;
+
+  /// No description provided for @spaceInviteQrSemanticLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'QR code for space invite'**
+  String get spaceInviteQrSemanticLabel;
+
+  /// No description provided for @spaceInviteRevokeConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke invite link?'**
+  String get spaceInviteRevokeConfirmTitle;
+
+  /// No description provided for @spaceInviteRevokeConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'People with this link will no longer be able to use it.'**
+  String get spaceInviteRevokeConfirmBody;
+
   /// No description provided for @spaceInviteJoinTooltip.
   ///
   /// In en, this message translates to:
@@ -3149,7 +3389,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatGroupMembersSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Owner can remove members. Members can leave the group.'**
+  /// **'Owners and admins can remove members. Members can leave the group.'**
   String get chatGroupMembersSubtitle;
 
   /// No description provided for @chatGroupMembersLoadError.
@@ -3218,6 +3458,24 @@ abstract class AppLocalizations {
   /// **'Owner'**
   String get chatGroupRoleOwner;
 
+  /// No description provided for @chatGroupRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin'**
+  String get chatGroupRoleAdmin;
+
+  /// No description provided for @chatGroupAddMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Add members'**
+  String get chatGroupAddMembers;
+
+  /// No description provided for @chatGroupMembersLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'This group has reached its 500-member limit. Create a Space for a larger community.'**
+  String get chatGroupMembersLimitReached;
+
   /// No description provided for @chatGroupMemberYou.
   ///
   /// In en, this message translates to:
@@ -3260,6 +3518,24 @@ abstract class AppLocalizations {
   /// **'You will no longer receive messages from this group.'**
   String get chatGroupLeaveConfirmMessage;
 
+  /// No description provided for @chatChannelLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel'**
+  String get chatChannelLeave;
+
+  /// No description provided for @chatChannelLeaveConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel?'**
+  String get chatChannelLeaveConfirmTitle;
+
+  /// No description provided for @chatChannelLeaveConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You will no longer receive messages from this channel.'**
+  String get chatChannelLeaveConfirmMessage;
+
   /// No description provided for @chatGroupOwnerLeaveHint.
   ///
   /// In en, this message translates to:
@@ -3301,6 +3577,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Settings'**
   String get settingsTooltip;
+
+  /// No description provided for @settingsAppearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearance;
+
+  /// No description provided for @settingsChatThemes.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat themes'**
+  String get settingsChatThemes;
+
+  /// No description provided for @chatThemesPlusLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus'**
+  String get chatThemesPlusLabel;
+
+  /// No description provided for @chatThemesPlusNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclusive themes are available to Voice Plus subscribers.'**
+  String get chatThemesPlusNotice;
+
+  /// No description provided for @chatThemesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get chatThemesSelected;
+
+  /// No description provided for @chatThemesApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {theme}'**
+  String chatThemesApply(String theme);
+
+  /// No description provided for @chatThemesReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get chatThemesReset;
+
+  /// No description provided for @appIconTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App Icon'**
+  String get appIconTitle;
+
+  /// No description provided for @appIconDeviceNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'This choice applies on this device only.'**
+  String get appIconDeviceNotice;
+
+  /// No description provided for @appIconPlusRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus is required to apply this icon.'**
+  String get appIconPlusRequired;
+
+  /// No description provided for @appIconSavedChoiceNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your saved icon will return when Voice Plus is active again.'**
+  String get appIconSavedChoiceNotice;
+
+  /// No description provided for @appIconUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime app icons are unavailable on this device.'**
+  String get appIconUnavailable;
+
+  /// No description provided for @appIconSubscriptionStatusError.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus status could not be checked. Retry or choose Voice Sky.'**
+  String get appIconSubscriptionStatusError;
+
+  /// No description provided for @appIconSubscriptionStatusChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking Voice Plus status…'**
+  String get appIconSubscriptionStatusChecking;
+
+  /// No description provided for @appIconApplyFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'The app icon could not be applied. Your saved choice is kept; retry to apply it.'**
+  String get appIconApplyFailure;
+
+  /// No description provided for @appIconRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get appIconRetry;
+
+  /// No description provided for @appIconApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {iconName}'**
+  String appIconApply(String iconName);
+
+  /// No description provided for @appIconSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get appIconSelected;
 
   /// No description provided for @settingsTheme.
   ///
@@ -3403,6 +3787,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Help'**
   String get settingsHelpTitle;
+
+  /// No description provided for @settingsHelpSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find an answer or contact the Voice team.'**
+  String get settingsHelpSubtitle;
+
+  /// No description provided for @settingsHelpHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'How can we help?'**
+  String get settingsHelpHeading;
+
+  /// No description provided for @settingsHelpBackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get settingsHelpBackLabel;
+
+  /// No description provided for @settingsHelpSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search help (e.g. voice rooms)'**
+  String get settingsHelpSearchHint;
+
+  /// No description provided for @settingsHelpDocsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Project documentation'**
+  String get settingsHelpDocsLabel;
+
+  /// No description provided for @settingsHelpSupportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact support'**
+  String get settingsHelpSupportLabel;
+
+  /// No description provided for @settingsHelpNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No help topics match your search.'**
+  String get settingsHelpNoResults;
+
+  /// No description provided for @settingsHelpLaunchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open link.'**
+  String get settingsHelpLaunchError;
 
   /// No description provided for @settingsHelpChatsTitle.
   ///
@@ -3746,6 +4178,18 @@ abstract class AppLocalizations {
   /// **'Security'**
   String get securitySettingsTitle;
 
+  /// No description provided for @securityChangePasswordAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change password'**
+  String get securityChangePasswordAction;
+
+  /// No description provided for @securityChangePasswordSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password changed. Sign in with your new password.'**
+  String get securityChangePasswordSuccess;
+
   /// No description provided for @appealSettingsTitle.
   ///
   /// In en, this message translates to:
@@ -3919,6 +4363,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Two-factor authentication is enabled.'**
   String get security2faEnabled;
+
+  /// No description provided for @security2faStatusUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-factor status is unavailable. Try again before changing this setting.'**
+  String get security2faStatusUnavailable;
+
+  /// No description provided for @security2faManualSecretLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup key'**
+  String get security2faManualSecretLabel;
+
+  /// No description provided for @security2faCopyBackupCodes.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy backup codes'**
+  String get security2faCopyBackupCodes;
+
+  /// No description provided for @security2faDownloadBackupCodes.
+  ///
+  /// In en, this message translates to:
+  /// **'Download backup codes'**
+  String get security2faDownloadBackupCodes;
+
+  /// No description provided for @security2faBackupCodesCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup codes copied.'**
+  String get security2faBackupCodesCopied;
+
+  /// No description provided for @security2faBackupCodesDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save backup codes. Try again.'**
+  String get security2faBackupCodesDownloadFailed;
 
   /// No description provided for @security2faDisableTitle.
   ///
@@ -4855,6 +5335,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Let invited guest accounts enter this chat.'**
   String get chatAllowGuestsSubtitle;
+
+  /// No description provided for @channelSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel settings'**
+  String get channelSettingsTitle;
+
+  /// No description provided for @channelSettingsThreads.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable threads'**
+  String get channelSettingsThreads;
+
+  /// No description provided for @channelSettingsMemberPosts.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow member posts'**
+  String get channelSettingsMemberPosts;
 
   /// No description provided for @privacyShowOnlineIncludeGuests.
   ///
@@ -5989,6 +6487,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start'**
   String get onboardingWrapUpStart;
+
+  /// No description provided for @deepLinkAccessDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Access denied'**
+  String get deepLinkAccessDenied;
+
+  /// No description provided for @deepLinkResourceNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Not found'**
+  String get deepLinkResourceNotFound;
+
+  /// No description provided for @deepLinkAccessDeniedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'You do not have permission to open this link. It may be intended for another profile.'**
+  String get deepLinkAccessDeniedDescription;
+
+  /// No description provided for @deepLinkResourceNotFoundDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'This link is unavailable or no longer valid.'**
+  String get deepLinkResourceNotFoundDescription;
+
+  /// No description provided for @deepLinkReturnHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Home'**
+  String get deepLinkReturnHome;
+
+  /// No description provided for @e2eBackupStatusChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking encrypted key backup…'**
+  String get e2eBackupStatusChecking;
+
+  /// No description provided for @e2eBackupStatusPresent.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted key backup is available for this account.'**
+  String get e2eBackupStatusPresent;
+
+  /// No description provided for @e2eBackupStatusAbsent.
+  ///
+  /// In en, this message translates to:
+  /// **'No encrypted key backup is saved for this account.'**
+  String get e2eBackupStatusAbsent;
+
+  /// No description provided for @e2eBackupActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t update the encrypted key backup. Try again.'**
+  String get e2eBackupActionFailed;
+
+  /// No description provided for @e2eBackupRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t restore this backup. Check the password and try again.'**
+  String get e2eBackupRestoreFailed;
+
+  /// No description provided for @e2eBackupChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change backup password'**
+  String get e2eBackupChange;
+
+  /// No description provided for @e2eBackupDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete encrypted backup?'**
+  String get e2eBackupDeleteTitle;
+
+  /// No description provided for @e2eBackupDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes the encrypted backup from this account. Your keys on this device will stay intact.'**
+  String get e2eBackupDeleteConfirm;
+
+  /// No description provided for @e2eBackupDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete backup'**
+  String get e2eBackupDelete;
+
+  /// No description provided for @e2eBackupRestoreCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore encrypted history'**
+  String get e2eBackupRestoreCta;
+
+  /// No description provided for @e2eKeyBackupManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage encrypted key backup'**
+  String get e2eKeyBackupManage;
+
+  /// No description provided for @profileNotInContactsWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in contacts · messages may be unsafe'**
+  String get profileNotInContactsWarning;
 }
 
 class _AppLocalizationsDelegate

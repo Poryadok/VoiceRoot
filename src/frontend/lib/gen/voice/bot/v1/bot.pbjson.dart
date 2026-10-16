@@ -1712,13 +1712,15 @@ const CreateBotChatRequest$json = {
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
     {'1': 'name', '3': 2, '4': 1, '5': 9, '10': 'name'},
     {'1': 'chat_type', '3': 3, '4': 1, '5': 9, '10': 'chatType'},
+    {'1': 'request_id', '3': 4, '4': 1, '5': 9, '10': 'requestId'},
   ],
 };
 
 /// Descriptor for `CreateBotChatRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List createBotChatRequestDescriptor = $convert.base64Decode(
     'ChRDcmVhdGVCb3RDaGF0UmVxdWVzdBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZBISCgRuYW'
-    '1lGAIgASgJUgRuYW1lEhsKCWNoYXRfdHlwZRgDIAEoCVIIY2hhdFR5cGU=');
+    '1lGAIgASgJUgRuYW1lEhsKCWNoYXRfdHlwZRgDIAEoCVIIY2hhdFR5cGUSHQoKcmVxdWVzdF9p'
+    'ZBgEIAEoCVIJcmVxdWVzdElk');
 
 @$core.Deprecated('Use createBotChatResponseDescriptor instead')
 const CreateBotChatResponse$json = {

@@ -143,6 +143,13 @@ profile_game_entries
 └── PRIMARY KEY (profile_id, game_id)
 ```
 
+`match_ratings` is the authoritative per-match vote ledger. `player_ratings` is
+the per-profile/game aggregate projection and is recomputed from those votes in
+the same transaction as each submission. The unique vote key makes retries
+idempotent; retrying a previously stored vote repairs the projection without
+counting that vote twice. Migration `000015_reconcile_player_rating_aggregates`
+repairs existing projections from the retained vote ledger.
+
 ## Алгоритм матчинга
 
 ```

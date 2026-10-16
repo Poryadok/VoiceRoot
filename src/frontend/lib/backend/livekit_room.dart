@@ -52,6 +52,23 @@ bool matchesMatchSquadLocalIdentity(
 ) {
   final expected = _matchSquadIdentity(profileId, mediaEpoch);
   return expected != null && sdkIdentity == expected;
+
+final RegExp _spaceMediaParticipantIdentity = RegExp(
+  r'^profile:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):media:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$',
+);
+
+String? _profileIdFromLiveKitIdentity(String identity) {
+  if (_isCanonicalNonzeroUuid(identity)) return identity;
+
+  final match = _spaceMediaParticipantIdentity.firstMatch(identity);
+  if (match == null) return null;
+  final profileId = match.group(1)!;
+  final generationId = match.group(2)!;
+  if (!_isCanonicalNonzeroUuid(profileId) ||
+      !_isCanonicalNonzeroUuid(generationId)) {
+    return null;
+  }
+  return profileId;
 }
 
 abstract interface class VoiceLiveKitRoom {
@@ -253,10 +270,15 @@ class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
     // livekit_client 2.8 has no RemoteAudioTrack.setVolume; approximate ducking
     // by muting non-commander remotes while broadcast is active (spec: client ducking).
     final muteOthers = enabled && duckedVolume < 1.0;
+    final commanderProfileId =
+        commanderIdentity != null && _isCanonicalProfileUuid(commanderIdentity)
+        ? commanderIdentity
+        : null;
     for (final participant in _room.remoteParticipants.values) {
       final isCommander =
-          commanderIdentity != null &&
-          participant.identity == commanderIdentity;
+          commanderProfileId != null &&
+          _profileIdFromLiveKitIdentity(participant.identity) ==
+              commanderProfileId;
       final audible = !(muteOthers && !isCommander);
       for (final publication in participant.audioTrackPublications) {
         final track = publication.track;
@@ -412,10 +434,15 @@ class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
   List<livekit.RemoteVideoTrack> remoteScreenShareTracks({
     String? participantIdentity,
   }) {
+    if (participantIdentity != null &&
+        !_isCanonicalProfileUuid(participantIdentity)) {
+      return const [];
+    }
     final tracks = <livekit.RemoteVideoTrack>[];
     for (final remote in _room.remoteParticipants.values) {
       if (participantIdentity != null &&
-          remote.identity != participantIdentity) {
+          _profileIdFromLiveKitIdentity(remote.identity) !=
+              participantIdentity) {
         continue;
       }
       for (final publication in remote.videoTrackPublications) {

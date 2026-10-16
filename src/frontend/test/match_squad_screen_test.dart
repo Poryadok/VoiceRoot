@@ -262,6 +262,31 @@ void main() {
     expect(operationIds[1], operationIds.first);
   });
 
+  testWidgets('MatchSquadScreen exposes another participant profile entry', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        home: MatchSquadScreen(
+          match: MatchData(
+            id: 'match-1',
+            gameId: 'game-1',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['prof-test', 'profile-2'],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('match_squad_player_profile-2')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('match_squad_player_prof-test')), findsNothing);
+  });
+
   testWidgets('leaving a squad enters rating and the Social history consumer', (
     tester,
   ) async {

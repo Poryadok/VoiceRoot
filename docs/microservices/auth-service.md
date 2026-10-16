@@ -15,6 +15,8 @@
 - JWT access token (15 мин) + opaque refresh token (30 дней)
 - Refresh token rotation (одноразовые)
 - Refresh rows retain the session's active `profile_id`; refreshing a switched-profile session keeps that profile instead of silently issuing a primary-profile token. Legacy refresh rows without a profile retain primary-profile fallback behavior.
+- A legacy refresh row is consumed and its prior access JTI is revoked before the primary-profile User lookup. If that authority is unavailable or malformed, Auth issues no replacement session and the presented refresh credential remains spent; retry requires normal sign-in. When User returns a profile, Auth rechecks that the durable account epoch and required Redis floor still equal the phase-A prepared epoch before issuing. It does not reconcile an already-consumed refresh onto a newer floor.
+- JDBC login keeps backup-code consumption and session issuance in one SQL transaction: a failed epoch-floor preparation rolls back the code row, so the same code can be retried after recovery and is consumed once on success. The memory test profile does not model that rollback and only proves that a failed preparation issues no session.
 - Отзыв всех сессий через Auth-owned `session_epoch`; strict-потребители Gateway и Realtime проверяют floor fail-closed
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
@@ -316,6 +318,7 @@ service AuthService {
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
   rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
+  rpc Disable2FA(Disable2FARequest) returns (Disable2FAResponse);
   rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
   rpc ConvertGuest(ConvertGuestRequest) returns (ConvertGuestResponse);
   rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
@@ -330,8 +333,32 @@ service AuthService {
   rpc ResolvePhoneHashes(ResolvePhoneHashesRequest) returns (ResolvePhoneHashesResponse);
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // encryption.md
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
+  rpc DeleteE2EKeyBackup(DeleteE2EKeyBackupRequest) returns (DeleteE2EKeyBackupResponse);
 }
 ```
+
+### Disable2FA
+
+Authenticated REST: `POST /api/v1/auth/2fa/disable` (Gateway transcoding), or
+the `Disable2FA` gRPC method. Both accept `password` and `totp_code`; the
+current access credential is required through the `Authorization: Bearer`
+header for REST or current-RPC metadata for gRPC. The TOTP code must be valid
+for the enrolled factor. Success returns HTTP `204` or an empty gRPC response,
+revokes all account sessions, clears the TOTP enrollment, and invalidates every
+backup code from that enrollment. The user must sign in again. The protobuf
+request and response remain the wire-contract source of truth.
+
+### Authenticated password change
+
+`POST /api/v1/auth/password/change` requires the current bearer credential and accepts `current_password`, `new_password`, and optional `totp_code`. Auth derives the account from the authenticated principal; the request has no account identifier. The current password is mandatory for every account. When TOTP is enabled, `totp_code` accepts either a valid TOTP value or one unused backup code. The new password uses the existing minimum-length and password validation rules.
+
+Success returns `204 No Content` and creates no replacement `AuthSession`. Auth serializes the password mutation, refresh rotation, and authenticated replacement-session paths on the account row; those paths reload and revalidate the current session epoch while holding the lock. The password operation advances the durable session epoch to a checked value strictly greater than both the durable epoch and the authoritative floor, revokes every refresh row, and publishes that epoch floor before the SQL transaction commits. If a still-current session has a floor ahead of its durable row, Auth preserves the existing reconciliation behavior and advances beyond that floor; a racing higher floor is retried a bounded number of times. Missing, invalid, unavailable, or exhausted epoch state fails closed without changing the password. A floor-store failure rolls back SQL changes; a later SQL commit failure fails closed and does not return success, although the caller may not know whether the database committed. A successful client request therefore requires the user to sign in again.
+
+`Enable2FA` verifies the current password. If TOTP is already enabled, it returns
+`totp_already_enabled` (HTTP `409` or gRPC `ALREADY_EXISTS`) before generating or
+persisting a replacement secret or backup codes. To change the authenticator,
+disable the existing factor with its current TOTP code, sign in again after the
+session revocation, then enroll the new factor.
 
 `SwitchActiveProfile` takes `access_token`, `profile_id`, and `device_info_json`;
 the response contains the replacement `AuthSession`. The active profile claim is
@@ -495,8 +522,16 @@ Only `response_type=code` and `grant_type=authorization_code` are accepted.
 The configured client must be enabled, the redirect URI must exactly match one
 of that client's configured URIs, and the authorization request and exchange
 use the S256 PKCE challenge. The authorization code is bound to the client,
-redirect URI, challenge, and logged-in account/profile, and expires according
-to that client's `authorization-code-ttl` (default `PT60S`). The token response
+redirect URI, challenge, logged-in account/profile, and the session epoch of the
+successful login that authorized it; it expires according to that client's
+`authorization-code-ttl` (default `PT60S`). Exchange locks and reloads the
+account, rejects an unbound legacy code or a code from a stale session epoch,
+then prepares the floor, consumes the code, and signs the token while holding
+that lock. A floor-ahead code may use the existing recovery path only while its
+bound durable session epoch remains current. All Auth instances serving the
+flow must run the corrected implementation before this revocation guarantee is
+claimed; older instances can otherwise accept legacy authorization-code data.
+The token response
 contains an access token; this endpoint does not return a refresh token. A
 configured client secret is checked during exchange; an empty client-secret
 setting skips that check.
@@ -551,10 +586,11 @@ promotion completes.
 |------|----------------------------|------------|
 | `PutE2EKeyBackup` | `PUT /api/v1/auth/e2e-key-backup` | Сохранить/обновить blob (`encrypted_blob`, опционально `password_hint`); `204 No Content` |
 | `GetE2EKeyBackup` | `GET /api/v1/auth/e2e-key-backup` | Получить blob для восстановления на новом устройстве; `404` до первого PUT |
+| `DeleteE2EKeyBackup` | `DELETE /api/v1/auth/e2e-key-backup` | Удалить blob текущего authenticated account; `204 No Content`, повторный DELETE безопасен, последующий GET возвращает `404` |
 
-- **Владение данными:** пароль и ключ расшифровки — только на клиенте; Auth хранит `encrypted_blob` как есть.
-- **Лимиты Gateway:** `E2EKeyBackupPut` 5/min, `E2EKeyBackupGet` 30/min (`ratelimit.go`).
-- **Клиент:** `VoiceE2eClient` + UI в `e2e_chat_settings.dart`; см. также [messaging-service.md](messaging-service.md) (key backup не в Messaging).
+- **Владение данными:** пароль и ключ расшифровки — только на клиенте; Auth хранит `encrypted_blob` как есть. Delete выводит account только из проверенных Auth claims, не принимает caller ID, и удаляет только серверную строку этого account; локальные Signal keys остаются на устройстве.
+- **Лимиты Gateway:** `E2EKeyBackupPut` и DELETE используют общий лимит изменяющих состояние запросов — 5/min; `E2EKeyBackupGet` — 30/min (`ratelimit.go`).
+- **Клиент:** `VoiceE2eClient`; управление доступно через Settings → Security, а плейсхолдер недоступной E2E-истории ведёт к тому же экрану восстановления. Перед локальным импортом клиент проверяет версию backup, совпадение profile ID и актуальность сессии; после асинхронного импорта повторно проверяет сессию перед загрузкой pre-key bundle. См. также [messaging-service.md](messaging-service.md) (key backup не в Messaging).
 
 ## Модель данных
 

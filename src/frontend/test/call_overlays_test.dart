@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -95,6 +96,41 @@ Future<void> _loadNotoSans() async {
     ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
     ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
   await loader.load();
+}
+
+Future<void> _pumpCallErrorListener(
+  WidgetTester tester,
+  ProviderContainer container,
+  String language,
+) async {
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: voiceTestTheme(),
+        locale: Locale(language),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: CallErrorListener(
+            child: Consumer(
+              builder: (context, ref, _) => FilledButton(
+                onPressed: () => ref
+                    .read(callControllerProvider.notifier)
+                    .startCall(
+                      chatId: 'chat-1',
+                      calleeProfileId: _calleeProfileId,
+                      mediaKind: VoiceCallMediaKind.video,
+                    ),
+                child: const Text('start call'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 String _incomingOverlayGolden(String orientation) {
@@ -505,5 +541,150 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('call_error_snackbar')), findsOneWidget);
+    final l10n = AppLocalizations.of(tester.element(find.text('fail')))!;
+    expect(find.text(l10n.callLivekitConnectFailed), findsOneWidget);
   });
+
+  for (final language in ['en', 'ru']) {
+    for (final statusCode in [500, 503]) {
+      testWidgets(
+        'CallErrorListener $language $statusCode hides upstream diagnostics '
+        'and allows an explicit new call',
+        (tester) async {
+          const privateMarker = 'private-call-diagnostic-92fa';
+          final requests = <http.Request>[];
+          var roomFactoryCalls = 0;
+          final container = ProviderContainer(
+            overrides: [
+              ...voiceAppTestOverrides(
+                client: MockClient((request) async {
+                  requests.add(request);
+                  if (request.method != 'POST' ||
+                      request.url.path != '/api/v1/voice/calls') {
+                    return http.Response('{}', 404);
+                  }
+                  if (requests.length == 1) {
+                    return http.Response(
+                      jsonEncode({'message': privateMarker}),
+                      statusCode,
+                    );
+                  }
+                  return http.Response(
+                    jsonEncode({
+                      'call_session': {
+                        'room_id': 'room-retry',
+                        'livekit_room_name': 'voice-dm-room-retry',
+                        'linked_chat': {'id': 'chat-1'},
+                        'initiator_profile_id': 'prof-test',
+                        'callee_profile_id': _calleeProfileId,
+                        'media_kind': 'CALL_MEDIA_KIND_VIDEO',
+                        'status': 'CALL_STATUS_RINGING',
+                      },
+                    }),
+                    200,
+                  );
+                }),
+              ),
+              liveKitRoomFactoryProvider.overrideWithValue(() {
+                roomFactoryCalls++;
+                throw StateError('Unexpected LiveKit connection');
+              }),
+            ],
+          );
+          addTearDown(container.dispose);
+          await _pumpCallErrorListener(tester, container, language);
+
+          await tester.tap(find.text('start call'));
+          await tester.pump();
+          await tester.pumpAndSettle();
+
+          final l10n = AppLocalizations.of(
+            tester.element(find.text('start call')),
+          )!;
+          expect(
+            find.text(l10n.callFailed(l10n.commonActionFailed)),
+            findsOneWidget,
+          );
+          expect(find.textContaining(privateMarker), findsNothing);
+          expect(find.textContaining('Exception'), findsNothing);
+          expect(requests, hasLength(1));
+          expect(container.read(callControllerProvider).phase, CallPhase.idle);
+          expect(container.read(callControllerProvider).session, isNull);
+          expect(container.read(callControllerProvider).errorMessage, isNull);
+          expect(roomFactoryCalls, 0);
+
+          await tester.tap(find.text('start call'));
+          await tester.pumpAndSettle();
+
+          expect(requests, hasLength(2));
+          for (final request in requests) {
+            expect(request.method, 'POST');
+            expect(request.url.path, '/api/v1/voice/calls');
+            expect(request.headers['Authorization'], 'Bearer test-access');
+            expect(jsonDecode(request.body), {
+              'linked_chat': {'id': 'chat-1'},
+              'callee_profile_id': _calleeProfileId,
+              'media_kind': 'CALL_MEDIA_KIND_VIDEO',
+            });
+          }
+          final state = container.read(callControllerProvider);
+          expect(state.phase, CallPhase.outgoing);
+          expect(state.session!.roomId, 'room-retry');
+          expect(state.session!.chatId, 'chat-1');
+          expect(state.session!.calleeProfileId, _calleeProfileId);
+          expect(state.session!.mediaKind, VoiceCallMediaKind.video);
+          expect(state.session!.status, VoiceCallStatus.ringing);
+          expect(state.errorMessage, isNull);
+          expect(roomFactoryCalls, 0);
+        },
+      );
+    }
+
+    for (final message in [
+      'call blocked by recipient privacy settings',
+      'livekit_connect_failed',
+      'livekit_url_missing',
+      'profile already has active call',
+    ]) {
+      testWidgets('CallErrorListener $language preserves $message mapping', (
+        tester,
+      ) async {
+        final requests = <http.Request>[];
+        final container = ProviderContainer(
+          overrides: voiceAppTestOverrides(
+            client: MockClient((request) async {
+              requests.add(request);
+              return http.Response(jsonEncode({'message': message}), 403);
+            }),
+          ),
+        );
+        addTearDown(container.dispose);
+        await _pumpCallErrorListener(tester, container, language);
+
+        await tester.tap(find.text('start call'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        final l10n = AppLocalizations.of(
+          tester.element(find.text('start call')),
+        )!;
+        final expected = switch (message) {
+          'call blocked by recipient privacy settings' =>
+            l10n.privacyDeniedCall,
+          'profile already has active call' => l10n.callActiveCallExists,
+          _ => l10n.callLivekitConnectFailed,
+        };
+        expect(find.text(expected), findsOneWidget);
+        expect(
+          find.text(l10n.callFailed(l10n.commonActionFailed)),
+          findsNothing,
+        );
+        expect(find.textContaining(message), findsNothing);
+        expect(requests, hasLength(1));
+        expect(requests.single.method, 'POST');
+        expect(requests.single.url.path, '/api/v1/voice/calls');
+        expect(container.read(callControllerProvider).phase, CallPhase.idle);
+      });
+    }
+  }
 }

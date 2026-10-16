@@ -19,6 +19,9 @@ public interface AccountRepository {
 
   Optional<Account> findById(String id);
 
+  /** Acquires the cross-instance account-row mutex for credential/session issuance mutations. */
+  void lockForSecurityMutation(UUID accountId);
+
   void saveTotpSecret(UUID accountId, byte[] encryptedSecret, boolean enabled);
 
   void setTotpEnabled(UUID accountId, boolean enabled);

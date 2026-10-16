@@ -51,6 +51,42 @@ void main() {
       expect(decoded['type'], 'CHAT_TYPE_GROUP');
       expect(decoded['name'], 'Friday squad');
     });
+
+    test(
+      'preserves the supplied idempotency key in the create request',
+      () async {
+        String? body;
+        final mock = MockClient((req) async {
+          body = req.body;
+          return http.Response(
+            jsonEncode({
+              'chat': {
+                'id': 'group-1',
+                'type': 'CHAT_TYPE_GROUP',
+                'name': 'Friday squad',
+                'creator_profile_id': 'profile-a',
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceChatsClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.createGroup(
+          authorization: auth,
+          name: 'Friday squad',
+          requestId: 'create-attempt-1',
+        );
+
+        expect(result, isA<ChatsApiOk<VoiceChat>>());
+        expect(
+          jsonDecode(body!) as Map<String, dynamic>,
+          containsPair('request_id', 'create-attempt-1'),
+        );
+      },
+    );
   });
 
   group('VoiceChatsClient.addGroupMembers', () {
@@ -147,6 +183,84 @@ void main() {
   });
 
   group('VoiceChatsClient.updateGroup', () {
+    test('maps omitted proto3 response channel booleans to false', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'PATCH');
+        expect(req.url.path, '/api/v1/chats/group-1');
+        return http.Response(
+          jsonEncode({
+            'chat': {
+              'id': 'group-1',
+              'type': 'CHAT_TYPE_CHANNEL',
+              'creator_profile_id': 'profile-a',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.updateGroup(
+        authorization: auth,
+        chatId: 'group-1',
+      );
+      expect(result, isA<ChatsApiOk<VoiceChat>>());
+      final chat = (result as ChatsApiOk<VoiceChat>).data;
+      expect(chat.threadsEnabled, isFalse);
+      expect(chat.allowUserMainFeed, isFalse);
+    });
+
+    test(
+      'PATCH keeps explicit channel booleans and omits unchanged fields',
+      () async {
+        final bodies = <Map<String, dynamic>>[];
+        final mock = MockClient((req) async {
+          expect(req.method, 'PATCH');
+          expect(req.url.path, '/api/v1/chats/group-1');
+          bodies.add(jsonDecode(req.body) as Map<String, dynamic>);
+          return http.Response(
+            jsonEncode({
+              'chat': {
+                'id': 'group-1',
+                'type': 'CHAT_TYPE_CHANNEL',
+                'creator_profile_id': 'profile-a',
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceChatsClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        await client.updateGroup(
+          authorization: auth,
+          chatId: 'group-1',
+          threadsEnabled: true,
+          allowUserMainFeed: false,
+        );
+        expect(bodies[0], {
+          'threads_enabled': true,
+          'allow_user_main_feed': false,
+        });
+
+        await client.updateGroup(
+          authorization: auth,
+          chatId: 'group-1',
+          threadsEnabled: false,
+          allowUserMainFeed: true,
+        );
+        expect(bodies[1], {
+          'threads_enabled': false,
+          'allow_user_main_feed': true,
+        });
+
+        await client.updateGroup(authorization: auth, chatId: 'group-1');
+        expect(bodies[2], isEmpty);
+      },
+    );
+
     test(
       'PATCH /api/v1/chats/{chatId} preserves explicit false allow_guests',
       () async {

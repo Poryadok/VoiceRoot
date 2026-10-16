@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/pkg/correlation"
 	"voice/backend/pkg/natslog"
 )
@@ -24,6 +26,7 @@ const (
 	subjectChatOverrideRemoved  = "role.chat_override_removed"
 	subjectVoiceOverride        = "role.voice_override_set"
 	subjectVoiceOverrideRemoved = "role.voice_override_removed"
+	subjectVoicePolicyInvalid   = "role.voice_policy_invalidated"
 )
 
 type roleEventPayload struct {
@@ -38,9 +41,13 @@ type roleEventPayload struct {
 // JetStreamPublisher publishes role.events payloads to NATS JetStream.
 type JetStreamPublisher struct {
 	nc *nats.Conn
-	js nats.JetStreamContext
+	js roleJetStreamClient
 	// Logger emits structured nats_publish lines; optional.
 	Logger *slog.Logger
+}
+
+type roleJetStreamClient interface {
+	PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error)
 }
 
 // NewJetStreamPublisher connects to the centrally provisioned JetStream service.
@@ -94,6 +101,33 @@ func (p *JetStreamPublisher) publish(ctx context.Context, subject string, payloa
 		slog.String("space_id", payload.SpaceID),
 	)
 	return nil
+}
+
+// PublishVoiceRoomPolicyInvalidated publishes the immutable Role outbox event
+// on its dedicated subject and returns only after JetStream confirms storage.
+func (p *JetStreamPublisher) PublishVoiceRoomPolicyInvalidated(ctx context.Context, env *eventsv1.RoleStreamEvent) (*nats.PubAck, error) {
+	if p == nil || p.js == nil {
+		return nil, fmt.Errorf("jetstream publisher not initialized")
+	}
+	if ctx == nil || env == nil || env.GetEventId() == "" {
+		return nil, fmt.Errorf("invalid Role Voice invalidation envelope")
+	}
+	policy := env.GetVoiceRoomPolicyInvalidated()
+	if policy == nil || policy.GetSpaceId() == "" || policy.GetPolicyEpoch() == 0 {
+		return nil, fmt.Errorf("invalid Role Voice invalidation payload")
+	}
+	data, err := proto.Marshal(env)
+	if err != nil {
+		return nil, fmt.Errorf("marshal RoleStreamEvent: %w", err)
+	}
+	msg := &nats.Msg{Subject: subjectVoicePolicyInvalid, Data: data, Header: nats.Header{}}
+	natslog.SetRequestIDHeader(msg.Header, correlation.FromGRPC(ctx))
+	msg.Header.Set(nats.MsgIdHdr, env.GetEventId())
+	ack, err := p.js.PublishMsg(msg, nats.Context(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("jetstream publish %s: %w", subjectVoicePolicyInvalid, err)
+	}
+	return ack, nil
 }
 
 func (p *JetStreamPublisher) PublishRoleCreated(ctx context.Context, spaceID, roleID, name string) error {

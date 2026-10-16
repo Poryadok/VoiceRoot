@@ -26,7 +26,15 @@ nats_generation_load() {
     phase="$(jq -er '.data.phase // empty' <<<"$marker" 2>/dev/null)" || return 1
     generation="$(jq -er '.data.generation // empty' <<<"$marker" 2>/dev/null)" || return 1
     previous="$(jq -er '.data.previousGeneration // empty' <<<"$marker" 2>/dev/null)" || return 1
-    [[ "$phase" == active ]] || { echo 'ERROR: NATS generation rotation is in progress' >&2; return 1; }
+    if [[ "$phase" != active ]]; then
+      [[ "$phase" == rollout-applying && -n "${VOICE_NATS_PRESERVATION_RECEIPT:-}" &&
+         "${VOICE_NATS_ROLLOUT_CLAIM_RV:-}" =~ ^[0-9]{1,20}$ ]] || {
+        echo 'ERROR: NATS generation rotation is in progress' >&2; return 1;
+      }
+      python3 -I -S "$(dirname "${BASH_SOURCE[0]}")/nats-rollout-preservation/guard.py" --check >/dev/null || return 1
+      # Only the root-established, single-use paused-apply transaction may
+      # render while maintenance owns the store. No general phase bypass.
+    fi
     [[ "$generation" == legacy ]] || nats_generation_valid "$generation" || {
       echo 'ERROR: invalid active NATS generation' >&2; return 1;
     }

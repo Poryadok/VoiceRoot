@@ -94,6 +94,7 @@ func main() {
 	var grpcSrv *grpc.Server
 	var spaceLifecycleSrv *grpc.Server
 	var spaceLifecycleRuntime *spaceprincipalruntime.Runtime
+	var notificationPresenceJWKS *presence.PrincipalJWKSHTTPServer
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -148,17 +149,24 @@ func main() {
 			logger.Info("push grouping redis enabled", slog.String("addr", redisAddr))
 		}
 
-		presenceChecker := presence.Checker(presence.OfflineChecker{})
+		presenceChecker := presence.Checker(presence.UnavailableChecker{})
 		var accountProfiles s2s.AccountProfiles
 		recordPushes := strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true")
 		if recordPushes {
+			presenceChecker = presence.OfflineChecker{}
 			logger.Info("push recording mode: routing as offline (NOTIFICATION_RECORD_PUSHES)")
-		} else if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
-			if pc, err := presence.NewGRPCChecker(userAddr); err != nil {
-				logger.Warn("user presence checker unavailable; offline-only routing", slog.Any("error", err))
+		} else {
+			checker, jwksServer, checkerErr := presence.LoadAuthenticatedGRPCCheckerFromEnv(os.LookupEnv)
+			if checkerErr != nil {
+				log.Fatalf("Notification routing presence configuration: %v", checkerErr)
+			}
+			if checker == nil || jwksServer == nil {
+				logger.Warn("Notification routing presence authority is not configured; message delivery will fail closed")
 			} else {
-				presenceChecker = pc
-				logger.Info("user presence checker enabled", slog.String("addr", userAddr))
+				notificationPresenceJWKS = jwksServer
+				presenceChecker = checker
+				defer func() { _ = checker.Close() }()
+				logger.Info("authenticated User routing presence enabled")
 			}
 		}
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
@@ -293,6 +301,14 @@ func main() {
 	} else {
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
+	if notificationPresenceJWKS != nil {
+		go func() {
+			logger.Info("Notification principal JWKS TLS listener started", slog.String("addr", notificationPresenceJWKS.Server.Addr))
+			if err := notificationPresenceJWKS.Server.ListenAndServeTLS(notificationPresenceJWKS.CertFile, notificationPresenceJWKS.KeyFile); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("Notification principal JWKS TLS serve: %v", err)
+			}
+		}()
+	}
 
 	server := &http.Server{
 		Addr:    httpAddr,
@@ -321,6 +337,11 @@ func main() {
 		}
 		if spaceLifecycleSrv != nil {
 			spaceLifecycleSrv.GracefulStop()
+		}
+		if notificationPresenceJWKS != nil {
+			if err := notificationPresenceJWKS.Server.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

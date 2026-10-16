@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,14 @@ type ManagedChatPurgeWork struct {
 	CompletedAt         *time.Time
 	MessageIDs          []uuid.UUID
 	MessageAttachments  []ManagedChatPurgeMessage
+	EventCount          int64
+	EventSetSHA256      []byte
+}
+
+type managedChatPurgeEvent struct {
+	EventID   uuid.UUID
+	MessageID uuid.UUID
+	SHA256    []byte
 }
 
 // CompleteManagedChatPurge removes the immutable work set only after callers
@@ -73,7 +82,16 @@ func (s *MessagesStore) CompleteManagedChatPurge(ctx context.Context, operationI
 	if state != "PENDING" {
 		return nil, ErrManagedChatPurgeOperationConflict
 	}
+	if _, err := lockChatAndSpaceForPurge(ctx, tx, chatID); err != nil {
+		return nil, err
+	}
 	if err := authorizeSpaceManagedPurge(ctx, tx, chatID, operationID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT o.event_id FROM message_event_outbox o JOIN managed_chat_purge_events e ON e.event_id=o.event_id WHERE e.operation_id=$1 FOR UPDATE OF o`, operationID); err != nil {
+		return nil, err
+	}
+	if err := requireManagedChatPurgeEventsPublished(ctx, tx, operationID); err != nil {
 		return nil, err
 	}
 	// Keep every payload and side row in the same transaction as completion.
@@ -184,6 +202,31 @@ func (s *MessagesStore) StartManagedChatPurge(ctx context.Context, operationID, 
 	if !due {
 		return nil, ErrManagedChatPurgeNotDue
 	}
+	if _, err := lockChatAndSpaceForPurge(ctx, tx, chatID); err != nil {
+		return nil, err
+	}
+	var pendingOperation uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT operation_id FROM managed_chat_purge_operations WHERE chat_id=$1 AND state='PENDING' FOR UPDATE`, chatID).Scan(&pendingOperation)
+	if err == nil {
+		if pendingOperation != operationID {
+			return nil, ErrManagedChatPurgeOperationConflict
+		}
+		work, err := loadManagedChatPurgeWork(ctx, tx, operationID, chatID, purgeAfter.Truncate(time.Microsecond), requestSHA256, "PENDING")
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		work.PurgeAfter = purgeAfter
+		return work, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	if err := authorizeSpaceManagedPurge(ctx, tx, chatID, operationID); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO managed_chat_purge_operations(operation_id,chat_id,purge_after,request_sha256,state) VALUES($1,$2,$3,$4,'PENDING')`, operationID, chatID, purgeAfter.Truncate(time.Microsecond), requestSHA256); err != nil {
 		return nil, err
 	}
@@ -220,10 +263,37 @@ func (s *MessagesStore) StartManagedChatPurge(ctx context.Context, operationID, 
 			return nil, err
 		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE managed_chat_purge_operations SET message_count=$2,file_reference_count=$3 WHERE operation_id=$1`, operationID, len(snapshots), fileReferenceCount); err != nil {
+	eventRows, err := tx.Query(ctx, `SELECT o.event_id,o.message_id,o.payload_sha256
+FROM message_event_outbox o
+JOIN managed_chat_purge_messages p ON p.operation_id=$1 AND p.message_id=o.message_id
+WHERE o.chat_id=$2 ORDER BY o.event_id FOR UPDATE OF o`, operationID, chatID)
+	if err != nil {
 		return nil, err
 	}
-	work := &ManagedChatPurgeWork{OperationID: operationID, ChatID: chatID, PurgeAfter: purgeAfter, RequestSHA256: append([]byte(nil), requestSHA256...), State: "PENDING"}
+	var frozenEvents []managedChatPurgeEvent
+	for eventRows.Next() {
+		var event managedChatPurgeEvent
+		if err := eventRows.Scan(&event.EventID, &event.MessageID, &event.SHA256); err != nil {
+			eventRows.Close()
+			return nil, err
+		}
+		frozenEvents = append(frozenEvents, event)
+	}
+	if err := eventRows.Err(); err != nil {
+		eventRows.Close()
+		return nil, err
+	}
+	eventRows.Close()
+	for _, event := range frozenEvents {
+		if _, err := tx.Exec(ctx, `INSERT INTO managed_chat_purge_events(operation_id,event_id,message_id,event_sha256) VALUES($1,$2,$3,$4)`, operationID, event.EventID, event.MessageID, event.SHA256); err != nil {
+			return nil, err
+		}
+	}
+	eventHash := messageEventSetHash(frozenEvents)
+	if _, err := tx.Exec(ctx, `UPDATE managed_chat_purge_operations SET message_count=$2,file_reference_count=$3,event_count=$4,event_set_sha256=$5 WHERE operation_id=$1`, operationID, len(snapshots), fileReferenceCount, len(frozenEvents), eventHash); err != nil {
+		return nil, err
+	}
+	work := &ManagedChatPurgeWork{OperationID: operationID, ChatID: chatID, PurgeAfter: purgeAfter, RequestSHA256: append([]byte(nil), requestSHA256...), State: "PENDING", EventCount: int64(len(frozenEvents)), EventSetSHA256: eventHash}
 	for _, item := range snapshots {
 		message, err := managedChatPurgeMessage(item.id, item.attachments)
 		if err != nil {
@@ -244,12 +314,17 @@ type managedChatPurgeRows interface {
 }
 
 func loadManagedChatPurgeWork(ctx context.Context, db managedChatPurgeRows, operationID, chatID uuid.UUID, cutoff time.Time, requestHash []byte, state string) (*ManagedChatPurgeWork, error) {
+	var eventCount int64
+	var eventHash []byte
+	if err := db.QueryRow(ctx, `SELECT event_count,event_set_sha256 FROM managed_chat_purge_operations WHERE operation_id=$1`, operationID).Scan(&eventCount, &eventHash); err != nil {
+		return nil, err
+	}
 	rows, err := db.Query(ctx, `SELECT message_id,attachments::text FROM managed_chat_purge_messages WHERE operation_id=$1 ORDER BY message_id`, operationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	work := &ManagedChatPurgeWork{OperationID: operationID, ChatID: chatID, PurgeAfter: cutoff, RequestSHA256: append([]byte(nil), requestHash...), State: state}
+	work := &ManagedChatPurgeWork{OperationID: operationID, ChatID: chatID, PurgeAfter: cutoff, RequestSHA256: append([]byte(nil), requestHash...), State: state, EventCount: eventCount, EventSetSHA256: append([]byte(nil), eventHash...)}
 	for rows.Next() {
 		var id uuid.UUID
 		var attachments string
@@ -267,6 +342,59 @@ func loadManagedChatPurgeWork(ctx context.Context, db managedChatPurgeRows, oper
 		return nil, err
 	}
 	return work, nil
+}
+
+func (s *MessagesStore) RequireManagedChatPurgeEventsPublished(ctx context.Context, operationID uuid.UUID) error {
+	if s == nil || s.Pool == nil || operationID == uuid.Nil {
+		return errors.New("managed chat purge event fence unavailable")
+	}
+	return requireManagedChatPurgeEventsPublished(ctx, s.Pool, operationID)
+}
+
+func requireManagedChatPurgeEventsPublished(ctx context.Context, db managedChatPurgeRows, operationID uuid.UUID) error {
+	var expectedCount int64
+	var expectedHash []byte
+	if err := db.QueryRow(ctx, `SELECT event_count,event_set_sha256 FROM managed_chat_purge_operations WHERE operation_id=$1`, operationID).Scan(&expectedCount, &expectedHash); err != nil {
+		return err
+	}
+	if expectedCount < 0 || len(expectedHash) != 32 {
+		return ErrManagedChatPurgeOperationConflict
+	}
+	rows, err := db.Query(ctx, `SELECT e.event_id,e.message_id,e.event_sha256,o.event_id IS NOT NULL,o.payload_sha256,o.pubacked_at,o.puback_sequence
+FROM managed_chat_purge_events e LEFT JOIN message_event_outbox o ON o.event_id=e.event_id
+WHERE e.operation_id=$1 ORDER BY e.event_id`, operationID)
+	if err != nil {
+		return err
+	}
+	var events []managedChatPurgeEvent
+	var pending bool
+	for rows.Next() {
+		var event managedChatPurgeEvent
+		var outboxPresent bool
+		var outboxHash []byte
+		var pubackedAt *time.Time
+		var pubackSequence *int64
+		if err := rows.Scan(&event.EventID, &event.MessageID, &event.SHA256, &outboxPresent, &outboxHash, &pubackedAt, &pubackSequence); err != nil {
+			rows.Close()
+			return err
+		}
+		// The LEFT JOIN's nullable event id is checked separately because event
+		// membership is immutable even when a corrupt/missing outbox row exists.
+		if !outboxPresent || len(outboxHash) != 32 || !bytes.Equal(outboxHash, event.SHA256) || pubackedAt == nil || pubackSequence == nil || *pubackSequence <= 0 {
+			pending = true
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	actualHash := messageEventSetHash(events)
+	if int64(len(events)) != expectedCount || !bytes.Equal(actualHash, expectedHash) || pending {
+		return ErrMessageEventOutboxUnavailable
+	}
+	return nil
 }
 
 func managedChatPurgeMessage(id uuid.UUID, attachments string) (ManagedChatPurgeMessage, error) {

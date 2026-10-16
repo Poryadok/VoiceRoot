@@ -14,8 +14,8 @@
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
-| Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | — |
-| Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
+| Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | NATS JetStream (publish); transactional `chat.deleted` outbox |
+| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; JetStream dispatcher retries exact bytes until positive PubAck |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | Social principal replay   | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
@@ -116,6 +116,7 @@ proof receipts. Runtime configuration is documented in
 | Таблица | Примечание |
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
+| `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
@@ -124,8 +125,16 @@ proof receipts. Runtime configuration is documented in
 | `chat_match_squad_operations` | One permanent match-owned row binds creation and teardown operation/receipt IDs and request/manifest hashes. Full request/receipt protobuf bytes remain retained while the aggregate teardown-completion trigger is unresolved; permanent operation digests/fences must remain. Migration DOWN refuses while pending, replay-required, or fence evidence exists. |
 
 The Chat MatchSquad replay guard uses `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` with Redis `SET NX` and expiry bounded by token expiry. Its create/teardown request and receipt bytes currently remain durable; the provider has no aggregate teardown-completion signal, so no local compaction clock is applied. The compact terminal fence remains permanent.
+| `chat_deleted_event_outbox` | Migration `000021`; immutable exact P3 `chat.deleted` envelope bytes and stable event ID. Pending/uncertain rows retry without expiry; confirmed rows are removable only after the joined parent PURGE receipt retention horizon. Parent receipt/manifest cleanup remains separate. |
 
 Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging_db`** (`messages.content_type`). Do not duplicate catalog DDL outside Chat Service docs.
+
+### `bot_db` (Bot Service)
+
+| Таблица | Примечание |
+|---------|------------|
+| `bot_daily_chat_creates` | Per-bot daily count; admission is an atomic conditional reservation capped at ten |
+| `bot_chat_create_requests` | Migration `000006`; stable `(bot_id, request_id)` hash tombstone, original/current quota day, active-attempt count, reserved flag and sticky retention fence; same-hash re-admission after definite rejection preserves key binding |
 
 ---
 
@@ -267,7 +276,7 @@ business idempotency independently of per-attempt JWT replay rejection.
 | `messaging_db` | lifecycle fence, imported Chat pages, Messaging File-reference producer pages, purge/release operation evidence and compact PURGED fence |
 | `file_db` | `file_blobs`, exact `file_references`, subject-bound access capabilities, Space lifecycle fences, reference operations, producer declarations/chunks/seals and GC operations |
 | `voice_db` | lifecycle fence/operation receipts and compact terminal fence; Redis remains a projection, never the durable deletion authority |
-| Matchmaking/Search/Bot/Notification DBs | service-owned lifecycle fence, exact imported Chat pages where required, cleanup operation/receipt evidence and compact terminal fence |
+| Matchmaking/Search/Bot/Notification DBs | service-owned lifecycle fence, exact imported Chat pages where required, cleanup operation/receipt evidence and compact terminal fence; Search retains the non-payload operation/generation/manifest/hash binding needed to validate terminal Chat deletion after manifest retention expires |
 | `subscription_db` | lifecycle fence/receipts, purged Space billing detail and permanent provider-event HMAC dedup fences |
 | Moderation DB | atomic `TARGET_DELETED` resolution, sanction snapshot/detached report relation and deletion of Space report evidence |
 | Analytics ClickHouse | existing 90-day raw HMAC events and de-identified aggregates; no raw deleted Space key |

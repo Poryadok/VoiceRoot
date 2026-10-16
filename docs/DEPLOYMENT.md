@@ -1,5 +1,16 @@
 # Окружения и выкат
 
+Before diagnosis or acceptance, read [Release evidence and recovery
+lessons](RELEASE_EVIDENCE.md): source/run binding, safe diagnostics, immutable
+failure history and independent preservation checks.
+
+Mixed `images-only` selection may include backend services and frontends in one
+preservation transaction. The compiler includes only the selected live frontend
+Deployments alongside the backend manifests and binds their canonical source
+files. Exact container/image inventory checks remain mandatory; image-only
+normalization preserves captured live templates, annotations, environment and
+sidecars while replacing only the authorized image pins.
+
 Согласуется со стеком в [MICROSERVICES.md](MICROSERVICES.md) и [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (k3s / Kubernetes, ClusterDNS). Политика релизов, canary и откат — [OPERATIONS.md](OPERATIONS.md).
 
 ---
@@ -34,9 +45,11 @@ Compose (`docker-compose.yml`) and in-cluster infra (`deploy/staging/infra.yaml`
         → прод: тег релиза + workflow с approval (или ручной выкат) → production
 ```
 
-- **Staging**: на push в `master` CI **собирает только изменённые** образы (`build_services` из path filter), **promote** остальных с предыдущего SHA (`promote-ghcr-images.sh`), публикует immutable тег `:<git_sha>` (без `:latest`). Артефакт **`stack.lock.yaml`** фиксирует теги всех 23 образов. Деплой: job **`deploy-staging`** в CI (`workflow_call` → [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml)) при `STAGING_DEPLOY_ENABLED=true`; режимы `DEPLOY_MODE=full|app-only|images-only` в [`render-and-apply.sh`](../scripts/staging/render-and-apply.sh). Ручной выкат — **Staging deploy** с обязательным git SHA. Для проверки загруженного Secret без кластера укажите `validate_app_secret_only=true`. При неполном Secret отдельный `mail_only=true` обновляет только `AUTH_RESEND_API_KEY` и `AUTH_RESEND_FROM` существующего `voice-app-secrets`, затем перезапускает только `voice-auth`; он не применяет полный Secret и не запускает остальные сервисы. Эти режимы взаимоисключающие.
+- **Staging**: на push в `master` CI **собирает только изменённые** образы (`build_services` из path filter), **promote** остальных с предыдущего SHA (`promote-ghcr-images.sh`), публикует immutable тег `:<git_sha>` (без `:latest`). Артефакт **`stack.lock.yaml`** фиксирует теги всех 23 образов. Деплой: job **`deploy-staging`** в CI (`workflow_call` → [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml)) при `STAGING_DEPLOY_ENABLED=true`; режимы `DEPLOY_MODE=full|app-only|images-only` в [`render-and-apply.sh`](../scripts/staging/render-and-apply.sh). Ручной выкат — **Staging deploy** с обязательным git SHA. Для проверки загруженного Secret без кластера укажите `validate_app_secret_only=true`.
+- **Mail configuration changes**: mail_only=true is disabled and fails before source acquisition, staging credentials, Kubernetes access or mutation. Upload a complete staging app Secret and dispatch the normal protected **Staging deploy** with deploy_mode=full or app-only and mail_only=false. This route uses the same cold NATS preservation gate as other application deployments. The offline validate_app_secret_only=true mode remains available for Secret validation.
 - Ручной **Staging deploy** не применяет observability namespace даже при `VOICE_APPLY_OBSERVABILITY=true`; автоматический `workflow_call` сохраняет настройку. Для observability есть отдельный workflow **Staging observability deploy**.
 - Both staging deployment and its pre-deploy diagnostic acquire repository source from the public GitHub API tarball endpoint pinned to the requested full commit SHA. The runner verifies the API commit/tree and archive tree before replacing its workspace. It requires HTTPS access to `api.github.com` and `codeload.github.com`; Git transport to `github.com` is diagnostic only. The archive request is unauthenticated.
+- The staging archive transfer is bounded to 600 seconds and 100 MiB, with a 5-second connection deadline and failure if transfer speed stays below 1 KiB/s for 30 seconds. A progressing archive may exceed two minutes; completed bytes still require the exact requested commit/tree verification before workspace replacement. The NATS diagnostic job shares this download step and has a 15-minute total ceiling to include download and its remaining bounded checks.
 - **Production**: workflow **[`Production deploy`](../.github/workflows/prod-deploy.yml)** — `workflow_dispatch`, environment **`production`**, обязательный **`image_tag`**, selective inputs `changed_services` / `needs_full_rollout`, optional [`deploy/prod/stack.lock.yaml`](../deploy/prod/stack.lock.example.yaml) для verify; полный стек [`deploy/prod/`](../deploy/prod/) через [`render-and-apply-prod.sh`](../scripts/prod/render-and-apply-prod.sh).
 
 ### `VOICE_IMAGE_TAG` (required)
@@ -131,7 +144,7 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 
 **Проверка деплоя из GitHub после настройки секрета:** в репозитории **Actions** → workflow **Staging deploy** → **Run workflow** (обязательно укажите тег образа — git SHA из зелёного CI run; default `latest` убран). Убедитесь, что job завершает шаг **Apply staging manifests** без ошибок `kubectl`.
 
-**Теги образов и автодеплой:** auto-deploy после CI на `master` использует **`head_sha`** CI run. Job **`staging-stack-lock`** публикует `stack.lock.yaml` (built vs promoted per image); **Staging deploy** скачивает lock при `workflow_call` и `verify-staging-images.sh` проверяет манифесты из lock или полного [`staging-image-catalog.json`](../scripts/ci/staging-image-catalog.json). Job **`staging-images-push`** может быть **skipped** при frontend-only change — достаточно **`staging-images-promote`** + frontend jobs. `scripts/staging/verify-staging-images.sh` не использует `:latest`.
+**Image tags and auto-deploy:** auto-deploy after CI on `master` uses the CI run's **`head_sha`**. Job **`staging-stack-lock`** publishes `stack.lock.yaml` (built or promoted images); before kubectl setup, **Staging deploy** verifies that every image in the full [`staging-image-catalog.json`](../scripts/ci/staging-image-catalog.json), plus the NATS hub renderer, has a manifest at the exact requested SHA. Manual deploys verify the same complete catalog against their requested SHA. CI-only changes do not publish a stack lock or enter auto-deploy because they do not publish a complete set of SHA-tagged images. `scripts/staging/verify-staging-images.sh` never uses `:latest`.
 
 **Sanity после изменений CI:** один раз **Actions → CI → Run workflow** → profile **`full`** (все тиры, все сервисы). Список required checks для branch protection — [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
@@ -275,6 +288,38 @@ docker build -f src/developer-portal/Dockerfile src/developer-portal \
 `scripts/staging/render-and-apply.sh` applies the portal manifest when present; ingress host from `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (repo Variable, passed through staging-deploy workflow). Add DNS **A/AAAA** for that host to the staging ingress node. **Production** portal Deployment + Ingress: [`deploy/prod/developer-portal.yaml`](../deploy/prod/developer-portal.yaml) (`voice-prod` namespace; substitute production FQDNs via `VOICE_DEVELOPER_PORTAL_INGRESS_HOST`).
 
 ### Flutter web staging
+
+The image build binds fresh `index.html` to a SHA256-named bootstrap, whose
+generated `mainJsPath` points to SHA256-named main JavaScript. Both stay in the
+web root, preserving relative renderer/resource paths. The original files remain
+for legacy references. Flutter 3.41's cleanup-only service worker and Firebase
+messaging worker remain unchanged; a caching worker with a resource map is
+rejected by the postprocessor until explicitly integrated.
+
+Nginx sends `Cache-Control: no-store` for mutable entry points, manifests and
+other unversioned resources. Only the two content-addressed JavaScript filename
+forms receive immutable caching; a missing hashed asset returns 404, not SPA HTML.
+`web-asset-manifest.json` (`voice-web-assets-v1`) records each bootstrap/main path,
+SHA256 and byte count. Public acceptance must follow the fresh HTML reference and
+compare complete decoded bytes with the manifest and deployed image. HTTP 200 or
+the legacy `/main.dart.js` alone does not prove current-release delivery.
+
+For release acceptance, first retain the exact deployed image/Pod manifest and
+asset hashes. Fetch public HTML and manifest with normal TLS verification; reject
+a stale manifest against those retained pins. Require the HTML script reference
+to equal `manifest.bootstrap.path`, then verify its complete decoded byte count
+and SHA256. Parse its generated build configuration and require `mainJsPath` to
+equal `manifest.main.path`; fetch that path and verify its complete decoded byte
+count and SHA256. Reject incomplete transfers, HTML fallbacks and mismatched
+references even when every HTTP status is 200. This sequence is independent of
+the ordinary rollout's Kubernetes readiness result.
+
+Previously cached entry points can require an independently authorized cache
+invalidation; new origin headers do not rewrite existing edge cache entries.
+The October 16 incident demonstrated both stale canonical asset HITs and a
+current-size cache MISS that still stalled in transfer. Content addressing fixes
+release identity, not that separate network delivery failure; no DNS or TLS
+weakening is part of this contract.
 
 Deployment + Ingress: [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml). **CI** (job `web` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes `ghcr.io/<owner>/<repo>/web:<git_sha>` on push to `master` with build-args:
 
@@ -509,6 +554,35 @@ the overlay or enable it by adding it to an active base. The overlay enables
 only Gateway-originated Matchmaking CompleteMatch; it does not configure Space
 principals or alter ordinary listeners. This source template is not a
 deployment or runtime acceptance claim.
+## Notification-to-User routing-presence principal
+
+The Notification presence client is a dedicated internal capability, separate
+from User's public viewer-filtered presence RPCs. User serves only
+`GetNotificationRoutingPresence` on its signed-principal TLS listener. For
+User, configure `USER_NOTIFICATION_PRINCIPAL_TLS_CERT_FILE`,
+`USER_NOTIFICATION_PRINCIPAL_TLS_KEY_FILE`,
+`USER_NOTIFICATION_PRINCIPAL_REPLAY_REDIS_ADDR`, and optionally
+`USER_NOTIFICATION_PRINCIPAL_GRPC_LISTEN` (default `:9095`). Its trusted
+`S2S_JWKS_URLS_JSON` map must include the `notification` issuer's HTTPS JWKS
+endpoint; use `S2S_JWKS_CA_FILE` when that endpoint uses a private CA.
+
+Notification's signer uses
+`NOTIFICATION_PRINCIPAL_SIGNING_KEYS_DIR` (the current and next private-key
+PEM files), `NOTIFICATION_PRINCIPAL_ACTIVE_KID`,
+`NOTIFICATION_PRINCIPAL_JWKS_LISTEN`,
+`NOTIFICATION_PRINCIPAL_JWKS_TLS_CERT_FILE`, and
+`NOTIFICATION_PRINCIPAL_JWKS_TLS_KEY_FILE`. Its User client uses
+`USER_NOTIFICATION_PRINCIPAL_GRPC_ADDR`,
+`USER_NOTIFICATION_PRINCIPAL_TLS_CA_FILE`, and
+`USER_NOTIFICATION_PRINCIPAL_TLS_SERVER_NAME`. Keep private keys and
+certificates in the service's existing secret mounts; do not reuse another
+issuer's signing key. Partial Notification client/listener configuration is a
+startup error. With no Notification authority configured, message delivery
+fails closed and the event is retried rather than routed as offline.
+
+This configuration documents source requirements only. A rollout still
+requires the normal operator-managed certificates, trusted issuer entry, key
+rotation and deployment procedure.
 
 ## Auth-to-User SDK profile principal
 
@@ -728,6 +802,16 @@ routes. Before switching active key, publish current+next keys, wait the
 credential hard expiry, then retain the retired public key for at least 35 s.
 
 ## NATS JWT and leaf activation
+
+For ordinary non-reset staging releases and rollback, follow the
+[NATS preservation runbook](../scripts/staging/nats-rollout-preservation/README.md).
+It covers the exact installed-helper transition, operation-closure and journal
+prerequisites, current source/native proof gates, and fresh-cut rollback. The
+reset and root-rotation procedures below are separately authorized maintenance
+exceptions; they are not recovery shortcuts for a blocked preservation rollout.
+For permission failures with existing credentials, use the runbook's
+[grant drift and prepare-failure diagnosis](../scripts/staging/nats-rollout-preservation/README.md#grant-drift-and-prepare-failure-diagnosis)
+before retrying or changing enrollment.
 
 The reviewed grants and issuer contract are in
 [`deploy/nats/README.md`](../deploy/nats/README.md) and
@@ -1019,3 +1103,132 @@ default, pinned image/mirror policy, k3s prerequisites, backup/restore, and the
 optional S3-provider migration procedure. Its browser-facing signed URL contract
 uses the existing Gateway HTTPS host and bucket-specific MinIO ingress routes;
 the full staging rollout applies both the ingress and Web-origin CORS setting.
+# Per-rollout NATS preservation gate
+
+The normal staging workflow now requires a fresh nonreset preservation
+transaction for every release and images-only rollback. Its once-installed
+root bridge owns cold backup, isolated complete-account proof, encrypted
+off-node artifact readback, same-PVC paused apply and verified-only restart.
+See [the operator runbook](../scripts/staging/nats-rollout-preservation/README.md)
+for the reviewed installer, authority, capacity and recovery boundaries.
+Source bootstrap43/deployed42durable compatibility remains an explicit
+pre-fence backend release prerequisite; the runtime inventory itself is dynamic.
+
+
+## NATS operation checkpoints and reset boundaries
+
+Ordinary rollout and rollback remain **nonreset** and follow the [preservation runbook](../scripts/staging/nats-rollout-preservation/README.md). A disposable reset is a separate maintenance operation within an explicitly established environment and data-loss scope. That authorization remains valid for reviewed continuations of the same operation; recheck its source, resource identities and saved phase instead of repeatedly requesting the same permission. Do not infer namespace clean-install, production reset or root-rotation authority from a NATS-only reset scope.
+
+Record what the operation actually reached:
+
+| Checkpoint | What its evidence establishes |
+| --- | --- |
+| Prepare/build/capture | Exact source and input checks, or a finite preparation failure. Use the matching request journal/response and checkpoint; a workflow label or `COMPLETE` journal alone does not establish a fence or apply. |
+| Fence | Writers are stopped under the recorded ownership and resource identities. A fenced operation can still be blocked before contract migration or apply. |
+| Native contract/migration | The retained native records and complete account census meet the operation's checks and planned contract changes. Backup upload or isolated restore alone does not establish this phase passed. |
+| Apply | The recorded paused apply and required migrations reached their actual outcomes. This is distinct from application restart/readiness. |
+| Readiness and application acceptance | Temporary maintenance changes have been reverted; intended workloads are ready on their verified target templates and selected image/source/stack-lock identity; smoke and authenticated application evidence establish the claimed behavior. CI or a ready broker alone is insufficient. |
+
+The `/msgs/` preservation boundary includes `index.db`. Retention expiry can change message count, first sequence and subject counts while payload block files remain byte-identical. This is real record loss. Do not exclude the index, rewrite timestamps, adopt a changed post-migration archive as the original cut, or turn the failed preservation operation into PASS. Retain its checkpoint, journals and archives. Follow the [explicit-reset boundary](../scripts/staging/nats-rollout-preservation/README.md#explicit-reset-after-retained-records-expire) only when that maintenance scope is already authorized.
+
+For the reviewed root adapter, retain both `FOWNER` and `FSETID` capabilities where the scoped store-custody procedure needs them: setting mode `2770` can otherwise produce `0770`. Verify the resulting owner, group and setgid mode; do not weaken the custody check or compensate with broad writable mounts/capabilities. Preserve the adapter's reviewed read-only boundaries and exact writable scope. After a failed allocation, inspect the saved phase and bound PVC/PV identity; use only the reviewed continuation that recognizes that state, not a repeated allocation or baseline replay.
+
+When restoring applications, reuse the existing owned User→Space startup choreography described under [NATS JWT and leaf activation](#nats-jwt-and-leaf-activation): temporarily clear only User's operation-owned `SPACE_GRPC_ADDR`, wait for User and then Space, restore the exact original User template, and verify restored User plus all required workload readiness. Recognize only the operation's own interrupted empty override; refuse foreign changes and retain cleanup on failure. Do not change Services, remove dependency checks, or waive readiness to break the cycle.
+
+A terminal reset closure is **not deployment acceptance**. Preserve its original failed FULL, reset authority, completed authorization journals, receipt and old-store evidence. Retirement/idle inventory must authenticate the exact terminal reset admission before classifying its authorization journal as settled; never delete history or treat every `STARTED` journal as abandoned. The reset receipt retains `deployment_pass=false` and `rollback_eligible=false`.
+
+After independent terminal-reset readback, install the reviewed helper successor through its existing exact-predecessor upgrade path. Verify all installed manifest members/code binding, terminal receipt and parsed active-contract equality. Compare canonical JSON mappings for semantic equality and record raw-file hashes separately. Only after installation/readback succeeds, start the existing `voice-nats-preservation.path` and `.timer` units; these trigger the existing service. Do not start the triggers against the predecessor helper or substitute a new scheduler. These systemd units are separate from Codex recurring automation.
+
+To accept the new build after reset, create recent application message/file data, run an ordinary nonreset FULL with its required source/image/stack-lock gates, then verify the same data after fresh login and again after a deliberate restart with recorded workload identity/readiness. Bind the final FULL checkpoint to its adopted target templates, not the old rollback templates. A rollout restart changes its restart annotation: record the exact owned annotation and require all other template fields and images to remain unchanged. Prove replacement through Pod owner chains and old/new UIDs. The empty baseline proves baseline creation, not application quality or preservation of later writes.
+
+Failures before bridge submission and in the captured workflow entry also emit
+a fixed safe error code to stderr and the Job Summary. The always-run collector
+uploads these as `voice-deployment-boundary-failure-v1` records alongside root
+reports. These records are runner observations, not root attestations: operation
+state and side effects remain unknown, and recovery is never authorized. A
+source mismatch before submission has no root request nonce. Match its run ID,
+attempt and source SHA; do not invent a checkpoint or replay prepare to obtain
+a report. Unknown exception text is never exported. Collection failure preserves
+the original nonzero deployment result and prints report-unavailable explicitly.
+
+The rollout bridge publishes the versioned `voice-deployment-report-v1` projection
+under `installed/responses/<request-nonce>.report.json`. Each atomic root-owned
+`root:pmd` mode `0440` report is bound to one request nonce, run ID/attempt and
+source SHA. Reports remain on the host with the existing request journal (no
+automatic deletion); CI artifacts retain them for 30 days. Root-private journals,
+checkpoints, command output and credentials remain private.
+
+An agent can read an exact existing report without a GitHub token or a running
+bridge service:
+
+```sh
+python3 /var/lib/voice-nats-preservation/installed/code/nats-rollout-preservation/bridge_client.py report REQUEST_NONCE
+```
+
+The client `collect-reports` command reads the current job's retained request
+index in `RUNNER_TEMP`, verifies run/attempt/source identity and exports bounded
+JSON. Staging CI runs collection and artifact upload with `always()` and
+`continue-on-error`; diagnostic failure cannot replace the original deployment
+result. Missing/invalid reports print `NATS_DEPLOYMENT_REPORT=UNAVAILABLE`.
+Cancellation or a host outage can prevent upload; the last host report remains
+the durable record. A report's `updated_at` is Unix UTC seconds: check its age
+before treating a `STARTED` record as current progress.
+
+The schema contains only request identity/status, operation identity/status/error,
+helper binding digest, timestamp, finite stage/current action/last completed
+action, stable error code, command exit/timeout/cause and finite effect states.
+`UNKNOWN` means evidence is absent; `PRESENT` means a receipt is recorded, not
+that a new verification has occurred. Maintenance, fencing, original broker
+orderly exit, finalizer removal, cut, preservation, apply, restart and release
+are reported separately. Request failure is distinct from operation failure.
+`recovery_authorized` is always false; no report authorizes a retry or weakens
+preservation guards. An application permission violation is distinct from an
+OS permission error; arbitrary stderr and exception text are never exported.
+The original failure action is captured before safety cleanup; later commands
+cannot overwrite that exception's finite action/exit/cause.
+
+For historical failures, root can use the same reviewed module from captured
+source before upgrading the installed helper:
+
+```sh
+python3 CAPTURED_CODE/nats-rollout-preservation/deployment_report.py --export-historical REQUEST_NONCE OPERATION
+```
+
+This validates the exact retained journal/operation binding, reads the checkpoint
+under the existing operation lock and writes only its sanitized report. It does
+not replay prepare, modify checkpoints or authorization, or mutate workloads.
+Historical current-exception causes remain `unknown`; a checkpoint's older
+`operation_error` is not the current request error. Independent installation,
+agent readback and an ordinary rollout remain acceptance requirements for
+`CI-A1-DEPLOY-DIAGNOSTICS`; isolated failure tests do not prove live deployment.
+
+For application smoke, use the existing truthful smoke `User-Agent` consistently for API/object/WebSocket transport where applicable. Pace login attempts against the existing five-attempts-per-IP/15-minute limit and honor rate-limit responses; shared runner attempts count against the same budget. See [testing guidance](TESTING.md) and [authentication limits](features/auth-and-contacts.md#сессии-и-безопасность). Do not spoof a browser, rotate identities to evade limits, or weaken WAF/auth/rate-limit policy to obtain a passing smoke.
+
+## Production host inotify prerequisite
+
+Before installing the rollout-preservation root bridge in **production**, ensure
+`fs.inotify.max_user_instances >= 512` persistently; retain any higher existing
+value. This is a per-user instance limit, separate from `max_user_watches` and
+`max_queued_events`. Verify actual host owners first rather than treating every
+shim with PPID 1 as stale or masking a suspected leak by raising the limit.
+
+The staging installer encountered `EMFILE` at the default instance limit 128.
+A complete, stable runtime check mapped all 52 k3s shim processes to 122 live
+RUNNING container tasks, with zero unresolved shims. Cleaning those shims would
+affect live containers, so a modest instance-capacity increase is justified for
+that host; this observation does not prove that every future host is leak-free.
+
+Record the value in a root-owned `sysctl.d` drop-in without replacing conflicting
+administrator settings. Preserve higher values, apply only
+`fs.inotify.max_user_instances`, and verify an empty inotify instance succeeds.
+After installation or partial-install recovery, require both
+`voice-nats-preservation.path` and `.timer` to be enabled and `active/waiting`;
+timer readiness alone does not prove the path watch works. Preserve the installed
+code, root policy and recovery key; restarting k3s, killing shims or rerunning the
+installer is not this host-capacity repair. Starting the path can process an
+already queued authenticated rollout request through the normal proof gates.
+
+This is a **production prerequisite to apply during production provisioning**,
+not evidence that the production host has already been changed. Host recovery
+and enablement precede the populated version-transition and fresh-rollback proof;
+automatic staging deployment remains disabled until that proof succeeds.

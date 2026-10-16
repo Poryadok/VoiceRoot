@@ -39,6 +39,7 @@ void main() {
 
     final theme = await _captureTheme(tester);
     final openHelpFocus = FocusNode();
+    addTearDown(openHelpFocus.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -89,6 +90,14 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Close help'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    expect(find.text('Help'), findsOneWidget);
+    expect(find.text('How can we help?'), findsOneWidget);
+    expect(tester.getSize(find.byTooltip('Close help')), const Size(34, 34));
+    expect(
+      tester.getTopLeft(find.byTooltip('Close help')).dx,
+      lessThan(tester.getTopLeft(find.text('Help')).dx),
+    );
 
     await tester.tap(find.byTooltip('Close help'));
     await tester.pumpAndSettle();
@@ -102,19 +111,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Keyboard shortcuts'), findsNothing);
     expect(FocusManager.instance.primaryFocus, same(openHelpFocus));
-
-    openHelpFocus.dispose();
   });
 
   testWidgets('Help reference fits a narrow viewport without overflow', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(360, 640);
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final theme = await _captureTheme(tester);
+    final openHelpFocus = FocusNode();
+    addTearDown(openHelpFocus.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -132,6 +141,7 @@ void main() {
             home: Builder(
               builder: (context) => Scaffold(
                 body: TextButton(
+                  focusNode: openHelpFocus,
                   onPressed: () => HelpSheet.show(context),
                   child: const Text('Open help'),
                 ),
@@ -142,14 +152,34 @@ void main() {
       ),
     );
 
+    openHelpFocus.requestFocus();
+    await tester.pump();
     await tester.tap(find.text('Open help'));
     await tester.pumpAndSettle();
-    await _captureIfRequested(tester, 'help-shortcuts-narrow.png');
+    await _captureIfRequested(tester, 'help-shortcuts-mobile.png');
 
     expect(tester.takeException(), isNull);
     expect(find.text('Help'), findsOneWidget);
+    expect(find.byIcon(Icons.help_outline), findsOneWidget);
+    expect(find.byTooltip('Back'), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    expect(tester.getSize(find.byTooltip('Back')), const Size(36, 36));
+    expect(
+      tester.getTopLeft(find.byTooltip('Back')).dx,
+      lessThan(tester.getTopLeft(find.text('Help')).dx),
+    );
+    expect(find.text('How can we help?'), findsOneWidget);
+    expect(
+      find.text('Find an answer or contact the Voice team.'),
+      findsOneWidget,
+    );
     expect(find.text('Keyboard shortcuts'), findsNothing);
     expect(find.text('Ctrl+K'), findsNothing);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('How can we help?'), findsNothing);
+    expect(FocusManager.instance.primaryFocus, same(openHelpFocus));
   });
 
   testWidgets(

@@ -17,6 +17,7 @@ import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $1;
 
+import '../../chat/v1/chat.pbenum.dart' as $3;
 import '../../common/v1/common.pb.dart' as $2;
 import 'user.pbenum.dart';
 
@@ -3890,6 +3891,364 @@ class GetBulkPresenceResponse extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(1)
   $pb.PbMap<$core.String, PresenceStatus> get byProfileId => $_getMap(0);
+}
+
+class GetNotificationRoutingPresenceRequest extends $pb.GeneratedMessage {
+  factory GetNotificationRoutingPresenceRequest({
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  GetNotificationRoutingPresenceRequest._();
+
+  factory GetNotificationRoutingPresenceRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetNotificationRoutingPresenceRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetNotificationRoutingPresenceRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetNotificationRoutingPresenceRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetNotificationRoutingPresenceRequest copyWith(
+          void Function(GetNotificationRoutingPresenceRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetNotificationRoutingPresenceRequest))
+          as GetNotificationRoutingPresenceRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetNotificationRoutingPresenceRequest create() =>
+      GetNotificationRoutingPresenceRequest._();
+  @$core.override
+  GetNotificationRoutingPresenceRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetNotificationRoutingPresenceRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetNotificationRoutingPresenceRequest>(create);
+  static GetNotificationRoutingPresenceRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+}
+
+/// This intentionally exposes no presence status, last-seen, or call metadata.
+class GetNotificationRoutingPresenceResponse extends $pb.GeneratedMessage {
+  factory GetNotificationRoutingPresenceResponse({
+    $core.bool? hasActiveSession,
+  }) {
+    final result = create();
+    if (hasActiveSession != null) result.hasActiveSession = hasActiveSession;
+    return result;
+  }
+
+  GetNotificationRoutingPresenceResponse._();
+
+  factory GetNotificationRoutingPresenceResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetNotificationRoutingPresenceResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetNotificationRoutingPresenceResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'hasActiveSession')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetNotificationRoutingPresenceResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetNotificationRoutingPresenceResponse copyWith(
+          void Function(GetNotificationRoutingPresenceResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetNotificationRoutingPresenceResponse))
+          as GetNotificationRoutingPresenceResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetNotificationRoutingPresenceResponse create() =>
+      GetNotificationRoutingPresenceResponse._();
+  @$core.override
+  GetNotificationRoutingPresenceResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetNotificationRoutingPresenceResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetNotificationRoutingPresenceResponse>(create);
+  static GetNotificationRoutingPresenceResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get hasActiveSession => $_getBF(0);
+  @$pb.TagNumber(1)
+  set hasActiveSession($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasHasActiveSession() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearHasActiveSession() => $_clearField(1);
+}
+
+class GetScheduledMessageDispatchPresenceRequest extends $pb.GeneratedMessage {
+  factory GetScheduledMessageDispatchPresenceRequest({
+    $core.String? scheduledMessageId,
+    $core.String? senderAccountId,
+    $core.String? senderProfileId,
+    $core.String? chatId,
+    $core.String? recipientProfileId,
+    $fixnum.Int64? scheduleGeneration,
+    ScheduledMessageDispatchMode? mode,
+    $3.ChatType? chatType,
+  }) {
+    final result = create();
+    if (scheduledMessageId != null)
+      result.scheduledMessageId = scheduledMessageId;
+    if (senderAccountId != null) result.senderAccountId = senderAccountId;
+    if (senderProfileId != null) result.senderProfileId = senderProfileId;
+    if (chatId != null) result.chatId = chatId;
+    if (recipientProfileId != null)
+      result.recipientProfileId = recipientProfileId;
+    if (scheduleGeneration != null)
+      result.scheduleGeneration = scheduleGeneration;
+    if (mode != null) result.mode = mode;
+    if (chatType != null) result.chatType = chatType;
+    return result;
+  }
+
+  GetScheduledMessageDispatchPresenceRequest._();
+
+  factory GetScheduledMessageDispatchPresenceRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetScheduledMessageDispatchPresenceRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetScheduledMessageDispatchPresenceRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'scheduledMessageId')
+    ..aOS(2, _omitFieldNames ? '' : 'senderAccountId')
+    ..aOS(3, _omitFieldNames ? '' : 'senderProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'chatId')
+    ..aOS(5, _omitFieldNames ? '' : 'recipientProfileId')
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'scheduleGeneration', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aE<ScheduledMessageDispatchMode>(7, _omitFieldNames ? '' : 'mode',
+        enumValues: ScheduledMessageDispatchMode.values)
+    ..aE<$3.ChatType>(8, _omitFieldNames ? '' : 'chatType',
+        enumValues: $3.ChatType.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetScheduledMessageDispatchPresenceRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetScheduledMessageDispatchPresenceRequest copyWith(
+          void Function(GetScheduledMessageDispatchPresenceRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetScheduledMessageDispatchPresenceRequest))
+          as GetScheduledMessageDispatchPresenceRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetScheduledMessageDispatchPresenceRequest create() =>
+      GetScheduledMessageDispatchPresenceRequest._();
+  @$core.override
+  GetScheduledMessageDispatchPresenceRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetScheduledMessageDispatchPresenceRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetScheduledMessageDispatchPresenceRequest>(create);
+  static GetScheduledMessageDispatchPresenceRequest? _defaultInstance;
+
+  /// The request is bound to one claimed durable schedule and the persisted
+  /// sender. DM modes additionally bind the authoritative DM peer.
+  @$pb.TagNumber(1)
+  $core.String get scheduledMessageId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set scheduledMessageId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasScheduledMessageId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearScheduledMessageId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get senderAccountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set senderAccountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSenderAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSenderAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get senderProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set senderProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSenderProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSenderProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get chatId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set chatId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasChatId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearChatId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get recipientProfileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set recipientProfileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRecipientProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRecipientProfileId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get scheduleGeneration => $_getI64(5);
+  @$pb.TagNumber(6)
+  set scheduleGeneration($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasScheduleGeneration() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearScheduleGeneration() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  ScheduledMessageDispatchMode get mode => $_getN(6);
+  @$pb.TagNumber(7)
+  set mode(ScheduledMessageDispatchMode value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasMode() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearMode() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $3.ChatType get chatType => $_getN(7);
+  @$pb.TagNumber(8)
+  set chatType($3.ChatType value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasChatType() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearChatType() => $_clearField(8);
+}
+
+/// user_policy_allows_dispatch is only User's scoped policy result; Messaging
+/// still performs its other chat, role, moderation, and delivery guards.
+class GetScheduledMessageDispatchPresenceResponse extends $pb.GeneratedMessage {
+  factory GetScheduledMessageDispatchPresenceResponse({
+    $core.bool? userPolicyAllowsDispatch,
+    $core.bool? recipientOnline,
+    $core.bool? senderIsGuest,
+  }) {
+    final result = create();
+    if (userPolicyAllowsDispatch != null)
+      result.userPolicyAllowsDispatch = userPolicyAllowsDispatch;
+    if (recipientOnline != null) result.recipientOnline = recipientOnline;
+    if (senderIsGuest != null) result.senderIsGuest = senderIsGuest;
+    return result;
+  }
+
+  GetScheduledMessageDispatchPresenceResponse._();
+
+  factory GetScheduledMessageDispatchPresenceResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetScheduledMessageDispatchPresenceResponse.fromJson(
+          $core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetScheduledMessageDispatchPresenceResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'userPolicyAllowsDispatch')
+    ..aOB(2, _omitFieldNames ? '' : 'recipientOnline')
+    ..aOB(3, _omitFieldNames ? '' : 'senderIsGuest')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetScheduledMessageDispatchPresenceResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetScheduledMessageDispatchPresenceResponse copyWith(
+          void Function(GetScheduledMessageDispatchPresenceResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetScheduledMessageDispatchPresenceResponse))
+          as GetScheduledMessageDispatchPresenceResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetScheduledMessageDispatchPresenceResponse create() =>
+      GetScheduledMessageDispatchPresenceResponse._();
+  @$core.override
+  GetScheduledMessageDispatchPresenceResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetScheduledMessageDispatchPresenceResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetScheduledMessageDispatchPresenceResponse>(create);
+  static GetScheduledMessageDispatchPresenceResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get userPolicyAllowsDispatch => $_getBF(0);
+  @$pb.TagNumber(1)
+  set userPolicyAllowsDispatch($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasUserPolicyAllowsDispatch() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearUserPolicyAllowsDispatch() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get recipientOnline => $_getBF(1);
+  @$pb.TagNumber(2)
+  set recipientOnline($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRecipientOnline() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRecipientOnline() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.bool get senderIsGuest => $_getBF(2);
+  @$pb.TagNumber(3)
+  set senderIsGuest($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSenderIsGuest() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSenderIsGuest() => $_clearField(3);
 }
 
 class GetSettingsResponse extends $pb.GeneratedMessage {

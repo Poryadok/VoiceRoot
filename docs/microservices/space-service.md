@@ -125,6 +125,15 @@ service SpaceService {
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
+`ListMembers` retains current-member authorization and returns the existing member
+list with an opaque `next_cursor` (empty on the last page). Ordering is
+`joined_at ASC, profile_id ASC`; continuation uses both fields. Page size defaults
+to 50 and is capped at 100. Previously issued UUID-only cursors remain accepted
+when their boundary resolves in the same eligible Space roster; an unresolvable
+or malformed cursor returns `INVALID_ARGUMENT`, rather than a false complete
+empty result. Newly issued tuple cursors do not require the boundary row to remain
+present. Pagination does not create a roster snapshot or bypass eligibility checks.
+
 ### Migration runbook -- fail-closed guest admission
 
 `000016_allow_guests_fail_closed` is a forward-only security correction. It sets
@@ -479,6 +488,14 @@ message UnpinTreeNodeRequest {
 | `space.tree_node_upserted`   | space_id, node_id, kind, chat_id?, voice_room_id?, **is_pinned**, **pin_order** |
 | `space.tree_node_removed`    | space_id, node_id               |
 | `space.invite_created`  | space_id, invite_code           |
+
+The separate `space.voice_room_access_invalidated` subject carries an
+immutable `ChatStreamEvent` with `event_id`, `space_id`, `access_epoch` and
+optional room/profile hints. Space writes its snapshot to its transactional
+outbox with the authority mutation. Voice's durable `voice_space_media_chat`
+consumer ACKs after current Space/Role authority is reconciled across the
+active Space room index; optional hints never narrow that full pass. This typed
+arm does not change the legacy Chat stream envelope or `space.updated` payload.
 
 ## Зависимости
 

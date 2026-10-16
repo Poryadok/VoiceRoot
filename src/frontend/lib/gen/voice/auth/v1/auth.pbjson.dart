@@ -792,6 +792,24 @@ final $typed_data.Uint8List getE2EKeyBackupResponseDescriptor = $convert.base64D
     'lwdGVkQmxvYhIoCg1wYXNzd29yZF9oaW50GAIgASgJSABSDHBhc3N3b3JkSGludIgBAUIQCg5f'
     'cGFzc3dvcmRfaGludA==');
 
+@$core.Deprecated('Use deleteE2EKeyBackupRequestDescriptor instead')
+const DeleteE2EKeyBackupRequest$json = {
+  '1': 'DeleteE2EKeyBackupRequest',
+};
+
+/// Descriptor for `DeleteE2EKeyBackupRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteE2EKeyBackupRequestDescriptor =
+    $convert.base64Decode('ChlEZWxldGVFMkVLZXlCYWNrdXBSZXF1ZXN0');
+
+@$core.Deprecated('Use deleteE2EKeyBackupResponseDescriptor instead')
+const DeleteE2EKeyBackupResponse$json = {
+  '1': 'DeleteE2EKeyBackupResponse',
+};
+
+/// Descriptor for `DeleteE2EKeyBackupResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteE2EKeyBackupResponseDescriptor =
+    $convert.base64Decode('ChpEZWxldGVFMkVLZXlCYWNrdXBSZXNwb25zZQ==');
+
 @$core.Deprecated('Use resolvePhoneHashesRequestDescriptor instead')
 const ResolvePhoneHashesRequest$json = {
   '1': 'ResolvePhoneHashesRequest',
@@ -1210,6 +1228,40 @@ final $typed_data.Uint8List getOwnershipTransferReceiptResponseDescriptor = $con
     'GAYgASgJUgtvcGVyYXRpb25JZBIjCg1zZXNzaW9uX2Vwb2NoGAcgASgDUgxzZXNzaW9uRXBvY2'
     'gSOwoLY29uc3VtZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgpjb25z'
     'dW1lZEF0EikKEHZlcmlmaWVkX2ZhY3RvcnMYCSADKAlSD3ZlcmlmaWVkRmFjdG9ycw==');
+
+@$core.Deprecated('Use getVoiceSessionEpochFloorRequestDescriptor instead')
+const GetVoiceSessionEpochFloorRequest$json = {
+  '1': 'GetVoiceSessionEpochFloorRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `GetVoiceSessionEpochFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getVoiceSessionEpochFloorRequestDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRWb2ljZVNlc3Npb25FcG9jaEZsb29yUmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUg'
+        'lhY2NvdW50SWQ=');
+
+@$core.Deprecated('Use getVoiceSessionEpochFloorResponseDescriptor instead')
+const GetVoiceSessionEpochFloorResponse$json = {
+  '1': 'GetVoiceSessionEpochFloorResponse',
+  '2': [
+    {
+      '1': 'session_epoch_floor',
+      '3': 1,
+      '4': 1,
+      '5': 3,
+      '10': 'sessionEpochFloor'
+    },
+  ],
+};
+
+/// Descriptor for `GetVoiceSessionEpochFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getVoiceSessionEpochFloorResponseDescriptor =
+    $convert.base64Decode(
+        'CiFHZXRWb2ljZVNlc3Npb25FcG9jaEZsb29yUmVzcG9uc2USLgoTc2Vzc2lvbl9lcG9jaF9mbG'
+        '9vchgBIAEoA1IRc2Vzc2lvbkVwb2NoRmxvb3I=');
 
 @$core.Deprecated('Use issueSpaceDeletionProofRequestDescriptor instead')
 const IssueSpaceDeletionProofRequest$json = {

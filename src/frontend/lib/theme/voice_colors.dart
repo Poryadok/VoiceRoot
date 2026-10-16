@@ -13,6 +13,7 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
     required this.textDisabled,
     required this.borderDefault,
     required this.borderStrong,
+    required this.dividerRail,
     required this.error,
     required this.success,
     required this.warning,
@@ -36,6 +37,7 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
   final Color textDisabled;
   final Color borderDefault;
   final Color borderStrong;
+  final Color dividerRail;
   final Color error;
   final Color success;
   final Color warning;
@@ -64,6 +66,7 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
     textDisabled: Color(0xFF6E6E6E),
     borderDefault: Color(0xFF3D3D3D),
     borderStrong: Color(0xFFF0F0F0),
+    dividerRail: Color(0xFF505050),
     error: Color(0xFFEF9A9A),
     success: Color(0xFF81C784),
     warning: Color(0xFFFFD54F),
@@ -93,6 +96,7 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
       textDisabled: c('color.text.disabled'),
       borderDefault: c('color.border.default'),
       borderStrong: c('color.border.strong'),
+      dividerRail: c('color.divider.rail'),
       error: c('color.semantic.error'),
       success: c('color.semantic.success'),
       warning: c('color.semantic.warning'),
@@ -119,6 +123,7 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
     Color? textDisabled,
     Color? borderDefault,
     Color? borderStrong,
+    Color? dividerRail,
     Color? error,
     Color? success,
     Color? warning,
@@ -142,6 +147,7 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
       textDisabled: textDisabled ?? this.textDisabled,
       borderDefault: borderDefault ?? this.borderDefault,
       borderStrong: borderStrong ?? this.borderStrong,
+      dividerRail: dividerRail ?? this.dividerRail,
       error: error ?? this.error,
       success: success ?? this.success,
       warning: warning ?? this.warning,
@@ -171,6 +177,7 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
       textDisabled: l(textDisabled, other.textDisabled),
       borderDefault: l(borderDefault, other.borderDefault),
       borderStrong: l(borderStrong, other.borderStrong),
+      dividerRail: l(dividerRail, other.dividerRail),
       error: l(error, other.error),
       success: l(success, other.success),
       warning: l(warning, other.warning),

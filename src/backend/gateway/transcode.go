@@ -66,6 +66,10 @@ type grpcClients struct {
 	search                  searchv1.SearchServiceClient
 	auth                    authv1.AuthServiceClient
 	analytics               analyticsv1.AnalyticsQueryServiceClient
+	voiceUser          callsv1.VoiceServiceClient
+	voiceUserConn      *grpc.ClientConn
+	voiceUserRequired  bool
+	voiceUserErr       error
 }
 
 type transcoder struct {
@@ -118,6 +122,19 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 			clients.connections = append(clients.connections, conn)
 			clients.matchmakingCompleteConn = conn
 			clients.matchmakingComplete = matchmakingv1.NewMatchmakingServiceClient(conn)
+		}
+	}
+	if cfg, enabled, err := voiceUserMediaClientConfigFromEnv(); err != nil {
+		clients.voiceUserRequired = true
+		clients.voiceUserErr = err
+	} else if enabled {
+		clients.voiceUserRequired = true
+		conn, err := cfg.dial()
+		clients.voiceUserErr = err
+		if err == nil {
+			clients.connections = append(clients.connections, conn)
+			clients.voiceUserConn = conn
+			clients.voiceUser = callsv1.NewVoiceServiceClient(conn)
 		}
 	}
 	dial := func(addr string) (*grpc.ClientConn, error) {
@@ -222,7 +239,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	} else if conn != nil {
 		clients.analytics = analyticsv1.NewAnalyticsQueryServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
 		return nil
 	}
 	return clients
@@ -241,6 +258,18 @@ func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 			c.matchSquadMemberConn.Connect()
 			if err := grpcclient.WaitForReady(ctx, c.matchSquadMemberConn); err != nil {
 				return fmt.Errorf("MatchSquad member readiness: %w", err)
+			}
+		}
+		if c.voiceUserErr != nil {
+			return c.voiceUserErr
+		}
+		if c.voiceUserRequired {
+			if c.voiceUserConn == nil {
+				return fmt.Errorf("voice user-principal connection is not configured")
+			}
+			c.voiceUserConn.Connect()
+			if err := grpcclient.WaitForReady(ctx, c.voiceUserConn); err != nil {
+				return fmt.Errorf("voice user-principal readiness: %w", err)
 			}
 		}
 		if c.spaceLifecycleErr != nil {

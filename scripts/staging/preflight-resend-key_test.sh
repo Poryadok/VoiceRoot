@@ -88,7 +88,7 @@ run_manifest_case() {
     VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" \
     VOICE_NATS_ACL_PROOF_GENERATION=legacy \
     STAGING_APP_SECRETS_YAML_B64="$(cat "${TMP}/input.b64")" \
-    bash "${ROOT}/scripts/staging/render-and-apply.sh" >"${TMP}/output" 2>&1
+    bash "${ROOT}/scripts/staging/preflight-resend-key.sh" >"${TMP}/output" 2>&1
   status=$?
   set -e
   ! grep -Fq "$key" "${TMP}/output" || { echo 'FAIL: key leaked to output' >&2; exit 1; }
@@ -98,7 +98,8 @@ run_manifest_case() {
     [ "$status" -ne 0 ] || { echo "FAIL: ${kind} key was accepted" >&2; exit 1; }
     [ ! -f "${TMP}/mutations" ] || { echo "FAIL: ${kind} key reached mutation" >&2; exit 1; }
   else
-    [ -f "${TMP}/mutations" ] || { echo "FAIL: ${kind} key did not pass preflight (status ${status})" >&2; exit 1; }
+    [ "$status" -eq 0 ] || { echo "FAIL: ${kind} key did not pass preflight (status ${status})" >&2; exit 1; }
+    [ ! -f "${TMP}/mutations" ] || { echo "FAIL: ${kind} preflight mutated staging" >&2; exit 1; }
   fi
 }
 
@@ -144,7 +145,7 @@ run_existing_case() {
     VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" \
     VOICE_NATS_ACL_PROOF_GENERATION=legacy \
     STAGING_APP_SECRETS_YAML_B64= \
-    bash "${ROOT}/scripts/staging/render-and-apply.sh" >"${TMP}/output" 2>&1
+    bash "${ROOT}/scripts/staging/preflight-resend-key.sh" >"${TMP}/output" 2>&1
   status=$?
   set -e
   ! grep -Fq "$key" "${TMP}/output" || { echo 'FAIL: key leaked to output' >&2; exit 1; }
@@ -153,7 +154,8 @@ run_existing_case() {
     [ "$status" -ne 0 ] || { echo "FAIL: existing ${kind} key was accepted" >&2; exit 1; }
     [ ! -f "${TMP}/mutations" ] || { echo "FAIL: existing ${kind} key reached mutation" >&2; exit 1; }
   else
-    [ -f "${TMP}/mutations" ] || { echo "FAIL: existing ${kind} key did not pass preflight" >&2; exit 1; }
+    [ "$status" -eq 0 ] || { echo "FAIL: existing ${kind} key did not pass preflight" >&2; exit 1; }
+    [ ! -f "${TMP}/mutations" ] || { echo "FAIL: existing ${kind} preflight mutated staging" >&2; exit 1; }
   fi
 }
 

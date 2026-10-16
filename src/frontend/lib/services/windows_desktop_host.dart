@@ -8,6 +8,10 @@ abstract class WindowsDesktopHost {
 
   void setListener(WindowsDesktopHostListener? listener);
 
+  bool get supportsAppIcon;
+
+  Future<void> setAppIcon(String iconId);
+
   Future<void> setTrayState({
     required bool voiceActive,
     required bool muted,
@@ -61,6 +65,14 @@ class MethodChannelWindowsDesktopHost implements WindowsDesktopHost {
   @override
   void setListener(WindowsDesktopHostListener? listener) {
     _listener = listener;
+  }
+
+  @override
+  bool get supportsAppIcon => true;
+
+  @override
+  Future<void> setAppIcon(String iconId) async {
+    await _channel.invokeMethod<void>('setAppIcon', {'iconId': iconId});
   }
 
   Future<dynamic> _onMethodCall(MethodCall call) async {
@@ -159,6 +171,15 @@ class RecordingWindowsDesktopHost implements WindowsDesktopHost {
   bool? lastVoiceActive;
   bool? lastMuted;
   bool? lastDeafened;
+  String? lastAppIcon;
+
+  @override
+  bool get supportsAppIcon => true;
+
+  @override
+  Future<void> setAppIcon(String iconId) async {
+    lastAppIcon = iconId;
+  }
 
   @override
   void setListener(WindowsDesktopHostListener? next) {
@@ -232,6 +253,14 @@ class NoopWindowsDesktopHost implements WindowsDesktopHost {
 
   @override
   void setListener(WindowsDesktopHostListener? listener) {}
+
+  @override
+  bool get supportsAppIcon => false;
+
+  @override
+  Future<void> setAppIcon(String iconId) async {
+    throw UnsupportedError('Runtime app icons are unavailable on this host');
+  }
 
   @override
   Future<void> setTrayState({

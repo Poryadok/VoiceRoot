@@ -14,9 +14,41 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
 )
+
+func TestHasNotificationRoutingSessionUsesOnlyActiveVisibleStates(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot *store.PresenceSnapshot
+		want     bool
+		wantErr  bool
+	}{
+		{name: "online", snapshot: &store.PresenceSnapshot{Live: true, Status: "online"}, want: true},
+		{name: "idle", snapshot: &store.PresenceSnapshot{Live: true, Status: "idle"}, want: true},
+		{name: "dnd", snapshot: &store.PresenceSnapshot{Live: true, Status: "dnd"}, want: true},
+		{name: "invisible remains push eligible", snapshot: &store.PresenceSnapshot{Live: true, Status: "invisible", StatusEnum: int32(userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_INVISIBLE)}, want: false},
+		{name: "offline", snapshot: &store.PresenceSnapshot{Live: false, Status: "offline"}, want: false},
+		{name: "unknown live status is unavailable", snapshot: &store.PresenceSnapshot{Live: true, Status: "unknown"}, wantErr: true},
+		{name: "unknown live enum is unavailable", snapshot: &store.PresenceSnapshot{Live: true, StatusEnum: 99}, wantErr: true},
+		{name: "missing presence", snapshot: nil, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := hasNotificationRoutingSession(tc.snapshot)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if got != tc.want {
+				t.Fatalf("hasNotificationRoutingSession() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestUserGRPC_presenceNil_returnsUnavailable(t *testing.T) {
 	ctx := context.Background()

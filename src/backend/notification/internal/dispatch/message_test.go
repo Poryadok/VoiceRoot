@@ -351,9 +351,15 @@ func TestMatchmakingPusher_SkipsVoIPToken(t *testing.T) {
 	require.Len(t, rec.sent, 1)
 }
 
+type explicitOfflinePresenceChecker struct{}
+
+func (explicitOfflinePresenceChecker) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
 func TestMessagePusher_EnrichDecision_OfflineGetsPush(t *testing.T) {
 	profileID := uuid.New()
-	decision, err := (&dispatch.MessagePusher{}).EnrichDecision(
+	decision, err := (&dispatch.MessagePusher{Presence: explicitOfflinePresenceChecker{}}).EnrichDecision(
 		context.Background(),
 		profileID.String(),
 		uuid.New(),
@@ -362,6 +368,30 @@ func TestMessagePusher_EnrichDecision_OfflineGetsPush(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.True(t, decision.Push)
+}
+
+type failingPresenceChecker struct{ err error }
+
+func (p failingPresenceChecker) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	return false, p.err
+}
+
+func TestMessagePusher_EnrichDecision_FailsClosedWhenPresenceAuthorityIsUnavailable(t *testing.T) {
+	profileID := uuid.New()
+	wantErr := errors.New("presence authority unavailable")
+	for name, pusher := range map[string]*dispatch.MessagePusher{
+		"missing checker": {},
+		"checker error":   {Presence: failingPresenceChecker{err: wantErr}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			decision, err := pusher.EnrichDecision(context.Background(), profileID.String(), uuid.New(), "chat-1", delivery.TypeNewMessage)
+			require.Error(t, err)
+			require.False(t, decision.Push, "an unavailable authority must not be treated as offline")
+			if name == "checker error" {
+				require.ErrorIs(t, err, wantErr)
+			}
+		})
+	}
 }
 
 func TestMessagePusher_EnrichDecision_PresenceExceptionsDoNotCallPresence(t *testing.T) {

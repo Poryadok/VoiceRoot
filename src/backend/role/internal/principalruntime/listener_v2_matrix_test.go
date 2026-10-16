@@ -91,6 +91,9 @@ func TestRuntimeListener_AuthenticatesOnlyTheDocumentedGameGrantIssuers(t *testi
 		ApplicationId: apply.ApplicationId, EnvironmentId: apply.EnvironmentId, SessionId: apply.SessionId,
 		VoiceRoomId: apply.VoiceRoomId, ProfileId: uuid.NewString(),
 	}
+	voiceRoomGrants := &rolev1.ResolveVoiceRoomGrantsRequest{
+		SpaceId: uuid.NewString(), VoiceRoomId: uuid.NewString(), ProfileId: uuid.NewString(),
+	}
 	tests := []struct {
 		name, issuer, requestID string
 		request                 proto.Message
@@ -111,6 +114,10 @@ func TestRuntimeListener_AuthenticatesOnlyTheDocumentedGameGrantIssuers(t *testi
 			}
 			return err
 		}},
+		{"voice_room_grants", "voice", uuid.NewString(), voiceRoomGrants, func(ctx context.Context) error {
+			_, err := client.ResolveVoiceRoomGrants(ctx, voiceRoomGrants)
+			return err
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -126,6 +133,11 @@ func TestRuntimeListener_AuthenticatesOnlyTheDocumentedGameGrantIssuers(t *testi
 			require.Equal(t, "service:"+tc.issuer, verified.Subject)
 			require.Equal(t, "role", verified.Audience)
 			require.Equal(t, hash, verified.RequestHash)
+			if tc.name == "voice_room_grants" {
+				require.Empty(t, verified.AccountID)
+				require.Empty(t, verified.ProfileID)
+				require.Zero(t, verified.SessionEpoch)
+			}
 		})
 	}
 	require.Equal(t, int64(len(tests)), recorder.calls.Load())
@@ -148,6 +160,10 @@ func TestRuntimeListener_AuthenticatesOnlyTheDocumentedGameGrantIssuers(t *testi
 			_, err := client.CheckGameSessionGrant(ctx, check)
 			return err
 		}},
+		{"gis_cannot_resolve_voice_grants", "gameintegration", rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName, uuid.NewString(), voiceRoomGrants, func(ctx context.Context) error {
+			_, err := client.ResolveVoiceRoomGrants(ctx, voiceRoomGrants)
+			return err
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			hash, err := principal.RequestHash(tc.request)
@@ -162,12 +178,36 @@ func TestRuntimeListener_AuthenticatesOnlyTheDocumentedGameGrantIssuers(t *testi
 	require.Equal(t, int64(len(tests)), recorder.calls.Load(), "wrong issuers must fail before handlers")
 }
 
+func TestRuntimeListener_VoiceRoomGrantsBindsBodyAndRejectsReplay(t *testing.T) {
+	f := newRuntimeFixture(t, 2)
+	address, recorder, roots := startRuntimeListener(t, f)
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
+	request := &rolev1.ResolveVoiceRoomGrantsRequest{SpaceId: uuid.NewString(), VoiceRoomId: uuid.NewString(), ProfileId: uuid.NewString()}
+	requestID := uuid.NewString()
+	hash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	token := issueRuntimeToken(t, f.key, "voice", "current", "role", rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName, requestID, hash)
+	call := func(req *rolev1.ResolveVoiceRoomGrantsRequest) error {
+		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID))
+		_, callErr := client.ResolveVoiceRoomGrants(ctx, req)
+		return callErr
+	}
+	changed := proto.Clone(request).(*rolev1.ResolveVoiceRoomGrantsRequest)
+	changed.ProfileId = uuid.NewString()
+	require.Equal(t, codes.Unauthenticated, status.Code(call(changed)))
+	require.NoError(t, call(request))
+	require.Equal(t, codes.Unauthenticated, status.Code(call(request)), "a Voice principal JTI is single-use")
+	require.Equal(t, int64(1), recorder.calls.Load())
+}
+
 func grpcMethodForGrant(name string) string {
 	switch name {
 	case "apply":
 		return rolev1.RoleService_ApplyGameSessionGrants_FullMethodName
 	case "revoke":
 		return rolev1.RoleService_RevokeGameSessionGrants_FullMethodName
+	case "voice_room_grants":
+		return rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName
 	default:
 		return rolev1.RoleService_CheckGameSessionGrant_FullMethodName
 	}
@@ -241,11 +281,22 @@ func TestRuntimeListener_DeniesLegacyAndUnrelatedMethodsBeforeHandler(t *testing
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.CompensateOwnershipTransfer(ctx, &rolev1.CompensateOwnershipTransferRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	_, err = client.ResolveVoiceRoomGrants(ctx, &rolev1.ResolveVoiceRoomGrantsRequest{})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.ListRoles(ctx, &rolev1.ListRolesRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Zero(t, recorder.calls.Load())
+	require.Empty(t, recorder.principals)
+}
+
+func TestRuntimeListener_RequiresVoicePrincipalForVoiceRoomGrants(t *testing.T) {
+	f := newRuntimeFixture(t, 2)
+	address, recorder, roots := startRuntimeListener(t, f)
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := client.ResolveVoiceRoomGrants(ctx, &rolev1.ResolveVoiceRoomGrantsRequest{})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Zero(t, recorder.calls.Load(), "unauthenticated request must not reach the handler")
 	require.Empty(t, recorder.principals)
 }
 

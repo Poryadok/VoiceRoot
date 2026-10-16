@@ -21,10 +21,10 @@ require_stream_contract() {
     found && /^  - name:/ { exit }
     found { print }
   ' "$MANIFEST")"
-  printf '%s\n' "$block" | grep -Fqx "    subjects: $subjects" || fail "${name} subjects must match its central contract"
-  printf '%s\n' "$block" | grep -Fqx '    retention: limits' || fail "${name} retention must be limits"
-  printf '%s\n' "$block" | grep -Fqx "    max_age: $max_age" || fail "${name} max age must match its central contract"
-  printf '%s\n' "$block" | grep -Fqx '    storage: file' || fail "${name} storage must be file"
+  printf '%s\n' "$block" | grep -Fx "    subjects: $subjects" >/dev/null || fail "${name} subjects must match its central contract"
+  printf '%s\n' "$block" | grep -Fx '    retention: limits' >/dev/null || fail "${name} retention must be limits"
+  printf '%s\n' "$block" | grep -Fx "    max_age: $max_age" >/dev/null || fail "${name} max age must match its central contract"
+  printf '%s\n' "$block" | grep -Fx '    storage: file' >/dev/null || fail "${name} storage must be file"
 }
 
 [[ -x "$BOOTSTRAP" ]] || fail "Compose bootstrap script must be executable"
@@ -33,7 +33,7 @@ cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_BOOTSTRAP" | sed '/^---$/,$d' | sed 
 
 for stream in \
   'stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack' \
-  'stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored' \
+  'stream chat_events chat.created chat.updated chat.deleted chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored space.voice_room_access_invalidated' \
   'stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded' \
   'stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted' \
   'stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed' \
@@ -42,7 +42,7 @@ for stream in \
   'stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response' \
   'stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
   'stream_with_duplicate_window social_events 86400000000000 social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
-  'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed' \
+  'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed role.voice_policy_invalidated' \
   'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' \
   'stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned'; do
   require "$stream" "$BOOTSTRAP"
@@ -57,7 +57,7 @@ social_stream_contract="$(awk -v name=social_events '
   found && /^  - name:/ { exit }
   found { print }
 ' "$MANIFEST")"
-printf '%s\n' "$social_stream_contract" | grep -Fqx '    duplicate_window: 24h' || fail 'social_events must keep a 24h publisher deduplication window'
+printf '%s\n' "$social_stream_contract" | grep -Fx '    duplicate_window: 24h' >/dev/null || fail 'social_events must keep a 24h publisher deduplication window'
 
 for consumer in \
   "consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message" \
@@ -66,6 +66,8 @@ for consumer in \
   'consumer social_events rt_realtime1_social social.user_blocked _INBOX.voice.realtime1.social' \
   'consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request' \
   "consumer role_events rt_realtime1_role 'role.>' _INBOX.voice.realtime1.role" \
+  'consumer chat_events voice_space_media_chat space.voice_room_access_invalidated _INBOX.voice.voice.space_media_chat' \
+  'consumer role_events voice_space_media_role role.voice_policy_invalidated _INBOX.voice.voice.space_media_role' \
   "consumer voice_events rt_realtime1_voice 'voice.>' _INBOX.voice.realtime1.voice" \
   "consumer matchmaking_events rt_realtime1_matchmaking 'mm.>' _INBOX.voice.realtime1.matchmaking"; do
   require "$consumer" "$BOOTSTRAP"
@@ -77,6 +79,8 @@ require '      REALTIME_INSTANCE_ID: ${REALTIME_INSTANCE_ID:-realtime-1}' "$COMP
 require '  - name: voice_events' "$MANIFEST"
 require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
 require_stream_contract analytics_events '[analytics.>]' 168h
+require_stream_contract chat_events '[chat.created, chat.updated, chat.deleted, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted, space.deletion_scheduled, space.restored, space.voice_room_access_invalidated]' 168h
+require_stream_contract role_events '[role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, role.voice_policy_invalidated]' 168h
 require_stream_contract user_profile_projection '[user.search_profile_projection]' 0s
 require "stream analytics_events 'analytics.>'" "$BOOTSTRAP"
 require 'stream_with_max_age user_profile_projection 0 user.search_profile_projection' "$BOOTSTRAP"
@@ -111,8 +115,8 @@ if ! awk '
 fi
 for service in social user matchmaking role voice analytics; do
   section="$(sed -n "/^  ${service}:$/,/^  [^ ]/p" "$COMPOSE")"
-  printf '%s\n' "$section" | grep -Fqx '      nats-realtime-bootstrap:' || fail "${service} must wait for central NATS bootstrap"
-  printf '%s\n' "$section" | grep -Fqx '        condition: service_completed_successfully' || fail "${service} bootstrap dependency must require success"
+  printf '%s\n' "$section" | grep -Fx '      nats-realtime-bootstrap:' >/dev/null || fail "${service} must wait for central NATS bootstrap"
+  printf '%s\n' "$section" | grep -Fx '        condition: service_completed_successfully' >/dev/null || fail "${service} bootstrap dependency must require success"
 done
 grep -Fq 'deploy/templates/nats-realtime-bootstrap.yaml' "$PROD_INFRA" || fail "${PROD_INFRA#"${ROOT}/"} must apply central bootstrap"
 grep -Fq 'kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap' "$PROD_INFRA" || fail "${PROD_INFRA#"${ROOT}/"} must wait for central bootstrap"
@@ -137,7 +141,8 @@ done
 
 notification_deployment="$(awk '$0 == "  name: voice-notification" {found=1} found {print} found && /^---$/ {exit}' \
   "${ROOT}/deploy/staging/services.yaml")"
-printf '%s\n' "$notification_deployment" | grep -Fqx '  strategy: {type: Recreate}' \
+# Piped grep must drain the block: -q can close early and SIGPIPE printf under pipefail.
+printf '%s\n' "$notification_deployment" | grep -Fx '  strategy: {type: Recreate}' >/dev/null \
   || fail "staging Notification must not overlap subscriptions to its fixed push durables"
 grep -Fq 'kubectl patch deployment voice-notification' "${ROOT}/scripts/staging/apply-app-manifests.sh" \
   || fail "staging app apply must transition existing Notification deployments before applying Recreate"
@@ -147,16 +152,16 @@ grep -Fq '$retainKeys' "${ROOT}/scripts/staging/apply-app-manifests.sh" \
 for deployment in voice-bot voice-chat voice-matchmaking voice-space; do
   singleton_deployment="$(awk -v name="$deployment" '$0 == "  name: " name {found=1} found {print} found && /^---$/ {exit}' \
     "${ROOT}/deploy/staging/services.yaml")"
-  printf '%s\n' "$singleton_deployment" | grep -Fqx '  strategy: {type: Recreate}' \
+  printf '%s\n' "$singleton_deployment" | grep -Fx '  strategy: {type: Recreate}' >/dev/null \
     || fail "staging ${deployment} must not overlap its fixed push durable subscription"
 done
 singleton_transition="$(awk '/^prepare_singleton_nats_recreate_transitions\(\)/,/^}/' \
   "${ROOT}/scripts/staging/apply-app-manifests.sh")"
 [[ -n "$singleton_transition" ]] \
   || fail "staging apply must define singleton NATS consumer transitions"
-printf '%s\n' "$singleton_transition" | grep -Fqx '  for deployment in voice-bot voice-chat voice-matchmaking voice-space; do' \
+printf '%s\n' "$singleton_transition" | grep -Fx '  for deployment in voice-bot voice-chat voice-matchmaking voice-space; do' >/dev/null \
   || fail "staging transition must be limited to the fixed push durable deployments"
-printf '%s\n' "$singleton_transition" | grep -Fq -- '"$retainKeys":["type"],"type":"Recreate"' \
+printf '%s\n' "$singleton_transition" | grep -F -- '"$retainKeys":["type"],"type":"Recreate"' >/dev/null \
   || fail "singleton transition must atomically clear rollingUpdate and select Recreate"
 transition_call_line="$(grep -n '^prepare_singleton_nats_recreate_transitions$' "${ROOT}/scripts/staging/apply-app-manifests.sh" | tail -n1 | cut -d: -f1)"
 services_apply_line="$(grep -n '^render .*deploy/staging/services.yaml.*kubectl apply -f -' "${ROOT}/scripts/staging/apply-app-manifests.sh" | cut -d: -f1)"
@@ -164,9 +169,9 @@ services_apply_line="$(grep -n '^render .*deploy/staging/services.yaml.*kubectl 
   || fail "singleton transition must run before the staging services manifest apply"
 gateway_deployment="$(awk '$0 == "  name: voice-gateway" {found=1} found {print} found && /^---$/ {exit}' \
   "${ROOT}/deploy/staging/gateway-deployment.yaml")"
-printf '%s\n' "$gateway_deployment" | grep -Fqx '          startupProbe:' \
+printf '%s\n' "$gateway_deployment" | grep -Fx '          startupProbe:' >/dev/null \
   || fail "Gateway startup must be protected while it waits for required User gRPC"
-printf '%s\n' "$gateway_deployment" | grep -Fqx '            failureThreshold: 30' \
+printf '%s\n' "$gateway_deployment" | grep -Fx '            failureThreshold: 30' >/dev/null \
   || fail "Gateway startup probe must cover the 120s staging gRPC dial deadline"
 
 # The hosted proof must wait for the Chat leaf's hub connection and a PubAck;
