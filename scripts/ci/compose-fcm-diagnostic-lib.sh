@@ -2,6 +2,13 @@
 
 VOICE_FCM_DIAG_UNKNOWN='compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
 
+voice_fcm_diag_filter_stream() {
+  # Drain ordinary application stdout before applying diagnostic byte/line caps.
+  # Keep malformed/prefixed marker lines too: the strict parser must reject them,
+  # rather than allowing filtering to conceal a duplicate or forged record.
+  LC_ALL=C awk '/compose_fcm_diag|compose_fcm_lifecycl/ { print }'
+}
+
 voice_fcm_diag_emit() {
   local text="${1-}" output_var="${2-}"
   if [[ -n "${output_var}" ]]; then

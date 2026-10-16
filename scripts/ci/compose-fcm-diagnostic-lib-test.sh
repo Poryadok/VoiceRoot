@@ -5,6 +5,27 @@ source "$(cd "$(dirname "$0")" && pwd)/compose-fcm-diagnostic-lib.sh"
 phase_known='phase_evidence=known consumer_bound_before_expiry=false callback_entered_before_expiry=false decode_succeeded_before_expiry=false route_started_before_expiry=false route_returned_before_expiry=false consumer_bound_at_expiry=true callback_entered_at_expiry=true decode_succeeded_at_expiry=true route_started_at_expiry=true route_returned_at_expiry=true'
 phase_unknown='phase_evidence=unknown consumer_bound_before_expiry=unknown callback_entered_before_expiry=unknown decode_succeeded_before_expiry=unknown route_started_before_expiry=unknown route_returned_before_expiry=unknown consumer_bound_at_expiry=unknown callback_entered_at_expiry=unknown decode_succeeded_at_expiry=unknown route_started_at_expiry=unknown route_returned_at_expiry=unknown'
 valid="compose_fcm_diag valid=true reason=matched admission=none candidates=1 attempts=2 member_result=ok member_count=2 recipient_present=true inbox=main base_push=true final_push=true presence=offline policy=ok token_rows=1 fcm_tokens=1 dispatcher_returns=1 route=ack ${phase_known}"
+printf '%s\n' 'compose_fcm_contract_case=stream_filter state=started'
+noisy_producer() {
+  for ((i=0; i<10000; i++)); do printf '%s\n' 'ordinary private application noise'; done
+  printf '%s\n' "${valid}"
+}
+filtered="$(noisy_producer | voice_fcm_diag_filter_stream | head -c 65537)"
+[[ "${filtered}" == "${valid}" ]]
+[[ "$(voice_fcm_diag_parse_log "${filtered}")" == "${valid}" ]]
+if filtered="$( { printf '%s\n' "${valid}"; exit 7; } | voice_fcm_diag_filter_stream | head -c 65537)"; then
+  exit 1
+else
+  [[ "$?" == 7 ]]
+fi
+filtered="$(printf '%s\n' "${valid}" "untrusted-prefix ${valid}" | voice_fcm_diag_filter_stream)"
+[[ "$(voice_fcm_diag_parse_log "${filtered}")" == "${VOICE_FCM_DIAG_UNKNOWN}" ]]
+filtered="$(printf '%s\n' 'compose_fcm_diag malformed' | voice_fcm_diag_filter_stream)"
+[[ "$(voice_fcm_diag_parse_log "${filtered}")" == "${VOICE_FCM_DIAG_UNKNOWN}" ]]
+filtered="$(for ((i=0; i<101; i++)); do printf '%s\n' 'compose_fcm_lifecycle control_sample=valid'; done | voice_fcm_diag_filter_stream)"
+[[ "$(voice_fcm_diag_parse_log "${filtered}")" == "${VOICE_FCM_DIAG_UNKNOWN}" ]]
+[[ -z "$(printf '%s\n' 'private application noise' | voice_fcm_diag_filter_stream)" ]]
+printf '%s\n' 'compose_fcm_contract_case=stream_filter state=completed'
 unknown="${VOICE_FCM_DIAG_UNKNOWN}"
 unknownPhase="${valid% phase_evidence=*} ${phase_unknown}"
 printf '%s\n' 'compose_fcm_contract_case=record_phase state=started'

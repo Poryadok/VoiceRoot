@@ -65,6 +65,13 @@ recording/routing flag but omit the debug HTTP opt-in, so they do not enable
 payload recording or this endpoint. Deployment acceptance remains separate from
 the source/configuration boundary tracked by [backend TODO](../todo/backend.md).
 
+The private Compose failure collector drains unrelated application stdout before
+applying its diagnostic byte/line limits. Only marker-bearing candidates reach
+the existing strict parser; malformed or prefixed candidates still invalidate
+the result. Producer failure, timeout, duplicate records, and excessive diagnostic
+output remain unknown evidence, never a successful delivery result. A collector
+failure does not establish why the push failed; retain the original FCM assertion.
+
 ## Модель данных
 
 ```

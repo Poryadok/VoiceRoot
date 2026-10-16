@@ -187,7 +187,7 @@ set -e
 if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" ]]; then
   set +e
   set -o pipefail
-  diagnostic_logs="$(timeout 5s docker logs --since "${diagnostic_since}" "${notification_container}" 2>/dev/null | head -c 65537)"
+  diagnostic_logs="$(timeout 5s docker logs --since "${diagnostic_since}" "${notification_container}" 2>/dev/null | voice_fcm_diag_filter_stream | head -c 65537)"
   diagnostic_logs_status=$?
   status_read_status=1
   status_data=''
