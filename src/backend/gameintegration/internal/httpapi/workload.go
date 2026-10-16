@@ -145,11 +145,20 @@ func SignWorkloadRequest(r *http.Request, key []byte, now time.Time, nonce strin
 }
 
 func (v WorkloadVerifier) Verify(r *http.Request) error {
+	return v.VerifyForPrincipal(r, "auth")
+}
+
+// VerifyForPrincipal authenticates a GET WorkloadProof v1 for a dedicated internal service identity.
+// Verify remains bound to Auth for existing callers.
+func (v WorkloadVerifier) VerifyForPrincipal(r *http.Request, principal string) error {
 	if len(v.Key) != 32 || v.Nonces == nil || v.Now == nil {
 		return ErrWorkloadUnavailable
 	}
+	if principal == "" {
+		return ErrWorkloadUnavailable
+	}
 	if r == nil || r.Method != http.MethodGet || r.URL.RawQuery != "" || r.ContentLength != 0 ||
-		r.Header.Get("X-Voice-Workload") != "auth" {
+		r.Header.Get("X-Voice-Workload") != principal {
 		return ErrInvalidWorkloadProof
 	}
 	for _, name := range []string{"X-Voice-Workload", "X-Voice-Timestamp", "X-Voice-Nonce", "X-Voice-Signature"} {

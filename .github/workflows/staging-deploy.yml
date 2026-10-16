@@ -337,7 +337,7 @@ jobs:
 
       - name: Download stack lock artifact
         if: github.event_name == 'workflow_call'
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: staging-stack-lock
           path: .
@@ -479,7 +479,7 @@ jobs:
       - name: Upload encrypted backup to off-node GitHub custody
         id: encrypted_backup
         if: inputs.expired_native_operation == '' && inputs.expired_finish_operation == ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.preservation.outputs.artifact_name }}
           path: ${{ steps.preservation.outputs.cipher_path }}
@@ -490,7 +490,7 @@ jobs:
       - name: Upload unchanged original encrypted recovery cut
         id: expired_original
         if: inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.preservation.outputs.original_artifact_name }}
           path: ${{ steps.preservation.outputs.original_cipher_path }}
@@ -501,7 +501,7 @@ jobs:
       - name: Upload distinct fresh closed observation ciphertext
         id: expired_observation
         if: inputs.expired_native_operation != '' || inputs.expired_finish_operation != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.preservation.outputs.observation_artifact_name }}
           path: ${{ steps.preservation.outputs.observation_cipher_path }}
@@ -674,7 +674,7 @@ jobs:
       - name: Upload safe deployment diagnostics
         if: always() && steps.deployment_diagnostics.outputs.report_directory != ''
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: deployment-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.deployment_diagnostics.outputs.report_directory }}/*.deployment-report.json
@@ -713,7 +713,7 @@ jobs:
       - name: Upload safe acceptance diagnostics
         if: always() && steps.acceptance_diagnostics.outputs.report_directory != ''
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: deployment-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.acceptance_diagnostics.outputs.report_directory }}/*.deployment-report.json
@@ -981,7 +981,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

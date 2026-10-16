@@ -19,6 +19,10 @@ import (
 
 var errPresenceAuthorityUnavailable = errors.New("notification presence authority unavailable")
 
+// ErrGamePushChatScopeUnavailable prevents chat-category pushes from falling
+// back to ordinary previews when GIS cannot classify a chat.
+var ErrGamePushChatScopeUnavailable = errors.New("game notification chat scope authority unavailable")
+
 // TokenRepository lists and deletes device tokens for push delivery.
 type TokenRepository interface {
 	ListByProfile(ctx context.Context, profileID uuid.UUID) ([]store.DeviceToken, error)
@@ -39,6 +43,32 @@ type MessagePusher struct {
 	GameConsent   GamePushConsentChecker
 	GameBlocks    GamePushBlockChecker
 	GameChatScope GamePushChatScopeResolver
+}
+
+// MessageDiagnosticObserver is carried only by the private Compose diagnostic
+// context. Implementations must not retain or expose profile/token/payload data.
+type MessageDiagnosticObserver interface {
+	Decision(profile uuid.UUID, basePush, finalPush bool, presence string, policy string)
+	FinalDecision(profile uuid.UUID, finalPush bool)
+	Tokens(profile uuid.UUID, rows, fcmEligible int, outcome string)
+	DispatcherReturned(profile uuid.UUID, service string)
+}
+
+type messageDiagnosticContextKey struct{}
+
+func WithMessageDiagnosticObserver(ctx context.Context, observer MessageDiagnosticObserver) context.Context {
+	if observer == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, messageDiagnosticContextKey{}, observer)
+}
+
+func messageDiagnosticObserverFromContext(ctx context.Context) MessageDiagnosticObserver {
+	if ctx == nil {
+		return nil
+	}
+	observer, _ := ctx.Value(messageDiagnosticContextKey{}).(MessageDiagnosticObserver)
+	return observer
 }
 
 // GamePushConsentChecker performs an execution-time GIS consent read for every device push.
@@ -130,6 +160,9 @@ func (p *MessagePusher) sendPush(
 		if !prepared {
 			settings, quiet, err := p.policy().LoadPolicy(ctx, recipient, in.ChatID, in.Type, time.Now())
 			if err != nil {
+				if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+					observer.Decision(recipient, decision.Push, false, "unknown", "error")
+				}
 				return err
 			}
 			decision = delivery.FinalizeDecision(decision, delivery.DeliveryInput{
@@ -140,6 +173,9 @@ func (p *MessagePusher) sendPush(
 				IsOnline:           in.IsOnline,
 				At:                 in.At,
 			}, settings, quiet)
+		}
+		if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+			observer.FinalDecision(recipient, decision.Push)
 		}
 		if decision.Push {
 			resolved[profileID] = decision
@@ -162,7 +198,19 @@ func (p *MessagePusher) sendPush(
 		}
 		tokens, err := p.Tokens.ListByProfile(ctx, recipient)
 		if err != nil {
+			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+				observer.Tokens(recipient, 0, 0, "error")
+			}
 			return err
+		}
+		if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+			eligible := 0
+			for _, token := range tokens {
+				if ShouldDeliverPushToToken(notificationType, token.PushService) && token.PushService == "fcm" {
+					eligible++
+				}
+			}
+			observer.Tokens(recipient, len(tokens), eligible, "ok")
 		}
 		if len(tokens) == 0 {
 			continue
@@ -184,7 +232,10 @@ func (p *MessagePusher) sendPush(
 					continue
 				}
 				gameScoped = true
-			} else if in.GameCategory != "" && in.ChatID != "" && p.GameChatScope != nil {
+			} else if in.GameCategory != "" {
+				if in.ChatID == "" || p.GameChatScope == nil {
+					return ErrGamePushChatScopeUnavailable
+				}
 				chatID, err := uuid.Parse(in.ChatID)
 				if err != nil || chatID == uuid.Nil {
 					return fmt.Errorf("game notification chat scope: invalid chat id")
@@ -215,7 +266,11 @@ func (p *MessagePusher) sendPush(
 				devicePayload.Title = "Game update"
 				devicePayload.Body = "A game event is waiting in Voice."
 			}
-			if err := p.Pusher.Send(ctx, recipient, tok, devicePayload); err != nil {
+			err := p.Pusher.Send(ctx, recipient, tok, devicePayload)
+			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+				observer.DispatcherReturned(recipient, tok.PushService)
+			}
+			if err != nil {
 				if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 					_ = p.Tokens.DeleteByToken(ctx, tok.Token)
 					continue
@@ -255,11 +310,13 @@ func (p *MessagePusher) enrichDecision(
 		return delivery.DeliveryDecision{}, err
 	}
 	isOnline := false
+	presenceKnown := false
 	if !delivery.SkipsPresenceCheck(typ) {
 		if p == nil || p.Presence == nil {
 			return delivery.DeliveryDecision{}, errPresenceAuthorityUnavailable
 		}
 		isOnline, err = p.Presence.IsOnline(ctx, recipient)
+		presenceKnown = err == nil
 		if err != nil {
 			return delivery.DeliveryDecision{}, fmt.Errorf("check notification presence: %w", err)
 		}
@@ -277,7 +334,18 @@ func (p *MessagePusher) enrichDecision(
 	if err != nil {
 		return delivery.DeliveryDecision{}, err
 	}
-	return delivery.FinalizeDecision(decision, in, settings, quiet), nil
+	final := delivery.FinalizeDecision(decision, in, settings, quiet)
+	if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+		presenceState := "unknown"
+		if presenceKnown {
+			presenceState = "offline"
+			if isOnline {
+				presenceState = "online"
+			}
+		}
+		observer.Decision(recipient, decision.Push, final.Push, presenceState, "ok")
+	}
+	return final, nil
 }
 
 func pushGroupingID(in delivery.DeliveryInput) string {
