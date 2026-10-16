@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -11,11 +12,33 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/spacemedia"
 	voicestore "voice/backend/voice/internal/store"
 
 	callsv1 "voice.app/voice/calls/v1"
 	eventsv1 "voice.app/voice/events/v1"
 )
+
+func (s *VoiceGRPC) logSpaceMediaAdmissionCommitFailure(ctx context.Context, err error) {
+	if err == nil || s == nil || s.Logger == nil {
+		return
+	}
+	s.Logger.ErrorContext(ctx, "space_media_admission_commit_failed",
+		slog.String("failure_class", spaceMediaAdmissionCommitFailureClass(err)))
+}
+
+func spaceMediaAdmissionCommitFailureClass(err error) string {
+	switch {
+	case errors.Is(err, spacemedia.ErrRoomHeadPending):
+		return "room_head_pending"
+	case errors.Is(err, spacemedia.ErrAdmissionConflict):
+		return "admission_conflict"
+	case errors.Is(err, spacemedia.ErrAdmissionUnavailable):
+		return "admission_unavailable"
+	default:
+		return "store_error"
+	}
+}
 
 func (s *VoiceGRPC) ensureConfirmedSpaceMediaCall(ctx context.Context, call voicestore.Call) error {
 	if !call.IsVoiceRoom() || call.SpaceID == "" {
@@ -287,6 +310,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		return voicestore.Call{}, status.Error(codes.FailedPrecondition, "Space media authority changed; retry join")
 	}
 	if err := s.SpaceMediaAdmissions.MarkCommitted(ctx, operationID, generation); err != nil {
+		s.logSpaceMediaAdmissionCommitFailure(ctx, err)
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission commit is pending recovery")
 	}
 	if created {
