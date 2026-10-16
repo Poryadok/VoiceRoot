@@ -2,11 +2,13 @@
 """Manually update only app images in the owned voice-dev namespace.
 
 Preview (read-only, includes server dry-run):
-  python3 scripts/dev/update_images.py --image user=registry/user:<full40hexSHA>
+  python3 scripts/dev/update_images.py --image user=registry/user@sha256:<64hex>
 Apply and wait:
   python3 scripts/dev/update_images.py --image user=registry/user@sha256:<64hex> --apply
 
-Build/push or import images first. Frontends must be built for dev API/WS URLs.
+Build/push or import images first and resolve their registry manifest digest.
+Tags, including full commit tags, are mutable and are never admitted.
+Frontends must be built for dev API/WS URLs.
 Schema-changing builds require explicit dev migration preparation before this
 command. This tool runs no migrations and changes no data/configuration.
 An interrupted or failed mutation retains its lock for operator inspection;
@@ -41,8 +43,8 @@ def parse_images(values):
         if not sep or service not in SERVICES or service in result:
             raise ValueError('unknown or duplicate app service')
         repository = r'[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*'
-        if not re.fullmatch(repository + r'(?:@sha256:[0-9a-f]{64}|:[0-9a-f]{40})', image):
-            raise ValueError('image must have a sha256 digest or full commit tag')
+        if not re.fullmatch(repository + r'@sha256:[0-9a-f]{64}', image):
+            raise ValueError('image must have an immutable sha256 manifest digest')
         result[service] = image
     if not result:
         raise ValueError('at least one app image required')

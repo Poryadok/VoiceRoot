@@ -31,18 +31,19 @@ class UpdateTests(unittest.TestCase):
 
     def test_immutable_image_requirement(self):
         for image in ('registry/user:latest','registry/user:main','registry/user:abc123','https://registry/user:'+ 'a'*40,
-                      'registry/user@sha256:'+'a'*63,'registry/user:latest@sha256:'+'a'*64):
+                      'registry/user@sha256:'+'a'*63,'registry/user:latest@sha256:'+'a'*64,
+                      'registry/user:'+'a'*40):
             with self.assertRaises(ValueError):
                 update.parse_images(['user='+image])
-        for image in ('registry/user:'+ 'a'*40, 'registry:5000/user@sha256:'+'a'*64):
+        for image in ('registry/user@sha256:'+ 'a'*64, 'registry:5000/user@sha256:'+'a'*64):
             self.assertEqual(update.parse_images(['user='+image]), {'user':image})
         with self.assertRaises(ValueError):
-            update.parse_images(['user=registry/x:'+'a'*40]*2)
+            update.parse_images(['user=registry/x@sha256:'+'a'*64]*2)
 
     def test_patch_changes_only_named_main_image_with_cas_guards(self):
         before = deployment()
         original = copy.deepcopy(before)
-        target = 'registry/user:'+ 'c'*40
+        target = 'registry/user@sha256:'+ 'c'*64
         patch, expected = update.plan_patch('user', target, before)
         self.assertEqual(before,original)
         self.assertEqual(patch[-1],{'op':'replace','path':'/spec/template/spec/containers/1/image','value':target})
@@ -90,7 +91,7 @@ class UpdateTests(unittest.TestCase):
                     return result
                 if args[0]=='rollout' and self.fail_rollout: raise RuntimeError('timeout')
                 return {}
-        image='registry/user:'+'c'*40
+        image='registry/user@sha256:'+'c'*64
         client=Fake()
         update.update_images(client,{'user':image})
         self.assertFalse(any(a[0] in ('create','delete') for a,b in client.calls))
