@@ -69,7 +69,9 @@ sidecars while replacing only the authorized image pins.
 | **production** | Пользователи                   | **Kubernetes** 1.35 (self-managed или managed: Yandex Managed Kubernetes, Hetzner и т.д.).                                                                   |
 
 Общий dev работает на том же сервере, что staging, с независимыми данными.
-Инструкции создания и ручного обновления: [scripts/dev/README.md](../scripts/dev/README.md).
+Полное описание стенда, доступ, тестовая почта, обновление и восстановление:
+[DEV_SERVER.md](DEV_SERVER.md). Низкоуровневые инструменты создания и ручного
+обновления: [scripts/dev/README.md](../scripts/dev/README.md).
 На 2026-10-16 `STAGING_DEPLOY_ENABLED=false`: WIP не должен автоматически заменять
 проверяемую staging-сборку. Staging остаётся названием предпродакшен-проверки;
 наличие стенда само по себе не означает, что установленная версия стабильна.

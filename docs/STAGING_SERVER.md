@@ -134,7 +134,8 @@ Dev: [dev.comrade.click](https://dev.comrade.click),
 [API](https://api-dev.comrade.click/health),
 [admin](https://admin-dev.comrade.click),
 [developer portal](https://developers-dev.comrade.click).
-Порядок обновления и ограничения — [dev runbook](../scripts/dev/README.md).
+Полное описание, доступ, тестовая почта, обновления и ограничения —
+[DEV_SERVER.md](DEV_SERVER.md); инструменты — [dev runbook](../scripts/dev/README.md).
 
 Dev имеет отдельный Let's Encrypt TLS Secret
 `voice-dev/voice-dev-signaling-tls` для пяти адресов: `dev`, `api-dev`, `admin-dev`,

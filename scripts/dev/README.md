@@ -1,5 +1,7 @@
 # Shared-host dev
 
+Full operator guide (Russian): [docs/DEV_SERVER.md](../../docs/DEV_SERVER.md).
+
 `voice-dev` on pmdebook is for WIP; `voice-staging` holds a deliberately selected
 build for testing. Same physical host remains a common failure domain.
 
