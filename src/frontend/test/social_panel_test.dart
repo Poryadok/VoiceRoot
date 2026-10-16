@@ -64,6 +64,165 @@ void main() {
     );
   }
 
+  testWidgets('outgoing pending cancel is single flight and retryable', (
+    tester,
+  ) async {
+    final first = Completer<http.Response>();
+    var calls = 0;
+    var cancelled = false;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': [],
+                  'outgoing': [
+                    if (!cancelled)
+                      {'profile_id': 'pending', 'status': 'pending'},
+                    {'profile_id': 'declined', 'status': 'declined'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/invitations/pending/cancel') {
+            calls++;
+            if (calls == 1) return first.future;
+            cancelled = true;
+            return http.Response('{}', 200);
+          }
+          if (req.url.path == '/api/v1/users/profiles/pending' ||
+              req.url.path == '/api/v1/users/profiles/declined') {
+            return http.Response('{"code":"NOT_FOUND"}', 404);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(SocialPanel.requestCancelKey('declined')), findsNothing);
+    expect(find.text('User unavailable'), findsNWidgets(2));
+    expect(find.text('pending'), findsNothing);
+    final button = find.byKey(SocialPanel.requestCancelKey('pending'));
+    final staleTap = tester.widget<IconButton>(button).onPressed!;
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(SocialPanel.panelKey)),
+    );
+    container.read(profileSwitchInProgressProvider.notifier).state = true;
+    staleTap();
+    await tester.pump();
+    expect(calls, 0);
+    expect(tester.widget<IconButton>(button).onPressed, isNull);
+    container.read(profileSwitchInProgressProvider.notifier).state = false;
+    await tester.pump();
+    staleTap();
+    staleTap();
+    await tester.pump();
+    expect(calls, 1);
+    expect(tester.widget<IconButton>(button).onPressed, isNull);
+    first.complete(http.Response('{"message":"private server error"}', 503));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private server error'), findsNothing);
+    expect(tester.widget<IconButton>(button).onPressed, isNotNull);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(button, findsNothing);
+    expect(find.text('Declined'), findsOneWidget);
+  });
+
+  for (final failedSwitch in [false, true]) {
+    for (final status in [200, 503]) {
+      testWidgets(
+        'cancel ignores stale completion $status failedSwitch=$failedSwitch',
+        (tester) async {
+          final pending = Completer<http.Response>();
+          AuthController? controller;
+          var requestReads = 0;
+          await tester.pumpWidget(
+            socialTestApp(
+              home: const SocialPanel(initialTabIndex: 4),
+              authControllerFactory: (ref) =>
+                  controller = authenticatedAuthController(ref),
+              client: MockClient((req) async {
+                if (req.url.path == '/api/v1/auth/switch-profile') {
+                  return http.Response('{}', 503);
+                }
+                if (req.url.path == '/api/v1/friends/requests') {
+                  final isNew =
+                      req.headers['authorization'] == 'Bearer new-token';
+                  requestReads++;
+                  return http.Response(
+                    jsonEncode({
+                      'friend_request_list': {
+                        'incoming': [],
+                        'outgoing': isNew
+                            ? []
+                            : [
+                                {'profile_id': 'pending', 'status': 'pending'},
+                              ],
+                      },
+                    }),
+                    200,
+                  );
+                }
+                if (req.url.path.endsWith('/pending/cancel'))
+                  return pending.future;
+                return http.Response('{}', 200);
+              }),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(SocialPanel.requestCancelKey('pending')));
+          await tester.pump();
+          if (failedSwitch) {
+            final container = ProviderScope.containerOf(
+              tester.element(find.byKey(SocialPanel.panelKey)),
+            );
+            final session = controller!.state.session;
+            final generation = controller!.sessionInstallGeneration;
+            container.read(profileSwitchInProgressProvider.notifier).state =
+                true;
+            expect(
+              await controller!.switchActiveProfile('other-profile'),
+              isNotNull,
+            );
+            container.read(profileSwitchInProgressProvider.notifier).state =
+                false;
+            expect(controller!.state.session, same(session));
+            expect(
+              controller!.sessionInstallGeneration,
+              greaterThan(generation),
+            );
+          } else {
+            controller!.state = const AuthState(
+              session: AuthSession(
+                accessToken: 'new-token',
+                refreshToken: 'new-refresh',
+                accountId: 'new-account',
+                activeProfileId: 'new-profile',
+                expiresInSeconds: 900,
+              ),
+            );
+          }
+          await tester.pumpAndSettle();
+          final reads = requestReads;
+          pending.complete(http.Response('{}', status));
+          await tester.pumpAndSettle();
+          expect(requestReads, reads);
+          expect(find.text('Could not complete this action.'), findsNothing);
+          if (!failedSwitch)
+            expect(find.text('No friend requests'), findsOneWidget);
+        },
+      );
+    }
+  }
+
   testWidgets('SocialPanel shows search, friends, and requests tabs', (
     tester,
   ) async {

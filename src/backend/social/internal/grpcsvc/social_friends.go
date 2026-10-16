@@ -254,6 +254,28 @@ func (s *SocialGRPC) DeclineFriendInvitation(ctx context.Context, req *socialv1.
 	return &socialv1.DeclineFriendInvitationResponse{}, nil
 }
 
+// CancelFriendInvitation removes an outgoing pending request, not a friendship.
+func (s *SocialGRPC) CancelFriendInvitation(ctx context.Context, req *socialv1.CancelFriendInvitationRequest) (*socialv1.CancelFriendInvitationResponse, error) {
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	target, err := parseUUIDField("target_profile_id", req.GetTargetProfileId())
+	if err != nil {
+		return nil, err
+	}
+	if s.Friends == nil {
+		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	if err := s.Friends.CancelInvitation(ctx, caller, target); err != nil {
+		if errors.Is(err, store.ErrFriendshipNotFound) {
+			return nil, status.Error(codes.NotFound, "pending friend request not found")
+		}
+		return nil, status.Error(codes.Internal, "could not cancel friend request")
+	}
+	return &socialv1.CancelFriendInvitationResponse{}, nil
+}
+
 // RemoveFriend implements voice.social.v1.SocialService.
 func (s *SocialGRPC) RemoveFriend(ctx context.Context, req *socialv1.RemoveFriendRequest) (*socialv1.RemoveFriendResponse, error) {
 	caller, ok := authctx.ProfileID(ctx)

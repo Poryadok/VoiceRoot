@@ -307,6 +307,31 @@ jobs:
         if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
         working-directory: src/frontend
         run: flutter test --no-pub --platform chrome --reporter expanded --concurrency=1 test/app_shell_icon_web_test.dart
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Help real Chrome external handoff (H/V)
+        id: help_browser_handoff
+        timeout-minutes: 8
+        env:
+          CHROME_BIN: google-chrome
+          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          cd src/frontend
+          flutter build web --release --no-pub --no-web-resources-cdn \
+            --target test/fixtures/settings_help_web_launcher_smoke.dart \
+            --output build/help-launcher-web
+          cd ../..
+          node scripts/ci/settings-help-browser-handoff.mjs \
+            src/frontend/build/help-launcher-web "$RUNNER_TEMP/settings-help-browser"
+      - name: Upload Help real browser handoff evidence
+        if: always() && steps.help_browser_handoff.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: settings-help-browser-${{ github.run_id }}
+          path: ${{ runner.temp }}/settings-help-browser
+          if-no-files-found: error
+          retention-days: 14
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
         id: network_offline_capture
         if: >-
