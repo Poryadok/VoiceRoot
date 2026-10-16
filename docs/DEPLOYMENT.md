@@ -64,16 +64,22 @@ sidecars while replacing only the authorized image pins.
 | Окружение      | Назначение                     | Инфраструктура                                                                                                                                               |
 |----------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **local**      | Разработка одного разработчика | Docker Compose: infra (Postgres, Redis, NATS JetStream) или **полный core стенд** — `make compose-app-up` / `--profile app` ([README.md](../README.md), [PLAN.md](PLAN.md)). Порты: `GATEWAY_PORT` (рекомендуется **18080**), `WEB_PORT` (**9080**), `POSTGRES_PORT`, `REDIS_PORT`, `NATS_PORT`, `NATS_HTTP_PORT`. Object storage: **MinIO** (compose, `--profile app`) или Cloudflare R2 через `*_R2_*` в `.env`; staging/prod по умолчанию используют MinIO, внешний S3 provider опционален ([OBJECT_STORAGE.md](OBJECT_STORAGE.md)). |
-| **staging**    | Интеграция, регрессия, демо    | **k3s** (лёгкий Kubernetes), версии близки к prod.                                                                                                           |
+| **dev**        | WIP, интеграция изменений      | Namespace `voice-dev` на существующем k3s; отдельные базы, PVC, ключи, квоты и NetworkPolicy. |
+| **staging**    | Проверка выбранной сборки, регрессия, демо | Namespace `voice-staging`; обновляется выбранным проверяемым набором образов. |
 | **production** | Пользователи                   | **Kubernetes** 1.35 (self-managed или managed: Yandex Managed Kubernetes, Hetzner и т.д.).                                                                   |
 
-Облачный **dev**-кластер не используем. При необходимости общего dev-окружения — кластер по тому же шаблону, что staging.
+Общий dev работает на том же сервере, что staging, с независимыми данными.
+Инструкции создания и ручного обновления: [scripts/dev/README.md](../scripts/dev/README.md).
+На 2026-10-16 `STAGING_DEPLOY_ENABLED=false`: WIP не должен автоматически заменять
+проверяемую staging-сборку. Staging остаётся названием предпродакшен-проверки;
+наличие стенда само по себе не означает, что установленная версия стабильна.
 
 ### Postgres / Redis versions (compose ↔ k8s)
 
 Compose (`docker-compose.yml`) and in-cluster infra (`deploy/staging/infra.yaml`, `deploy/prod/infra.yaml`) both use **PostgreSQL 16** and **Redis 7**. Decision and upgrade policy: [ADR 001](adr/001-compose-postgres-redis-versions.md).
 
-**Namespace** в Kubernetes: по умолчанию `voice-staging`, `voice-prod`; иные имена — только если зафиксированы в репозитории инфраструктуры или Helm-чартах.
+**Namespace** в Kubernetes: `voice-dev`, `voice-staging`, `voice-prod`. Dev обновляется
+отдельным инструментом; staging/prod pipeline не переназначается на dev.
 
 ---
 
@@ -84,7 +90,8 @@ Compose (`docker-compose.yml`) and in-cluster infra (`deploy/staging/infra.yaml`
         → PR → CI (lint, test, build image)
         → merge в master
         → образы в registry (GHCR или выбранный registry)
-        → автоматический деплой на staging
+        → проверка WIP на dev; выбор сборки для staging
+        → защищённый деплой на staging (автоматический только при явно включённой переменной)
         → проверка / ручной регресс
         → прод: тег релиза + workflow с approval (или ручной выкат) → production
 ```
