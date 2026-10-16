@@ -105,7 +105,16 @@ try {
   if (chrome?.pid && chrome.exitCode === null) { chrome.kill('SIGKILL'); await once(chrome, 'exit').catch(() => {}); }
   server.closeAllConnections();
   await new Promise(r => server.close(r));
-  await rm(profile, { recursive: true, force: true });
+  let profileCleanupFailed = false;
+  try {
+    await rm(profile, { recursive: true, force: true });
+  } catch {
+    // Chrome may leave a profile file behind briefly after its process exits.
+    // Preserve the playback receipt so CI can report the decoder result.
+    profileCleanupFailed = true;
+    process.exitCode = 1;
+  }
+  if (profileCleanupFailed) receipt.cleanup = 'profile_remove_failed';
   await writeFile(join(root, 'music-playback-result.json'), JSON.stringify(receipt) + '\n');
   console.log(JSON.stringify(receipt));
 }
