@@ -57,7 +57,7 @@ class Actions:
 
     def recover(self,request):
         if request['action']=='status':return self.execute(request)
-        operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback') else request.get('operation')
+        operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback','prepare-repair') else request.get('operation')
         try:base,state=self.state(operation)
         except (OSError,Blocked):return None
         if request['action']=='resume-cipher-upload':
@@ -67,12 +67,16 @@ class Actions:
             if record['upload_execution']['dispatcher_run_id']!=request['run_id']:
                 raise Blocked('preserved_upload_replay_run_changed')
             return preserved_upload.result(base,state,record)
-        if request['action']=='finish' and state.get('status')=='PASS':
+        if request['action']=='finish' and state.get('status') in ('PASS','PROVISIONAL_READY'):
+            if state.get('status')=='PROVISIONAL_READY' and (base/'provisional-child.json').exists():
+                raise Blocked('provisional_child_already_bound')
             self._active_release(state)
+            return summary(state)
+        if request['action']=='accept-provisional' and state.get('status')=='PASS' and state.get('ci_acceptance',{}).get('verified') is True:
             return summary(state)
         if request['action']=='authorize' and state.get('phase')=='PAUSED_APPLY' and state.get('custody',{}).get('artifact_id')==request['artifact_id']:
             return summary(state)|{'authorization':str(base/'apply-authorization.json')}
-        if request['action'] in ('prepare','prepare-rollback','resume-cold-backup') and state.get('phase')=='AWAITING_OFF_NODE' and state.get('cipher_binding'):
+        if request['action'] in ('prepare','prepare-rollback','prepare-repair','resume-cold-backup') and state.get('phase')=='AWAITING_OFF_NODE' and state.get('cipher_binding'):
             if request['action']=='resume-cold-backup':
                 execution=state.get('execution_authority',{})
                 cipher=state['cipher_binding']
@@ -90,7 +94,7 @@ class Actions:
             'challenge':binding['challenge'],'changed_services':','.join(state['target']['changed_services']),
             'deploy_mode':state['target']['mode'],'source_sha':state['target']['tag']}
 
-    def _idle(self):
+    def _idle(self,*,admitted_parent=None):
         rows=list(guard.ROOT.glob('rollout-*'))
         if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
         for base in rows:
@@ -98,6 +102,9 @@ class Actions:
             if not (base/'checkpoint.json').exists():raise Blocked('bridge_incomplete_operation_present')
             row=private_json(base/'checkpoint.json')
             if row.get('status') not in ('PASS','ROLLED_BACK'):
+                if row.get('status')=='PROVISIONAL_READY':
+                    import provisional
+                    if provisional.covered(base,row,admitted=admitted_parent):continue
                 from operator_retirement import verify_terminal
                 verify_terminal(base,row)
 
@@ -122,12 +129,30 @@ class Actions:
         save(INSTALLED/'active-release.json',{'operation':state['operation'],'namespace_uid':state['context']['expected']['namespace_uid'],
             'pvc_uid':state['context']['expected']['source_claim_uid'],'target_sha256':state['target']['manifest_sha256']})
 
-    def _prepare(self,request,previous=None):
-        self._idle();operation=request['nonce'][:12]
+    def _prepare(self,request,previous=None,repair=None):
+        if repair is None:self._idle()
+        else:self._idle(admitted_parent=repair['operation'])
+        operation=request['nonce'][:12]
         source_run,execution=self._dispatcher(request)
+        provisional_mode=request.get('provisional_staging') is True
+        if provisional_mode or repair is not None:
+            if (execution['event']!='workflow_dispatch' or execution['workflow_id']!=263689731
+                or request['mode']!='images-only' or previous is not None):raise Blocked('provisional_dispatch_required')
         workspace=INSTALLED/'sources'/operation;workspace.mkdir(mode=0o700)
         self._report('source-capture','STARTED')
-        approved=source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace)
+        approved=(source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace,provisional_staging=True)
+            if provisional_mode else source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace))
+        lifecycle=None
+        if provisional_mode or repair is not None:
+            import provisional
+            for relative,wanted in self.binding.items():
+                if relative in ('nats-known-baseline/kernel','nats-rollout-preservation/bootstrap-renewer',
+                    'nats-rollout-preservation/story-current4-probe'):continue
+                if approved['source_files'].get('scripts/staging/'+relative)!=wanted:
+                    raise Blocked('provisional_helper_source_changed')
+            lifecycle={'source_authority':{k:v for k,v in approved.items() if k!='source_files'},'execution_authority':execution}
+            if provisional_mode:lifecycle['provisional']=provisional.admission(approved,execution,self.binding)
+            if repair is not None:lifecycle['repair_parent']=provisional.parent_reference(repair)
         self._report('source-capture','COMPLETE')
         self._report('workload-capture','STARTED')
         kube=Kube();marker=kube.get('configmap','voice-nats-generation')
@@ -204,10 +229,16 @@ class Actions:
         compiler.main([str(workspace),str(parameter_path),str(output)])
         output.chmod(0o600)
         value=private_json(output)
+        if lifecycle is not None and (value['migrations'] or value['nonnats']['actions']
+            or nats_authority is not None and nats_authority['plan']['actions']):
+            raise Blocked('provisional_migration_forbidden')
         if renderer_authority is not None:value['target']=renderer_root.bind_target(value['target'],renderer_authority)
         self._report('target-build','COMPLETE')
         def authority_before_fence():
             source_authority._head(source_authority._headers(request['token']),approved['source_sha'],time.monotonic()+30)
+            if lifecycle is not None:source_authority.revalidate_ci(request['token'],approved)
+            if repair is not None:
+                provisional.verify_runtime(repair,kube,self.binding,private_json(INSTALLED/'active-release.json'),require_healthy=False)
             actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority)
             if renderer_authority is not None:renderer_root.revalidate(kube,stage,renderer_authority)
             if nats_authority is not None:
@@ -215,7 +246,10 @@ class Actions:
                 # Business records may advance, but config/consumer intent and
                 # dynamic subject ownership cannot change between plan/fence.
                 if current['plan']!=nats_authority['plan'] or current['binding']!=nats_authority['binding']:raise Blocked('nats_migration_live_contract_changed')
-        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority)
+            if repair is not None:
+                provisional.link_parent(guard.ROOT/('rollout-'+repair['operation']),repair,operation)
+        lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
+        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,**lifecycle_args)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority
         state['service_actor_services']=names
@@ -347,6 +381,22 @@ class Actions:
             'prepare-expired-finish':self._prepare_expired_finish,'authorize-expired-finish':self._authorize_expired_finish}
         if request['action'] in expired_actions:return expired_actions[request['action']](request)
         if request['action']=='prepare':return self._prepare(request)
+        if request['action']=='prepare-repair':
+            import provisional
+            base,parent=self.state(request['operation'])
+            provisional.require_ready(parent,self.binding)
+            if not set(parent['target']['changed_services'])<=set(request['changed_services']):
+                raise Blocked('provisional_repair_scope_missing')
+            if (base/'provisional-child.json').exists():raise Blocked('provisional_child_already_bound')
+            provisional.verify_runtime(parent,Kube(),self.binding,private_json(INSTALLED/'active-release.json'),require_healthy=False)
+            return self._prepare(request,repair=parent)
+        if request['action']=='accept-provisional':
+            import provisional
+            _,execution=self._dispatcher(request)
+            if execution['event']!='workflow_dispatch' or execution['workflow_id']!=263689731:
+                raise Blocked('provisional_dispatch_required')
+            base,state=self.state(request['operation'])
+            return summary(provisional.accept(base,state,request['token'],Kube(),self.binding,private_json(INSTALLED/'active-release.json')))
         if request['action']=='resume-cold-backup':return self._resume_cold_backup(request)
         if request['action']=='resume-cipher-upload':return self._resume_cipher_upload(request)
         if request['action']=='prepare-rollback':
@@ -360,6 +410,8 @@ class Actions:
         base,state=self.state(request['operation'])
         if request['action']=='status':return summary(state)
         if request['action'] in ('authorize','authorize-preserved-upload'):
+            if state.get('provisional') is not None:
+                source_authority.revalidate_ci(request['token'],state['source_authority'])
             upload_record=None
             if request['action']=='authorize-preserved-upload':
                 import preserved_upload
@@ -381,6 +433,8 @@ class Actions:
             import actor_root
             actor_root.revalidate(Kube(),INSTALLED/'sources'/state['operation'],self.code,self.binding,
                 transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
+            if state.get('provisional') is not None:
+                source_authority.revalidate_ci(request['token'],state['source_authority'])
             if upload_record is not None:
                 preserved_upload.verify_deadline(upload_record,dt.datetime.now(dt.timezone.utc))
                 state['custody']=receipt

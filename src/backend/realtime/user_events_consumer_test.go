@@ -91,7 +91,7 @@ func TestDispatchPresenceChangeToFriends_fansOut(t *testing.T) {
 		"actor-1": {"friend-1", "offline-friend"},
 	}}
 	viewer := &stubPresenceViewer{byViewer: map[string]viewerPresence{
-		"friend-1":       {Status: "dnd", CustomStatus: "focus"},
+		"friend-1":       {Status: "dnd", CustomStatus: "focus", GameTitle: "Filtered game"},
 		"offline-friend": {Status: "dnd", CustomStatus: "focus"},
 	}}
 	dispatchPresenceChangeToFriends(hub, friends, viewer, "actor-1", "dnd", nil, "")
@@ -102,6 +102,7 @@ func TestDispatchPresenceChangeToFriends_fansOut(t *testing.T) {
 		require.Equal(t, "actor-1", d["profile_id"])
 		require.Equal(t, "dnd", d["status"])
 		require.Equal(t, "focus", d["custom_status"])
+		require.Equal(t, "Filtered game", d["game_title"])
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected friend presence_update")
 	}

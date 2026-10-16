@@ -2860,6 +2860,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileBlockConfirmTitle => 'Заблокировать пользователя?';
 
   @override
+  String get profileRemoveFriendConfirmTitle => 'Удалить из друзей?';
+
+  @override
+  String get profileRemoveFriendConfirmMessage =>
+      'Удалить этого пользователя из списка друзей?';
+
+  @override
   String get profileBlockConfirmMessage => 'Он не сможет писать вам сообщения.';
 
   @override
@@ -3661,4 +3668,9 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get profileNotInContactsWarning =>
       'Не в контактах · сообщения могут быть небезопасны';
+
+  @override
+  String contactProfilePlayingGame(String title) {
+    return 'Играет в $title';
+  }
 }
