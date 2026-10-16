@@ -38,7 +38,6 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.crt:/run/phase0/space-lifecycle-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.key:/run/phase0/space-lifecycle-client.key:ro
   matchmaking:
-    user: "0:0"
     environment:
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
       S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","space":"https://space:8443/.well-known/jwks.json"}'

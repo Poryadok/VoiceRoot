@@ -1739,7 +1739,7 @@ jobs:
           python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
       - name: Start app stack
         run: |
-          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build; then
+          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --build; then
             :
           else
             startup_status=$?
@@ -1747,7 +1747,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status "$startup_status" \
             --service voice \
-            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app || true
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
             cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
             exit "$startup_status"
           fi
@@ -1763,7 +1763,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status 1 \
             --service voice \
-            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app || true
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
           cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
           exit 1
       - uses: actions/setup-go@v5

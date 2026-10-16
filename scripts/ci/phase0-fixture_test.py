@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = ROOT / "scripts/dev/generate-phase0-fixture.py"
 OVERLAY = ROOT / "docker-compose.phase0.yml"
 MEDIA_OVERLAY = ROOT / "docker-compose.voice-space-media.yml"
+CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 PROXY = "phase0-jwks"
 URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
@@ -430,6 +431,7 @@ class ComposeTests(unittest.TestCase):
         cls.base = cls.render(False)
         cls.merged = cls.render(True)
         cls.media_merged = cls.render_media()
+        cls.ci_merged = cls.render_ci_stack()
 
     @classmethod
     def command(cls, overlay):
@@ -448,6 +450,13 @@ class ComposeTests(unittest.TestCase):
         command = ["docker", "compose", "--env-file", cls.empty_env,
                    "--profile", "*", "-f", ROOT / "docker-compose.yml",
                    "-f", MEDIA_OVERLAY, "config", "--format", "json"]
+        return json.loads(require_success(run(*command, env=cls.env)))["services"]
+
+    @classmethod
+    def render_ci_stack(cls):
+        command = ["docker", "compose", "--env-file", cls.empty_env,
+                   "--profile", "*", "-f", ROOT / "docker-compose.yml",
+                   "-f", MEDIA_OVERLAY, "-f", OVERLAY, "config", "--format", "json"]
         return json.loads(require_success(run(*command, env=cls.env)))["services"]
 
     def fixture_mounts(self, service):
@@ -471,8 +480,9 @@ class ComposeTests(unittest.TestCase):
                          "https://space:8443/.well-known/jwks.json")
         self.assertEqual(self.source_at("matchmaking", environment["S2S_JWKS_CA_FILE"]),
                          "ca/ca.crt")
-        self.assertIn(str(self.merged["matchmaking"].get("user")), ("0", "0:0", "root"),
-                      "the base Phase0 overlay retains its established root fixture access")
+        self.assertNotIn("user", self.merged["matchmaking"],
+                         "Matchmaking must retain its Dockerfile nonroot identity")
+        self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/matchmaking/Dockerfile").read_text())
 
     def test_matchmaking_complete_match_uses_gateway_principal_and_scoped_mtls(self):
         gateway = self.merged["gateway"]
@@ -501,6 +511,39 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(self.source_at("matchmaking", matchmaking_env["MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE"]),
                          "tls/matchmaking-complete-grpc.key")
         self.assertEqual(matchmaking["depends_on"]["phase0-jwks"]["condition"], "service_started")
+
+    def test_compose_e2e_starts_with_generated_complete_match_fixture(self):
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        fixture_generation = workflow.index("python scripts/dev/generate-phase0-fixture.py")
+        app_start = workflow.index("      - name: Start app stack")
+        app_section = workflow[app_start:workflow.index("      - name:", app_start + 1)]
+
+        self.assertLess(fixture_generation, app_start)
+        self.assertIn(
+            "-f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app",
+            app_section,
+        )
+        self.assertEqual(app_section.count("docker-compose.phase0.yml"), 3)
+
+    def test_complete_match_ci_stack_keeps_matchmaking_nonroot_and_reads_owned_tls(self):
+        matchmaking = self.ci_merged["matchmaking"]
+        environment = matchmaking["environment"]
+        self.assertNotIn("user", matchmaking)
+        self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/matchmaking/Dockerfile").read_text())
+        for key, leaf in (("MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE", "tls/matchmaking-complete-grpc.crt"),
+                          ("MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE", "tls/matchmaking-complete-grpc.key"),
+                          ("MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE", "ca/ca.crt")):
+            self.assertEqual(self.media_source_at("matchmaking", environment[key], merged=self.ci_merged), leaf)
+        if CAN_SET_MATCHSQUAD_UID:
+            for directory in (self.fixture, self.fixture / "tls", self.fixture / "ca"):
+                info = directory.stat()
+                self.assertEqual((info.st_uid, info.st_gid), (65532, 65532))
+                self.assertEqual(stat.S_IMODE(info.st_mode), 0o711)
+            for leaf in ("tls/matchmaking-complete-grpc.crt", "tls/matchmaking-complete-grpc.key", "ca/ca.crt"):
+                path = self.fixture / leaf
+                info = path.stat()
+                self.assertEqual((info.st_uid, info.st_gid), (65532, 65532))
+                self.assertEqual(stat.S_IMODE(info.st_mode), 0o600)
 
     def test_media_compose_uses_protected_match_squad_provider_fixture(self):
         matchmaking = self.media_merged["matchmaking"]
