@@ -120,7 +120,11 @@ Future<void> _complete(
     },
     body: jsonEncode({'operationId': const Uuid().v4()}),
   );
-  expect(resp.statusCode, 200);
+  expect(
+    resp.statusCode,
+    200,
+    reason: 'CompleteMatch returned ${resp.statusCode}: ${resp.body}',
+  );
 }
 
 Future<void> _rate(
