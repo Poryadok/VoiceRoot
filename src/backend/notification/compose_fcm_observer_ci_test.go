@@ -347,10 +347,11 @@ func TestComposeFcmObserverUnreadActualRouteRemainsUnchangedAndUnknown(t *testin
 	forwardedToken := store.DeviceToken{Token: "private-test-token", PushService: "fcm"}
 	recorder := &observerCaptureFCM{}
 	pusher := &dispatch.MessagePusher{
-		Presence: presence.OfflineChecker{},
-		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {forwardedToken}}},
-		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-		Grouping: grouping.NewMemoryStore(),
+		Presence:      presence.OfflineChecker{},
+		Tokens:        messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {forwardedToken}}},
+		Pusher:        &dispatch.PushDispatcher{FCM: recorder},
+		Grouping:      grouping.NewMemoryStore(),
+		GameChatScope: &recordingGameChatScope{},
 	}
 	event := &eventsv1.MessageStreamEvent{EventId: eventID.String(), Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
 		MessageId: messageID.String(), ChatId: chatID.String(), SenderProfileId: senderID.String(),
@@ -580,10 +581,11 @@ func TestComposeFcmObserverPhaseSnapshotsDecodeFailureAndRouteError(t *testing.T
 		}
 		recorder := &observerCaptureFCM{err: errors.New("private route failure")}
 		pusher := &dispatch.MessagePusher{
-			Presence: presence.OfflineChecker{},
-			Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "private-test-token", PushService: "fcm"}}}},
-			Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-			Grouping: grouping.NewMemoryStore(),
+			Presence:      presence.OfflineChecker{},
+			Tokens:        messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "private-test-token", PushService: "fcm"}}}},
+			Pusher:        &dispatch.PushDispatcher{FCM: recorder},
+			Grouping:      grouping.NewMemoryStore(),
+			GameChatScope: &recordingGameChatScope{},
 		}
 		event := &eventsv1.MessageStreamEvent{EventId: "event-route-error", Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
 			MessageId: messageID.String(), ChatId: chatID.String(), SenderProfileId: senderID.String(),
@@ -834,10 +836,11 @@ func TestComposeFcmObserverPreservesRouteSenderArgumentsAndArchivedSuppression(t
 	forwardedToken := store.DeviceToken{Token: "private-test-token", PushService: "fcm"}
 	recorder := &observerCaptureFCM{}
 	pusher := &dispatch.MessagePusher{
-		Presence: presence.OfflineChecker{},
-		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {forwardedToken}}},
-		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-		Grouping: grouping.NewMemoryStore(),
+		Presence:      presence.OfflineChecker{},
+		Tokens:        messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {forwardedToken}}},
+		Pusher:        &dispatch.PushDispatcher{FCM: recorder},
+		Grouping:      grouping.NewMemoryStore(),
+		GameChatScope: &recordingGameChatScope{},
 	}
 	event := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
 		MessageId: messageID.String(), ChatId: chatID.String(), SenderProfileId: senderID.String(),
@@ -914,9 +917,11 @@ func TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait(t *t
 	members := &observerRetryMembers{sender: senderID.String(), target: targetID.String()}
 	fcmRecorder := &observerAckFCM{}
 	pusher := &dispatch.MessagePusher{
-		Presence: presence.OfflineChecker{},
-		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{targetID: {{Token: "private-test-token", PushService: "fcm"}}}},
-		Pusher:   &dispatch.PushDispatcher{FCM: fcmRecorder}, Grouping: grouping.NewMemoryStore(),
+		Presence:      presence.OfflineChecker{},
+		Tokens:        messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{targetID: {{Token: "private-test-token", PushService: "fcm"}}}},
+		Pusher:        &dispatch.PushDispatcher{FCM: fcmRecorder},
+		Grouping:      grouping.NewMemoryStore(),
+		GameChatScope: &recordingGameChatScope{},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
