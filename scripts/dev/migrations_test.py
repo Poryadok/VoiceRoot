@@ -125,6 +125,26 @@ class MigrationContracts(unittest.TestCase):
         self.assertEqual(dev_pod['containers'][0]['image'], contract['images']['postgres'])
         self.assertEqual(dev_pod['containers'][0]['volumeMounts'][0]['mountPath'], '/verify')
 
+    def test_gameintegration_verifier_emits_exact_collector_json_contract(self):
+        root = Path(__file__).resolve().parents[2]
+        sql = (root / 'docker/postgres/verify-gameintegration-runtime-role.sql').read_text(encoding='utf-8')
+        record = sql.split('SELECT json_build_object(', 1)[1].split(')::text', 1)[0]
+        fields = [line.strip() for line in record.splitlines() if line.strip()]
+        self.assertEqual(fields, [
+            "'schema', 'voice-gis-verifier-v1',",
+            "'database', current_database(),",
+            "'migration_version', version,",
+            "'dirty', dirty,",
+            "'runtime_role', 'gameintegration_runtime',",
+            "'role_restricted', true,",
+            "'table_grants', 'select_insert_update_delete',",
+            "'sequence_grants', 'usage_select',",
+            "'ddl_denied', true,",
+            "'schema_ledger_runtime_mutation_denied', true",
+        ])
+        self.assertLess(sql.index('IF has_table_privilege(\'gameintegration_runtime\''),
+                        sql.index('SELECT json_build_object('))
+
     def test_apply_provisions_gameintegration_runtime_role_before_schema_migration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

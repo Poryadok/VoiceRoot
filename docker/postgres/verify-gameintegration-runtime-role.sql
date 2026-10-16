@@ -84,6 +84,7 @@ SELECT json_build_object(
     'role_restricted', true,
     'table_grants', 'select_insert_update_delete',
     'sequence_grants', 'usage_select',
-    'ddl_denied', true
+    'ddl_denied', true,
+    'schema_ledger_runtime_mutation_denied', true
 )::text
   FROM schema_migrations;
