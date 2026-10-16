@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Owned dev-only public signaling TLS via Certbot manual HTTP01 hooks.
+"""Owned dev-only public edge TLS via Certbot manual HTTP01 hooks.
 
 Root Linux operator, after DNS and public HTTP reachability are configured:
   python3 scripts/dev/signal_tls.py issue --agree-tos --email operator@example.org
+  python3 scripts/dev/signal_tls.py expand
   python3 scripts/dev/signal_tls.py renew
 
-Only livekit-dev.comrade.click in voice-dev is admitted. The first command
-explicitly accepts the ACME subscriber terms. Omit --email only to register
+Only the five fixed dev hosts listed in ROUTES in voice-dev are admitted.
+Issue requests all five; expand extends the existing owned LiveKit certificate
+lineage to all five. Renew preserves that lineage. The first command explicitly
+accepts the ACME subscriber terms. Omit --email only to register
 without email. State and all logs stay under /home/voice-dev/tls (root0700).
 No timers are installed: run renew regularly before expiration and verify the
 public HTTPS endpoint after publication. Keep the challenge Ingress for renewal.
@@ -24,6 +27,11 @@ import sys
 
 NS='voice-dev'
 HOST='livekit-dev.comrade.click'
+ROUTES={HOST:('voice-livekit',7880,'livekit'),
+        'dev.comrade.click':('voice-web',80,'web'),
+        'api-dev.comrade.click':('voice-gateway',8080,'api'),
+        'admin-dev.comrade.click':('voice-admin',80,'admin'),
+        'developers-dev.comrade.click':('voice-developer-portal',80,'developers')}
 SECRET='voice-dev-signaling-tls'
 LABELS={'voice.environment':'dev','app.kubernetes.io/managed-by':'voice-dev'}
 STATE=Path('/home/voice-dev/tls')
@@ -76,7 +84,7 @@ def guard(client):
 
 def challenge(env):
     token=env.get('CERTBOT_TOKEN','')
-    if env.get('CERTBOT_DOMAIN')!=HOST or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',token):
+    if env.get('CERTBOT_DOMAIN') not in ROUTES or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',token):
         raise ValueError('fixed dev domain and safe challenge filename required')
     return token
 
@@ -97,17 +105,21 @@ def hook(client,cleanup=False):
         run(['kubectl','--namespace',NS,*prefix,'-i','--','tee',path],validation.encode())
 
 
-def ingress(secure):
-    name='voice-dev-signaling-https' if secure else 'voice-dev-signaling-http01'
-    service,port=('voice-livekit',7880) if secure else ('voice-web',80)
+def ingress(secure,host=HOST):
+    if host not in ROUTES:
+        raise ValueError('fixed dev host required')
+    service,port,suffix=ROUTES[host]
+    name=('voice-dev-signaling' if host==HOST else 'voice-dev-edge-'+suffix)+('-https' if secure else '-http01')
+    if not secure:
+        service,port='voice-web',80
     obj={'apiVersion':'networking.k8s.io/v1','kind':'Ingress',
          'metadata':{'name':name,'namespace':NS,'labels':dict(LABELS),
                      'annotations':{'traefik.ingress.kubernetes.io/router.entrypoints':'websecure' if secure else 'web'}},
-         'spec':{'ingressClassName':'traefik','rules':[{'host':HOST,'http':{'paths':[{
+         'spec':{'ingressClassName':'traefik','rules':[{'host':host,'http':{'paths':[{
              'path':'/' if secure else '/.well-known/acme-challenge/','pathType':'Prefix',
              'backend':{'service':{'name':service,'port':{'number':port}}}}]}}]}}
     if secure:
-        obj['spec']['tls']=[{'hosts':[HOST],'secretName':SECRET}]
+        obj['spec']['tls']=[{'hosts':[host],'secretName':SECRET}]
     return obj
 
 
@@ -143,6 +155,50 @@ def private_state():
         raise ValueError('TLS state must be root-owned0700')
 
 
+def validate_action(action,existing,agree_tos):
+    if action not in ('issue','expand','renew'):
+        raise ValueError('unknown certificate operation')
+    if existing is not None:
+        owned(existing)
+    if action=='issue' and (existing is not None or not agree_tos):
+        raise ValueError('issue requires fresh TLS Secret and explicit --agree-tos')
+    if action in ('expand','renew') and existing is None:
+        raise ValueError('expand and renew require an existing owned TLS Secret')
+
+
+def certbot_arguments(action,email=None,agree_tos=False):
+    if action not in ('issue','expand','renew'):
+        raise ValueError('unknown certificate operation')
+    common=['--non-interactive','--cert-name',HOST,'--config-dir','/etc/letsencrypt',
+            '--work-dir','/etc/letsencrypt/work','--logs-dir','/etc/letsencrypt/logs',
+            '--manual-auth-hook','python3 /hook/signal_tls.py auth',
+            '--manual-cleanup-hook','python3 /hook/signal_tls.py cleanup']
+    if action=='renew':
+        return ['renew',*common]
+    result=['certonly','--manual','--preferred-challenges','http']
+    if action=='expand':
+        result+=['--expand']
+    if agree_tos:
+        result+=['--agree-tos']
+    for host in ROUTES:
+        result+=['-d',host]
+    if email:
+        result+=['--email',email]
+    elif action=='issue':
+        result+=['--register-unsafely-without-email']
+    return result+common
+
+
+def validate_certificate(cert,key):
+    for host in ROUTES:
+        run(['openssl','x509','-in',cert,'-noout','-checkhost',host,'-checkend','86400'])
+    certpub=run(['openssl','x509','-in',cert,'-noout','-pubkey'])
+    keypub=run(['openssl','pkey','-in',key,'-pubout'])
+    if certpub!=keypub:
+        raise ValueError('certificate private key mismatch')
+    run(['openssl','verify','-CApath','/etc/ssl/certs','-untrusted',cert,cert])
+
+
 def operator(action,kubeconfig,email=None,agree_tos=False):
     global LOG
     private_state()
@@ -155,55 +211,39 @@ def operator(action,kubeconfig,email=None,agree_tos=False):
         client=Client(kubeconfig)
         guard(client)
         existing=client.get('secret',SECRET)
-        if existing is not None:
-            owned(existing)
-        if action=='issue' and (existing is not None or not agree_tos):
-            raise ValueError('issue requires fresh TLS Secret and explicit --agree-tos')
-        if action=='renew' and existing is None:
-            raise ValueError('renew requires an existing owned TLS Secret')
-        for secure in (False,True):
-            current=client.get('ingress',ingress(secure)['metadata']['name'])
-            if current is not None:
-                owned(current)
-        publish(client,ingress(False))
+        validate_action(action,existing,agree_tos)
+        for host in ROUTES:
+            for secure in (False,True):
+                current=client.get('ingress',ingress(secure,host)['metadata']['name'])
+                if current is not None:
+                    owned(current)
+        for host in ROUTES:
+            publish(client,ingress(False,host))
         cmd=['docker','run','--rm','--network','host',
              '--mount','type=bind,src='+str(STATE)+',dst=/etc/letsencrypt',
              '--mount','type=bind,src=/usr/local/bin/k3s,dst=/usr/local/bin/kubectl,readonly',
              '--mount','type=bind,src='+str(kubeconfig)+',dst=/kubeconfig,readonly',
              '--mount','type=bind,src='+str(Path(__file__).resolve())+',dst=/hook/signal_tls.py,readonly',
              '-e','KUBECONFIG=/kubeconfig',IMAGE]
-        common=['--non-interactive','--cert-name',HOST,'--config-dir','/etc/letsencrypt',
-                '--work-dir','/etc/letsencrypt/work','--logs-dir','/etc/letsencrypt/logs',
-                '--manual-auth-hook','python3 /hook/signal_tls.py auth',
-                '--manual-cleanup-hook','python3 /hook/signal_tls.py cleanup']
-        if action=='issue':
-            cmd+=['certonly','--manual','--preferred-challenges','http','--agree-tos','-d',HOST]
-            cmd+=['--email',email] if email else ['--register-unsafely-without-email']
-        else:
-            cmd+=['renew']
-        run(cmd+common)
+        run(cmd+certbot_arguments(action,email,agree_tos))
         lineage=STATE/'live'/HOST
         cert,key=lineage/'fullchain.pem',lineage/'privkey.pem'
         for path in (cert,key):
             if not path.resolve(strict=True).is_relative_to(STATE):
                 raise ValueError('certificate lineage escaped private state')
-        run(['openssl','x509','-in',cert,'-noout','-checkhost',HOST,'-checkend','86400'])
-        certpub=run(['openssl','x509','-in',cert,'-noout','-pubkey'])
-        keypub=run(['openssl','pkey','-in',key,'-pubout'])
-        if certpub!=keypub:
-            raise ValueError('certificate private key mismatch')
-        run(['openssl','verify','-CApath','/etc/ssl/certs','-untrusted',cert,cert])
+        validate_certificate(cert,key)
         guard(client)
         publish(client,secret(cert.read_bytes(),key.read_bytes()))
-        publish(client,ingress(True))
+        for host in ROUTES:
+            publish(client,ingress(True,host))
         expiry=run(['openssl','x509','-in',cert,'-noout','-enddate']).decode().strip()
-        print('DEV_SIGNAL_TLS_PUBLISHED host='+HOST+' '+expiry)
+        print('DEV_SIGNAL_TLS_PUBLISHED hosts='+','.join(ROUTES)+' '+expiry)
 
 
 def main():
     global LOG
     parser=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('action',choices=('issue','renew','auth','cleanup'))
+    parser.add_argument('action',choices=('issue','expand','renew','auth','cleanup'))
     parser.add_argument('--kubeconfig',default='/home/pmd/.kube/config')
     parser.add_argument('--email')
     parser.add_argument('--agree-tos',action='store_true')
