@@ -1,5 +1,16 @@
 # Окружения и выкат
 
+Before diagnosis or acceptance, read [Release evidence and recovery
+lessons](RELEASE_EVIDENCE.md): source/run binding, safe diagnostics, immutable
+failure history and independent preservation checks.
+
+Mixed `images-only` selection may include backend services and frontends in one
+preservation transaction. The compiler includes only the selected live frontend
+Deployments alongside the backend manifests and binds their canonical source
+files. Exact container/image inventory checks remain mandatory; image-only
+normalization preserves captured live templates, annotations, environment and
+sidecars while replacing only the authorized image pins.
+
 Согласуется со стеком в [MICROSERVICES.md](MICROSERVICES.md) и [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (k3s / Kubernetes, ClusterDNS). Политика релизов, canary и откат — [OPERATIONS.md](OPERATIONS.md).
 
 ---

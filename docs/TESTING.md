@@ -1,5 +1,9 @@
 # Тестирование
 
+See [Release evidence and recovery lessons](RELEASE_EVIDENCE.md) for executed
+scenario coverage, discriminating negative tests, acceptance-reader testing and
+source-bound visual/runtime evidence.
+
 Договорённости по слоям тестов, стеку и CI. Детали релиза и отката — [OPERATIONS.md](OPERATIONS.md); локальный подъём сервисов — [PLAN.md](PLAN.md) (Docker Compose), [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
