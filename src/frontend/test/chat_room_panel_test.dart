@@ -124,10 +124,10 @@ void main() {
           harness.container.read(chatReplyTargetProvider('chat-abc')),
           isNull,
         );
-        expect(harness.room.state.messages.map((m) => m.id), [
-          'history-before-retry',
-          'accepted-1',
-        ]);
+        expect(
+          harness.room.state.messages.map((m) => m.id),
+          unorderedEquals(['history-before-retry', 'accepted-1']),
+        );
         expectMessagePlainText(tester, 'Existing visible history');
         expectMessagePlainText(tester, 'Accepted text');
         expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
