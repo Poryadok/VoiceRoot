@@ -190,6 +190,17 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 		return nil
 	}
 	c := o.control
+	if o.controlState == composeFcmControlValid {
+		// Shared-stream traffic is not conflicting evidence about the selected
+		// target. Preserve same-key conflicts above and malformed identities.
+		if c.MessageID != "" && validUUID(messageID) && c.MessageID != messageID {
+			return nil
+		}
+		if c.MessageID == "" && (c.ChatID != chatID || c.SenderProfileID != senderID) &&
+			validUUID(messageID) && validUUID(chatID) && validUUID(senderID) {
+			return nil
+		}
+	}
 	if o.controlState == composeFcmControlValid && (c.ChatID != chatID || c.SenderProfileID != senderID || c.MessageID != "" && c.MessageID != messageID) {
 		o.recordAdmissionLocked(composeFcmAdmissionTuple)
 		return nil
@@ -461,6 +472,13 @@ func (o *composeFcmObserver) sampleControlLocked(c composeFcmControl, ok bool, s
 		return false
 	}
 	previousState := o.controlState
+	if previousState == composeFcmControlInvalid {
+		// Invalid control already discarded the old candidates. Only this
+		// genuinely fresh window may discard their admission failures too.
+		o.admissionCounts = [composeFcmAdmissionKindCount]uint8{}
+		o.admissionSeen = false
+		o.admissionOverflow = false
+	}
 	o.control, o.controlState = c, composeFcmControlValid
 	if previousState != composeFcmControlValid {
 		if !o.validSampleEmitted {

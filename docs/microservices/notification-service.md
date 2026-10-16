@@ -71,6 +71,13 @@ the existing strict parser; malformed or prefixed candidates still invalidate
 the result. Producer failure, timeout, duplicate records, and excessive diagnostic
 output remain unknown evidence, never a successful delivery result. A collector
 failure does not establish why the push failed; retain the original FCM assertion.
+The observer attributes only the selected message (or its chat/sender tuple
+before the response supplies the message ID). Unrelated well-formed traffic
+does not consume that candidate budget or invalidate its result. Same-target
+identity/tuple conflicts and multiple event identities still produce unknown
+evidence. Only a fresh invalid-to-valid control window clears earlier admission
+failures; normal resampling cannot erase them. Callback phase flags describe
+global consumer progress, not successful delivery of the selected message.
 
 ## Модель данных
 

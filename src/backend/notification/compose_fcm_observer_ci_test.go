@@ -135,6 +135,87 @@ func TestComposeFcmObserverBoundsUntrustedCorrelationKeys(t *testing.T) {
 	}
 }
 
+func TestComposeFcmObserverUnrelatedTrafficDoesNotPoisonExactTarget(t *testing.T) {
+	for _, fixed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "pre-send tuple", true: "fixed message"}[fixed], func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "control.json")
+			message := ""
+			if fixed {
+				message = diagnosticTestMessage
+			}
+			writeDiagnosticControl(t, path, message)
+			o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+			cacheDiagnosticControl(t, o)
+			unrelated := func() {
+				for i := 0; i < composeFcmCandidateLimit+1; i++ {
+					if o.begin("unrelated-event", uuid.NewString(), uuid.NewString(), uuid.NewString()) != nil {
+						t.Fatal("unrelated event consumed target candidate capacity")
+					}
+				}
+			}
+			unrelated()
+			trace := o.begin("target-event", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+			if trace == nil {
+				t.Fatal("target was not admitted after unrelated traffic")
+			}
+			o.finish(trace, "nak")
+			unrelated()
+			writeDiagnosticControl(t, path, diagnosticTestMessage)
+			cacheDiagnosticControl(t, o)
+			output := captureComposeFcmOutput(t, func() { expireDiagnosticAt(o, o.postControlStarted.Add(composeFcmWindow)) })
+			if !strings.Contains(output, "valid=true reason=matched admission=none") || !strings.Contains(output, "route=nak") {
+				t.Fatal("unrelated events concealed the exact failed target route")
+			}
+		})
+	}
+}
+
+func TestComposeFcmObserverFreshInvalidToValidWindowClearsOldAdmissionOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.json")
+	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+	cacheDiagnosticControl(t, o)
+	o.begin("old-event", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+	writeDiagnosticControl(t, path, "")
+	cacheDiagnosticControl(t, o)
+	trace := o.begin("target-event", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+	if trace == nil || o.admissionClassLocked() != "none" {
+		t.Fatal("fresh valid window retained invalid-window admission")
+	}
+	o.finish(trace, "nak")
+	writeDiagnosticControl(t, path, diagnosticTestMessage)
+	cacheDiagnosticControl(t, o)
+	output := captureComposeFcmOutput(t, func() { expireDiagnosticAt(o, o.postControlStarted.Add(composeFcmWindow)) })
+	if !strings.Contains(output, "valid=true reason=matched admission=none") || !strings.Contains(output, "route=nak") {
+		t.Fatal("fresh window did not retain its exact failed route")
+	}
+}
+
+func TestComposeFcmObserverTargetConflictsSurviveValidResampling(t *testing.T) {
+	for _, conflict := range []string{"tuple", "event", "identity"} {
+		t.Run(conflict, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "control.json")
+			writeDiagnosticControl(t, path, diagnosticTestMessage)
+			o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+			cacheDiagnosticControl(t, o)
+			trace := o.begin("target-event", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+			o.finish(trace, "nak")
+			switch conflict {
+			case "tuple":
+				o.begin("target-event", diagnosticTestMessage, uuid.NewString(), diagnosticTestSender)
+			case "event":
+				o.finish(o.begin("second-event", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender), "nak")
+			case "identity":
+				o.begin("", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+			}
+			cacheDiagnosticControl(t, o)
+			output := captureComposeFcmOutput(t, func() { expireDiagnosticAt(o, o.postControlStarted.Add(composeFcmWindow)) })
+			if strings.Contains(output, "valid=true") || !strings.Contains(output, "route=unknown") {
+				t.Fatal("valid resampling erased conflicting target evidence")
+			}
+		})
+	}
+}
+
 func TestComposeFcmObserverAdmissionClassificationIsBoundedAndAnonymous(t *testing.T) {
 	newObserver := func() *composeFcmObserver {
 		return &composeFcmObserver{candidates: make(map[string]*composeFcmTrace)}
