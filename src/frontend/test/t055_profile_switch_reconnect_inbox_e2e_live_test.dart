@@ -40,6 +40,55 @@ import 'support/live_gateway_harness.dart';
 /// transport so the production Hub proves reconnect history catch-up from a
 /// second Gateway `hello` without fabricated frames or link state.
 void main() {
+  test('T055 relay holds only the exact offline event and releases once', () {
+    final gate = _OfflineMessageGate(chatId: 'selected', messageId: 'delta');
+    final delivered = <Object>[];
+    final matched = jsonEncode({
+      'op': 'message_create',
+      'd': {'chat_id': 'selected', 'message_id': 'delta'},
+    });
+    final unrelated = <Object>[
+      '{"op":"hello","d":{}}',
+      '{"op":"message_create","d":{"chat_id":"other","message_id":"delta"}}',
+      '{"op":"message_create","d":{"chat_id":"selected","message_id":"other"}}',
+      '{"op":"message_update","d":{"chat_id":"selected","message_id":"delta"}}',
+      'not-json',
+      Uint8List.fromList([255]),
+    ];
+    gate.forward(matched, delivered.add);
+    for (final frame in unrelated) {
+      gate.forward(frame, delivered.add);
+    }
+    expect(delivered, orderedEquals(unrelated));
+    gate.release();
+    gate.release();
+    expect(delivered, orderedEquals([...unrelated, matched]));
+  });
+
+  test('T055 relay passes a matched frame arriving after release unchanged', () {
+    final gate = _OfflineMessageGate(chatId: 'selected', messageId: 'delta');
+    final delivered = <Object>[];
+    final frame = utf8.encode(
+      '{"op":"message_create","d":{"chat_id":"selected","message_id":"delta"}}',
+    );
+    gate.release();
+    gate.forward(frame, delivered.add);
+    expect(delivered, hasLength(1));
+    expect(identical(delivered.single, frame), isTrue);
+  });
+
+  test('T055 relay cleanup drops held delivery without forwarding later', () {
+    final gate = _OfflineMessageGate(chatId: 'selected', messageId: 'delta');
+    final delivered = <Object>[];
+    const frame =
+        '{"op":"message_create","d":{"chat_id":"selected","message_id":"delta"}}';
+    gate.forward(frame, delivered.add);
+    gate.dispose();
+    gate.release();
+    gate.forward(frame, delivered.add);
+    expect(delivered, isEmpty);
+  });
+
   test('T055 setup waits for selected Chat ordering projection', () async {
     var reads = 0;
     var waits = 0;
@@ -671,6 +720,9 @@ void main() {
       );
       offlineMessageId = (offlineDelta as MessagesApiOk<VoiceMessage>).data.id;
       expect(offlineMessageId, isNotEmpty, reason: 'offline selected delta');
+      // The durable POST can finish before its asynchronous message_create.
+      // Hold that exact live event so this window measures reconnect REST only.
+      relay.holdOfflineMessage(selectedChatId, offlineMessageId);
 
       recorder.failNextInboxReconciliationPage(
         authorization: bAuthorization,
@@ -896,6 +948,7 @@ void main() {
         isTrue,
         reason: 'mounted passive room must not catch up after reconnect',
       );
+      relay.releaseOfflineMessage();
     },
     skip: runLiveIntegration
         ? null
@@ -1330,10 +1383,65 @@ class _InboxPageFailure {
   }
 }
 
-/// A VM-only relay. It does not inspect or synthesize WebSocket frames: each
-/// accepted client socket gets a real Gateway upstream and both directions are
-/// forwarded unchanged. Holding the second *upgrade* keeps the Hub offline
-/// while the fixture writes its missed durable message.
+/// Holds only one identified offline message's live notification until the
+/// reconnect assertions finish. Original frames are forwarded without rewriting;
+/// unrelated frames are never held. Cleanup drops queued callbacks to closed peers.
+class _OfflineMessageGate {
+  _OfflineMessageGate({required this.chatId, required this.messageId});
+
+  final String chatId;
+  final String messageId;
+  final _pending = <void Function()>[];
+  var _released = false;
+  var _disposed = false;
+
+  bool _matches(Object frame) {
+    try {
+      final text = frame is String
+          ? frame
+          : frame is List<int>
+          ? utf8.decode(frame)
+          : null;
+      if (text == null) return false;
+      final value = jsonDecode(text);
+      if (value is! Map || value['op'] != 'message_create') return false;
+      final data = value['d'];
+      return data is Map &&
+          data['chat_id'] == chatId &&
+          data['message_id'] == messageId;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  void forward(Object frame, void Function(Object) deliver) {
+    if (_disposed) return;
+    if (!_released && _matches(frame)) {
+      _pending.add(() => deliver(frame));
+    } else {
+      deliver(frame);
+    }
+  }
+
+  void release() {
+    if (_released || _disposed) return;
+    _released = true;
+    final pending = _pending.toList(growable: false);
+    _pending.clear();
+    for (final deliver in pending) {
+      deliver();
+    }
+  }
+
+  void dispose() {
+    _disposed = true;
+    _pending.clear();
+  }
+}
+
+/// A VM-only relay using real Gateway upstreams and unchanged frame bytes.
+/// Holding the second upgrade keeps the Hub offline during the durable write;
+/// the exact offline notification is held separately through reconnect assertions.
 class _LiveWebSocketRelay {
   _LiveWebSocketRelay._(this._server) {
     _requests = _server.listen((request) {
@@ -1357,6 +1465,7 @@ class _LiveWebSocketRelay {
   final _handlers = <Future<void>>[];
   Uri? _upstreamUri;
   var _connectionAttempts = 0;
+  _OfflineMessageGate? _offlineMessage;
 
   static Future<_LiveWebSocketRelay> bind() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -1390,6 +1499,15 @@ class _LiveWebSocketRelay {
   void releaseSecondUpgrade() {
     if (!_releaseSecondUpgrade.isCompleted) _releaseSecondUpgrade.complete();
   }
+
+  void holdOfflineMessage(String chatId, String messageId) {
+    if (_offlineMessage != null || _releaseSecondUpgrade.isCompleted) {
+      throw StateError('offline message must be bound before reconnect release');
+    }
+    _offlineMessage = _OfflineMessageGate(chatId: chatId, messageId: messageId);
+  }
+
+  void releaseOfflineMessage() => _offlineMessage?.release();
 
   Future<void> _handle(HttpRequest request) async {
     if (!WebSocketTransformer.isUpgradeRequest(request)) {
@@ -1426,7 +1544,11 @@ class _LiveWebSocketRelay {
       );
       rethrow;
     }
-    final pair = _RelaySocketPair(client: client, upstream: upstream);
+    final pair = _RelaySocketPair(
+      client: client,
+      upstream: upstream,
+      offlineMessage: _offlineMessage,
+    );
     _pairs.add(pair);
     pair.start();
     if (attempt == 1 && !_firstPair.isCompleted) _firstPair.complete(pair);
@@ -1442,6 +1564,7 @@ class _LiveWebSocketRelay {
   }
 
   Future<void> dispose() async {
+    _offlineMessage?.dispose();
     releaseSecondUpgrade();
     await _requests.cancel();
     await _server.close(force: true);
@@ -1487,10 +1610,15 @@ class _RelayRealtimeTransportFactory implements RealtimeTransportFactory {
 }
 
 class _RelaySocketPair {
-  _RelaySocketPair({required this.client, required this.upstream});
+  _RelaySocketPair({
+    required this.client,
+    required this.upstream,
+    this.offlineMessage,
+  });
 
   final WebSocket client;
   final WebSocket upstream;
+  final _OfflineMessageGate? offlineMessage;
   final clientClosed = Completer<void>();
   StreamSubscription<dynamic>? _clientFrames;
   StreamSubscription<dynamic>? _upstreamFrames;
@@ -1507,7 +1635,14 @@ class _RelaySocketPair {
       onError: (_, _) => _onClientTerminal(),
     );
     _upstreamFrames = upstream.listen(
-      _forwardToClient,
+      (dynamic frame) {
+        final gate = offlineMessage;
+        if (gate == null) {
+          _forwardToClient(frame);
+        } else {
+          gate.forward(frame as Object, _forwardToClient);
+        }
+      },
       onDone: _onUpstreamTerminal,
       onError: (_, _) => _onUpstreamTerminal(),
     );

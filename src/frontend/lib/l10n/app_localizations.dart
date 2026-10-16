@@ -6464,6 +6464,18 @@ abstract class AppLocalizations {
   /// **'Not found'**
   String get deepLinkResourceNotFound;
 
+  /// No description provided for @deepLinkAccessDeniedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'You do not have permission to open this link. It may be intended for another profile.'**
+  String get deepLinkAccessDeniedDescription;
+
+  /// No description provided for @deepLinkResourceNotFoundDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'This link is unavailable or no longer valid.'**
+  String get deepLinkResourceNotFoundDescription;
+
   /// No description provided for @deepLinkReturnHome.
   ///
   /// In en, this message translates to:

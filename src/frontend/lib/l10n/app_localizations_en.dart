@@ -3534,6 +3534,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deepLinkResourceNotFound => 'Not found';
 
   @override
+  String get deepLinkAccessDeniedDescription =>
+      'You do not have permission to open this link. It may be intended for another profile.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'This link is unavailable or no longer valid.';
+
+  @override
   String get deepLinkReturnHome => 'Go to Home';
 
   @override

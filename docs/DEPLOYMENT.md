@@ -1078,6 +1078,16 @@ After independent terminal-reset readback, install the reviewed helper successor
 
 To accept the new build after reset, create recent application message/file data, run an ordinary nonreset FULL with its required source/image/stack-lock gates, then verify the same data after fresh login and again after a deliberate restart with recorded workload identity/readiness. Bind the final FULL checkpoint to its adopted target templates, not the old rollback templates. A rollout restart changes its restart annotation: record the exact owned annotation and require all other template fields and images to remain unchanged. Prove replacement through Pod owner chains and old/new UIDs. The empty baseline proves baseline creation, not application quality or preservation of later writes.
 
+Failures before bridge submission and in the captured workflow entry also emit
+a fixed safe error code to stderr and the Job Summary. The always-run collector
+uploads these as `voice-deployment-boundary-failure-v1` records alongside root
+reports. These records are runner observations, not root attestations: operation
+state and side effects remain unknown, and recovery is never authorized. A
+source mismatch before submission has no root request nonce. Match its run ID,
+attempt and source SHA; do not invent a checkpoint or replay prepare to obtain
+a report. Unknown exception text is never exported. Collection failure preserves
+the original nonzero deployment result and prints report-unavailable explicitly.
+
 The rollout bridge publishes the versioned `voice-deployment-report-v1` projection
 under `installed/responses/<request-nonce>.report.json`. Each atomic root-owned
 `root:pmd` mode `0440` report is bound to one request nonce, run ID/attempt and
