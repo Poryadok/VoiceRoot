@@ -68,13 +68,7 @@ class PullMusicPlayback extends MusicPlayback {
       : _duration;
 
   static String? _tag(String? value) {
-    if (value == null ||
-        value.length > 1024 ||
-        RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)) {
-      return null;
-    }
-    final clean = value.trim();
-    return clean.isEmpty ? null : clean;
+    return firstUsableMusicTag([value]);
   }
 
   @override
@@ -82,6 +76,8 @@ class PullMusicPlayback extends MusicPlayback {
     if (_closed || !hasSupportedMusicSignature(bytes)) {
       throw const FormatException('music_format_invalid');
     }
+    _duration = Duration.zero;
+    _fed = 0;
     final activation = ++_activation;
     final nativeFlacTags = nativeFlacMusicTags(bytes);
     // Native FLAC comments are parsed from the admitted plaintext bytes. The
@@ -108,7 +104,13 @@ class PullMusicPlayback extends MusicPlayback {
       throw const FormatException('music_load_cancelled');
     }
     _bytes = Uint8List.fromList(bytes);
+    final oggFlacDurationFallback = unknownTotalOggFlacDuration(_bytes!);
+    if (oggFlacDurationFallback != null) {
+      _duration = oggFlacDurationFallback;
+    }
     final ready = Completer<void>();
+    var durationFromOggGranule = oggFlacDurationFallback != null;
+    if (durationFromOggGranule) ready.complete();
     void fail() {
       _failed = true;
       if (!ready.isCompleted) {
@@ -165,9 +167,11 @@ class PullMusicPlayback extends MusicPlayback {
         onAudioDuration: (seconds) {
           if (_closed || generation != _generation) return;
           if (!seconds.isFinite || seconds <= 0 || seconds > 2147483647) {
+            if (durationFromOggGranule) return;
             fail();
             return;
           }
+          durationFromOggGranule = false;
           _duration = Duration(milliseconds: (seconds * 1000).ceil());
           if (!ready.isCompleted) ready.complete();
           notifyListeners();
@@ -194,21 +198,21 @@ class PullMusicPlayback extends MusicPlayback {
             return values.length == 1 ? values.single.value : null;
           }
 
-          _title = _tag(
-            metadata.mp3Metadata?.title ??
-                comment('title') ??
-                nativeFlacTags['title'],
-          );
-          _artist = _tag(
-            metadata.mp3Metadata?.artist ??
-                comment('artist') ??
-                nativeFlacTags['artist'],
-          );
-          _album = _tag(
-            metadata.mp3Metadata?.album ??
-                comment('album') ??
-                nativeFlacTags['album'],
-          );
+          _title = firstUsableMusicTag([
+            metadata.mp3Metadata?.title,
+            comment('title'),
+            nativeFlacTags['title'],
+          ]);
+          _artist = firstUsableMusicTag([
+            metadata.mp3Metadata?.artist,
+            comment('artist'),
+            nativeFlacTags['artist'],
+          ]);
+          _album = firstUsableMusicTag([
+            metadata.mp3Metadata?.album,
+            comment('album'),
+            nativeFlacTags['album'],
+          ]);
           notifyListeners();
         },
       );
