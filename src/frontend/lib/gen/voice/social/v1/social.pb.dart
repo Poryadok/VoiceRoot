@@ -3140,6 +3140,106 @@ class GetFriendsOfFriendsResponse extends $pb.GeneratedMessage {
   ProfileIdList ensureProfileIdList() => $_ensure(0);
 }
 
+class CancelFriendInvitationRequest extends $pb.GeneratedMessage {
+  factory CancelFriendInvitationRequest({
+    $core.String? targetProfileId,
+  }) {
+    final result = create();
+    if (targetProfileId != null) result.targetProfileId = targetProfileId;
+    return result;
+  }
+
+  CancelFriendInvitationRequest._();
+
+  factory CancelFriendInvitationRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CancelFriendInvitationRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CancelFriendInvitationRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'targetProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CancelFriendInvitationRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CancelFriendInvitationRequest copyWith(
+          void Function(CancelFriendInvitationRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CancelFriendInvitationRequest))
+          as CancelFriendInvitationRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CancelFriendInvitationRequest create() =>
+      CancelFriendInvitationRequest._();
+  @$core.override
+  CancelFriendInvitationRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CancelFriendInvitationRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CancelFriendInvitationRequest>(create);
+  static CancelFriendInvitationRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get targetProfileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set targetProfileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasTargetProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearTargetProfileId() => $_clearField(1);
+}
+
+class CancelFriendInvitationResponse extends $pb.GeneratedMessage {
+  factory CancelFriendInvitationResponse() => create();
+
+  CancelFriendInvitationResponse._();
+
+  factory CancelFriendInvitationResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CancelFriendInvitationResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CancelFriendInvitationResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CancelFriendInvitationResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CancelFriendInvitationResponse copyWith(
+          void Function(CancelFriendInvitationResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CancelFriendInvitationResponse))
+          as CancelFriendInvitationResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CancelFriendInvitationResponse create() =>
+      CancelFriendInvitationResponse._();
+  @$core.override
+  CancelFriendInvitationResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CancelFriendInvitationResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CancelFriendInvitationResponse>(create);
+  static CancelFriendInvitationResponse? _defaultInstance;
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

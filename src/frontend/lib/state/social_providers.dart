@@ -364,6 +364,39 @@ class SocialActions {
     };
   }
 
+  Future<String?> cancelFriendInvitation(String targetProfileId) async {
+    final controller = _ref.read(authControllerProvider.notifier);
+    final actor = controller.gatewayRequestIdentity;
+    final generation = controller.sessionInstallGeneration;
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null ||
+        actor == null ||
+        _ref.read(profileSwitchInProgressProvider)) {
+      return 'not_authenticated';
+    }
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .cancelFriendInvitation(
+          authorization: auth,
+          targetProfileId: targetProfileId,
+        );
+    final current = _ref.read(authControllerProvider.notifier);
+    if (!identical(current, controller) ||
+        current.gatewayRequestIdentity != actor ||
+        current.sessionInstallGeneration != generation ||
+        _ref.read(authorizationHeaderProvider) != auth ||
+        _ref.read(profileSwitchInProgressProvider)) {
+      return 'actor_changed';
+    }
+    // Reconcile success and races (including NotFound) with authoritative state.
+    _ref.invalidate(friendRequestsProvider);
+    return switch (result) {
+      FriendsApiEmpty() => null,
+      FriendsApiFailure(:final message) => message,
+      FriendsApiOk() => null,
+    };
+  }
+
   Future<String?> blockAccount(
     String blockedAccountId, {
     String? blockedProfileId,
