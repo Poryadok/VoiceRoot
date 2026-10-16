@@ -108,6 +108,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       for (final scenario in [
         'populated', 'busy', 'empty', 'loading', 'error', 'ru',
+        'profile-error', 'profile-missing', 'profile-loading',
       ]) {
         final pending = Completer<http.Response>();
         final client = MockClient((request) async {
@@ -138,6 +139,15 @@ void main() {
           }
           if (request.url.path.startsWith('/api/v1/users/profiles/')) {
             final id = request.url.pathSegments.last;
+            if (id == 'incoming') {
+              if (scenario == 'profile-loading') return pending.future;
+              if (scenario == 'profile-error' || scenario == 'profile-missing') {
+                return http.Response(
+                  '{"message":"private profile diagnostic"}',
+                  scenario == 'profile-error' ? 503 : 404,
+                );
+              }
+            }
             return http.Response(
               jsonEncode({
                 'profile': {
@@ -211,6 +221,7 @@ void main() {
               find.byKey(SocialPanel.requestDeclineKey('incoming')),
             );
             await tester.pump();
+            await tester.pump(const Duration(milliseconds: 150));
             expect(
               find.byKey(SocialPanel.requestActionProgressKey('incoming')),
               findsOneWidget,
@@ -227,6 +238,32 @@ void main() {
             expect(find.byKey(SocialPanel.requestsUnavailableKey), findsOneWidget);
             expect(find.text('Try again'), findsOneWidget);
             expect(find.textContaining('private load diagnostic'), findsNothing);
+          } else if (scenario.startsWith('profile-')) {
+            final l10n = AppLocalizations.of(
+              tester.element(find.byKey(SocialPanel.panelKey)),
+            )!;
+            expect(
+              find.text(
+                scenario == 'profile-loading'
+                    ? l10n.commonLoading
+                    : l10n.socialProfileUnavailable,
+              ),
+              findsOneWidget,
+            );
+            expect(find.text('incoming'), findsNothing);
+            expect(
+              find.textContaining('private profile diagnostic'),
+              findsNothing,
+            );
+            for (final key in [
+              SocialPanel.requestAcceptKey('incoming'),
+              SocialPanel.requestDeclineKey('incoming'),
+            ]) {
+              expect(
+                tester.widget<IconButton>(find.byKey(key)).onPressed,
+                isNotNull,
+              );
+            }
           } else {
             expect(find.text('Alex'), findsOneWidget);
             expect(find.text('Maria'), findsOneWidget);

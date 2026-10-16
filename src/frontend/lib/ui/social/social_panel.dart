@@ -884,10 +884,44 @@ class _IncomingRequestTileState extends ConsumerState<_IncomingRequestTile> {
     final profileId = widget.profileId;
     final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          key: SocialPanel.requestAcceptKey(profileId),
+          tooltip: l10n.socialAcceptRequest,
+          icon: Icon(Icons.check, semanticLabel: l10n.socialAcceptRequest),
+          onPressed: _busy || !widget.canMutate
+              ? null
+              : () => _runAction(widget.onAccept),
+        ),
+        IconButton(
+          key: SocialPanel.requestDeclineKey(profileId),
+          tooltip: l10n.socialDeclineRequest,
+          icon: Icon(Icons.close, semanticLabel: l10n.socialDeclineRequest),
+          onPressed: _busy || !widget.canMutate
+              ? null
+              : () => _runAction(widget.onDecline),
+        ),
+        if (_busy)
+          SizedBox(
+            key: SocialPanel.requestActionProgressKey(profileId),
+            width: 18,
+            height: 18,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          ),
+      ],
+    );
 
     return profileAsync.when(
-      loading: () => ListTile(title: Text(l10n.commonLoading)),
-      error: (e, st) => ListTile(title: Text(profileId)),
+      loading: () => ListTile(
+        title: Text(l10n.commonLoading),
+        trailing: actions,
+      ),
+      error: (e, st) => ListTile(
+        title: Text(l10n.socialProfileUnavailable),
+        trailing: actions,
+      ),
       data: (profile) => ListTile(
         leading: CircleAvatar(
           child: Text(
@@ -896,37 +930,16 @@ class _IncomingRequestTileState extends ConsumerState<_IncomingRequestTile> {
                 : '?',
           ),
         ),
-        title: Text(profile?.displayName ?? profileId),
-        subtitle: profile != null ? Text(profile.handle) : null,
-        onTap: () => widget.onOpenProfile(profileId),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              key: SocialPanel.requestAcceptKey(profileId),
-              tooltip: l10n.socialAcceptRequest,
-              icon: Icon(Icons.check, semanticLabel: l10n.socialAcceptRequest),
-              onPressed: _busy || !widget.canMutate
-                  ? null
-                  : () => _runAction(widget.onAccept),
-            ),
-            IconButton(
-              key: SocialPanel.requestDeclineKey(profileId),
-              tooltip: l10n.socialDeclineRequest,
-              icon: Icon(Icons.close, semanticLabel: l10n.socialDeclineRequest),
-              onPressed: _busy || !widget.canMutate
-                  ? null
-                  : () => _runAction(widget.onDecline),
-            ),
-            if (_busy)
-              SizedBox(
-                key: SocialPanel.requestActionProgressKey(profileId),
-                width: 18,
-                height: 18,
-                child: const CircularProgressIndicator(strokeWidth: 2),
-              ),
-          ],
+        title: Text(
+          (profile?.displayName.isNotEmpty ?? false)
+              ? profile!.displayName
+              : l10n.socialProfileUnavailable,
         ),
+        subtitle: profile != null && profile.username.isNotEmpty
+            ? Text(profile.handle)
+            : null,
+        onTap: () => widget.onOpenProfile(profileId),
+        trailing: actions,
       ),
     );
   }

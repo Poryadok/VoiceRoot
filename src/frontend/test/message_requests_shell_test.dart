@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show ImageByteFormat, Tristate;
 
@@ -10,21 +11,28 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/routing/deep_link_listener.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/state/presence_providers.dart';
+import 'package:voice_frontend/state/mobile_opened_chat_strip.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
+import 'package:voice_frontend/ui/shell/chat_rail_sections.dart';
 import 'package:voice_frontend/ui/shell/desktop_shell_rail.dart';
+import 'package:voice_frontend/ui/shell/manage_folders_sheet.dart';
 import 'package:voice_frontend/ui/shell/message_requests_folder.dart';
 import 'package:voice_frontend/ui/shell/mobile_shell_drawer.dart';
+import 'package:voice_frontend/ui/shell/navigation_panel.dart';
+import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/fake_voice_api_clients.dart';
@@ -42,117 +50,349 @@ void main() {
       final capturing = captureDir != null && captureDir.isNotEmpty;
       final captureTheme = await _themeForCapture(tester, capturing);
       final semantics = tester.ensureSemantics();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(_voipChannel, (_) async => null);
-      addTearDown(
-        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(_voipChannel, null),
-      );
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+      try {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(_voipChannel, (_) async => null);
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(_voipChannel, null),
+        );
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      final wideContainer = await _pumpVoiceShell(
-        tester,
-        const Size(1280, 800),
-        captureTheme,
-      );
-      expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
-      expect(find.byKey(MessageRequestsFolderRailButton.keyId), findsOneWidget);
-      expect(find.text('2'), findsWidgets);
-      await tester.tap(find.byKey(MessageRequestsFolderRailButton.keyId));
-      await tester.pumpAndSettle();
-      _expectRequestsWorkspace(tester);
-      await _captureIfRequested(tester, 'contact-requests-wide.png');
-      await tester.tap(find.byIcon(Icons.arrow_back));
-      await tester.pumpAndSettle();
-      expect(wideContainer.read(selectedChatFolderIdProvider), isNull);
-      expect(find.text('Direct messages'), findsWidgets);
-      expect(find.text('Rowan'), findsNothing);
-
-      final narrowContainer = await _pumpVoiceShell(
-        tester,
-        const Size(390, 844),
-        captureTheme,
-      );
-      expect(find.byKey(const Key('mobile_shell_drawer_open')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('mobile_shell_drawer_open')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(MobileShellDrawer.drawerKey), findsOneWidget);
-      expect(find.byKey(MessageRequestsFolderDrawerTile.keyId), findsOneWidget);
-      expect(find.text('2'), findsWidgets);
-      expect(
-        tester
-            .getSemantics(find.byKey(MessageRequestsFolderDrawerTile.keyId))
-            .getSemanticsData()
-            .hasAction(SemanticsAction.tap),
-        isTrue,
-      );
-      await tester.tap(find.byKey(MessageRequestsFolderDrawerTile.keyId));
-      await tester.pumpAndSettle();
-      expect(find.byKey(MobileShellDrawer.drawerKey), findsNothing);
-      _expectRequestsWorkspace(tester);
-      await _captureIfRequested(tester, 'contact-requests-narrow.png');
-      await tester.tap(find.byKey(const Key('mobile_shell_drawer_open')));
-      await tester.pumpAndSettle();
-      final requestTile = tester.widget<ListTile>(
-        find.byKey(MessageRequestsFolderDrawerTile.keyId),
-      );
-      expect(requestTile.selected, isTrue);
-      expect(
-        tester
-                .getSemantics(find.byKey(MessageRequestsFolderDrawerTile.keyId))
-                .getSemanticsData()
-                .flagsCollection
-                .isSelected ==
-            Tristate.isTrue,
-        isTrue,
-      );
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      if (find.byKey(MobileShellDrawer.drawerKey).evaluate().isNotEmpty) {
-        await tester.tapAt(const Offset(380, 400));
+        final wideContainer = await _pumpVoiceShell(
+          tester,
+          const Size(1280, 800),
+          captureTheme,
+        );
+        expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
+        expect(find.byKey(MessageRequestsFolderRailButton.keyId), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(DesktopShellRail.railKey),
+            matching: find.byType(ChatRailFoldersSection),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(NavigationPanel.panelKey),
+            matching: find.byType(ChatRailFoldersSection),
+          ),
+          findsOneWidget,
+        );
+        final allFolder = find.byKey(ChatRailFoldersSection.folderKey('all'));
+        final requestFolder = find.byKey(MessageRequestsFolderRailButton.keyId);
+        expect(find.byTooltip('Requests · 2 unread'), findsOneWidget);
+        expect(tester.getCenter(allFolder).dy, tester.getCenter(requestFolder).dy);
+        expect(tester.getCenter(requestFolder).dx, greaterThan(tester.getCenter(allFolder).dx));
+        await tester.tap(find.byTooltip('Manage folders'));
         await tester.pumpAndSettle();
-      }
-      expect(find.byKey(MobileShellDrawer.drawerKey), findsNothing);
-      await tester.tap(find.byIcon(Icons.arrow_back));
-      await tester.pumpAndSettle();
-      expect(narrowContainer.read(selectedChatFolderIdProvider), isNull);
-      expect(find.text('Direct messages'), findsWidgets);
-      expect(find.text('Rowan'), findsNothing);
+        expect(find.byKey(ManageFoldersSheet.sheetKey), findsOneWidget);
+        Navigator.of(tester.element(find.byKey(ManageFoldersSheet.sheetKey))).pop();
+        await tester.pumpAndSettle();
+        expect(find.text('2'), findsWidgets);
+        wideContainer.read(selectedChatIdProvider.notifier).state = 'ordinary-row';
+        wideContainer.read(mobileOpenedChatStripProvider.notifier).openChat('ordinary-row');
+        await tester.pumpAndSettle();
+        await tester.tap(allFolder);
+        await tester.pumpAndSettle();
+        expect(wideContainer.read(selectedChatIdProvider), 'ordinary-row');
+        await tester.tap(find.byKey(MessageRequestsFolderRailButton.keyId));
+        await tester.pumpAndSettle();
+        expect(wideContainer.read(selectedChatIdProvider), isNull);
+        expect(wideContainer.read(mobileOpenedChatStripProvider), contains('ordinary-row'));
+        _expectRequestsWorkspace(tester);
+        expect(find.byKey(const Key('message_requests_detail_hint')), findsOneWidget);
+        expect(find.text('Select a conversation'), findsNothing);
+        await _captureIfRequested(tester, 'contact-requests-wide.png');
+        await tester.tap(find.byKey(ChatListBody.tileKey('request-row')));
+        await tester.pumpAndSettle();
+        expect(wideContainer.read(selectedChatIdProvider), 'request-row');
+        expect(find.byType(ChatRoomPanel), findsOneWidget);
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+        expect(wideContainer.read(selectedChatFolderIdProvider), isNull);
+        expect(wideContainer.read(selectedChatIdProvider), isNull);
+        expect(wideContainer.read(mobileOpenedChatStripProvider), contains('ordinary-row'));
+        expect(find.text('Direct messages'), findsWidgets);
+        expect(find.text('Rowan'), findsNothing);
+        expect(find.text('Select a conversation'), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('mobile_shell_drawer_open')));
-      await tester.pumpAndSettle();
-      var requestTileFocused = false;
-      for (var attempt = 0; attempt < 10 && !requestTileFocused; attempt++) {
-        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-        await tester.pump();
-        requestTileFocused =
-            tester
-                .getSemantics(find.byKey(MessageRequestsFolderDrawerTile.keyId))
-                .getSemanticsData()
-                .flagsCollection
-                .isFocused ==
-            Tristate.isTrue;
+        final narrowContainer = await _pumpVoiceShell(
+          tester,
+          const Size(390, 844),
+          captureTheme,
+        );
+        expect(find.byKey(const Key('mobile_shell_drawer_open')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('mobile_shell_drawer_open')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(MobileShellDrawer.drawerKey), findsOneWidget);
+        expect(find.byKey(MessageRequestsFolderDrawerTile.keyId), findsOneWidget);
+        expect(find.byType(ChatRailFoldersSection), findsNothing);
+        await _captureIfRequested(tester, 'contact-requests-drawer-v.png');
+        expect(find.text('2'), findsWidgets);
+        expect(
+          tester
+              .getSemantics(find.byKey(MessageRequestsFolderDrawerTile.keyId))
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+        await tester.tap(find.byKey(MessageRequestsFolderDrawerTile.keyId));
+        await tester.pumpAndSettle();
+        expect(find.byKey(MobileShellDrawer.drawerKey), findsNothing);
+        _expectRequestsWorkspace(tester);
+        await _captureIfRequested(tester, 'contact-requests-narrow.png');
+        await tester.tap(find.byKey(const Key('mobile_shell_drawer_open')));
+        await tester.pumpAndSettle();
+        final requestTile = tester.widget<ListTile>(
+          find.byKey(MessageRequestsFolderDrawerTile.keyId),
+        );
+        expect(requestTile.selected, isTrue);
+        expect(
+          tester
+                  .getSemantics(find.byKey(MessageRequestsFolderDrawerTile.keyId))
+                  .getSemanticsData()
+                  .flagsCollection
+                  .isSelected ==
+              Tristate.isTrue,
+          isTrue,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        if (find.byKey(MobileShellDrawer.drawerKey).evaluate().isNotEmpty) {
+          await tester.tapAt(const Offset(380, 400));
+          await tester.pumpAndSettle();
+        }
+        expect(find.byKey(MobileShellDrawer.drawerKey), findsNothing);
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+        expect(narrowContainer.read(selectedChatFolderIdProvider), isNull);
+        expect(find.text('Direct messages'), findsWidgets);
+        expect(find.text('Rowan'), findsNothing);
+
+        await tester.tap(find.byKey(const Key('mobile_shell_drawer_open')));
+        await tester.pumpAndSettle();
+        var requestTileFocused = false;
+        for (var attempt = 0; attempt < 10 && !requestTileFocused; attempt++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+          requestTileFocused =
+              tester
+                  .getSemantics(find.byKey(MessageRequestsFolderDrawerTile.keyId))
+                  .getSemanticsData()
+                  .flagsCollection
+                  .isFocused ==
+              Tristate.isTrue;
+        }
+        expect(requestTileFocused, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(find.byKey(MobileShellDrawer.drawerKey), findsNothing);
+        expect(narrowContainer.read(chatInboxProvider), 'requests');
+        _expectRequestsWorkspace(tester);
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+        expect(narrowContainer.read(chatInboxProvider), 'main');
+        expect(find.text('Direct messages'), findsWidgets);
+      } finally {
+        semantics.dispose();
       }
-      expect(requestTileFocused, isTrue);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(find.byKey(MobileShellDrawer.drawerKey), findsNothing);
-      expect(narrowContainer.read(chatInboxProvider), 'requests');
-      _expectRequestsWorkspace(tester);
-      await tester.tap(find.byIcon(Icons.arrow_back));
-      await tester.pumpAndSettle();
-      expect(narrowContainer.read(chatInboxProvider), 'main');
-      expect(find.text('Direct messages'), findsWidgets);
-      semantics.dispose();
     },
   );
+
+  testWidgets('request filter remains available without custom or system folders', (
+    tester,
+  ) async {
+    _mockVoip(tester);
+    await _pumpVoiceShell(tester, const Size(1280, 800), null, emptyFolders: true);
+    expect(find.byKey(MessageRequestsFolderRailButton.keyId), findsOneWidget);
+    await tester.tap(find.byKey(MessageRequestsFolderRailButton.keyId));
+    await tester.pumpAndSettle();
+    _expectRequestsWorkspace(tester);
+  });
+
+  for (final layout in ['h', 'v']) {
+    testWidgets('actual $layout shell request failure is retryable with keyboard', (
+      tester,
+    ) async {
+      _mockVoip(tester);
+      final semantics = tester.ensureSemantics();
+      try {
+        final pending = Completer<ChatsApiResult<void>>();
+        final accepting = layout == 'h';
+        final chats = _RequestsChatsClient();
+        if (accepting) {
+          chats.acceptResponse = pending.future;
+        } else {
+          chats.declineResponse = pending.future;
+        }
+        final directory = Platform.environment[_captureEnv];
+        final theme = await _themeForCapture(
+          tester,
+          directory != null && directory.isNotEmpty,
+        );
+        final container = await _pumpVoiceShell(
+          tester,
+          layout == 'h' ? const Size(1280, 800) : const Size(390, 844),
+          theme,
+          chats: chats,
+        );
+        await _openRequests(tester, narrow: layout == 'v');
+        final accept = find.widgetWithText(TextButton, 'Accept');
+        final decline = find.widgetWithText(TextButton, 'Decline');
+        final action = accepting ? accept : decline;
+        final staleTap = tester.widget<TextButton>(action).onPressed!;
+        staleTap();
+        staleTap();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 150));
+        expect(chats.acceptCalls, accepting ? 1 : 0);
+        expect(chats.declineCalls, accepting ? 0 : 1);
+        expect(tester.widget<TextButton>(accept).onPressed, isNull);
+        expect(tester.widget<TextButton>(decline).onPressed, isNull);
+        expect(find.byKey(const Key('chat_request_progress_request-row')), findsOneWidget);
+        await _captureIfRequested(tester, 'contact-requests-shell-busy-$layout.png');
+        pending.complete(const ChatsApiFailure(message: 'private request failure', statusCode: 503));
+        await tester.pumpAndSettle();
+        expect(find.text('Could not complete this action.'), findsOneWidget);
+        expect(find.textContaining('private request failure'), findsNothing);
+        expect(find.text('Rowan'), findsOneWidget);
+        expect(tester.widget<TextButton>(accept).onPressed, isNotNull);
+        await _captureIfRequested(tester, 'contact-requests-shell-error-$layout.png');
+        chats.acceptResponse = null;
+        chats.declineResponse = null;
+        var focused = false;
+        for (var attempt = 0; attempt < 30 && !focused; attempt++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+          focused = tester.getSemantics(action).getSemanticsData()
+              .flagsCollection.isFocused == Tristate.isTrue;
+        }
+        expect(focused, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(chats.acceptCalls, accepting ? 2 : 0);
+        expect(chats.declineCalls, accepting ? 0 : 2);
+        expect(container.read(chatInboxProvider), 'main');
+        expect(find.text('Could not complete this action.'), findsNothing);
+        expect(find.text('Rowan'), findsNothing);
+        expect(find.byKey(MessageRequestsFolderRailButton.keyId), findsNothing);
+        await _captureIfRequested(tester, 'contact-requests-shell-final-$layout.png');
+      } finally {
+        semantics.dispose();
+      }
+    });
+  }
+
+  for (final accepting in [true, false]) {
+    for (final changedContext in ['navigation', 'profile', 'failed-switch', 'new-selection']) {
+      for (final succeeded in [false, true]) {
+        testWidgets('request accept=$accepting completion success=$succeeded is silent after $changedContext changes', (
+          tester,
+        ) async {
+          _mockVoip(tester);
+          final pending = Completer<ChatsApiResult<void>>();
+          final chats = _RequestsChatsClient();
+          if (accepting) {
+            chats.acceptResponse = pending.future;
+          } else {
+            chats.declineResponse = pending.future;
+          }
+          final container = await _pumpVoiceShell(
+            tester, const Size(1280, 800), null, chats: chats,
+          );
+          await _openRequests(tester, narrow: false);
+          final action = find.widgetWithText(
+            TextButton, accepting ? 'Accept' : 'Decline',
+          );
+          final staleTap = tester.widget<TextButton>(action).onPressed!;
+          await tester.tap(action);
+          await tester.pump();
+          final auth = container.read(authControllerProvider.notifier);
+          if (changedContext == 'navigation' || changedContext == 'new-selection') {
+            await tester.tap(find.byTooltip('Back to chats'));
+            await tester.pumpAndSettle();
+            if (changedContext == 'new-selection') {
+              await _openRequests(tester, narrow: false, settle: false);
+              expect(tester.widget<TextButton>(action).onPressed, isNull);
+              staleTap();
+              await tester.pump();
+              expect(chats.acceptCalls + chats.declineCalls, 1);
+            }
+          } else if (changedContext == 'profile') {
+            auth.state = const AuthState(session: AuthSession(
+              accessToken: 'next-token', refreshToken: 'next-refresh',
+              accountId: 'next-account', activeProfileId: 'next-profile',
+              expiresInSeconds: 900,
+            ));
+            await tester.pump();
+          } else {
+            final session = auth.state.session;
+            container.read(profileSwitchInProgressProvider.notifier).state = true;
+            expect(await auth.switchActiveProfile('next-profile'), isNotNull);
+            container.read(profileSwitchInProgressProvider.notifier).state = false;
+            expect(auth.state.session, same(session));
+            await tester.pump();
+          }
+          final inboxBefore = container.read(chatInboxProvider);
+          final folderBefore = container.read(selectedChatFolderIdProvider);
+          pending.complete(succeeded
+              ? const ChatsApiOk<void>(null)
+              : const ChatsApiFailure(message: 'private stale failure', statusCode: 503));
+          await tester.pumpAndSettle();
+          expect(chats.acceptCalls, accepting ? 1 : 0);
+          expect(chats.declineCalls, accepting ? 0 : 1);
+          expect(container.read(chatInboxProvider), inboxBefore);
+          expect(container.read(selectedChatFolderIdProvider), folderBefore);
+          expect(find.text('Could not complete this action.'), findsNothing);
+          expect(find.textContaining('private stale failure'), findsNothing);
+        });
+      }
+    }
+  }
+}
+
+void _mockVoip(WidgetTester tester) {
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    _voipChannel, (_) async => null,
+  );
+  addTearDown(() {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_voipChannel, null);
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+}
+
+Future<void> _openRequests(
+  WidgetTester tester, {
+  required bool narrow,
+  bool settle = true,
+}) async {
+  if (narrow) {
+    await tester.tap(find.byKey(const Key('mobile_shell_drawer_open')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MessageRequestsFolderDrawerTile.keyId));
+  } else {
+    await tester.tap(find.byKey(MessageRequestsFolderRailButton.keyId));
+  }
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+  }
+  _expectRequestsWorkspace(tester);
 }
 
 void _expectRequestsWorkspace(WidgetTester tester) {
-  expect(find.text('Message requests'), findsOneWidget);
+  expect(
+    find.descendant(of: find.byType(ChatListBody), matching: find.text('Message requests')),
+    findsOneWidget,
+  );
   expect(find.text('Rowan'), findsOneWidget);
   expect(find.byKey(ChatListBody.listKey), findsOneWidget);
 }
@@ -160,16 +400,21 @@ void _expectRequestsWorkspace(WidgetTester tester) {
 Future<ProviderContainer> _pumpVoiceShell(
   WidgetTester tester,
   Size size,
-  ThemeData? captureTheme,
-) async {
+  ThemeData? captureTheme, {
+  _RequestsChatsClient? chats,
+  bool emptyFolders = false,
+}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   final container = ProviderContainer(
     overrides: [
       ...voiceAppTestOverrides(
-        client: MockClient((_) async => http.Response('{}', 404)),
+        client: MockClient((request) async => http.Response(
+          '{}', request.url.path == '/health' ? 200 :
+              request.url.path == '/api/v1/auth/switch-profile' ? 503 : 404,
+        )),
       ),
-      voiceChatsClientProvider.overrideWithValue(_RequestsChatsClient()),
+      voiceChatsClientProvider.overrideWithValue(chats ?? _RequestsChatsClient()),
       activeProfileProvider.overrideWith(
         (_) async => const VoiceProfile(
           id: 'prof-test',
@@ -181,9 +426,10 @@ Future<ProviderContainer> _pumpVoiceShell(
         ),
       ),
       chatFoldersProvider.overrideWith(
-        (_) async => const FolderListData(
+        (_) async => FolderListData(
           folders: [
-            VoiceFolder(id: 'all', name: 'All chats', folderType: 'system'),
+            if (!emptyFolders)
+              const VoiceFolder(id: 'all', name: 'All chats', folderType: 'system'),
           ],
         ),
       ),
@@ -214,6 +460,38 @@ Future<ProviderContainer> _pumpVoiceShell(
 class _RequestsChatsClient extends FakeVoiceChatsClient {
   _RequestsChatsClient() : super();
 
+  Future<ChatsApiResult<void>>? acceptResponse;
+  Future<ChatsApiResult<void>>? declineResponse;
+  var acceptCalls = 0;
+  var declineCalls = 0;
+  var handled = false;
+
+  @override
+  Future<ChatsApiResult<void>> acceptDmRequest({
+    required String authorization,
+    required String chatId,
+  }) async {
+    acceptCalls++;
+    final result = await (acceptResponse ?? Future.value(const ChatsApiOk<void>(null)));
+    if (result is ChatsApiOk<void>) {
+      handled = true;
+    }
+    return result;
+  }
+
+  @override
+  Future<ChatsApiResult<void>> declineDmRequest({
+    required String authorization,
+    required String chatId,
+  }) async {
+    declineCalls++;
+    final result = await (declineResponse ?? Future.value(const ChatsApiOk<void>(null)));
+    if (result is ChatsApiOk<void>) {
+      handled = true;
+    }
+    return result;
+  }
+
   @override
   Future<ChatsApiResult<ChatListData>> listChats({
     required String authorization,
@@ -223,6 +501,7 @@ class _RequestsChatsClient extends FakeVoiceChatsClient {
     String? folderId,
   }) async {
     if (inbox == 'requests') {
+      if (handled) return const ChatsApiOk(ChatListData(items: []));
       return const ChatsApiOk(
         ChatListData(
           items: [

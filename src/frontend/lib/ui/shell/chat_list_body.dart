@@ -78,6 +78,71 @@ class ChatListBody extends ConsumerStatefulWidget {
 
 class _ChatListBodyState extends ConsumerState<ChatListBody> {
   late final ScrollController _scrollController;
+  final _pendingRequestActions = <String>{};
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _requestError;
+
+  String _requestActionKey(String chatId) {
+    final auth = ref.read(authControllerProvider.notifier);
+    final actor = auth.gatewayRequestIdentity;
+    return '${actor?.generation}:${actor?.accountId}:${actor?.profileId}:'
+        '${auth.sessionInstallGeneration}:$chatId';
+  }
+
+  Future<void> _runRequestAction(String chatId, {required bool accept}) async {
+    final auth = ref.read(authControllerProvider.notifier);
+    final actor = auth.gatewayRequestIdentity;
+    final session = ref.read(authControllerProvider).session;
+    final generation = auth.sessionInstallGeneration;
+    final navigation = ref.read(messageRequestsNavigationGenerationProvider);
+    final key = _requestActionKey(chatId);
+    if (actor == null ||
+        session == null ||
+        ref.read(profileSwitchInProgressProvider) ||
+        ref.read(chatInboxProvider) != 'requests' ||
+        _pendingRequestActions.contains(key)) {
+      return;
+    }
+    _requestError?.close();
+    _requestError = null;
+    setState(() => _pendingRequestActions.add(key));
+    String? error;
+    try {
+      final controller = ref.read(chatListControllerProvider.notifier);
+      error = accept
+          ? await controller.acceptRequest(chatId)
+          : await controller.declineRequest(chatId);
+    } catch (_) {
+      error = 'request_action_failed';
+    }
+    if (!mounted) return;
+    setState(() => _pendingRequestActions.remove(key));
+    final currentAuth = ref.read(authControllerProvider.notifier);
+    if (!identical(currentAuth, auth) ||
+        currentAuth.gatewayRequestIdentity != actor ||
+        currentAuth.sessionInstallGeneration != generation ||
+        ref.read(authorizationHeaderProvider) != session.authorizationHeader ||
+        ref.read(profileSwitchInProgressProvider)) {
+      return;
+    }
+    if (error == null) {
+      ref.read(inboxReconcilerProvider.notifier).removeChat(
+        InboxScope.requests,
+        chatId,
+        expectedProfileId: session.activeProfileId,
+        expectedAuthorization: session.authorizationHeader,
+      );
+    } else if (error != kChatActionStaleContext &&
+        ref.read(chatInboxProvider) == 'requests' &&
+        ref.read(messageRequestsNavigationGenerationProvider) == navigation) {
+      _requestError = ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            chatActionErrorMessage(AppLocalizations.of(context)!, error),
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -407,48 +472,14 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                               null,
                           showDragHandle: reorderIndex != null,
                           dragIndex: reorderIndex,
-                          onAccept: () async {
-                            final session = ref
-                                .read(authControllerProvider)
-                                .session;
-                            if (session == null) return;
-                            final error = await ref
-                                .read(chatListControllerProvider.notifier)
-                                .acceptRequest(item.chatId);
-                            if (!context.mounted) return;
-                            if (error == null) {
-                              ref
-                                  .read(inboxReconcilerProvider.notifier)
-                                  .removeChat(
-                                    InboxScope.requests,
-                                    item.chatId,
-                                    expectedProfileId: session.activeProfileId,
-                                    expectedAuthorization:
-                                        session.authorizationHeader,
-                                  );
-                            }
-                          },
-                          onDecline: () async {
-                            final session = ref
-                                .read(authControllerProvider)
-                                .session;
-                            if (session == null) return;
-                            final error = await ref
-                                .read(chatListControllerProvider.notifier)
-                                .declineRequest(item.chatId);
-                            if (!context.mounted) return;
-                            if (error == null) {
-                              ref
-                                  .read(inboxReconcilerProvider.notifier)
-                                  .removeChat(
-                                    InboxScope.requests,
-                                    item.chatId,
-                                    expectedProfileId: session.activeProfileId,
-                                    expectedAuthorization:
-                                        session.authorizationHeader,
-                                  );
-                            }
-                          },
+                          requestBusy: _pendingRequestActions.contains(
+                            _requestActionKey(item.chatId),
+                          ),
+                          requestCanMutate:
+                              ref.watch(authControllerProvider).session != null &&
+                              !ref.watch(profileSwitchInProgressProvider),
+                          onAccept: () => _runRequestAction(item.chatId, accept: true),
+                          onDecline: () => _runRequestAction(item.chatId, accept: false),
                         ),
                         onTap: () => selectChat(item.chatId),
                         onLongPress: inbox == 'requests'
@@ -807,6 +838,8 @@ class _ChatListTrailing extends StatelessWidget {
     required this.muted,
     required this.onAccept,
     required this.onDecline,
+    this.requestBusy = false,
+    this.requestCanMutate = true,
     this.showDragHandle = false,
     this.dragIndex,
   });
@@ -820,6 +853,8 @@ class _ChatListTrailing extends StatelessWidget {
   final bool muted;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
+  final bool requestBusy;
+  final bool requestCanMutate;
   final bool showDragHandle;
   final int? dragIndex;
 
@@ -830,13 +865,20 @@ class _ChatListTrailing extends StatelessWidget {
         spacing: 4,
         children: [
           TextButton(
-            onPressed: onAccept,
+            onPressed: requestBusy || !requestCanMutate ? null : onAccept,
             child: Text(l10n.socialAcceptRequest),
           ),
           TextButton(
-            onPressed: onDecline,
+            onPressed: requestBusy || !requestCanMutate ? null : onDecline,
             child: Text(l10n.socialDeclineRequest),
           ),
+          if (requestBusy)
+            SizedBox(
+              key: Key('chat_request_progress_${item.chatId}'),
+              width: 18,
+              height: 18,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            ),
         ],
       );
     }

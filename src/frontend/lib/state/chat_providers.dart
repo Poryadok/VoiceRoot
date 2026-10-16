@@ -598,12 +598,27 @@ class ChatListController extends StateNotifier<ChatListState> {
   Future<String?> acceptRequest(String chatId) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null) return 'not_authenticated';
+    final requestAuth = _ref.read(authControllerProvider.notifier);
+    final requestIdentity = requestAuth.gatewayRequestIdentity;
+    final sessionGeneration = requestAuth.sessionInstallGeneration;
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
     final result = await _ref
         .read(voiceChatsClientProvider)
         .acceptDmRequest(authorization: auth, chatId: chatId);
     if (!mounted) return kChatActionStaleContext;
+    final currentAuth = _ref.read(authControllerProvider.notifier);
+    if (!identical(currentAuth, requestAuth) ||
+        currentAuth.gatewayRequestIdentity != requestIdentity ||
+        currentAuth.sessionInstallGeneration != sessionGeneration ||
+        _ref.read(profileSwitchInProgressProvider) ||
+        _ref.read(messageRequestsNavigationGenerationProvider) !=
+            navigationGeneration) {
+      return kChatActionStaleContext;
+    }
     switch (result) {
       case ChatsApiOk<void>():
         final reconciler = _ref.read(inboxReconcilerProvider.notifier);
@@ -618,12 +633,27 @@ class ChatListController extends StateNotifier<ChatListState> {
   Future<String?> declineRequest(String chatId) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null) return 'not_authenticated';
+    final requestAuth = _ref.read(authControllerProvider.notifier);
+    final requestIdentity = requestAuth.gatewayRequestIdentity;
+    final sessionGeneration = requestAuth.sessionInstallGeneration;
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
     final result = await _ref
         .read(voiceChatsClientProvider)
         .declineDmRequest(authorization: auth, chatId: chatId);
     if (!mounted) return kChatActionStaleContext;
+    final currentAuth = _ref.read(authControllerProvider.notifier);
+    if (!identical(currentAuth, requestAuth) ||
+        currentAuth.gatewayRequestIdentity != requestIdentity ||
+        currentAuth.sessionInstallGeneration != sessionGeneration ||
+        _ref.read(profileSwitchInProgressProvider) ||
+        _ref.read(messageRequestsNavigationGenerationProvider) !=
+            navigationGeneration) {
+      return kChatActionStaleContext;
+    }
     return switch (result) {
       ChatsApiOk<void>() => _afterRequestAction(chatId, profileId, auth),
       ChatsApiFailure(:final message) => message,

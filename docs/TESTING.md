@@ -265,14 +265,20 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 ## CI (GitHub Actions)
 
 The `codex/contact-requests-panel-acceptance` PR uses the existing Flutter job to
-run `test/contact_requests_capture_test.dart` with
+run `test/contact_requests_capture_test.dart` and
+`test/message_requests_shell_test.dart` with
 `VOICE_CONTACT_REQUESTS_CAPTURE_DIR` and retain `contact-requests-hv-<run_id>`.
-Its twelve PNGs show the actual `SocialPanel` pending tab: populated, busy,
-empty, loading, load error, and Russian populated states in H (1280×800 with
+Eighteen PNGs show the actual `SocialPanel` pending tab: populated, busy,
+empty, loading, load error, Russian populated, and incoming profile lookup
+503/404/loading states in H (1280×800 with
 a 360px panel) and V (390×844). Capture mode loads the shipped token catalog,
-Noto Sans and Material Icons. These are friendship-request panel evidence for
-screen-controls §4.3; they do not establish equivalence to the separate
-stranger-DM HTML workspace or complete the original ContactRequests panel DoD.
+Noto Sans and Material Icons. Nine additional PNGs show the real authenticated
+`VoiceApp` request workspace in H/V, its V drawer, and H/V mutation busy/error/
+final-return states. Those tests exercise the production folder selection and
+request controller paths, keyboard retry, and actor/navigation fencing.
+Friendship Pending (§4.3) remains distinct from stranger-DM requests
+(§1.1b/1.3a); full original DoD and deployment acceptance require the current
+head's actual artifacts and independent review.
 
 Файлы workflow лежат в репозитории; **они начинают выполняться только после** публикации репозитория на GitHub и включения Actions (ветки, secrets для GHCR/staging — [DEPLOYMENT.md](DEPLOYMENT.md)). Локально перед PR — минимум по затронутому коду (таблица выше); полный sign-off: **`make build-all`** + **`make flutter-ci`** (как nightly job **`local-ci-parity`**).
 
