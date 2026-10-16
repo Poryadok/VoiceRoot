@@ -187,10 +187,11 @@ Secret data after a malformed kubectl metadata query; no such data in source/PR.
   actual renewal/no-op service passed Resultsuccess/Exit0. Certificate expires
   2027-01-14; state root0700/home/voice-dev/tls, protected operator copy on/home.
 - [x]37dev+4storage focused Python tests pass, independent TLS review no blockers.
-- [ ] Five explicit dev A95.31.10.177 DNS-only records; no provider access in
+- [x] Five explicit dev A95.31.10.177 DNS-only records; no provider access in
   current browser/env, user question pending. Never modify wildcard/staging DNS.
-- [ ] Original public RTP test without test DNS override after resolver change.
-- [ ] Final PR CI completion; preserve original goal until these gates verified.
+- [x] Original public RTP test without test DNS override after resolver change.
+- [x] Implementation PR CI completed successfully at9edb13f6d; final documentation
+  update requires only documentation validation, not repeated backend tests.
 
 Only new dev TLS SNI is published; shared staging hostname design was rejected.
 Temporary CF path experiment removed, LiveKit upgrade reverted. Existing TLS
@@ -210,3 +211,28 @@ Original full authenticated bidirectional RTP scenario with actual HTTPS API
 and WSS names, test-local DNS overrides only, passed7.477s. No assertion or TLS
 verification weakened. Normal public DNS acceptance still pending provider change.
 Current /var82GiB free, /home195GiB free after disposable media tool caches.
+
+## Completed public acceptance (supersedes earlier pending outcomes)
+
+2026-10-16: operator created the five explicit DNS-only A records. Authoritative
+Cloudflare answers return95.31.10.177; prior recursive caches briefly retained
+Cloudflare addresses. First normal-DNS attempt failed at registration while
+that stale answer was observed. After expiration, original full authenticated
+RTP test passed7.760s with actual public API/WSS names, default Go HTTP client,
+normal DNS, no --add-host/--resolve or TLS bypass. All five HTTPS endpoints pass
+normal certificate validation and HTTP200 (API /health). All implementation CI
+checks at9edb13f6d are SUCCESS or intentionally SKIPPED. Final docs record these
+observations; runtime/source implementation remains the same tested revision.
+
+Read-only current storage audit again confirmed original PV/PVC identities,
+all six exact /home bind roots, retained rollback copies and SQLite integrity.
+The historical cold-content equality verifier now reports tracker content drift:
+the live tracker has continued operating. Both tables still have their original
+row counts (graph1, projects2); no historical baseline was overwritten or equality
+claim fabricated. The forced-restart equality proof remains the migration-time
+evidence, and current integrity passes independently.
+
+Remaining operational limitations are shared-host failure domain, test-mail
+fixture, locally imported frontend images, TTenrec Delete reclaim policy and no
+full host-reboot/off-host disaster recovery proof. These do not block the requested
+independent dev installation and storage relocation.

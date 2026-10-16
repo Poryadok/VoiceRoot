@@ -93,25 +93,24 @@ Deployment verification results and remaining media routing limitations are
 recorded in `.agent/execplans/dev-environment.md`. HTTP health alone is not an
 authenticated application or audio test.
 
-Current edge limitation: Go HTTP/2 clients can receive headers then stall reading
-Cloudflare response bodies. The public authenticated DM/WS scenario passed with
-GODEBUG=http2client=0 (68.560s), and direct Gateway passed (41.881s). Dev Voice
-uses the same HTTP/1.1 workaround for HTTPS Gateway JWKS; TLS validation remains
-enabled. Remove the workaround only after a public HTTP/2 regression proof.
+Public acceptance completed on 2026-10-16 after switching the five explicit dev
+records to DNS only. All five HTTPS endpoints validate normally. The unchanged
+full authenticated bidirectional RTP test passed in7.760s on LiveKit1.8.4 with
+normal public DNS, no host mapping and the default Go HTTP client. Browser login
+and DM send/read were also verified during deployment.
 
-Voice smoke: the unchanged bidirectional RTP test passes through direct signaling
-on the original LiveKit1.8.4. It also passes through the real WSS hostname and
-trusted origin certificate with a test-local DNS override to95.31.10.177 (6.372s).
-Cloudflare-proxied signaling still fails negotiation; a server upgrade and an
-alternate proxied path did not fix it. Public voice acceptance remains pending
-the DNS-only record and a successful run without the test DNS override.
+The former Cloudflare-proxied path stalled API bodies and signaling negotiation;
+a server upgrade did not help and was reverted. Dev Voice retains its HTTP/1.1
+compatibility setting for validated HTTPS Gateway JWKS. This is distinct from
+the acceptance client's default HTTP transport; removing that server setting is
+a separate bounded configuration change.
 
 ## Public dev TLS
 
 Create or update the five explicit Cloudflare A records `dev.comrade.click`,
 `api-dev.comrade.click`, `admin-dev.comrade.click`, `developers-dev.comrade.click`
 and `livekit-dev.comrade.click` to `95.31.10.177`, proxy **DNS only** (grey cloud).
-Keep the wildcard and staging
+The initial installation now has these records. Keep the wildcard and staging
 records unchanged. Browser WSS then reaches the existing HTTPS Traefik NodePort
 forward. LiveKit media remains on TCP31081 / UDP31082.
 
