@@ -49,7 +49,7 @@ void main() {
 
 Uint8List _flac(List<String> fields) {
   final comments = BytesBuilder(copy: false)
-    ..add(_le32(6))
+    ..add(_le32(5))
     ..add(utf8.encode('Voice'))
     ..add(_le32(fields.length));
   for (final field in fields) {
