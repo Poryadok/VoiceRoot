@@ -980,6 +980,85 @@ _GIS_DEPLOYMENT_DEFAULTS = {
     ("spec", "template", "spec", "schedulerName"): "default-scheduler",
     ("spec", "template", "spec", "terminationGracePeriodSeconds"): 30,
 }
+_GIS_SERVER_METADATA_FIELDS = {"uid", "resourceVersion", "generation", "creationTimestamp", "managedFields"}
+_GIS_UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z")
+_GIS_RESOURCE_VERSION = re.compile(r"[1-9][0-9]*\Z")
+_GIS_REVISION = re.compile(r"[1-9][0-9]*\Z")
+
+
+def _valid_kube_timestamp(value):
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def _valid_fields_v1(value):
+    return isinstance(value, dict) and all(
+        isinstance(key, str) and isinstance(child, dict) and _valid_fields_v1(child)
+        for key, child in value.items())
+
+
+def _validate_gis_metadata(actual, wanted, kind, *, service_pin=None):
+    """Accept only authored ownership metadata and validated Kubernetes identity fields."""
+    required_identity = {"name", "namespace", "uid", "resourceVersion", "creationTimestamp"}
+    if kind == "Deployment":
+        required_identity.add("generation")
+    authored_fields = set(wanted) if isinstance(wanted, dict) else set()
+    allowed = {"name", "namespace", "labels", "annotations"} | _GIS_SERVER_METADATA_FIELDS
+    if (not isinstance(actual, dict) or not isinstance(wanted, dict)
+        or not (required_identity | authored_fields) <= set(actual)
+        or set(actual) - allowed
+        or authored_fields - {"name", "namespace", "labels", "annotations"}
+        or any(actual.get(key) != wanted.get(key) for key in authored_fields if key != "annotations")):
+        _blocked("gis_dev_api_metadata_mismatch")
+    if (not isinstance(actual.get("uid"), str) or not _GIS_UID.fullmatch(actual["uid"])
+        or not isinstance(actual.get("resourceVersion"), str)
+        or not _GIS_RESOURCE_VERSION.fullmatch(actual["resourceVersion"])
+        or ("generation" in actual and (type(actual["generation"]) is not int
+            or actual["generation"] < 1))
+        or not _valid_kube_timestamp(actual.get("creationTimestamp"))):
+        _blocked("gis_dev_api_metadata_mismatch")
+    labels = actual.get("labels", {})
+    annotations = copy.deepcopy(actual.get("annotations", {}))
+    if (not isinstance(labels, dict) or any(not isinstance(key, str) or not isinstance(value, str)
+            for key, value in labels.items())
+        or not isinstance(annotations, dict) or any(not isinstance(key, str) or not isinstance(value, str)
+            for key, value in annotations.items())):
+        _blocked("gis_dev_api_metadata_mismatch")
+    expected_annotations = copy.deepcopy(wanted.get("annotations", {}))
+    if kind == "Deployment" and "deployment.kubernetes.io/revision" in annotations:
+        revision = annotations.pop("deployment.kubernetes.io/revision")
+        if not isinstance(revision, str) or not _GIS_REVISION.fullmatch(revision):
+            _blocked("gis_dev_api_metadata_mismatch")
+    if (("labels" not in wanted and "labels" in actual)
+        or ("annotations" not in wanted and "annotations" in actual)
+        or labels != wanted.get("labels", {}) or annotations != expected_annotations):
+        _blocked("gis_dev_api_metadata_mismatch")
+    fields = actual.get("managedFields")
+    if fields is not None:
+        if not isinstance(fields, list):
+            _blocked("gis_dev_api_metadata_mismatch")
+        for entry in fields:
+            if (not isinstance(entry, dict)
+                or not {"apiVersion", "fieldsType", "fieldsV1", "manager", "operation"} <= set(entry)
+                or set(entry) - {"apiVersion", "fieldsType", "fieldsV1", "manager", "operation", "time", "subresource"}
+                or entry.get("apiVersion") not in ("v1", "apps/v1")
+                or entry.get("fieldsType") != "FieldsV1"
+                or not _valid_fields_v1(entry.get("fieldsV1"))
+                or entry.get("manager") not in ("kubectl-create", "kubectl-patch", "k3s")
+                or entry.get("operation") not in ("Apply", "Update")
+                or ("time" in entry and not _valid_kube_timestamp(entry["time"]))
+                or ("subresource" in entry and (entry.get("manager") != "k3s"
+                    or entry.get("subresource") != "status"))):
+                _blocked("gis_dev_api_metadata_mismatch")
+    metadata_sha256 = _digest(actual)
+    if service_pin is not None and metadata_sha256 != service_pin.get("metadata_sha256"):
+        _blocked("gis_dev_api_projection_service_pin_changed")
+    return metadata_sha256
 
 
 def _same_projection_value(actual, expected):
@@ -1012,7 +1091,7 @@ def _project_authored_fields(actual, wanted, defaults, path=()):
         if not isinstance(actual, dict):
             raise Blocked("gis_dev_api_projection_mismatch")
         missing = set(wanted) - set(actual)
-        if any(key != "securityContext" or wanted[key] != {} for key in missing):
+        if missing:
             raise Blocked("gis_dev_api_projection_mismatch")
         projected = {}
         for key, value in wanted.items():
@@ -1030,8 +1109,6 @@ def _project_authored_fields(actual, wanted, defaults, path=()):
                     expected = list(expected)
                 if not _same_projection_value(value, expected):
                     raise Blocked("gis_dev_api_projection_mismatch")
-            elif key == "securityContext" and value == {}:
-                continue
             elif any(default[:len(child)] == child for default in defaults):
                 expected = _default_subtree(defaults, child)
                 if not _same_projection_value(value, expected):
@@ -1059,15 +1136,12 @@ def _gis_project_response(live, intended, *, service_pin=None):
         _blocked("gis_dev_api_projection_scope_invalid")
     actual_meta = live.get("metadata", {})
     wanted_meta = intended.get("metadata", {})
-    if (actual_meta.get("name") != wanted_meta.get("name")
-        or actual_meta.get("namespace") != wanted_meta.get("namespace")
-        or not isinstance(actual_meta.get("uid"), str)
-        or not isinstance(actual_meta.get("resourceVersion"), str)
-        or actual_meta.get("labels", {}) != wanted_meta.get("labels", {})
-        or actual_meta.get("annotations", {}) != wanted_meta.get("annotations", {})):
-        _blocked("gis_dev_api_projection_mismatch")
+    _validate_gis_metadata(actual_meta, wanted_meta, kind, service_pin=service_pin)
     defaults = _GIS_SERVICE_DEFAULTS if kind == "Service" else _GIS_DEPLOYMENT_DEFAULTS
     live_semantic = gis.semantic(live)
+    if kind == "Deployment":
+        live_semantic.get("metadata", {}).get("annotations", {}).pop(
+            "deployment.kubernetes.io/revision", None)
     wanted_semantic = gis.semantic(intended)
     live_spec = live_semantic.get("spec", {})
     wanted_spec = wanted_semantic.get("spec", {})
@@ -1097,6 +1171,8 @@ def _gis_project_response(live, intended, *, service_pin=None):
     projected_live = copy.deepcopy(live)
     projected_live["spec"] = projected["spec"]
     if kind == "Deployment":
+        projected_live.get("metadata", {}).get("annotations", {}).pop(
+            "deployment.kubernetes.io/revision", None)
         projected_live["spec"]["replicas"] = replicas
     return projected_live
 
@@ -1834,12 +1910,15 @@ def _partial_live_c10_checkpoint(kube, state, fingerprints, root, *, allow_deplo
     metadata = service.get("metadata", {}) if isinstance(service, dict) else {}
     marker = metadata.get("annotations", {}).get(gis.MARKER)
     service_spec = service.get("spec", {}) if isinstance(service, dict) else {}
+    intended_service_metadata = next(obj for obj in plan["objects"]
+        if gis._identity(obj) == gis.SERVICE).get("metadata", {})
     service_pin = {
         "name": "voice-gameintegration", "uid": metadata.get("uid"),
         "resourceVersion": str(metadata.get("resourceVersion")), "operation": marker,
         "raw_spec_sha256": hashlib.sha256(json.dumps(service_spec, sort_keys=True,
             separators=(",", ":")).encode()).hexdigest(),
-        "cluster_ip": service_spec.get("clusterIP")}
+        "cluster_ip": service_spec.get("clusterIP"),
+        "metadata_sha256": _validate_gis_metadata(metadata, intended_service_metadata, "Service")}
     if (marker != _PARTIAL_OPERATION or not isinstance(service_pin["uid"], str)
         or not isinstance(service_pin["resourceVersion"], str)
         or service_pin["cluster_ip"] != "10.43.202.38"
@@ -2004,7 +2083,7 @@ def _partial_v4_admissible(v4, v4_sha256, v3, v3_sha256, current_v2,
     live_service = checkpoint.get("service")
     if (not isinstance(live_service, dict)
         or any(live_service.get(key) != static_checkpoint.get("service", {}).get(key)
-            for key in ("name", "uid", "resourceVersion", "operation", "raw_spec_sha256", "cluster_ip"))):
+            for key in ("name", "uid", "resourceVersion", "operation", "raw_spec_sha256", "cluster_ip", "metadata_sha256"))):
         _blocked("gis_dev_partial_v4_service_checkpoint_changed")
     # The initial C11 authorization binds Deployment absence. On retry, exact
     # workload ownership is checked by the instance-scoped projection adapter.

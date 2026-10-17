@@ -868,19 +868,40 @@ class DevWorkloadProjectionTests(unittest.TestCase):
         for row in intended.values():
             row.setdefault("metadata", {}).setdefault("annotations", {})[gis_first_install.MARKER] = gis._PARTIAL_OPERATION
         service = copy.deepcopy(intended["Service"])
-        service["metadata"].update(uid="c28155fe-017f-4d68-8b86-15a9b13dbbed", resourceVersion="3382156")
+        service["metadata"].update(uid="c28155fe-017f-4d68-8b86-15a9b13dbbed", resourceVersion="3382156",
+            creationTimestamp="2026-10-17T12:44:38Z")
         for path, value in gis._GIS_SERVICE_DEFAULTS.items():
             self.add_default(service, path, value)
         service["spec"].update(clusterIP="10.43.202.38", clusterIPs=["10.43.202.38"])
         pin = {"name": "voice-gameintegration", "uid": service["metadata"]["uid"],
             "resourceVersion": service["metadata"]["resourceVersion"], "operation": gis._PARTIAL_OPERATION,
             "raw_spec_sha256": hashlib.sha256(json.dumps(service["spec"], sort_keys=True,
-                separators=(",", ":")).encode()).hexdigest(), "cluster_ip": "10.43.202.38"}
+                separators=(",", ":")).encode()).hexdigest(), "cluster_ip": "10.43.202.38",
+            "metadata_sha256": gis._digest(service["metadata"])}
         deployment = copy.deepcopy(intended["Deployment"])
-        deployment["metadata"].update(uid="10000000-0000-0000-0000-000000000001", resourceVersion="3382200")
+        deployment["metadata"].update(uid="10000000-0000-4000-8000-000000000001", resourceVersion="3382200",
+            generation=1, creationTimestamp="2026-10-17T00:00:01Z",
+            managedFields=[
+                {"apiVersion": "apps/v1", "fieldsType": "FieldsV1", "fieldsV1": {"f:spec": {}},
+                    "manager": "kubectl-create", "operation": "Update", "time": "2026-10-17T00:00:01Z"},
+                {"apiVersion": "apps/v1", "fieldsType": "FieldsV1", "fieldsV1": {"f:spec": {"f:replicas": {}}},
+                    "manager": "kubectl-patch", "operation": "Update", "time": "2026-10-17T00:00:02Z"},
+                {"apiVersion": "apps/v1", "fieldsType": "FieldsV1", "fieldsV1": {"f:status": {}},
+                    "manager": "k3s", "operation": "Update", "subresource": "status",
+                    "time": "2026-10-17T00:00:03Z"}])
         for path, value in gis._GIS_DEPLOYMENT_DEFAULTS.items():
             self.add_default(deployment, path, value)
+        # K3s' deployment controller adds this annotation after create; it is
+        # accepted only as a positive decimal revision on the owned Deployment.
+        deployment["metadata"]["annotations"]["deployment.kubernetes.io/revision"] = "1"
         return intended, service, deployment, pin
+
+    @staticmethod
+    def set_path(row, path, value):
+        node = row
+        for part in path[:-1]:
+            node = node[int(part)] if part.isdigit() else node[part]
+        node[path[-1]] = value
 
     def test_projects_only_pinned_service_and_exact_deployment_defaults(self):
         intended, service, deployment, pin = self.fixture()
@@ -897,25 +918,60 @@ class DevWorkloadProjectionTests(unittest.TestCase):
     def test_service_identity_and_unknown_or_wrong_defaults_fail_closed(self):
         intended, service, deployment, pin = self.fixture()
         for mutate in (
-            lambda row: row["metadata"].update(uid="20000000-0000-0000-0000-000000000002"),
+            lambda row: row["metadata"].update(uid="20000000-0000-4000-8000-000000000002"),
+            lambda row: row["metadata"].update(resourceVersion="0"),
             lambda row: row["spec"].update(clusterIP="10.43.0.99"),
             lambda row: row["spec"]["ports"][0].update(targetPort=9090),
             lambda row: row["spec"]["ports"][0].update(nodePort=32000),
+            lambda row: row["spec"].update(externalName="unexpected.example"),
+            lambda row: row["metadata"].update(finalizers=["example.invalid/finalizer"]),
+            lambda row: row["metadata"].update(ownerReferences=[{"apiVersion": "v1", "kind": "Service", "name": "other", "uid": "00000000-0000-0000-0000-000000000001"}]),
+            lambda row: row["metadata"].update(deletionTimestamp="2026-10-17T00:00:00Z"),
+            lambda row: row["metadata"].update(deletionGracePeriodSeconds=30),
+            lambda row: row["metadata"].update(generation=True),
+            lambda row: row["metadata"].update(creationTimestamp="not-a-time"),
+            lambda row: row["metadata"].update(labels={"unexpected": "label"}),
+            lambda row: row["metadata"]["annotations"].update(unexpected="annotation"),
+            lambda row: row["metadata"].update(unexpectedMetadata="value"),
         ):
             changed = copy.deepcopy(service)
             mutate(changed)
             with self.assertRaises(gis.Blocked):
                 gis._gis_project_response(changed, intended["Service"], service_pin=pin)
+        for path, default in gis._GIS_SERVICE_DEFAULTS.items():
+            changed = copy.deepcopy(service)
+            bad = list(default) + ["unexpected"] if isinstance(default, tuple) else "unexpected"
+            self.set_path(changed, path, bad)
+            with self.assertRaises(gis.Blocked):
+                gis._gis_project_response(changed, intended["Service"], service_pin=pin)
+        for path, default in gis._GIS_DEPLOYMENT_DEFAULTS.items():
+            changed = copy.deepcopy(deployment)
+            bad = list(default) + ["unexpected"] if isinstance(default, tuple) else (default + 1 if type(default) is int else "unexpected")
+            self.set_path(changed, path, bad)
+            with self.assertRaises(gis.Blocked):
+                gis._gis_project_response(changed, intended["Deployment"])
         for mutate in (
-            lambda row: row["spec"]["template"]["spec"]["containers"][0].update(imagePullPolicy="Always"),
-            lambda row: row["spec"]["template"]["spec"]["containers"][0].update(terminationMessagePolicy="FallbackToLogsOnError"),
-            lambda row: row["spec"]["template"]["spec"].update(securityContext={"runAsUser": 0}),
-            lambda row: row["spec"].update(progressDeadlineSeconds=601),
+            lambda row: row["spec"]["template"]["spec"]["containers"][0].update(securityContext={}),
+            lambda row: row["metadata"].update(finalizers=["example.invalid/finalizer"]),
+            lambda row: row["metadata"].update(ownerReferences=[{"apiVersion": "apps/v1", "kind": "Deployment", "name": "other", "uid": "00000000-0000-0000-0000-000000000001"}]),
+            lambda row: row["metadata"].update(deletionTimestamp="2026-10-17T00:00:00Z"),
+            lambda row: row["metadata"].update(deletionGracePeriodSeconds=30),
+            lambda row: row["metadata"]["annotations"].update({"deployment.kubernetes.io/revision": "0"}),
+            lambda row: row["metadata"]["annotations"].update({"unexpected": "annotation"}),
+            lambda row: row["metadata"].update(generation=True),
+            lambda row: row["metadata"].update(managedFields=[{"manager": "unreviewed", "operation": "Update"}]),
         ):
             changed = copy.deepcopy(deployment)
             mutate(changed)
             with self.assertRaises(gis.Blocked):
                 gis._gis_project_response(changed, intended["Deployment"])
+
+    def test_service_metadata_pin_rejects_changes_after_checkpoint(self):
+        intended, service, _, pin = self.fixture()
+        changed = copy.deepcopy(service)
+        changed["metadata"]["creationTimestamp"] = "2026-10-17T12:44:39Z"
+        with self.assertRaises(gis.Blocked):
+            gis._gis_project_response(changed, intended["Service"], service_pin=pin)
 
     def test_projection_adapter_scopes_transforms_to_the_fixed_pair(self):
         intended, service, deployment, pin = self.fixture()
@@ -930,7 +986,7 @@ class DevWorkloadProjectionTests(unittest.TestCase):
                     return {"apiVersion": "v1", "kind": "List", "metadata": {},
                         "items": copy.deepcopy(self.rows)}
                 if args == ["create", "-f", "/dev/stdin", "-o", "json"]:
-                    return copy.deepcopy(body)
+                    return copy.deepcopy(self.rows[2])
                 return {"kind": "Deployment", "metadata": {"name": "other"}}
 
             def get(self, kind, name):
@@ -942,6 +998,9 @@ class DevWorkloadProjectionTests(unittest.TestCase):
         self.assertEqual(rows[0]["spec"], {})
         self.assertEqual(gis_first_install.semantic(rows[1]), gis_first_install.semantic(intended["Service"]))
         self.assertEqual(gis_first_install.semantic(rows[2]), gis_first_install.semantic(intended["Deployment"]))
+        created = adapter.run(["create", "-f", "/dev/stdin", "-o", "json"],
+            body=intended["Deployment"])
+        self.assertEqual(gis_first_install.semantic(created), gis_first_install.semantic(intended["Deployment"]))
 
 
 class PartialV4AuthorizationTests(unittest.TestCase):
