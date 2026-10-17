@@ -262,9 +262,27 @@ def _apply_append_operations(base, operations):
 
 
 def _apply_overlay_operations(base, operations, target):
-    """Apply generated additions plus the one explicitly reviewed env removal."""
+    """Apply generated additions plus the two exact reviewed scalar/list changes."""
     result = copy.deepcopy(base)
     for operation in operations:
+        if operation.get("op") == "add" and operation.get("path") in (
+                "/spec/template/spec/securityContext",
+                "/spec/template/spec/securityContext/fsGroup"):
+            if (target.kind != "Deployment" or target.name != "voice-matchmaking" or
+                    operation.get("value") != ({"fsGroup": 65532}
+                    if operation["path"] == "/spec/template/spec/securityContext" else 65532)):
+                raise OverlayError("generated fsGroup addition is outside the fixed Matchmaking setting")
+            pod_spec = result.get("spec", {}).get("template", {}).get("spec", {})
+            if operation["path"] == "/spec/template/spec/securityContext":
+                if "securityContext" in pod_spec:
+                    raise OverlayError("generated fsGroup parent already exists")
+                pod_spec["securityContext"] = {"fsGroup": 65532}
+            else:
+                security_context = pod_spec.get("securityContext")
+                if not isinstance(security_context, dict) or "fsGroup" in security_context:
+                    raise OverlayError("generated fsGroup target is not absent")
+                security_context["fsGroup"] = 65532
+            continue
         if operation.get("op") != "remove":
             result = _apply_append_operations(result, [operation])
             continue
@@ -336,6 +354,27 @@ def object_patch(base, desired):
         delta.extend(_append_or_merge(old_volumes, new_volumes,
                                       "/spec/template/spec/volumes", "volumes",
                                       parent_exists="volumes" in base["spec"]["template"]["spec"]))
+        old_security_context = base["spec"]["template"]["spec"].get("securityContext")
+        new_security_context = desired["spec"]["template"]["spec"].get("securityContext")
+        if old_security_context != new_security_context:
+            if name != "voice-matchmaking":
+                raise OverlayError("securityContext change is outside the fixed Matchmaking fsGroup")
+            if ((old_security_context is not None and not isinstance(old_security_context, dict)) or
+                    not isinstance(new_security_context, dict)):
+                raise OverlayError("Matchmaking securityContext shape is invalid")
+            if (old_security_context is not None and "fsGroup" in old_security_context and
+                    old_security_context["fsGroup"] != 65532):
+                raise OverlayError("Matchmaking fsGroup replacement is not permitted")
+            expected_security_context = copy.deepcopy(old_security_context or {})
+            expected_security_context["fsGroup"] = 65532
+            if new_security_context != expected_security_context:
+                raise OverlayError("Matchmaking securityContext changed outside fsGroup 65532")
+            if old_security_context is None:
+                delta.append({"op": "add", "path": "/spec/template/spec/securityContext",
+                              "value": {"fsGroup": 65532}})
+            elif "fsGroup" not in old_security_context:
+                delta.append({"op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+                              "value": 65532})
     else:
         raise OverlayError("object kind outside fixed target set")
 
