@@ -957,6 +957,7 @@ class DevWorkloadProjectionTests(unittest.TestCase):
             lambda row: row["metadata"].update(deletionTimestamp="2026-10-17T00:00:00Z"),
             lambda row: row["metadata"].update(deletionGracePeriodSeconds=30),
             lambda row: row["metadata"]["annotations"].update({"deployment.kubernetes.io/revision": "0"}),
+            lambda row: row["metadata"]["annotations"].update({"deployment.kubernetes.io/revision": "1" * 11}),
             lambda row: row["metadata"]["annotations"].update({"unexpected": "annotation"}),
             lambda row: row["metadata"].update(generation=True),
             lambda row: row["metadata"].update(managedFields=[{"manager": "unreviewed", "operation": "Update"}]),

@@ -1032,7 +1032,8 @@ def _validate_gis_metadata(actual, wanted, kind, *, service_pin=None):
     expected_annotations = copy.deepcopy(wanted.get("annotations", {}))
     if kind == "Deployment" and "deployment.kubernetes.io/revision" in annotations:
         revision = annotations.pop("deployment.kubernetes.io/revision")
-        if not isinstance(revision, str) or not _GIS_REVISION.fullmatch(revision):
+        if (not isinstance(revision, str) or len(revision) > 10
+            or not _GIS_REVISION.fullmatch(revision)):
             _blocked("gis_dev_api_metadata_mismatch")
     if (("labels" not in wanted and "labels" in actual)
         or ("annotations" not in wanted and "annotations" in actual)
