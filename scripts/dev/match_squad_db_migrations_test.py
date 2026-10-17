@@ -222,6 +222,63 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         self.assertTrue(runner.validate_create_readback(created, created))
 
     @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_controller_template_labels_are_bound_to_exact_job_identity(self):
+        item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
+        item["postgres_ip"] = "10.42.0.3"
+        job = runner.job_manifest(item, item["postgres_ip"])
+        job["metadata"].update({"uid": "job-uid", "resourceVersion": "8"})
+        job["spec"]["selector"] = {"matchLabels": {
+            "batch.kubernetes.io/controller-uid": "job-uid"}}
+        labels = job["spec"]["template"]["metadata"]["labels"]
+        labels.update({
+            "batch.kubernetes.io/controller-uid": "job-uid",
+            "controller-uid": "job-uid",
+            "batch.kubernetes.io/job-name": item["job_name"],
+            "job-name": item["job_name"],
+        })
+        self.assertTrue(runner.validate_bound_object(job, item, "job"))
+
+        for key, bad_value in (
+            ("batch.kubernetes.io/controller-uid", "other-uid"),
+            ("controller-uid", "other-uid"),
+            ("batch.kubernetes.io/job-name", "other-job"),
+            ("job-name", "other-job"),
+            ("unrecognized", "injected"),
+        ):
+            altered = copy.deepcopy(job)
+            altered["spec"]["template"]["metadata"]["labels"][key] = bad_value
+            with self.subTest(label=key), self.assertRaises(runner.Blocked):
+                runner.validate_bound_object(altered, item, "job")
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_migration_failure_log_is_allowlisted_and_never_emits_private_stderr(self):
+        item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
+        command = runner.job_manifest(item, "10.42.0.3")["spec"]["template"]["spec"]["containers"][0]["command"][2]
+        self.assertIn("failure_category=unknown", command)
+        self.assertIn("failure_category=database_unavailable", command)
+        self.assertIn("failure_category=database_authentication", command)
+        self.assertIn("failure_category=migration_sql", command)
+        self.assertIn("failure_category=migration_runner", command)
+        self.assertIn("migration_failed category=$failure_category exit=1", command)
+        self.assertNotIn("cat /run/migration/migrate.stderr", command)
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_plan_binds_only_the_three_baseline_down_readers_and_five_up_migrations(self):
+        plan = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)
+        expected_down = {
+            "matchmaking": "000015_reconcile_player_rating_aggregates.down.sql",
+            "chat": "000022_chat_create_requests.down.sql",
+            "voice": "000010_space_media_admission.down.sql",
+        }
+        self.assertEqual(sum(len(item["new_up_migrations"]) for item in plan), 5)
+        for item in plan:
+            service = item["service"]
+            self.assertEqual(item["baseline_down_migration"], expected_down[service])
+            self.assertEqual(set(item["migration_data"]),
+                set(item["new_up_migrations"]) | {expected_down[service]})
+            self.assertFalse(any(name.endswith(".down.sql") for name in item["new_up_migrations"]))
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_live_job_defaulting_is_allowed_but_source_spec_drift_is_rejected(self):
         item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
         item["postgres_ip"] = "10.42.0.3"
@@ -230,6 +287,12 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         live["spec"].update({"parallelism": 1, "completions": 1,
             "completionMode": "NonIndexed", "suspend": False,
             "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": "uid-job"}}})
+        live["spec"]["template"]["metadata"]["labels"].update({
+            "batch.kubernetes.io/controller-uid": "uid-job",
+            "controller-uid": "uid-job",
+            "batch.kubernetes.io/job-name": item["job_name"],
+            "job-name": item["job_name"],
+        })
         live["spec"]["template"]["spec"]["dnsPolicy"] = "ClusterFirst"
         live["spec"]["template"]["spec"].update({
             "schedulerName": "default-scheduler", "terminationGracePeriodSeconds": 30,
@@ -391,7 +454,7 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
             migrated = subprocess.run(["/bin/sh", "-ec", migration_script], env=environment,
                 capture_output=True, text=True, check=False)
             self.assertEqual(migrated.returncode, 1)
-            self.assertEqual(migrated.stderr.strip(), "migration_failed")
+            self.assertEqual(migrated.stderr.strip(), "migration_failed category=unknown exit=1")
             self.assertNotIn("secret", migrated.stderr)
             self.assertNotIn("voice-postgres", pod["containers"][0]["command"][2])
             self.assertIn("postgres://voice:secret@10.42.0.3:5432/matchmaking_db?sslmode=disable",
@@ -573,6 +636,12 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
                         uid = obj["metadata"]["uid"]
                         obj["spec"]["selector"] = {"matchLabels": {
                             "batch.kubernetes.io/controller-uid": uid}}
+                        obj["spec"]["template"]["metadata"]["labels"].update({
+                            "batch.kubernetes.io/controller-uid": uid,
+                            "controller-uid": uid,
+                            "batch.kubernetes.io/job-name": body["metadata"]["name"],
+                            "job-name": body["metadata"]["name"],
+                        })
                         obj["status"] = {"active": 1}
                     key = (body["kind"].lower(), body["metadata"]["name"])
                     self.objects[key] = obj
