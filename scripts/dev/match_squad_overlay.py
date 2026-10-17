@@ -185,6 +185,11 @@ def _append_or_merge(old_list, new_list, path, identity_field):
         new_by_id[identity] = item
     if not old_by_id.keys() <= new_by_id.keys():
         raise OverlayError("overlay would remove a list item")
+    old_order = [_list_identity(item, identity_field) for item in old_list]
+    rendered_old_order = [_list_identity(item, identity_field) for item in new_list
+                          if _list_identity(item, identity_field) in old_by_id]
+    if rendered_old_order != old_order:
+        raise OverlayError("overlay changed existing list order")
     operations = []
     for index, old_item in enumerate(old_list):
         identity = _list_identity(old_item, identity_field)
@@ -197,6 +202,23 @@ def _append_or_merge(old_list, new_list, path, identity_field):
     return operations
 
 
+def _apply_append_operations(base, operations):
+    """Predict the API result of the exact append-only JSON Patch we submit."""
+    result = copy.deepcopy(base)
+    for operation in operations:
+        if operation.get("op") != "add" or not operation.get("path", "").endswith("/-"):
+            raise OverlayError("generated overlay operation is not an append")
+        parts = [part.replace("~1", "/").replace("~0", "~")
+                 for part in operation["path"].split("/")[1:-1]]
+        parent = result
+        for part in parts:
+            parent = parent[int(part)] if isinstance(parent, list) else parent[part]
+        if not isinstance(parent, list):
+            raise OverlayError("generated append target is not a list")
+        parent.append(copy.deepcopy(operation["value"]))
+    return result
+
+
 def object_patch(base, desired):
     """Validate a rendered overlay delta and return one atomic UID/RV JSON Patch."""
     if base.get("kind") != desired.get("kind") or base.get("apiVersion") != desired.get("apiVersion"):
@@ -207,7 +229,6 @@ def object_patch(base, desired):
     if (base_uid, base_rv) != (desired_uid, desired_rv):
         raise OverlayError("render operation changed target identity")
 
-    base_projection = copy.deepcopy(base)
     desired_projection = copy.deepcopy(desired)
     delta = []
     if base["kind"] == "Service":
@@ -216,7 +237,6 @@ def object_patch(base, desired):
         delta.extend(_append_or_merge(base["spec"].get("ports", []),
                                       desired["spec"].get("ports", []),
                                       "/spec/ports", "servicePorts"))
-        base_projection["spec"]["ports"] = desired_projection["spec"]["ports"]
     elif base["kind"] == "Deployment":
         name = base["metadata"]["name"]
         if name not in CONTAINERS:
@@ -235,19 +255,27 @@ def object_patch(base, desired):
             delta.extend(_append_or_merge(old_items, new_items,
                                           "/spec/template/spec/containers/" + str(main_index) +
                                           "/" + fields, fields))
-            if fields in old_container or fields in new_container:
-                base_projection["spec"]["template"]["spec"]["containers"][main_index][fields] = \
-                    desired_projection["spec"]["template"]["spec"]["containers"][main_index].get(fields, [])
         old_volumes = base["spec"]["template"]["spec"].get("volumes", [])
         new_volumes = desired["spec"]["template"]["spec"].get("volumes", [])
         delta.extend(_append_or_merge(old_volumes, new_volumes,
                                       "/spec/template/spec/volumes", "volumes"))
-        if "volumes" in base["spec"]["template"]["spec"] or "volumes" in desired["spec"]["template"]["spec"]:
-            base_projection["spec"]["template"]["spec"]["volumes"] = new_volumes
     else:
         raise OverlayError("object kind outside fixed target set")
 
-    if base_projection != desired_projection:
+    projected = _apply_append_operations(base, delta)
+    if base["kind"] == "Service":
+        desired_projection["spec"]["ports"] = projected["spec"]["ports"]
+    else:
+        desired_spec = desired_projection["spec"]["template"]["spec"]
+        projected_spec = projected["spec"]["template"]["spec"]
+        desired_container = desired_spec["containers"][main_index]
+        projected_container = projected_spec["containers"][main_index]
+        for fields in ("env", "ports", "volumeMounts"):
+            if fields in desired_container or fields in projected_container:
+                desired_container[fields] = projected_container.get(fields, [])
+        if "volumes" in desired_spec or "volumes" in projected_spec:
+            desired_spec["volumes"] = projected_spec.get("volumes", [])
+    if projected != desired_projection:
         raise OverlayError("overlay changed an unapproved object path")
     # Every operation is an append or a leaf update under one allowed array.
     allowed = ("/spec/ports/", "/spec/template/spec/containers/",
@@ -284,16 +312,17 @@ def build_object_plan(client, target, base, patch_path):
     patch_bytes = patch_path.read_bytes()
     desired = strategic_render(client, target, base, patch_path)
     operations = object_patch(base, desired)
-    if len(operations) == 2:
-        raise OverlayError("overlay produced no change: " + target.name)
+    already_satisfied = len(operations) == 2
     return {
         "kind": target.kind, "name": target.name,
         "uid": base["metadata"]["uid"], "resourceVersion": base["metadata"]["resourceVersion"],
         "baseObjectSha256": object_hash(base),
         "patchFile": target.patch_file,
         "patchSha256": sha256_bytes(patch_bytes),
-        "desiredRenderSha256": rendered_hash(target, desired),
-        "desiredObservedSha256": observed_render_hash(target, desired),
+        "desiredRenderSha256": rendered_hash(target, _apply_append_operations(base, operations[2:])),
+        "desiredObservedSha256": observed_render_hash(
+            target, _apply_append_operations(base, operations[2:])),
+        "alreadySatisfied": already_satisfied,
         "operations": operations,
     }
 
@@ -355,7 +384,11 @@ class KubectlClient:
                 result.get("metadata", {}).get("resourceVersion") in
                 (None, plan["resourceVersion"]) or
                 observed_render_hash(target, result) != plan["desiredObservedSha256"]):
-            raise OverlayError("patched object did not match the frozen desired hash")
+            error = OverlayError("patched object did not match the frozen desired hash")
+            error.persisted = (result.get("metadata", {}).get("uid") == plan["uid"] and
+                               result.get("metadata", {}).get("resourceVersion") not in
+                               (None, plan["resourceVersion"]))
+            raise error
         return result
 
     def wait_deployment(self, plan):
@@ -475,14 +508,26 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
     # Global preflight is complete before the first write. The request itself
     # repeats UID/RV tests to close the race on each individual object.
     completed = 0
+    applied = 0
     for target, plan in zip(TARGETS, fresh_plans):
         try:
-            client.apply(plan)
-            if target.kind == "Deployment":
-                client.wait_deployment(plan)
+            if plan["alreadySatisfied"]:
+                current = client.get(target)
+                if (current.get("metadata", {}).get("uid") != plan["uid"] or
+                        current.get("metadata", {}).get("resourceVersion") != plan["resourceVersion"] or
+                        object_hash(current) != plan["baseObjectSha256"] or
+                        observed_render_hash(target, current) != plan["desiredObservedSha256"]):
+                    raise OverlayError("already-satisfied target changed before skip")
+            else:
+                client.apply(plan)
+                applied += 1
+                if target.kind == "Deployment":
+                    client.wait_deployment(plan)
         except Exception as exc:
+            persisted = applied + int(bool(getattr(exc, "persisted", False)))
             print("MATCH_SQUAD_OVERLAY_STOPPED kind=" + target.kind + " name=" +
                   target.name + " completed_prefix=" + str(completed) +
+                  " applied_prefix=" + str(persisted) +
                   " result=uncertain", file=sys.stderr)
             raise OverlayError("overlay stopped at first failed target") from exc
         completed += 1
@@ -495,7 +540,8 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
             client.verify_service_endpoints(service, ports)
         except Exception as exc:
             print("MATCH_SQUAD_OVERLAY_ENDPOINTS_NOT_READY service=" + service +
-                  " completed_prefix=7 result=uncertain", file=sys.stderr)
+                  " completed_prefix=7 applied_prefix=" + str(applied) +
+                  " result=uncertain", file=sys.stderr)
             raise OverlayError("overlay services are patched but endpoints are not ready") from exc
     print("MATCH_SQUAD_OVERLAY_APPLY_COMPLETE count=7")
 
