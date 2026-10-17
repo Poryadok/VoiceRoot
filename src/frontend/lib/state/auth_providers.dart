@@ -477,12 +477,18 @@ class AuthController extends StateNotifier<AuthState> {
   }) async {
     final current = state.session;
     if (current == null) return 'not_authenticated';
+    final generation = _profileSwitchGeneration;
+    final installGeneration = _sessionInstallGeneration;
     _convertingGuest = true;
     final result = await _authClient.convertGuest(
       session: current,
       email: email,
       password: password,
     );
+    if (!_isCurrentSessionInstall(current, generation, installGeneration)) {
+      _convertingGuest = false;
+      return 'not_authenticated';
+    }
     switch (result) {
       case AuthSessionOk(:final session):
         if (session.accessToken.isEmpty || session.refreshToken.isEmpty) {
@@ -490,21 +496,50 @@ class AuthController extends StateNotifier<AuthState> {
           return AuthErrorKeys.validationFailed;
         }
         await _guestCredentialsStorage.writePendingConversionEmail(email);
+        if (!_isCurrentSessionInstall(current, generation, installGeneration)) {
+          _convertingGuest = false;
+          return 'not_authenticated';
+        }
         await _guestCredentialsStorage.setGuestConversionPromotionPending(
           false,
         );
-        state = state.copyWith(
+        if (!_isCurrentSessionInstall(current, generation, installGeneration)) {
+          _convertingGuest = false;
+          return 'not_authenticated';
+        }
+        await _commitProfileSession(
           session: session,
-          isGuest: true,
-          pendingGuestConversionEmail: email,
-          isGuestConversionPromotionPending: false,
-          clearError: true,
+          generation: generation,
+          newSessionInstallation: true,
+          nextState: (currentState) => currentState.copyWith(
+            session: session,
+            isGuest: true,
+            pendingGuestConversionEmail: email,
+            isGuestConversionPromotionPending: false,
+            clearError: true,
+          ),
         );
-        await _persist(session);
+        final convertedInstallGeneration = _sessionInstallGeneration;
+        if (!_isCurrentSessionInstall(
+          session,
+          generation,
+          convertedInstallGeneration,
+        )) {
+          _convertingGuest = false;
+          return 'not_authenticated';
+        }
         // Conversion creates a pending email identity but does not send OTP.
         // Keep the returned restricted session so a failed send can be retried
         // without converting the account again.
         final sendError = await _sendEmailVerificationOtp(session);
+        if (!_isCurrentSessionInstall(
+          session,
+          generation,
+          convertedInstallGeneration,
+        )) {
+          _convertingGuest = false;
+          return 'not_authenticated';
+        }
         _convertingGuest = false;
         return sendError;
       case AuthSessionFailure(
