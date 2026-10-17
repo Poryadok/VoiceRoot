@@ -103,6 +103,121 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertTrue(all(call[0].get_header('Accept') == 'application/json' for call in self.calls))
         self.assertTrue(all(call[1].check_hostname and call[1].verify_mode for call in self.calls))
 
+    def test_native_stage_gets_are_namespaced_and_fixed_kind(self):
+        with patch.object(self.api, '_request', return_value={'metadata': {}}) as get:
+            self.api.get_service('voice-staging', 'voice-nats')
+            self.api.get_pod('voice-staging', 'voice-nats-hub-0')
+            self.api.get_replicaset('voice-staging', 'voice-nats-hub-abc')
+            self.api.get_deployment('voice-staging', 'voice-gateway')
+        paths = [call.args[1] for call in get.call_args_list]
+        self.assertEqual(paths, [
+            '/api/v1/namespaces/voice-staging/services/voice-nats',
+            '/api/v1/namespaces/voice-staging/pods/voice-nats-hub-0',
+            '/apis/apps/v1/namespaces/voice-staging/replicasets/voice-nats-hub-abc',
+            '/apis/apps/v1/namespaces/voice-staging/deployments/voice-gateway'])
+        for method, args in ((self.api.get_service, ('default', 'voice-nats')),
+                             (self.api.get_pod, ('voice-staging', '../escape')),
+                             (self.api.get_replicaset, ('voice-staging', '')),
+                             (self.api.get_deployment, ('default', 'voice-gateway'))):
+            with self.subTest(args=args), patch.object(self.api, '_request') as request, \
+                 self.assertRaises(kube.KubeAPIError):
+                method(*args)
+            request.assert_not_called()
+
+    def test_native_stage_lists_are_closed_and_fail_on_pagination(self):
+        with patch.object(self.api, '_request', return_value={'items': []}) as get:
+            self.assertEqual(self.api.list_fence_objects('voice-staging'), {'pods': [], 'replicasets': []})
+            self.assertEqual(self.api.list_control_objects('voice-staging'), {
+                'deployments': [], 'horizontalpodautoscalers': [], 'jobs': []})
+        self.assertEqual(len(get.call_args_list), 5)
+        paths = [call.args[1] for call in get.call_args_list]
+        self.assertIn('/api/v1/namespaces/voice-staging/pods?', paths[0])
+        self.assertIn('/apis/apps/v1/namespaces/voice-staging/replicasets?', paths[1])
+        self.assertIn('/apis/apps/v1/namespaces/voice-staging/deployments?', paths[2])
+        self.assertIn('/apis/autoscaling/v2/namespaces/voice-staging/horizontalpodautoscalers?', paths[3])
+        self.assertIn('/apis/batch/v1/namespaces/voice-staging/jobs?', paths[4])
+        with patch.object(self.api, '_request', return_value={'items': [], 'metadata': {'continue': 'next'}}):
+            with self.assertRaises(kube.KubeAPIError):
+                self.api.list_control_objects('voice-staging')
+
+    def test_hub_jsz_uses_exact_pod_uid_fixed_command_and_bounded_stdout(self):
+        pod_uid = '44444444-4444-4444-8444-444444444444'
+        pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
+        with patch.object(self.api, 'get_pod', return_value=pod), \
+             patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
+             patch.object(kube, '_websocket_exec', return_value=iter((b'{"account":', b'"A"}'))) as execute:
+            self.assertEqual(self.api.exec_hub_jsz('voice-staging', 'voice-nats-hub-0', pod_uid, 'nats'),
+                b'{"account":"A"}')
+        path, token = execute.call_args.args[1:]
+        self.assertEqual(token, 'opaque-test-token')
+        from urllib.parse import parse_qs, urlsplit
+        query = parse_qs(urlsplit(path).query)
+        self.assertEqual(query['container'], ['nats'])
+        self.assertEqual(query['stdin'], ['false'])
+        self.assertEqual(query['stdout'], ['true'])
+        self.assertEqual(query['stderr'], ['false'])
+        self.assertEqual(query['tty'], ['false'])
+        self.assertEqual(query['command'], ['/bin/busybox', 'wget', '-q', '-O', '-',
+            'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048'])
+        self.assertEqual(execute.call_args.kwargs['max_bytes'], 64 << 20)
+        with patch.object(self.api, 'get_pod', return_value={'metadata': {'uid': '55555555-5555-4555-8555-555555555555', 'namespace': 'voice-staging'}}), \
+             patch.object(self.api, '_operation_token') as token_read, \
+             self.assertRaises(kube.KubeAPIError):
+            self.api.exec_hub_jsz('voice-staging', 'voice-nats-hub-0', pod_uid, 'nats')
+        token_read.assert_not_called()
+
+    def test_owned_pod_finalizer_cas_tests_uid_resource_version_and_exact_list(self):
+        uid = '44444444-4444-4444-8444-444444444444'
+        current = {'metadata': {'uid': uid, 'resourceVersion': '12', 'finalizers': ['voice.io/old']}}
+        with patch.object(self.api, 'get_pod', return_value=current), \
+             patch.object(self.api, '_request', return_value={'kind': 'Pod'}) as patch_request:
+            result = self.api.add_owned_pod_finalizer('voice-staging', 'hub-0', uid, '12',
+                ['voice.io/old'], 'voice.io/rollout')
+        self.assertEqual(result, {'kind': 'Pod'})
+        method, path, patch_doc = patch_request.call_args.args
+        self.assertEqual((method, path), ('PATCH', '/api/v1/namespaces/voice-staging/pods/hub-0'))
+        self.assertEqual(patch_doc[:3], [
+            {'op': 'test', 'path': '/metadata/uid', 'value': uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '12'},
+            {'op': 'test', 'path': '/metadata/finalizers', 'value': ['voice.io/old']}])
+        self.assertEqual(patch_doc[3], {'op': 'replace', 'path': '/metadata/finalizers',
+            'value': ['voice.io/old', 'voice.io/rollout']})
+        self.assertEqual(patch_request.call_args.kwargs['content_type'], 'application/json-patch+json')
+        with patch.object(self.api, 'get_pod', return_value={
+                'metadata': {'uid': uid, 'resourceVersion': '13', 'finalizers': ['voice.io/old']}}), \
+             patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
+            self.api.add_owned_pod_finalizer('voice-staging', 'hub-0', uid, '12',
+                ['voice.io/old'], 'voice.io/rollout')
+        request.assert_not_called()
+
+    def test_deployment_cas_binds_uid_rv_replicas_and_full_template_digest(self):
+        uid = '44444444-4444-4444-8444-444444444444'
+        template = {'metadata': {'labels': {'app': 'hub'}}, 'spec': {'volumes': [
+            {'name': 'jsdata', 'persistentVolumeClaim': {'claimName': 'old'}}]}}
+        digest = hashlib.sha256(json.dumps(template, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        current = {'metadata': {'uid': uid, 'resourceVersion': '12'},
+            'spec': {'replicas': 1, 'template': template}}
+        replacement = copy.deepcopy(template)
+        replacement['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = 'new'
+        with patch.object(self.api, 'get_deployment', return_value=current), \
+             patch.object(self.api, '_request', return_value={'kind': 'Deployment'}) as patch_request:
+            self.api.cas_rollout_deployment('voice-staging', 'voice-nats-hub', uid, '12', 1, digest,
+                new_replicas=0, new_template=replacement, expected_jsdata_claim='old', new_jsdata_claim='new')
+        method, path, patch_doc = patch_request.call_args.args
+        self.assertEqual((method, path), ('PATCH', '/apis/apps/v1/namespaces/voice-staging/deployments/voice-nats-hub'))
+        self.assertEqual(patch_doc[:3], [
+            {'op': 'test', 'path': '/metadata/uid', 'value': uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '12'},
+            {'op': 'test', 'path': '/spec/replicas', 'value': 1}])
+        self.assertEqual(patch_doc[3], {'op': 'replace', 'path': '/spec/replicas', 'value': 0})
+        self.assertEqual(patch_doc[4]['path'], '/spec/template')
+        self.assertEqual(patch_doc[4]['value'], replacement)
+        with patch.object(self.api, 'get_deployment', return_value=current), \
+             patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
+            self.api.cas_rollout_deployment('voice-staging', 'voice-nats-hub', uid, '12', 1, 'f' * 64,
+                new_replicas=0)
+        request.assert_not_called()
+
     def test_job_create_read_logs_and_uid_precondition_delete_are_json_contracts(self):
         payload = {'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': 'job'}}
         with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'):

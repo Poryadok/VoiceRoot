@@ -7,6 +7,7 @@ fixed protocol objects only; this module never invokes kubectl or a shell.
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 import os
@@ -148,14 +149,15 @@ class _KubernetesJSONAPIBase:
             _fail('resource_name_invalid')
         return quote(value, safe='')
 
-    def _request(self, method, path, body=None, *, log=False, token_refresh=True):
+    def _request(self, method, path, body=None, *, log=False, token_refresh=True,
+                 content_type='application/json'):
         if not isinstance(path, str) or not path.startswith('/') or path.startswith('//'):
             _fail('path_invalid')
         data = None if body is None else json.dumps(body, sort_keys=True, separators=(',', ':')).encode()
         token = self._operation_token() if token_refresh else self._refresh_token_credential()
         headers = {'Accept': 'application/json', 'Authorization': 'Bearer ' + token}
         if data is not None:
-            headers['Content-Type'] = 'application/json'
+            headers['Content-Type'] = content_type
         request = Request(self.origin + path, data=data, headers=headers, method=method)
         try:
             with self.opener(request, context=self.context, timeout=self.timeout) as response:
@@ -219,10 +221,179 @@ class _KubernetesJSONAPIBase:
             + '/configmaps/' + self._segment(name))
 
     def get_deployment(self, namespace, name):
-        if namespace != NAMESPACE or name != 'voice-nats-hub':
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', name)):
             _fail('deployment_invalid')
         return self._request('GET', '/apis/apps/v1/namespaces/' + self._segment(namespace)
             + '/deployments/' + self._segment(name))
+
+    def get_service(self, namespace, name):
+        if namespace != NAMESPACE or name != 'voice-nats':
+            _fail('service_invalid')
+        return self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/services/' + self._segment(name))
+
+    def get_pod(self, namespace, name):
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', name)):
+            _fail('pod_invalid')
+        return self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods/' + self._segment(name))
+
+    def get_replicaset(self, namespace, name):
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', name)):
+            _fail('replicaset_invalid')
+        return self._request('GET', '/apis/apps/v1/namespaces/' + self._segment(namespace)
+            + '/replicasets/' + self._segment(name))
+
+    def _list_namespaced(self, group, version, resource, *, limit=2048):
+        if resource not in ('pods', 'replicasets', 'deployments', 'horizontalpodautoscalers', 'jobs'):
+            _fail('resource_invalid')
+        if type(limit) is not int or not 1 <= limit <= 2048:
+            _fail('list_limit_invalid')
+        prefix = '/api/' if group is None else '/apis/' + group + '/'
+        version_path = version if group is None else version
+        result = self._request('GET', prefix + version_path + '/namespaces/'
+            + self._segment(NAMESPACE) + '/' + resource + '?' + urlencode({'limit': str(limit)}))
+        items = result.get('items')
+        if not isinstance(items, list) or len(items) > limit or not all(isinstance(item, dict) for item in items):
+            _fail('resource_list_invalid')
+        if result.get('metadata', {}).get('continue'):
+            _fail('resource_list_truncated')
+        return items
+
+    def list_fence_objects(self, namespace):
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        return {'pods': self._list_namespaced(None, 'v1', 'pods'),
+            'replicasets': self._list_namespaced('apps', 'v1', 'replicasets')}
+
+    def list_control_objects(self, namespace):
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        return {'deployments': self._list_namespaced('apps', 'v1', 'deployments'),
+            'horizontalpodautoscalers': self._list_namespaced('autoscaling', 'v2', 'horizontalpodautoscalers'),
+            'jobs': self._list_namespaced('batch', 'v1', 'jobs')}
+
+    def add_owned_pod_finalizer(self, namespace, name, pod_uid, expected_rv,
+                                expected_finalizers, finalizer):
+        return self._patch_pod_finalizers(namespace, name, pod_uid, expected_rv,
+            expected_finalizers, finalizer, add=True)
+
+    def remove_owned_pod_finalizer(self, namespace, name, pod_uid, expected_rv,
+                                   expected_finalizers, finalizer):
+        return self._patch_pod_finalizers(namespace, name, pod_uid, expected_rv,
+            expected_finalizers, finalizer, add=False)
+
+    def _patch_pod_finalizers(self, namespace, name, pod_uid, expected_rv,
+                              expected_finalizers, finalizer, *, add):
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', name)
+            or not isinstance(pod_uid, str) or not _UID.fullmatch(pod_uid)
+            or not isinstance(expected_rv, str) or not expected_rv.isdigit()
+            or not isinstance(expected_finalizers, list) or len(expected_finalizers) > 32
+            or any(not isinstance(item, str) or not re.fullmatch(r'[a-z0-9][a-z0-9./-]{0,252}', item)
+                for item in expected_finalizers)
+            or len(set(expected_finalizers)) != len(expected_finalizers)
+            or not isinstance(finalizer, str) or not re.fullmatch(r'[a-z0-9][a-z0-9./-]{0,252}', finalizer)
+            or type(add) is not bool):
+            _fail('pod_finalizer_request_invalid')
+        current = self.get_pod(namespace, name)
+        metadata = current.get('metadata', {})
+        actual_finalizers = metadata.get('finalizers', [])
+        if (metadata.get('uid') != pod_uid or metadata.get('resourceVersion') != expected_rv
+            or actual_finalizers != expected_finalizers):
+            _fail('pod_finalizer_precondition_changed')
+        if add:
+            if finalizer in expected_finalizers:
+                _fail('pod_finalizer_already_present')
+            next_finalizers = expected_finalizers + [finalizer]
+        else:
+            if finalizer not in expected_finalizers:
+                _fail('pod_finalizer_missing')
+            next_finalizers = [item for item in expected_finalizers if item != finalizer]
+        patch = [
+            {'op': 'test', 'path': '/metadata/uid', 'value': pod_uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': expected_rv},
+        ]
+        if 'finalizers' in metadata:
+            patch.append({'op': 'test', 'path': '/metadata/finalizers', 'value': expected_finalizers})
+            patch.append({'op': 'replace', 'path': '/metadata/finalizers', 'value': next_finalizers})
+        else:
+            patch.append({'op': 'add', 'path': '/metadata/finalizers', 'value': next_finalizers})
+        return self._request('PATCH', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods/' + self._segment(name), patch, content_type='application/json-patch+json')
+
+    def delete_owned_pod(self, namespace, name, pod_uid, expected_rv):
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', name)
+            or not isinstance(pod_uid, str) or not _UID.fullmatch(pod_uid)
+            or not isinstance(expected_rv, str) or not expected_rv.isdigit()):
+            _fail('pod_delete_request_invalid')
+        current = self.get_pod(namespace, name)
+        metadata = current.get('metadata', {})
+        if metadata.get('uid') != pod_uid or metadata.get('resourceVersion') != expected_rv:
+            _fail('pod_delete_precondition_changed')
+        body = {'apiVersion': 'v1', 'kind': 'DeleteOptions',
+            'preconditions': {'uid': pod_uid, 'resourceVersion': expected_rv}}
+        self._request('DELETE', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods/' + self._segment(name), body)
+        try:
+            observed = self.get_pod(namespace, name)
+        except KubeNotFound:
+            return True
+        if observed.get('metadata', {}).get('uid') != pod_uid:
+            return True
+        _fail('pod_delete_unconfirmed')
+
+    def cas_rollout_deployment(self, namespace, name, expected_uid, expected_rv,
+                               expected_replicas, expected_template_sha256, *,
+                               new_replicas=None, new_template=None,
+                               expected_jsdata_claim=None, new_jsdata_claim=None):
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', name)
+            or not isinstance(expected_uid, str) or not _UID.fullmatch(expected_uid)
+            or not isinstance(expected_rv, str) or not expected_rv.isdigit()
+            or type(expected_replicas) is not int or expected_replicas < 0
+            or not isinstance(expected_template_sha256, str)
+            or not re.fullmatch(r'[a-f0-9]{64}', expected_template_sha256)):
+            _fail('deployment_cas_request_invalid')
+        if (new_replicas is None and new_template is None
+            or new_replicas is not None and (type(new_replicas) is not int or new_replicas < 0)
+            or new_template is not None and not isinstance(new_template, dict)
+            or (new_jsdata_claim is not None and new_template is None)):
+            _fail('deployment_cas_mutation_invalid')
+        current = self.get_deployment(namespace, name)
+        metadata, spec = current.get('metadata', {}), current.get('spec', {})
+        template = spec.get('template')
+        if (metadata.get('uid') != expected_uid or metadata.get('resourceVersion') != expected_rv
+            or spec.get('replicas') != expected_replicas or not isinstance(template, dict)
+            or hashlib.sha256(json.dumps(template, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                != expected_template_sha256):
+            _fail('deployment_cas_precondition_changed')
+        if expected_jsdata_claim is not None:
+            volumes = template.get('spec', {}).get('volumes', [])
+            jsdata = [row for row in volumes if isinstance(row, dict) and row.get('name') == 'jsdata']
+            if (len(jsdata) != 1 or jsdata[0].get('persistentVolumeClaim', {}).get('claimName')
+                != expected_jsdata_claim):
+                _fail('deployment_jsdata_precondition_changed')
+        patch = [
+            {'op': 'test', 'path': '/metadata/uid', 'value': expected_uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': expected_rv},
+            {'op': 'test', 'path': '/spec/replicas', 'value': expected_replicas},
+        ]
+        if new_replicas is not None:
+            patch.append({'op': 'replace', 'path': '/spec/replicas', 'value': new_replicas})
+        if new_template is not None:
+            if expected_jsdata_claim is not None and new_jsdata_claim is not None:
+                volumes = new_template.get('spec', {}).get('volumes', [])
+                jsdata = [row for row in volumes if isinstance(row, dict) and row.get('name') == 'jsdata']
+                if len(jsdata) != 1 or jsdata[0].get('persistentVolumeClaim', {}).get('claimName') != new_jsdata_claim:
+                    _fail('deployment_jsdata_target_invalid')
+            patch.append({'op': 'replace', 'path': '/spec/template', 'value': copy.deepcopy(new_template)})
+        return self._request('PATCH', '/apis/apps/v1/namespaces/' + self._segment(namespace)
+            + '/deployments/' + self._segment(name), patch, content_type='application/json-patch+json')
 
     def list_nodes_by_hostname(self, hostname):
         if (not isinstance(hostname, str) or len(hostname) > 253
@@ -249,7 +420,11 @@ class _KubernetesJSONAPIBase:
             _fail('pod_list_invalid')
         return items
 
-    def get_node(self, name):
+    def get_node(self, namespace, name=None):
+        if name is None:
+            name, namespace = namespace, NAMESPACE
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
         return self._request('GET', '/api/v1/nodes/' + self._segment(name))
 
     def create_job(self, namespace, document):
@@ -417,6 +592,36 @@ class _KubernetesJSONAPIBase:
             + self._segment(pod_name) + '/exec?' + urlencode(query))
         token = self._operation_token()
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
+
+    def exec_hub_jsz(self, namespace, pod_name, pod_uid, container, *, timeout_seconds=30):
+        """Read the captured Hub's fixed loopback JSZ endpoint over pods/exec."""
+        if (namespace != NAMESPACE or container != 'nats' or type(timeout_seconds) is not int
+            or not 1 <= timeout_seconds <= 60 or not isinstance(pod_uid, str)
+            or not _UID.fullmatch(pod_uid)):
+            _fail('hub_jsz_identity_invalid')
+        pod = self.get_pod(namespace, pod_name)
+        metadata = pod.get('metadata', {})
+        if metadata.get('uid') != pod_uid or metadata.get('namespace') != namespace:
+            _fail('hub_jsz_pod_changed')
+        command = ['/bin/busybox', 'wget', '-q', '-O', '-',
+            'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048']
+        query = [('container', container), ('stdin', 'false'), ('stdout', 'true'),
+            ('stderr', 'false'), ('tty', 'false')]
+        query.extend(('command', item) for item in command)
+        path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
+            + self._segment(pod_name) + '/exec?' + urlencode(query))
+        token = self._operation_token()
+        deadline = time.monotonic() + timeout_seconds
+        chunks = []
+        size = 0
+        for chunk in _websocket_exec(self, path, token, max_bytes=64 << 20):
+            if time.monotonic() > deadline:
+                _fail('hub_jsz_timeout')
+            size += len(chunk)
+            if size > 64 << 20:
+                _fail('hub_jsz_too_large')
+            chunks.append(chunk)
+        return b''.join(chunks)
 
     def exec_pod_census_input(self, namespace, pod_name, pod_uid, request, binding,
                               archive_path, manifest_bytes, archive_sha256, archive_bytes):
