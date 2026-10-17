@@ -968,6 +968,10 @@ _GIS_DEPLOYMENT_DEFAULTS = {
     ("spec", "strategy", "rollingUpdate", "maxSurge"): "25%",
     ("spec", "strategy", "rollingUpdate", "maxUnavailable"): "25%",
     ("spec", "template", "spec", "containers", "0", "imagePullPolicy"): "IfNotPresent",
+    # Kubernetes serializes an omitted container resources stanza as an empty
+    # object. Accept only this exact server insertion; authored resources and
+    # every nonempty or differently located object remain structural input.
+    ("spec", "template", "spec", "containers", "0", "resources"): {},
     ("spec", "template", "spec", "containers", "0", "ports", "0", "protocol"): "TCP",
     ("spec", "template", "spec", "containers", "0", "ports", "1", "protocol"): "TCP",
     ("spec", "template", "spec", "containers", "0", "readinessProbe", "httpGet", "scheme"): "HTTP",
@@ -1802,12 +1806,14 @@ def _partial_v3_admissible(current, current_v2, current_v2_sha256,
     return True
 
 
-def _partial_live_c10_checkpoint(kube, state, fingerprints, root, *, allow_deployment=False):
+def _partial_live_c10_checkpoint(kube, state, fingerprints, root, *, allow_deployment=False,
+        allow_progress=False):
     """Revalidate C10's completed prerequisites and stopped Service without writes."""
     import gis_first_install as gis
     import gis_prerequisite as prerequisite
     plan = state.get("plan", {})
-    if (plan.get("phase") != "PLANNED" or plan.get("prerequisite_phase") != "VERIFIED"
+    allowed_phases = ("PLANNED", "CREATED", "STARTING", "STARTED") if allow_progress else ("PLANNED",)
+    if (plan.get("phase") not in allowed_phases or plan.get("prerequisite_phase") != "VERIFIED"
         or not isinstance(plan.get("prerequisite_receipt"), dict)
         or not isinstance(plan.get("created"), dict)
         or set(plan.get("jobs", {})) != {"provision", "migrate", "verify"}):
@@ -1928,8 +1934,53 @@ def _partial_live_c10_checkpoint(kube, state, fingerprints, root, *, allow_deplo
     projected_service = _gis_project_response(service, intended_service, service_pin=service_pin)
     intended_deployment = next(obj for obj in plan["objects"] if gis._identity(obj) == gis.DEPLOYMENT)
     deployment_projection = None
+    deployment_metadata_sha256 = None
+    deployment_raw_spec_sha256 = None
+    deployment_operation = None
+    deployment_generation = None
+    deployment_replicas = None
+    deployment_image_ref = None
+    deployment_pods = []
     if deployment is not None:
         deployment_projection = _gis_project_response(deployment, intended_deployment)
+        deployment_metadata = deployment.get("metadata", {})
+        deployment_spec = deployment.get("spec", {})
+        deployment_metadata_sha256 = _validate_gis_metadata(deployment_metadata,
+            intended_deployment.get("metadata", {}), "Deployment")
+        deployment_raw_spec_sha256 = hashlib.sha256(json.dumps(deployment_spec,
+            sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        deployment_operation = deployment_metadata.get("annotations", {}).get(gis.MARKER)
+        deployment_generation = deployment_metadata.get("generation")
+        deployment_replicas = deployment_spec.get("replicas")
+        containers = deployment_spec.get("template", {}).get("spec", {}).get("containers", [])
+        images = [row.get("image") for row in containers
+            if isinstance(row, dict) and row.get("name") == "gameintegration"]
+        if len(images) != 1:
+            _blocked("gis_dev_partial_v4_deployment_checkpoint_changed")
+        deployment_image_ref = images[0]
+        selector = deployment_spec.get("selector", {}).get("matchLabels", {})
+        if (not isinstance(selector, dict) or not selector
+            or any(not isinstance(key, str) or not isinstance(value, str)
+                for key, value in selector.items())):
+            _blocked("gis_dev_partial_v4_deployment_checkpoint_changed")
+        selector_arg = ",".join(f"{key}={value}" for key, value in sorted(selector.items()))
+        pod_response = kube.run(["get", "pods", "-l", selector_arg, "-o", "json"])
+        pod_items = pod_response.get("items") if isinstance(pod_response, dict) else None
+        if not isinstance(pod_items, list) or len(pod_items) > 64:
+            _blocked("gis_dev_partial_v4_deployment_pod_inventory_invalid")
+        for pod in pod_items:
+            pod_metadata = pod.get("metadata", {})
+            pod_status = pod.get("status", {})
+            deployment_pods.append({
+                "name": pod_metadata.get("name"), "uid": pod_metadata.get("uid"),
+                "resourceVersion": str(pod_metadata.get("resourceVersion")),
+                "labels": copy.deepcopy(pod_metadata.get("labels", {})),
+                "ownerReferences": copy.deepcopy(pod_metadata.get("ownerReferences", [])),
+                "phase": pod_status.get("phase"),
+                "containerStatuses": [{key: row.get(key) for key in
+                    ("name", "image", "imageID", "ready", "restartCount") if key in row}
+                    for row in pod_status.get("containerStatuses", [])],
+            })
     return {
         "operation": _PARTIAL_OPERATION, "namespace_uid": namespace["uid"],
         "created_records": copy.deepcopy(recorded),
@@ -1947,17 +1998,26 @@ def _partial_live_c10_checkpoint(kube, state, fingerprints, root, *, allow_deplo
             "uid": deployment.get("metadata", {}).get("uid") if deployment is not None else None,
             "resourceVersion": str(deployment.get("metadata", {}).get("resourceVersion"))
                 if deployment is not None else None,
-            "semantic_sha256": gis.digest(gis.semantic(deployment_projection)) if deployment_projection else None,
+            "generation": deployment_generation,
+            "operation": deployment_operation,
+            "raw_spec_sha256": deployment_raw_spec_sha256,
+            "metadata_sha256": deployment_metadata_sha256,
+            "image_ref": deployment_image_ref,
+            "replicas": deployment_replicas,
+            "semantic_sha256": gis.digest(gis.semantic({**deployment_projection,
+                "spec": {**deployment_projection.get("spec", {}), "replicas": 0}}))
+                if deployment_projection else None,
             "desired_semantic_sha256": gis.digest(gis.semantic(intended_deployment)),
             "desired_raw_spec_sha256": hashlib.sha256(json.dumps(
                 intended_deployment.get("spec", {}),
-                sort_keys=True, separators=(",", ":")).encode()).hexdigest()}}
+                sort_keys=True, separators=(",", ":")).encode()).hexdigest()},
+        "deployment_pods": deployment_pods}
 
 
 def _partial_v3_to_v4_authorized(v3, v3_sha256, c10_authorization_sha256,
         binding, fingerprints, original_state, authorization,
         verified_authorization_sha256, expected_authorization_sha256, checkpoint,
-        current_v2, root):
+        current_v2, root, *, historical_candidate=False):
     """Validate the one root-pinned C10-v3 to C11-v4 same-operation bridge."""
     required = {"schema", "operation", "namespace_uid", "original_journal_sha256",
         "immutable_v1_sha256", "previous_v2_sha256", "previous_v2_binding_sha256",
@@ -1978,7 +2038,10 @@ def _partial_v3_to_v4_authorized(v3, v3_sha256, c10_authorization_sha256,
         or _digest(v3.get("binding")) != _PARTIAL_C10_V3_BINDING_SHA256
         or _digest(v3.get("state")) != _PARTIAL_C10_V3_STATE_SHA256
         or not isinstance(binding, dict)
-        or binding.get("candidate_source_sha") != _git_text(root, ["rev-parse", "HEAD"])
+        or (not historical_candidate
+            and binding.get("candidate_source_sha") != _git_text(root, ["rev-parse", "HEAD"]))
+        or (historical_candidate and (binding.get("candidate_source_sha") != authorization.get("target_source_sha")
+            or binding.get("changed_files") != authorization.get("target_changed_files")))
         or binding.get("old_source_sha") != _PARTIAL_SOURCE_SHA
         or set(binding.get("changed_files", {})) != _PARTIAL_CHANGED_PATHS
         or any(not isinstance(value, str) or not HASH.fullmatch(value)
@@ -2055,7 +2118,7 @@ def _partial_v4_admissible(v4, v4_sha256, v3, v3_sha256, current_v2,
         current_v2_sha256, c5_authorization_sha256, c10_authorization_sha256,
         binding, fingerprints, original_state, authorization,
         verified_authorization_sha256, expected_authorization_sha256,
-        kube, root):
+        kube, root, *, historical_candidate=False):
     """Revalidate frozen history and the current v4/C11 authorization before writes."""
     expected = {"schema": "voice-dev-gis-partial-continuation-v4",
         "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
@@ -2104,7 +2167,7 @@ def _partial_v4_admissible(v4, v4_sha256, v3, v3_sha256, current_v2,
     _partial_v3_to_v4_authorized(v3, v3_sha256, c10_authorization_sha256,
         binding, fingerprints, original_state, authorization,
         verified_authorization_sha256, expected_authorization_sha256, static_checkpoint,
-        current_v2, root)
+        current_v2, root, historical_candidate=historical_candidate)
     _partial_state_compatible(v4.get("state"), original_state)
     v3_state = v3.get("state", {})
     plan = v4["state"].get("plan", {})
@@ -2119,6 +2182,241 @@ def _partial_v4_admissible(v4, v4_sha256, v3, v3_sha256, current_v2,
         or created[service_key].get("resourceVersion") != static_checkpoint["service"]["resourceVersion"]
         or created[service_key].get("spec_sha256") != static_checkpoint["service"]["semantic_sha256"]):
         _blocked("gis_dev_partial_v4_state_checkpoint_changed")
+    return True
+
+
+def _partial_v4_to_v5(v4, v4_sha256, v3, v3_sha256, current_v2,
+        current_v2_sha256, c5_authorization_sha256, c10_authorization_sha256,
+        c14_authorization_sha256, binding, fingerprints, original_state,
+        c14_authorization, c14_authorization_raw_sha256,
+        deployment_authorization, deployment_authorization_raw_sha256,
+        expected_deployment_authorization_sha256, kube, root):
+    """Pin the already-created, paused Deployment in a separate v5 record."""
+    import gis_first_install as gis
+    old_binding = copy.deepcopy(binding)
+    old_binding["candidate_source_sha"] = c14_authorization.get("target_source_sha")
+    old_binding["changed_files"] = copy.deepcopy(c14_authorization.get("target_changed_files"))
+    _partial_v4_admissible(v4, v4_sha256, v3, v3_sha256, current_v2,
+        current_v2_sha256, c5_authorization_sha256, c10_authorization_sha256,
+        old_binding, fingerprints, original_state, c14_authorization,
+        c14_authorization_raw_sha256, c14_authorization_raw_sha256,
+        kube, root, historical_candidate=True)
+    checkpoint = _partial_live_c10_checkpoint(kube, v3["state"], fingerprints,
+        root, allow_deployment=True)
+    deployment = checkpoint.get("deployment", {})
+    intended_deployment = next(obj for obj in v4["state"]["plan"]["objects"]
+        if gis._identity(obj) == gis.DEPLOYMENT)
+    intended_image = intended_deployment["spec"]["template"]["spec"]["containers"][0]["image"]
+    required_checkpoint = {"name": "voice-gameintegration", "exists": True,
+        "uid": "fc9bb9e1-b6c8-46a6-ae8b-cde5f3bd28f2",
+        "resourceVersion": "3383482", "generation": 1,
+        "operation": _PARTIAL_OPERATION,
+        "image_ref": intended_image,
+        "replicas": 0}
+    if (any(deployment.get(key) != value for key, value in required_checkpoint.items())
+        or checkpoint.get("deployment_pods") != []):
+        _blocked("gis_dev_partial_v5_deployment_checkpoint_changed")
+    required = {"schema", "operation", "namespace_uid", "original_journal_sha256",
+        "immutable_v1_sha256", "previous_v2_sha256", "previous_v2_binding_sha256",
+        "previous_v2_state_sha256", "previous_c5_authorization_sha256",
+        "previous_v3_sha256", "previous_v3_binding_sha256", "previous_v3_state_sha256",
+        "previous_c10_authorization_sha256", "previous_v4_sha256",
+        "previous_v4_binding_sha256", "previous_v4_state_sha256",
+        "previous_c14_authorization_sha256", "previous_candidate_source_sha",
+        "previous_changed_files", "previous_secret_fingerprints_sha256",
+        "target_source_sha", "target_changed_files", "protected_binding",
+        "partial_checkpoint", "transition_id"}
+    protected_keys = ("old_source_sha", "backend_tree", "build_receipt_sha256", "image_ref",
+        "source_plan_sha256", "source_capture_sha256", "inputs_sha256")
+    protected = {key: binding.get(key) for key in protected_keys}
+    v4_state = v4.get("state")
+    previous_binding = v4.get("binding")
+    if (not isinstance(deployment_authorization, dict)
+        or set(deployment_authorization) != required
+        or deployment_authorization.get("schema") != "voice-dev-gis-deployment-adoption-authorization-v1"
+        or deployment_authorization_raw_sha256 != expected_deployment_authorization_sha256
+        or not isinstance(expected_deployment_authorization_sha256, str)
+        or not HASH.fullmatch(expected_deployment_authorization_sha256)
+        or deployment_authorization.get("operation") != _PARTIAL_OPERATION
+        or deployment_authorization.get("namespace_uid") != original_state.get("namespace_uid")
+        or deployment_authorization.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or deployment_authorization.get("immutable_v1_sha256") != _PARTIAL_V1_SIDECAR_SHA256
+        or deployment_authorization.get("previous_v2_sha256") != _PARTIAL_C5_V2_SHA256
+        or deployment_authorization.get("previous_v2_binding_sha256") != _digest(current_v2.get("binding"))
+        or deployment_authorization.get("previous_v2_state_sha256") != _digest(current_v2.get("state"))
+        or deployment_authorization.get("previous_c5_authorization_sha256") != c5_authorization_sha256
+        or deployment_authorization.get("previous_v3_sha256") != v3_sha256
+        or deployment_authorization.get("previous_v3_binding_sha256") != _digest(v3.get("binding"))
+        or deployment_authorization.get("previous_v3_state_sha256") != _digest(v3.get("state"))
+        or deployment_authorization.get("previous_c10_authorization_sha256") != c10_authorization_sha256
+        or deployment_authorization.get("previous_v4_sha256") != v4_sha256
+        or deployment_authorization.get("previous_v4_binding_sha256") != _digest(previous_binding)
+        or deployment_authorization.get("previous_v4_state_sha256") != _digest(v4_state)
+        or deployment_authorization.get("previous_c14_authorization_sha256") != c14_authorization_raw_sha256
+        or c14_authorization_sha256 != c14_authorization_raw_sha256
+        or deployment_authorization.get("previous_candidate_source_sha") != previous_binding.get("candidate_source_sha")
+        or deployment_authorization.get("previous_changed_files") != previous_binding.get("changed_files")
+        or deployment_authorization.get("previous_secret_fingerprints_sha256") != v4.get("secret_fingerprints_sha256")
+        or deployment_authorization.get("target_source_sha") != binding.get("candidate_source_sha")
+        or deployment_authorization.get("target_changed_files") != binding.get("changed_files")
+        or deployment_authorization.get("protected_binding") != protected
+        or deployment_authorization.get("partial_checkpoint") != checkpoint
+        or deployment_authorization.get("transition_id") != "C14-v4-to-v5-paused-deployment-adoption"):
+        _blocked("gis_dev_partial_v5_transition_authorization_invalid")
+    if (binding.get("candidate_source_sha") != _git_text(root, ["rev-parse", "HEAD"])
+        or binding.get("old_source_sha") != _PARTIAL_SOURCE_SHA
+        or set(binding.get("changed_files", {})) != _PARTIAL_CHANGED_PATHS
+        or any(not isinstance(value, str) or not HASH.fullmatch(value)
+            for value in binding.get("changed_files", {}).values())
+        or any(previous_binding.get(key) != binding.get(key) for key in protected_keys)):
+        _blocked("gis_dev_partial_v5_source_checkpoint_invalid")
+    _partial_state_compatible(v4_state, original_state)
+    state = copy.deepcopy(v4_state)
+    plan = state["plan"]
+    deployment_object = next(obj for obj in plan["objects"] if gis._identity(obj) == gis.DEPLOYMENT)
+    live, _ = gis._read_one(kube, "Deployment", "voice-gameintegration"), None
+    projected = _gis_project_response(live, deployment_object)
+    plan["created"]["Deployment/voice-gameintegration"] = {
+        "uid": deployment["uid"], "resourceVersion": deployment["resourceVersion"],
+        "spec_sha256": gis.digest(gis.semantic(projected))}
+    return {"schema": "voice-dev-gis-partial-continuation-v5",
+        "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
+        "previous_v4_sha256": v4_sha256,
+        "previous_v4_state_sha256": _digest(v4_state),
+        "previous_v4_binding_sha256": _digest(previous_binding),
+        "previous_c14_authorization_sha256": c14_authorization_raw_sha256,
+        "deployment_transition_authorization_sha256": expected_deployment_authorization_sha256,
+        "binding": copy.deepcopy(binding), "protected_binding": protected,
+        "secret_fingerprints_sha256": _digest(fingerprints),
+        "checkpoint": checkpoint, "state": state}
+
+
+def _partial_v5_admissible(v5, v5_sha256, v4, v4_sha256, binding,
+        fingerprints, original_state, deployment_authorization,
+        c14_authorization_raw_sha256, deployment_authorization_raw_sha256,
+        expected_deployment_authorization_sha256,
+        kube, root):
+    """Reconcile only the root-pinned Deployment UID across a paused start."""
+    import gis_first_install as gis
+    if not isinstance(deployment_authorization, dict):
+        _blocked("gis_dev_partial_v5_transition_changed")
+    expected = {"schema": "voice-dev-gis-partial-continuation-v5",
+        "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
+        "previous_v4_sha256": v4_sha256,
+        "previous_v4_state_sha256": _digest(v4.get("state")),
+        "previous_v4_binding_sha256": _digest(v4.get("binding")),
+        "previous_c14_authorization_sha256": deployment_authorization.get("previous_c14_authorization_sha256"),
+        "deployment_transition_authorization_sha256": expected_deployment_authorization_sha256,
+        "binding": copy.deepcopy(binding),
+        "protected_binding": copy.deepcopy(deployment_authorization.get("protected_binding")),
+        "secret_fingerprints_sha256": _digest(fingerprints),
+        "checkpoint": copy.deepcopy(deployment_authorization.get("partial_checkpoint"))}
+    if (not isinstance(v5, dict) or v5_sha256 is None
+        or set(v5) != set(expected) | {"state"}
+        or any(v5.get(key) != value for key, value in expected.items())
+        or deployment_authorization_raw_sha256 != expected_deployment_authorization_sha256
+        or not isinstance(deployment_authorization, dict)
+        or deployment_authorization.get("schema") != "voice-dev-gis-deployment-adoption-authorization-v1"
+        or deployment_authorization.get("target_source_sha") != binding.get("candidate_source_sha")
+        or deployment_authorization.get("target_changed_files") != binding.get("changed_files")
+        or binding.get("candidate_source_sha") != _git_text(root, ["rev-parse", "HEAD"])):
+        _blocked("gis_dev_partial_v5_transition_changed")
+    _partial_state_compatible(v5.get("state"), original_state)
+    checkpoint = deployment_authorization.get("partial_checkpoint")
+    auth_required = {"schema", "operation", "namespace_uid", "original_journal_sha256",
+        "immutable_v1_sha256", "previous_v2_sha256", "previous_v2_binding_sha256",
+        "previous_v2_state_sha256", "previous_c5_authorization_sha256",
+        "previous_v3_sha256", "previous_v3_binding_sha256", "previous_v3_state_sha256",
+        "previous_c10_authorization_sha256", "previous_v4_sha256",
+        "previous_v4_binding_sha256", "previous_v4_state_sha256",
+        "previous_c14_authorization_sha256", "previous_candidate_source_sha",
+        "previous_changed_files", "previous_secret_fingerprints_sha256",
+        "target_source_sha", "target_changed_files", "protected_binding",
+        "partial_checkpoint", "transition_id"}
+    if (set(deployment_authorization) != auth_required
+        or deployment_authorization.get("operation") != _PARTIAL_OPERATION
+        or deployment_authorization.get("namespace_uid") != original_state.get("namespace_uid")
+        or deployment_authorization.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or deployment_authorization.get("immutable_v1_sha256") != _PARTIAL_V1_SIDECAR_SHA256
+        or deployment_authorization.get("previous_v2_sha256") != v4.get("previous_v2_sha256")
+        or deployment_authorization.get("previous_v2_binding_sha256") != v4.get("previous_v2_binding_sha256")
+        or deployment_authorization.get("previous_v2_state_sha256") != v4.get("previous_v2_state_sha256")
+        or deployment_authorization.get("previous_c5_authorization_sha256") != v4.get("previous_c5_authorization_sha256")
+        or deployment_authorization.get("previous_v3_sha256") != v4.get("previous_v3_sha256")
+        or deployment_authorization.get("previous_v3_binding_sha256") != v4.get("previous_v3_binding_sha256")
+        or deployment_authorization.get("previous_v3_state_sha256") != v4.get("previous_v3_state_sha256")
+        or deployment_authorization.get("previous_c10_authorization_sha256") != v4.get("previous_c10_authorization_sha256")
+        or deployment_authorization.get("previous_v4_sha256") != v4_sha256
+        or deployment_authorization.get("previous_v4_binding_sha256") != _digest(v4.get("binding"))
+        or deployment_authorization.get("previous_v4_state_sha256") != _digest(v4.get("state"))
+        or deployment_authorization.get("previous_c14_authorization_sha256") != c14_authorization_raw_sha256
+        or deployment_authorization.get("previous_candidate_source_sha") != v4.get("binding", {}).get("candidate_source_sha")
+        or deployment_authorization.get("previous_changed_files") != v4.get("binding", {}).get("changed_files")
+        or deployment_authorization.get("previous_secret_fingerprints_sha256") != v4.get("secret_fingerprints_sha256")
+        or deployment_authorization.get("protected_binding") != v5.get("protected_binding")
+        or deployment_authorization.get("partial_checkpoint") != v5.get("checkpoint")
+        or deployment_authorization.get("transition_id") != "C14-v4-to-v5-paused-deployment-adoption"):
+        _blocked("gis_dev_partial_v5_transition_changed")
+    protected_keys = ("old_source_sha", "backend_tree", "build_receipt_sha256", "image_ref",
+        "source_plan_sha256", "source_capture_sha256", "inputs_sha256")
+    if (v5.get("protected_binding") != {key: binding.get(key) for key in protected_keys}
+        or any(v5.get("protected_binding", {}).get(key) != v4.get("binding", {}).get(key)
+            for key in protected_keys)):
+        _blocked("gis_dev_partial_v5_source_checkpoint_invalid")
+    current = _partial_live_c10_checkpoint(kube, v5["state"], fingerprints, root,
+        allow_deployment=True, allow_progress=True)
+    expected_records = copy.deepcopy(checkpoint.get("created_records", {}))
+    current_records = copy.deepcopy(current.get("created_records", {}))
+    expected_records.pop("Deployment/voice-gameintegration", None)
+    current_records.pop("Deployment/voice-gameintegration", None)
+    for key in ("operation", "namespace_uid", "prerequisite_receipt_sha256",
+        "configmaps", "jobs", "secret_fingerprints_sha256", "database", "service"):
+        if current.get(key) != checkpoint.get(key):
+            _blocked("gis_dev_partial_v5_protected_checkpoint_changed")
+    if current_records != expected_records:
+        _blocked("gis_dev_partial_v5_protected_checkpoint_changed")
+    expected_deployment = checkpoint.get("deployment", {})
+    actual_deployment = current.get("deployment", {})
+    deployment_record = v5["state"].get("plan", {}).get("created", {}).get(
+        "Deployment/voice-gameintegration")
+    if (not isinstance(deployment_record, dict)
+        or actual_deployment.get("uid") != expected_deployment.get("uid")
+        or actual_deployment.get("operation") != expected_deployment.get("operation")
+        or actual_deployment.get("image_ref") != expected_deployment.get("image_ref")
+        or actual_deployment.get("desired_semantic_sha256") != expected_deployment.get("desired_semantic_sha256")
+        or actual_deployment.get("semantic_sha256") != deployment_record.get("spec_sha256")
+        or actual_deployment.get("replicas") not in (0, 1)
+        or (actual_deployment.get("replicas") == 0 and current.get("deployment_pods") != [])
+        or (actual_deployment.get("replicas") == 1 and len(current.get("deployment_pods", [])) > 1)):
+        _blocked("gis_dev_partial_v5_deployment_checkpoint_changed")
+    v5_state = copy.deepcopy(v5["state"])
+    v4_state = copy.deepcopy(v4.get("state", {}))
+    v5_plan = v5_state.get("plan", {})
+    v4_plan = v4_state.get("plan", {})
+    allowed_plan_phases = {"PLANNED", "CREATED", "STARTING", "STARTED"}
+    if (v5_plan.get("phase") not in allowed_plan_phases
+        or v5_state.get("phase") not in (v4_state.get("phase"), "READY")
+        or v5_state.get("plan_phase") not in (None, v5_plan.get("phase"))):
+        _blocked("gis_dev_partial_v5_state_changed")
+    v5_plan.get("created", {}).pop("Deployment/voice-gameintegration", None)
+    v5_plan["phase"] = v4_plan.get("phase")
+    v5_state["plan_phase"] = v4_state.get("plan_phase")
+    v5_state["phase"] = v4_state.get("phase")
+    if v5_state != v4_state:
+        _blocked("gis_dev_partial_v5_state_changed")
+    if (actual_deployment.get("replicas") == 0
+        and deployment_record.get("resourceVersion") != expected_deployment.get("resourceVersion")):
+        _blocked("gis_dev_partial_v5_deployment_checkpoint_changed")
+    if (actual_deployment.get("replicas") == 0
+        and any(actual_deployment.get(key) != expected_deployment.get(key)
+            for key in ("resourceVersion", "generation", "raw_spec_sha256", "metadata_sha256"))):
+        _blocked("gis_dev_partial_v5_deployment_checkpoint_changed")
+    for pod in current.get("deployment_pods", []):
+        owners = pod.get("ownerReferences", [])
+        if (not isinstance(pod.get("uid"), str) or not any(
+            owner.get("kind") == "ReplicaSet" and owner.get("controller") is True
+            for owner in owners) or pod.get("phase") not in ("Pending", "Running")):
+            _blocked("gis_dev_partial_v5_deployment_pod_changed")
     return True
 
 
@@ -2304,7 +2602,8 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
             secret_plan_factory=build_secret_plan, source_verifier=verify_current_source,
             resume_partial=False, recovery_authorization=None, recovery_authorization_sha256=None,
             source_transition_authorization=None, source_transition_authorization_sha256=None,
-            service_transition_authorization=None, service_transition_authorization_sha256=None):
+            service_transition_authorization=None, service_transition_authorization_sha256=None,
+            deployment_transition_authorization=None, deployment_transition_authorization_sha256=None):
     """Run the fixed DEV-only install through source, DB, Secret, and GIS guards."""
     if not apply:
         _blocked("gis_dev_apply_flag_required")
@@ -2361,6 +2660,7 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
     continuation_path = Path(str(state_path) + ".continuation-current.json")
     continuation_v3_path = Path(str(state_path) + ".continuation-current-v3.json")
     continuation_v4_path = Path(str(state_path) + ".continuation-current-v4.json")
+    continuation_v5_path = Path(str(state_path) + ".continuation-current-v5.json")
     continuation = None
     continuation_sha256 = None
     if resume_partial:
@@ -2432,6 +2732,18 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
             else:
                 service_authorization = None
                 service_authorization_raw_sha256 = None
+            if not deployment_transition_authorization or not deployment_transition_authorization_sha256:
+                if continuation_v4_path.exists() or continuation_v5_path.exists():
+                    _blocked("gis_dev_partial_v5_transition_authorization_required")
+            if deployment_transition_authorization:
+                try:
+                    deployment_authorization, deployment_authorization_raw_sha256 = _read_transition_authorization(
+                        deployment_transition_authorization, deployment_transition_authorization_sha256)
+                except Exception:
+                    _blocked("gis_dev_partial_v5_transition_authorization_invalid")
+            else:
+                deployment_authorization = None
+                deployment_authorization_raw_sha256 = None
             if continuation_v4_path.exists():
                 try:
                     v4_raw = _read_private_continuation(continuation_v4_path)
@@ -2439,13 +2751,34 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
                 except Exception:
                     _blocked("gis_dev_partial_v4_sidecar_invalid")
                 v4_sha = hashlib.sha256(v4_raw).hexdigest()
-                _partial_v4_admissible(v4, v4_sha, continuation, continuation_sha256,
-                    current_v2, current_v2_sha256, c5_authorization_sha256,
-                    transition_authorization_raw_sha256, binding, fingerprints,
-                    original_state, service_authorization, service_authorization_raw_sha256,
-                    service_transition_authorization_sha256, kube, root)
-                continuation, continuation_sha256 = v4, v4_sha
-                continuation_path = continuation_v4_path
+                if continuation_v5_path.exists():
+                    try:
+                        v5_raw = _read_private_continuation(continuation_v5_path)
+                        v5 = _strict_json_object(v5_raw)
+                    except Exception:
+                        _blocked("gis_dev_partial_v5_sidecar_invalid")
+                    v5_sha = hashlib.sha256(v5_raw).hexdigest()
+                    _partial_v5_admissible(v5, v5_sha, v4, v4_sha, binding,
+                        fingerprints, original_state, deployment_authorization,
+                        service_transition_authorization_sha256,
+                        deployment_authorization_raw_sha256,
+                        deployment_transition_authorization_sha256, kube, root)
+                    continuation, continuation_sha256 = v5, v5_sha
+                    continuation_path = continuation_v5_path
+                else:
+                    if deployment_authorization is None:
+                        _blocked("gis_dev_partial_v5_transition_authorization_required")
+                    v5 = _partial_v4_to_v5(v4, v4_sha, continuation,
+                        continuation_sha256, current_v2, current_v2_sha256,
+                        c5_authorization_sha256, transition_authorization_raw_sha256,
+                        service_transition_authorization_sha256, binding, fingerprints,
+                        original_state, service_authorization,
+                        service_authorization_raw_sha256, deployment_authorization,
+                        deployment_authorization_raw_sha256,
+                        deployment_transition_authorization_sha256, kube, root)
+                    v5_sha = _save_continuation(continuation_v5_path, v5)
+                    continuation, continuation_sha256 = v5, v5_sha
+                    continuation_path = continuation_v5_path
             else:
                 if service_authorization is None:
                     _blocked("gis_dev_partial_v4_transition_authorization_required")
@@ -2729,6 +3062,8 @@ def main(argv=None):
     parser.add_argument("--source-transition-authorization-sha256", help="independently granted SHA-256 for the checkpoint transition receipt")
     parser.add_argument("--service-transition-authorization", help="dispatcher-issued C10 Service checkpoint to reviewed candidate transition receipt")
     parser.add_argument("--service-transition-authorization-sha256", help="independently granted SHA-256 for the Service checkpoint transition receipt")
+    parser.add_argument("--deployment-transition-authorization", help="dispatcher-issued paused Deployment adoption transition receipt")
+    parser.add_argument("--deployment-transition-authorization-sha256", help="independently granted SHA-256 for the Deployment adoption receipt")
     args = parser.parse_args(argv)
     try:
         if args.build_and_publish:
@@ -2770,7 +3105,9 @@ def main(argv=None):
             source_transition_authorization=args.source_transition_authorization,
             source_transition_authorization_sha256=args.source_transition_authorization_sha256,
             service_transition_authorization=args.service_transition_authorization,
-            service_transition_authorization_sha256=args.service_transition_authorization_sha256)
+            service_transition_authorization_sha256=args.service_transition_authorization_sha256,
+            deployment_transition_authorization=args.deployment_transition_authorization,
+            deployment_transition_authorization_sha256=args.deployment_transition_authorization_sha256)
         print("GIS_DEV_FIRST_INSTALL=READY " + ready["deployment_uid"])
         return 0
     except Blocked as error:

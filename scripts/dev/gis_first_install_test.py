@@ -891,6 +891,9 @@ class DevWorkloadProjectionTests(unittest.TestCase):
                     "time": "2026-10-17T00:00:03Z"}])
         for path, value in gis._GIS_DEPLOYMENT_DEFAULTS.items():
             self.add_default(deployment, path, value)
+        # The real K3s API response inserts this only on the live object; keep
+        # the producer-shaped fixture independent of the allowlist itself.
+        deployment["spec"]["template"]["spec"]["containers"][0]["resources"] = {}
         # K3s' deployment controller adds this annotation after create; it is
         # accepted only as a positive decimal revision on the owned Deployment.
         deployment["metadata"]["annotations"]["deployment.kubernetes.io/revision"] = "1"
@@ -905,6 +908,9 @@ class DevWorkloadProjectionTests(unittest.TestCase):
 
     def test_projects_only_pinned_service_and_exact_deployment_defaults(self):
         intended, service, deployment, pin = self.fixture()
+        container = intended["Deployment"]["spec"]["template"]["spec"]["containers"][0]
+        self.assertNotIn("resources", container)
+        self.assertEqual(deployment["spec"]["template"]["spec"]["containers"][0]["resources"], {})
         projected_service = gis._gis_project_response(service, intended["Service"], service_pin=pin)
         projected_deployment = gis._gis_project_response(deployment, intended["Deployment"])
         self.assertEqual(gis_first_install.semantic(projected_service),
@@ -914,6 +920,33 @@ class DevWorkloadProjectionTests(unittest.TestCase):
         # The allocated address stays bound in the raw live pin; it is omitted
         # only from the projected semantic object to compare against authored spec.
         self.assertNotIn("clusterIP", projected_service["spec"])
+        self.assertNotIn("resources", projected_deployment["spec"]["template"]["spec"]["containers"][0])
+
+    def test_empty_resources_is_only_projected_at_exact_omitted_main_container_path(self):
+        intended, _, deployment, _ = self.fixture()
+        authored_empty = copy.deepcopy(intended["Deployment"])
+        authored_empty["spec"]["template"]["spec"]["containers"][0]["resources"] = {}
+        missing_authored_field = copy.deepcopy(deployment)
+        del missing_authored_field["spec"]["template"]["spec"]["containers"][0]["resources"]
+        with self.assertRaises(gis.Blocked):
+            gis._gis_project_response(missing_authored_field, authored_empty)
+
+        for mutate in (
+            lambda row: row["spec"]["template"]["spec"]["containers"][0].update(resources={"limits": {"cpu": "1"}}),
+            lambda row: row["spec"]["template"]["spec"]["containers"][0].update(resources={"unexpected": "value"}),
+            lambda row: row["spec"]["template"]["spec"]["containers"][0]["readinessProbe"].update(resources={}),
+            lambda row: row["spec"]["template"]["spec"].update(initContainers=[{"name": "unexpected", "image": "example.invalid/image", "resources": {}}]),
+        ):
+            changed = copy.deepcopy(deployment)
+            mutate(changed)
+            with self.assertRaises(gis.Blocked):
+                gis._gis_project_response(changed, intended["Deployment"])
+
+        authored_exact = copy.deepcopy(intended["Deployment"])
+        authored_exact["spec"]["template"]["spec"]["containers"][0]["resources"] = {}
+        exact_live = copy.deepcopy(deployment)
+        projected = gis._gis_project_response(exact_live, authored_exact)
+        self.assertEqual(projected["spec"]["template"]["spec"]["containers"][0]["resources"], {})
 
     def test_service_identity_and_unknown_or_wrong_defaults_fail_closed(self):
         intended, service, deployment, pin = self.fixture()
@@ -1060,6 +1093,94 @@ class PartialV4AuthorizationTests(unittest.TestCase):
                     gis._partial_v3_to_v4_authorized(v3, "3" * 64,
                         gis._PARTIAL_C10_AUTH_SHA256, binding, {}, {"namespace_uid": "ns"},
                         changed, "4" * 64, "4" * 64, checkpoint, current_v2, Path("."))
+
+
+class PartialV5DeploymentAdoptionTests(unittest.TestCase):
+    def fixture(self):
+        binding = {"old_source_sha": gis._PARTIAL_SOURCE_SHA,
+            "candidate_source_sha": "a" * 40,
+            "changed_files": {name: hashlib.sha256(name.encode()).hexdigest()
+                for name in sorted(gis._PARTIAL_CHANGED_PATHS)},
+            "backend_tree": "b" * 40, "build_receipt_sha256": "c" * 64,
+            "image_ref": "image@sha256:" + "d" * 64,
+            "source_plan_sha256": "e" * 64, "source_capture_sha256": "f" * 64,
+            "inputs_sha256": "1" * 64}
+        protected = {key: binding[key] for key in ("old_source_sha", "backend_tree",
+            "build_receipt_sha256", "image_ref", "source_plan_sha256",
+            "source_capture_sha256", "inputs_sha256")}
+        service = {"uid": "20000000-0000-4000-8000-000000000001",
+            "resourceVersion": "3382156"}
+        deployment = {"name": "voice-gameintegration", "exists": True,
+            "uid": "fc9bb9e1-b6c8-46a6-ae8b-cde5f3bd28f2", "resourceVersion": "3383482",
+            "generation": 1, "operation": gis._PARTIAL_OPERATION,
+            "raw_spec_sha256": "2" * 64, "metadata_sha256": "3" * 64,
+            "image_ref": "image@sha256:" + "d" * 64, "replicas": 0,
+            "semantic_sha256": "4" * 64, "desired_semantic_sha256": "4" * 64}
+        fingerprints_sha = gis._digest({})
+        checkpoint = {"operation": gis._PARTIAL_OPERATION, "namespace_uid": "ns",
+            "created_records": {}, "prerequisite_receipt_sha256": "5" * 64,
+            "configmaps": [], "jobs": [], "secret_fingerprints_sha256": fingerprints_sha,
+            "database": {"owner": "voice", "migration_state": {"version": 31, "dirty": False}},
+            "service": service, "deployment": deployment, "deployment_pods": []}
+        v4_state = {"phase": "SECRETS_APPLIED", "plan_phase": None,
+            "plan": {"phase": "PLANNED", "created": {}}}
+        record = {"uid": deployment["uid"], "resourceVersion": deployment["resourceVersion"],
+            "spec_sha256": deployment["semantic_sha256"]}
+        v5_state = copy.deepcopy(v4_state)
+        v5_state["plan"]["created"]["Deployment/voice-gameintegration"] = record
+        current_v2 = {"previous_v2_sha256": "7" * 64,
+            "previous_v2_binding_sha256": "8" * 64, "previous_v2_state_sha256": "9" * 64,
+            "previous_c5_authorization_sha256": "a" * 64}
+        v3 = {"previous_v3_sha256": "b" * 64, "previous_v3_binding_sha256": "c" * 64,
+            "previous_v3_state_sha256": "d" * 64, "previous_c10_authorization_sha256": "e" * 64}
+        v4 = {**current_v2, **v3, "secret_fingerprints_sha256": fingerprints_sha,
+            "binding": {**protected, "candidate_source_sha": "f" * 40,
+            "changed_files": {name: "1" * 64 for name in sorted(gis._PARTIAL_CHANGED_PATHS)}},
+            "state": v4_state}
+        v4_sha = "2" * 64
+        authorization = {"schema": "voice-dev-gis-deployment-adoption-authorization-v1",
+            "operation": gis._PARTIAL_OPERATION, "namespace_uid": "ns",
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "immutable_v1_sha256": gis._PARTIAL_V1_SIDECAR_SHA256,
+            **current_v2, **v3,
+            "previous_v4_sha256": v4_sha,
+            "previous_v4_binding_sha256": gis._digest(v4["binding"]),
+            "previous_v4_state_sha256": gis._digest(v4_state),
+            "previous_c14_authorization_sha256": "f" * 64,
+            "previous_candidate_source_sha": v4["binding"]["candidate_source_sha"],
+            "previous_changed_files": v4["binding"]["changed_files"],
+            "previous_secret_fingerprints_sha256": fingerprints_sha,
+            "target_source_sha": binding["candidate_source_sha"],
+            "target_changed_files": binding["changed_files"],
+            "protected_binding": protected, "partial_checkpoint": checkpoint,
+            "transition_id": "C14-v4-to-v5-paused-deployment-adoption"}
+        v5 = {"schema": "voice-dev-gis-partial-continuation-v5",
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "previous_v4_sha256": v4_sha,
+            "previous_v4_state_sha256": gis._digest(v4_state),
+            "previous_v4_binding_sha256": gis._digest(v4["binding"]),
+            "previous_c14_authorization_sha256": "f" * 64,
+            "deployment_transition_authorization_sha256": "0" * 64,
+            "binding": binding, "protected_binding": protected,
+            "secret_fingerprints_sha256": fingerprints_sha,
+            "checkpoint": checkpoint, "state": v5_state}
+        return v5, v4, binding, checkpoint, authorization, v4_sha, deployment
+
+    def test_v5_reconciles_only_the_pinned_paused_uid(self):
+        v5, v4, binding, checkpoint, authorization, v4_sha, _ = self.fixture()
+        with (patch.object(gis, "_partial_live_c10_checkpoint", return_value=checkpoint),
+              patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]),
+              patch.object(gis, "_partial_state_compatible", return_value=True)):
+            self.assertTrue(gis._partial_v5_admissible(v5, "3" * 64, v4, v4_sha,
+                binding, {}, {"namespace_uid": "ns"}, authorization, "f" * 64,
+                "0" * 64, "0" * 64, object(), Path(".")))
+            drifted = copy.deepcopy(checkpoint)
+            drifted["deployment"]["uid"] = "40000000-0000-4000-8000-000000000004"
+            with patch.object(gis, "_partial_live_c10_checkpoint", return_value=drifted):
+                with self.assertRaises(gis.Blocked):
+                    gis._partial_v5_admissible(v5, "3" * 64, v4, v4_sha,
+                        binding, {}, {"namespace_uid": "ns"}, authorization, "f" * 64,
+                        "0" * 64, "0" * 64, object(), Path("."))
 
 
 class SourceAuthorityTests(unittest.TestCase):
