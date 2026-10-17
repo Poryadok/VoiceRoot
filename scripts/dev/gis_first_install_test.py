@@ -596,8 +596,8 @@ class ReadOnlyDatabasePreflightTests(unittest.TestCase):
                     return {'items': [{'endpoints': [{'conditions': {'ready': True},
                         'targetRef': {'kind': 'Pod', 'name': 'voice-postgres-0', 'uid': 'p'}}]}]}
                 if args[:2] == ['get', 'configmap']:
-                    return {'data': {'POSTGRES_USER': 'postgres'}}
-                if '-d postgres' in args[-1]: return 'postgres\n'
+                    return {'data': {'POSTGRES_USER': 'voice'}}
+                if '-d postgres' in args[-1]: return 'voice\n'
                 return 'false|false\n'
 
         kube = Kube()
@@ -616,14 +616,14 @@ class ReadOnlyDatabasePreflightTests(unittest.TestCase):
             'service_spec_sha256': 'a' * 64, 'endpoints': [{'uid': 'e', 'pod_uids': ['p']}]}
 
         class Kube:
-            def __init__(self, owner='postgres', catalog='false|false'):
+            def __init__(self, owner='voice', catalog='false|false'):
                 self.owner, self.catalog = owner, catalog
             def run(self, args, timeout=30):
                 if args[:2] == ['get', 'endpointslices']:
                     return {'items': [{'endpoints': [{'conditions': {'ready': True},
                         'targetRef': {'kind': 'Pod', 'name': 'voice-postgres-0', 'uid': 'p'}}]}]}
                 if args[:2] == ['get', 'configmap']:
-                    return {'data': {'POSTGRES_USER': 'postgres'}}
+                    return {'data': {'POSTGRES_USER': 'voice'}}
                 if '-d postgres' in args[-1]: return self.owner + '\n'
                 return self.catalog + '\n'
 
