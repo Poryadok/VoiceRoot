@@ -74,6 +74,18 @@ class NatsPhaseTests(unittest.TestCase):
             phase.stream_existing(wrong)
         self.assertEqual((self.source / 'jetstream' / 'meta.inf').read_bytes(), b'cold-native-data')
 
+    def test_existing_readback_rejects_replaced_pod_uid_without_rearchiving(self):
+        self.run_helper(phase.create_and_stream)
+        archive = self.output / 'archive.tar'
+        original = archive.read_bytes()
+        replacement = types.SimpleNamespace(operation=OPERATION, nonce=NONCE,
+            pod_uid='77777777-7777-4777-8777-777777777777')
+        with patch.object(phase.native_store, 'archive_closed_store',
+                side_effect=AssertionError('replacement Pod must never recreate the archive')):
+            with self.assertRaisesRegex(ValueError, 'archive-readback-binding'):
+                phase.stream_existing(replacement)
+        self.assertEqual(archive.read_bytes(), original)
+
     def test_helper_output_consumes_bounded_archive_and_manifest_frames(self):
         raw = self.run_helper(phase.create_and_stream)
         artifacts = self.root / 'private'; artifacts.mkdir(mode=0o700)
