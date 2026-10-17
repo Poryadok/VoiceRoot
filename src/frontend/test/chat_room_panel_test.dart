@@ -40,11 +40,170 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final scheduledEnabled in [false, true]) {
+    testWidgets('scheduled list request follows capability=$scheduledEnabled', (
+      tester,
+    ) async {
+      final scheduledRequests = <Uri>[];
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: scheduledEnabled,
+            ),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path == '/api/v1/messages/scheduled') {
+                scheduledRequests.add(request.url);
+                return http.Response('{}', 500);
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          presenceProvider.overrideWith((ref, profileId) => null),
+          selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+          chatListControllerProvider.overrideWith(_DmChatListController.new),
+          chatRoomControllerProvider('chat-abc').overrideWith(
+            (ref) => _SingleMessageRoomController(ref, 'chat-abc'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(scheduledRequests, hasLength(scheduledEnabled ? 1 : 0));
+      if (!scheduledEnabled) {
+        expect(
+          container
+              .read(chatRoomControllerProvider('chat-abc'))
+              .scheduledMessagesError,
+          isNull,
+        );
+      }
+    });
+  }
+
+  for (final threadsEnabled in [false, true]) {
+    testWidgets('Reply action follows threads_enabled=$threadsEnabled', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          presenceProvider.overrideWith((ref, profileId) => null),
+          selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+          chatListControllerProvider.overrideWith(
+            (ref) =>
+                _SpaceChatListController(ref, threadsEnabled: threadsEnabled),
+          ),
+          chatRoomControllerProvider('chat-abc').overrideWith(
+            (ref) => _SingleMessageRoomController(ref, 'chat-abc'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      container
+              .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
+              .state =
+          'chat-abc-message';
+      await tester.pumpAndSettle();
+
+      final replyAction = find.text(
+        AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!.chatMessageReply,
+      );
+      expect(replyAction, threadsEnabled ? findsOneWidget : findsNothing);
+    });
+  }
+
+  testWidgets('disabled thread failure explains recovery and keeps the draft', (
+    tester,
+  ) async {
+    final harness = _ImmediateRetryHarness(
+      threadsEnabled: true,
+      send: (_, _) async => http.Response(
+        jsonEncode({
+          'error': 'failed_precondition',
+          'message': 'threads are disabled for this chat',
+        }),
+        412,
+      ),
+    );
+    addTearDown(harness.container.dispose);
+    await harness.pump(tester);
+
+    await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Keep my draft');
+    harness.container.read(chatReplyTargetProvider('chat-abc').notifier).state =
+        _retryReply;
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ChatRoomPanel)),
+    )!;
+    expect(find.text(l10n.chatThreadRepliesUnavailable), findsOneWidget);
+    expect(harness.composer(tester).text, 'Keep my draft');
+    await tester.tap(find.byKey(ChatRoomPanel.replyTargetCancelKey));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.chatThreadRepliesUnavailable), findsNothing);
+    expect(harness.composer(tester).text, 'Keep my draft');
+    expect(harness.container.read(chatReplyTargetProvider('chat-abc')), isNull);
+  });
+
   for (final locale in ['en', 'ru']) {
     testWidgets(
       'immediate text failure in $locale retries the same wire attempt',
       (tester) async {
-        final harness = _ImmediateRetryHarness();
+        final harness = _ImmediateRetryHarness(threadsEnabled: true);
         addTearDown(harness.container.dispose);
         harness.room.state = harness.room.state.copyWith(
           messages: const [_preexistingRetryHistory],
@@ -199,6 +358,7 @@ void main() {
     (tester) async {
       final pending = Completer<http.Response>();
       final harness = _ImmediateRetryHarness(
+        threadsEnabled: true,
         send: (_, attempt) async =>
             attempt == 1 ? pending.future : _successfulSendResponse(),
       );
@@ -322,6 +482,7 @@ void main() {
     (tester) async {
       final pending = Completer<http.Response>();
       final harness = _ImmediateRetryHarness(
+        threadsEnabled: true,
         send: (_, attempt) async =>
             attempt == 1 ? _failedSendResponse() : pending.future,
       );
@@ -349,6 +510,10 @@ void main() {
               .state =
           newerReply;
       await tester.pump();
+      expect(
+        harness.container.read(chatReplyTargetProvider('chat-abc')),
+        newerReply,
+      );
       final retry = tester
           .widget<TextButton>(find.byKey(ChatRoomPanel.sendRetryKey))
           .onPressed!;
@@ -364,6 +529,58 @@ void main() {
       expect(
         harness.container.read(chatReplyTargetProvider('chat-abc')),
         newerReply,
+      );
+    },
+  );
+
+  testWidgets(
+    'text Retry blocks a retained reply after threads are disabled',
+    (tester) async {
+      final harness = _ImmediateRetryHarness(threadsEnabled: true);
+      addTearDown(harness.container.dispose);
+      harness.container
+              .read(chatReplyTargetProvider('chat-abc').notifier)
+              .state =
+          _retryReply;
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Retained reply body',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(1));
+
+      harness.container.read(chatListControllerProvider.notifier).state =
+          ChatListState(
+            profileId: 'prof-test',
+            items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-abc',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'prof-test',
+                  threadsEnabled: false,
+                ),
+                dmPeerProfileId: 'peer-1',
+              ),
+            ],
+          );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+      await tester.pumpAndSettle();
+
+      expect(harness.bodies, hasLength(1));
+      expect(harness.composer(tester).text, 'Retained reply body');
+      expect(
+        harness.container.read(chatReplyTargetProvider('chat-abc')),
+        _retryReply,
+      );
+      expect(
+        find.text(AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!.chatThreadRepliesUnavailable),
+        findsOneWidget,
       );
     },
   );
@@ -1075,7 +1292,10 @@ void main() {
             ),
             authControllerProvider.overrideWith(authenticatedAuthController),
             gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
+              const GatewayConfig(
+                baseUrl: 'http://api.test',
+                scheduledMessagesEnabled: true,
+              ),
             ),
             httpClientProvider.overrideWithValue(
               MockClient((request) async {
@@ -1276,7 +1496,10 @@ void main() {
           return auth = authenticatedAuthController(ref);
         }),
         gatewayConfigProvider.overrideWithValue(
-          const GatewayConfig(baseUrl: 'http://api.test'),
+          const GatewayConfig(
+            baseUrl: 'http://api.test',
+            scheduledMessagesEnabled: true,
+          ),
         ),
         httpClientProvider.overrideWithValue(
           MockClient((request) async {
@@ -1384,7 +1607,10 @@ void main() {
           ),
           authControllerProvider.overrideWith(authenticatedAuthController),
           gatewayConfigProvider.overrideWithValue(
-            const GatewayConfig(baseUrl: 'http://api.test'),
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: true,
+            ),
           ),
           httpClientProvider.overrideWithValue(client),
           isDeviceOfflineProvider.overrideWith((ref) => false),
@@ -1455,7 +1681,10 @@ void main() {
           ),
           authControllerProvider.overrideWith(authenticatedAuthController),
           gatewayConfigProvider.overrideWithValue(
-            const GatewayConfig(baseUrl: 'http://api.test'),
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: true,
+            ),
           ),
           httpClientProvider.overrideWithValue(
             MockClient((request) async {
@@ -1547,7 +1776,10 @@ void main() {
           ),
           authControllerProvider.overrideWith(authenticatedAuthController),
           gatewayConfigProvider.overrideWithValue(
-            const GatewayConfig(baseUrl: 'http://api.test'),
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: true,
+            ),
           ),
           httpClientProvider.overrideWithValue(
             MockClient((request) async {
@@ -1612,6 +1844,7 @@ class _ImmediateRetryHarness {
   _ImmediateRetryHarness({
     Future<http.Response> Function(http.Request, int)? send,
     bool encrypted = false,
+    bool threadsEnabled = false,
   }) {
     final client = MockClient((request) async {
       if (request.url.path == '/api/v1/messages/send') {
@@ -1656,7 +1889,11 @@ class _ImmediateRetryHarness {
         realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
         isDeviceOfflineProvider.overrideWith((ref) => false),
         selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
-        chatListControllerProvider.overrideWith(_DmChatListController.new),
+        chatListControllerProvider.overrideWith(
+          threadsEnabled
+              ? (ref) => _DmChatListController(ref, threadsEnabled: true)
+              : _DmChatListController.new,
+        ),
         chatE2eEnabledProvider('chat-abc').overrideWith((ref) => encrypted),
         e2eMessageServiceProvider.overrideWithValue(
           _CountingE2eMessageService(() => ++encryptionCalls),
@@ -1765,8 +2002,8 @@ class _EmptyRoomController extends ChatRoomController {
 }
 
 class _DmChatListController extends ChatListController {
-  _DmChatListController(super.ref) : super() {
-    state = const ChatListState(
+  _DmChatListController(super.ref, {bool threadsEnabled = false}) : super() {
+    state = ChatListState(
       profileId: 'prof-test',
       items: [
         ChatListItem(
@@ -1774,6 +2011,7 @@ class _DmChatListController extends ChatListController {
             id: 'chat-abc',
             type: 'CHAT_TYPE_DM',
             creatorProfileId: 'prof-test',
+            threadsEnabled: threadsEnabled,
           ),
           dmPeerProfileId: 'peer-1',
         ),
@@ -1876,8 +2114,8 @@ class _BlockedDmChatListController extends ChatListController {
 }
 
 class _SpaceChatListController extends ChatListController {
-  _SpaceChatListController(super.ref) : super() {
-    state = const ChatListState(
+  _SpaceChatListController(super.ref, {this.threadsEnabled = false}) : super() {
+    state = ChatListState(
       profileId: 'prof-test',
       items: [
         ChatListItem(
@@ -1886,11 +2124,14 @@ class _SpaceChatListController extends ChatListController {
             type: 'CHAT_TYPE_GROUP',
             creatorProfileId: 'owner',
             spaceId: 'space-1',
+            threadsEnabled: threadsEnabled,
           ),
         ),
       ],
     );
   }
+
+  final bool threadsEnabled;
 
   @override
   Future<void> loadInitial() async {}

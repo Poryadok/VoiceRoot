@@ -1,7 +1,11 @@
 /// API Gateway base URL (scheme + host + optional port), no trailing path.
 /// Set at compile time: `--dart-define=VOICE_API_BASE_URL=https://voice.example`.
 class GatewayConfig {
-  const GatewayConfig({required this.baseUrl, this.livekitUrl = ''});
+  const GatewayConfig({
+    required this.baseUrl,
+    this.livekitUrl = '',
+    this.scheduledMessagesEnabled = false,
+  });
 
   /// Empty string when not defined (tests and local runs inject via [Provider]).
   factory GatewayConfig.fromEnvironment() {
@@ -10,11 +14,23 @@ class GatewayConfig {
       'VOICE_LIVEKIT_URL',
       defaultValue: '',
     );
-    return GatewayConfig(baseUrl: url, livekitUrl: livekit);
+    const scheduledMessages = bool.fromEnvironment(
+      'VOICE_FEATURE_SCHEDULED_MESSAGES',
+      defaultValue: false,
+    );
+    return GatewayConfig(
+      baseUrl: url,
+      livekitUrl: livekit,
+      scheduledMessagesEnabled: scheduledMessages,
+    );
   }
 
   final String baseUrl;
   final String livekitUrl;
+
+  /// Messaging's scheduled-message handler and worker are not available in
+  /// every deployment, so callers must opt in explicitly.
+  final bool scheduledMessagesEnabled;
 
   bool get hasBaseUrl => baseUrl.isNotEmpty;
 

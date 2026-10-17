@@ -2252,6 +2252,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   bool get canRetryFailedMessage =>
       _failedImmediateSend != null && !_immediateSendInFlight && mounted;
 
+  /// Drops a failed reply attempt after its target is removed, leaving the
+  /// composer text available to send as a regular message.
+  void discardFailedMessage() => _cancelImmediateSend(clearState: true);
+
   bool _isCurrentImmediateSend(
     GatewayRequestIdentity identity,
     int install,
@@ -2396,10 +2400,24 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   }
 
   Future<void> loadScheduledMessages({bool loadMore = false}) async {
+    final requestGeneration = ++_scheduledMessagesGeneration;
+    if (!_ref.read(gatewayConfigProvider).scheduledMessagesEnabled) {
+      _scheduledMessagesWasLoaded = false;
+      _seenScheduledMessagesCursors.clear();
+      state = state.copyWith(
+        scheduledMessages: const [],
+        isLoadingScheduledMessages: false,
+        clearScheduledMessagesError: true,
+        scheduledMessagesFailedLoadMore: false,
+        clearScheduledActionError: true,
+        clearScheduledMessagesNextCursor: true,
+        hasMoreScheduledMessages: false,
+      );
+      return;
+    }
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final generation = _loadGeneration;
-    final requestGeneration = ++_scheduledMessagesGeneration;
     if (auth == null || profileId == null) {
       _seenScheduledMessagesCursors.clear();
       state = state.copyWith(
