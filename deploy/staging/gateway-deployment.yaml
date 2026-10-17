@@ -39,6 +39,11 @@ spec:
             - {name: GATEWAY_VOICE_USER_TLS_CA_FILE, value: /etc/voice/media/ca/ca.crt}
             - {name: GATEWAY_VOICE_USER_CLIENT_CERT_FILE, value: /etc/voice/media/client/tls.crt}
             - {name: GATEWAY_VOICE_USER_CLIENT_KEY_FILE, value: /etc/voice/media/client/tls.key}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_GRPC_ADDR, value: "voice-voice:9095"}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_TLS_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_TLS_SERVER_NAME, value: voice-voice}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_CERT_FILE, value: /etc/voice/media/client/tls.crt}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_KEY_FILE, value: /etc/voice/media/client/tls.key}
             - name: GATEWAY_REDIS_ADDR
               valueFrom:
                 configMapKeyRef:

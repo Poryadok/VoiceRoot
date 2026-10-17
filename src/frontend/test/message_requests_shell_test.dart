@@ -13,10 +13,12 @@ import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/users_client.dart';
+import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/routing/deep_link_listener.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
@@ -32,8 +34,11 @@ import 'package:voice_frontend/ui/shell/manage_folders_sheet.dart';
 import 'package:voice_frontend/ui/shell/message_requests_folder.dart';
 import 'package:voice_frontend/ui/shell/mobile_shell_drawer.dart';
 import 'package:voice_frontend/ui/shell/navigation_panel.dart';
+import 'package:voice_frontend/ui/onboarding/onboarding_coach_mark.dart';
+import 'package:voice_frontend/ui/onboarding/onboarding_anchor_keys.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/core/voice_avatar.dart';
+import 'package:voice_frontend/ui/social/social_panel.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/fake_voice_api_clients.dart';
@@ -44,6 +49,227 @@ const _voipChannel = MethodChannel('voice/voip');
 var _captureFontsLoaded = false;
 
 void main() {
+  testWidgets('desktop Friends rail opens the real social panel', (
+    tester,
+  ) async {
+    _mockVoip(tester);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final container = await _pumpVoiceShell(
+      tester,
+      const Size(1280, 800),
+      null,
+    );
+
+    expect(container.read(navigationSectionProvider), NavigationSection.chats);
+    expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
+    expect(find.byKey(const Key('shell_rail_friends')), findsOneWidget);
+    expect(find.byType(SocialPanel), findsNothing);
+
+    await tester.tap(find.byKey(const Key('shell_rail_friends')));
+    await tester.pumpAndSettle();
+
+    expect(container.read(navigationSectionProvider), NavigationSection.social);
+    expect(find.byKey(SocialPanel.panelKey), findsOneWidget);
+    expect(find.byKey(NavigationPanel.panelKey), findsOneWidget);
+    expect(find.byType(ChatListBody), findsNothing);
+  });
+
+  testWidgets(
+    'fresh-user spaces coach mark stays visible without blocking Friends navigation',
+    (tester) async {
+      _mockVoip(tester);
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await _pumpVoiceShell(
+        tester,
+        const Size(1280, 800),
+        null,
+        onboardingAtSpaces: true,
+      );
+
+      final anchorRect = tester.getRect(find.byKey(OnboardingAnchorKeys.spaces));
+      final title = find.text(AppLocalizationsEn().onboardingSpacesTitle);
+      final titleRect = tester.getRect(title);
+      final cardRect = tester.getRect(find.byKey(OnboardingCoachMark.cardKey));
+      final safeTop = tester.view.padding.top + 8;
+      final safeBottom =
+          tester.view.physicalSize.height - tester.view.padding.bottom - 8;
+      const safeLeft = 8.0;
+      final safeRight = tester.view.physicalSize.width - safeLeft;
+      expect(anchorRect.height, lessThan(120));
+      expect(cardRect.left, greaterThanOrEqualTo(safeLeft));
+      expect(cardRect.right, lessThanOrEqualTo(safeRight));
+      expect(cardRect.top, greaterThanOrEqualTo(safeTop));
+      expect(cardRect.bottom, lessThanOrEqualTo(safeBottom));
+      expect(titleRect.top, greaterThanOrEqualTo(safeTop));
+      expect(titleRect.bottom, lessThanOrEqualTo(safeBottom));
+      final skip = find.widgetWithText(
+        TextButton,
+        AppLocalizationsEn().onboardingSkip,
+      );
+      final continueButton = find.widgetWithText(
+        FilledButton,
+        AppLocalizationsEn().onboardingLater,
+      );
+      final secondaryButton = find.widgetWithText(
+        TextButton,
+        AppLocalizationsEn().onboardingSpacesFind,
+      );
+      expect(tester.getTopLeft(skip).dx, greaterThanOrEqualTo(safeLeft));
+      expect(tester.getBottomRight(skip).dx, lessThanOrEqualTo(safeRight));
+      expect(tester.getTopLeft(skip).dy, greaterThanOrEqualTo(safeTop));
+      expect(tester.getBottomRight(skip).dy, lessThanOrEqualTo(safeBottom));
+      expect(
+        tester.getTopLeft(continueButton).dx,
+        greaterThanOrEqualTo(safeLeft),
+      );
+      expect(
+        tester.getBottomRight(continueButton).dx,
+        lessThanOrEqualTo(safeRight),
+      );
+      expect(tester.getTopLeft(continueButton).dy, greaterThanOrEqualTo(safeTop));
+      expect(tester.getBottomRight(continueButton).dy, lessThanOrEqualTo(safeBottom));
+      expect(
+        tester.getTopLeft(secondaryButton).dx,
+        greaterThanOrEqualTo(safeLeft),
+      );
+      expect(
+        tester.getBottomRight(secondaryButton).dx,
+        lessThanOrEqualTo(safeRight),
+      );
+      expect(tester.getTopLeft(secondaryButton).dy, greaterThanOrEqualTo(safeTop));
+      expect(tester.getBottomRight(secondaryButton).dy, lessThanOrEqualTo(safeBottom));
+      expect(
+        skip,
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('shell_rail_friends')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SocialPanel), findsOneWidget);
+      expect(find.byKey(SocialPanel.panelKey), findsOneWidget);
+      expect(find.text(AppLocalizationsEn().onboardingSpacesTitle), findsOneWidget);
+      expect(
+        find.widgetWithText(TextButton, AppLocalizationsEn().onboardingSkip),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.widgetWithText(TextButton, AppLocalizationsEn().onboardingSkip),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(AppLocalizationsEn().onboardingSpacesTitle), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'fresh-user can reach Friends by keyboard while spaces coach mark is visible',
+    (tester) async {
+      _mockVoip(tester);
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final container = await _pumpVoiceShell(
+        tester,
+        const Size(1280, 800),
+        null,
+        onboardingAtSpaces: true,
+      );
+
+      var focused = false;
+      for (var attempt = 0; attempt < 24 && !focused; attempt++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        final primaryContext = FocusManager.instance.primaryFocus?.context;
+        primaryContext?.visitAncestorElements((element) {
+          if (element.widget.key == const Key('shell_rail_friends')) {
+            focused = true;
+            return false;
+          }
+          return true;
+        });
+      }
+      expect(focused, isTrue, reason: FocusManager.instance.primaryFocus?.toStringDeep());
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(container.read(navigationSectionProvider), NavigationSection.social);
+      expect(find.byKey(SocialPanel.panelKey), findsOneWidget);
+      expect(find.text(AppLocalizationsEn().onboardingSpacesTitle), findsOneWidget);
+      expect(find.byKey(OnboardingCoachMark.cardKey), findsOneWidget);
+    },
+  );
+
+  testWidgets('spaces coach mark fits a narrow viewport', (tester) async {
+    _mockVoip(tester);
+    await _pumpVoiceShell(
+      tester,
+      const Size(320, 800),
+      null,
+      onboardingAtSpaces: true,
+    );
+
+    final card = tester.getRect(find.byKey(OnboardingCoachMark.cardKey));
+    expect(card.left, greaterThanOrEqualTo(8));
+    expect(card.right, lessThanOrEqualTo(312));
+    expect(card.top, greaterThanOrEqualTo(8));
+    expect(card.bottom, lessThanOrEqualTo(792));
+    for (final action in [
+      find.widgetWithText(TextButton, AppLocalizationsEn().onboardingSkip),
+      find.widgetWithText(TextButton, AppLocalizationsEn().onboardingSpacesFind),
+      find.widgetWithText(FilledButton, AppLocalizationsEn().onboardingLater),
+    ]) {
+      final rect = tester.getRect(action);
+      expect(rect.left, greaterThanOrEqualTo(8));
+      expect(rect.right, lessThanOrEqualTo(312));
+      expect(rect.top, greaterThanOrEqualTo(8));
+      expect(rect.bottom, lessThanOrEqualTo(792));
+    }
+  });
+
+  testWidgets('spaces coach mark scrolls its actions into a short viewport', (
+    tester,
+  ) async {
+    final anchorKey = await _pumpStandaloneCoachMark(
+      tester,
+      const Size(1280, 220),
+      body: List.filled(
+        60,
+        'Spaces help people find communities and conversations.',
+      ).join(' '),
+    );
+
+    final anchor = tester.getRect(find.byKey(anchorKey));
+    final card = find.byKey(OnboardingCoachMark.cardKey);
+    final initialCard = tester.getRect(card);
+    expect(initialCard.top, greaterThanOrEqualTo(8));
+    expect(initialCard.bottom, lessThanOrEqualTo(212));
+    expect(initialCard.top, lessThan(anchor.bottom));
+
+    for (final action in [
+      find.text('Skip'),
+      find.text('Find spaces'),
+      find.text('Later'),
+    ]) {
+      await tester.ensureVisible(action);
+      await tester.pumpAndSettle();
+      final cardRect = tester.getRect(card);
+      final actionRect = tester.getRect(action);
+      expect(actionRect.top, greaterThanOrEqualTo(cardRect.top));
+      expect(actionRect.bottom, lessThanOrEqualTo(cardRect.bottom));
+      expect(actionRect.top, greaterThanOrEqualTo(8));
+      expect(actionRect.bottom, lessThanOrEqualTo(212));
+    }
+  });
+
   testWidgets(
     'real shell opens and returns from message requests on wide and narrow layouts',
     (tester) async {
@@ -422,12 +648,49 @@ void _expectRequestsWorkspace(WidgetTester tester) {
   expect(find.byKey(ChatListBody.listKey), findsOneWidget);
 }
 
+Future<GlobalKey> _pumpStandaloneCoachMark(
+  WidgetTester tester,
+  Size size, {
+  required String body,
+}) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = size;
+  final anchorKey = GlobalKey();
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(key: anchorKey, width: 48, height: 48),
+        ),
+      ),
+    ),
+  );
+  final entry = OnboardingCoachMark.show(
+    context: tester.element(find.byKey(anchorKey)),
+    anchorKey: anchorKey,
+    title: 'Spaces',
+    body: body,
+    continueLabel: 'Later',
+    skipLabel: 'Skip',
+    secondaryLabel: 'Find spaces',
+    onContinue: () {},
+    onSkip: () {},
+    onSecondary: () {},
+  ) ??
+      (throw StateError('coach mark overlay was not inserted'));
+  addTearDown(entry.remove);
+  await tester.pumpAndSettle();
+  return anchorKey;
+}
+
 Future<ProviderContainer> _pumpVoiceShell(
   WidgetTester tester,
   Size size,
   ThemeData? captureTheme, {
   _RequestsChatsClient? chats,
   bool emptyFolders = false,
+  bool onboardingAtSpaces = false,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -440,6 +703,10 @@ Future<ProviderContainer> _pumpVoiceShell(
         )),
       ),
       voiceChatsClientProvider.overrideWithValue(chats ?? _RequestsChatsClient()),
+      if (onboardingAtSpaces)
+        onboardingControllerProvider.overrideWith(
+          _IncompleteSpacesOnboardingController.new,
+        ),
       activeProfileProvider.overrideWith(
         (_) async => const VoiceProfile(
           id: 'prof-test',
@@ -491,6 +758,22 @@ Future<ProviderContainer> _pumpVoiceShell(
   );
   await tester.pumpAndSettle();
   return container;
+}
+
+class _IncompleteSpacesOnboardingController extends OnboardingController {
+  @override
+  OnboardingUiState build() => const OnboardingUiState(
+    completedSteps: ['save_account', 'chats_nav'],
+    loaded: true,
+  );
+
+  @override
+  Future<void> load() async {}
+
+  @override
+  Future<void> completeStep(String stepId) async {
+    state = const OnboardingUiState(completed: true, loaded: true);
+  }
 }
 
 class _RequestsChatsClient extends FakeVoiceChatsClient {

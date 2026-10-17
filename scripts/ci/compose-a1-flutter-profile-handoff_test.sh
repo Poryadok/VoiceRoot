@@ -144,9 +144,12 @@ log="${FAKE_LOG:?FAKE_LOG required}"
 printf 'python3' >>"${log}"
 for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
 printf '\n' >>"${log}"
+printf 'fixture_uid=%s\n' "${PHASE0_MATCHSQUAD_FIXTURE_UID:-}" >>"${log}"
 if [[ "${1:-}" == */generate-phase0-fixture.py ]]; then
   if [[ "${FAKE_FIXTURE_RC:-0}" != 0 ]]; then exit "$FAKE_FIXTURE_RC"; fi
   mkdir -p "${2:?fixture destination required}"
+elif [[ "${1:-}" == */restore-phase0-fixture-owner.py ]]; then
+  :
 fi
 EOF
 cat >"${bin}/curl" <<'EOF'
@@ -368,6 +371,7 @@ compose_file="$(sed -n 's/.* <-f> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 assert_abs "$env_file"; assert_abs "$compose_dir"; assert_abs "$compose_file"
 assert_contains "${case_dir}/commands.log" 'env_size=[1-9][0-9]*'
 assert_contains "${case_dir}/commands.log" 'python3 .*<.*scripts/dev/generate-phase0-fixture.py>'
+assert_contains "${case_dir}/commands.log" '^fixture_uid=65532$'
 assert_contains "${case_dir}/commands.log" 'docker <compose> .*<-f> <.*docker-compose.voice-space-media.yml>'
 assert_contains "${case_dir}/commands.log" '^env_PHASE0_FIXTURE_DIR=.*/phase0-fixture$'
 assert_contains "${case_dir}/commands.log" 'compose.*<--project-name> <voice-a1-flutter-handoff-[a-z0-9-]+>'
@@ -386,6 +390,7 @@ assert_not_contains "${case_dir}/commands.log" 'compose.*<down>'
 case_dir="$(new_case cleanup)"
 VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
+assert_contains "${case_dir}/commands.log" 'restore-phase0-fixture-owner.py'
 [[ -z "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'fixture must be removed after opted-in Compose cleanup'
 assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
 assert_not_contains "${case_dir}/commands.log" '--volumes|<-v>|volume prune|system prune'

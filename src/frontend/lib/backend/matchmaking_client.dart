@@ -303,6 +303,10 @@ class MatchData {
     this.chatId,
     this.gameName,
     this.createdAt,
+    this.acceptanceDeadlineAt,
+    this.serverNow,
+    this.ownProposalResponse,
+    this.ownSearchSession,
   });
 
   final String id;
@@ -315,6 +319,10 @@ class MatchData {
   final String? chatId;
   final String? gameName;
   final DateTime? createdAt;
+  final DateTime? acceptanceDeadlineAt;
+  final DateTime? serverNow;
+  final String? ownProposalResponse;
+  final SearchSessionData? ownSearchSession;
 
   static MatchData fromGatewayJson(Map<String, dynamic> json) {
     final match = json['match'] as Map<String, dynamic>? ?? json;
@@ -330,11 +338,29 @@ class MatchData {
       voiceRoomId: match['voiceRoomId'] as String? ?? match['voice_room_id'] as String?,
       chatId: match['chatId'] as String? ?? match['chat_id'] as String?,
       createdAt: _parseGatewayTimestamp(match['createdAt'] ?? match['created_at']),
+      acceptanceDeadlineAt: _parseGatewayTimestamp(
+        json['acceptanceDeadlineAt'] ?? json['acceptance_deadline_at'],
+      ),
+      serverNow: _parseGatewayTimestamp(json['serverNow'] ?? json['server_now']),
+      ownProposalResponse: json['ownProposalResponse'] as String? ??
+          json['own_proposal_response'] as String?,
+      ownSearchSession: _parseOptionalSearchSession(json),
       profileIds: [
         for (final p in profilesRaw)
           if (p is String) p,
       ],
     );
+  }
+
+  static SearchSessionData? _parseOptionalSearchSession(
+    Map<String, dynamic> json,
+  ) {
+    final raw = json['ownSearchSession'] ??
+        json['own_search_session'] ??
+        json['searchSession'] ??
+        json['search_session'];
+    if (raw is! Map<String, dynamic>) return null;
+    return SearchSessionData.fromGatewayJson(raw);
   }
 }
 
@@ -586,11 +612,12 @@ class VoiceMatchmakingClient {
   Future<MatchmakingApiResult<MatchData>> completeMatch({
     required String authorization,
     required String matchId,
+    required String operationId,
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/matchmaking/matches/$matchId/complete'),
       authorization: authorization,
-      body: const <String, dynamic>{},
+      body: <String, dynamic>{'operationId': operationId},
     );
     return _map(result, MatchData.fromGatewayJson);
   }

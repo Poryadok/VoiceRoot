@@ -2,13 +2,20 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
+	"voice/backend/pkg/principal"
 )
 
 type recordingMatchmakingRatingGRPC struct {
@@ -36,6 +43,20 @@ func (s *recordingMatchmakingRatingGRPC) CompleteMatch(_ context.Context, req *m
 	}, nil
 }
 
+type verifyingMatchmakingCompleteClient struct {
+	matchmakingv1.MatchmakingServiceClient
+	verify func(context.Context, *matchmakingv1.CompleteMatchRequest)
+	calls  int
+}
+
+func (c *verifyingMatchmakingCompleteClient) CompleteMatch(ctx context.Context, req *matchmakingv1.CompleteMatchRequest, _ ...grpc.CallOption) (*matchmakingv1.CompleteMatchResponse, error) {
+	c.calls++
+	if c.verify != nil {
+		c.verify(ctx, req)
+	}
+	return &matchmakingv1.CompleteMatchResponse{Match: &matchmakingv1.Match{Id: req.GetMatchId(), Status: "completed"}}, nil
+}
+
 func (s *recordingMatchmakingRatingGRPC) RateMatch(_ context.Context, req *matchmakingv1.RateMatchRequest) (*matchmakingv1.RateMatchResponse, error) {
 	s.lastRate = req
 	return &matchmakingv1.RateMatchResponse{}, nil
@@ -45,10 +66,10 @@ func (s *recordingMatchmakingRatingGRPC) GetPlayerRating(_ context.Context, req 
 	s.lastPlayerRating = req
 	return &matchmakingv1.GetPlayerRatingResponse{
 		PlayerRating: &matchmakingv1.PlayerRating{
-			ProfileId:    req.GetProfileId(),
-			GameId:       req.GetGameId(),
-			RatingValue:  4.5,
-			GamesPlayed:  3,
+			ProfileId:   req.GetProfileId(),
+			GameId:      req.GetGameId(),
+			RatingValue: 4.5,
+			GamesPlayed: 3,
 		},
 	}, nil
 }
@@ -68,23 +89,70 @@ func (s *recordingMatchmakingRatingGRPC) GetMMBanStatus(_ context.Context, req *
 
 func TestTranscodeMatchmakingCompleteMatch(t *testing.T) {
 	t.Parallel()
-	grpcRec := &recordingMatchmakingRatingGRPC{}
-	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
-	t.Cleanup(cleanup)
-
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
+	accountID, profileID := "10000000-0000-4000-8000-000000000002", "10000000-0000-4000-8000-000000000003"
+	completeClient := &verifyingMatchmakingCompleteClient{}
+	completeClient.verify = func(ctx context.Context, req *matchmakingv1.CompleteMatchRequest) {
+		md, ok := metadata.FromOutgoingContext(ctx)
+		require.True(t, ok)
+		require.Empty(t, md.Get("x-voice-user-id"))
+		require.Empty(t, md.Get("x-voice-profile-id"))
+		require.Empty(t, md.Get("x-voice-session-epoch"))
+		require.Len(t, md.Get("authorization"), 1)
+		require.True(t, strings.HasPrefix(md.Get("authorization")[0], "Bearer "))
+		require.Equal(t, req.GetOperationId(), md.Get("x-request-id")[0])
+		hash, err := principal.RequestHash(req)
+		require.NoError(t, err)
+		verified, err := principal.VerifyDelegatedUser(context.Background(), strings.TrimPrefix(md.Get("authorization")[0], "Bearer "), principal.VerifyConfig{
+			ExpectedIssuer: "gateway", ExpectedAudience: "matchmaking", ExpectedRPC: matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName,
+			ExpectedRequestID: req.GetOperationId(), ExpectedRequestHash: hash,
+			KeyResolver: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil },
+			ReplayGuard: func(context.Context, string, string, time.Time) error { return nil },
+			SessionEpochChecker: func(_ context.Context, account string, epoch int64) error {
+				require.Equal(t, accountID, account)
+				require.Equal(t, int64(8), epoch)
+				return nil
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, accountID, verified.AccountID)
+		require.Equal(t, profileID, verified.ProfileID)
+		require.NotEmpty(t, verified.JWTID)
+	}
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+			"valid-user-token": {UserID: accountID, ProfileID: profileID, SessionEpoch: 8, AccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)},
 		},
-		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+		transcoder: &transcoder{clients: grpcClients{matchmakingComplete: completeClient}, matchmakingCompleteIssuer: issuer},
 	})
-	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/matches/match-1/complete", "", map[string]string{
+	operationID := "10000000-0000-4000-8000-000000000001"
+	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/matches/match-1/complete", `{"operationId":"`+operationID+`"}`, map[string]string{
 		"Authorization": "Bearer valid-user-token",
+		"Content-Type":  "application/json",
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.NotNil(t, grpcRec.lastComplete)
-	require.Equal(t, "match-1", grpcRec.lastComplete.GetMatchId())
+	require.Equal(t, 1, completeClient.calls)
 	require.Contains(t, rec.Body.String(), "completed")
+}
+
+func TestTranscodeMatchmakingCompleteMatchFailsClosedWithoutProtectedUpstream(t *testing.T) {
+	t.Parallel()
+	ordinaryClient := &verifyingMatchmakingCompleteClient{}
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "10000000-0000-4000-8000-000000000002", ProfileID: "10000000-0000-4000-8000-000000000003", SessionEpoch: 8, AccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)},
+		},
+		transcoder: &transcoder{clients: grpcClients{matchmaking: ordinaryClient}},
+	})
+	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/matches/10000000-0000-4000-8000-000000000004/complete", `{"operationId":"10000000-0000-4000-8000-000000000001"}`, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+		"Content-Type":  "application/json",
+	})
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	require.Zero(t, ordinaryClient.calls, "the ordinary matchmaking connection must never receive CompleteMatch")
 }
 
 func TestTranscodeMatchmakingRateMatch(t *testing.T) {

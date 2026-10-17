@@ -2503,6 +2503,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get securitySessionsManage => 'Manage sessions';
 
   @override
+  String get securityLinkedDevicesManage => 'Manage linked devices';
+
+  @override
   String get securitySessionsCurrentDevice => 'This device';
 
   @override
@@ -2927,7 +2930,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String guestConvertVerificationSubtitle(Object email) {
-    return 'Enter the code sent to $email. Your guest access stays active until it is verified.';
+    return 'Enter the verification code for $email. Your guest access stays active until it is verified.';
   }
 
   @override

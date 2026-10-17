@@ -91,10 +91,12 @@ func TestComposeMatchmakingRatingPrivacyWiring_yaml(t *testing.T) {
 	require.Equal(t, "social:9090", matchmaking.Environment["SOCIAL_GRPC_ADDR"])
 	require.Equal(t, "space:9090", matchmaking.Environment["SPACE_GRPC_ADDR"])
 
-	for _, dependency := range []string{"user", "social", "space"} {
+	for _, dependency := range []string{"user", "social"} {
 		require.Equal(t, "service_healthy", matchmaking.DependsOn[dependency].Condition,
 			"matchmaking must wait for %s before privacy checks are enabled", dependency)
 	}
+	require.NotContains(t, matchmaking.DependsOn, "space",
+		"the Matchmaking JWKS publisher must start before Space gRPC is ready")
 }
 
 type composeYAML struct {

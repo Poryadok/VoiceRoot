@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import '../../backend/screen_share_capabilities.dart';
+import '../../backend/livekit_room.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
@@ -45,12 +46,31 @@ class ScreenSharePanel extends ConsumerWidget {
 
     if (room != null && selected != null) {
       if (isLocalSelf) {
-        track = room.localScreenShareTrack();
+        final isMatchSquad =
+            session.matchId != null && session.mediaEpoch != null;
+        if (!isMatchSquad ||
+            (selfId != null &&
+                room is MatchSquadVoiceLiveKitRoom &&
+                room.matchesLocalParticipantIdentity(
+                  selfId,
+                  session.mediaEpoch,
+                ))) {
+          track = room.localScreenShareTrack();
+        }
       } else {
-        final tracks = room.remoteScreenShareTracks(
-          participantIdentity: selected.profileId,
-        );
-        track = tracks.isNotEmpty ? tracks.first : null;
+        final isMatchSquad =
+            session.matchId != null && session.mediaEpoch != null;
+        final identity = isMatchSquad
+            ? room is MatchSquadVoiceLiveKitRoom
+                  ? room.resolveRemoteParticipantIdentity(selected.profileId)
+                  : null
+            : selected.profileId;
+        if (identity != null) {
+          final tracks = room.remoteScreenShareTracks(
+            participantIdentity: identity,
+          );
+          track = tracks.isNotEmpty ? tracks.first : null;
+        }
       }
     }
 

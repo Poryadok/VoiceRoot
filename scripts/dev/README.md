@@ -63,6 +63,45 @@ Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
 
+MatchSquad schema activation uses the separate, fixed-scope
+`scripts/dev/match_squad_db_migrations.py` runner. It accepts only the three
+`voice-dev` databases (Matchmaking, Chat, Voice), pins the five reviewed UP
+migrations by SHA-256, and requires the exact source commit, clean tree,
+namespace UID, and clean baseline ledgers `15/22/10` before creating anything.
+It creates source-bound ConfigMaps and one-shot Jobs with digest-pinned images;
+it never invokes broad `apply_all`, updates Postgres credentials, runs DOWN SQL,
+or deletes/replays an interrupted Job. A failed or ambiguous Job remains for
+inspection and blocks another attempt. The one-shot Job verifies the exact
+`voice` role, database, captured ready Pod IP, and `sslmode=disable` DSN before
+writing its IP-bound URL into a mode-0600 memory-backed volume. The migrate
+container reads only that sealed URL; it does not re-read the mutable Secret or
+resolve the Postgres Service. Runner failures are generic and command output is
+kept private inside the ephemeral Job. Run
+`python3 scripts/dev/match_squad_db_migrations.py --source-sha
+<40-character-commit> --preflight-only` to perform namespaced read-only target
+checks and print only object metadata, required Secret key names, image pins,
+and the three migration ledger rows. This mode creates no resources. Use
+`--apply` only for a specifically authorized DEV activation after reviewing
+the exact source and preflight; it creates Kubernetes resources.
+
+If the pinned Matchmaking Job from source `1c1e2471e6d112e075c5f33f4f4602ceb00b0f0d`
+has already completed and its exact immutable ConfigMap, Job, Pod, and clean
+version-18 ledger receipt are still present, `--preflight-after-matchmaking`
+performs a read-only check for that one completion plus clean Chat/Voice
+baselines and absent continuation targets. Only that exact receipt enables
+`--continue-after-matchmaking`; it creates Chat then Voice targets and never
+creates or replays a Matchmaking Job. If either remainder Job fails or becomes
+ambiguous, retain its objects and stop. This command has no general resume
+mode; later reconciliation requires a separately reviewed source path.
+
+The continuation receipt also compares the captured Pod's actual containers,
+commands, images, Secret references, volumes, security context and
+controller-assigned identity with the source-bound Job template. Only the
+captured scheduler/API fields (node assignment, priority, default service
+account and the two standard not-ready/unreachable tolerations) are admitted;
+the full sanitized Job and Pod API fixture rejects mutations to either init
+container, the migrate container, Secret reference or volume wiring.
+
 ## Fresh installation only
 
 `environment.py` renders captured staging workload/configuration identities into
@@ -320,3 +359,52 @@ The last command verifies the origin with normal certificate validation while
 DNS is still proxied. Final acceptance uses the unchanged audio test with normal
 DNS, without `--add-host`/`--resolve`. Issuance and renewal follow the
 [Certbot HTTP-01 hook contract](https://eff-certbot.readthedocs.io/en/stable/using.html#manual).
+# DEV MatchSquad credentials
+
+`match_squad_pki.py` and `match-squad-pki-issuer/` provide a separate, DEV-only
+issuer for the Matchmaking → Chat/Voice service-principal flow. This is not a
+continuation of `media_pki.py`: it uses its own named volume
+`voice-dev-match-squad-pki`, source-bound private journal, CA, and operation ID.
+The completed media PKI volume and journal are outside this flow and must remain
+untouched.
+
+Build the issuer image on the approved private Linux operator host from the
+clean reviewed source commit, label it with that source commit, and pin the
+result by its local immutable `sha256:` image ID. The Dockerfile pins the
+`python:3.13-slim-bookworm` base by digest. Use the exact staging-template
+SHA-256 and current DEV namespace UID from the reviewed activation packet. The
+CLI is Linux-only. `preflight` is read-only;
+`prepare`, `apply`, and `resume` all require `--confirm-dev-match-squad-pki-change`.
+`prepare` persists one staged CA/key set in the dedicated private volume;
+`apply` creates only the six reviewed Secrets plus public `voice-match-squad-ca`
+ConfigMap; `resume` continues that exact operation. After every successful
+create, the operator reads the object back and compares its normalized metadata
+and full payload with the exact staged object before recording success. Never
+start another operation to recover a partial one.
+
+Example command shape (replace placeholders only with reviewer-approved pins):
+
+```sh
+python3 scripts/dev/match_squad_pki.py preflight --issuer-image sha256:<image-id> --expected-source-sha <commit-sha> --expected-template-sha256 <template-sha256> --expected-namespace-uid <namespace-uid>
+python3 scripts/dev/match_squad_pki.py prepare --issuer-image sha256:<image-id> --expected-source-sha <commit-sha> --expected-template-sha256 <template-sha256> --expected-namespace-uid <namespace-uid> --confirm-dev-match-squad-pki-change
+python3 scripts/dev/match_squad_pki.py apply --issuer-image sha256:<image-id> --expected-source-sha <commit-sha> --expected-template-sha256 <template-sha256> --expected-namespace-uid <namespace-uid> --confirm-dev-match-squad-pki-change
+python3 scripts/dev/match_squad_pki.py resume --issuer-image sha256:<image-id> --expected-source-sha <commit-sha> --expected-template-sha256 <template-sha256> --expected-namespace-uid <namespace-uid> --confirm-dev-match-squad-pki-change
+```
+
+The issuer image runs offline, read-only, without Linux capabilities, as UID
+10002, with only a bounded private `/tmp` tmpfs for OpenSSL scratch files. Keep
+issuer stdout captured by the operator; the `export` action carries
+private key/replay material to the in-memory create-only adapter and must never
+be run directly into a terminal or log. The journal is mode 0600 and stores
+operation/resource identity and phase only. Kubernetes creates are preceded by
+durable intent; uncertain results are recovered only by exact operation-marker
+and payload comparison. A retry may reuse only the same operation's verified
+empty `.building` directory, or export an already complete integrity-checked
+stage; nonempty, insecure, ambiguous, or foreign state fails closed. One
+recorded legacy `stage-intent` journal has an exact operation/source/image/
+template/namespace/digest-bound transition to the newly reviewed pins, after
+which retries use those active pins. This does not authorize a new operation or
+a general source/image override. On an unknown result, stop and preserve the
+same journal, volume, and staged material for review. No overwrite, deletion,
+or rollback path exists. The separate DEV trust patches and their activation order are in
+`deploy/dev/match-squad-trust-overlay/README.md`.

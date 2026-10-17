@@ -427,6 +427,21 @@ base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
 # and Git blobs; the original R22.2 oracle still checks every remaining delta.
 accepted_game_checkpoint='5ff441e04422e3ff1a4c0e1e7e81e3d17b8470eb'
+# This immutable text record pins the owner-approved source implementation
+# checkpoint. The record is a descendant of H and does not self-hash. These are
+# source constants, never environment-provided proof; producer checks still
+# validate the actual PR rows before merge and the actual master push afterward.
+game_checkpoint_snapshot_base='28f1a0a26f3f23bfb9242592aea9c92fd659ee2d'
+game_checkpoint_snapshot_head='6fe3f778538c0cfff689bb8fc40543010d158944'
+game_checkpoint_snapshot_record='6b2c9a602c920bcbfd785f400f0f3d8560587db9'
+game_checkpoint_aggregate_active=false
+game_checkpoint_aggregate_base=''
+game_checkpoint_aggregate_head=''
+game_checkpoint_aggregate_target=''
+game_checkpoint_aggregate_paths=''
+game_checkpoint_aggregate_map=''
+game_checkpoint_aggregate_record=''
+game_checkpoint_aggregate_alias_map=''
 game_checkpoint_enabled=false
 if git -C "${ROOT}" merge-base --is-ancestor "${accepted_game_checkpoint}" HEAD; then
   game_checkpoint_enabled=true
@@ -447,6 +462,1203 @@ game_checkpoint_path_allowed() {
   [[ "${game_checkpoint_enabled}" == true && -f "${ROOT}/${path}" ]] || return 1
   actual_blob="$(git -C "${ROOT}" hash-object --path="${path}" "${ROOT}/${path}")"
   game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${actual_blob}"
+}
+
+# A later owner-approved Game snapshot is admitted as one immutable projection,
+# never as a per-file union with the legacy 5ff checkpoint. Callers supply the
+# actual F13 row base/head plus a fixed approved snapshot tuple (base, head,
+# record commit); no environment value can select or construct a proof.
+game_checkpoint_domain_path() {
+  case "$1" in
+    protos/*|src/backend/voice/*|src/backend/role/*|src/backend/space/*|src/backend/*/pb/*|src/backend/migrations/voice_db/*)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+game_checkpoint_projection_authorized_in_delta() {
+  local repo="$1" target="$2" source_base="$3" source_head="$4"
+  local checkpoint_base="$5" checkpoint_head="$6" checkpoint_commit="$7" delta="$8"
+  local expected="${TMP_DIR}/game-projection-expected" actual="${TMP_DIR}/game-projection-actual"
+  local path checkpoint_entry target_entry
+
+  git -C "${repo}" rev-parse --verify "${checkpoint_base}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" rev-parse --verify "${checkpoint_head}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" rev-parse --verify "${checkpoint_commit}^{commit}" >/dev/null 2>&1 || return 1
+  [[ "${checkpoint_base}" != "${checkpoint_head}" &&
+    "${source_base}" != "${source_head}" &&
+    "${source_head}" != "${target}" && "${source_base}" != "${target}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_base}" "${source_base}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_base}" "${checkpoint_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${source_base}" "${source_head}" 2>/dev/null || return 1
+  [[ "${checkpoint_head}" != "${checkpoint_commit}" && "${checkpoint_commit}" != "${source_head}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_head}" "${checkpoint_commit}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${checkpoint_commit}" "${source_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${source_head}" "${target}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${source_base}" "${target}" 2>/dev/null || return 1
+
+  : >"${expected}"
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    game_checkpoint_domain_path "${path}" && printf '%s\n' "${path}" >>"${expected}"
+  done < <(git -C "${repo}" diff --name-only --no-renames "${checkpoint_base}" "${checkpoint_head}")
+  LC_ALL=C sort -u -o "${expected}" "${expected}"
+  : >"${actual}"
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    game_checkpoint_domain_path "${path}" && printf '%s\n' "${path}" >>"${actual}"
+  done <"${delta}"
+  LC_ALL=C sort -u -o "${actual}" "${actual}"
+  cmp -s "${expected}" "${actual}" || return 1
+
+  # P is exactly the Game-family contribution captured at H. Compare complete
+  # literal entries only for P; later base-owned Game paths remain subject to
+  # their own provenance gates and are not claimed by this snapshot.
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    checkpoint_entry="$(git -C "${repo}" ls-tree -r "${checkpoint_head}" -- ":(literal)${path}")" || return 1
+    target_entry="$(git -C "${repo}" ls-tree -r "${target}" -- ":(literal)${path}")" || return 1
+    [[ "${checkpoint_entry}" == "${target_entry}" ]] || return 1
+  done <"${expected}"
+  return 0
+}
+
+game_checkpoint_contribution_allowed() {
+  local repo="$1" target="$2" source_base="$3" source_head="$4" delta="$5"
+  [[ -n "${game_checkpoint_snapshot_base}" && -n "${game_checkpoint_snapshot_head}" &&
+    -n "${game_checkpoint_snapshot_record}" ]] || return 1
+  game_checkpoint_projection_authorized_in_delta "${repo}" "${target}" \
+    "${source_base}" "${source_head}" "${game_checkpoint_snapshot_base}" \
+    "${game_checkpoint_snapshot_head}" "${game_checkpoint_snapshot_record}" "${delta}"
+}
+
+game_checkpoint_aggregate_binding_valid() {
+  local repo="$1"
+  [[ "${game_checkpoint_aggregate_active}" == true && -s "${game_checkpoint_aggregate_paths}" &&
+    -n "${game_checkpoint_snapshot_base}" && -n "${game_checkpoint_snapshot_head}" &&
+    -n "${game_checkpoint_snapshot_record}" && -n "${game_checkpoint_aggregate_base}" &&
+    -n "${game_checkpoint_aggregate_head}" && -n "${game_checkpoint_aggregate_target}" &&
+    "${game_checkpoint_aggregate_record}" == "${game_checkpoint_snapshot_record}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${game_checkpoint_snapshot_base}" \
+    "${game_checkpoint_aggregate_base}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${game_checkpoint_snapshot_base}" \
+    "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${game_checkpoint_aggregate_base}" \
+    "${game_checkpoint_aggregate_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${game_checkpoint_snapshot_head}" \
+    "${game_checkpoint_snapshot_record}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${game_checkpoint_snapshot_record}" \
+    "${game_checkpoint_aggregate_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${game_checkpoint_aggregate_head}" \
+    "${game_checkpoint_aggregate_target}" 2>/dev/null
+}
+
+f13_tree_entry_tuple_for_path() {
+  local path="$1" entry="$2" tuple entry_path mode type oid extra
+  if [[ -z "${entry}" ]]; then
+    printf '\n'
+    return 0
+  fi
+  if [[ "${entry}" == *$'\t'* ]]; then
+    entry_path="${entry#*$'\t'}"
+    [[ "${entry_path}" == "${path}" ]] || return 1
+    tuple="${entry%%$'\t'*}"
+  else
+    tuple="${entry}"
+  fi
+  IFS=' ' read -r mode type oid extra <<<"${tuple}"
+  [[ -z "${extra}" &&
+    "${mode}" =~ ^(040000|100644|100755|120000|160000)$ &&
+    "${type}" =~ ^(blob|tree|commit)$ &&
+    "${oid}" =~ ^[0-9a-f]{40,64}$ ]] || return 1
+  printf '%s\n' "${tuple}"
+}
+
+f13_tree_entry_from_records() {
+  local path="$1" raw_file="$2" entry
+  local -a entries=()
+  mapfile -d '' -t entries <"${raw_file}" || return 1
+  [[ "${#entries[@]}" -le 1 ]] || return 1
+  if [[ "${#entries[@]}" == 0 ]]; then
+    printf '\n'
+    return 0
+  fi
+  entry="${entries[0]}"
+  [[ "${entry}" == *$'\t'* ]] || return 1
+  f13_tree_entry_tuple_for_path "${path}" "${entry}"
+}
+
+f13_tree_entry_raw_for_path() {
+  local path="$1" raw_file="$2" entry
+  local -a entries=()
+  mapfile -d '' -t entries <"${raw_file}" || return 1
+  [[ "${#entries[@]}" -le 1 ]] || return 1
+  if [[ "${#entries[@]}" == 0 ]]; then
+    printf '\n'
+    return 0
+  fi
+  entry="${entries[0]}"
+  [[ "${entry}" == *$'\t'* && "${entry#*$'\t'}" == "${path}" ]] || return 1
+  # Validate the mode/type/OID while retaining ls-tree's raw record form for
+  # callers whose established comparison contract is raw-to-raw.
+  f13_tree_entry_tuple_for_path "${path}" "${entry}" >/dev/null || return 1
+  printf '%s\n' "${entry}"
+}
+
+f13_git_tree_entry_record() {
+  local repo="$1" commit="$2" path="$3" raw_file="${TMP_DIR}/f13-tree-record-${BASHPID}"
+  git -C "${repo}" ls-tree -z "${commit}" -- ":(literal)${path}" >"${raw_file}" 2>/dev/null || return 1
+  f13_tree_entry_raw_for_path "${path}" "${raw_file}"
+}
+
+f13_git_tree_entry() {
+  local repo="$1" commit="$2" path="$3" raw_file="${TMP_DIR}/f13-tree-entry-${BASHPID}"
+  git -C "${repo}" ls-tree -z "${commit}" -- ":(literal)${path}" >"${raw_file}" 2>/dev/null || return 1
+  f13_tree_entry_from_records "${path}" "${raw_file}"
+}
+
+f13_tree_entry_normalizer_fixtures() {
+  local records="${TMP_DIR}/f13-tree-entry-normalizer-records" actual
+  printf '%s\0' '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395	:(glob)literal.sql' >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records ':(glob)literal.sql' "${records}")" || return 1
+  [[ "${actual}" == '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' ]] || return 1
+  if f13_tree_entry_from_records 'different.sql' "${records}" >/dev/null; then
+    return 1
+  fi
+  printf '%s\0%s\0' \
+    '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395	:(glob)literal.sql' \
+    '100644 blob 9c506399d95a0f460bbdff8972b14fff9bd645ca	:(glob)literal.sql' >"${records}" || return 1
+  if f13_tree_entry_from_records ':(glob)literal.sql' "${records}" >/dev/null; then
+    return 1
+  fi
+  : >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records 'missing.sql' "${records}")" || return 1
+  [[ -z "${actual}" ]] || return 1
+  printf '%s\0' '100755 blob 19bd5687fea0f556260d27fd1ecf5308de835395	mode.sql' >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records 'mode.sql' "${records}")" || return 1
+  [[ "${actual}" != '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' ]] || return 1
+  printf '%s\0' '100644 tree 19bd5687fea0f556260d27fd1ecf5308de835395	type.sql' >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records 'type.sql' "${records}")" || return 1
+  [[ "${actual}" != '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' ]]
+}
+
+game_checkpoint_aggregate_path_allowed() {
+  local repo="$1" commit="$2" path="$3" source_entry="$4" checkpoint_entry
+  game_checkpoint_aggregate_binding_valid "${repo}" || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  git -C "${repo}" merge-base --is-ancestor "${commit}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  checkpoint_entry="$(f13_git_tree_entry_record "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
+  [[ "${source_entry}" == "${checkpoint_entry}" ]]
+}
+
+# A source path may be represented by two nested owners when a pre-H merge
+# integrates both histories and produces the exact immutable checkpoint entry.
+# Replace the prior row only for that fully verified integration; ordinary
+# independent or post-H duplicate owners remain ambiguous and fail closed.
+game_checkpoint_duplicate_owner_supersession_allowed() {
+  local repo="$1" path="$2" prior_owner="$3" prior_source_head="$4"
+  local current_owner="$5" current_source_head="$6" integration_commit="$7"
+  local merge_outcome="${8:-unverified}" integration_entry checkpoint_entry
+  game_checkpoint_aggregate_binding_valid "${repo}" || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  for candidate in "${prior_owner}" "${prior_source_head}" "${current_owner}" \
+    "${current_source_head}" "${integration_commit}"; do
+    [[ -n "${candidate}" ]] || return 1
+    git -C "${repo}" merge-base --is-ancestor "${candidate}" \
+      "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  done
+  [[ "${merge_outcome}" == clean || "${merge_outcome}" == guarded_conflict ]] || return 1
+  integration_entry="$(f13_git_tree_entry_record "${repo}" "${integration_commit}" "${path}")" || return 1
+  checkpoint_entry="$(f13_git_tree_entry_record "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
+  if [[ "${integration_entry}" == "${checkpoint_entry}" ]]; then
+    return 0
+  fi
+  if [[ "${merge_outcome}" == clean ]]; then
+    # A verified clean merge can carry a temporary non-H entry. This is only a
+    # taint-preserving owner replacement; a later exact-H pre-H owner must clear
+    # it, or the strict aggregate final-entry check rejects the result.
+    return 2
+  fi
+  # A path-specific guarded conflict with a non-H result may replace the
+  # intermediate owner only while retaining its guarded-entry taint. The
+  # strict aggregate A/T comparison still requires a later exact-H owner.
+  # Unknown outcomes were rejected above; this branch is reached only for the
+  # caller's parsed guarded-path conflict result.
+  return 2
+}
+
+# A guarded path from an approved checkpoint can be carried through an ordinary
+# merge when the merge producer combines disjoint edits from both parents. The
+# checkpoint still authorizes only the source-side contribution; this helper
+# independently verifies that the result is exactly Git's clean three-way
+# merge for that path. It tolerates conflicts on other paths and reports a
+# guarded-path conflict distinctly so only a qualified intermediate checkpoint
+# frame can defer it; the aggregate boundary still requires the pinned entry.
+f13_checkpoint_merge_tree_entry_matches() {
+  local repo="$1" expected_base="$2" first_parent="$3" source_head="$4"
+  local path="$5" result_entry="$6" bases_file output_file status tree_oid expected_entry output_fd
+  local conflict_path guarded_conflict=false
+  bases_file="${TMP_DIR}/f13-checkpoint-merge-bases"
+  output_file="${TMP_DIR}/f13-checkpoint-merge-tree"
+  git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" \
+    >"${bases_file}" 2>/dev/null || return 1
+  [[ "$(wc -l <"${bases_file}" | tr -d '[:space:]')" == 1 &&
+    "$(<"${bases_file}")" == "${expected_base}" ]] || return 1
+
+  if git -C "${repo}" merge-tree --write-tree --name-only -z --no-messages \
+    "${first_parent}" "${source_head}" \
+    >"${output_file}" 2>/dev/null; then
+    status=0
+  else
+    status=$?
+  fi
+  # merge-tree uses 1 for an ordinary content conflict; other errors fail
+  # closed. Its first output line remains the resulting tree object.
+  [[ "${status}" == 0 || "${status}" == 1 ]] || return 1
+  exec {output_fd}<"${output_file}" || return 1
+  IFS= read -r -d '' tree_oid <&"${output_fd}" || {
+    exec {output_fd}<&-
+    return 1
+  }
+  if [[ ! "${tree_oid}" =~ ^[0-9a-f]{40,64}$ ]]; then
+    exec {output_fd}<&-
+    return 1
+  fi
+  while IFS= read -r -d '' conflict_path <&"${output_fd}"; do
+    [[ "${conflict_path}" != "${path}" ]] || guarded_conflict=true
+  done
+  exec {output_fd}<&-
+  if [[ "${guarded_conflict}" == true ]]; then
+    # A parsed, path-specific conflict is distinct from a failed or malformed
+    # merge-tree computation. The collector may defer only this known result
+    # for a qualified intermediate checkpoint frame; its aggregate boundary
+    # still verifies the final entry against the pinned snapshot.
+    return 2
+  fi
+  expected_entry="$(git -C "${repo}" ls-tree "${tree_oid}" -- "${path}" 2>/dev/null)" || return 1
+  [[ "${expected_entry}" == "${result_entry}" ]]
+}
+
+f13_checkpoint_merge_tree_fixtures() {
+  local repo guarded other base source parent result result_entry expected_entry tree_oid
+  local merge_output merge_status wrong_blob wrong_entry mode_entry type_entry target
+  local index_file manual_tree real_git wrapper_dir conflict_record conflict_target post_h
+  local guarded_conflict_status supersession_status source_entry checkpoint_entry
+  local -A fixture_guarded_entries=()
+  repo="${TMP_DIR}/f13-checkpoint-merge-tree-fixture"
+  guarded='protos/voice/chat/v1/fixture.proto'
+  other='protos/voice/chat/v1/unrelated.proto'
+  mkdir -p "${repo}"
+  git -C "${repo}" init -q || return 1
+  git -C "${repo}" config user.name 'Voice CI fixture'
+  git -C "${repo}" config user.email 'voice-ci@example.invalid'
+  git -C "${repo}" config commit.gpgsign false
+  mkdir -p "${repo}/protos/voice/chat/v1"
+  printf '%s\n' 'left base' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
+  printf '%s\n' 'other base' >"${repo}/${other}"
+  git -C "${repo}" add . && git -C "${repo}" commit -qm 'F13 merge fixture base' || return 1
+  base="$(git -C "${repo}" rev-parse HEAD)" || return 1
+
+  # Both sides change disjoint lines in the guarded path; Git's clean merge is
+  # the exact expected entry even though it differs from the source parent.
+  git -C "${repo}" checkout -qb clean-source "${base}" || return 1
+  printf '%s\n' 'left source' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
+  git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 clean source edit' || return 1
+  source="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  git -C "${repo}" checkout -qb clean-parent "${base}" || return 1
+  printf '%s\n' 'left base' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right parent' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
+  git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 clean parent edit' || return 1
+  parent="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  git -C "${repo}" merge --no-ff -qm 'F13 clean disjoint guarded merge' clean-source || return 1
+  result="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  result_entry="$(git -C "${repo}" ls-tree "${result}" -- "${guarded}")" || return 1
+  f13_checkpoint_merge_tree_entry_matches "${repo}" "${base}" "${parent}" \
+    "${source}" "${guarded}" "${result_entry}" || {
+    printf '%s\n' 'F13 oracle bug: clean disjoint guarded merge was rejected' >&2
+    return 1
+  }
+
+  # A manual resolution that changes the auto-merged guarded result is not
+  # equivalent to the deterministic merge tree and must remain rejected.
+  merge_output="${TMP_DIR}/f13-checkpoint-manual-merge-tree"
+  git -C "${repo}" merge-tree --write-tree --name-only -z --no-messages \
+    "${parent}" "${source}" >"${merge_output}" 2>/dev/null || return 1
+  tree_oid="$(git -C "${repo}" rev-parse "${result}^{tree}")" || return 1
+  wrong_blob="$(printf '%s\n' 'manual guarded resolution' | git -C "${repo}" hash-object -w --stdin)" || return 1
+  index_file="${TMP_DIR}/f13-checkpoint-manual.index"
+  GIT_INDEX_FILE="${index_file}" git -C "${repo}" read-tree "${tree_oid}" || return 1
+  GIT_INDEX_FILE="${index_file}" git -C "${repo}" update-index --cacheinfo \
+    "100644,${wrong_blob},${guarded}" || return 1
+  manual_tree="$(GIT_INDEX_FILE="${index_file}" git -C "${repo}" write-tree)" || return 1
+  target="$(git -C "${repo}" commit-tree "${manual_tree}" -p "${parent}" -p "${source}" \
+    <<< 'F13 manual guarded merge resolution')" || return 1
+  wrong_entry="$(git -C "${repo}" ls-tree "${target}" -- "${guarded}")" || return 1
+  if f13_checkpoint_merge_tree_entry_matches "${repo}" "${base}" "${parent}" \
+    "${source}" "${guarded}" "${wrong_entry}"; then
+    printf '%s\n' 'F13 oracle bug: manual guarded resolution differing from Git merge was accepted' >&2
+    return 1
+  fi
+
+  # An unrelated file conflict is allowed for this path-level comparison when
+  # Git reports the guarded path as clean and its full entry matches the tree.
+  git -C "${repo}" checkout -qb unrelated-source "${base}" || return 1
+  printf '%s\n' 'left source' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
+  printf '%s\n' 'unrelated source' >"${repo}/${other}"
+  git -C "${repo}" add . && git -C "${repo}" commit -qm 'F13 unrelated-conflict source' || return 1
+  source="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  git -C "${repo}" checkout -qb unrelated-parent "${base}" || return 1
+  printf '%s\n' 'left base' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right parent' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
+  printf '%s\n' 'unrelated parent' >"${repo}/${other}"
+  git -C "${repo}" add . && git -C "${repo}" commit -qm 'F13 unrelated-conflict parent' || return 1
+  parent="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  merge_output="${TMP_DIR}/f13-checkpoint-unrelated-merge-tree"
+  if git -C "${repo}" merge-tree --write-tree --name-only --no-messages \
+    "${parent}" "${source}" >"${merge_output}" 2>/dev/null; then
+    merge_status=0
+  else
+    merge_status=$?
+  fi
+  [[ "${merge_status}" == 1 ]] || return 1
+  tree_oid="$(head -n 1 "${merge_output}")" || return 1
+  [[ "${tree_oid}" =~ ^[0-9a-f]{40,64}$ ]] || return 1
+  ! tail -n +2 "${merge_output}" | grep -Fxq -- "${guarded}" || return 1
+  git -C "${repo}" commit-tree "${tree_oid}" -p "${parent}" -p "${source}" \
+    <<< 'F13 unrelated conflict result' >"${TMP_DIR}/f13-checkpoint-unrelated-result" || return 1
+  result="$(<"${TMP_DIR}/f13-checkpoint-unrelated-result")"
+  result_entry="$(git -C "${repo}" ls-tree "${result}" -- "${guarded}")" || return 1
+  f13_checkpoint_merge_tree_entry_matches "${repo}" "${base}" "${parent}" \
+    "${source}" "${guarded}" "${result_entry}" || {
+    printf '%s\n' 'F13 oracle bug: unrelated conflict rejected a clean guarded merge entry' >&2
+    return 1
+  }
+
+  # A conflict on the guarded path and a manual resolution that differs from
+  # Git's clean result must both fail closed.
+  git -C "${repo}" checkout -qb overlap-source "${base}" || return 1
+  printf '%s\n' 'left source' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
+  git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 overlapping source edit' || return 1
+  source="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  git -C "${repo}" checkout -qb overlap-parent "${base}" || return 1
+  printf '%s\n' 'left parent' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
+  git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 overlapping parent edit' || return 1
+  parent="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  merge_output="${TMP_DIR}/f13-checkpoint-overlap-merge-tree"
+  if git -C "${repo}" merge-tree --write-tree --name-only --no-messages \
+    "${parent}" "${source}" >"${merge_output}" 2>/dev/null; then
+    merge_status=0
+  else
+    merge_status=$?
+  fi
+  [[ "${merge_status}" == 1 ]] && tail -n +2 "${merge_output}" | grep -Fxq -- "${guarded}" || return 1
+  tree_oid="$(head -n 1 "${merge_output}")" || return 1
+  target="$(git -C "${repo}" commit-tree "${tree_oid}" -p "${parent}" -p "${source}" \
+    <<< 'F13 guarded conflict result')" || return 1
+  result_entry="$(git -C "${repo}" ls-tree "${target}" -- "${guarded}")" || return 1
+  if f13_checkpoint_merge_tree_entry_matches "${repo}" "${base}" "${parent}" \
+    "${source}" "${guarded}" "${result_entry}"; then
+    printf '%s\n' 'F13 oracle bug: guarded-path conflict was accepted' >&2
+    return 1
+  fi
+
+  # A path-specific conflict can be superseded only when the immutable H tree
+  # contains that exact integration result and every owner is within H. The
+  # result is a real merge commit in the fixture graph, not a synthesized row.
+  guarded_conflict_status=0
+  if f13_checkpoint_merge_tree_entry_matches "${repo}" "${base}" "${parent}" \
+    "${source}" "${guarded}" "${result_entry}"; then
+    guarded_conflict_status=0
+  else
+    guarded_conflict_status=$?
+  fi
+  [[ "${guarded_conflict_status}" == 2 ]] || return 1
+  conflict_record="$(git -C "${repo}" commit-tree "${target}^{tree}" -p "${target}" \
+    <<< 'F13 immutable conflict snapshot record')" || return 1
+  conflict_target="$(git -C "${repo}" commit-tree "${conflict_record}^{tree}" -p "${conflict_record}" \
+    <<< 'F13 checkpoint-qualified conflict result')" || return 1
+  post_h="$(git -C "${repo}" commit-tree "${conflict_target}^{tree}" -p "${conflict_target}" \
+    <<< 'F13 post-H conflict owner')" || return 1
+  game_checkpoint_snapshot_base="${base}"
+  game_checkpoint_snapshot_head="${target}"
+  game_checkpoint_snapshot_record="${conflict_record}"
+  game_checkpoint_aggregate_active=true
+  game_checkpoint_aggregate_base="${base}"
+  game_checkpoint_aggregate_head="${conflict_record}"
+  game_checkpoint_aggregate_target="${conflict_target}"
+  game_checkpoint_aggregate_record="${conflict_record}"
+  game_checkpoint_aggregate_paths="${TMP_DIR}/f13-checkpoint-conflict-paths"
+  printf '%s\n' "${guarded}" >"${game_checkpoint_aggregate_paths}"
+  if ! game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+    "${source}" "${source}" "${source}" "${source}" "${target}" guarded_conflict; then
+    printf '%s\n' 'F13 oracle bug: exact-H guarded-path conflict integration was rejected' >&2
+    return 1
+  fi
+  source_entry="$(git -C "${repo}" ls-tree "${source}" -- "${guarded}")" || return 1
+  checkpoint_entry="$(git -C "${repo}" ls-tree "${target}" -- "${guarded}")" || return 1
+  fixture_guarded_entries["${guarded}"]="${source_entry}"
+  if game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+    "${source}" "${source}" "${source}" "${source}" "${source}" guarded_conflict; then
+    supersession_status=0
+  else
+    supersession_status=$?
+  fi
+  [[ "${supersession_status}" == 2 ]] || {
+    printf '%s\n' 'F13 oracle bug: qualified non-H conflict did not retain guarded taint' >&2
+    return 1
+  }
+  [[ "${fixture_guarded_entries[${guarded}]}" == "${source_entry}" &&
+    "${fixture_guarded_entries[${guarded}]}" != "${checkpoint_entry}" ]] || {
+    printf '%s\n' 'F13 oracle bug: non-H conflict cleared or lost guarded-entry taint' >&2
+    return 1
+  }
+  # A missing or wrong restoration cannot satisfy the strict final target
+  # comparison; only an actual pre-H owner with the exact H entry may clear it.
+  if f13_guarded_entry_matches_final_target \
+    "${fixture_guarded_entries[${guarded}]}" "${checkpoint_entry}"; then
+    printf '%s\n' 'F13 oracle bug: missing H restoration passed final guarded-entry comparison' >&2
+    return 1
+  fi
+  if f13_guarded_entry_matches_final_target "" "${checkpoint_entry}" ||
+    f13_guarded_entry_matches_final_target "100644 blob wrong-entry" "${checkpoint_entry}"; then
+    printf '%s\n' 'F13 oracle bug: missing or wrong guarded owner passed final target comparison' >&2
+    return 1
+  fi
+  fixture_guarded_entries["${guarded}"]=''
+  [[ -n "${fixture_guarded_entries[${guarded}]+present}" ]] && \
+    f13_guarded_entry_matches_final_target "${fixture_guarded_entries[${guarded}]}" '' || {
+    printf '%s\n' 'F13 oracle bug: exact deleted-path entry was not distinguishable from missing owner' >&2
+    return 1
+  }
+  unset 'fixture_guarded_entries[$guarded]'
+  [[ -z "${fixture_guarded_entries[${guarded}]+present}" ]] || {
+    printf '%s\n' 'F13 oracle bug: missing guarded-owner map key was not detected' >&2
+    return 1
+  }
+  if game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+    "${source}" "${source}" "${source}" "${source}" "${target}" guarded_conflict; then
+    supersession_status=0
+  else
+    supersession_status=$?
+  fi
+  [[ "${supersession_status}" == 0 ]] || {
+    printf '%s\n' 'F13 oracle bug: exact pre-H restoration did not clear guarded taint' >&2
+    return 1
+  }
+  fixture_guarded_entries["${guarded}"]="${checkpoint_entry}"
+  f13_guarded_entry_matches_final_target \
+    "${fixture_guarded_entries[${guarded}]}" "${checkpoint_entry}" || {
+    printf '%s\n' 'F13 oracle bug: exact-H owner did not satisfy final guarded-entry comparison' >&2
+    return 1
+  }
+  if game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+    "${source}" "${source}" "${source}" "${source}" "${source}" guarded_conflict ||
+    game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${other}" \
+      "${source}" "${source}" "${source}" "${source}" "${target}" guarded_conflict ||
+    game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+      "${source}" "${source}" "${source}" "${source}" "${post_h}" guarded_conflict ||
+    game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+      "${post_h}" "${source}" "${source}" "${source}" "${target}" guarded_conflict; then
+    printf '%s\n' 'F13 oracle bug: wrong result, non-P path, or post-H conflict owner/integration was accepted' >&2
+    return 1
+  fi
+  game_checkpoint_aggregate_record="$(printf '%040d' 0)"
+  if game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+    "${source}" "${source}" "${source}" "${source}" "${target}" guarded_conflict; then
+    printf '%s\n' 'F13 oracle bug: guarded conflict used an unpinned checkpoint record' >&2
+    return 1
+  fi
+  game_checkpoint_aggregate_active=false
+  game_checkpoint_aggregate_record="${conflict_record}"
+  if game_checkpoint_duplicate_owner_supersession_allowed "${repo}" "${guarded}" \
+    "${source}" "${source}" "${source}" "${source}" "${target}" guarded_conflict; then
+    printf '%s\n' 'F13 oracle bug: guarded conflict supersession worked with no active checkpoint' >&2
+    return 1
+  fi
+  game_checkpoint_aggregate_active=false
+
+  git -C "${repo}" checkout -qb mode-source "${base}" || return 1
+  printf '%s\n' 'left source' 'right base' >"${repo}/${guarded}"
+  git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 mode source edit' || return 1
+  source="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  git -C "${repo}" checkout -qb mode-parent "${base}" || return 1
+  git -C "${repo}" update-index --chmod=+x "${guarded}" && \
+    git -C "${repo}" commit -qm 'F13 mode parent edit' || return 1
+  parent="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  merge_output="${TMP_DIR}/f13-checkpoint-mode-merge-tree"
+  git -C "${repo}" merge-tree --write-tree --name-only --no-messages \
+    "${parent}" "${source}" >"${merge_output}" 2>/dev/null || return 1
+  tree_oid="$(head -n 1 "${merge_output}")" || return 1
+  expected_entry="$(git -C "${repo}" ls-tree "${tree_oid}" -- "${guarded}")" || return 1
+  [[ "${expected_entry%% *}" == 100755 ]] || return 1
+  result_entry="100644${expected_entry#100755}"
+  if f13_checkpoint_merge_tree_entry_matches "${repo}" "${base}" "${parent}" \
+    "${source}" "${guarded}" "${result_entry}"; then
+    printf '%s\n' 'F13 oracle bug: mode mismatch was accepted' >&2
+    return 1
+  fi
+  type_entry="${expected_entry/ blob / commit }"
+  if f13_checkpoint_merge_tree_entry_matches "${repo}" "${base}" "${parent}" \
+    "${source}" "${guarded}" "${type_entry}"; then
+    printf '%s\n' 'F13 oracle bug: object type mismatch was accepted' >&2
+    return 1
+  fi
+
+  real_git="$(command -v git)" || return 1
+  wrapper_dir="${TMP_DIR}/f13-malformed-merge-tree-bin"
+  mkdir -p "${wrapper_dir}" || return 1
+  {
+    printf '%s\n' '#!/usr/bin/env bash' 'for argument in "$@"; do' \
+      '  if [[ "$argument" == merge-tree ]]; then printf "malformed-output"; exit 0; fi' \
+      'done'
+    printf 'exec %q "$@"\n' "${real_git}"
+  } >"${wrapper_dir}/git" || return 1
+  chmod +x "${wrapper_dir}/git" || return 1
+  if PATH="${wrapper_dir}:${PATH}" f13_checkpoint_merge_tree_entry_matches \
+    "${repo}" "${base}" "${parent}" "${source}" "${guarded}" "${expected_entry}"; then
+    printf '%s\n' 'F13 oracle bug: malformed merge-tree output was accepted' >&2
+    return 1
+  fi
+}
+
+game_checkpoint_aggregate_authorized() {
+  local repo="$1" event_base="$2" source_head="$3" target="$4" delta="$5" paths="$6"
+  [[ -n "${game_checkpoint_snapshot_base}" && -n "${game_checkpoint_snapshot_head}" &&
+    -n "${game_checkpoint_snapshot_record}" ]] || return 1
+  game_checkpoint_projection_authorized_in_delta "${repo}" "${target}" "${event_base}" \
+    "${source_head}" "${game_checkpoint_snapshot_base}" "${game_checkpoint_snapshot_head}" \
+    "${game_checkpoint_snapshot_record}" "${delta}" || return 1
+  cp "${TMP_DIR}/game-projection-expected" "${paths}"
+}
+
+f13_extract_versioned_alias_section() {
+  local repo="$1" record="$2" begin="$3" end="$4" output="$5"
+  local document="${TMP_DIR}/f13-versioned-alias-record-${record}.md"
+  git -C "${repo}" show "${record}:docs/testing/game-integrations-exec-plan.md" >"${document}" 2>/dev/null || return 1
+  awk -v begin="${begin}" -v end="${end}" '
+    $0 == begin { if (inside || seen) exit 2; inside=1; seen++; next }
+    $0 == end { if (!inside) exit 2; inside=0; ended++; next }
+    inside { print }
+    END { if (inside || seen != 1 || ended != 1) exit 2 }
+  ' "${document}" >"${output}" || return 1
+  [[ -s "${output}" ]]
+}
+
+# The R3 record grants one explicit migration renumber only. Both complete
+# source rows, their original owner/base/integration lineage, the competing
+# baseline pair, and the destination projection must match the immutable R3
+# document and Git trees. This never widens P or treats equal bytes as authority.
+f13_migration_alias_tables_match_expected() {
+  local aliases="$1" collisions="$2" expected_aliases="$3" expected_collisions="$4"
+  cmp -s "${expected_aliases}" "${aliases}" && cmp -s "${expected_collisions}" "${collisions}"
+}
+
+f13_migration_alias_record_load() {
+  local repo="$1" record="$2" alias_file="$3" collision_file="$4"
+  local alias_raw="${TMP_DIR}/f13-migration-alias-raw" collision_raw="${TMP_DIR}/f13-migration-collision-raw"
+  local expected_aliases="${TMP_DIR}/f13-migration-alias-expected" expected_collisions="${TMP_DIR}/f13-migration-collision-expected"
+  f13_extract_versioned_alias_section "${repo}" "${record}" \
+    '<!-- F13-MIGRATION-ALIASES-V3-BEGIN -->' '<!-- F13-MIGRATION-ALIASES-V3-END -->' \
+    "${alias_raw}" || return 1
+  f13_extract_versioned_alias_section "${repo}" "${record}" \
+    '<!-- F13-MIGRATION-COLLISION-V3-BEGIN -->' '<!-- F13-MIGRATION-COLLISION-V3-END -->' \
+    "${collision_raw}" || return 1
+  awk -F'|' 'NF != 21 { exit 1 } {
+      for (i=1; i<=NF; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i) }
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", \
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+    }' "${alias_raw}" >"${alias_file}" || return 1
+  awk -F'|' 'NF != 2 { exit 1 } {
+      for (i=1; i<=NF; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i) }
+      printf "%s\t%s\n", $1,$2
+    }' "${collision_raw}" >"${collision_file}" || return 1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    'src/backend/migrations/voice_db/000010_match_squad_operations.up.sql' \
+    '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' \
+    '0590ac862c5027ff9266f8403af1011ef2134f63' \
+    '5a42388c95377d7d0b718e823b35f317a71bf851' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    'e33b8a3b09828055f690957b596b843177410ff6' \
+    '5a42388c95377d7d0b718e823b35f317a71bf851' \
+    '07d752a2f0f4daa0fe3aecc36bdbe73812dfd833' \
+    'e33b8a3b09828055f690957b596b843177410ff6' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    'e33b8a3b09828055f690957b596b843177410ff6' \
+    '1909f0ee3a3d038d83c468158fe99f6ef0a120bb' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    '100644 blob b4442e910cad45e8d4bd31c0d1ff14426199553d' \
+    '020911cf4cb70be47bd575dcd8268685b5c6002d' \
+    'f79dfa4d93c2d5bc7efa5fe1f713dcecde761b97' \
+    'ce05d869e133cfec521439386320b714a32ffdb3' \
+    'e8f5c812ad1ac1880e0850f5863312ff9502183d' \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+    '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' \
+    >"${expected_aliases}" || return 1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    'src/backend/migrations/voice_db/000010_match_squad_operations.down.sql' \
+    '100644 blob 9c506399d95a0f460bbdff8972b14fff9bd645ca' \
+    '0590ac862c5027ff9266f8403af1011ef2134f63' \
+    '5a42388c95377d7d0b718e823b35f317a71bf851' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    'e33b8a3b09828055f690957b596b843177410ff6' \
+    '5a42388c95377d7d0b718e823b35f317a71bf851' \
+    '07d752a2f0f4daa0fe3aecc36bdbe73812dfd833' \
+    'e33b8a3b09828055f690957b596b843177410ff6' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    'e33b8a3b09828055f690957b596b843177410ff6' \
+    '1909f0ee3a3d038d83c468158fe99f6ef0a120bb' \
+    '53529ea60dec670e64d1ae61724a7b8daff582bc' \
+    '100644 blob 08e3a0ea2536307c1affc0c6ddfa0376b8083c67' \
+    '020911cf4cb70be47bd575dcd8268685b5c6002d' \
+    'f79dfa4d93c2d5bc7efa5fe1f713dcecde761b97' \
+    'ce05d869e133cfec521439386320b714a32ffdb3' \
+    'e8f5c812ad1ac1880e0850f5863312ff9502183d' \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql' \
+    '100644 blob 9c506399d95a0f460bbdff8972b14fff9bd645ca' \
+    >>"${expected_aliases}" || return 1
+  printf '%s\t%s\n' \
+    'src/backend/migrations/voice_db/000010_space_media_admission.up.sql' \
+    '100644 blob 171033aaf172370f76ede86349b042154bd2ff71' \
+    'src/backend/migrations/voice_db/000010_space_media_admission.down.sql' \
+    '100644 blob 83953384c9caa2ae2aa8d9485a208bb5ead5e33f' \
+    >"${expected_collisions}" || return 1
+  f13_migration_alias_tables_match_expected \
+    "${alias_file}" "${collision_file}" "${expected_aliases}" "${expected_collisions}"
+}
+
+f13_migration_alias_expect_bad_tables() {
+  local label="$1" aliases="$2" collisions="$3"
+  if f13_migration_alias_tables_match_expected \
+    "${aliases}" "${collisions}" \
+    "${TMP_DIR}/f13-migration-alias-expected" \
+    "${TMP_DIR}/f13-migration-collision-expected"; then
+    printf 'F13 oracle bug: migration alias record accepted invalid %s fixture\n' "${label}" >&2
+    return 1
+  fi
+}
+
+f13_migration_alias_record_negative_fixtures() {
+  local aliases="$1" collisions="$2" case_alias case_collision column
+  case_alias="${TMP_DIR}/f13-alias-negative.tsv"
+  case_collision="${TMP_DIR}/f13-collision-negative.tsv"
+
+  head -n 1 "${aliases}" >"${case_alias}" || return 1
+  cp "${collisions}" "${case_collision}" || return 1
+  f13_migration_alias_expect_bad_tables 'missing/half-pair row' "${case_alias}" "${case_collision}" || return 1
+
+  cat "${aliases}" "${aliases}" >"${case_alias}" || return 1
+  f13_migration_alias_expect_bad_tables 'duplicate alias rows' "${case_alias}" "${collisions}" || return 1
+  cp "${aliases}" "${case_alias}" || return 1
+  printf '%s\n' 'unexpected|extra|alias|row' >>"${case_alias}" || return 1
+  f13_migration_alias_expect_bad_tables 'extra alias row' "${case_alias}" "${collisions}" || return 1
+
+  for column in 1 {3..21}; do
+    awk -F'\t' -v col="${column}" 'BEGIN { OFS="\t" } NR == 1 { $col = $col "-changed" } { print }' \
+      "${aliases}" >"${case_alias}" || return 1
+    f13_migration_alias_expect_bad_tables "alias field ${column}" "${case_alias}" "${collisions}" || return 1
+  done
+  awk -F'\t' 'BEGIN { OFS="\t" } NR == 1 { $2 = "100755 blob 19bd5687fea0f556260d27fd1ecf5308de835395" } { print }' \
+    "${aliases}" >"${case_alias}" || return 1
+  f13_migration_alias_expect_bad_tables 'alias mode' "${case_alias}" "${collisions}" || return 1
+  awk -F'\t' 'BEGIN { OFS="\t" } NR == 1 { $2 = "100644 tree 19bd5687fea0f556260d27fd1ecf5308de835395" } { print }' \
+    "${aliases}" >"${case_alias}" || return 1
+  f13_migration_alias_expect_bad_tables 'alias type' "${case_alias}" "${collisions}" || return 1
+  awk -F'\t' 'BEGIN { OFS="\t" } NR == 1 { $2 = "100644 blob 0000000000000000000000000000000000000000" } { print }' \
+    "${aliases}" >"${case_alias}" || return 1
+  f13_migration_alias_expect_bad_tables 'alias blob' "${case_alias}" "${collisions}" || return 1
+
+  head -n 1 "${collisions}" >"${case_collision}" || return 1
+  cp "${aliases}" "${case_alias}" || return 1
+  f13_migration_alias_expect_bad_tables 'missing collision pair row' "${case_alias}" "${case_collision}" || return 1
+  cp "${collisions}" "${case_collision}" || return 1
+  printf '%s\n' 'unexpected|100644 blob 0000000000000000000000000000000000000000' >>"${case_collision}" || return 1
+  f13_migration_alias_expect_bad_tables 'extra collision row' "${aliases}" "${case_collision}" || return 1
+  awk -F'\t' 'BEGIN { OFS="\t" } NR == 1 { $1 = $1 ".unexpected" } { print }' \
+    "${collisions}" >"${case_collision}" || return 1
+  f13_migration_alias_expect_bad_tables 'collision path' "${aliases}" "${case_collision}" || return 1
+  awk -F'\t' 'BEGIN { OFS="\t" } NR == 1 { $2 = "100644 blob 0000000000000000000000000000000000000000" } { print }' \
+    "${collisions}" >"${case_collision}" || return 1
+  f13_migration_alias_expect_bad_tables 'collision entry' "${aliases}" "${case_collision}" || return 1
+}
+
+f13_migration_alias_reconciles_guarded_path() {
+  local repo="$1" base="$2" target="$3" path="$4" owner="$5"
+  local content_base="$6" source_head="$7" saved_guarded_entry="$8"
+  local saved_source_entry="$9" output="${10}"
+  local aliases="${TMP_DIR}/f13-migration-aliases.tsv" collisions="${TMP_DIR}/f13-migration-collisions.tsv"
+  local row_count row alias_path old_entry record_row_owner record_row_first_parent record_row_source_base record_row_source_head record_row_content_base record_row_candidates
+  local nested_owner nested_first_parent nested_source_base nested_source_head nested_content_base nested_candidates source_base_entry
+  local row_commit row_nested_base row_nested_head record_base record_head integration
+  local alias_record_row
+  local integration_first integration_second integration_base destination destination_entry
+  local expected_up='src/backend/migrations/voice_db/000010_match_squad_operations.up.sql'
+  local expected_down='src/backend/migrations/voice_db/000010_match_squad_operations.down.sql'
+  local destination_up='src/backend/migrations/voice_db/000011_match_squad_operations.up.sql'
+  local destination_down='src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'
+  local collision_up='src/backend/migrations/voice_db/000010_space_media_admission.up.sql'
+  local collision_down='src/backend/migrations/voice_db/000010_space_media_admission.down.sql'
+  local base_up base_down snapshot_base_up snapshot_base_down h_entry target_entry integration_entry integration_entry_record
+  local base_old snapshot_base_old h_old integration_old integration_first_old integration_second_old integration_base_old target_old aggregate_old resolved_content_base
+  local normalized_saved_guarded normalized_saved_source normalized_integration_record
+  local alias_row_hash alias_approval_file alias_approval_count
+  [[ "${game_checkpoint_aggregate_active}" == true &&
+    "${target}" == "${game_checkpoint_aggregate_head}" &&
+    -n "${game_checkpoint_snapshot_record}" &&
+    -n "${owner}" && -n "${content_base}" && -n "${source_head}" &&
+    -n "${owners[${path}]+present}" && -n "${owner_content_bases[${path}]+present}" &&
+    -n "${owner_source_heads[${path}]+present}" && -n "${owner_source_entries[${path}]+present}" &&
+    -n "${guarded_entries[${path}]+present}" && -n "${guarded_entry_commits[${path}]+present}" ]] || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" && return 1
+  game_checkpoint_aggregate_binding_valid "${repo}" || return 1
+  [[ "${guarded_entry_commits[${path}]}" == "${owner}" &&
+    "${owner_content_bases[${path}]}" == "${content_base}" &&
+    "${owner_source_heads[${path}]}" == "${source_head}" &&
+    "${owner_source_entries[${path}]}" == "${saved_source_entry}" &&
+    "${guarded_entries[${path}]}" == "${saved_guarded_entry}" &&
+    "${guarded_entry_commits[${path}]}" == "${owner}" ]] || return 1
+  f13_migration_alias_record_load "${repo}" "${game_checkpoint_snapshot_record}" \
+    "${aliases}" "${collisions}" || return 1
+
+  [[ "$(awk -F'\t' -v p="${expected_up}" '$1 == p { n++ } END { print n+0 }' "${aliases}")" == 1 &&
+    "$(awk -F'\t' -v p="${expected_down}" '$1 == p { n++ } END { print n+0 }' "${aliases}")" == 1 ]] || return 1
+  awk -F'\t' -v up="${expected_up}" -v down="${expected_down}" \
+    '$1 != up && $1 != down { bad=1 } END { exit bad }' "${aliases}" || return 1
+  [[ "$(awk -F'\t' -v p="${collision_up}" '$1 == p { n++ } END { print n+0 }' "${collisions}")" == 1 &&
+    "$(awk -F'\t' -v p="${collision_down}" '$1 == p { n++ } END { print n+0 }' "${collisions}")" == 1 ]] || return 1
+  awk -F'\t' -v up="${collision_up}" -v down="${collision_down}" \
+    '$1 != up && $1 != down { bad=1 } END { exit bad }' "${collisions}" || return 1
+  [[ "$(awk -F'\t' -v p="${collision_up}" '$1 == p { print $2; exit }' "${collisions}")" == \
+      '100644 blob 171033aaf172370f76ede86349b042154bd2ff71' &&
+    "$(awk -F'\t' -v p="${collision_down}" '$1 == p { print $2; exit }' "${collisions}")" == \
+      '100644 blob 83953384c9caa2ae2aa8d9485a208bb5ead5e33f' ]] || return 1
+  row_count="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { n++; row=$0 } END { print n+0 }' "${aliases}")"
+  [[ "${row_count}" == 1 ]] || return 1
+  row="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { print; exit }' "${aliases}")"
+  alias_record_row="${row}"
+  IFS=$'\t' read -r alias_path old_entry record_row_owner record_row_first_parent record_row_source_base record_row_source_head record_row_content_base record_row_candidates \
+    nested_owner nested_first_parent nested_source_base nested_source_head nested_content_base nested_candidates source_base_entry \
+    integration integration_first integration_second integration_base destination destination_entry <<<"${row}"
+  record_base="${nested_source_base}"
+  record_head="${nested_source_head}"
+  normalized_saved_guarded="$(f13_tree_entry_tuple_for_path "${path}" "${saved_guarded_entry}")" || return 1
+  normalized_saved_source="$(f13_tree_entry_tuple_for_path "${path}" "${saved_source_entry}")" || return 1
+  [[ "${owners[${path}]}" == "${record_row_owner}" &&
+    "${alias_path}" == "${path}" && "${owner}" == "${nested_owner}" &&
+    "${source_head}" == "${nested_source_head}" &&
+    "${normalized_saved_guarded}" == "${old_entry}" && "${normalized_saved_source}" == "${old_entry}" &&
+    "${record_row_owner}" == 0590ac862c5027ff9266f8403af1011ef2134f63 &&
+    "${record_row_first_parent}" == 5a42388c95377d7d0b718e823b35f317a71bf851 &&
+    "${record_row_source_base}" == 53529ea60dec670e64d1ae61724a7b8daff582bc &&
+    "${record_row_source_head}" == e33b8a3b09828055f690957b596b843177410ff6 &&
+    "${record_row_content_base}" == 5a42388c95377d7d0b718e823b35f317a71bf851 &&
+    "${record_row_candidates}" == 07d752a2f0f4daa0fe3aecc36bdbe73812dfd833 &&
+    "${nested_owner}" == e33b8a3b09828055f690957b596b843177410ff6 &&
+    "${nested_first_parent}" == 53529ea60dec670e64d1ae61724a7b8daff582bc &&
+    "${nested_source_base}" == 53529ea60dec670e64d1ae61724a7b8daff582bc &&
+    "${nested_source_head}" == e33b8a3b09828055f690957b596b843177410ff6 &&
+    "${nested_content_base}" == 1909f0ee3a3d038d83c468158fe99f6ef0a120bb &&
+    "${nested_candidates}" == 53529ea60dec670e64d1ae61724a7b8daff582bc &&
+    "${content_base}" == "${record_row_content_base}" &&
+    "${record_base}" == 53529ea60dec670e64d1ae61724a7b8daff582bc &&
+    "${record_head}" == e33b8a3b09828055f690957b596b843177410ff6 &&
+    "${integration}" == 020911cf4cb70be47bd575dcd8268685b5c6002d &&
+    "${integration_first}" == f79dfa4d93c2d5bc7efa5fe1f713dcecde761b97 &&
+    "${integration_second}" == ce05d869e133cfec521439386320b714a32ffdb3 &&
+    "${integration_base}" == e8f5c812ad1ac1880e0850f5863312ff9502183d ]] || return 1
+  case "${path}" in
+    "${expected_up}") [[ "${destination}" == "${destination_up}" && "${old_entry}" == '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' && "${destination_entry}" == "${old_entry}" ]] || return 1 ;;
+    "${expected_down}") [[ "${destination}" == "${destination_down}" && "${old_entry}" == '100644 blob 9c506399d95a0f460bbdff8972b14fff9bd645ca' && "${destination_entry}" == "${old_entry}" ]] || return 1 ;;
+    *) return 1 ;;
+  esac
+  git -C "${repo}" merge-base --is-ancestor "${record_base}" "${nested_owner}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${record_row_owner}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${record_row_candidates}" "${record_row_source_base}" 2>/dev/null || return 1
+  git -C "${repo}" rev-parse --verify "${record_row_content_base}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" rev-parse --verify "${nested_content_base}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" merge-base --is-ancestor "${record_head}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${integration}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  resolved_content_base="$(git -C "${repo}" rev-parse --verify "${content_base}^{commit}" 2>/dev/null)" || return 1
+  [[ "${resolved_content_base}" == "${content_base}" ]] || return 1
+  [[ "$(git -C "${repo}" rev-list --parents -n 1 "${integration}" 2>/dev/null)" == \
+    "${integration} ${integration_first} ${integration_second}" ]] || return 1
+  [[ "$(git -C "${repo}" rev-list --parents -n 1 "${record_row_owner}" 2>/dev/null)" == \
+    "${record_row_owner} ${record_row_first_parent} ${nested_owner}" &&
+    "$(git -C "${repo}" rev-list --parents -n 1 "${nested_owner}" 2>/dev/null)" == \
+    "${nested_owner} ${nested_first_parent}" ]] || return 1
+  if git -C "${repo}" merge-base --is-ancestor "${integration}" "${record_row_owner}" 2>/dev/null; then
+    return 1
+  else
+    [[ "$?" == 1 ]] || return 1
+  fi
+  [[ "$(git -C "${repo}" merge-base --all "${integration_first}" "${integration_second}" 2>/dev/null)" == "${integration_base}" ]] || return 1
+  [[ "$(f13_git_tree_entry "${repo}" "${record_row_owner}" "${path}")" == "${old_entry}" &&
+    "$(f13_git_tree_entry "${repo}" "${record_row_first_parent}" "${path}")" == "" &&
+    "$(f13_git_tree_entry "${repo}" "${nested_owner}" "${path}")" == "${old_entry}" &&
+    "$(f13_git_tree_entry "${repo}" "${record_head}" "${path}")" == "${old_entry}" ]] || return 1
+  [[ "$(f13_git_tree_entry "${repo}" "${record_base}" "${path}")" == "${source_base_entry}" ]] || return 1
+  base_old="$(f13_git_tree_entry "${repo}" "${base}" "${path}")" || return 1
+  snapshot_base_old="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_base}" "${path}")" || return 1
+  h_old="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
+  integration_old="$(f13_git_tree_entry "${repo}" "${integration}" "${path}")" || return 1
+  integration_first_old="$(f13_git_tree_entry "${repo}" "${integration_first}" "${path}")" || return 1
+  integration_second_old="$(f13_git_tree_entry "${repo}" "${integration_second}" "${path}")" || return 1
+  integration_base_old="$(f13_git_tree_entry "${repo}" "${integration_base}" "${path}")" || return 1
+  target_old="$(f13_git_tree_entry "${repo}" "${target}" "${path}")" || return 1
+  aggregate_old="$(f13_git_tree_entry "${repo}" "${game_checkpoint_aggregate_target}" "${path}")" || return 1
+  [[ "${integration_first_old}" == "${old_entry}" && -z "${integration_second_old}" &&
+    -z "${integration_base_old}" && -z "${base_old}" && -z "${snapshot_base_old}" &&
+    -z "${h_old}" && -z "${integration_old}" &&
+    -z "${target_old}" && -z "${aggregate_old}" ]] || return 1
+  snapshot_base_up="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_base}" "${collision_up}")" || return 1
+  snapshot_base_down="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_base}" "${collision_down}")" || return 1
+  base_up="$(f13_git_tree_entry "${repo}" "${base}" "${collision_up}")" || return 1
+  base_down="$(f13_git_tree_entry "${repo}" "${base}" "${collision_down}")" || return 1
+  [[ "${base_up}" == '100644 blob 171033aaf172370f76ede86349b042154bd2ff71' &&
+    "${base_down}" == '100644 blob 83953384c9caa2ae2aa8d9485a208bb5ead5e33f' &&
+    "${snapshot_base_up}" == "${base_up}" && "${snapshot_base_down}" == "${base_down}" ]] || return 1
+  row_count="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { n++; row=$0 } END { print n+0 }' "${output}")"
+  [[ "${row_count}" == 1 ]] || return 1
+  row="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { print; exit }' "${output}")"
+  IFS=$'\t' read -r _ _ actual_row_commit actual_row_first_parent actual_row_nested_base actual_row_nested_head \
+    actual_row_content_base actual_row_source_candidates <<<"${row}"
+  [[ "${actual_row_commit}" == "${record_row_owner}" &&
+    "${owners[${path}]}" == "${record_row_owner}" &&
+    "${guarded_entry_commits[${path}]}" == "${owner}" &&
+    "${actual_row_first_parent}" == "${record_row_first_parent}" &&
+    "${actual_row_nested_base}" == "${record_row_source_base}" &&
+    "${actual_row_nested_head}" == "${record_row_source_head}" &&
+    "${actual_row_content_base}" == "${record_row_content_base}" &&
+    "${actual_row_source_candidates}" == "${record_row_candidates}" ]] || return 1
+  grep -Fxq -- "${destination}" "${game_checkpoint_aggregate_paths}" || return 1
+  h_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${destination}")" || return 1
+  target_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_aggregate_target}" "${destination}")" || return 1
+  integration_entry="$(f13_git_tree_entry "${repo}" "${integration}" "${destination}")" || return 1
+  integration_entry_record="$(f13_git_tree_entry_record "${repo}" "${integration}" "${destination}")" || return 1
+  normalized_integration_record="$(f13_tree_entry_tuple_for_path "${destination}" "${integration_entry_record}")" || return 1
+  [[ "${h_entry}" == "100644 blob ${destination_entry##* }" &&
+    "${target_entry}" == "${h_entry}" && "${integration_entry}" == "${h_entry}" &&
+    "${destination_entry}" == "${old_entry}" &&
+    "${normalized_integration_record}" == "${destination_entry}" ]] || return 1
+  game_checkpoint_aggregate_path_allowed "${repo}" "${integration}" \
+    "${destination}" "${integration_entry_record}" || return 1
+  alias_approval_file="${game_checkpoint_aggregate_alias_map}"
+  [[ -n "${alias_approval_file}" ]] || return 1
+  alias_approval_count="$(awk -F '\t' -v p="${destination}" '$1 == p { n++ } END { print n+0 }' \
+    "${alias_approval_file}")"
+  [[ "${alias_approval_count}" == 0 ]] || return 1
+  alias_row_hash="$(printf '%s\n' "${alias_record_row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || return 1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${destination}" "${path}" "${alias_row_hash}" \
+    "${game_checkpoint_snapshot_base}" "${game_checkpoint_snapshot_head}" \
+    "${game_checkpoint_snapshot_record}" "${game_checkpoint_aggregate_base}" \
+    "${game_checkpoint_aggregate_head}" "${game_checkpoint_aggregate_target}" \
+    "${integration}" "${integration_first}" "${integration_second}" "${integration_base}" \
+    "${h_entry}" "${target_entry}" "${integration_entry}" "${normalized_integration_record}" \
+    >>"${alias_approval_file}" || return 1
+  return 0
+}
+
+f13_migration_alias_approval_valid() {
+  local repo="$1" map="$2" path="$3" ledger row_count row approval_count approval_row
+  local alias_path alias_hash snapshot_base snapshot_head snapshot_record aggregate_base aggregate_head aggregate_target
+  local integration integration_first integration_second integration_base h_entry target_entry integration_entry normalized_integration_entry
+  local aliases collisions record_row actual_hash expected_destination expected_entry actual_entry actual_record normalized_actual_record tuple prior_aggregate_active
+  [[ "${game_checkpoint_aggregate_map}" == "${map}" &&
+    -n "${game_checkpoint_aggregate_alias_map}" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${map}.game-snapshot-alias-approvals" &&
+    -n "${game_checkpoint_aggregate_base}" && -n "${game_checkpoint_aggregate_head}" &&
+    -n "${game_checkpoint_aggregate_target}" && -n "${game_checkpoint_aggregate_record}" &&
+    "${game_checkpoint_aggregate_record}" == "${game_checkpoint_snapshot_record}" ]] || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  row_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${map}")"
+  [[ "${row_count}" == 0 ]] || return 1
+  approval_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${map}.game-snapshot-approvals")"
+  [[ "${approval_count}" == 0 ]] || return 1
+  ledger="${game_checkpoint_aggregate_alias_map}"
+  [[ -f "${ledger}" ]] || return 1
+  [[ "$(awk 'END { print NR+0 }' "${ledger}")" == 2 ]] || return 1
+  awk -F '\t' '
+    $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql" &&
+    $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql" { bad=1 }
+    END { exit bad }
+  ' "${ledger}" || return 1
+  approval_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${ledger}")"
+  [[ "${approval_count}" == 1 ]] || return 1
+  [[ "$(awk -F '\t' -v p="${path}" '$1 == p { if (NF != 17) bad=1 } END { print bad+0 }' "${ledger}")" == 0 ]] || return 1
+  approval_row="$(awk -F '\t' -v p="${path}" '$1 == p { row=$0 } END { print row }' "${ledger}")"
+  IFS=$'\t' read -r _ alias_path alias_hash snapshot_base snapshot_head snapshot_record \
+    aggregate_base aggregate_head aggregate_target integration integration_first integration_second \
+    integration_base h_entry target_entry integration_entry normalized_integration_entry <<<"${approval_row}"
+  [[ "${snapshot_base}" == "${game_checkpoint_snapshot_base}" &&
+    "${snapshot_head}" == "${game_checkpoint_snapshot_head}" &&
+    "${snapshot_record}" == "${game_checkpoint_snapshot_record}" &&
+    "${aggregate_base}" == "${game_checkpoint_aggregate_base}" &&
+    "${aggregate_head}" == "${game_checkpoint_aggregate_head}" &&
+    "${aggregate_target}" == "${game_checkpoint_aggregate_target}" ]] || return 1
+  f13_migration_alias_record_load "${repo}" "${snapshot_record}" \
+    "${TMP_DIR}/f13-alias-ledger-record.tsv" "${TMP_DIR}/f13-alias-ledger-collisions.tsv" || return 1
+  record_row="$(awk -F '\t' -v p="${alias_path}" '$1 == p { n++; row=$0 } END { if (n == 1) print row }' \
+    "${TMP_DIR}/f13-alias-ledger-record.tsv")"
+  [[ -n "${record_row}" ]] || return 1
+  actual_hash="$(printf '%s\n' "${record_row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || return 1
+  [[ "${actual_hash}" == "${alias_hash}" ]] || return 1
+  IFS=$'\t' read -r _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ expected_destination expected_entry <<<"${record_row}"
+  [[ "${expected_destination}" == "${path}" && -n "${expected_entry}" ]] || return 1
+  case "${alias_path}" in
+    src/backend/migrations/voice_db/000010_match_squad_operations.up.sql)
+      [[ "${path}" == src/backend/migrations/voice_db/000011_match_squad_operations.up.sql ]] || return 1 ;;
+    src/backend/migrations/voice_db/000010_match_squad_operations.down.sql)
+      [[ "${path}" == src/backend/migrations/voice_db/000011_match_squad_operations.down.sql ]] || return 1 ;;
+    *) return 1 ;;
+  esac
+  grep -Fxq -- "${alias_path}" "${game_checkpoint_aggregate_paths}" && return 1
+  [[ "$(git -C "${repo}" rev-list --parents -n 1 "${integration}" 2>/dev/null)" == \
+    "${integration} ${integration_first} ${integration_second}" ]] || return 1
+  [[ "$(git -C "${repo}" merge-base --all "${integration_first}" "${integration_second}" 2>/dev/null)" == \
+    "${integration_base}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${integration}" "${snapshot_head}" 2>/dev/null || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  h_entry="$(f13_git_tree_entry "${repo}" "${snapshot_head}" "${path}")" || return 1
+  target_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_aggregate_target}" "${path}")" || return 1
+  actual_entry="$(f13_git_tree_entry "${repo}" "${integration}" "${path}")" || return 1
+  actual_record="$(f13_git_tree_entry_record "${repo}" "${integration}" "${path}")" || return 1
+  normalized_actual_record="$(f13_tree_entry_tuple_for_path "${path}" "${actual_record}")" || return 1
+  [[ "${h_entry}" == "${expected_entry}" && "${target_entry}" == "${h_entry}" &&
+    "${actual_entry}" == "${h_entry}" &&
+    "${normalized_actual_record}" == "${h_entry}" &&
+    "${normalized_integration_entry}" == "${actual_entry}" ]] || return 1
+  prior_aggregate_active="${game_checkpoint_aggregate_active}"
+  game_checkpoint_aggregate_active=true
+  if ! game_checkpoint_aggregate_path_allowed "${repo}" "${integration}" "${path}" "${actual_record}"; then
+    game_checkpoint_aggregate_active="${prior_aggregate_active}"
+    return 1
+  fi
+  game_checkpoint_aggregate_active="${prior_aggregate_active}"
+  [[ -f "${repo}/${path}" ]] || return 1
+  tuple="$(git -C "${repo}" hash-object --path="${path}" "${repo}/${path}" 2>/dev/null)" || return 1
+  [[ "100644 blob ${tuple}" == "${h_entry}" ]]
+}
+
+f13_release_projection_path_accounted() {
+  local repo="$1" output="$2" path="$3" row_count alias_count
+  row_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${output}")" || return 1
+  alias_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' \
+    "${game_checkpoint_aggregate_alias_map}")" || return 1
+  if [[ "${row_count}" == 1 && "${alias_count}" == 0 ]]; then return 0; fi
+  [[ "${row_count}" == 0 && "${alias_count}" == 1 ]] || return 1
+  f13_migration_alias_approval_valid "${repo}" "${output}" "${path}"
+}
+
+game_checkpoint_alias_path_allowed_for_provenance() {
+  local repo="$1" map="$2" path="$3"
+  game_checkpoint_domain_path "${path}" || return 1
+  f13_migration_alias_approval_valid "${repo}" "${map}" "${path}"
+}
+
+f13_migration_alias_worktree_bytes_fixture() {
+  local repo="$1" map="$2" target="$3" path="$4"
+  local worktree="${TMP_DIR}/f13-alias-worktree-bytes-${RANDOM}-${RANDOM}"
+  local fixture_file="${worktree}/${path}"
+  local result=0
+  git -C "${repo}" worktree add --quiet --detach --no-checkout "${worktree}" "${target}" || return 1
+  if ! mkdir -p "${fixture_file%/*}" ||
+    ! git -C "${repo}" show "${target}:${path}" >"${fixture_file}" ||
+    ! printf '\nF13 fixture-only worktree mutation\n' >>"${fixture_file}"; then
+    result=1
+  elif game_checkpoint_alias_path_allowed_for_provenance "${worktree}" "${map}" "${path}"; then
+    result=1
+  fi
+  if ((result == 0)); then
+    git -C "${repo}" show "${target}:${path}" >"${fixture_file}" || result=1
+    if ((result == 0)) && ! game_checkpoint_alias_path_allowed_for_provenance "${worktree}" "${map}" "${path}"; then
+      result=1
+    fi
+  fi
+  git -C "${repo}" worktree remove --force "${worktree}" >/dev/null 2>&1 || result=1
+  return "${result}"
+}
+
+f13_migration_alias_wrapper_result_fixture() {
+  local repo="$1" map="$2" path
+  [[ "${game_checkpoint_aggregate_map}" == "${map}" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${map}.game-snapshot-alias-approvals" ]] || return 1
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    f13_release_projection_path_accounted "${repo}" "${map}" "${path}" || return 1
+  done <"${game_checkpoint_aggregate_paths}"
+  for path in \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+    f13_release_projection_path_accounted "${repo}" "${map}" "${path}" || return 1
+    game_checkpoint_alias_path_allowed_for_provenance "${repo}" "${map}" "${path}" || return 1
+  done
+}
+
+# Exercise the guarded-path helper with the exact immutable R3 row while the
+# checkout is a real master-target pull-request merge. This catches shell
+# nounset regressions in the record-to-owner binding before the full collector
+# walks the same row.
+f13_migration_alias_reconciliation_execution_fixture() {
+  local repo="$1" event_base="$2" target="$3" source_head="$4"
+  local delta="${TMP_DIR}/f13-alias-execution-delta" paths="${TMP_DIR}/f13-alias-execution-paths"
+  local r2_delta="${TMP_DIR}/f13-r2-stale-projection-delta"
+  local aliases="${TMP_DIR}/f13-alias-execution-record.tsv" collisions="${TMP_DIR}/f13-alias-execution-collisions.tsv"
+  local path row fields old_entry row_owner row_first row_source_base row_source_head row_content_base row_candidates
+  local nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry
+  local integration integration_first integration_second integration_base destination destination_entry
+  local output old_path generic_path ledger backup_ledger
+  local fixture_old_record
+  local -A owners=() owner_content_bases=() owner_source_heads=() owner_source_entries=()
+  local -A guarded_entries=() guarded_entry_commits=()
+
+  [[ "$(git -C "${repo}" rev-list --parents -n 1 "${target}" | awk '{ print NF }')" == 3 &&
+    "$(git -C "${repo}" rev-parse "${target}^1")" == "${event_base}" &&
+    "$(git -C "${repo}" rev-parse "${target}^2")" == "${source_head}" ]] || return 1
+  git -C "${repo}" diff --name-only --no-renames "${event_base}" "${source_head}" >"${r2_delta}" || return 1
+  if game_checkpoint_projection_authorized_in_delta "${repo}" "${target}" \
+    "${event_base}" "${source_head}" \
+    '28f1a0a26f3f23bfb9242592aea9c92fd659ee2d' \
+    '7270d22d05475afee9e20fbb1b95377c138ebdf4' \
+    'a3fe5aad4fea5ff9ef18a7786d80916c06776e40' "${r2_delta}"; then
+    printf '%s\n' 'F13 oracle bug: stale R2 projection authorized the updated R3 source tree' >&2
+    return 1
+  fi
+  git -C "${repo}" diff --name-only --no-renames "${event_base}" "${source_head}" >"${delta}" || return 1
+  game_checkpoint_aggregate_authorized "${repo}" "${event_base}" "${source_head}" \
+    "${target}" "${delta}" "${paths}" || return 1
+  game_checkpoint_aggregate_active=true
+  game_checkpoint_aggregate_base="${event_base}"
+  game_checkpoint_aggregate_head="${source_head}"
+  game_checkpoint_aggregate_target="${target}"
+  game_checkpoint_aggregate_paths="${paths}"
+  output="${TMP_DIR}/f13-alias-execution-map"
+  game_checkpoint_aggregate_map="${output}"
+  game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
+  game_checkpoint_aggregate_alias_map="${output}.game-snapshot-alias-approvals"
+  : >"${output}" || return 1
+  : >"${output}.game-snapshot-approvals" || return 1
+  : >"${game_checkpoint_aggregate_alias_map}" || return 1
+  f13_migration_alias_record_load "${repo}" "${game_checkpoint_snapshot_record}" \
+    "${aliases}" "${collisions}" || return 1
+
+  for path in \
+    'src/backend/migrations/voice_db/000010_match_squad_operations.up.sql' \
+    'src/backend/migrations/voice_db/000010_match_squad_operations.down.sql'; do
+    row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { print; exit }' "${aliases}")"
+    [[ -n "${row}" ]] || return 1
+    IFS=$'\t' read -r _ old_entry row_owner row_first row_source_base row_source_head row_content_base row_candidates \
+      nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry \
+      integration integration_first integration_second integration_base destination destination_entry <<<"${row}"
+    owners["${path}"]="${row_owner}"
+    owner_content_bases["${path}"]="${row_content_base}"
+    owner_source_heads["${path}"]="${row_source_head}"
+    fixture_old_record="${old_entry}"$'\t'"${path}"
+    owner_source_entries["${path}"]="${fixture_old_record}"
+    guarded_entries["${path}"]="${fixture_old_record}"
+    guarded_entry_commits["${path}"]="${nested_owner}"
+    output="${TMP_DIR}/f13-alias-execution-map"
+    awk -F '\t' -v candidate="${path}" '$1 == candidate { for (i=1; i<=8; i++) printf "%s%s", $i, (i==8 ? ORS : FS) }' \
+      "${aliases}" >"${output}" || return 1
+    if ! f13_migration_alias_reconciles_guarded_path "${repo}" "${event_base}" \
+      "${source_head}" "${path}" "${nested_owner}" "${row_content_base}" \
+      "${nested_head}" "${fixture_old_record}" "${fixture_old_record}" "${output}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+    awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-alias-execution-map-rewrite" || return 1
+    cat "${TMP_DIR}/f13-alias-execution-map-rewrite" >"${output}" || return 1
+  done
+  game_checkpoint_aggregate_map="${output}"
+  ledger="${game_checkpoint_aggregate_alias_map}"
+  for path in \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+    if ! f13_release_projection_path_accounted "${repo}" "${output}" "${path}" ||
+      ! game_checkpoint_alias_path_allowed_for_provenance "${repo}" "${output}" "${path}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+    if ! f13_migration_alias_worktree_bytes_fixture \
+      "${repo}" "${output}" "${game_checkpoint_aggregate_target}" "${path}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+    printf '%s\t%s\n' "${path}" 'true	fixture-owner	fixture-parent	fixture-base	fixture-head	fixture-content	fixture-candidates' >>"${output}" || return 1
+    if f13_release_projection_path_accounted "${repo}" "${output}" "${path}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+    awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-alias-execution-map-rewrite" || return 1
+    cat "${TMP_DIR}/f13-alias-execution-map-rewrite" >"${output}" || return 1
+  done
+  generic_path="$(awk -v up='src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+    -v down='src/backend/migrations/voice_db/000011_match_squad_operations.down.sql' \
+    '$0 != up && $0 != down && NF { print; exit }' "${paths}")"
+  [[ -n "${generic_path}" ]] || return 1
+  : >"${output}" || return 1
+  if f13_release_projection_path_accounted "${repo}" "${output}" "${generic_path}"; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  printf '%s\ttrue\tfixture-owner\tfixture-parent\tfixture-base\tfixture-head\tfixture-content\tfixture-candidates\n' \
+    "${generic_path}" >"${output}" || return 1
+  f13_release_projection_path_accounted "${repo}" "${output}" "${generic_path}" || return 1
+  cat "${output}" "${output}" >"${TMP_DIR}/f13-alias-execution-map-duplicate" || return 1
+  if f13_release_projection_path_accounted "${repo}" "${TMP_DIR}/f13-alias-execution-map-duplicate" "${generic_path}"; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  : >"${output}" || return 1
+  backup_ledger="${TMP_DIR}/f13-alias-execution-ledger-backup.tsv"
+  cp "${ledger}" "${backup_ledger}" || return 1
+  : >"${ledger}" || return 1
+  if f13_release_projection_path_accounted "${repo}" "${output}" \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql'; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  cp "${backup_ledger}" "${ledger}" || return 1
+  cat "${ledger}" "${ledger}" >"${TMP_DIR}/f13-alias-execution-ledger-duplicate" || return 1
+  game_checkpoint_aggregate_alias_map="${TMP_DIR}/f13-alias-execution-ledger-duplicate"
+  if f13_release_projection_path_accounted "${repo}" "${output}" \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql'; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  game_checkpoint_aggregate_alias_map="${ledger}"
+  awk -F '\t' 'BEGIN { OFS="\t" } NR == 1 { $10 = "0000000000000000000000000000000000000000" } { print }' \
+    "${ledger}" >"${TMP_DIR}/f13-alias-execution-ledger-wrong-tuple" || return 1
+  game_checkpoint_aggregate_alias_map="${TMP_DIR}/f13-alias-execution-ledger-wrong-tuple"
+  if f13_release_projection_path_accounted "${repo}" "${output}" \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql'; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  game_checkpoint_aggregate_alias_map="${ledger}"
+  f13_tree_entry_normalizer_fixtures || return 1
+  game_checkpoint_aggregate_active=false
+  printf '%s\n' 'F13 R3 alias early-helper fixture: PASS'
 }
 
 # These exact paths are the reviewed Role private room-grant handler and its
@@ -590,6 +1802,584 @@ if game_checkpoint_path_authorized_in_delta "${game_fixture_path}" "${TMP_DIR}/g
   printf '%s\n' 'F13 oracle bug: changed Game blob or absent delta was accepted' >&2
   exit 2
 fi
+
+# Exercise the later whole-snapshot verifier against a producer-shaped nested
+# merge. The immutable record binds source base B0, snapshot H, and source A;
+# event base B may equal B0 or add separately governed paths before result T.
+f13_game_checkpoint_projection_fixtures() {
+local game_projection_path game_projection_h_entry game_projection_a_entry game_projection_t_entry
+f13_checkpoint_merge_tree_fixtures || return 1
+f13_diag_stderr="${TMP_DIR}/f13-guarded-diagnostic-stderr"
+f13_diag_stdout="$(f13_emit_guarded_failure_diagnostic guarded_target_mismatch \
+  'protos/voice/fixture:(glob)/fixture.proto' '0123456789012345678901234567890123456789' \
+  'abcdefabcdefabcdefabcdefabcdefabcdefabcd' 'fedcbafedcbafedcbafedcbafedcbafedcbafedc' \
+  '1111111111111111111111111111111111111111' \
+  '100644 blob 0123456789012345678901234567890123456789 path' \
+  '100755 blob abcdefabcdefabcdefabcdefabcdefabcdefabcd path' \
+  stored_entry_must_equal_final_target 2>"${f13_diag_stderr}")"
+[[ -z "${f13_diag_stdout}" ]] || {
+  printf '%s\n' 'F13 oracle bug: guarded failure diagnostics leaked onto collector stdout' >&2
+  return 1
+}
+grep -Fq 'stage=f13-collector category=guarded_target_mismatch' "${f13_diag_stderr}" && \
+  grep -Fq 'path=protos/voice/fixture' "${f13_diag_stderr}" && \
+  grep -Fq 'source_head=1111111111111111111111111111111111111111' "${f13_diag_stderr}" && \
+  grep -Fq 'stored=100644:blob:0123456789012345678901234567890123456789' "${f13_diag_stderr}" && \
+  grep -Fq 'target=100755:blob:abcdefabcdefabcdefabcdefabcdefabcdefabcd' "${f13_diag_stderr}" && \
+  grep -Fq 'predicate=stored_entry_must_equal_final_target' "${f13_diag_stderr}" || {
+  printf '%s\n' 'F13 oracle bug: bounded guarded failure diagnostic omitted safe Git metadata' >&2
+  return 1
+}
+game_projection_repo="${TMP_DIR}/game-coherent-projection-fixture"
+mkdir -p "${game_projection_repo}"
+git -C "${game_projection_repo}" init -q
+git -C "${game_projection_repo}" config user.name 'Voice CI fixture'
+git -C "${game_projection_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${game_projection_repo}" config commit.gpgsign false
+mkdir -p "${game_projection_repo}/protos/voice/fixture/v1" \
+  "${game_projection_repo}/src/backend/voice/internal/fixture" \
+  "${game_projection_repo}/src/backend/role/internal/fixture"
+printf '%s\n' 'baseline proto' >"${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+printf '%s\n' 'baseline voice' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+printf '%s\n' 'removed by accepted source' >"${game_projection_repo}/src/backend/role/internal/fixture/obsolete.go"
+printf '%s\n' 'fixture base' >"${game_projection_repo}/README.md"
+git -C "${game_projection_repo}" add .
+git -C "${game_projection_repo}" commit -qm 'F13 coherent Game base'
+game_projection_base="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -qb game-source
+printf '%s\n' 'accepted proto' >"${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+printf '%s\n' 'accepted voice' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+rm "${game_projection_repo}/src/backend/role/internal/fixture/obsolete.go"
+git -C "${game_projection_repo}" add -A
+git -C "${game_projection_repo}" commit -qm 'F13 coherent Game source contribution'
+game_projection_head="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -qb game-current-base "${game_projection_base}"
+mkdir -p "${game_projection_repo}/docs" "${game_projection_repo}/src/backend/space/internal/fixture"
+printf '%s\n' '718 non-Game base advance' >"${game_projection_repo}/docs/base-advance.md"
+printf '%s\n' 'base-owned Space path' >"${game_projection_repo}/src/backend/space/internal/fixture/base-owned.go"
+git -C "${game_projection_repo}" add docs/base-advance.md src/backend/space/internal/fixture/base-owned.go
+git -C "${game_projection_repo}" commit -qm 'F13 unrelated 718 base advance'
+game_projection_actual_base="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -q game-source
+mkdir -p "${game_projection_repo}/scripts/ci"
+printf '%s\n' 'approved snapshot tuple metadata' >"${game_projection_repo}/scripts/ci/game-checkpoint-record.fixture"
+git -C "${game_projection_repo}" add scripts/ci/game-checkpoint-record.fixture
+git -C "${game_projection_repo}" commit -qm 'F13 record immutable Game snapshot H'
+game_projection_record="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+printf '%s\n' 'ordinary metadata-only follow-up A' >"${game_projection_repo}/scripts/ci/follow-up.fixture"
+git -C "${game_projection_repo}" add scripts/ci/follow-up.fixture
+git -C "${game_projection_repo}" commit -qm 'F13 ordinary metadata-only follow-up A'
+game_projection_actual_head="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+game_projection_equal_source_head="${game_projection_actual_head}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 source lane syncs exact advanced master base' game-current-base
+game_projection_actual_head="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" checkout -qb game-integrate "${game_projection_actual_base}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 nested merge of accepted Game source' game-source
+game_projection_target="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" diff --name-only "${game_projection_actual_base}" "${game_projection_actual_head}" >"${TMP_DIR}/game-projection-delta"
+game_checkpoint_snapshot_base="${game_projection_base}"
+game_checkpoint_snapshot_head="${game_projection_head}"
+game_checkpoint_snapshot_record="${game_projection_record}"
+
+# The fixture snapshot is an exact projection at H; the post-record source
+# head A and integration target T carry no further Game-path changes. Check
+# the complete entries, including the intentional deletion, before testing
+# the aggregate ancestry predicates below.
+for game_projection_path in \
+  'protos/voice/fixture/v1/fixture.proto' \
+  'src/backend/voice/internal/fixture/runtime.go' \
+  'src/backend/role/internal/fixture/obsolete.go'; do
+  game_projection_h_entry="$(f13_git_tree_entry_record \
+    "${game_projection_repo}" "${game_projection_head}" "${game_projection_path}")" || return 1
+  game_projection_a_entry="$(f13_git_tree_entry_record \
+    "${game_projection_repo}" "${game_projection_actual_head}" "${game_projection_path}")" || return 1
+  game_projection_t_entry="$(f13_git_tree_entry_record \
+    "${game_projection_repo}" "${game_projection_target}" "${game_projection_path}")" || return 1
+  [[ "${game_projection_h_entry}" == "${game_projection_a_entry}" &&
+    "${game_projection_h_entry}" == "${game_projection_t_entry}" ]] || {
+    printf '%s\n' 'F13 oracle bug: valid B0/H/R/A/T fixture changed a full Game path entry' >&2
+    return 1
+  }
+done
+
+# Exercise every boundary of the narrow pre-H duplicate-owner supersession
+# rule independently of the full producer fixture below.
+game_checkpoint_aggregate_active=true
+game_checkpoint_aggregate_base="${game_projection_base}"
+game_checkpoint_aggregate_head="${game_projection_actual_head}"
+game_checkpoint_aggregate_target="${game_projection_target}"
+game_checkpoint_aggregate_record="${game_projection_record}"
+game_checkpoint_aggregate_paths="${TMP_DIR}/game-projection-supersession-paths"
+printf '%s\n' 'protos/voice/fixture/v1/fixture.proto' >"${game_checkpoint_aggregate_paths}"
+game_checkpoint_aggregate_binding_valid "${game_projection_repo}" || {
+  printf '%s\n' 'F13 oracle bug: valid B0/H/R/A/T aggregate fixture was rejected' >&2
+  exit 2
+}
+if ! game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" clean; then
+  printf '%s\n' 'F13 oracle bug: exact pre-H integration owner was rejected' >&2
+  exit 2
+fi
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_actual_head}" "${game_projection_head}" clean ||
+  game_checkpoint_duplicate_owner_supersession_allowed \
+    "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+    "${game_projection_base}" "${game_projection_base}" \
+    "${game_projection_head}" "${game_projection_head}" "${game_projection_base}" clean ||
+  game_checkpoint_duplicate_owner_supersession_allowed \
+    "${game_projection_repo}" 'scripts/ci/game-checkpoint-record.fixture' \
+    "${game_projection_base}" "${game_projection_base}" \
+    "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" clean; then
+  printf '%s\n' 'F13 oracle bug: out-of-H owner, wrong result entry, or non-P path was accepted' >&2
+  exit 2
+fi
+supersession_status=0
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_base}" clean; then
+  supersession_status=0
+else
+  supersession_status=$?
+fi
+[[ "${supersession_status}" == 2 ]] || {
+  printf '%s\n' 'F13 oracle bug: verified non-H integration did not retain a tainted owner row' >&2
+  exit 2
+}
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" unverified; then
+  printf '%s\n' 'F13 oracle bug: unverified merge outcome was accepted for duplicate supersession' >&2
+  exit 2
+fi
+game_checkpoint_aggregate_active=false
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" clean; then
+  printf '%s\n' 'F13 oracle bug: inactive aggregate accepted duplicate owner' >&2
+  exit 2
+fi
+game_checkpoint_aggregate_active=true
+game_checkpoint_aggregate_record='0000000000000000000000000000000000000000'
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" clean; then
+  printf '%s\n' 'F13 oracle bug: mismatched checkpoint record accepted duplicate owner' >&2
+  exit 2
+fi
+game_checkpoint_aggregate_record="${game_projection_record}"
+game_checkpoint_aggregate_head="${game_projection_base}"
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" clean; then
+  printf '%s\n' 'F13 oracle bug: source aggregate not descended from H was accepted' >&2
+  exit 2
+fi
+game_checkpoint_aggregate_head="${game_projection_actual_head}"
+game_checkpoint_aggregate_target="${game_projection_target}"
+game_checkpoint_aggregate_binding_valid "${game_projection_repo}" || {
+  printf '%s\n' 'F13 oracle bug: valid B0/H/R/A/T aggregate fixture was rejected before target-negative case' >&2
+  exit 2
+}
+game_checkpoint_aggregate_target="${game_projection_base}"
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" clean; then
+  printf '%s\n' 'F13 oracle bug: aggregate target not descended from A was accepted' >&2
+  exit 2
+fi
+game_checkpoint_aggregate_target="${game_projection_target}"
+game_projection_unrelated_base="$(printf '%s\n' 'F13 unrelated checkpoint base' | \
+  git -C "${game_projection_repo}" commit-tree "${game_projection_target}^{tree}")"
+game_checkpoint_aggregate_base="${game_projection_unrelated_base}"
+if game_checkpoint_duplicate_owner_supersession_allowed \
+  "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
+  "${game_projection_base}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${game_projection_head}" clean; then
+  printf '%s\n' 'F13 oracle bug: unrelated aggregate base was accepted' >&2
+  exit 2
+fi
+game_checkpoint_aggregate_base="${game_projection_base}"
+game_checkpoint_aggregate_active=false
+
+game_projection_event_sha="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if ! f13_master_pr_contribution_enabled "${game_projection_repo}" pull_request master   codex/matchfound-deadline-recovery refs/pull/667/merge "${game_projection_event_sha}"   "${game_projection_actual_base}" "${game_projection_target}"; then
+  printf '%s\n' 'F13 oracle bug: exact checkpoint PR graph on an arbitrary feature branch was not routed' >&2
+  exit 2
+fi
+if f13_master_pr_contribution_enabled "${game_projection_repo}" pull_request master   codex/matchfound-deadline-recovery refs/pull/667/merge "${game_projection_event_sha}"   "${game_projection_actual_base}" "${game_projection_actual_head}" ||
+  f13_master_pr_contribution_enabled "${game_projection_repo}" pull_request develop   codex/matchfound-deadline-recovery refs/pull/667/merge "${game_projection_event_sha}"   "${game_projection_actual_base}" "${game_projection_target}" ||
+  f13_master_pr_contribution_enabled "${game_projection_repo}" pull_request master   codex/matchfound-deadline-recovery refs/pull/667/head "${game_projection_event_sha}"   "${game_projection_actual_base}" "${game_projection_target}"; then
+  printf '%s\n' 'F13 oracle bug: wrong event, base, ref, or merge identity selected checkpoint routing' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-pr-drift-source "${game_projection_actual_head}"
+printf '%s\n' 'unapproved post-checkpoint drift' >"${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+git -C "${game_projection_repo}" add protos/voice/fixture/v1/fixture.proto
+git -C "${game_projection_repo}" commit -qm 'F13 reject post-checkpoint Game drift'
+game_projection_drift_head="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+game_projection_drift_target="$(git -C "${game_projection_repo}" commit-tree \
+  "${game_projection_drift_head}^{tree}" -p "${game_projection_actual_base}" -p "${game_projection_drift_head}" \
+  <<< 'F13 reject drifted checkpoint PR')"
+if f13_master_pr_contribution_enabled "${game_projection_repo}" pull_request master \
+  codex/matchfound-deadline-recovery refs/pull/667/merge "${game_projection_drift_target}" \
+  "${game_projection_actual_base}" "${game_projection_drift_target}"; then
+  printf '%s\n' 'F13 oracle bug: post-checkpoint guarded drift retained checkpoint routing' >&2
+  exit 2
+fi
+f13_collect_master_release_pr_contributions "${game_projection_repo}" "${game_projection_actual_base}"   "${game_projection_target}" "${TMP_DIR}/game-projection-pr-map"   "${TMP_DIR}/game-projection-pr-category" || {
+  printf '%s\n' 'F13 oracle bug: checkpoint-qualified feature PR failed the existing release-PR collector' >&2
+  exit 2
+}
+awk -F '\t' '$1 == "protos/voice/fixture/v1/fixture.proto" { found=1 } END { exit !found }' \
+  "${TMP_DIR}/game-projection-pr-map" || {
+  printf '%s\n' 'F13 oracle bug: release-PR collector omitted the checkpointed path row' >&2
+}
+game_checkpoint_path_allowed_for_provenance "${game_projection_repo}"   "${TMP_DIR}/game-projection-pr-map" 'protos/voice/fixture/v1/fixture.proto' || {
+  printf '%s\n' 'F13 oracle bug: actual release-PR row failed pinned checkpoint path authorization' >&2
+  exit 2
+}
+f13_collect_master_push_contributions "${game_projection_repo}" push refs/heads/master \
+  "${game_projection_actual_base}" "${game_projection_actual_base}" "${game_projection_target}" \
+  "${TMP_DIR}/game-projection-map" || {
+  printf '%s\n' 'F13 oracle bug: real contribution collector rejected the approved snapshot fixture' >&2
+  exit 2
+}
+game_projection_row="$(awk -F '\t' '$1 == "protos/voice/fixture/v1/fixture.proto" { row = $0 } END { print row }' \
+  "${TMP_DIR}/game-projection-map")"
+IFS=$'\t' read -r _ game_projection_trigger game_projection_row_target _ \
+  game_projection_row_base game_projection_row_head _ _ <<<"${game_projection_row}"
+[[ "${game_projection_trigger}" == false && \
+  -n "${game_projection_row_target}" && \
+  "${game_projection_row_base}" == "${game_projection_base}" && \
+  "${game_projection_row_head}" == "${game_projection_head}" ]] || {
+  printf '%s\n' 'F13 oracle bug: master-push partition did not preserve the nested approved owner' >&2
+  exit 2
+}
+game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" "${TMP_DIR}/game-projection-map" \
+  'protos/voice/fixture/v1/fixture.proto' || {
+  printf '%s\n' 'F13 oracle bug: exact coherent Game source projection was rejected' >&2
+  exit 2
+}
+game_projection_approval_map="${TMP_DIR}/game-projection-map.game-snapshot-approvals"
+cp "${game_projection_approval_map}" "${TMP_DIR}/game-projection-approval-saved"
+: >"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: missing aggregate sidecar was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-approval-saved" "${game_projection_approval_map}"
+cat "${TMP_DIR}/game-projection-approval-saved" >>"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: ambiguous aggregate sidecar row was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-approval-saved" "${game_projection_approval_map}"
+awk -F '\t' -v OFS='\t' '{$5="0000000000000000000000000000000000000000"; print}' \
+  "${TMP_DIR}/game-projection-approval-saved" >"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: stale aggregate target binding was accepted' >&2
+  exit 2
+fi
+awk -F '\t' -v OFS='\t' '{$8="0000000000000000000000000000000000000000"; print}' \
+  "${TMP_DIR}/game-projection-approval-saved" >"${game_projection_approval_map}"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: mixed snapshot record binding was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-approval-saved" "${game_projection_approval_map}"
+cp "${TMP_DIR}/game-projection-map" "${TMP_DIR}/game-projection-map-saved"
+awk -F '\t' '$1 == "protos/voice/fixture/v1/fixture.proto" { print }' \
+  "${TMP_DIR}/game-projection-map-saved" >>"${TMP_DIR}/game-projection-map"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: ambiguous partition owner row was accepted' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-map-saved" "${TMP_DIR}/game-projection-map"
+awk -F '\t' -v OFS='\t' '$1 == "protos/voice/fixture/v1/fixture.proto" {$6="0000000000000000000000000000000000000000"} {print}' \
+  "${TMP_DIR}/game-projection-map-saved" >"${TMP_DIR}/game-projection-map"
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'protos/voice/fixture/v1/fixture.proto'; then
+  printf '%s\n' 'F13 oracle bug: sidecar accepted a changed nested owner row' >&2
+  exit 2
+fi
+cp "${TMP_DIR}/game-projection-map-saved" "${TMP_DIR}/game-projection-map"
+game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'src/backend/role/internal/fixture/obsolete.go' || {
+  printf '%s\n' 'F13 oracle bug: exact checkpoint deletion with its unique owner row was rejected' >&2
+  exit 2
+}
+game_projection_metadata_row="$(awk -F '\t' '$1 == "scripts/ci/follow-up.fixture" { row = $0 } END { print row }' \
+  "${TMP_DIR}/game-projection-map")"
+IFS=$'\t' read -r _ game_projection_metadata_trigger game_projection_metadata_owner game_projection_metadata_target \
+  game_projection_metadata_base game_projection_metadata_head _ _ <<<"${game_projection_metadata_row}"
+[[ "${game_projection_metadata_trigger}" == false && \
+  "${game_projection_metadata_owner}" == "${game_projection_equal_source_head}" && \
+  -n "${game_projection_metadata_target}" && \
+  "${game_projection_metadata_base}" == "${game_projection_record}" && \
+  "${game_projection_metadata_head}" == "${game_projection_equal_source_head}" ]] || {
+  printf '%s\n' 'F13 oracle bug: metadata-only path lost its ordinary contribution provenance' >&2
+  exit 2
+}
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'scripts/ci/follow-up.fixture'; then
+  printf '%s\n' 'F13 oracle bug: Game snapshot authorization bypassed ordinary metadata policy' >&2
+  exit 2
+fi
+if game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-map" 'src/backend/space/internal/fixture/base-owned.go'; then
+  printf '%s\n' 'F13 oracle bug: Game snapshot claimed an out-of-P Space path from the current base' >&2
+  exit 2
+fi
+[[ "$(git -C "${game_projection_repo}" rev-parse "${game_projection_target}:src/backend/space/internal/fixture/base-owned.go")" == \
+  "$(git -C "${game_projection_repo}" rev-parse "${game_projection_actual_base}:src/backend/space/internal/fixture/base-owned.go")" ]] || {
+  printf '%s\n' 'F13 oracle bug: accepted snapshot projection failed to preserve current-base Space path' >&2
+  exit 2
+}
+# A post-H change cannot regain checkpoint authority by restoring the exact
+# pinned bytes later in the same source lane. Keep this producer-shaped through
+# the release-PR wrapper so the full PR tree and aggregate owner path are used.
+git -C "${game_projection_repo}" checkout -qb game-post-h-restore "${game_projection_actual_head}"
+printf '%s\n' 'unauthorized post-H edit' >"${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+git -C "${game_projection_repo}" add protos/voice/fixture/v1/fixture.proto
+git -C "${game_projection_repo}" commit -qm 'F13 post-H checkpoint drift'
+printf '%s\n' 'accepted proto' >"${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+git -C "${game_projection_repo}" add protos/voice/fixture/v1/fixture.proto
+git -C "${game_projection_repo}" commit -qm 'F13 restore checkpoint bytes after H'
+game_projection_post_h_restore="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+game_projection_post_h_restore_target="$(git -C "${game_projection_repo}" commit-tree \
+  "${game_projection_post_h_restore}^{tree}" -p "${game_projection_actual_base}" \
+  -p "${game_projection_post_h_restore}" <<< 'F13 reject post-H restore PR')"
+if f13_collect_master_release_pr_contributions "${game_projection_repo}" \
+  "${game_projection_actual_base}" "${game_projection_post_h_restore_target}" \
+  "${TMP_DIR}/game-projection-post-h-restore-map" \
+  "${TMP_DIR}/game-projection-post-h-restore-category"; then
+  printf '%s\n' 'F13 oracle bug: post-H drift restored to H retained checkpoint authority' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/game-projection-post-h-restore-category")" == checkpoint_post_h_owner ]] || {
+  printf '%s\n' 'F13 oracle bug: post-H restore failed for an unexpected reason' >&2
+  exit 2
+}
+
+# The release wrapper must still compare every changed tree entry at the
+# synthetic merge target, including checkpoint paths, before collector routing.
+game_projection_tampered_index="${TMP_DIR}/game-projection-tampered.index"
+GIT_INDEX_FILE="${game_projection_tampered_index}" git -C "${game_projection_repo}" \
+  read-tree "${game_projection_target}^{tree}"
+printf '%s\n' 'tampered synthetic target' | git -C "${game_projection_repo}" hash-object -w --stdin \
+  >"${TMP_DIR}/game-projection-tampered-blob"
+game_projection_tampered_blob="$(<"${TMP_DIR}/game-projection-tampered-blob")"
+GIT_INDEX_FILE="${game_projection_tampered_index}" git -C "${game_projection_repo}" \
+  update-index --cacheinfo "100644,${game_projection_tampered_blob},protos/voice/fixture/v1/fixture.proto"
+game_projection_tampered_tree="$(GIT_INDEX_FILE="${game_projection_tampered_index}" \
+  git -C "${game_projection_repo}" write-tree)"
+game_projection_tampered_target="$(printf '%s\n' 'F13 tamper PR merge target' | \
+  git -C "${game_projection_repo}" commit-tree "${game_projection_tampered_tree}" \
+  -p "${game_projection_actual_base}" -p "${game_projection_actual_head}")"
+if f13_collect_master_release_pr_contributions "${game_projection_repo}" \
+  "${game_projection_actual_base}" "${game_projection_tampered_target}" \
+  "${TMP_DIR}/game-projection-tampered-map" "${TMP_DIR}/game-projection-tampered-category"; then
+  printf '%s\n' 'F13 oracle bug: tampered synthetic merge target was accepted' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/game-projection-tampered-category")" == release_pr_merge_tree_mismatch ]] || {
+  printf '%s\n' 'F13 oracle bug: tampered synthetic target failed outside full-tree verification' >&2
+  exit 2
+}
+
+# A conflict-carry owner is temporary: the release-PR producer must reject a
+# result whose checkpoint path never returns to the approved H entry.
+game_projection_missing_restore_index="${TMP_DIR}/game-projection-missing-restore.index"
+GIT_INDEX_FILE="${game_projection_missing_restore_index}" git -C "${game_projection_repo}" read-tree "${game_projection_target}^{tree}"
+printf '%s\n' 'unrestored intermediate conflict entry' | git -C "${game_projection_repo}" hash-object -w --stdin >"${TMP_DIR}/game-projection-missing-restore-blob"
+game_projection_missing_restore_blob="$(<"${TMP_DIR}/game-projection-missing-restore-blob")"
+GIT_INDEX_FILE="${game_projection_missing_restore_index}" git -C "${game_projection_repo}" update-index --cacheinfo "100644,${game_projection_missing_restore_blob},protos/voice/fixture/v1/fixture.proto"
+game_projection_missing_restore_tree="$(GIT_INDEX_FILE="${game_projection_missing_restore_index}" git -C "${game_projection_repo}" write-tree)"
+game_projection_missing_restore_target="$(printf '%s\n' 'F13 reject missing checkpoint restore' | git -C "${game_projection_repo}" commit-tree "${game_projection_missing_restore_tree}" -p "${game_projection_actual_base}" -p "${game_projection_actual_head}")"
+if f13_collect_master_release_pr_contributions "${game_projection_repo}" "${game_projection_actual_base}" \
+  "${game_projection_missing_restore_target}" "${TMP_DIR}/game-projection-missing-restore-map" \
+  "${TMP_DIR}/game-projection-missing-restore-category"; then
+  printf '%s\n' 'F13 oracle bug: missing exact-H restore survived the release-PR producer' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/game-projection-missing-restore-category")" == release_pr_merge_tree_mismatch ]] || {
+  printf '%s\n' 'F13 oracle bug: missing restore did not fail at strict release target verification' >&2
+  exit 2
+}
+
+# A conflict-carry owner is only temporary. If the approved P entry is never
+# restored before the release result, the real PR producer rejects the target.
+game_projection_missing_restore_index="${TMP_DIR}/game-projection-missing-restore.index"
+GIT_INDEX_FILE="${game_projection_missing_restore_index}" git -C "${game_projection_repo}" \
+  read-tree "${game_projection_target}^{tree}"
+printf '%s\n' 'unrestored intermediate conflict entry' | \
+  git -C "${game_projection_repo}" hash-object -w --stdin >"${TMP_DIR}/game-projection-missing-restore-blob"
+game_projection_missing_restore_blob="$(<"${TMP_DIR}/game-projection-missing-restore-blob")"
+GIT_INDEX_FILE="${game_projection_missing_restore_index}" git -C "${game_projection_repo}" \
+  update-index --cacheinfo "100644,${game_projection_missing_restore_blob},protos/voice/fixture/v1/fixture.proto"
+game_projection_missing_restore_tree="$(GIT_INDEX_FILE="${game_projection_missing_restore_index}" \
+  git -C "${game_projection_repo}" write-tree)"
+game_projection_missing_restore_target="$(printf '%s\n' 'F13 reject missing checkpoint restore' | \
+  git -C "${game_projection_repo}" commit-tree "${game_projection_missing_restore_tree}" \
+  -p "${game_projection_actual_base}" -p "${game_projection_actual_head}")"
+if f13_collect_master_release_pr_contributions "${game_projection_repo}" \
+  "${game_projection_actual_base}" "${game_projection_missing_restore_target}" \
+  "${TMP_DIR}/game-projection-missing-restore-map" \
+  "${TMP_DIR}/game-projection-missing-restore-category"; then
+  printf '%s\n' 'F13 oracle bug: missing exact-H restore survived the release-PR producer' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/game-projection-missing-restore-category")" == release_pr_merge_tree_mismatch ]] || {
+  printf '%s\n' 'F13 oracle bug: missing restore did not fail at strict release target verification' >&2
+  exit 2
+}
+
+git -C "${game_projection_repo}" checkout -qb game-equal-source "${game_projection_base}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 equal-base source contribution' "${game_projection_equal_source_head}"
+git -C "${game_projection_repo}" checkout -qb game-integrate-equal-base "${game_projection_base}"
+git -C "${game_projection_repo}" merge --no-ff -qm 'F13 snapshot contribution on unchanged base' game-equal-source
+game_projection_equal_target="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+f13_collect_master_push_contributions "${game_projection_repo}" push refs/heads/master \
+  "${game_projection_base}" "${game_projection_base}" "${game_projection_equal_target}" \
+  "${TMP_DIR}/game-projection-equal-map" || {
+  printf '%s\n' 'F13 oracle bug: coherent snapshot on B == B0 was rejected by the producer' >&2
+  exit 2
+}
+game_checkpoint_path_allowed_for_provenance "${game_projection_repo}" \
+  "${TMP_DIR}/game-projection-equal-map" 'protos/voice/fixture/v1/fixture.proto' || {
+  printf '%s\n' 'F13 oracle bug: coherent snapshot on B == B0 was rejected' >&2
+  exit 2
+}
+game_checkpoint_snapshot_base=''
+game_checkpoint_snapshot_head=''
+game_checkpoint_snapshot_record=''
+if game_checkpoint_contribution_allowed "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: missing trusted snapshot record was accepted' >&2
+  exit 2
+fi
+printf '%s\n' 'src/backend/voice/internal/fixture/unapproved.go' >>"${TMP_DIR}/game-projection-delta"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: extra Game-domain delta path was accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-drift "${game_projection_target}"
+printf '%s\n' 'drifted after checkpoint' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+git -C "${game_projection_repo}" add src/backend/voice/internal/fixture/runtime.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject Game snapshot drift'
+game_projection_drift="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+git -C "${game_projection_repo}" diff --name-only "${game_projection_base}" "${game_projection_actual_head}" >"${TMP_DIR}/game-projection-delta"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_drift}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: changed Game tree entry was accepted after checkpoint' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-extra "${game_projection_target}"
+printf '%s\n' 'extra file' >"${game_projection_repo}/src/backend/space/internal/fixture/extra.go"
+git -C "${game_projection_repo}" add src/backend/space/internal/fixture/extra.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject extra Game snapshot path'
+game_projection_extra="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+game_projection_extra_target="$(git -C "${game_projection_repo}" commit-tree \
+  "${game_projection_extra}^{tree}" -p "${game_projection_actual_base}" -p "${game_projection_actual_head}" \
+  <<< 'F13 reject target-only Game path')"
+if f13_collect_master_push_contributions "${game_projection_repo}" push refs/heads/master \
+  "${game_projection_actual_base}" "${game_projection_actual_base}" "${game_projection_extra_target}" \
+  "${TMP_DIR}/game-projection-extra-map" "${TMP_DIR}/game-projection-extra-category"; then
+  printf '%s\n' 'F13 oracle bug: master-push wrapper accepted a target-only Game path' >&2
+  exit 2
+fi
+[[ "$(<"${TMP_DIR}/game-projection-extra-category")" == release_pr_delta_mismatch ]] || {
+  printf '%s\n' 'F13 oracle bug: target-only Game path failed outside synthetic merge parity' >&2
+  exit 2
+}
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-restored-deletion "${game_projection_target}"
+mkdir -p "${game_projection_repo}/src/backend/role/internal/fixture"
+printf '%s\n' 'unexpected restoration' >"${game_projection_repo}/src/backend/role/internal/fixture/obsolete.go"
+git -C "${game_projection_repo}" add src/backend/role/internal/fixture/obsolete.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject restoration of checkpoint deletion'
+game_projection_restored="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_restored}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: restored checkpoint deletion was accepted' >&2
+  exit 2
+fi
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-forbidden-delta"; then
+  printf '%s\n' 'F13 oracle bug: mixed or wrong delta checkpoint projection was accepted' >&2
+  exit 2
+fi
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_head}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: snapshot head without a later record commit was accepted' >&2
+  exit 2
+fi
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+  "${game_projection_actual_base}" "${game_projection_actual_head}" "${game_projection_head}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta" ||
+  game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_target}" \
+    "${game_projection_actual_base}" "${game_projection_record}" "${game_projection_base}" \
+    "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: wrong base or source identity was accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-mixed "${game_projection_target}"
+printf '%s\n' 'mixed checkpoint source' >"${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+git -C "${game_projection_repo}" add src/backend/voice/internal/fixture/runtime.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject mixed checkpoint projection'
+game_projection_mixed="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_mixed}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: mixed snapshot entries from checkpoints were accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-mode "${game_projection_target}"
+chmod +x "${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+git -C "${game_projection_repo}" add src/backend/voice/internal/fixture/runtime.go
+git -C "${game_projection_repo}" commit -qm 'F13 reject mode drift'
+game_projection_mode="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_mode}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: changed Game entry mode was accepted' >&2
+  exit 2
+fi
+git -C "${game_projection_repo}" checkout -qb game-checkpoint-type "${game_projection_target}"
+rm "${game_projection_repo}/src/backend/voice/internal/fixture/runtime.go"
+rm "${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+ln -s fixture.proto.link-target "${game_projection_repo}/protos/voice/fixture/v1/fixture.proto"
+git -C "${game_projection_repo}" add -A
+git -C "${game_projection_repo}" commit -qm 'F13 reject entry type drift'
+game_projection_type="$(git -C "${game_projection_repo}" rev-parse HEAD)"
+if game_checkpoint_projection_authorized_in_delta "${game_projection_repo}" "${game_projection_type}" \
+  "${game_projection_base}" "${game_projection_actual_head}" "${game_projection_base}" \
+  "${game_projection_head}" "${game_projection_record}" "${TMP_DIR}/game-projection-delta"; then
+  printf '%s\n' 'F13 oracle bug: changed Game entry type/path was accepted' >&2
+  exit 2
+fi
+}
+
 accepted_r23_base='edc52d46406d97283f81dfbdfc916660f50dcc69'
 r23_contract_base_allowed() {
   local candidate="$1"
@@ -1316,6 +3106,35 @@ f13_master_release_pr_enabled() {
     "${4:-}" =~ ^refs/pull/[0-9]+/merge$ ]]
 }
 
+# A pinned Game checkpoint selects only a verified GitHub PR merge graph; it is routing, not authority.
+f13_master_checkpoint_pr_enabled() {
+  local repo="$1" event="${2:-}" base_ref="${3:-}" head_ref="${4:-}"
+  local merge_ref="${5:-}" event_sha="${6:-}" event_base="${7:-}" target="${8:-}"
+  local target_commit base_commit target_line source_head source_delta
+  local -a target_fields
+  [[ "$event" == pull_request && "$base_ref" == master &&
+    "$merge_ref" =~ ^refs/pull/[0-9]+/merge$ &&
+    -n "$head_ref" && -n "$event_sha" && -n "$event_base" && -n "$target" ]] || return 1
+  target_commit="$(git -C "$repo" rev-parse --verify "$target^{commit}" 2>/dev/null)" || return 1
+  [[ "$target_commit" == "$event_sha" ]] || return 1
+  base_commit="$(git -C "$repo" rev-parse --verify "$event_base^{commit}" 2>/dev/null)" || return 1
+  target_line="$(git -C "$repo" rev-list --parents -n 1 "$target_commit" 2>/dev/null)" || return 1
+  read -r -a target_fields <<<"$target_line"
+  (("${#target_fields[@]}" == 3)) || return 1
+  [[ "${target_fields[1]}" == "$base_commit" ]] || return 1
+  source_head="${target_fields[2]}"
+  source_delta="${TMP_DIR}/f13-checkpoint-pr-source-delta"
+  git -C "$repo" diff --name-only --no-renames "$base_commit" "$source_head" >"$source_delta" 2>/dev/null || return 1
+  game_checkpoint_projection_authorized_in_delta "$repo" "$target_commit" "$base_commit" "$source_head"     "$game_checkpoint_snapshot_base" "$game_checkpoint_snapshot_head" "$game_checkpoint_snapshot_record" "$source_delta"
+}
+
+f13_master_pr_contribution_enabled() {
+  local repo="$1" event="${2:-}" base_ref="${3:-}" head_ref="${4:-}"
+  local merge_ref="${5:-}" event_sha="${6:-}" event_base="${7:-}" target="${8:-}"
+  f13_master_release_pr_enabled "$event" "$base_ref" "$head_ref" "$merge_ref" ||
+    f13_master_checkpoint_pr_enabled "$repo" "$event" "$base_ref" "$head_ref" "$merge_ref" "$event_sha" "$event_base" "$target"
+}
+
 # Master pushes must be analyzed as a merge contribution. The merge collector
 # validates the event-before first parent, exact two-parent shape, and result
 # tree; malformed pushes must fail there rather than fall back to aggregate.
@@ -1417,6 +3236,39 @@ f13_collect_failure() {
   return 1
 }
 
+f13_guarded_entry_matches_final_target() {
+  local stored_entry="${1-}" target_entry="${2-}"
+  # Empty is a legitimate exact ls-tree result for a deleted path. Callers
+  # establish map-key presence separately before comparing entries.
+  [[ "${stored_entry}" == "${target_entry}" ]]
+}
+
+f13_tree_entry_identity() {
+  local entry="${1:-}" mode type oid
+  if [[ -z "${entry}" ]]; then
+    printf '%s' absent
+    return 0
+  fi
+  read -r mode type oid _ <<<"${entry}"
+  if [[ -z "${mode:-}" || -z "${type:-}" || -z "${oid:-}" ]]; then
+    printf '%s' malformed
+    return 0
+  fi
+  printf '%s:%s:%s' "${mode}" "${type}" "${oid}"
+}
+
+# Failure-only diagnostics stay on stderr and expose Git identities/tree entry
+# metadata, never source contents, credentials, or the collector's stdout map.
+f13_emit_guarded_failure_diagnostic() {
+  local category="$1" path="$2" commit="$3" aggregate_head="$4"
+  local owner="$5" source_head="$6" stored_entry="$7" target_entry="$8" predicate="$9"
+  printf 'CI_DIAG stage=f13-collector category=%s path=%q commit=%s aggregate_head=%s owner=%s source_head=%s stored=%s target=%s predicate=%s\n' \
+    "${category}" "${path}" "${commit:-unknown}" "${aggregate_head:-unknown}" \
+    "${owner:-unknown}" "${source_head:-unknown}" \
+    "$(f13_tree_entry_identity "${stored_entry}")" \
+    "$(f13_tree_entry_identity "${target_entry}")" "${predicate}" >&2
+}
+
 f13_validate_sync_merge_resolution() {
   local repo="$1" commit="$2" diagnostic_file="${3:-}"
   local path
@@ -1434,6 +3286,35 @@ f13_validate_sync_merge_resolution() {
   done <"${resolution_paths}"
 }
 
+# Retire a stale guarded row only when an exact base-sync merge imports the
+# same full tree entry that the old, already-base-owned source row represented.
+f13_sync_boundary_reconciles_guarded_path() {
+  local repo="$1" base="$2" commit="$3" path="$4"
+  local content_base="$5" owner="$6" source_head="$7"
+  local saved_guarded_entry="$8" saved_source_entry="$9"
+  local parents first_parent base_entry first_parent_entry result_entry owner_entry source_head_entry resolved_content_base
+  parents="$(git -C "${repo}" rev-list --parents -n 1 "${commit}" 2>/dev/null)" || return 1
+  read -r -a parents <<<"${parents}"
+  ((${#parents[@]} == 3)) && [[ "${parents[2]}" == "${base}" ]] || return 1
+  first_parent="${parents[1]}"
+  [[ -n "${content_base}" ]] || return 1
+  resolved_content_base="$(git -C "${repo}" rev-parse --verify "${content_base}^{commit}" 2>/dev/null)" || return 1
+  [[ "${resolved_content_base}" == "${content_base}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${owner}" "${base}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${source_head}" "${base}" 2>/dev/null || return 1
+  owner_entry="$(git -C "${repo}" ls-tree "${owner}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  source_head_entry="$(git -C "${repo}" ls-tree "${source_head}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  first_parent_entry="$(git -C "${repo}" ls-tree "${first_parent}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  base_entry="$(git -C "${repo}" ls-tree "${base}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  result_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  [[ "${saved_guarded_entry}" == "${owner_entry}" &&
+    "${saved_source_entry}" == "${source_head_entry}" &&
+    "${owner_entry}" == "${source_head_entry}" &&
+    "${saved_guarded_entry}" == "${first_parent_entry}" &&
+    "${saved_source_entry}" == "${first_parent_entry}" &&
+    "${result_entry}" == "${base_entry}" ]]
+}
+
 f13_collect_develop_contributions() {
   local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
   local allow_direct_followup="${6:-false}"
@@ -1441,11 +3322,12 @@ f13_collect_develop_contributions() {
   local commit parent_count first_parent source_head source_base delta first_parent_commits is_direct
   local source_parent_index contribution_id source_base_file
   local sync_boundary boundary_commit
-  local path source_entry result_entry target_entry blob trigger incremental_merge
+  local path source_entry result_entry target_entry blob trigger incremental_merge checkpoint_owner_commit checkpoint_owner_row
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
-  local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates
+  local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates nested_owner_commit
+  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count
   local -a commit_line
-  local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=()
+  local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=() guarded_entry_commits=() checkpoint_merge_outcomes=()
   : >"${output}"
   git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || {
     f13_collect_failure "${diagnostic_file}" base_object
@@ -1492,6 +3374,36 @@ f13_collect_develop_contributions() {
       # Keep the novel first-parent commits from base..target, but do not
       # re-attribute base-side history as a source contribution.
       f13_validate_sync_merge_resolution "${repo}" "${commit}" "${diagnostic_file}" || return 1
+      for path in "${!guarded_entries[@]}"; do
+        [[ -n "${owners[${path}]+present}" &&
+          -n "${owner_triggers[${path}]+present}" &&
+          -n "${owner_content_bases[${path}]+present}" &&
+          -n "${owner_source_heads[${path}]+present}" &&
+          -n "${owner_source_entries[${path}]+present}" &&
+          -n "${guarded_entry_commits[${path}]+present}" ]] || continue
+        if [[ "${game_checkpoint_aggregate_active}" == true ]] &&
+          grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}"; then
+          continue
+        fi
+        if f13_sync_boundary_reconciles_guarded_path "${repo}" "${base}" "${commit}" \
+          "${path}" "${owner_content_bases[${path}]}" "${guarded_entry_commits[${path}]}" \
+          "${owner_source_heads[${path}]}" \
+          "${guarded_entries[${path}]}" "${owner_source_entries[${path}]}"; then
+          sync_row_count="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { count++ } END { print count + 0 }' "${output}")"
+          [[ "${sync_row_count}" == 1 ]] || continue
+          awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-sync-map-rewrite" || {
+            f13_collect_failure "${diagnostic_file}" sync_map_write
+            return 1
+          }
+          cat "${TMP_DIR}/f13-sync-map-rewrite" >"${output}" || {
+            f13_collect_failure "${diagnostic_file}" sync_map_write
+            return 1
+          }
+          unset 'owners[$path]' 'owner_triggers[$path]' 'owner_content_bases[$path]'
+          unset 'owner_source_heads[$path]' 'owner_source_entries[$path]'
+          unset 'guarded_entries[$path]' 'guarded_entry_commits[$path]'
+        fi
+      done
       continue
     fi
     first_parent="${commit_line[1]}"
@@ -1525,6 +3437,11 @@ f13_collect_develop_contributions() {
     fi
     delta="${TMP_DIR}/f13-source-delta-${contribution_id}"
 
+    game_snapshot_contribution_allowed=false
+    if game_checkpoint_contribution_allowed "${repo}" "${commit}" "${source_base}" "${source_head}" "${delta}"; then
+      game_snapshot_contribution_allowed=true
+    fi
+
     nested_map=""
     if [[ "${partition_source_history}" == true && "${is_direct}" != true ]]; then
       nested_map="${TMP_DIR}/f13-nested-map-${contribution_id}"
@@ -1539,18 +3456,73 @@ f13_collect_develop_contributions() {
         f13_collect_failure "${diagnostic_file}" source_tree_entry
         return 1
       }
+      # Resolve this path's nested owner before any guarded merge check. The
+      # defer decision must never inherit an empty or previous path's owner.
+      checkpoint_owner_commit="${commit}"
+      if [[ -n "${nested_map}" ]]; then
+        checkpoint_owner_row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { row = $0 } END { print row }' "${nested_map}")"
+        if [[ -n "${checkpoint_owner_row}" ]]; then
+          IFS=$'\t' read -r _ _ checkpoint_owner_commit _ _ _ _ _ <<<"${checkpoint_owner_row}"
+        fi
+      fi
+      checkpoint_merge_outcomes["${path}"]=unverified
       if ((parent_count >= 2)) && f13_path_is_guarded "${path}"; then
         result_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}" 2>/dev/null)" || {
           f13_collect_failure "${diagnostic_file}" merge_tree_entry
           return 1
         }
-        [[ "${source_entry}" == "${result_entry}" ]] || {
-          f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
-          return 1
-        }
+        if [[ "${game_checkpoint_aggregate_active}" == true ]] &&
+          grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}"; then
+          if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
+            "${first_parent}" "${source_head}" "${path}" "${result_entry}"; then
+            checkpoint_merge_outcomes["${path}"]=clean
+          else
+            merge_tree_status=$?
+            if [[ "${merge_tree_status}" == 2 && "${commit}" != "${game_checkpoint_aggregate_head}" ]] &&
+              grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" &&
+              git -C "${repo}" merge-base --is-ancestor "${commit}" \
+                "${game_checkpoint_aggregate_head}" 2>/dev/null &&
+              git -C "${repo}" merge-base --is-ancestor "${commit}" \
+                "${game_checkpoint_snapshot_head}" 2>/dev/null &&
+              git -C "${repo}" merge-base --is-ancestor "${checkpoint_owner_commit}" \
+                "${game_checkpoint_snapshot_head}" 2>/dev/null; then
+              checkpoint_merge_outcomes["${path}"]=guarded_conflict
+            else
+              f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
+              return 1
+            fi
+          fi
+        else
+          [[ "${source_entry}" == "${result_entry}" ]] || {
+            f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
+            return 1
+          }
+        fi
+      fi
+      if [[ "${game_checkpoint_aggregate_active}" == true ]] &&
+        grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" &&
+        ! git -C "${repo}" merge-base --is-ancestor "${checkpoint_owner_commit}" "${game_checkpoint_snapshot_head}" 2>/dev/null; then
+        f13_collect_failure "${diagnostic_file}" checkpoint_post_h_owner
+        return 1
+      fi
+      if game_checkpoint_aggregate_path_allowed "${repo}" "${checkpoint_owner_commit}" "${path}" "${source_entry}"; then
+        unset 'guarded_entries[$path]'
+        unset 'guarded_entry_commits[$path]'
+        # When an already-emitted guarded row is later restored by a real
+        # pre-H direct owner, keep processing this delta so the producer map
+        # is rebound to that owner instead of retaining the temporary row.
+        if [[ -z "${owners[${path}]+present}" || "${is_direct}" != true ]]; then
+          continue
+        fi
+      fi
+      if [[ "${game_snapshot_contribution_allowed}" == true ]] && game_checkpoint_domain_path "${path}"; then
+        unset 'guarded_entries[$path]'
+        unset 'guarded_entry_commits[$path]'
+        continue
       fi
       if f13_path_is_guarded "${path}"; then
         guarded_entries["${path}"]="${source_entry}"
+        guarded_entry_commits["${path}"]="${checkpoint_owner_commit}"
       fi
       blob="$(awk '{print $3}' <<<"${source_entry}")"
       if game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${blob}" || \
@@ -1580,8 +3552,10 @@ f13_collect_develop_contributions() {
           f13_collect_failure "${diagnostic_file}" nested_contribution_missing
           return 1
         }
-        IFS=$'\t' read -r _ nested_trigger _ _ nested_base nested_head _ _ <<<"${nested_row}"
+        IFS=$'\t' read -r _ nested_trigger nested_owner_commit _ nested_base nested_head _ _ <<<"${nested_row}"
         trigger="${nested_trigger}"
+      else
+        nested_owner_commit="${commit}"
       fi
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
@@ -1590,6 +3564,7 @@ f13_collect_develop_contributions() {
         # ancestor of this merge's source base; independent merge owners remain
         # ambiguous and fail closed.
         incremental_merge=false
+        checkpoint_supersession_status=1
         previous_source_head="${owner_source_heads[${path}]:-}"
         previous_source_entry="${owner_source_entries[${path}]:-}"
         if [[ -n "${previous_source_head}" && -n "${previous_source_entry}" ]] && \
@@ -1606,13 +3581,47 @@ f13_collect_develop_contributions() {
           fi
           [[ "${source_lineage}" == true ]] && incremental_merge=true
         fi
+        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && \
+          "${incremental_merge}" != true ]]; then
+          if game_checkpoint_duplicate_owner_supersession_allowed \
+            "${repo}" "${path}" "${owners[${path}]}" "${previous_source_head}" \
+            "${nested_owner_commit}" "${nested_head}" "${commit}" \
+            "${checkpoint_merge_outcomes[${path}]:-unverified}"; then
+            incremental_merge=true
+            checkpoint_supersession_status=0
+          else
+            checkpoint_supersession_status=$?
+            [[ "${checkpoint_supersession_status}" == 2 ]] && incremental_merge=true
+          fi
+        fi
         if [[ "${allow_direct_followup}" != true || \
           ( "${is_direct}" != true && "${incremental_merge}" != true ) ]]; then
+          f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
+            "${commit}" "${game_checkpoint_aggregate_head:-}" "${owners[${path}]:-}" \
+            "${nested_head:-}" "${guarded_entries[${path}]:-}" "${source_entry}" \
+            "incremental_or_qualified_supersession_required:${checkpoint_supersession_status}"
           f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
           return 1
         fi
         previous_trigger="${owner_triggers[${path}]:-false}"
         [[ "${previous_trigger}" == true && "${source_lineage}" == true ]] && trigger=true
+        if [[ "${checkpoint_supersession_status}" == 0 ]]; then
+          unset 'guarded_entries[$path]'
+          unset 'guarded_entry_commits[$path]'
+          if [[ "${checkpoint_merge_outcomes[${path}]:-}" == guarded_conflict ]]; then
+            # The exact path conflict was resolved to the immutable H entry.
+            # Record the real integration commit and its result entry as the
+            # owner; the conflicting nested parent is not the approved blob.
+            result_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}" 2>/dev/null)" || {
+              f13_collect_failure "${diagnostic_file}" merge_tree_entry
+              return 1
+            }
+            source_entry="${result_entry}"
+            nested_owner_commit="${commit}"
+            nested_base="${source_base}"
+            nested_head="${commit}"
+          fi
+        fi
         awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-map-rewrite" || {
           f13_collect_failure "${diagnostic_file}" release_pr_map_write
           return 1
@@ -1656,10 +3665,54 @@ f13_collect_develop_contributions() {
       f13_collect_failure "${diagnostic_file}" target_tree_entry
       return 1
     }
-    [[ "${guarded_entries[${path}]}" == "${target_entry}" ]] || {
+    # Recursive source collectors can see a valid pre-H owner before a later
+    # sync merge carries the path to H. Defer only this intermediate P check;
+    # retain the owner row so the aggregate A boundary must still prove H.
+    if [[ "${game_checkpoint_aggregate_active}" == true &&
+      "${target}" != "${game_checkpoint_aggregate_head}" &&
+      -n "${guarded_entry_commits[${path}]:-}" ]] &&
+      grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" &&
+      git -C "${repo}" merge-base --is-ancestor "${target}" \
+        "${game_checkpoint_aggregate_head}" 2>/dev/null &&
+      git -C "${repo}" merge-base --is-ancestor "${guarded_entry_commits[${path}]}" \
+        "${game_checkpoint_snapshot_head}" 2>/dev/null; then
+      continue
+    fi
+    if ! f13_guarded_entry_matches_final_target \
+      "${guarded_entries[${path}]}" "${target_entry}"; then
+      # The only approved non-P retirement is the versioned, complete
+      # MatchSquad migration renumber recorded by R2. The helper validates the
+      # exact source owner, integration, destination P entry, and competing
+      # baseline migration; then remove exactly its stale source row.
+      if f13_migration_alias_reconciles_guarded_path "${repo}" "${base}" \
+        "${target}" "${path}" "${guarded_entry_commits[${path}]:-}" \
+        "${owner_content_bases[${path}]:-}" "${owner_source_heads[${path}]:-}" \
+        "${guarded_entries[${path}]}" "${owner_source_entries[${path}]:-}" "${output}"; then
+        sync_row_count="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { count++ } END { print count + 0 }' "${output}")"
+        [[ "${sync_row_count}" == 1 ]] || {
+          f13_collect_failure "${diagnostic_file}" migration_alias_row_ambiguous
+          return 1
+        }
+        awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-migration-alias-map-rewrite" || {
+          f13_collect_failure "${diagnostic_file}" migration_alias_map_write
+          return 1
+        }
+        cat "${TMP_DIR}/f13-migration-alias-map-rewrite" >"${output}" || {
+          f13_collect_failure "${diagnostic_file}" migration_alias_map_write
+          return 1
+        }
+        unset 'owners[$path]' 'owner_triggers[$path]' 'owner_content_bases[$path]'
+        unset 'owner_source_heads[$path]' 'owner_source_entries[$path]'
+        unset 'guarded_entries[$path]' 'guarded_entry_commits[$path]'
+        continue
+      fi
+      f13_emit_guarded_failure_diagnostic guarded_target_mismatch "${path}" \
+        "${target}" "${game_checkpoint_aggregate_head:-}" \
+        "${guarded_entry_commits[${path}]:-}" "${owner_source_heads[${path}]:-}" \
+        "${guarded_entries[${path}]}" "${target_entry}" "stored_entry_must_equal_final_target"
       f13_collect_failure "${diagnostic_file}" guarded_target_mismatch
       return 1
-    }
+    fi
   done
 }
 
@@ -1671,8 +3724,21 @@ f13_collect_master_release_pr_contributions() {
   local target_line base_commit target_first_parent source_head
   local source_delta="${output}.source-delta" result_delta="${output}.result-delta"
   local source_map="${output}.source-map" path source_entry result_entry
+  local aggregate_paths="${output}.game-snapshot-paths" approval_map="${output}.game-snapshot-approvals"
+  local alias_map="${output}.game-snapshot-alias-approvals" row row_count row_hash
   local -a target_line_fields
   : >"${output}"
+  : >"${approval_map}"
+  : >"${alias_map}"
+  : >"${aggregate_paths}"
+  game_checkpoint_aggregate_active=false
+  game_checkpoint_aggregate_base=''
+  game_checkpoint_aggregate_head=''
+  game_checkpoint_aggregate_target=''
+  game_checkpoint_aggregate_paths=''
+  game_checkpoint_aggregate_map=''
+  game_checkpoint_aggregate_record=''
+  game_checkpoint_aggregate_alias_map="${alias_map}"
 
   [[ -n "${base}" ]] || {
     f13_collect_failure "${diagnostic_file}" release_pr_missing_base
@@ -1706,8 +3772,6 @@ f13_collect_master_release_pr_contributions() {
     return 1
   }
 
-  f13_collect_develop_contributions "${repo}" "${base_commit}" "${source_head}" \
-    "${source_map}" "${diagnostic_file}" true true || return 1
   git -C "${repo}" diff --name-only "${base_commit}" "${source_head}" 2>/dev/null >"${source_delta}" || {
     f13_collect_failure "${diagnostic_file}" release_pr_source_delta
     return 1
@@ -1735,10 +3799,59 @@ f13_collect_master_release_pr_contributions() {
       return 1
     }
   done <"${source_delta}"
+  if game_checkpoint_aggregate_authorized "${repo}" "${base_commit}" "${source_head}" \
+    "${target}" "${source_delta}" "${aggregate_paths}"; then
+    game_checkpoint_aggregate_active=true
+    game_checkpoint_aggregate_base="${base_commit}"
+    game_checkpoint_aggregate_head="${source_head}"
+    game_checkpoint_aggregate_target="${target}"
+    game_checkpoint_aggregate_paths="${aggregate_paths}"
+    game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
+  fi
+  f13_collect_develop_contributions "${repo}" "${base_commit}" "${source_head}" \
+    "${source_map}" "${diagnostic_file}" true true || {
+    game_checkpoint_aggregate_active=false
+    return 1
+  }
+  game_checkpoint_aggregate_active=false
   cat "${source_map}" >"${output}" || {
     f13_collect_failure "${diagnostic_file}" release_pr_map_write
     return 1
   }
+  game_checkpoint_aggregate_map="${output}"
+  if [[ -s "${aggregate_paths}" ]]; then
+    while IFS= read -r path; do
+      [[ -n "${path}" ]] || continue
+      row_count="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { count++ } END { print count+0 }' "${output}")"
+      f13_release_projection_path_accounted "${repo}" "${output}" "${path}" || {
+        f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
+        : >"${approval_map}"
+        return 1
+      }
+      [[ "${row_count}" == 0 ]] && continue
+      row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { value=$0 } END { print value }' "${output}")"
+      row_hash="$(printf '%s\n' "${row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || {
+        f13_collect_failure "${diagnostic_file}" release_pr_map_write
+        : >"${approval_map}"
+        return 1
+      }
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${path}" "${row_hash}" "${base_commit}" "${source_head}" "${target}" \
+        "${game_checkpoint_snapshot_base}" "${game_checkpoint_snapshot_head}" \
+        "${game_checkpoint_snapshot_record}" >>"${approval_map}" || {
+        f13_collect_failure "${diagnostic_file}" release_pr_map_write
+        : >"${approval_map}"
+        return 1
+      }
+    done <"${aggregate_paths}"
+    game_checkpoint_aggregate_base="${base_commit}"
+    game_checkpoint_aggregate_head="${source_head}"
+    game_checkpoint_aggregate_target="${target}"
+    game_checkpoint_aggregate_paths="${aggregate_paths}"
+    game_checkpoint_aggregate_map="${output}"
+    game_checkpoint_aggregate_alias_map="${alias_map}"
+    game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
+  fi
 }
 
 # Share the full push-event gate with producer-shaped fixtures so master-push
@@ -2637,6 +4750,165 @@ IFS=$'\t' read -r _ _ f13_sync_post_owner _ _ f13_sync_post_head _ _ <<<"${f13_s
   exit 2
 }
 
+# An exact later import of B reconciles only source rows whose owner and source
+# head were already in B. This mirrors a PR branch that carried an older base
+# version through a nested merge before syncing the current base.
+f13_sync_reconcile_repo="${TMP_DIR}/f13-sync-reconcile-fixture"
+mkdir -p "${f13_sync_reconcile_repo}"
+git -C "${f13_sync_reconcile_repo}" init -q
+git -C "${f13_sync_reconcile_repo}" config user.name 'Voice CI fixture'
+git -C "${f13_sync_reconcile_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${f13_sync_reconcile_repo}" config commit.gpgsign false
+f13_sync_reconcile_path='src/backend/user/pb/sync_reconcile.pb.go'
+mkdir -p "${f13_sync_reconcile_repo}/$(dirname "${f13_sync_reconcile_path}")"
+printf '%s\n' 'baseline entry' >"${f13_sync_reconcile_repo}/${f13_sync_reconcile_path}"
+git -C "${f13_sync_reconcile_repo}" add .
+git -C "${f13_sync_reconcile_repo}" commit -qm 'F13 reconciliation shared source'
+f13_sync_reconcile_shared="$(git -C "${f13_sync_reconcile_repo}" rev-parse HEAD)"
+git -C "${f13_sync_reconcile_repo}" checkout -qb f13-reconcile-base
+printf '%s\n' 'pre-base stale entry' >"${f13_sync_reconcile_repo}/${f13_sync_reconcile_path}"
+git -C "${f13_sync_reconcile_repo}" add "${f13_sync_reconcile_path}"
+git -C "${f13_sync_reconcile_repo}" commit -qm 'F13 reconciliation base-owned source'
+f13_sync_reconcile_owner="$(git -C "${f13_sync_reconcile_repo}" rev-parse HEAD)"
+printf '%s\n' 'baseline entry' >"${f13_sync_reconcile_repo}/${f13_sync_reconcile_path}"
+git -C "${f13_sync_reconcile_repo}" add "${f13_sync_reconcile_path}"
+git -C "${f13_sync_reconcile_repo}" commit -qm 'F13 reconciliation authoritative base entry'
+f13_sync_reconcile_base="$(git -C "${f13_sync_reconcile_repo}" rev-parse HEAD)"
+git -C "${f13_sync_reconcile_repo}" checkout -qb f13-reconcile-source "${f13_sync_reconcile_shared}"
+printf '%s\n' 'source lane' >"${f13_sync_reconcile_repo}/README.md"
+git -C "${f13_sync_reconcile_repo}" add README.md
+git -C "${f13_sync_reconcile_repo}" commit -qm 'F13 reconciliation source lane'
+git -C "${f13_sync_reconcile_repo}" merge --no-ff -qm 'F13 reconciliation imports base-owned row' f13-reconcile-base~1
+f13_sync_reconcile_stale="$(git -C "${f13_sync_reconcile_repo}" rev-parse HEAD)"
+git -C "${f13_sync_reconcile_repo}" merge --no-ff -qm 'F13 reconciliation syncs exact current base' f13-reconcile-base
+f13_sync_reconcile_merge="$(git -C "${f13_sync_reconcile_repo}" rev-parse HEAD)"
+f13_sync_reconcile_head="${f13_sync_reconcile_merge}"
+f13_sync_reconcile_tree="$(git -C "${f13_sync_reconcile_repo}" rev-parse "${f13_sync_reconcile_head}^{tree}")"
+f13_sync_reconcile_target="$(printf '%s\n' 'F13 exact synthetic PR result' | \
+  git -C "${f13_sync_reconcile_repo}" commit-tree "${f13_sync_reconcile_tree}" \
+    -p "${f13_sync_reconcile_base}" -p "${f13_sync_reconcile_head}")" || {
+  printf '%s\n' 'F13 fixture setup failed: could not create exact synthetic PR result' >&2
+  exit 2
+}
+f13_collect_master_release_pr_contributions \
+  "${f13_sync_reconcile_repo}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_target}" \
+  "${TMP_DIR}/f13-sync-reconcile-map" "${TMP_DIR}/f13-sync-reconcile-category" || {
+  printf '%s\n' 'F13 oracle bug: exact current-base sync did not reconcile a stale pre-base owner' >&2
+  exit 2
+}
+if awk -F '\t' -v candidate="${f13_sync_reconcile_path}" '$1 == candidate { found=1 } END { exit !found }' \
+  "${TMP_DIR}/f13-sync-reconcile-map"; then
+  printf '%s\n' 'F13 oracle bug: exact current-base sync retained a stale guarded owner row' >&2
+  exit 2
+fi
+f13_sync_reconcile_post_base="${TMP_DIR}/f13-sync-reconcile-post-base-owner"
+git -C "${f13_sync_reconcile_repo}" checkout -qb f13-reconcile-post-base "${f13_sync_reconcile_base}"
+printf '%s\n' 'pre-base stale entry' >"${f13_sync_reconcile_repo}/${f13_sync_reconcile_path}"
+git -C "${f13_sync_reconcile_repo}" add "${f13_sync_reconcile_path}"
+git -C "${f13_sync_reconcile_repo}" commit -qm 'F13 post-base source proposal with matching bytes'
+f13_sync_reconcile_post_base_owner="$(git -C "${f13_sync_reconcile_repo}" rev-parse HEAD)"
+f13_sync_reconcile_first_entry="$(git -C "${f13_sync_reconcile_repo}" ls-tree "${f13_sync_reconcile_stale}" -- "${f13_sync_reconcile_path}")"
+if f13_sync_boundary_reconciles_guarded_path \
+  "${f13_sync_reconcile_repo}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_merge}" \
+  "${f13_sync_reconcile_path}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_post_base_owner}" \
+  "${f13_sync_reconcile_post_base_owner}" "${f13_sync_reconcile_first_entry}" \
+  "${f13_sync_reconcile_first_entry}"; then
+  printf '%s\n' 'F13 oracle bug: exact base sync retired a post-base owner with matching bytes' >&2
+  exit 2
+fi
+
+# The comparison origin is metadata, not ownership authority: a valid commit
+# outside B is acceptable when the actual owner and source head are in B.
+f13_sync_boundary_reconciles_guarded_path \
+  "${f13_sync_reconcile_repo}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_merge}" \
+  "${f13_sync_reconcile_path}" "${f13_sync_reconcile_post_base_owner}" \
+  "${f13_sync_reconcile_owner}" "${f13_sync_reconcile_owner}" \
+  "${f13_sync_reconcile_first_entry}" "${f13_sync_reconcile_first_entry}" || {
+  printf '%s\n' 'F13 oracle bug: valid non-base comparison origin rejected base-owned reconciliation' >&2
+  exit 2
+}
+if f13_sync_boundary_reconciles_guarded_path \
+  "${f13_sync_reconcile_repo}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_merge}" \
+  "${f13_sync_reconcile_path}" '' "${f13_sync_reconcile_owner}" \
+  "${f13_sync_reconcile_owner}" "${f13_sync_reconcile_first_entry}" \
+  "${f13_sync_reconcile_first_entry}" ||
+  f13_sync_boundary_reconciles_guarded_path \
+    "${f13_sync_reconcile_repo}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_merge}" \
+    "${f13_sync_reconcile_path}" '0000000000000000000000000000000000000000' \
+    "${f13_sync_reconcile_owner}" "${f13_sync_reconcile_owner}" \
+    "${f13_sync_reconcile_first_entry}" "${f13_sync_reconcile_first_entry}"; then
+  printf '%s\n' 'F13 oracle bug: missing or invalid comparison origin qualified base reconciliation' >&2
+  exit 2
+fi
+
+# Missing provenance and altered mode metadata must never qualify, even when
+# the content blob is otherwise identical to the first-parent/base entry.
+if f13_sync_boundary_reconciles_guarded_path \
+  "${f13_sync_reconcile_repo}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_merge}" \
+  "${f13_sync_reconcile_path}" "${f13_sync_reconcile_base}" "" \
+  "${f13_sync_reconcile_owner}" "${f13_sync_reconcile_first_entry}" \
+  "${f13_sync_reconcile_first_entry}"; then
+  printf '%s\n' 'F13 oracle bug: missing owner provenance qualified base reconciliation' >&2
+  exit 2
+fi
+if [[ "${f13_sync_reconcile_first_entry}" == 100644* ]]; then
+  f13_sync_reconcile_wrong_mode="${f13_sync_reconcile_first_entry/100644/100755}"
+else
+  f13_sync_reconcile_wrong_mode="${f13_sync_reconcile_first_entry/100755/100644}"
+fi
+if f13_sync_boundary_reconciles_guarded_path \
+  "${f13_sync_reconcile_repo}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_merge}" \
+  "${f13_sync_reconcile_path}" "${f13_sync_reconcile_base}" "${f13_sync_reconcile_owner}" \
+  "${f13_sync_reconcile_owner}" "${f13_sync_reconcile_wrong_mode}" \
+  "${f13_sync_reconcile_first_entry}"; then
+  printf '%s\n' 'F13 oracle bug: mismatched mode metadata qualified base reconciliation' >&2
+  exit 2
+fi
+
+# Git pathspec magic must not redirect a lookup away from a literal tracked
+# filename that itself starts with a pathspec expression.
+f13_sync_literal_repo="${TMP_DIR}/f13-sync-literal-path-fixture"
+mkdir -p "${f13_sync_literal_repo}"
+git -C "${f13_sync_literal_repo}" init -q
+git -C "${f13_sync_literal_repo}" config user.name 'Voice CI fixture'
+git -C "${f13_sync_literal_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${f13_sync_literal_repo}" config commit.gpgsign false
+f13_sync_literal_path=':(glob)f13-reconcile.txt'
+printf '%s\n' 'baseline' >"${f13_sync_literal_repo}/${f13_sync_literal_path}"
+git -C "${f13_sync_literal_repo}" add -- ":(literal)${f13_sync_literal_path}"
+git -C "${f13_sync_literal_repo}" commit -qm 'F13 literal path shared source'
+f13_sync_literal_shared="$(git -C "${f13_sync_literal_repo}" rev-parse HEAD)"
+git -C "${f13_sync_literal_repo}" checkout -qb f13-literal-base
+printf '%s\n' 'stale' >"${f13_sync_literal_repo}/${f13_sync_literal_path}"
+git -C "${f13_sync_literal_repo}" add -- ":(literal)${f13_sync_literal_path}"
+git -C "${f13_sync_literal_repo}" commit -qm 'F13 literal path base owner'
+f13_sync_literal_owner="$(git -C "${f13_sync_literal_repo}" rev-parse HEAD)"
+printf '%s\n' 'baseline' >"${f13_sync_literal_repo}/${f13_sync_literal_path}"
+git -C "${f13_sync_literal_repo}" add -- ":(literal)${f13_sync_literal_path}"
+git -C "${f13_sync_literal_repo}" commit -qm 'F13 literal path authoritative base'
+f13_sync_literal_base="$(git -C "${f13_sync_literal_repo}" rev-parse HEAD)"
+git -C "${f13_sync_literal_repo}" checkout -qb f13-literal-source "${f13_sync_literal_shared}"
+printf '%s\n' 'source lane' >"${f13_sync_literal_repo}/README.md"
+git -C "${f13_sync_literal_repo}" add README.md
+git -C "${f13_sync_literal_repo}" commit -qm 'F13 literal path source lane'
+git -C "${f13_sync_literal_repo}" merge --no-ff -qm 'F13 literal path imports owner' f13-literal-base~1
+git -C "${f13_sync_literal_repo}" merge --no-ff -qm 'F13 literal path syncs base' f13-literal-base
+f13_sync_literal_merge="$(git -C "${f13_sync_literal_repo}" rev-parse HEAD)"
+f13_sync_literal_entry="$(git -C "${f13_sync_literal_repo}" ls-tree "${f13_sync_literal_owner}" -- ":(literal)${f13_sync_literal_path}")"
+f13_sync_literal_result="$(git -C "${f13_sync_literal_repo}" ls-tree "${f13_sync_literal_merge}" -- ":(literal)${f13_sync_literal_path}")"
+f13_sync_literal_base_entry="$(git -C "${f13_sync_literal_repo}" ls-tree "${f13_sync_literal_base}" -- ":(literal)${f13_sync_literal_path}")"
+[[ -n "${f13_sync_literal_entry}" && "${f13_sync_literal_result}" == "${f13_sync_literal_base_entry}" ]] || {
+  printf '%s\n' 'F13 fixture setup failed: literal path merge entries are not as expected' >&2
+  exit 2
+}
+f13_sync_boundary_reconciles_guarded_path \
+  "${f13_sync_literal_repo}" "${f13_sync_literal_base}" "${f13_sync_literal_merge}" \
+  "${f13_sync_literal_path}" "${f13_sync_literal_shared}" "${f13_sync_literal_owner}" \
+  "${f13_sync_literal_owner}" "${f13_sync_literal_entry}" "${f13_sync_literal_entry}" || {
+  printf '%s\n' 'F13 oracle bug: literal path lookup failed exact base reconciliation' >&2
+  exit 2
+}
+
 # A base that is merely an ancestor of the sync merge's second parent is not
 # the exact imported boundary and must not gain the normal-sync exception.
 if f13_collect_develop_contributions \
@@ -2771,10 +5043,37 @@ f13_develop_aggregate_enabled push refs/heads/develop || {
 f13_master_release_pr=false
 f13_master_merge_push=false
 f13_collect_status=0
-if f13_master_release_pr_enabled \
-  "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_BASE_REF:-}" \
-  "${GITHUB_HEAD_REF:-}" "${GITHUB_REF:-}"; then
+if f13_master_pr_contribution_enabled   "$ROOT" "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_BASE_REF:-}"   "${GITHUB_HEAD_REF:-}" "${GITHUB_REF:-}" "${GITHUB_SHA:-}"   "${VOICE_R22_BASE_SHA:-}" HEAD; then
   f13_master_release_pr=true
+fi
+if [[ "${f13_master_release_pr}" == true ]]; then
+  if ! f13_migration_alias_record_load "${ROOT}" "${game_checkpoint_snapshot_record}" \
+    "${TMP_DIR}/f13-active-alias-record.tsv" "${TMP_DIR}/f13-active-collision-record.tsv"; then
+    printf '%s\n' 'F13 oracle bug: active immutable R2 migration alias record failed exact table validation' >&2
+    exit 2
+  fi
+  f13_migration_alias_record_negative_fixtures \
+    "${TMP_DIR}/f13-active-alias-record.tsv" "${TMP_DIR}/f13-active-collision-record.tsv" || exit 2
+  if ! f13_migration_alias_reconciliation_execution_fixture "${ROOT}" \
+    "${VOICE_R22_BASE_SHA:-}" HEAD "$(git -C "${ROOT}" rev-parse HEAD^2)"; then
+    printf '%s\n' 'F13 oracle bug: exact R2 migration alias helper rejected its complete producer row' >&2
+    exit 2
+  fi
+  if f13_extract_versioned_alias_section "${ROOT}" \
+    'd97e8acd6824c5dd08d4f70be93fc7f91d6f6fce' \
+    '<!-- F13-MIGRATION-ALIASES-V2-BEGIN -->' '<!-- F13-MIGRATION-ALIASES-V2-END -->' \
+    "${TMP_DIR}/f13-old-record-aliases"; then
+    printf '%s\n' 'F13 oracle bug: old R1 unexpectedly contains the R2 migration alias section' >&2
+    exit 2
+  fi
+  f13_active_alias_record="${game_checkpoint_snapshot_record}"
+  game_checkpoint_snapshot_record='d97e8acd6824c5dd08d4f70be93fc7f91d6f6fce'
+  if f13_collect_master_release_pr_contributions "${ROOT}" "${VOICE_R22_BASE_SHA:-}" HEAD \
+    "${TMP_DIR}/f13-wrong-alias-record-map" "${TMP_DIR}/f13-wrong-alias-record-category"; then
+    printf '%s\n' 'F13 oracle bug: release-PR producer accepted the prior R1 tuple for the R2 alias source' >&2
+    exit 2
+  fi
+  game_checkpoint_snapshot_record="${f13_active_alias_record}"
 fi
 if f13_master_merge_push_enabled \
   "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
@@ -2803,7 +5102,7 @@ if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]
         base_object|target_object|base_ancestry|first_parent_range|parent_count|source_base|source_delta|\
         push_before_mismatch|\
         sync_merge_resolution_inspection|sync_merge_guarded_resolution|\
-        source_tree_entry|merge_tree_entry|merge_tree_mismatch|target_tree_entry|guarded_target_mismatch|\
+        source_tree_entry|merge_tree_entry|merge_tree_mismatch|target_tree_entry|guarded_target_mismatch|checkpoint_post_h_owner|\
         duplicate_guarded_owner|release_pr_missing_base|release_pr_shape|release_pr_base_parent|\
         release_pr_source_delta|release_pr_result_delta|release_pr_delta_mismatch|\
         release_pr_merge_tree_mismatch|release_pr_map_write)
@@ -2814,6 +5113,11 @@ if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]
       "${f13_failure_category}" "$(f13_base_origin_class)" >&2
     printf '%s\n' 'F13: develop contribution provenance is missing or ambiguous' >&2
     exit 1
+  fi
+  if [[ "${f13_collect_status}" == 0 && "${f13_master_release_pr}" == true ]] &&
+    ! f13_migration_alias_wrapper_result_fixture "${ROOT}" "${TMP_DIR}/f13-contributions"; then
+    printf '%s\n' 'F13 oracle bug: release-PR alias ledger failed wrapper/downstream provenance checks' >&2
+    exit 2
   fi
 fi
 
@@ -2876,38 +5180,414 @@ f13_source_head_for_path() {
   fi
 }
 
-git -C "${f13_fixture_repo}" checkout -qb f13-bot-only-integration "${f13_fixture_base}"
-git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture unrelated-only merge' f13-bot-source
-f13_collect_develop_contributions \
-  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-bot-only-map" || {
-  printf '%s\n' 'F13 oracle bug: unrelated-only contribution fixture was rejected' >&2
-  exit 2
-}
-f13_bot_only_delta="$(f13_delta_for_path \
-  "${f13_fixture_repo}" "${TMP_DIR}/f13-bot-only-map" 'protos/voice/bot/v1/bot.proto')" || {
-  printf '%s\n' 'F13 oracle bug: unrelated contribution lost its own delta' >&2
-  exit 2
-}
-[[ "$(cat "${f13_bot_only_delta}")" == 'protos/voice/bot/v1/bot.proto' ]] || {
-  printf '%s\n' 'F13 oracle bug: contribution delta included paths from another contribution' >&2
-  exit 2
-}
-git -C "${f13_fixture_repo}" checkout -qb f13-direct-contribution "${f13_fixture_base}"
-mkdir -p "${f13_fixture_repo}/src/backend/voice"
-printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/direct.go"
-git -C "${f13_fixture_repo}" add src/backend/voice/direct.go
-git -C "${f13_fixture_repo}" commit -qm 'F13 fixture direct contribution'
-f13_collect_develop_contributions \
-  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-direct-map" || {
-  printf '%s\n' 'F13 oracle bug: direct commit contribution fixture was rejected' >&2
-  exit 2
-}
-grep -Fqx $'src/backend/voice/direct.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-direct-map") || {
-  printf '%s\n' 'F13 oracle bug: direct commit delta lost its runtime trigger' >&2
-  exit 2
+game_checkpoint_path_allowed_for_provenance() {
+  local repo="$1" map="$2" path="$3" row approval_map approval_row row_count approval_count
+  local row_hash approved_hash approved_path approved_base approved_head approved_target
+  local approved_snapshot_base approved_snapshot_head approved_record checkpoint_entry target_entry
+  local owner_commit owner_base owner_head
+  game_checkpoint_domain_path "${path}" || return 1
+  [[ -s "${map}" ]] || return 1
+  [[ "${game_checkpoint_aggregate_map}" == "${map}" &&
+    -n "${game_checkpoint_aggregate_base}" && -n "${game_checkpoint_aggregate_head}" &&
+    -n "${game_checkpoint_aggregate_target}" && -n "${game_checkpoint_aggregate_record}" &&
+    -s "${game_checkpoint_aggregate_paths}" ]] || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  row="$(awk -F '\t' -v path="${path}" '$1 == path { value = $0 } END { if (value != "") print value }' "${map}")"
+  [[ -n "${row}" ]] || return 1
+  row_count="$(awk -F '\t' -v path="${path}" '$1 == path { count++ } END { print count+0 }' "${map}")"
+  [[ "${row_count}" == 1 ]] || return 1
+  IFS=$'\t' read -r _ _ owner_commit _ owner_base owner_head _ _ <<<"${row}"
+  [[ -n "${owner_commit}" && -n "${owner_base}" && -n "${owner_head}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${owner_commit}" "${game_checkpoint_aggregate_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${owner_base}" "${owner_head}" 2>/dev/null || return 1
+  git -C "${repo}" merge-base --is-ancestor "${owner_head}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
+  row_hash="$(printf '%s\n' "${row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || return 1
+  approval_map="${map}.game-snapshot-approvals"
+  [[ -s "${approval_map}" ]] || return 1
+  approval_row="$(awk -F '\t' -v path="${path}" '$1 == path { value = $0 } END { if (value != "") print value }' "${approval_map}")"
+  approval_count="$(awk -F '\t' -v path="${path}" '$1 == path { count++ } END { print count+0 }' "${approval_map}")"
+  [[ "${approval_count}" == 1 && -n "${approval_row}" ]] || return 1
+  IFS=$'\t' read -r approved_path approved_hash approved_base approved_head approved_target \
+    approved_snapshot_base approved_snapshot_head approved_record <<<"${approval_row}"
+  [[ "${approved_path}" == "${path}" && "${approved_hash}" == "${row_hash}" &&
+    "${approved_base}" == "${game_checkpoint_aggregate_base}" &&
+    "${approved_head}" == "${game_checkpoint_aggregate_head}" &&
+    "${approved_target}" == "${game_checkpoint_aggregate_target}" &&
+    "${approved_snapshot_base}" == "${game_checkpoint_snapshot_base}" &&
+    "${approved_snapshot_head}" == "${game_checkpoint_snapshot_head}" &&
+    "${approved_record}" == "${game_checkpoint_aggregate_record}" &&
+    "${approved_record}" == "${game_checkpoint_snapshot_record}" ]] || return 1
+  checkpoint_entry="$(git -C "${repo}" ls-tree "${approved_snapshot_head}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  target_entry="$(git -C "${repo}" ls-tree "${approved_target}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  [[ "${checkpoint_entry}" == "${target_entry}" ]]
 }
 
+# Drive the status-2 taint and later exact-H owner through the real release-PR
+# wrapper. This protects the producer map, not just the supersession predicate.
+f13_checkpoint_duplicate_owner_producer_fixture() {
+  local repo path deleted_path base left_owner right_owner integration checkpoint record source_head target
+  local missing_head missing_target wrong_head wrong_target map category row_count row row_owner row_head
+  repo="${TMP_DIR}/f13-checkpoint-conflict-owner-producer"
+  path='protos/voice/fixture/v1/fixture.proto'
+  mkdir -p "${repo}"
+  git -C "${repo}" init -q || return 1
+  git -C "${repo}" config user.name 'Voice CI fixture'
+  git -C "${repo}" config user.email 'voice-ci@example.invalid'
+  git -C "${repo}" config commit.gpgsign false
+  mkdir -p "${repo}/$(dirname "${path}")"
+  deleted_path='src/backend/role/internal/fixture/obsolete.go'
+  mkdir -p "${repo}/$(dirname "${deleted_path}")"
+  printf '%s\n' 'producer baseline' >"${repo}/${path}"
+  printf '%s\n' 'deleted by approved checkpoint' >"${repo}/${deleted_path}"
+  git -C "${repo}" add -- "${path}" "${deleted_path}" &&
+    git -C "${repo}" commit -qm 'F13 conflict-owner producer base' || return 1
+  base="$(git -C "${repo}" rev-parse HEAD)" || return 1
+
+  git -C "${repo}" checkout -qb producer-left "${base}" || return 1
+  printf '%s\n' 'left contribution' >"${repo}/${path}"
+  git -C "${repo}" add -- "${path}" &&
+    git -C "${repo}" commit -qm 'F13 conflict-owner left contribution' || return 1
+  left_owner="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  git -C "${repo}" checkout -qb producer-right "${base}" || return 1
+  printf '%s\n' 'right contribution' >"${repo}/${path}"
+  git -C "${repo}" add -- "${path}" &&
+    git -C "${repo}" commit -qm 'F13 conflict-owner right contribution' || return 1
+  right_owner="$(git -C "${repo}" rev-parse HEAD)" || return 1
+
+  git -C "${repo}" checkout -q producer-left || return 1
+  if git -C "${repo}" merge --no-commit producer-right >/dev/null 2>&1; then
+    printf '%s\n' 'F13 oracle bug: guarded owner fixture merge unexpectedly had no conflict' >&2
+    return 1
+  fi
+  printf '%s\n' 'temporary conflict resolution' >"${repo}/${path}"
+  git -C "${repo}" add -- "${path}" &&
+    git -C "${repo}" commit -qm 'F13 pre-H guarded conflict integration' || return 1
+  integration="$(git -C "${repo}" rev-parse HEAD)" || return 1
+
+  # H is a later real source commit which restores the approved path entry.
+  printf '%s\n' 'approved checkpoint entry' >"${repo}/${path}"
+  rm "${repo}/${deleted_path}"
+  git -C "${repo}" add -A -- "${path}" "${deleted_path}" &&
+    git -C "${repo}" commit -qm 'F13 exact-H guarded owner restore' || return 1
+  checkpoint="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  record="$(git -C "${repo}" commit-tree "${checkpoint}^{tree}" -p "${checkpoint}" \
+    <<< 'F13 immutable checkpoint record')" || return 1
+  git -C "${repo}" checkout -qb producer-approved "${record}" || return 1
+  printf '%s\n' 'ordinary metadata follow-up' >"${repo}/README.md"
+  git -C "${repo}" add -- README.md &&
+    git -C "${repo}" commit -qm 'F13 approved source head after checkpoint record' || return 1
+  source_head="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  target="$(git -C "${repo}" commit-tree "${source_head}^{tree}" -p "${base}" \
+    -p "${source_head}" <<< 'F13 producer-shaped release PR result')" || return 1
+
+  game_checkpoint_snapshot_base="${base}"
+  game_checkpoint_snapshot_head="${checkpoint}"
+  game_checkpoint_snapshot_record="${record}"
+  map="${TMP_DIR}/f13-checkpoint-conflict-owner-producer-map"
+  category="${TMP_DIR}/f13-checkpoint-conflict-owner-producer-category"
+  f13_collect_master_release_pr_contributions "${repo}" "${base}" "${target}" \
+    "${map}" "${category}" || {
+    printf 'F13 oracle bug: producer rejected qualified conflict followed by exact-H owner (category=%s)\n' \
+      "$(<"${category}")" >&2
+    return 1
+  }
+  row_count="$(awk -F '\t' -v candidate="${path}" \
+    '$1 == candidate { count++ } END { print count+0 }' "${map}")"
+  row="$(awk -F '\t' -v candidate="${path}" \
+    '$1 == candidate { value=$0 } END { print value }' "${map}")"
+  IFS=$'\t' read -r _ _ row_owner _ _ row_head _ _ <<<"${row}"
+  [[ "${row_count}" == 1 && "${row_owner}" == "${checkpoint}" &&
+    "${row_head}" == "${checkpoint}" ]] || {
+    printf '%s\n' 'F13 oracle bug: producer map did not retain the actual exact-H owner row' >&2
+    return 1
+  }
+  game_checkpoint_path_allowed_for_provenance "${repo}" "${map}" "${path}" || {
+    printf '%s\n' 'F13 oracle bug: producer H-restored row failed pinned provenance authorization' >&2
+    return 1
+  }
+  row_count="$(awk -F '\t' -v candidate="${deleted_path}" \
+    '$1 == candidate { count++ } END { print count+0 }' "${map}")"
+  [[ "${row_count}" == 1 ]] &&
+    [[ -z "$(git -C "${repo}" ls-tree "${checkpoint}" -- ":(literal)${deleted_path}")" ]] &&
+    [[ -z "$(git -C "${repo}" ls-tree "${target}" -- ":(literal)${deleted_path}")" ]] &&
+    game_checkpoint_path_allowed_for_provenance "${repo}" "${map}" "${deleted_path}" || {
+    printf '%s\n' 'F13 oracle bug: producer rejected the exact checkpoint deletion/empty tree entry' >&2
+    return 1
+  }
+  cp "${map}" "${TMP_DIR}/f13-checkpoint-conflict-owner-producer-map-saved"
+  awk -F '\t' -v candidate="${deleted_path}" '$1 != candidate' \
+    "${TMP_DIR}/f13-checkpoint-conflict-owner-producer-map-saved" >"${map}" || return 1
+  if game_checkpoint_path_allowed_for_provenance "${repo}" "${map}" "${deleted_path}"; then
+    printf '%s\n' 'F13 oracle bug: missing deletion owner row was treated as an absent tree entry' >&2
+    return 1
+  fi
+  cp "${TMP_DIR}/f13-checkpoint-conflict-owner-producer-map-saved" "${map}" || return 1
+
+  # Without the later H owner, the same temporary conflict must remain tainted
+  # and the release-PR producer must reject it.
+  git -C "${repo}" checkout -qb producer-missing-restore "${integration}" || return 1
+  printf '%s\n' 'missing-restore metadata' >"${repo}/README.md"
+  git -C "${repo}" add -- README.md &&
+    git -C "${repo}" commit -qm 'F13 source without exact-H restoration' || return 1
+  missing_head="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  missing_target="$(git -C "${repo}" commit-tree "${missing_head}^{tree}" -p "${base}" \
+    -p "${missing_head}" <<< 'F13 missing-restore PR result')" || return 1
+  if f13_collect_master_release_pr_contributions "${repo}" "${base}" "${missing_target}" \
+    "${TMP_DIR}/f13-checkpoint-missing-owner-map" \
+    "${TMP_DIR}/f13-checkpoint-missing-owner-category"; then
+    printf '%s\n' 'F13 oracle bug: missing H restoration passed the release-PR producer' >&2
+    return 1
+  fi
+
+  # A wrong value after the conflict also remains rejected, even though it is
+  # a real pre-H owner and the synthetic PR tree matches that source head.
+  git -C "${repo}" checkout -qb producer-wrong-restore "${integration}" || return 1
+  printf '%s\n' 'wrong checkpoint restoration' >"${repo}/${path}"
+  git -C "${repo}" add -- "${path}" &&
+    git -C "${repo}" commit -qm 'F13 wrong guarded restoration' || return 1
+  wrong_head="$(git -C "${repo}" rev-parse HEAD)" || return 1
+  wrong_target="$(git -C "${repo}" commit-tree "${wrong_head}^{tree}" -p "${base}" \
+    -p "${wrong_head}" <<< 'F13 wrong-restore PR result')" || return 1
+  if f13_collect_master_release_pr_contributions "${repo}" "${base}" "${wrong_target}" \
+    "${TMP_DIR}/f13-checkpoint-wrong-owner-map" \
+    "${TMP_DIR}/f13-checkpoint-wrong-owner-category"; then
+    printf '%s\n' 'F13 oracle bug: wrong H restoration passed the release-PR producer' >&2
+    return 1
+  fi
+}
+
+f13_run_synthetic_provenance_fixture_body() {
+  # Bash locals are dynamically scoped, so the synthetic collectors below see
+  # isolated checkpoint state. No fixture may target the real producer output
+  # or its authorization sidecars.
+  local game_checkpoint_snapshot_base="${game_checkpoint_snapshot_base}"
+  local game_checkpoint_snapshot_head="${game_checkpoint_snapshot_head}"
+  local game_checkpoint_snapshot_record="${game_checkpoint_snapshot_record}"
+  local game_checkpoint_aggregate_active="${game_checkpoint_aggregate_active}"
+  local game_checkpoint_aggregate_base="${game_checkpoint_aggregate_base}"
+  local game_checkpoint_aggregate_head="${game_checkpoint_aggregate_head}"
+  local game_checkpoint_aggregate_target="${game_checkpoint_aggregate_target}"
+  local game_checkpoint_aggregate_paths="${game_checkpoint_aggregate_paths}"
+  local game_checkpoint_aggregate_map="${game_checkpoint_aggregate_map}"
+  local game_checkpoint_aggregate_record="${game_checkpoint_aggregate_record}"
+  local game_checkpoint_aggregate_alias_map="${game_checkpoint_aggregate_alias_map}"
+  local f13_bot_only_delta
+
+  f13_game_checkpoint_projection_fixtures
+  f13_checkpoint_duplicate_owner_producer_fixture || exit 2
+
+  git -C "${f13_fixture_repo}" checkout -qb f13-bot-only-integration "${f13_fixture_base}"
+  git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture unrelated-only merge' f13-bot-source
+  f13_collect_develop_contributions \
+    "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-bot-only-map" || {
+    printf '%s\n' 'F13 oracle bug: unrelated-only contribution fixture was rejected' >&2
+    exit 2
+  }
+  f13_bot_only_delta="$(f13_delta_for_path \
+    "${f13_fixture_repo}" "${TMP_DIR}/f13-bot-only-map" 'protos/voice/bot/v1/bot.proto')" || {
+    printf '%s\n' 'F13 oracle bug: unrelated contribution lost its own delta' >&2
+    exit 2
+  }
+  [[ "$(cat "${f13_bot_only_delta}")" == 'protos/voice/bot/v1/bot.proto' ]] || {
+    printf '%s\n' 'F13 oracle bug: contribution delta included paths from another contribution' >&2
+    exit 2
+  }
+  git -C "${f13_fixture_repo}" checkout -qb f13-direct-contribution "${f13_fixture_base}"
+  mkdir -p "${f13_fixture_repo}/src/backend/voice"
+  printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/direct.go"
+  git -C "${f13_fixture_repo}" add src/backend/voice/direct.go
+  git -C "${f13_fixture_repo}" commit -qm 'F13 fixture direct contribution'
+  f13_collect_develop_contributions \
+    "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-direct-map" || {
+    printf '%s\n' 'F13 oracle bug: direct commit contribution fixture was rejected' >&2
+    exit 2
+  }
+  grep -Fqx $'src/backend/voice/direct.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-direct-map") || {
+    printf '%s\n' 'F13 oracle bug: direct commit delta lost its runtime trigger' >&2
+    exit 2
+  }
+
+}
+
+f13_run_synthetic_provenance_fixtures() {
+  local expected_snapshot_base="${game_checkpoint_snapshot_base}"
+  local expected_snapshot_head="${game_checkpoint_snapshot_head}"
+  local expected_snapshot_record="${game_checkpoint_snapshot_record}"
+  local expected_aggregate_active="${game_checkpoint_aggregate_active}"
+  local expected_aggregate_base="${game_checkpoint_aggregate_base}"
+  local expected_aggregate_head="${game_checkpoint_aggregate_head}"
+  local expected_aggregate_target="${game_checkpoint_aggregate_target}"
+  local expected_aggregate_paths="${game_checkpoint_aggregate_paths}"
+  local expected_aggregate_map="${game_checkpoint_aggregate_map}"
+  local expected_aggregate_record="${game_checkpoint_aggregate_record}"
+  local expected_aggregate_alias_map="${game_checkpoint_aggregate_alias_map}"
+  local expected_paths_hash expected_map_hash expected_row_approvals_hash expected_alias_approvals_hash
+  local expected_paths_present=false expected_map_present=false
+  local expected_row_approvals_present=false expected_alias_approvals_present=false
+  local f13_state_path f13_real_alias_context=false
+
+  if [[ -n "${game_checkpoint_aggregate_paths}" && -f "${game_checkpoint_aggregate_paths}" ]]; then
+    expected_paths_present=true
+    expected_paths_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_paths}")" || return 1
+  fi
+  if [[ -n "${game_checkpoint_aggregate_map}" && -f "${game_checkpoint_aggregate_map}" ]]; then
+    expected_map_present=true
+    expected_map_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}")" || return 1
+  fi
+  if [[ -n "${game_checkpoint_aggregate_map}" && -f "${game_checkpoint_aggregate_map}.game-snapshot-approvals" ]]; then
+    expected_row_approvals_present=true
+    expected_row_approvals_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}.game-snapshot-approvals")" || return 1
+  fi
+  if [[ -n "${game_checkpoint_aggregate_alias_map}" && -f "${game_checkpoint_aggregate_alias_map}" ]]; then
+    expected_alias_approvals_present=true
+    expected_alias_approvals_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_alias_map}")" || return 1
+  fi
+
+  # The five production-consumer assertions apply only when the current event
+  # actually produced the complete two-row R2 alias ledger for this aggregate.
+  if [[ "${f13_master_release_pr:-false}" == true &&
+    "${game_checkpoint_aggregate_map}" == "${TMP_DIR}/f13-contributions" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${game_checkpoint_aggregate_map}.game-snapshot-alias-approvals" &&
+    -f "${game_checkpoint_aggregate_paths}" && -f "${game_checkpoint_aggregate_map}" &&
+    -f "${game_checkpoint_aggregate_map}.game-snapshot-approvals" &&
+    -f "${game_checkpoint_aggregate_alias_map}" &&
+    "${game_checkpoint_snapshot_base}" == "${game_checkpoint_aggregate_base}" &&
+    "${game_checkpoint_snapshot_record}" == "${game_checkpoint_aggregate_record}" &&
+    "$(awk 'END { print NR+0 }' "${game_checkpoint_aggregate_alias_map}")" == 2 ]] &&
+    grep -Fxq -- 'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' "${game_checkpoint_aggregate_paths}" &&
+    grep -Fxq -- 'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql' "${game_checkpoint_aggregate_paths}" &&
+    awk -F '\t' '
+      $1 == "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql" { up++ }
+      $1 == "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql" { down++ }
+      $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql" &&
+      $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql" { bad=1 }
+      END { exit !(up == 1 && down == 1 && !bad) }
+    ' "${game_checkpoint_aggregate_alias_map}"; then
+    f13_real_alias_context=true
+    for f13_state_path in \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+      game_checkpoint_alias_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: production alias authorization failed before synthetic fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+    for f13_state_path in \
+      'src/backend/voice/internal/grpcsvc/matchsquad_member.go' \
+      'src/backend/voice/internal/grpcsvc/matchsquad_voice.go' \
+      'src/backend/voice/internal/livekit/token.go'; do
+      game_checkpoint_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: production ordinary Game provenance failed before synthetic fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+  fi
+
+  f13_run_synthetic_provenance_fixture_body
+
+  [[ "${game_checkpoint_snapshot_base}" == "${expected_snapshot_base}" &&
+    "${game_checkpoint_snapshot_head}" == "${expected_snapshot_head}" &&
+    "${game_checkpoint_snapshot_record}" == "${expected_snapshot_record}" &&
+    "${game_checkpoint_aggregate_active}" == "${expected_aggregate_active}" &&
+    "${game_checkpoint_aggregate_base}" == "${expected_aggregate_base}" &&
+    "${game_checkpoint_aggregate_head}" == "${expected_aggregate_head}" &&
+    "${game_checkpoint_aggregate_target}" == "${expected_aggregate_target}" &&
+    "${game_checkpoint_aggregate_paths}" == "${expected_aggregate_paths}" &&
+    "${game_checkpoint_aggregate_map}" == "${expected_aggregate_map}" &&
+    "${game_checkpoint_aggregate_record}" == "${expected_aggregate_record}" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${expected_aggregate_alias_map}" ]] || {
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the active release checkpoint context' >&2
+    return 1
+  }
+  if [[ "${expected_paths_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_paths}" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_paths}")" == "${expected_paths_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production projection path list' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_paths}" && -e "${game_checkpoint_aggregate_paths}" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production projection path list' >&2
+    return 1
+  fi
+  if [[ "${expected_map_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_map}" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}")" == "${expected_map_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production contribution map' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_map}" && -e "${game_checkpoint_aggregate_map}" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production contribution map' >&2
+    return 1
+  fi
+  if [[ "${expected_row_approvals_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_map}.game-snapshot-approvals" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}.game-snapshot-approvals")" == "${expected_row_approvals_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production row approval map' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_map}" && -e "${game_checkpoint_aggregate_map}.game-snapshot-approvals" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production row approval map' >&2
+    return 1
+  fi
+  if [[ "${expected_alias_approvals_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_alias_map}" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_alias_map}")" == "${expected_alias_approvals_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production alias ledger' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_alias_map}" && -e "${game_checkpoint_aggregate_alias_map}" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production alias ledger' >&2
+    return 1
+  fi
+  if [[ "${f13_real_alias_context}" == true ]]; then
+    [[ "${game_checkpoint_aggregate_map}" == "${TMP_DIR}/f13-contributions" &&
+      "${game_checkpoint_aggregate_alias_map}" == "${game_checkpoint_aggregate_map}.game-snapshot-alias-approvals" &&
+      -f "${game_checkpoint_aggregate_map}" && -f "${game_checkpoint_aggregate_alias_map}" &&
+      "${game_checkpoint_snapshot_base}" == "${game_checkpoint_aggregate_base}" &&
+      "${game_checkpoint_snapshot_record}" == "${game_checkpoint_aggregate_record}" ]] || {
+      printf '%s\n' 'F13 oracle bug: active release output/alias ledger was not preserved after synthetic fixtures' >&2
+      return 1
+    }
+    for f13_state_path in \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+      game_checkpoint_alias_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: preserved release alias authorization failed after fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+    for f13_state_path in \
+      'src/backend/voice/internal/grpcsvc/matchsquad_member.go' \
+      'src/backend/voice/internal/grpcsvc/matchsquad_voice.go' \
+      'src/backend/voice/internal/livekit/token.go'; do
+      game_checkpoint_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: preserved ordinary Game provenance failed after fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+  fi
+  if [[ "${f13_real_alias_context}" == true ]]; then
+    printf '%s\n' 'F13 producer checkpoint context survives synthetic fixtures: PASS' >&2
+  fi
+}
+
+# The producer-shaped fixtures also call this provenance helper. Invoke them
+# only after every collector and path-authorization function is defined.
+f13_run_synthetic_provenance_fixtures
+
 while IFS= read -r file; do
+  if game_checkpoint_alias_path_allowed_for_provenance \
+    "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    continue
+  fi
   f13_path_delta="${TMP_DIR}/changed-files"
   if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
     f13_path_delta="$(f13_delta_for_path "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}")" || {
@@ -2925,6 +5605,9 @@ while IFS= read -r file; do
       fi
       f13_path_target=HEAD
     }
+  fi
+  if game_checkpoint_path_allowed_for_provenance "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    continue
   fi
   file_r22_runtime_delta="${r22_runtime_delta}"
   if [[ -s "${TMP_DIR}/f13-contributions" ]]; then

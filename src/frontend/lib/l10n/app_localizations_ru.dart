@@ -2527,6 +2527,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get securitySessionsManage => 'Управление сессиями';
 
   @override
+  String get securityLinkedDevicesManage =>
+      'Управление связанными устройствами';
+
+  @override
   String get securitySessionsCurrentDevice => 'Это устройство';
 
   @override
@@ -2954,7 +2958,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String guestConvertVerificationSubtitle(Object email) {
-    return 'Введите код, отправленный на $email. Гостевой доступ сохранится до подтверждения.';
+    return 'Введите код подтверждения для $email. Гостевой доступ сохранится до подтверждения.';
   }
 
   @override

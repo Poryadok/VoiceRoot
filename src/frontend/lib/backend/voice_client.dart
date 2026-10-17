@@ -47,6 +47,8 @@ class VoiceCallSession {
     this.voiceRoomId,
     this.spaceId,
     this.expiresAt,
+    this.matchId,
+    this.mediaEpoch,
   });
 
   final String roomId;
@@ -66,6 +68,10 @@ class VoiceCallSession {
   final String? spaceId;
   final DateTime? expiresAt;
 
+  /// Present only for the delegated MatchSquad membership flow.
+  final String? matchId;
+  final String? mediaEpoch;
+
   bool get isGroupVoice => sessionKind == VoiceSessionKind.groupVoice;
 }
 
@@ -75,6 +81,13 @@ class VoiceJoinToken {
   final String jwt;
   final DateTime? expiresAt;
   final String? livekitUrl;
+}
+
+class MatchSquadJoinResult {
+  const MatchSquadJoinResult({required this.session, required this.mediaEpoch});
+
+  final VoiceCallSession session;
+  final String mediaEpoch;
 }
 
 class VoiceRoomSession {
@@ -284,6 +297,131 @@ class VoiceCallsClient {
       calls_pb.JoinCallRequest(roomId: roomId),
       calls_pb.JoinCallResponse.create,
     );
+  }
+
+  Future<VoiceApiResult<MatchSquadJoinResult>> joinMatchSquadRoom({
+    required String authorization,
+    required String matchId,
+    required String roomId,
+    required String operationId,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve(
+        '/api/v1/matchmaking/matches/${Uri.encodeComponent(matchId)}/voice/join',
+      ),
+      authorization: authorization,
+      body: calls_pb.JoinMatchSquadRoomRequest(
+        protocolVersion: 1,
+        operationId: operationId,
+        matchId: matchId,
+        roomId: roomId,
+      ),
+      createEmpty: calls_pb.JoinMatchSquadRoomResponse.create,
+    );
+    final mapped = _map<dynamic>(result, (data) => data);
+    if (mapped case VoiceApiFailure()) return mapped;
+    final response =
+        (mapped as VoiceApiOk<dynamic>).data
+            as calls_pb.JoinMatchSquadRoomResponse;
+    if (!response.hasCallSession() ||
+        response.callSession.roomId != roomId ||
+        response.mediaEpoch.trim().isEmpty) {
+      return const VoiceApiFailure(
+        message: 'invalid_match_squad_join_response',
+        errorCode: 'invalid_response',
+      );
+    }
+    final parsed = voiceCallSessionFromProto(response.callSession);
+    final session = VoiceCallSession(
+      roomId: parsed.roomId,
+      livekitRoomName: parsed.livekitRoomName,
+      chatId: parsed.chatId,
+      initiatorProfileId: parsed.initiatorProfileId,
+      calleeProfileId: parsed.calleeProfileId,
+      mediaKind: parsed.mediaKind,
+      status: parsed.status,
+      sessionKind: parsed.sessionKind,
+      voiceRoomId: parsed.voiceRoomId,
+      spaceId: parsed.spaceId,
+      expiresAt: parsed.expiresAt,
+      matchId: matchId,
+      mediaEpoch: response.mediaEpoch,
+    );
+    return VoiceApiOk(
+      MatchSquadJoinResult(session: session, mediaEpoch: response.mediaEpoch),
+    );
+  }
+
+  Future<VoiceApiResult<VoiceJoinToken>> getMatchSquadJoinToken({
+    required String authorization,
+    required String matchId,
+    required String roomId,
+    required String mediaEpoch,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve(
+        '/api/v1/matchmaking/matches/${Uri.encodeComponent(matchId)}/voice/token',
+      ),
+      authorization: authorization,
+      body: calls_pb.GetMatchSquadJoinTokenRequest(
+        protocolVersion: 1,
+        matchId: matchId,
+        roomId: roomId,
+        mediaEpoch: mediaEpoch,
+      ),
+      createEmpty: calls_pb.GetMatchSquadJoinTokenResponse.create,
+    );
+    final mapped = _map<dynamic>(result, (data) => data);
+    if (mapped case VoiceApiFailure()) return mapped;
+    final response =
+        (mapped as VoiceApiOk<dynamic>).data
+            as calls_pb.GetMatchSquadJoinTokenResponse;
+    if (!response.hasToken() || response.mediaEpoch != mediaEpoch) {
+      return const VoiceApiFailure(
+        message: 'invalid_match_squad_token_response',
+        errorCode: 'invalid_response',
+      );
+    }
+    return VoiceApiOk(voiceJoinTokenFromProto(response.token));
+  }
+
+  Future<VoiceApiResult<void>> leaveMatchSquadRoom({
+    required String authorization,
+    required String matchId,
+    required String roomId,
+    required String mediaEpoch,
+    required String operationId,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve(
+        '/api/v1/matchmaking/matches/${Uri.encodeComponent(matchId)}/voice/leave',
+      ),
+      authorization: authorization,
+      body: calls_pb.LeaveMatchSquadRoomRequest(
+        protocolVersion: 1,
+        operationId: operationId,
+        matchId: matchId,
+        roomId: roomId,
+        expectedMediaEpoch: mediaEpoch,
+      ),
+      createEmpty: calls_pb.LeaveMatchSquadRoomResponse.create,
+    );
+    final mapped = _map<dynamic>(result, (data) => data);
+    if (mapped case VoiceApiFailure()) return mapped;
+    final response =
+        (mapped as VoiceApiOk<dynamic>).data
+            as calls_pb.LeaveMatchSquadRoomResponse;
+    if (!response.hasCallSession() ||
+        response.callSession.roomId != roomId ||
+        response.mediaEpoch != mediaEpoch ||
+        response.membershipState !=
+            calls_pb.MatchSquadMembershipState.MATCH_SQUAD_MEMBERSHIP_STATE_LEFT) {
+      return const VoiceApiFailure(
+        message: 'invalid_match_squad_leave_response',
+        errorCode: 'invalid_response',
+      );
+    }
+    return const VoiceApiOk<void>(null);
   }
 
   Future<VoiceApiResult<VoiceCallSession>> acceptCall({

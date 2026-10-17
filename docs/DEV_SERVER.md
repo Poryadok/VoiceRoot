@@ -258,6 +258,24 @@ TLS Secret `voice-matchmaking-principal-jwks-tls`; Chat/Voice читают то�
 Secret, а Matchmaking монтирует TLS Secret read-only. Эти имена и сертификат
 не используются для Compose alias или namespace `voice-staging`.
 
+MatchSquad mTLS использует отдельный DEV trust domain, не `voice-media-ca`:
+`voice-matchmaking-client-tls` выпускается с `clientAuth` и SAN
+`voice-matchmaking.voice-dev.svc`, `voice-chat-match-squad-server-tls` — с
+`serverAuth` и SAN `voice-chat`, а `voice-voice-match-squad-server-tls` — с
+`serverAuth` и SAN `voice-voice` для портов 9094 и 9095. Публичный корень
+хранится в ConfigMap `voice-match-squad-ca`; закрытый ключ CA остаётся только в
+отдельном приватном томе `voice-dev-match-squad-pki`. Secrets подписи principal
+и replay credentials создаются отдельно и неизменяемо тем же DEV-оператором.
+
+DEV overlay переключает четыре CA-файла: исходящую проверку Matchmaking для
+Chat/Voice, входящую проверку клиента Matchmaking в Chat 9092 и Voice 9094, и
+исходящую проверку Voice 9095 в Gateway. Проверка клиентского сертификата
+Voice 9095 остаётся на `voice-media-ca`; JWKS-корни и существующие media
+идентичности не меняются. Порядок выпуска и точные overlay patches описаны в
+`scripts/dev/README.md` и
+`deploy/dev/match-squad-trust-overlay/README.md`. Этот отдельный оператор не
+продолжает и не изменяет journal/volume уже завершённого media PKI recovery.
+
 Пересоздание pod не равно удалению PVC: stateful данные dev находятся на PV;
 `Retain` сохраняет backing data при удалении claim, но не восстанавливает
 namespace, привязки и конфигурацию автоматически. Redis/mail fixture и любые

@@ -10,6 +10,7 @@ smoke_gateway:
   - TestComposeGroups_live
   - TestComposeSpaces_live
   - TestComposeMatchmakingSearch_live
+  - TestComposeMatchmakingRating_live
   - TestComposeSearchInChat_live
   - TestComposeModeration_live
   - TestComposeModerationShadowBan_live

@@ -674,13 +674,14 @@ const CompleteMatchRequest$json = {
   '1': 'CompleteMatchRequest',
   '2': [
     {'1': 'match_id', '3': 1, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `CompleteMatchRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List completeMatchRequestDescriptor =
-    $convert.base64Decode(
-        'ChRDb21wbGV0ZU1hdGNoUmVxdWVzdBIZCghtYXRjaF9pZBgBIAEoCVIHbWF0Y2hJZA==');
+final $typed_data.Uint8List completeMatchRequestDescriptor = $convert.base64Decode(
+    'ChRDb21wbGV0ZU1hdGNoUmVxdWVzdBIZCghtYXRjaF9pZBgBIAEoCVIHbWF0Y2hJZBIhCgxvcG'
+    'VyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklk');
 
 @$core.Deprecated('Use completeMatchResponseDescriptor instead')
 const CompleteMatchResponse$json = {
@@ -1003,13 +1004,49 @@ const GetMatchResponse$json = {
       '6': '.voice.matchmaking.v1.Match',
       '10': 'match'
     },
+    {
+      '1': 'acceptance_deadline_at',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'acceptanceDeadlineAt'
+    },
+    {
+      '1': 'server_now',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'serverNow'
+    },
+    {
+      '1': 'own_proposal_response',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'ownProposalResponse'
+    },
+    {
+      '1': 'own_search_session',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.matchmaking.v1.SearchSession',
+      '10': 'ownSearchSession'
+    },
   ],
 };
 
 /// Descriptor for `GetMatchResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getMatchResponseDescriptor = $convert.base64Decode(
     'ChBHZXRNYXRjaFJlc3BvbnNlEjEKBW1hdGNoGAEgASgLMhsudm9pY2UubWF0Y2htYWtpbmcudj'
-    'EuTWF0Y2hSBW1hdGNo');
+    'EuTWF0Y2hSBW1hdGNoElAKFmFjY2VwdGFuY2VfZGVhZGxpbmVfYXQYAiABKAsyGi5nb29nbGUu'
+    'cHJvdG9idWYuVGltZXN0YW1wUhRhY2NlcHRhbmNlRGVhZGxpbmVBdBI5CgpzZXJ2ZXJfbm93GA'
+    'MgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJc2VydmVyTm93EjIKFW93bl9wcm9w'
+    'b3NhbF9yZXNwb25zZRgEIAEoCVITb3duUHJvcG9zYWxSZXNwb25zZRJRChJvd25fc2VhcmNoX3'
+    'Nlc3Npb24YBSABKAsyIy52b2ljZS5tYXRjaG1ha2luZy52MS5TZWFyY2hTZXNzaW9uUhBvd25T'
+    'ZWFyY2hTZXNzaW9u');
 
 @$core.Deprecated('Use getMatchHistoryResponseDescriptor instead')
 const GetMatchHistoryResponse$json = {

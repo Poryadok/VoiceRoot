@@ -38,8 +38,6 @@ import (
 	voiceprom "voice/backend/pkg/promhttp"
 	pkgruntimeconfig "voice/backend/pkg/runtimeconfig"
 
-	callsv1 "voice.app/voice/calls/v1"
-	chatv1 "voice.app/voice/chat/v1"
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -63,12 +61,47 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 }
 
 func main() {
+	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	startupCtx, cancelStartup := context.WithCancel(shutdownCtx)
+	defer cancelStartup()
 	logger := httpserver.NewLogger(serviceName)
 	principalConfig, principalEnabled, err := spaceprincipal.LoadFromEnv()
 	if err != nil {
 		log.Fatalf("Matchmaking Space principal config: %v", err)
 	}
+	jwksConfig, err := squad.LoadPrincipalJWKSListener(os.Getenv)
+	if err != nil {
+		log.Fatalf("Matchmaking principal JWKS config: %v", err)
+	}
+	errCh := make(chan error, 2)
+	var jwksServer *http.Server
+	if jwksConfig.Enabled {
+		jwksListener, err := net.Listen("tcp", jwksConfig.ListenAddr)
+		if err != nil {
+			log.Fatalf("Matchmaking principal JWKS listen: %v", err)
+		}
+		jwksServer = &http.Server{Handler: jwksConfig.Handler, TLSConfig: jwksConfig.TLSConfig, ReadHeaderTimeout: 5 * time.Second}
+		// Publish before waiting for Chat/Voice gRPC readiness: their protected
+		// listeners verify Matchmaking principals during their own startup.
+		logger.Info("Matchmaking principal JWKS listening", slog.String("addr", jwksConfig.ListenAddr))
+		go func() {
+			if err := jwksServer.ServeTLS(jwksListener, "", ""); err != nil && err != http.ErrServerClosed {
+				errCh <- err
+				cancelStartup()
+			}
+		}()
+	}
 	metricsReg := prometheus.NewRegistry()
+	teardownOldestPendingProgressAge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "matchmaking_matchsquad_teardown_oldest_pending_progress_age_seconds",
+		Help: "Age of the oldest pending MatchSquad teardown aggregate without durable provider progress.",
+	})
+	teardownContractMismatches := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "matchmaking_matchsquad_teardown_contract_mismatches",
+		Help: "Number of pending MatchSquad teardown provider operations in terminal contract mismatch.",
+	})
+	metricsReg.MustRegister(teardownOldestPendingProgressAge, teardownContractMismatches)
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -97,8 +130,32 @@ func main() {
 		matchStore := &store.MatchStore{Pool: pool}
 		ratingStore := &store.RatingStore{Pool: pool}
 		banStore := &store.BanStore{Pool: pool}
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				alertCtx, alertCancel := context.WithTimeout(shutdownCtx, 3*time.Second)
+				alertState, err := matchStore.GetMatchSquadTeardownAlertState(alertCtx)
+				alertCancel()
+				if err != nil {
+					if shutdownCtx.Err() != nil {
+						return
+					}
+					logger.Warn("MatchSquad teardown alert-state query failed", slog.Any("error", err))
+				} else {
+					teardownOldestPendingProgressAge.Set(alertState.OldestPendingProgressAgeSeconds)
+					teardownContractMismatches.Set(float64(alertState.ContractMismatchCount))
+				}
+				select {
+				case <-shutdownCtx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
 
 		var events mmevents.Publisher = mmevents.NoopPublisher{}
+		eventsEnabled := false
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := mmevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
@@ -106,6 +163,7 @@ func main() {
 			} else {
 				pub.Logger = logger
 				events = pub
+				eventsEnabled = true
 				defer func() { _ = pub.Close() }()
 			}
 		}
@@ -123,8 +181,18 @@ func main() {
 			if redisQueue == nil {
 				log.Fatal("Matchmaking Space principal listener requires MATCHMAKING_REDIS_ADDR")
 			}
-			principalRuntime, err = spaceprincipal.New(context.Background(), principalConfig)
+			principalRuntime, err = spaceprincipal.New(startupCtx, principalConfig)
 			if err != nil {
+				select {
+				case startupErr := <-errCh:
+					if startupErr != nil && startupErr != http.ErrServerClosed {
+						log.Fatalf("Matchmaking principal startup: %v", startupErr)
+					}
+				default:
+				}
+				if shutdownCtx.Err() != nil {
+					return
+				}
 				log.Fatalf("Matchmaking Space principal runtime: %v", err)
 			}
 			defer func() { _ = principalRuntime.Close() }()
@@ -139,37 +207,51 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		var squadProvisioner grpcsvc.SquadProvisioner
-		chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR"))
-		voiceAddr := strings.TrimSpace(os.Getenv("VOICE_GRPC_ADDR"))
-		if chatAddr != "" && voiceAddr != "" {
-			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("chat grpc: %v", err)
-			}
-			defer func() { _ = cconn.Close() }()
-			vconn, err := grpc.NewClient(grpcclient.DialTarget(voiceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("voice grpc: %v", err)
-			}
-			defer func() { _ = vconn.Close() }()
-			chatWaitCtx, chatWaitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			if err := waitForGRPCReady(chatWaitCtx, cconn); err != nil {
-				chatWaitCancel()
-				log.Fatalf("chat grpc dial: %v", err)
-			}
-			chatWaitCancel()
-			voiceWaitCtx, voiceWaitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			if err := waitForGRPCReady(voiceWaitCtx, vconn); err != nil {
-				voiceWaitCancel()
-				log.Fatalf("voice grpc dial: %v", err)
-			}
-			voiceWaitCancel()
-			squadProvisioner = &squad.Provisioner{
-				Chat:  &squad.GRPCChatClient{Client: chatv1.NewChatServiceClient(cconn)},
-				Voice: &squad.GRPCVoiceClient{Client: callsv1.NewVoiceServiceClient(vconn)},
-			}
-		} else if chatAddr != "" || voiceAddr != "" {
-			logger.Warn("squad provisioning disabled: set both CHAT_GRPC_ADDR and VOICE_GRPC_ADDR")
+		providerWorker, closeProviderConnections, providerConfigured, providerErr := squad.LoadProtectedProviderWorker(matchStore, os.Getenv)
+		if providerErr != nil {
+			log.Fatalf("MatchSquad protected provider configuration: %v", providerErr)
+		}
+		if providerConfigured {
+			squadProvisioner = providerWorker
+			defer func() {
+				if err := closeProviderConnections(); err != nil {
+					logger.Warn("MatchSquad provider connections did not close cleanly", slog.Any("error", err))
+				}
+			}()
+			go func() {
+				ticker := time.NewTicker(2 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-shutdownCtx.Done():
+						return
+					case <-ticker.C:
+					}
+					ctx, cancel := context.WithTimeout(shutdownCtx, 5*time.Second)
+					if _, err := providerWorker.RunProvisioningOnce(ctx, 100); err != nil {
+						logger.Warn("MatchSquad provisioning recovery failed", slog.Any("error", err))
+					}
+					cancel()
+					if shutdownCtx.Err() != nil {
+						return
+					}
+					// Each incomplete provider gets an independent 10-second attempt
+					// context in the worker; a batch-level deadline must not shrink it.
+					if _, err := providerWorker.RunTeardownOnce(shutdownCtx, 100); err != nil {
+						logger.Warn("MatchSquad teardown dispatch failed", slog.Any("error", err))
+					}
+					if shutdownCtx.Err() != nil {
+						return
+					}
+					ctx, cancel = context.WithTimeout(shutdownCtx, 5*time.Second)
+					if _, err := providerWorker.RunCompactionOnce(ctx, 100); err != nil {
+						logger.Warn("MatchSquad compaction dispatch failed", slog.Any("error", err))
+					}
+					cancel()
+				}
+			}()
+		} else {
+			logger.Warn("MatchSquad provisioning unavailable: protected provider configuration is absent")
 		}
 
 		var ratingPrivacy grpcsvc.MmRatingPrivacyChecker
@@ -248,6 +330,32 @@ func main() {
 			matchmakingv1.RegisterMatchmakingServiceServer(lifecycleSrv, mmSvc)
 		}
 		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
+		if eventsEnabled {
+			go func() {
+				ticker := time.NewTicker(2 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					pending, err := matchStore.ListPendingMatchSquadCompletionEvents(context.Background(), 100)
+					if err != nil {
+						logger.Warn("MatchSquad completion event scan failed", slog.Any("error", err))
+						continue
+					}
+					for _, event := range pending {
+						if err := events.PublishMatchCompleted(context.Background(), mmevents.MatchCompletedEvent{
+							EventID: event.EventID.String(), OccurredAt: event.OccurredAt,
+							MatchID: event.MatchID.String(), DurationSeconds: event.DurationSeconds,
+							ProfileIDs: event.ProfileIDs,
+						}); err != nil {
+							logger.Warn("MatchSquad completion event publish failed", slog.String("match_id", event.MatchID.String()), slog.Any("error", err))
+							continue
+						}
+						if err := matchStore.MarkMatchSquadCompletionEventPublished(context.Background(), event.AggregateID, event.EventID); err != nil {
+							logger.Warn("MatchSquad completion event acknowledgement failed", slog.String("match_id", event.MatchID.String()), slog.Any("error", err))
+						}
+					}
+				}
+			}()
+		}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			lfpCtx, lfpCancel := context.WithCancel(context.Background())
@@ -333,20 +441,17 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(health, metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
-	case <-stop:
+	case <-shutdownCtx.Done():
 		ctx, cancel := context.WithTimeout(context.Background(), pkgruntimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
@@ -357,6 +462,11 @@ func main() {
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
+		}
+		if jwksServer != nil {
+			if err := jwksServer.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }

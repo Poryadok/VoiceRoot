@@ -40,6 +40,8 @@ type MatchFoundEvent struct {
 
 // MatchCompletedEvent is emitted when all participants left a match squad.
 type MatchCompletedEvent struct {
+	EventID         string
+	OccurredAt      time.Time
 	MatchID         string
 	DurationSeconds int64
 	ProfileIDs      []string
@@ -185,9 +187,17 @@ func (p *JetStreamPublisher) PublishMatchFound(ctx context.Context, ev MatchFoun
 
 // PublishMatchCompleted implements Publisher.
 func (p *JetStreamPublisher) PublishMatchCompleted(ctx context.Context, ev MatchCompletedEvent) error {
+	eventID := ev.EventID
+	if eventID == "" {
+		eventID = uuid.NewString()
+	}
+	occurredAt := ev.OccurredAt
+	if occurredAt.IsZero() {
+		occurredAt = time.Now().UTC()
+	}
 	env := &eventsv1.MatchmakingStreamEvent{
-		EventId:    uuid.NewString(),
-		OccurredAt: timestamppb.New(time.Now().UTC()),
+		EventId:    eventID,
+		OccurredAt: timestamppb.New(occurredAt.UTC()),
 		Payload: &eventsv1.MatchmakingStreamEvent_MatchCompleted{
 			MatchCompleted: &eventsv1.MatchCompleted{
 				MatchId:         ev.MatchID,

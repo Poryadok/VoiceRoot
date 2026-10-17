@@ -826,9 +826,10 @@ def receipt_binding(source_sha, image_ref, build_receipt, namespace_uid):
 
 
 class KubeError(RuntimeError):
-    def __init__(self, status, *, returncode=None, category="api_error"):
+    def __init__(self, status, stage="kubectl.request", *, returncode=None, category="api_error"):
         super().__init__("kubernetes_api_error")
         self.status = status
+        self.stage = stage
         self.returncode = returncode
         self.category = category
 
@@ -849,6 +850,45 @@ def _safe_kubectl_error_category(stderr):
     if "timeout" in text or "timed out" in text:
         return "timeout"
     return "api_error"
+
+
+_KUBECTL_STATUS_BY_REASON = {
+    "Unauthorized": 401,
+    "Forbidden": 403,
+    "NotFound": 404,
+    "AlreadyExists": 409,
+    "Conflict": 409,
+    "Invalid": 422,
+    "TooManyRequests": 429,
+    "InternalError": 500,
+    "ServiceUnavailable": 503,
+    "Timeout": 504,
+}
+
+
+def _kubectl_error_status(stderr):
+    """Keep a Kubernetes reason code without retaining or printing its details."""
+    match = re.search(r"Error from server \(([^)]+)\)", stderr or "")
+    return _KUBECTL_STATUS_BY_REASON.get(match.group(1), 0) if match else 0
+
+
+def _kubectl_operation_stage(args, body):
+    """Map an argv to a fixed low-sensitivity operation label."""
+    verb = args[0]
+    if verb == "exec":
+        return "exec.database_probe"
+    if verb == "create" and isinstance(body, dict):
+        kind = body.get("kind")
+        return {"ConfigMap": "create.migration_configmap",
+            "Job": "create.migration_job"}.get(kind, "create.resource")
+    if verb == "get" and len(args) > 1:
+        kind = args[1].lower()
+        return {"namespace": "get.namespace", "endpointslices": "get.postgres_endpoints",
+            "service": "get.postgres_service", "statefulset": "get.postgres_statefulset",
+            "pod": "get.postgres_pod", "secret": "get.database_secret_metadata",
+            "configmap": "get.migration_configmap", "job": "get.migration_job"}.get(
+                kind, "get.resource")
+    return verb + ".request"
 
 
 class Kubectl:
@@ -886,10 +926,13 @@ class Kubectl:
         if result.returncode != 0:
             # Kubernetes errors can contain object contents; retain only status.
             code_match = re.search(r"\b(403|404|409|422)\b", result.stderr or "")
-            status = int(code_match.group(1)) if code_match else 0
+            status = _kubectl_error_status(result.stderr)
+            if not status:
+                status = int(code_match.group(1)) if code_match else 0
             category = _safe_kubectl_error_category(result.stderr)
             returncode = result.returncode if type(result.returncode) is int else None
-            raise KubeError(status, returncode=returncode, category=category)
+            stage = _kubectl_operation_stage(args, body)
+            raise KubeError(status, stage, returncode=returncode, category=category)
         output = result.stdout
         # The prerequisite consumer relies on booleans from this one exact
         # kubectl go-template probe. Keep every other raw command output typed
