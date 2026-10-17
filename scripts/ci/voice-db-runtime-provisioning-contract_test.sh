@@ -441,6 +441,7 @@ game_checkpoint_aggregate_target=''
 game_checkpoint_aggregate_paths=''
 game_checkpoint_aggregate_map=''
 game_checkpoint_aggregate_record=''
+game_checkpoint_aggregate_alias_map=''
 game_checkpoint_enabled=false
 if git -C "${ROOT}" merge-base --is-ancestor "${accepted_game_checkpoint}" HEAD; then
   game_checkpoint_enabled=true
@@ -1188,6 +1189,7 @@ f13_migration_alias_reconciles_guarded_path() {
   local row_count row alias_path old_entry record_row_owner record_row_first_parent record_row_source_base record_row_source_head record_row_content_base record_row_candidates
   local nested_owner nested_first_parent nested_source_base nested_source_head nested_content_base nested_candidates source_base_entry
   local row_commit row_nested_base row_nested_head record_base record_head integration
+  local alias_record_row
   local integration_first integration_second integration_base destination destination_entry
   local expected_up='src/backend/migrations/voice_db/000010_match_squad_operations.up.sql'
   local expected_down='src/backend/migrations/voice_db/000010_match_squad_operations.down.sql'
@@ -1198,6 +1200,7 @@ f13_migration_alias_reconciles_guarded_path() {
   local base_up base_down snapshot_base_up snapshot_base_down h_entry target_entry integration_entry integration_entry_record
   local base_old snapshot_base_old h_old integration_old integration_first_old integration_second_old integration_base_old target_old aggregate_old resolved_content_base
   local normalized_saved_guarded normalized_saved_source normalized_integration_record
+  local alias_row_hash alias_approval_file alias_approval_count
   [[ "${game_checkpoint_aggregate_active}" == true &&
     "${target}" == "${game_checkpoint_aggregate_head}" &&
     -n "${game_checkpoint_snapshot_record}" &&
@@ -1231,6 +1234,7 @@ f13_migration_alias_reconciles_guarded_path() {
   row_count="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { n++; row=$0 } END { print n+0 }' "${aliases}")"
   [[ "${row_count}" == 1 ]] || return 1
   row="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { print; exit }' "${aliases}")"
+  alias_record_row="${row}"
   IFS=$'\t' read -r alias_path old_entry record_row_owner record_row_first_parent record_row_source_base record_row_source_head record_row_content_base record_row_candidates \
     nested_owner nested_first_parent nested_source_base nested_source_head nested_content_base nested_candidates source_base_entry \
     integration integration_first integration_second integration_base destination destination_entry <<<"${row}"
@@ -1337,7 +1341,157 @@ f13_migration_alias_reconciles_guarded_path() {
     "${normalized_integration_record}" == "${destination_entry}" ]] || return 1
   game_checkpoint_aggregate_path_allowed "${repo}" "${integration}" \
     "${destination}" "${integration_entry_record}" || return 1
+  alias_approval_file="${game_checkpoint_aggregate_alias_map}"
+  [[ -n "${alias_approval_file}" ]] || return 1
+  alias_approval_count="$(awk -F '\t' -v p="${destination}" '$1 == p { n++ } END { print n+0 }' \
+    "${alias_approval_file}")"
+  [[ "${alias_approval_count}" == 0 ]] || return 1
+  alias_row_hash="$(printf '%s\n' "${alias_record_row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || return 1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${destination}" "${path}" "${alias_row_hash}" \
+    "${game_checkpoint_snapshot_base}" "${game_checkpoint_snapshot_head}" \
+    "${game_checkpoint_snapshot_record}" "${game_checkpoint_aggregate_base}" \
+    "${game_checkpoint_aggregate_head}" "${game_checkpoint_aggregate_target}" \
+    "${integration}" "${integration_first}" "${integration_second}" "${integration_base}" \
+    "${h_entry}" "${target_entry}" "${integration_entry}" "${normalized_integration_record}" \
+    >>"${alias_approval_file}" || return 1
   return 0
+}
+
+f13_migration_alias_approval_valid() {
+  local repo="$1" map="$2" path="$3" ledger row_count row approval_count approval_row
+  local alias_path alias_hash snapshot_base snapshot_head snapshot_record aggregate_base aggregate_head aggregate_target
+  local integration integration_first integration_second integration_base h_entry target_entry integration_entry normalized_integration_entry
+  local aliases collisions record_row actual_hash expected_destination expected_entry actual_entry actual_record normalized_actual_record tuple prior_aggregate_active
+  [[ "${game_checkpoint_aggregate_map}" == "${map}" &&
+    -n "${game_checkpoint_aggregate_alias_map}" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${map}.game-snapshot-alias-approvals" &&
+    -n "${game_checkpoint_aggregate_base}" && -n "${game_checkpoint_aggregate_head}" &&
+    -n "${game_checkpoint_aggregate_target}" && -n "${game_checkpoint_aggregate_record}" &&
+    "${game_checkpoint_aggregate_record}" == "${game_checkpoint_snapshot_record}" ]] || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  row_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${map}")"
+  [[ "${row_count}" == 0 ]] || return 1
+  approval_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${map}.game-snapshot-approvals")"
+  [[ "${approval_count}" == 0 ]] || return 1
+  ledger="${game_checkpoint_aggregate_alias_map}"
+  [[ -f "${ledger}" ]] || return 1
+  [[ "$(awk 'END { print NR+0 }' "${ledger}")" == 2 ]] || return 1
+  awk -F '\t' '
+    $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql" &&
+    $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql" { bad=1 }
+    END { exit bad }
+  ' "${ledger}" || return 1
+  approval_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${ledger}")"
+  [[ "${approval_count}" == 1 ]] || return 1
+  [[ "$(awk -F '\t' -v p="${path}" '$1 == p { if (NF != 17) bad=1 } END { print bad+0 }' "${ledger}")" == 0 ]] || return 1
+  approval_row="$(awk -F '\t' -v p="${path}" '$1 == p { row=$0 } END { print row }' "${ledger}")"
+  IFS=$'\t' read -r _ alias_path alias_hash snapshot_base snapshot_head snapshot_record \
+    aggregate_base aggregate_head aggregate_target integration integration_first integration_second \
+    integration_base h_entry target_entry integration_entry normalized_integration_entry <<<"${approval_row}"
+  [[ "${snapshot_base}" == "${game_checkpoint_snapshot_base}" &&
+    "${snapshot_head}" == "${game_checkpoint_snapshot_head}" &&
+    "${snapshot_record}" == "${game_checkpoint_snapshot_record}" &&
+    "${aggregate_base}" == "${game_checkpoint_aggregate_base}" &&
+    "${aggregate_head}" == "${game_checkpoint_aggregate_head}" &&
+    "${aggregate_target}" == "${game_checkpoint_aggregate_target}" ]] || return 1
+  f13_migration_alias_record_load "${repo}" "${snapshot_record}" \
+    "${TMP_DIR}/f13-alias-ledger-record.tsv" "${TMP_DIR}/f13-alias-ledger-collisions.tsv" || return 1
+  record_row="$(awk -F '\t' -v p="${alias_path}" '$1 == p { n++; row=$0 } END { if (n == 1) print row }' \
+    "${TMP_DIR}/f13-alias-ledger-record.tsv")"
+  [[ -n "${record_row}" ]] || return 1
+  actual_hash="$(printf '%s\n' "${record_row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || return 1
+  [[ "${actual_hash}" == "${alias_hash}" ]] || return 1
+  IFS=$'\t' read -r _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ expected_destination expected_entry <<<"${record_row}"
+  [[ "${expected_destination}" == "${path}" && -n "${expected_entry}" ]] || return 1
+  case "${alias_path}" in
+    src/backend/migrations/voice_db/000010_match_squad_operations.up.sql)
+      [[ "${path}" == src/backend/migrations/voice_db/000011_match_squad_operations.up.sql ]] || return 1 ;;
+    src/backend/migrations/voice_db/000010_match_squad_operations.down.sql)
+      [[ "${path}" == src/backend/migrations/voice_db/000011_match_squad_operations.down.sql ]] || return 1 ;;
+    *) return 1 ;;
+  esac
+  grep -Fxq -- "${alias_path}" "${game_checkpoint_aggregate_paths}" && return 1
+  [[ "$(git -C "${repo}" rev-list --parents -n 1 "${integration}" 2>/dev/null)" == \
+    "${integration} ${integration_first} ${integration_second}" ]] || return 1
+  [[ "$(git -C "${repo}" merge-base --all "${integration_first}" "${integration_second}" 2>/dev/null)" == \
+    "${integration_base}" ]] || return 1
+  git -C "${repo}" merge-base --is-ancestor "${integration}" "${snapshot_head}" 2>/dev/null || return 1
+  grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
+  h_entry="$(f13_git_tree_entry "${repo}" "${snapshot_head}" "${path}")" || return 1
+  target_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_aggregate_target}" "${path}")" || return 1
+  actual_entry="$(f13_git_tree_entry "${repo}" "${integration}" "${path}")" || return 1
+  actual_record="$(f13_git_tree_entry_record "${repo}" "${integration}" "${path}")" || return 1
+  normalized_actual_record="$(f13_tree_entry_tuple_for_path "${path}" "${actual_record}")" || return 1
+  [[ "${h_entry}" == "${expected_entry}" && "${target_entry}" == "${h_entry}" &&
+    "${actual_entry}" == "${h_entry}" &&
+    "${normalized_actual_record}" == "${h_entry}" &&
+    "${normalized_integration_entry}" == "${actual_entry}" ]] || return 1
+  prior_aggregate_active="${game_checkpoint_aggregate_active}"
+  game_checkpoint_aggregate_active=true
+  if ! game_checkpoint_aggregate_path_allowed "${repo}" "${integration}" "${path}" "${actual_record}"; then
+    game_checkpoint_aggregate_active="${prior_aggregate_active}"
+    return 1
+  fi
+  game_checkpoint_aggregate_active="${prior_aggregate_active}"
+  [[ -f "${repo}/${path}" ]] || return 1
+  tuple="$(git -C "${repo}" hash-object --path="${path}" "${repo}/${path}" 2>/dev/null)" || return 1
+  [[ "100644 blob ${tuple}" == "${h_entry}" ]]
+}
+
+f13_release_projection_path_accounted() {
+  local repo="$1" output="$2" path="$3" row_count alias_count
+  row_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${output}")" || return 1
+  alias_count="$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' \
+    "${game_checkpoint_aggregate_alias_map}")" || return 1
+  if [[ "${row_count}" == 1 && "${alias_count}" == 0 ]]; then return 0; fi
+  [[ "${row_count}" == 0 && "${alias_count}" == 1 ]] || return 1
+  f13_migration_alias_approval_valid "${repo}" "${output}" "${path}"
+}
+
+game_checkpoint_alias_path_allowed_for_provenance() {
+  local repo="$1" map="$2" path="$3"
+  game_checkpoint_domain_path "${path}" || return 1
+  f13_migration_alias_approval_valid "${repo}" "${map}" "${path}"
+}
+
+f13_migration_alias_worktree_bytes_fixture() {
+  local repo="$1" map="$2" target="$3" path="$4"
+  local worktree="${TMP_DIR}/f13-alias-worktree-bytes-${RANDOM}-${RANDOM}"
+  local fixture_file="${worktree}/${path}"
+  local result=0
+  git -C "${repo}" worktree add --quiet --detach --no-checkout "${worktree}" "${target}" || return 1
+  if ! mkdir -p "${fixture_file%/*}" ||
+    ! git -C "${repo}" show "${target}:${path}" >"${fixture_file}" ||
+    ! printf '\nF13 fixture-only worktree mutation\n' >>"${fixture_file}"; then
+    result=1
+  elif game_checkpoint_alias_path_allowed_for_provenance "${worktree}" "${map}" "${path}"; then
+    result=1
+  fi
+  if ((result == 0)); then
+    git -C "${repo}" show "${target}:${path}" >"${fixture_file}" || result=1
+    if ((result == 0)) && ! game_checkpoint_alias_path_allowed_for_provenance "${worktree}" "${map}" "${path}"; then
+      result=1
+    fi
+  fi
+  git -C "${repo}" worktree remove --force "${worktree}" >/dev/null 2>&1 || result=1
+  return "${result}"
+}
+
+f13_migration_alias_wrapper_result_fixture() {
+  local repo="$1" map="$2" path
+  [[ "${game_checkpoint_aggregate_map}" == "${map}" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${map}.game-snapshot-alias-approvals" ]] || return 1
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    f13_release_projection_path_accounted "${repo}" "${map}" "${path}" || return 1
+  done <"${game_checkpoint_aggregate_paths}"
+  for path in \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+    f13_release_projection_path_accounted "${repo}" "${map}" "${path}" || return 1
+    game_checkpoint_alias_path_allowed_for_provenance "${repo}" "${map}" "${path}" || return 1
+  done
 }
 
 # Exercise the guarded-path helper with the exact immutable R2 row while the
@@ -1351,7 +1505,7 @@ f13_migration_alias_reconciliation_execution_fixture() {
   local path row fields old_entry row_owner row_first row_source_base row_source_head row_content_base row_candidates
   local nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry
   local integration integration_first integration_second integration_base destination destination_entry
-  local output old_path
+  local output old_path generic_path ledger backup_ledger
   local fixture_old_record
   local -A owners=() owner_content_bases=() owner_source_heads=() owner_source_entries=()
   local -A guarded_entries=() guarded_entry_commits=()
@@ -1367,8 +1521,13 @@ f13_migration_alias_reconciliation_execution_fixture() {
   game_checkpoint_aggregate_head="${source_head}"
   game_checkpoint_aggregate_target="${target}"
   game_checkpoint_aggregate_paths="${paths}"
-  game_checkpoint_aggregate_map=''
+  output="${TMP_DIR}/f13-alias-execution-map"
+  game_checkpoint_aggregate_map="${output}"
   game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
+  game_checkpoint_aggregate_alias_map="${output}.game-snapshot-alias-approvals"
+  : >"${output}" || return 1
+  : >"${output}.game-snapshot-approvals" || return 1
+  : >"${game_checkpoint_aggregate_alias_map}" || return 1
   f13_migration_alias_record_load "${repo}" "${game_checkpoint_snapshot_record}" \
     "${aliases}" "${collisions}" || return 1
 
@@ -1396,7 +1555,76 @@ f13_migration_alias_reconciliation_execution_fixture() {
       game_checkpoint_aggregate_active=false
       return 1
     fi
+    awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-alias-execution-map-rewrite" || return 1
+    cat "${TMP_DIR}/f13-alias-execution-map-rewrite" >"${output}" || return 1
   done
+  game_checkpoint_aggregate_map="${output}"
+  ledger="${game_checkpoint_aggregate_alias_map}"
+  for path in \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+    if ! f13_release_projection_path_accounted "${repo}" "${output}" "${path}" ||
+      ! game_checkpoint_alias_path_allowed_for_provenance "${repo}" "${output}" "${path}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+    if ! f13_migration_alias_worktree_bytes_fixture \
+      "${repo}" "${output}" "${game_checkpoint_aggregate_target}" "${path}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+    printf '%s\t%s\n' "${path}" 'true	fixture-owner	fixture-parent	fixture-base	fixture-head	fixture-content	fixture-candidates' >>"${output}" || return 1
+    if f13_release_projection_path_accounted "${repo}" "${output}" "${path}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+    awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-alias-execution-map-rewrite" || return 1
+    cat "${TMP_DIR}/f13-alias-execution-map-rewrite" >"${output}" || return 1
+  done
+  generic_path="$(awk -v up='src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+    -v down='src/backend/migrations/voice_db/000011_match_squad_operations.down.sql' \
+    '$0 != up && $0 != down && NF { print; exit }' "${paths}")"
+  [[ -n "${generic_path}" ]] || return 1
+  : >"${output}" || return 1
+  if f13_release_projection_path_accounted "${repo}" "${output}" "${generic_path}"; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  printf '%s\ttrue\tfixture-owner\tfixture-parent\tfixture-base\tfixture-head\tfixture-content\tfixture-candidates\n' \
+    "${generic_path}" >"${output}" || return 1
+  f13_release_projection_path_accounted "${repo}" "${output}" "${generic_path}" || return 1
+  cat "${output}" "${output}" >"${TMP_DIR}/f13-alias-execution-map-duplicate" || return 1
+  if f13_release_projection_path_accounted "${repo}" "${TMP_DIR}/f13-alias-execution-map-duplicate" "${generic_path}"; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  : >"${output}" || return 1
+  backup_ledger="${TMP_DIR}/f13-alias-execution-ledger-backup.tsv"
+  cp "${ledger}" "${backup_ledger}" || return 1
+  : >"${ledger}" || return 1
+  if f13_release_projection_path_accounted "${repo}" "${output}" \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql'; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  cp "${backup_ledger}" "${ledger}" || return 1
+  cat "${ledger}" "${ledger}" >"${TMP_DIR}/f13-alias-execution-ledger-duplicate" || return 1
+  game_checkpoint_aggregate_alias_map="${TMP_DIR}/f13-alias-execution-ledger-duplicate"
+  if f13_release_projection_path_accounted "${repo}" "${output}" \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql'; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  game_checkpoint_aggregate_alias_map="${ledger}"
+  awk -F '\t' 'BEGIN { OFS="\t" } NR == 1 { $10 = "0000000000000000000000000000000000000000" } { print }' \
+    "${ledger}" >"${TMP_DIR}/f13-alias-execution-ledger-wrong-tuple" || return 1
+  game_checkpoint_aggregate_alias_map="${TMP_DIR}/f13-alias-execution-ledger-wrong-tuple"
+  if f13_release_projection_path_accounted "${repo}" "${output}" \
+    'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql'; then
+    game_checkpoint_aggregate_active=false
+    return 1
+  fi
+  game_checkpoint_aggregate_alias_map="${ledger}"
   f13_tree_entry_normalizer_fixtures || return 1
   game_checkpoint_aggregate_active=false
   printf '%s\n' 'F13 R2 alias early-helper fixture: PASS'
@@ -3433,10 +3661,11 @@ f13_collect_master_release_pr_contributions() {
   local source_delta="${output}.source-delta" result_delta="${output}.result-delta"
   local source_map="${output}.source-map" path source_entry result_entry
   local aggregate_paths="${output}.game-snapshot-paths" approval_map="${output}.game-snapshot-approvals"
-  local row row_count row_hash
+  local alias_map="${output}.game-snapshot-alias-approvals" row row_count row_hash
   local -a target_line_fields
   : >"${output}"
   : >"${approval_map}"
+  : >"${alias_map}"
   : >"${aggregate_paths}"
   game_checkpoint_aggregate_active=false
   game_checkpoint_aggregate_base=''
@@ -3445,6 +3674,7 @@ f13_collect_master_release_pr_contributions() {
   game_checkpoint_aggregate_paths=''
   game_checkpoint_aggregate_map=''
   game_checkpoint_aggregate_record=''
+  game_checkpoint_aggregate_alias_map="${alias_map}"
 
   [[ -n "${base}" ]] || {
     f13_collect_failure "${diagnostic_file}" release_pr_missing_base
@@ -3524,15 +3754,17 @@ f13_collect_master_release_pr_contributions() {
     f13_collect_failure "${diagnostic_file}" release_pr_map_write
     return 1
   }
+  game_checkpoint_aggregate_map="${output}"
   if [[ -s "${aggregate_paths}" ]]; then
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue
       row_count="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { count++ } END { print count+0 }' "${output}")"
-      [[ "${row_count}" == 1 ]] || {
+      f13_release_projection_path_accounted "${repo}" "${output}" "${path}" || {
         f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
         : >"${approval_map}"
         return 1
       }
+      [[ "${row_count}" == 0 ]] && continue
       row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { value=$0 } END { print value }' "${output}")"
       row_hash="$(printf '%s\n' "${row}" | git -C "${repo}" hash-object --stdin 2>/dev/null)" || {
         f13_collect_failure "${diagnostic_file}" release_pr_map_write
@@ -3553,6 +3785,7 @@ f13_collect_master_release_pr_contributions() {
     game_checkpoint_aggregate_target="${target}"
     game_checkpoint_aggregate_paths="${aggregate_paths}"
     game_checkpoint_aggregate_map="${output}"
+    game_checkpoint_aggregate_alias_map="${alias_map}"
     game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
   fi
 }
@@ -4817,6 +5050,11 @@ if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]
     printf '%s\n' 'F13: develop contribution provenance is missing or ambiguous' >&2
     exit 1
   fi
+  if [[ "${f13_collect_status}" == 0 && "${f13_master_release_pr}" == true ]] &&
+    ! f13_migration_alias_wrapper_result_fixture "${ROOT}" "${TMP_DIR}/f13-contributions"; then
+    printf '%s\n' 'F13 oracle bug: release-PR alias ledger failed wrapper/downstream provenance checks' >&2
+    exit 2
+  fi
 fi
 
 {
@@ -5091,6 +5329,10 @@ grep -Fqx $'src/backend/voice/direct.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-direc
 }
 
 while IFS= read -r file; do
+  if game_checkpoint_alias_path_allowed_for_provenance \
+    "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    continue
+  fi
   f13_path_delta="${TMP_DIR}/changed-files"
   if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
     f13_path_delta="$(f13_delta_for_path "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}")" || {
