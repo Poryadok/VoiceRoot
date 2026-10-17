@@ -426,6 +426,18 @@ class KubectlClient:
             raise error
         return result
 
+    def server_dry_run(self, plan):
+        """Ask the API server to validate the exact guarded patch without writing."""
+        result = self.call("patch", plan["kind"].lower(), plan["name"],
+                           "--type=json", "--patch=" + json.dumps(plan["operations"],
+                                                                      separators=(",", ":")),
+                           "--dry-run=server", "-o", "json")
+        target = _Target(plan["kind"], plan["name"], plan["patchFile"])
+        if (result.get("metadata", {}).get("uid") != plan["uid"] or
+                observed_render_hash(target, result) != plan["desiredObservedSha256"]):
+            raise OverlayError("server dry-run result did not match frozen desired hash")
+        return result
+
     def wait_deployment(self, plan):
         self.call("rollout", "status", "deployment/" + plan["name"], "--timeout=600s")
         target = _Target("Deployment", plan["name"], plan["patchFile"])
@@ -540,8 +552,22 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
             raise OverlayError("target drift or overlay source changed: " + target.name)
         fresh_plans.append(fresh)
 
-    # Global preflight is complete before the first write. The request itself
-    # repeats UID/RV tests to close the race on each individual object.
+    # Validate every effective patch against live admission/schema before the
+    # first write. The eventual request repeats UID/RV tests to close races.
+    for target, plan in zip(TARGETS, fresh_plans):
+        if plan["alreadySatisfied"]:
+            continue
+        try:
+            client.server_dry_run(plan)
+        except Exception as exc:
+            print("MATCH_SQUAD_OVERLAY_PREFLIGHT_REJECTED kind=" + target.kind +
+                  " name=" + target.name + " stage=server-dry-run writes=0",
+                  file=sys.stderr)
+            raise OverlayError("server dry-run rejected target: " + target.name) from exc
+        print("MATCH_SQUAD_OVERLAY_PREFLIGHT_OK kind=" + target.kind +
+              " name=" + target.name)
+
+    # The request itself repeats UID/RV tests to close the race on each object.
     completed = 0
     applied = 0
     for target, plan in zip(TARGETS, fresh_plans):
@@ -569,8 +595,8 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
         print("MATCH_SQUAD_OVERLAY_OBJECT_READY kind=" + target.kind + " name=" + target.name)
     for service, ports in (
             ("voice-matchmaking", {"principal-jwks": 8443}),
-            ("voice-chat", {"match-squad-principal": 9092}),
-            ("voice-voice", {"match-squad-provider": 9094, "match-squad-member": 9095})):
+            ("voice-chat", {"match-principal": 9092}),
+            ("voice-voice", {"match-provider": 9094, "match-member": 9095})):
         try:
             client.verify_service_endpoints(service, ports)
         except Exception as exc:

@@ -5,9 +5,9 @@ metadata:
   namespace: voice-dev
 spec:
   ports:
-    - name: match-squad-provider
+    - name: match-provider
       port: 9094
-      targetPort: match-squad-provider
-    - name: match-squad-member
+      targetPort: match-provider
+    - name: match-member
       port: 9095
-      targetPort: match-squad-member
+      targetPort: match-member
