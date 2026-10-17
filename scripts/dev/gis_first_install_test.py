@@ -332,9 +332,18 @@ class PartialOperationContinuationTests(unittest.TestCase):
         fingerprints = copy.deepcopy(legacy["secret_fingerprints"])
         sidecar_sha = "46994d2e66cb2376b1ebafb79510ef0b46ddb94ecc376bcc16fc606c4c28720a"
         self.assertEqual(gis._PARTIAL_V1_SIDECAR_SHA256, sidecar_sha)
+        authorization = {"schema": "voice-dev-gis-recovery-authorization-v1",
+            "operation": gis._PARTIAL_OPERATION, "namespace_uid": state["namespace_uid"],
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "previous_sidecar_sha256": sidecar_sha,
+            "target_source_sha": current_binding["candidate_source_sha"],
+            "target_changed_files": copy.deepcopy(current_binding["changed_files"]),
+            "protected_binding": {key: current_binding[key] for key in ("old_source_sha", "backend_tree",
+                "build_receipt_sha256", "image_ref", "source_plan_sha256", "source_capture_sha256", "inputs_sha256")}}
+        authorization_sha = gis._digest(authorization)
 
         current = gis._partial_v1_transition(legacy, sidecar_sha, current_binding,
-            fingerprints, state)
+            fingerprints, state, authorization, authorization_sha)
         self.assertEqual(current["schema"], "voice-dev-gis-partial-continuation-v2")
         self.assertEqual(current["previous_sidecar_sha256"], sidecar_sha)
         self.assertEqual(current["binding"], current_binding)
@@ -342,13 +351,13 @@ class PartialOperationContinuationTests(unittest.TestCase):
         self.assertEqual(current["secret_fingerprints_sha256"], gis._digest(fingerprints))
         self.assertEqual(legacy["binding"], c2_binding)
         self.assertTrue(gis._partial_v2_admissible(current, legacy, sidecar_sha,
-            current_binding, fingerprints, state))
+            current_binding, fingerprints, state, authorization, authorization_sha))
 
         resumed = copy.deepcopy(current)
         resumed["state"]["plan"]["phase"] = "CREATING"
         resumed["state"]["plan_phase"] = "CREATING"
         self.assertTrue(gis._partial_v2_admissible(resumed, legacy, sidecar_sha,
-            current_binding, fingerprints, state))
+            current_binding, fingerprints, state, authorization, authorization_sha))
 
         for bad_legacy, bad_hash, bad_binding, bad_fingerprints in (
             (legacy, "0" * 64, current_binding, fingerprints),
@@ -369,7 +378,24 @@ class PartialOperationContinuationTests(unittest.TestCase):
         ):
             with self.assertRaises(gis.Blocked):
                 gis._partial_v1_transition(bad_legacy, bad_hash, bad_binding,
-                    bad_fingerprints, state)
+                    bad_fingerprints, state, authorization, authorization_sha)
+
+        for bad_authorization, bad_sha in (
+            (authorization, "0" * 64),
+            ({**authorization, "target_source_sha": "1" * 40}, authorization_sha),
+            ({**authorization, "target_changed_files": {**authorization["target_changed_files"],
+                "scripts/dev/gis_first_install_test.py": "c" * 64}}, authorization_sha),
+            ({**authorization, "operation": "000000000000"}, authorization_sha),
+            ({**authorization, "namespace_uid": "9" * 36}, authorization_sha),
+            ({**authorization, "original_journal_sha256": "0" * 64}, authorization_sha),
+            ({**authorization, "previous_sidecar_sha256": "0" * 64}, authorization_sha),
+            ({**authorization, "protected_binding": {**authorization["protected_binding"],
+                "image_ref": "image@sha256:" + "3" * 64}}, authorization_sha),
+            ({**authorization, "extra": True}, authorization_sha),
+        ):
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v1_transition(legacy, sidecar_sha, current_binding,
+                    fingerprints, state, bad_authorization, bad_sha)
 
         for mutate in (
             lambda row: row.update(operation="other"),
@@ -382,7 +408,7 @@ class PartialOperationContinuationTests(unittest.TestCase):
             mutate(invalid_legacy["state"])
             with self.assertRaises(gis.Blocked):
                 gis._partial_v1_transition(invalid_legacy, sidecar_sha,
-                    current_binding, fingerprints, state)
+                    current_binding, fingerprints, state, authorization, authorization_sha)
 
         for mutate in (
             lambda row: row["source_transition"].update(previous_sidecar_sha256="0" * 64),
@@ -393,7 +419,7 @@ class PartialOperationContinuationTests(unittest.TestCase):
             mutate(invalid)
             with self.assertRaises(gis.Blocked):
                 gis._partial_v2_admissible(invalid, legacy, sidecar_sha,
-                    current_binding, fingerprints, state)
+                    current_binding, fingerprints, state, authorization, authorization_sha)
 
         with tempfile.TemporaryDirectory() as folder:
             old_path = Path(folder) / "continuation.json"
@@ -402,8 +428,9 @@ class PartialOperationContinuationTests(unittest.TestCase):
             fixture_sha = gis.hashlib.sha256(legacy_raw).hexdigest()
             with patch.object(gis, "_PARTIAL_V1_SIDECAR_SHA256", fixture_sha):
                 old_path.write_bytes(legacy_raw)
+                fixture_authorization = {**authorization, "previous_sidecar_sha256": fixture_sha}
                 saved = gis._partial_v1_transition(legacy, fixture_sha, current_binding,
-                    fingerprints, state)
+                    fingerprints, state, fixture_authorization, gis._digest(fixture_authorization))
                 gis._save_continuation(new_path, saved)
             self.assertEqual(old_path.read_bytes(), legacy_raw)
             self.assertTrue(new_path.exists())
@@ -411,6 +438,12 @@ class PartialOperationContinuationTests(unittest.TestCase):
                 json.dumps(saved, sort_keys=True, separators=(",", ":")).encode())
             if gis.os.name != "nt":
                 self.assertEqual(gis.stat.S_IMODE(new_path.stat().st_mode), 0o600)
+
+    def test_recovery_authorization_json_rejects_duplicate_or_nonobject_roots(self):
+        for raw in (b'{"schema":"a","schema":"b"}', b'[]', b'null'):
+            with self.assertRaises((ValueError, TypeError)):
+                gis._strict_json_object(raw)
+        self.assertEqual(gis._strict_json_object(b'{"schema":"ok"}'), {"schema": "ok"})
 
     def test_continuation_sidecar_requires_exact_prior_hash_for_atomic_replace(self):
         with tempfile.TemporaryDirectory() as folder:

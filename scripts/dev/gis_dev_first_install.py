@@ -105,6 +105,21 @@ def _digest(value):
     return hashlib.sha256(raw).hexdigest()
 
 
+def _strict_json_object(raw):
+    """Decode a bounded JSON object while rejecting duplicate member names."""
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+    value = json.loads(raw, object_pairs_hook=pairs)
+    if not isinstance(value, dict):
+        raise ValueError("JSON root must be an object")
+    return value
+
+
 def validate_build_receipt(source_sha, image_ref, receipt, *, clean):
     """Require immutable image bytes tied to a verified successful GitHub builder."""
     keys = {"schema", "source_sha", "image_ref", "build_context_sha256", "image_config_sha256",
@@ -1077,7 +1092,8 @@ def _partial_source_binding(root, state, original_sha, *, runner=subprocess.run)
         "inputs_sha256": state.get("plan", {}).get("inputs_sha256")}
 
 
-def _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, original_state):
+def _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, original_state,
+        authorization, expected_authorization_sha256):
     """Build the only allowed C2-v1 to current same-operation sidecar receipt."""
     if (legacy_sha256 != _PARTIAL_V1_SIDECAR_SHA256
         or not isinstance(legacy, dict)
@@ -1088,13 +1104,29 @@ def _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, origina
         or set(binding) != {"old_source_sha", "candidate_source_sha", "changed_files", "backend_tree",
             "build_receipt_sha256", "image_ref", "source_plan_sha256", "source_capture_sha256", "inputs_sha256"}
         or not isinstance(binding.get("changed_files"), dict)
-        or binding.get("candidate_source_sha") == _PARTIAL_V1_CANDIDATE_SHA
         or not isinstance(binding.get("candidate_source_sha"), str)
         or not SOURCE.fullmatch(binding["candidate_source_sha"])
         or set(binding["changed_files"]) != _PARTIAL_CHANGED_PATHS
         or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
             for value in binding["changed_files"].values())):
         _blocked("gis_dev_partial_v1_transition_invalid")
+    required_authorization = {"schema", "operation", "namespace_uid", "original_journal_sha256",
+        "previous_sidecar_sha256", "target_source_sha", "target_changed_files", "protected_binding"}
+    protected = {key: binding[key] for key in ("old_source_sha", "backend_tree", "build_receipt_sha256",
+        "image_ref", "source_plan_sha256", "source_capture_sha256", "inputs_sha256")}
+    if (not isinstance(authorization, dict) or set(authorization) != required_authorization
+        or authorization.get("schema") != "voice-dev-gis-recovery-authorization-v1"
+        or not isinstance(expected_authorization_sha256, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_authorization_sha256)
+        or _digest(authorization) != expected_authorization_sha256
+        or authorization.get("operation") != _PARTIAL_OPERATION
+        or authorization.get("namespace_uid") != original_state.get("namespace_uid")
+        or authorization.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or authorization.get("previous_sidecar_sha256") != _PARTIAL_V1_SIDECAR_SHA256
+        or authorization.get("target_source_sha") != binding["candidate_source_sha"]
+        or authorization.get("target_changed_files") != binding["changed_files"]
+        or authorization.get("protected_binding") != protected):
+        _blocked("gis_dev_partial_authorization_invalid")
     expected_legacy_binding = copy.deepcopy(binding)
     expected_legacy_binding["candidate_source_sha"] = _PARTIAL_V1_CANDIDATE_SHA
     expected_legacy_binding["changed_files"] = copy.deepcopy(_PARTIAL_V1_CHANGED_FILES)
@@ -1135,14 +1167,17 @@ def _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, origina
         "previous_state_sha256": _digest(prior),
         "source_transition": transition,
         "binding": copy.deepcopy(binding),
+        "authorization_sha256": expected_authorization_sha256,
         "secret_fingerprints_sha256": _digest(fingerprints),
         "state": copy.deepcopy(prior),
     }
 
 
-def _partial_v2_admissible(current, legacy, legacy_sha256, binding, fingerprints, original_state):
+def _partial_v2_admissible(current, legacy, legacy_sha256, binding, fingerprints, original_state,
+        authorization, expected_authorization_sha256):
     """Validate the current receipt against both immutable v1 history and source."""
-    expected = _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, original_state)
+    expected = _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, original_state,
+        authorization, expected_authorization_sha256)
     if (not isinstance(current, dict)
         or set(current) != set(expected)
         or any(current.get(key) != value for key, value in expected.items() if key != "state")):
@@ -1301,7 +1336,7 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
             builder_run=38984047252, builder_job=117252300427,
             local_build=False, local_build_receipt=None, build_receipt_factory=source_build_receipt,
             secret_plan_factory=build_secret_plan, source_verifier=verify_current_source,
-            resume_partial=False):
+            resume_partial=False, recovery_authorization=None, recovery_authorization_sha256=None):
     """Run the fixed DEV-only install through source, DB, Secret, and GIS guards."""
     if not apply:
         _blocked("gis_dev_apply_flag_required")
@@ -1362,6 +1397,16 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
         if namespace["uid"] != original_state.get("namespace_uid"):
             _blocked("gis_dev_partial_namespace_changed")
         binding = _partial_source_binding(root, original_state, _PARTIAL_JOURNAL_SHA256)
+        if not recovery_authorization or not recovery_authorization_sha256:
+            _blocked("gis_dev_partial_authorization_required")
+        try:
+            authorization_raw = _read_private_continuation(recovery_authorization,
+                maximum_size=16384, exact_mode=0o600)
+            authorization = _strict_json_object(authorization_raw)
+        except Exception:
+            _blocked("gis_dev_partial_authorization_invalid")
+        if hashlib.sha256(authorization_raw).hexdigest() != recovery_authorization_sha256:
+            _blocked("gis_dev_partial_authorization_invalid")
         try:
             legacy_raw = _read_private_continuation(legacy_continuation_path)
             legacy = json.loads(legacy_raw)
@@ -1377,11 +1422,11 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
                 _blocked("gis_dev_partial_sidecar_invalid")
             continuation_sha256 = hashlib.sha256(raw).hexdigest()
             _partial_v2_admissible(continuation, legacy, legacy_sha256,
-                binding, fingerprints, original_state)
+                binding, fingerprints, original_state, authorization, recovery_authorization_sha256)
             prior = continuation.get("state")
         else:
             continuation = _partial_v1_transition(legacy, legacy_sha256,
-                binding, fingerprints, original_state)
+                binding, fingerprints, original_state, authorization, recovery_authorization_sha256)
             continuation_sha256 = _save_continuation(continuation_path, continuation)
             prior = continuation["state"]
         if (not isinstance(prior, dict) or prior.get("operation") != _PARTIAL_OPERATION
@@ -1523,7 +1568,7 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
         raise
 
 
-def _read_private_continuation(path):
+def _read_private_continuation(path, *, maximum_size=4 * 1024 * 1024, exact_mode=None):
     """Read an owner-only regular continuation file without following links."""
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
@@ -1534,13 +1579,17 @@ def _read_private_continuation(path):
         _blocked("gis_dev_partial_sidecar_invalid")
     try:
         info = os.fstat(fd)
-        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > maximum_size
             or (os.name != "nt" and info.st_mode & 0o077)
+            or (exact_mode is not None and os.name != "nt" and stat.S_IMODE(info.st_mode) != exact_mode)
             or (hasattr(os, "geteuid") and info.st_uid != os.geteuid())):
             _blocked("gis_dev_partial_sidecar_permissions_invalid")
         with os.fdopen(fd, "rb") as stream:
             fd = None
-            return stream.read()
+            raw = stream.read(maximum_size + 1)
+            if len(raw) > maximum_size:
+                _blocked("gis_dev_partial_sidecar_size_invalid")
+            return raw
     finally:
         if fd is not None:
             os.close(fd)
@@ -1615,6 +1664,8 @@ def main(argv=None):
     parser.add_argument("--apply", action="store_true", help="run guarded DEV Secret, migration, and workload steps")
     parser.add_argument("--resume-partial-operation", action="store_true",
         help="continue only the frozen GIS operation 737e63e3aaee through its reviewed sidecar")
+    parser.add_argument("--recovery-authorization", help="dispatcher-issued exact-source recovery authorization receipt")
+    parser.add_argument("--recovery-authorization-sha256", help="independently granted SHA-256 for that authorization receipt")
     args = parser.parse_args(argv)
     try:
         if args.build_and_publish:
@@ -1650,7 +1701,9 @@ def main(argv=None):
             _blocked("gis_dev_install_arguments_invalid")
         ready = install(args.source_root, args.image_ref, args.state, apply=args.apply,
             builder_run=args.builder_run, builder_job=args.builder_job, local_build=args.local_build,
-            resume_partial=args.resume_partial_operation)
+            resume_partial=args.resume_partial_operation,
+            recovery_authorization=args.recovery_authorization,
+            recovery_authorization_sha256=args.recovery_authorization_sha256)
         print("GIS_DEV_FIRST_INSTALL=READY " + ready["deployment_uid"])
         return 0
     except Blocked as error:
