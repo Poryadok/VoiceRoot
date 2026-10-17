@@ -98,6 +98,14 @@ func TestArchiveJobVAPValidatesProducerOutput(t *testing.T) {
 	if err := createJob(ctx, runner, base); err != nil {
 		t.Fatalf("producer archive Job rejected by VAP/Kubernetes: %v", err)
 	}
+	for _, removedPhase := range []string{"restore", "bind-restore", "verification-session"} {
+		candidate := base.DeepCopy()
+		candidate.Labels["voice.io/nats-job-phase"] = removedPhase
+		candidate.Spec.Template.Labels["voice.io/nats-job-phase"] = removedPhase
+		if err := createJob(ctx, runner, candidate); err == nil || !strings.Contains(err.Error(), jobPolicyName) {
+			t.Errorf("removed Job phase %q was not denied by VAP: %v", removedPhase, err)
+		}
+	}
 	census := decodeFixtureJob(t, fixture.CensusJob)
 	for _, tc := range []struct {
 		name string
@@ -137,46 +145,6 @@ func TestArchiveJobVAPValidatesProducerOutput(t *testing.T) {
 	if err := createJob(ctx, runner, census); err != nil {
 		t.Fatalf("producer census Job rejected by VAP/Kubernetes: %v", err)
 	}
-	restore := decodeFixtureJob(t, fixture.RestoreJob)
-	for _, tc := range []struct {
-		name string
-		edit func(*batchv1.Job)
-	}{
-		{"source PVC co-mounted", func(j *batchv1.Job) {
-			j.Spec.Template.Spec.Volumes = append(j.Spec.Template.Spec.Volumes, corev1.Volume{Name: "source", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "voice-nats-jsdata-d20261017a", ReadOnly: true}}})
-		}},
-		{"restore claim attempt changed", func(j *batchv1.Job) {
-			j.Spec.Template.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = "voice-nats-restore-0123456789ab-deadbeee"
-		}},
-		{"restore mount is read only", func(j *batchv1.Job) { j.Spec.Template.Spec.Containers[0].VolumeMounts[0].ReadOnly = true }},
-		{"restore volume is read only", func(j *batchv1.Job) { j.Spec.Template.Spec.Volumes[0].PersistentVolumeClaim.ReadOnly = true }},
-		{"wrong restore fsGroup", func(j *batchv1.Job) { j.Spec.Template.Spec.SecurityContext.FSGroup = i64ptr(65532) }},
-		{"restore attempt argv changed", func(j *batchv1.Job) { j.Spec.Template.Spec.Containers[0].Args[6] = "deadbeee" }},
-		{"restore PVC UID changed", func(j *batchv1.Job) {
-			j.Spec.Template.Spec.Containers[0].Args[8] = "77777777-7777-4777-8777-777777777777"
-		}},
-		{"wrong actor", func(j *batchv1.Job) {}},
-	} {
-		t.Run("restore "+tc.name, func(t *testing.T) {
-			candidate := restore.DeepCopy()
-			tc.edit(candidate)
-			client := runner
-			if tc.name == "wrong actor" {
-				client = clientAs(ctx, t, cfg, "system:serviceaccount:voice-staging:default")
-			}
-			err := createJob(ctx, client, candidate)
-			if err == nil {
-				_ = admin.BatchV1().Jobs(namespace).Delete(ctx, candidate.Name, metav1.DeleteOptions{})
-				t.Fatalf("mutated restore Job was not denied by VAP")
-			}
-			if !strings.Contains(err.Error(), jobPolicyName) {
-				t.Fatalf("mutated restore Job failed outside the VAP: %v", err)
-			}
-		})
-	}
-	if err := createJob(ctx, runner, restore); err != nil {
-		t.Fatalf("producer restore Job rejected by VAP/Kubernetes: %v", err)
-	}
 }
 
 func producerJob(t *testing.T, fixture producerFixture) *batchv1.Job {
@@ -200,7 +168,7 @@ func installArchiveJobPolicy(ctx context.Context, t *testing.T, client *kubernet
 	t.Helper()
 	fail, equivalent, scope := admissionv1.Fail, admissionv1.Equivalent, admissionv1.NamespacedScope
 	validations := []admissionv1.Validation{{Expression: "request.namespace == 'voice-staging'", Message: jobDenyMessage}, {Expression: "request.userInfo.username == '" + stagingRunner + "'", Message: jobDenyMessage}}
-	for _, job := range []map[string]interface{}{fixture.Job, fixture.CensusJob, fixture.RestoreJob} {
+	for _, job := range []map[string]interface{}{fixture.Job, fixture.CensusJob} {
 		phase := job["metadata"].(map[string]interface{})["labels"].(map[string]interface{})["voice.io/nats-job-phase"].(string)
 		for _, expr := range exactJobCELExpressions(job) {
 			if strings.HasPrefix(expr, "object.spec.template.spec.containers[0].image == ") {
@@ -209,7 +177,7 @@ func installArchiveJobPolicy(ctx context.Context, t *testing.T, client *kubernet
 			validations = append(validations, admissionv1.Validation{Expression: "object.metadata.labels['voice.io/nats-job-phase'] != '" + phase + "' || (" + expr + ")", Message: jobDenyMessage})
 		}
 	}
-	for _, expr := range []string{"!has(object.spec.template.spec.nodeName)", "object.metadata.labels['voice.io/nats-job-phase'] != 'archive' || !has(object.spec.template.spec.securityContext.fsGroup)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly) || object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly == false)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.containers[0].volumeMounts[0].readOnly) || object.spec.template.spec.containers[0].volumeMounts[0].readOnly == false)", "object.metadata.labels['voice.io/nats-job-phase'] != 'restore' || (!has(object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly) || object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly == false)", "object.metadata.labels['voice.io/nats-job-phase'] != 'restore' || (!has(object.spec.template.spec.containers[0].volumeMounts[0].readOnly) || object.spec.template.spec.containers[0].volumeMounts[0].readOnly == false)", "!has(object.spec.template.spec.hostNetwork) || object.spec.template.spec.hostNetwork == false", "!has(object.spec.template.spec.shareProcessNamespace) || object.spec.template.spec.shareProcessNamespace == false", "!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0", "!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0"} {
+	for _, expr := range []string{"object.metadata.labels['voice.io/nats-job-phase'] in ['archive','census']", "!has(object.spec.template.spec.nodeName)", "object.metadata.labels['voice.io/nats-job-phase'] != 'archive' || !has(object.spec.template.spec.securityContext.fsGroup)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly) || object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly == false)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.containers[0].volumeMounts[0].readOnly) || object.spec.template.spec.containers[0].volumeMounts[0].readOnly == false)", "!has(object.spec.template.spec.hostNetwork) || object.spec.template.spec.hostNetwork == false", "!has(object.spec.template.spec.shareProcessNamespace) || object.spec.template.spec.shareProcessNamespace == false", "!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0", "!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0"} {
 		validations = append(validations, admissionv1.Validation{Expression: expr, Message: jobDenyMessage})
 	}
 	paramKind := &admissionv1.ParamKind{APIVersion: "v1", Kind: "ConfigMap"}

@@ -43,6 +43,9 @@ func TestProducerBinderPodsPassVAPAndKubernetes(t *testing.T) {
 	installBinderPodVAP(ctx, t, admin, fixture)
 	controller := clientAs(ctx, t, cfg, controllerFixtureUser)
 	for phase, raw := range fixture.BindJobs {
+		if phase != "bind-verification" {
+			continue
+		}
 		t.Run(phase, func(t *testing.T) {
 			job := decodeFixtureJob(t, raw)
 			base := podFromBinderJob(job)
@@ -112,35 +115,13 @@ func TestProducerBinderPodsPassVAPAndKubernetes(t *testing.T) {
 	if _, err := controller.CoreV1().Pods(namespace).Create(ctx, censusPod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("producer census Pod rejected: %v", err)
 	}
-	restorePod := podFromBinderJob(decodeFixtureJob(t, fixture.RestoreJob))
-	for _, tc := range []struct {
-		name string
-		edit func(*v1.Pod)
-	}{
-		{"source PVC co-mounted", func(p *v1.Pod) {
-			p.Spec.Volumes = append(p.Spec.Volumes, v1.Volume{Name: "source", VolumeSource: v1.VolumeSource{PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "voice-nats-jsdata-d20261017a", ReadOnly: true}}})
-		}},
-		{"wrong restore claim attempt", func(p *v1.Pod) {
-			p.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = "voice-nats-restore-0123456789ab-deadbeee"
-		}},
-		{"wrong restore fsGroup", func(p *v1.Pod) { p.Spec.SecurityContext.FSGroup = i64ptr(65532) }},
-		{"wrong restore UID", func(p *v1.Pod) { p.Spec.SecurityContext.RunAsUser = i64ptr(65532) }},
-		{"wrong actor", func(p *v1.Pod) {}},
-	} {
-		t.Run("restore Pod "+tc.name, func(t *testing.T) {
-			candidate := restorePod.DeepCopy()
-			tc.edit(candidate)
-			actor := controller
-			if tc.name == "wrong actor" {
-				actor = clientAs(ctx, t, cfg, stagingRunner)
-			}
-			if _, err := actor.CoreV1().Pods(namespace).Create(ctx, candidate, metav1.CreateOptions{}); err == nil || !strings.Contains(err.Error(), podPolicyID) {
-				t.Fatalf("mutated restore Pod was not denied by VAP: %v", err)
-			}
-		})
-	}
-	if _, err := controller.CoreV1().Pods(namespace).Create(ctx, restorePod, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("producer restore Pod rejected: %v", err)
+	for _, removedPhase := range []string{"restore", "bind-restore", "verification-session"} {
+		candidate := censusPod.DeepCopy()
+		candidate.Name += "-" + removedPhase
+		candidate.Labels["voice.io/nats-job-phase"] = removedPhase
+		if _, err := controller.CoreV1().Pods(namespace).Create(ctx, candidate, metav1.CreateOptions{}); err == nil || !strings.Contains(err.Error(), podPolicyID) {
+			t.Errorf("removed Pod phase %q was not denied by VAP: %v", removedPhase, err)
+		}
 	}
 	if err := admin.CoreV1().ConfigMaps(namespace).Delete(ctx, podParamsName, metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
@@ -166,6 +147,7 @@ func installBinderPodVAP(ctx context.Context, t *testing.T, client *kubernetes.C
 	validations := []admissionv1.Validation{
 		{Expression: "request.namespace == 'voice-staging'", Message: podPolicyMessage},
 		{Expression: "request.userInfo.username == params.data['job_controller_username']", Message: podPolicyMessage},
+		{Expression: "object.metadata.labels['voice.io/nats-job-phase'] in ['archive','census','bind-verification']", Message: podPolicyMessage},
 		{Expression: "!has(object.spec.nodeName)", Message: podPolicyMessage},
 		{Expression: "!has(object.spec.hostNetwork) || object.spec.hostNetwork == false", Message: podPolicyMessage},
 		{Expression: "!has(object.spec.shareProcessNamespace) || object.spec.shareProcessNamespace == false", Message: podPolicyMessage},
@@ -177,9 +159,11 @@ func installBinderPodVAP(ctx context.Context, t *testing.T, client *kubernetes.C
 	jobs := map[string]map[string]interface{}{
 		"archive": fixture.Job,
 		"census":  fixture.CensusJob,
-		"restore": fixture.RestoreJob,
 	}
 	for phase, raw := range fixture.BindJobs {
+		if phase != "bind-verification" {
+			continue
+		}
 		jobs[phase] = raw
 	}
 	for phase, raw := range jobs {
