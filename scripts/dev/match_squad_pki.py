@@ -457,22 +457,14 @@ def _read_staged_manifest(journal, *, stage_first=False):
 
 def _ensure_volume_absent_or_owned(operation_id):
     name = 'voice-dev-match-squad-pki'
-    listing = run_result(['docker', 'volume', 'ls', '--filter', 'name=' + name, '--format={{.Name}}'])
+    listing = run_result(['docker', 'volume', 'ls', '--format={{.Name}}'])
     if listing.returncode:
         raise ValueError('issuer volume inventory failed')
     existing_names = listing.stdout.splitlines()
-    if existing_names:
-        if existing_names != [name]:
-            raise ValueError('issuer volume inventory returned an unexpected identity')
-        inspect = run_result(['docker', 'volume', 'inspect', '--format={{json .Labels}}', name])
-        if inspect.returncode:
-            raise ValueError('issuer volume ownership inspection failed')
-        try:
-            labels = json.loads(inspect.stdout)
-        except json.JSONDecodeError as exc:
-            raise ValueError('issuer volume ownership is unproven') from exc
-        if labels != {'voice.environment': 'dev', 'voice.dev/match-squad-pki-operation': operation_id}:
-            raise ValueError('dedicated MatchSquad issuer volume belongs to another operation')
+    if existing_names.count(name) > 1 or len(existing_names) != len(set(existing_names)):
+        raise ValueError('issuer volume inventory returned duplicate identities')
+    if name in existing_names:
+        _verify_volume_owned(operation_id)
         return name
     create = run_result(['docker', 'volume', 'create', '--label', 'voice.environment=dev',
                          '--label', 'voice.dev/match-squad-pki-operation=' + operation_id, name])
@@ -483,17 +475,20 @@ def _ensure_volume_absent_or_owned(operation_id):
 
 def _verify_volume_owned(operation_id):
     name = 'voice-dev-match-squad-pki'
-    listing = run_result(['docker', 'volume', 'ls', '--filter', 'name=' + name, '--format={{.Name}}'])
-    if listing.returncode or listing.stdout.splitlines() != [name]:
-        raise ValueError('staged issuer volume is missing or ambiguous')
-    inspect = run_result(['docker', 'volume', 'inspect', '--format={{json .Labels}}', name])
+    inspect = run_result(['docker', 'volume', 'inspect', name])
     if inspect.returncode:
         raise ValueError('issuer volume ownership inspection failed')
     try:
-        labels = json.loads(inspect.stdout)
+        rows = json.loads(inspect.stdout)
     except json.JSONDecodeError as exc:
         raise ValueError('issuer volume ownership is unproven') from exc
-    if labels != {'voice.environment': 'dev', 'voice.dev/match-squad-pki-operation': operation_id}:
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+        raise ValueError('issuer volume inspection returned an unexpected identity')
+    volume = rows[0]
+    if (volume.get('Name') != name or volume.get('Driver') != 'local' or
+            volume.get('Scope') != 'local' or
+            volume.get('Labels') != {'voice.environment': 'dev',
+                                     'voice.dev/match-squad-pki-operation': operation_id}):
         raise ValueError('staged issuer volume belongs to another operation')
     return name
 
