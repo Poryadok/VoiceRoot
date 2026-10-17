@@ -1123,7 +1123,10 @@ class PartialV5DeploymentAdoptionTests(unittest.TestCase):
             "database": {"owner": "voice", "migration_state": {"version": 31, "dirty": False}},
             "service": service, "deployment": deployment, "deployment_pods": []}
         v4_state = {"phase": "SECRETS_APPLIED", "plan_phase": None,
-            "plan": {"phase": "PLANNED", "created": {}}}
+            "plan": {"phase": "PLANNED", "created": {
+                "Service/voice-gameintegration": {
+                    "uid": service["uid"], "resourceVersion": service["resourceVersion"],
+                    "spec_sha256": "a" * 64}}}}
         record = {"uid": deployment["uid"], "resourceVersion": deployment["resourceVersion"],
             "spec_sha256": deployment["semantic_sha256"]}
         v5_state = copy.deepcopy(v4_state)
@@ -1181,6 +1184,50 @@ class PartialV5DeploymentAdoptionTests(unittest.TestCase):
                     gis._partial_v5_admissible(v5, "3" * 64, v4, v4_sha,
                         binding, {}, {"namespace_uid": "ns"}, authorization, "f" * 64,
                         "0" * 64, "0" * 64, object(), Path("."))
+
+    def test_v5_accepts_only_the_exact_normal_resource_receipt_delta(self):
+        v5, v4, binding, checkpoint, authorization, v4_sha, _ = self.fixture()
+        service = v5["state"]["plan"]["created"]["Service/voice-gameintegration"]
+        deployment = v5["state"]["plan"]["created"]["Deployment/voice-gameintegration"]
+        v5["state"]["plan"]["phase"] = "STARTING"
+        v5["state"]["plan_phase"] = "STARTING"
+        v5["state"]["plan"]["receipt"] = {
+            "schema": gis.RESOURCE_RECEIPT_SCHEMA,
+            "operation": gis._PARTIAL_OPERATION,
+            "objects": {
+                "Service/voice-gameintegration": {"uid": service["uid"],
+                    "spec_sha256": service["spec_sha256"]},
+                "Deployment/voice-gameintegration": {"uid": deployment["uid"],
+                    "spec_sha256": deployment["spec_sha256"]}}}
+        with (patch.object(gis, "_partial_live_c10_checkpoint", return_value=checkpoint),
+              patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]),
+              patch.object(gis, "_partial_state_compatible", return_value=True)):
+            self.assertTrue(gis._partial_v5_admissible(v5, "3" * 64, v4, v4_sha,
+                binding, {}, {"namespace_uid": "ns"}, authorization, "f" * 64,
+                "0" * 64, "0" * 64, object(), Path(".")))
+            for mutate in (
+                    lambda receipt: receipt.update(operation="foreign-operation"),
+                    lambda receipt: receipt["objects"]["Service/voice-gameintegration"].update(uid="foreign-uid"),
+                    lambda receipt: receipt["objects"]["Deployment/voice-gameintegration"].update(spec_sha256="b" * 64),
+                    lambda receipt: receipt["objects"].update(extra={"uid": "x", "spec_sha256": "c" * 64})):
+                changed = copy.deepcopy(v5)
+                mutate(changed["state"]["plan"]["receipt"])
+                with self.assertRaises(gis.Blocked):
+                    gis._partial_v5_admissible(changed, "3" * 64, v4, v4_sha,
+                        binding, {}, {"namespace_uid": "ns"}, authorization, "f" * 64,
+                        "0" * 64, "0" * 64, object(), Path("."))
+
+    def test_v5_starting_intent_requires_its_resource_receipt(self):
+        v5, v4, binding, checkpoint, authorization, v4_sha, _ = self.fixture()
+        v5["state"]["plan"]["phase"] = "STARTING"
+        v5["state"]["plan_phase"] = "STARTING"
+        with (patch.object(gis, "_partial_live_c10_checkpoint", return_value=checkpoint),
+              patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]),
+              patch.object(gis, "_partial_state_compatible", return_value=True)):
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v5_admissible(v5, "3" * 64, v4, v4_sha,
+                    binding, {}, {"namespace_uid": "ns"}, authorization, "f" * 64,
+                    "0" * 64, "0" * 64, object(), Path("."))
 
     def _recover(self, v5, v4, binding, checkpoint, authorization, v4_sha):
         saved = []

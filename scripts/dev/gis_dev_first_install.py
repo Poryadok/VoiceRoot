@@ -2401,6 +2401,25 @@ def _partial_v5_admissible(v5, v5_sha256, v4, v4_sha256, binding,
         or v5_state.get("plan_phase") not in (None, v5_plan.get("phase"))):
         _blocked("gis_dev_partial_v5_state_changed")
     v5_plan.get("created", {}).pop("Deployment/voice-gameintegration", None)
+    receipt = v5_plan.get("receipt")
+    if receipt is not None:
+        receipt_objects = {}
+        for key in ("Service/voice-gameintegration", "Deployment/voice-gameintegration"):
+            record = v5_plan.get("created", {}).get(key)
+            if (not isinstance(record, dict)
+                or not isinstance(record.get("uid"), str)
+                or not isinstance(record.get("spec_sha256"), str)
+                or not HASH.fullmatch(record["spec_sha256"])):
+                _blocked("gis_dev_partial_v5_state_changed")
+            receipt_objects[key] = {"uid": record["uid"],
+                "spec_sha256": record["spec_sha256"]}
+        expected_receipt = {"schema": gis.RESOURCE_RECEIPT_SCHEMA,
+            "operation": _PARTIAL_OPERATION, "objects": receipt_objects}
+        if receipt != expected_receipt:
+            _blocked("gis_dev_partial_v5_state_changed")
+        v5_plan.pop("receipt", None)
+    elif v5_plan.get("phase") != "PLANNED":
+        _blocked("gis_dev_partial_v5_state_changed")
     v5_plan["phase"] = v4_plan.get("phase")
     v5_state["plan_phase"] = v4_state.get("plan_phase")
     v5_state["phase"] = v4_state.get("phase")
