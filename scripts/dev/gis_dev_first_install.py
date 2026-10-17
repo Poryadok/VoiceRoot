@@ -1244,7 +1244,8 @@ def _partial_v2_admissible(current, legacy, legacy_sha256, binding, fingerprints
 
 
 def _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256, c5_authorization_sha256,
-        binding, fingerprints, original_state, authorization, expected_authorization_sha256,
+        binding, fingerprints, original_state, authorization, verified_authorization_sha256,
+        expected_authorization_sha256,
         kube, root, code_capture):
     """Create the one reviewed C5 checkpoint transition without editing v1/v2."""
     required = {"schema", "operation", "namespace_uid", "original_journal_sha256",
@@ -1304,8 +1305,9 @@ def _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256, c5_authorization
         "namespace_uid": original_state.get("namespace_uid")}
     if (not isinstance(authorization, dict) or set(authorization) != required
         or authorization.get("schema") != "voice-dev-gis-recovery-transition-authorization-v1"
+        or not isinstance(verified_authorization_sha256, str) or not HASH.fullmatch(verified_authorization_sha256)
         or not isinstance(expected_authorization_sha256, str) or not HASH.fullmatch(expected_authorization_sha256)
-        or _digest(authorization) != expected_authorization_sha256
+        or verified_authorization_sha256 != expected_authorization_sha256
         or authorization.get("operation") != _PARTIAL_OPERATION
         or authorization.get("namespace_uid") != original_state.get("namespace_uid")
         or authorization.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
@@ -1389,7 +1391,7 @@ def _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256, c5_authorization
 
 def _partial_v3_admissible(current, current_v2, current_v2_sha256,
         c5_authorization_sha256, binding, fingerprints, original_state, authorization,
-        expected_authorization_sha256, root):
+        verified_authorization_sha256, expected_authorization_sha256, root):
     """Validate the C5 checkpoint bridge on every C6 resume without mutating v1/v2."""
     if (current_v2_sha256 != _PARTIAL_C5_V2_SHA256
         or c5_authorization_sha256 != _PARTIAL_C5_AUTH_SHA256
@@ -1433,8 +1435,9 @@ def _partial_v3_admissible(current, current_v2, current_v2_sha256,
         or any(previous_binding.get(key) != binding.get(key) for key in protected)
         or not isinstance(authorization, dict) or set(authorization) != auth_keys
         or authorization.get("schema") != "voice-dev-gis-recovery-transition-authorization-v1"
+        or not isinstance(verified_authorization_sha256, str) or not HASH.fullmatch(verified_authorization_sha256)
         or not isinstance(expected_authorization_sha256, str) or not HASH.fullmatch(expected_authorization_sha256)
-        or _digest(authorization) != expected_authorization_sha256
+        or verified_authorization_sha256 != expected_authorization_sha256
         or authorization.get("operation") != _PARTIAL_OPERATION
         or authorization.get("namespace_uid") != original_state.get("namespace_uid")
         or authorization.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
@@ -1754,15 +1757,13 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
                 _blocked("gis_dev_partial_c5_transition_authorization_required")
         if source_transition_authorization:
             try:
-                transition_raw = _read_private_continuation(source_transition_authorization,
-                    maximum_size=16384, exact_mode=0o600)
-                transition_authorization = _strict_json_object(transition_raw)
+                transition_authorization, transition_authorization_raw_sha256 = _read_transition_authorization(
+                    source_transition_authorization, source_transition_authorization_sha256)
             except Exception:
-                _blocked("gis_dev_partial_c5_transition_authorization_invalid")
-            if hashlib.sha256(transition_raw).hexdigest() != source_transition_authorization_sha256:
                 _blocked("gis_dev_partial_c5_transition_authorization_invalid")
         else:
             transition_authorization = None
+            transition_authorization_raw_sha256 = None
         if continuation_v3_path.exists():
             if current_v2 is None:
                 _blocked("gis_dev_partial_c5_checkpoint_invalid")
@@ -1774,13 +1775,15 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
             continuation_sha256 = hashlib.sha256(raw).hexdigest()
             _partial_v3_admissible(continuation, current_v2, current_v2_sha256,
                 c5_authorization_sha256, binding, fingerprints, original_state,
-                transition_authorization, source_transition_authorization_sha256, root)
+                transition_authorization, transition_authorization_raw_sha256,
+                source_transition_authorization_sha256, root)
             continuation_path = continuation_v3_path
             prior = continuation.get("state")
         elif current_v2 is not None:
             continuation = _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256,
                 c5_authorization_sha256, binding, fingerprints, original_state,
-                transition_authorization, source_transition_authorization_sha256,
+                transition_authorization, transition_authorization_raw_sha256,
+                source_transition_authorization_sha256,
                 kube, root, original_state.get("plan", {}).get("source_capture"))
             continuation_sha256 = _save_continuation(continuation_v3_path, continuation)
             continuation_path = continuation_v3_path
@@ -1954,6 +1957,19 @@ def _read_private_continuation(path, *, maximum_size=4 * 1024 * 1024, exact_mode
     finally:
         if fd is not None:
             os.close(fd)
+
+
+def _read_transition_authorization(path, expected_sha256):
+    """Return the parsed receipt and its verified raw-file digest."""
+    raw = _read_private_continuation(path, maximum_size=16384, exact_mode=0o600)
+    raw_sha256 = hashlib.sha256(raw).hexdigest()
+    if not isinstance(expected_sha256, str) or not HASH.fullmatch(expected_sha256) or raw_sha256 != expected_sha256:
+        _blocked("gis_dev_partial_c5_transition_authorization_invalid")
+    try:
+        authorization = _strict_json_object(raw)
+    except Exception:
+        _blocked("gis_dev_partial_c5_transition_authorization_invalid")
+    return authorization, raw_sha256
 
 
 @contextlib.contextmanager

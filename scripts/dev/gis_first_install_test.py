@@ -442,7 +442,8 @@ class PartialOperationContinuationTests(unittest.TestCase):
                 "old_source_sha", "backend_tree", "build_receipt_sha256", "image_ref",
                 "source_plan_sha256", "source_capture_sha256", "inputs_sha256")},
             "partial_checkpoint": checkpoint}
-        expected_sha = gis._digest(auth)
+        auth_raw = (json.dumps(auth, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        expected_sha = hashlib.sha256(auth_raw).hexdigest()
         proof = {"name": "voice-provision-gameintegration-runtime-role",
             "uid": "e4d29319-b765-4d19-9e89-05dce1dbc862",
             "spec_sha256": "5f95a29493a4eb0b2580899d48c0afc54740a3cd792453897eff876de9ec8ad4",
@@ -469,16 +470,39 @@ class PartialOperationContinuationTests(unittest.TestCase):
 
     def test_c5_checkpoint_transition_requires_exact_dispatcher_pins_and_preserves_job_proof(self):
         state, previous_v2, binding, fingerprints, auth, auth_sha, current = self.c5_checkpoint_fixture()
+        receipt_raw = (json.dumps(auth, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        self.assertEqual(hashlib.sha256(receipt_raw).hexdigest(), auth_sha)
+        with tempfile.TemporaryDirectory() as directory:
+            receipt_path = Path(directory) / "authorization.json"
+            receipt_path.write_bytes(receipt_raw)
+            receipt_path.chmod(0o600)
+            parsed_auth, verified_raw_sha = gis._read_transition_authorization(receipt_path, auth_sha)
+            self.assertEqual(parsed_auth, auth)
+            self.assertEqual(verified_raw_sha, auth_sha)
+            with self.assertRaises(gis.Blocked):
+                gis._read_transition_authorization(receipt_path, "0" * 64)
+            receipt_path.write_bytes(receipt_raw + b" ")
+            receipt_path.chmod(0o600)
+            with self.assertRaises(gis.Blocked):
+                gis._read_transition_authorization(receipt_path, auth_sha)
+            reformatted = json.dumps(auth, indent=2).encode()
+            receipt_path.write_bytes(reformatted)
+            receipt_path.chmod(0o600)
+            reformatted_auth, reformatted_sha = gis._read_transition_authorization(
+                receipt_path, hashlib.sha256(reformatted).hexdigest())
+            self.assertEqual(reformatted_auth, auth)
         with patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]):
             self.assertTrue(gis._partial_v3_admissible(current, previous_v2,
                 gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                binding, fingerprints, state, auth, auth_sha, Path(".")))
+                binding, fingerprints, state, parsed_auth, verified_raw_sha,
+                verified_raw_sha, Path(".")))
             resumed = copy.deepcopy(current)
             resumed["state"]["plan"]["phase"] = "CREATING"
             resumed["state"]["plan_phase"] = "CREATING"
             self.assertTrue(gis._partial_v3_admissible(resumed, previous_v2,
                 gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                binding, fingerprints, state, auth, auth_sha, Path(".")))
+                binding, fingerprints, state, parsed_auth, verified_raw_sha,
+                verified_raw_sha, Path(".")))
             for bad_v2_sha, bad_old_auth, bad_auth, bad_current, bad_binding in (
                 ("0"*64, gis._PARTIAL_C5_AUTH_SHA256, auth, current, binding),
                 (gis._PARTIAL_C5_V2_SHA256, "0"*64, auth, current, binding),
@@ -492,30 +516,44 @@ class PartialOperationContinuationTests(unittest.TestCase):
                 with self.assertRaises(gis.Blocked):
                     gis._partial_v3_admissible(bad_current, previous_v2,
                         bad_v2_sha, bad_old_auth, bad_binding, fingerprints, state,
-                        bad_auth, auth_sha, Path("."))
+                        bad_auth, verified_raw_sha, verified_raw_sha, Path("."))
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v3_admissible(current, previous_v2,
+                    gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                    binding, fingerprints, state, parsed_auth, "0" * 64,
+                    verified_raw_sha, Path("."))
             invalid = copy.deepcopy(current)
             invalid["state"]["plan"]["jobs"]["provision"]["uid"] = "foreign"
             with self.assertRaises(gis.Blocked):
                 gis._partial_v3_admissible(invalid, previous_v2,
                     gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                    binding, fingerprints, state, auth, auth_sha, Path("."))
+                    binding, fingerprints, state, parsed_auth, verified_raw_sha,
+                    verified_raw_sha, Path("."))
             invalid = copy.deepcopy(current)
             invalid["state"]["plan"]["created"][
                 "configmap/voice-gameintegration-runtime-role-sql"]["uid"] = "foreign"
             with self.assertRaises(gis.Blocked):
                 gis._partial_v3_admissible(invalid, previous_v2,
                     gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                    binding, fingerprints, state, auth, auth_sha, Path("."))
+                    binding, fingerprints, state, parsed_auth, verified_raw_sha,
+                    verified_raw_sha, Path("."))
             changed_v2 = copy.deepcopy(previous_v2)
             changed_v2["binding"]["changed_files"][
                 "scripts/dev/gis_dev_first_install.py"] = "0" * 64
             with self.assertRaises(gis.Blocked):
                 gis._partial_v3_admissible(current, changed_v2,
                     gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                    binding, fingerprints, state, auth, auth_sha, Path("."))
+                    binding, fingerprints, state, parsed_auth, verified_raw_sha,
+                    verified_raw_sha, Path("."))
 
     def test_c5_to_v3_transition_separates_frozen_c5_hashes_from_c8_target_hashes(self):
         state, previous_v2, binding, fingerprints, auth, auth_sha, _ = self.c5_checkpoint_fixture()
+        auth_raw = (json.dumps(auth, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        with tempfile.TemporaryDirectory() as directory:
+            auth_path = Path(directory) / "authorization.json"
+            auth_path.write_bytes(auth_raw)
+            auth_path.chmod(0o600)
+            parsed_auth, verified_raw_sha = gis._read_transition_authorization(auth_path, auth_sha)
         plan = previous_v2["state"]["plan"]
         import gis_prerequisite
         configmap = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {
@@ -556,8 +594,16 @@ class PartialOperationContinuationTests(unittest.TestCase):
              patch.object(gis, "_database_exists_readonly", return_value=expected_identity):
             transitioned = gis._partial_c5_checkpoint_to_v3(previous_v2,
                 gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                binding, fingerprints, state, auth, auth_sha, kube, Path("."), {})
+                binding, fingerprints, state, parsed_auth, verified_raw_sha,
+                verified_raw_sha, kube, Path("."), {})
             self.assertEqual(kube.run.call_count, 3)
+            kube.run.reset_mock()
+            with self.assertRaises(gis.Blocked):
+                gis._partial_c5_checkpoint_to_v3(previous_v2,
+                    gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                    binding, fingerprints, state, parsed_auth, "0" * 64,
+                    auth_sha, kube, Path("."), {})
+            kube.run.assert_not_called()
             for old_v2, target, target_auth, target_auth_sha in (
                 (self._mutated(previous_v2, lambda row: row["binding"]["changed_files"].update(
                     {"scripts/dev/gis_dev_first_install.py": "0" * 64})), binding, auth, auth_sha),
@@ -568,11 +614,11 @@ class PartialOperationContinuationTests(unittest.TestCase):
             ):
                 kube.run.reset_mock()
                 if target_auth_sha is None:
-                    target_auth_sha = gis._digest(target_auth)
+                    target_auth_sha = auth_sha
                 with self.assertRaises(gis.Blocked):
                     gis._partial_c5_checkpoint_to_v3(old_v2,
                         gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                        target, fingerprints, state, target_auth, target_auth_sha,
+                        target, fingerprints, state, target_auth, verified_raw_sha, target_auth_sha,
                         kube, Path("."), {})
                 kube.run.assert_not_called()
 
@@ -583,7 +629,8 @@ class PartialOperationContinuationTests(unittest.TestCase):
         with patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]):
             self.assertTrue(gis._partial_v3_admissible(transitioned, previous_v2,
                 gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
-                binding, fingerprints, previous_v2["state"], auth, auth_sha, Path(".")))
+                binding, fingerprints, previous_v2["state"], parsed_auth,
+                verified_raw_sha, verified_raw_sha, Path(".")))
         self.assertEqual(kube.run.call_count, 0)
 
     @staticmethod
