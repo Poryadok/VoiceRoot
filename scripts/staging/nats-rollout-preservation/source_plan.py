@@ -268,8 +268,21 @@ def _leaf_monitor_config(obj):
 def _application(builder):
     p = builder.p
     apps = []
+    gis_objects = []
     for path in APP_SOURCES:
         for obj in builder.documents(path, 'app-restart'):
+            if p.get('gis_first_install') is True and (obj.get('kind'), obj.get('metadata', {}).get('name')) in {
+                ('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration')
+            }:
+                # The finite first-install owns these two absent identities via
+                # create-only calls after the protected database phase. Never
+                # let the ordinary source planner turn absence into apply.
+                if obj.get('kind') == 'Deployment':
+                    _gateway_delegated_config(obj)
+                    _leaf_monitor_config(obj)
+                    _pin_images(obj, p)
+                gis_objects.append(obj)
+                continue
             if obj['kind'] == 'Deployment':
                 _gateway_delegated_config(obj)
                 _leaf_monitor_config(obj)
@@ -280,6 +293,17 @@ def _application(builder):
                 _pin_images(obj, p)
                 apps.append(obj)
             builder.add('app-restart', obj, action=True)
+    if p.get('gis_first_install') is True:
+        if p.get('mode') not in ('full', 'app-only'):
+            _fail('gis_first_install_mode_invalid')
+        identities = {(obj.get('kind'), obj.get('metadata', {}).get('name')) for obj in gis_objects}
+        expected = {('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration')}
+        if identities != expected or len(gis_objects) != 2:
+            _fail('gis_first_install_source_pair_invalid')
+        # A bounded namespace list gives authoritative presence/absence without
+        # parsing kubectl's human error text for a 404 signal.
+        require_gis_absent(builder.kube)
+        builder.gis_first_install_objects = gis_objects
     for obj in apps:
         service = obj['metadata']['name'].removeprefix('voice-')
         if service in ('file', 'user'):
@@ -449,12 +473,33 @@ def compile_plan(source, parameters, decoder, kube):
                 _fail('unsupported_enabled_observability_reconciliation')
             b.skip('observability')
         plan = {'schema': guard.SCHEMA, 'mode': p['mode'], 'checks': [b.rows[row] for row in selected], 'actions': b.actions}
+        if p.get('gis_first_install') is True:
+            plan['gis_first_install'] = {'objects': copy.deepcopy(getattr(b, 'gis_first_install_objects', []))}
         guard.preflight(kube, plan, p['mode'])
         return plan
     except PlanError:
         raise
     except Exception:
         _fail('canonical_plan_invalid')
+
+
+def require_gis_absent(kube):
+    """Require bounded, authoritative absence for the only supported pair."""
+    expected = {('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration')}
+    try:
+        response = kube.run(['get', 'services,deployments', '-o', 'json'])
+        items = response.get('items') if isinstance(response, dict) and set(response) == {'apiVersion', 'items', 'kind', 'metadata'} else None
+        if not isinstance(items, list) or len(items) > 2048:
+            _fail('gis_first_install_live_inventory_invalid')
+        found = {(row.get('kind'), row.get('metadata', {}).get('name')) for row in items
+                 if isinstance(row, dict) and isinstance(row.get('metadata'), dict)}
+    except PlanError:
+        raise
+    except Exception:
+        _fail('gis_first_install_live_read_failed')
+    if found & expected:
+        _fail('gis_first_install_identity_present')
+    return True
 
 
 def _pin_images(obj, parameters):

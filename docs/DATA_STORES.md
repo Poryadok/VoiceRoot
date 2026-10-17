@@ -36,7 +36,8 @@
 
 ### Game Integration Service (`game_integration_db`): T05 ownership target
 
-This inventory describes the target owner boundary; it is not a shipment claim.
+The service owns this database boundary. Internal DEV/STAGE deployment is
+supported; production activation remains deferred.
 The current migrations implement registry/security, credentials, installations,
 and registry operations. Session/resource mappings and managed grants remain
 future GIS-owned records under T30/T31 and later community work.
@@ -202,9 +203,9 @@ or profile IDs. This is storage evidence, not an activated party snapshot source
 
 ## Подсчёт логических PostgreSQL БД
 
-**17** current service PostgreSQL databases are listed above; **16** are provisioned in staging.
-The staging manifests still include legacy `gateway_db` and lack `game_integration_db`; the local
-Compose initializer also carries the planned `federation_db` scaffold. The game sprint in
+**17** current service PostgreSQL databases are listed above; **17** are provisioned in staging.
+The staging manifests also retain the legacy `gateway_db`; local Compose carries the planned
+`federation_db` scaffold, which remains deferred. The game sprint in
 [PLAN](PLAN.md) includes implementing its new authority store and deployment;
 the old deferred-runtime description is superseded.
 

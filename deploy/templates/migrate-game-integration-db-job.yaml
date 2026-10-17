@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-migrate-gameintegration-db
+  namespace: __K_NAMESPACE__
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: voice-migrate-gameintegration-db}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      initContainers:
+        - name: wait-postgres
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
+          command: ["/bin/sh", "-ec", "until pg_isready -h voice-postgres -p 5432 -U voice; do sleep 2; done"]
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+      containers:
+        - name: migrate
+          image: migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              rfc3986_encode_component() (
+                value=$1
+                encoded=
+                for byte in $(printf '%s' "${value}" | LC_ALL=C od -An -v -tx1); do
+                  case "${byte}" in
+                    2d|2e|3[0-9]|4[1-9a-f]|5[0-9a]|5f|6[1-9a-f]|7[0-9a]|7e)
+                      encoded="${encoded}$(printf "\\$(printf '%03o' "$((0x${byte}))")")"
+                      ;;
+                    *)
+                      encoded="${encoded}%$(printf '%s' "${byte}" | tr '[:lower:]' '[:upper:]')"
+                      ;;
+                  esac
+                done
+                printf '%s' "${encoded}"
+              )
+              encoded_user="$(rfc3986_encode_component "${POSTGRES_USER}")"
+              encoded_password="$(rfc3986_encode_component "${POSTGRES_PASSWORD}")"
+              database_url="postgres://${encoded_user}:${encoded_password}@${POSTGRES_HOST}:5432/${POSTGRES_DATABASE}?sslmode=disable"
+              exec migrate -path=/migrations -database="${database_url}" up
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST
+              value: voice-postgres
+            - name: POSTGRES_DATABASE
+              value: game_integration_db
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - {name: migrations, mountPath: /migrations, readOnly: true}
+      volumes:
+        - name: migrations
+          configMap: {name: voice-gameintegration-db-migrations}

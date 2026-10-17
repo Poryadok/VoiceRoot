@@ -2,6 +2,7 @@ analytics
 bot
 chat
 file
+gameintegration
 gateway
 matchmaking
 messaging

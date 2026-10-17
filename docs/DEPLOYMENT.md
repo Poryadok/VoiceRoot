@@ -560,7 +560,20 @@ GIS/Voice's `/internal/v1/principal/jwks.json`; the issuer keys must be exactly
 `space`, `gameintegration`, and `voice`. Keep each signing private key mounted
 only into its issuer. Phase0's GIS and Voice signer settings are
 `GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE` / `GAME_INTEGRATION_PRINCIPAL_KID`
-and `VOICE_PRINCIPAL_PRIVATE_KEY_FILE` / `VOICE_PRINCIPAL_KID`.
+and `VOICE_PRINCIPAL_PRIVATE_KEY_FILE` / `VOICE_PRINCIPAL_KID`. Staging provisions
+GIS's current/next private signing keys and its own HTTPS server certificate as
+separate operator-managed Secrets. Role trusts only the GIS public JWKS endpoint
+at `https://voice-gameintegration:8443/internal/v1/principal/jwks.json`; the
+server certificate must have SAN `voice-gameintegration` and chain to the
+configured media CA. Do not reuse Voice or Gateway key material.
+
+For the documented T58 consent resolver, GIS, Notification, and Realtime each
+receive only the workload key they use from a separate `voice-gameintegration-workload-credentials`
+Secret. The two keys must be distinct random 32-byte values, provisioned through
+the environment's secret manager; missing/malformed proof configuration remains
+fail-closed. Staging uses the internal `http://voice-gameintegration:8080`
+endpoint. This does not enable external push providers or GIS session-owner
+routes.
 
 Space signs both Role and Auth ownership calls with a fresh `service:space`
 principal bound to the exact full RPC, deterministic protobuf request hash and

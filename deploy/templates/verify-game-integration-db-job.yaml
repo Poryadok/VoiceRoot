@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-verify-gameintegration-db
+  namespace: __K_NAMESPACE__
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: voice-verify-gameintegration-db}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      initContainers:
+        - name: wait-postgres
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
+          command: ["/bin/sh", "-ec", "until pg_isready -h voice-postgres -p 5432 -U \"${POSTGRES_USER}\"; do sleep 2; done"]
+          env:
+            - name: POSTGRES_USER
+              valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+      containers:
+        - name: verify
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
+          command: ["/bin/sh", "-ec", "exec psql -X -qAt -v ON_ERROR_STOP=1 -h voice-postgres -p 5432 -U \"${POSTGRES_USER}\" -d game_integration_db -f /verify/verify.sql"]
+          env:
+            - name: POSTGRES_USER
+              valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          volumeMounts:
+            - {name: verifier, mountPath: /verify, readOnly: true}
+      volumes:
+        - name: verifier
+          configMap: {name: voice-gameintegration-db-verifier-sql}

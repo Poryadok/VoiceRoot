@@ -103,6 +103,7 @@ class Material:
 
 def application_values(jwt, gateway_host):
     pg, ch = secrets.token_hex(32), secrets.token_hex(32)
+    gameintegration_db = secrets.token_hex(32)
     values = {"POSTGRES_PASSWORD":pg, "CLICKHOUSE_PASSWORD":ch,
               "CLICKHOUSE_DSN":f"clickhouse://default:{ch}@voice-clickhouse:9000/voice",
               "AUTH_JWT_PRIVATE_KEY":jwt, "AUTH_TOTP_ENCRYPTION_KEY":secrets.token_hex(32),
@@ -112,7 +113,9 @@ def application_values(jwt, gateway_host):
               "AUTH_RESEND_API_KEY":"", "AUTH_RESEND_FROM":"Voice dev <noreply@voice.invalid>",
               "FCM_PROJECT_ID":"", "FCM_SERVICE_ACCOUNT_JSON":"", "APNS_KEY_ID":"", "APNS_TEAM_ID":"",
               "APNS_PRIVATE_KEY":"", "APNS_BUNDLE_ID":"voice.app.dev", "APNS_VOIP_TOPIC":"voice.app.dev.voip",
-              "APNS_PRODUCTION":"false"}
+              "APNS_PRODUCTION":"false",
+              "GAME_INTEGRATION_DB_PASSWORD":gameintegration_db,
+              "GAME_INTEGRATION_DATABASE_URL":f"postgres://gameintegration_runtime:{gameintegration_db}@voice-postgres:5432/game_integration_db?sslmode=disable"}
     for service in "social user chat space messaging file role matchmaking search notification bot story moderation subscription gateway voice".split():
         values[service.upper() + "_DATABASE_URL"] = f"postgres://voice:{pg}@voice-postgres:5432/{service}_db?sslmode=disable"
     for service, bucket in (("USER", "avatars"), ("FILE", "files")):
@@ -142,6 +145,16 @@ def make_truststore(root, cacerts, media_cert):
     if not before < after or len(after) != len(before) + 1:
         raise ValueError("public Java trust changed")
     return output.read_bytes()
+
+
+def add_gameintegration_issuer_material(material, media_ca):
+    """Issue distinct GIS signer/TLS Secrets for its internal JWKS endpoint."""
+    material.signer("voice-gameintegration-principal-signing", active=False)
+    material.tls("voice-gameintegration-jwks-tls", media_ca, "voice-gameintegration", "serverAuth")
+    material.add("voice-gameintegration-workload-credentials", {
+        "GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64": base64.b64encode(secrets.token_bytes(32)).decode(),
+        "GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64": base64.b64encode(secrets.token_bytes(32)).decode(),
+    })
 
 
 def validate_bundle(bundle):
@@ -179,6 +192,7 @@ def generate(destination, issuer, public_roots, java_cacerts, gateway_host, acl)
             material.tls("voice-user-file-principal-tls", principal, "voice-user", "serverAuth,clientAuth")
             for service in ("social", "file", "search", "gateway"):
                 material.signer("voice-" + service + "-principal-signing")
+            add_gameintegration_issuer_material(material, media)
             material.signer("voice-voice-principal-signing", active=False)
             for service in ("auth", "role", "voice"):
                 material.tls("voice-" + service + "-media-server-tls", media, "voice-" + service, "serverAuth")

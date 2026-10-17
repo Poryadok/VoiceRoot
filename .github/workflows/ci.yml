@@ -998,6 +998,8 @@ jobs:
           git diff --exit-code scripts/ci/staging-go-services.txt
       - name: Check staging-image-catalog drift
         run: bash scripts/ci/check-image-catalog-drift.sh
+      - name: Reject unexpected image-catalog environment exceptions
+        run: python3 scripts/ci/check-image-catalog-drift_test.py
       - name: Render stack lock
         env:
           BUILT_SERVICES: ${{ needs.changes.outputs.build_services }}

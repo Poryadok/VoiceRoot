@@ -8,6 +8,17 @@ from unittest.mock import patch
 import bridge
 
 class ReplayTests(unittest.TestCase):
+    def test_gis_first_install_is_explicit_and_only_full_or_app_only(self):
+        base={'action':'prepare','source_sha':'a'*40,'run_id':17,'mode':'full',
+              'changed_services':[],'token':'private-token','nonce':'b'*64}
+        self.assertIs(bridge.validate({**base,'gis_first_install':True})['gis_first_install'],True)
+        self.assertIs(bridge.validate({**base,'mode':'app-only','gis_first_install':True})['gis_first_install'],True)
+        for row in ({**base,'mode':'images-only','gis_first_install':True},
+                    {**base,'action':'prepare-repair','operation':'c'*12,'gis_first_install':True},
+                    {**base,'gis_first_install':False},
+                    {**base,'gis_first_install':'true'}):
+            with self.assertRaises(bridge.BridgeError):bridge.validate(row)
+
     def test_prepare_failure_retains_fixed_stage_without_exception_text(self):
         with tempfile.TemporaryDirectory() as directory:
             request={'action':'prepare','source_sha':'a'*40,'run_id':17,'mode':'images-only','changed_services':['user'],'token':'private-token','nonce':'b'*64}
