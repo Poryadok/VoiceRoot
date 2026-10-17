@@ -1,0 +1,543 @@
+{
+  "capture": "sanitized from completed DEV Job and Pod API readback; UIDs replaced; spec/default fields retained",
+  "job": {
+    "apiVersion": "batch/v1",
+    "kind": "Job",
+    "metadata": {
+      "annotations": {
+        "voice.io/match-squad-database": "matchmaking_db",
+        "voice.io/match-squad-migration-input": "9870a4d010d55c222dc870dfddcc0ede25e17f7bc9da28edba3ed7ce8aab73b5",
+        "voice.io/match-squad-migration-source": "1c1e2471e6d112e075c5f33f4f4602ceb00b0f0d",
+        "voice.io/match-squad-namespace-uid": "15950fc8-0392-4053-9156-e95e78b596f9"
+      },
+      "name": "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0",
+      "namespace": "voice-dev",
+      "uid": "fixture-job-uid"
+    },
+    "spec": {
+      "activeDeadlineSeconds": 600,
+      "backoffLimit": 0,
+      "completionMode": "NonIndexed",
+      "completions": 1,
+      "manualSelector": false,
+      "parallelism": 1,
+      "podReplacementPolicy": "TerminatingOrFailed",
+      "selector": {
+        "matchLabels": {
+          "batch.kubernetes.io/controller-uid": "fixture-job-uid"
+        }
+      },
+      "suspend": false,
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0",
+            "batch.kubernetes.io/controller-uid": "fixture-job-uid",
+            "batch.kubernetes.io/job-name": "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0",
+            "controller-uid": "fixture-job-uid",
+            "job-name": "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0"
+          }
+        },
+        "spec": {
+          "automountServiceAccountToken": false,
+          "containers": [
+            {
+              "command": [
+                "/bin/sh",
+                "-ec",
+                "database_url=$(cat /run/migration/validated-database-url) || { echo migration_source_unavailable >&2; exit 1; }\numask 077\nif migrate -path=/migrations -database \"$database_url\" up >/run/migration/migrate.stdout 2>/run/migration/migrate.stderr; then exit 0; fi\nfailure_category=unknown\nif grep -Eiq 'connection refused|i/o timeout|no such host|network is unreachable' /run/migration/migrate.stderr; then\n  failure_category=database_unavailable\nelif grep -Eiq 'password authentication failed|authentication failed|role .* does not exist' /run/migration/migrate.stderr; then\n  failure_category=database_authentication\nelif grep -Eiq 'ERROR:|pq:|syntax error|relation .* does not exist|duplicate key' /run/migration/migrate.stderr; then\n  failure_category=migration_sql\nelif grep -Eiq 'no migration|source driver|database driver' /run/migration/migrate.stderr; then\n  failure_category=migration_runner\nfi\necho migration_failed category=$failure_category exit=1 >&2\nexit 1"
+              ],
+              "image": "migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "migrate",
+              "resources": {
+                "limits": {
+                  "cpu": "500m",
+                  "memory": "512Mi"
+                },
+                "requests": {
+                  "cpu": "20m",
+                  "memory": "64Mi"
+                }
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/migrations",
+                  "name": "migrations",
+                  "readOnly": true
+                },
+                {
+                  "mountPath": "/run/migration",
+                  "name": "migration-runtime"
+                }
+              ]
+            }
+          ],
+          "dnsPolicy": "ClusterFirst",
+          "initContainers": [
+            {
+              "command": [
+                "/bin/sh",
+                "-ec",
+                "until pg_isready -h \"$EXPECTED_POSTGRES_IP\" -p 5432 -U voice -d \"$EXPECTED_DATABASE\" >/dev/null 2>&1; do sleep 2; done"
+              ],
+              "env": [
+                {
+                  "name": "EXPECTED_DATABASE",
+                  "value": "matchmaking_db"
+                },
+                {
+                  "name": "EXPECTED_POSTGRES_IP",
+                  "value": "10.42.0.32"
+                }
+              ],
+              "image": "docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "wait-postgres",
+              "resources": {
+                "limits": {
+                  "cpu": "500m",
+                  "memory": "512Mi"
+                },
+                "requests": {
+                  "cpu": "20m",
+                  "memory": "64Mi"
+                }
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File"
+            },
+            {
+              "command": [
+                "/bin/sh",
+                "-ec",
+                "case \"$DATABASE_URL\" in postgres://voice:*) ;; *) echo migration_target_url_invalid >&2; exit 1 ;; esac\nauthority_path=${DATABASE_URL#postgres://}\nuserinfo=${authority_path%%@*}\ntarget=${authority_path#*@}\ntest \"$target\" != \"$authority_path\" || { echo migration_target_url_invalid >&2; exit 1; }\ncase \"$userinfo\" in voice:*) password=${userinfo#voice:}; test -n \"$password\" || { echo migration_target_url_invalid >&2; exit 1; } ;; *) echo migration_target_url_invalid >&2; exit 1 ;; esac\ncase \"$target\" in \"voice-postgres:5432/${EXPECTED_DATABASE}?sslmode=disable\") ;; *) echo migration_target_url_invalid >&2; exit 1 ;; esac\nsealed_url=\"postgres://${userinfo}@${EXPECTED_POSTGRES_IP}:5432/${EXPECTED_DATABASE}?sslmode=disable\"\nunset PGHOST PGHOSTADDR PGPORT PGUSER PGDATABASE PGSERVICE PGSERVICEFILE PGPASSWORD\nif observed=$(psql -X -qAt -v ON_ERROR_STOP=1 -d \"$sealed_url\" -c \"SELECT current_database() || '|' || current_user || '|' || host(inet_server_addr())\" 2>/dev/null); then :; else echo migration_target_probe_failed >&2; exit 1; fi\ntest \"$observed\" = \"$EXPECTED_DATABASE|voice|$EXPECTED_POSTGRES_IP\" || { echo migration_target_mismatch >&2; exit 1; }\numask 077\ntest ! -e \"/run/migration/validated-database-url\" || { echo migration_target_already_sealed >&2; exit 1; }\n(set -C; printf '%s' \"$sealed_url\" > \"/run/migration/validated-database-url\") || { echo migration_target_seal_failed >&2; exit 1; }\nchmod 600 \"/run/migration/validated-database-url\" || { echo migration_target_seal_failed >&2; exit 1; }\nunset DATABASE_URL sealed_url userinfo authority_path target password observed"
+              ],
+              "env": [
+                {
+                  "name": "DATABASE_URL",
+                  "valueFrom": {
+                    "secretKeyRef": {
+                      "key": "MATCHMAKING_DATABASE_URL",
+                      "name": "voice-app-secrets"
+                    }
+                  }
+                },
+                {
+                  "name": "EXPECTED_DATABASE",
+                  "value": "matchmaking_db"
+                },
+                {
+                  "name": "EXPECTED_POSTGRES_IP",
+                  "value": "10.42.0.32"
+                }
+              ],
+              "image": "docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "verify-database-target",
+              "resources": {
+                "limits": {
+                  "cpu": "500m",
+                  "memory": "512Mi"
+                },
+                "requests": {
+                  "cpu": "20m",
+                  "memory": "64Mi"
+                }
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/run/migration",
+                  "name": "migration-runtime"
+                }
+              ]
+            }
+          ],
+          "restartPolicy": "Never",
+          "schedulerName": "default-scheduler",
+          "securityContext": {},
+          "terminationGracePeriodSeconds": 30,
+          "volumes": [
+            {
+              "configMap": {
+                "defaultMode": 420,
+                "name": "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0-sql"
+              },
+              "name": "migrations"
+            },
+            {
+              "emptyDir": {
+                "medium": "Memory",
+                "sizeLimit": "1Mi"
+              },
+              "name": "migration-runtime"
+            }
+          ]
+        }
+      }
+    },
+    "status": {
+      "conditions": [
+        {
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "Complete"
+        }
+      ],
+      "succeeded": 1
+    }
+  },
+  "pod": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+      "name": "fixture-job-pod",
+      "namespace": "voice-dev",
+      "ownerReferences": [
+        {
+          "apiVersion": "batch/v1",
+          "kind": "Job",
+          "name": "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0",
+          "uid": "fixture-job-uid"
+        }
+      ],
+      "uid": "fixture-pod-uid"
+    },
+    "spec": {
+      "automountServiceAccountToken": false,
+      "containers": [
+        {
+          "command": [
+            "/bin/sh",
+            "-ec",
+            "database_url=$(cat /run/migration/validated-database-url) || { echo migration_source_unavailable >&2; exit 1; }\numask 077\nif migrate -path=/migrations -database \"$database_url\" up >/run/migration/migrate.stdout 2>/run/migration/migrate.stderr; then exit 0; fi\nfailure_category=unknown\nif grep -Eiq 'connection refused|i/o timeout|no such host|network is unreachable' /run/migration/migrate.stderr; then\n  failure_category=database_unavailable\nelif grep -Eiq 'password authentication failed|authentication failed|role .* does not exist' /run/migration/migrate.stderr; then\n  failure_category=database_authentication\nelif grep -Eiq 'ERROR:|pq:|syntax error|relation .* does not exist|duplicate key' /run/migration/migrate.stderr; then\n  failure_category=migration_sql\nelif grep -Eiq 'no migration|source driver|database driver' /run/migration/migrate.stderr; then\n  failure_category=migration_runner\nfi\necho migration_failed category=$failure_category exit=1 >&2\nexit 1"
+          ],
+          "image": "migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539",
+          "imagePullPolicy": "IfNotPresent",
+          "name": "migrate",
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "terminationMessagePath": "/dev/termination-log",
+          "terminationMessagePolicy": "File",
+          "volumeMounts": [
+            {
+              "mountPath": "/migrations",
+              "name": "migrations",
+              "readOnly": true
+            },
+            {
+              "mountPath": "/run/migration",
+              "name": "migration-runtime"
+            }
+          ]
+        }
+      ],
+      "dnsPolicy": "ClusterFirst",
+      "enableServiceLinks": true,
+      "initContainers": [
+        {
+          "command": [
+            "/bin/sh",
+            "-ec",
+            "until pg_isready -h \"$EXPECTED_POSTGRES_IP\" -p 5432 -U voice -d \"$EXPECTED_DATABASE\" >/dev/null 2>&1; do sleep 2; done"
+          ],
+          "env": [
+            {
+              "name": "EXPECTED_DATABASE",
+              "value": "matchmaking_db"
+            },
+            {
+              "name": "EXPECTED_POSTGRES_IP",
+              "value": "10.42.0.32"
+            }
+          ],
+          "image": "docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb",
+          "imagePullPolicy": "IfNotPresent",
+          "name": "wait-postgres",
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "terminationMessagePath": "/dev/termination-log",
+          "terminationMessagePolicy": "File"
+        },
+        {
+          "command": [
+            "/bin/sh",
+            "-ec",
+            "case \"$DATABASE_URL\" in postgres://voice:*) ;; *) echo migration_target_url_invalid >&2; exit 1 ;; esac\nauthority_path=${DATABASE_URL#postgres://}\nuserinfo=${authority_path%%@*}\ntarget=${authority_path#*@}\ntest \"$target\" != \"$authority_path\" || { echo migration_target_url_invalid >&2; exit 1; }\ncase \"$userinfo\" in voice:*) password=${userinfo#voice:}; test -n \"$password\" || { echo migration_target_url_invalid >&2; exit 1; } ;; *) echo migration_target_url_invalid >&2; exit 1 ;; esac\ncase \"$target\" in \"voice-postgres:5432/${EXPECTED_DATABASE}?sslmode=disable\") ;; *) echo migration_target_url_invalid >&2; exit 1 ;; esac\nsealed_url=\"postgres://${userinfo}@${EXPECTED_POSTGRES_IP}:5432/${EXPECTED_DATABASE}?sslmode=disable\"\nunset PGHOST PGHOSTADDR PGPORT PGUSER PGDATABASE PGSERVICE PGSERVICEFILE PGPASSWORD\nif observed=$(psql -X -qAt -v ON_ERROR_STOP=1 -d \"$sealed_url\" -c \"SELECT current_database() || '|' || current_user || '|' || host(inet_server_addr())\" 2>/dev/null); then :; else echo migration_target_probe_failed >&2; exit 1; fi\ntest \"$observed\" = \"$EXPECTED_DATABASE|voice|$EXPECTED_POSTGRES_IP\" || { echo migration_target_mismatch >&2; exit 1; }\numask 077\ntest ! -e \"/run/migration/validated-database-url\" || { echo migration_target_already_sealed >&2; exit 1; }\n(set -C; printf '%s' \"$sealed_url\" > \"/run/migration/validated-database-url\") || { echo migration_target_seal_failed >&2; exit 1; }\nchmod 600 \"/run/migration/validated-database-url\" || { echo migration_target_seal_failed >&2; exit 1; }\nunset DATABASE_URL sealed_url userinfo authority_path target password observed"
+          ],
+          "env": [
+            {
+              "name": "DATABASE_URL",
+              "valueFrom": {
+                "secretKeyRef": {
+                  "key": "MATCHMAKING_DATABASE_URL",
+                  "name": "voice-app-secrets"
+                }
+              }
+            },
+            {
+              "name": "EXPECTED_DATABASE",
+              "value": "matchmaking_db"
+            },
+            {
+              "name": "EXPECTED_POSTGRES_IP",
+              "value": "10.42.0.32"
+            }
+          ],
+          "image": "docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb",
+          "imagePullPolicy": "IfNotPresent",
+          "name": "verify-database-target",
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "terminationMessagePath": "/dev/termination-log",
+          "terminationMessagePolicy": "File",
+          "volumeMounts": [
+            {
+              "mountPath": "/run/migration",
+              "name": "migration-runtime"
+            }
+          ]
+        }
+      ],
+      "nodeName": "pmdebook",
+      "preemptionPolicy": "PreemptLowerPriority",
+      "priority": 0,
+      "restartPolicy": "Never",
+      "schedulerName": "default-scheduler",
+      "securityContext": {},
+      "serviceAccount": "default",
+      "serviceAccountName": "default",
+      "terminationGracePeriodSeconds": 30,
+      "tolerations": [
+        {
+          "effect": "NoExecute",
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "tolerationSeconds": 300
+        },
+        {
+          "effect": "NoExecute",
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "tolerationSeconds": 300
+        }
+      ],
+      "volumes": [
+        {
+          "configMap": {
+            "defaultMode": 420,
+            "name": "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0-sql"
+          },
+          "name": "migrations"
+        },
+        {
+          "emptyDir": {
+            "medium": "Memory",
+            "sizeLimit": "1Mi"
+          },
+          "name": "migration-runtime"
+        }
+      ]
+    },
+    "status": {
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://289e034c85435950737980015ec9ce99633f3c8756caa2f42e7573ff06864d3d",
+          "image": "docker.io/migrate/migrate:v4.18.1",
+          "imageID": "docker.io/migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539",
+          "lastState": {},
+          "name": "migrate",
+          "ready": false,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                10,
+                11,
+                20,
+                26,
+                27
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/migrations",
+              "name": "migrations",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/migration",
+              "name": "migration-runtime"
+            }
+          ]
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://3001632b0d549341aa6d933defa80ef536c3c746682cab6ab0fc7d12cee32f6d",
+          "image": "docker.io/library/postgres:16-alpine",
+          "imageID": "docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb",
+          "lastState": {},
+          "name": "wait-postgres",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                10,
+                11,
+                20,
+                26,
+                27
+              ],
+              "uid": 0
+            }
+          }
+        },
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://5dc2b7dd3e851d3eaf1d98f45c2488aa17c9fd9c1fe92e56a0718d11e5ab7fa7",
+          "image": "docker.io/library/postgres:16-alpine",
+          "imageID": "docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb",
+          "lastState": {},
+          "name": "verify-database-target",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                10,
+                11,
+                20,
+                26,
+                27
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/migration",
+              "name": "migration-runtime"
+            }
+          ]
+        }
+      ],
+      "phase": "Succeeded"
+    }
+  }
+}

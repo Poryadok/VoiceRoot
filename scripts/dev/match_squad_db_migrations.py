@@ -28,6 +28,15 @@ SERVICES = ("matchmaking", "chat", "voice")
 DATABASES = {"matchmaking": "matchmaking_db", "chat": "chat_db", "voice": "voice_db"}
 BASELINES = {"matchmaking": 15, "chat": 22, "voice": 10}
 TARGETS = {"matchmaking": 18, "chat": 23, "voice": 11}
+PRIOR_MATCHMAKING_SOURCE_SHA = "1c1e2471e6d112e075c5f33f4f4602ceb00b0f0d"
+PRIOR_MATCHMAKING_INPUT_HASH = "9870a4d010d55c222dc870dfddcc0ede25e17f7bc9da28edba3ed7ce8aab73b5"
+PRIOR_MATCHMAKING_CONFIGMAP_NAME = "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0-sql"
+PRIOR_MATCHMAKING_CONFIGMAP_UID = "66de0ebb-bc2e-49c6-82dc-d6221696eb5c"
+PRIOR_MATCHMAKING_JOB_NAME = "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0"
+PRIOR_MATCHMAKING_JOB_UID = "5b581338-0e12-4199-8326-21c4ffe6b232"
+PRIOR_MATCHMAKING_POD_NAME = "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0-wl425"
+PRIOR_MATCHMAKING_POD_UID = "2f333370-91f5-439e-a6e8-bc0e61b81573"
+PRIOR_MATCHMAKING_POD_NODE_NAME = "pmdebook"
 MIGRATION_FILES = {
     "matchmaking": (
         "000016_match_deadline_squad_recovery.up.sql",
@@ -213,6 +222,7 @@ _KUBE_DEFAULTS = {
     ("template", "spec", "schedulerName"): "default-scheduler",
     ("template", "spec", "terminationGracePeriodSeconds"): 30,
     ("template", "spec", "serviceAccountName"): "default",
+    ("template", "spec", "securityContext"): {},
     ("template", "spec", "enableServiceLinks"): True,
     ("template", "spec", "preemptionPolicy"): "PreemptLowerPriority",
     ("template", "spec", "containers", "*", "imagePullPolicy"): "IfNotPresent",
@@ -575,7 +585,101 @@ def _verify_live_targets(kube, prepared):
         _blocked("migration_secret_identity_changed")
 
 
-def preflight(kube, root, expected_source, *, plan=None):
+def _completed_matchmaking_receipt(kube, root, postgres_ip):
+    item = build_plan(root, PRIOR_MATCHMAKING_SOURCE_SHA)[0]
+    if (item["input_hash"] != PRIOR_MATCHMAKING_INPUT_HASH
+            or item["configmap_name"] != PRIOR_MATCHMAKING_CONFIGMAP_NAME
+            or item["job_name"] != PRIOR_MATCHMAKING_JOB_NAME):
+        _blocked("completed_matchmaking_source_binding_invalid")
+    item = {**item, "postgres_ip": postgres_ip}
+    configmap = _get_optional(kube, "configmap", item["configmap_name"])
+    job = _get_optional(kube, "job", item["job_name"])
+    if configmap is None or job is None:
+        _blocked("completed_matchmaking_receipt_missing")
+    if configmap.get("metadata", {}).get("uid") != PRIOR_MATCHMAKING_CONFIGMAP_UID:
+        _blocked("completed_matchmaking_configmap_uid_mismatch")
+    if job.get("metadata", {}).get("uid") != PRIOR_MATCHMAKING_JOB_UID:
+        _blocked("completed_matchmaking_job_uid_mismatch")
+    validate_bound_object(configmap, item, "configmap")
+    validate_terminal_job(job, item)
+    status = job.get("status", {})
+    if (status.get("succeeded") != 1 or status.get("active") or status.get("failed")
+            or not any(condition.get("type") == "Complete"
+                and condition.get("status") == "True"
+                for condition in status.get("conditions", []) if isinstance(condition, dict))):
+        _blocked("completed_matchmaking_job_not_complete")
+
+    pods_result = kube.run(["get", "pods", "-l",
+        "batch.kubernetes.io/controller-uid=" + PRIOR_MATCHMAKING_JOB_UID, "-o", "json"])
+    pods = pods_result.get("items") if isinstance(pods_result, dict) else None
+    if not isinstance(pods, list) or len(pods) != 1:
+        _blocked("completed_matchmaking_pod_set_invalid")
+    pod = pods[0]
+    metadata = pod.get("metadata", {})
+    if (metadata.get("name") != PRIOR_MATCHMAKING_POD_NAME
+            or metadata.get("uid") != PRIOR_MATCHMAKING_POD_UID
+            or metadata.get("namespace") != NAMESPACE):
+        _blocked("completed_matchmaking_pod_identity_mismatch")
+    owners = metadata.get("ownerReferences", [])
+    if not isinstance(owners, list) or not any(
+            owner.get("kind") == "Job" and owner.get("name") == PRIOR_MATCHMAKING_JOB_NAME
+            and owner.get("uid") == PRIOR_MATCHMAKING_JOB_UID for owner in owners
+            if isinstance(owner, dict)):
+        _blocked("completed_matchmaking_pod_owner_mismatch")
+    pod_status = pod.get("status", {})
+    if pod_status.get("phase") != "Succeeded":
+        _blocked("completed_matchmaking_pod_not_succeeded")
+    _validate_completed_pod_spec(pod, job)
+    init_statuses = pod_status.get("initContainerStatuses", [])
+    container_statuses = pod_status.get("containerStatuses", [])
+    if (not isinstance(init_statuses, list) or not isinstance(container_statuses, list)
+            or {row.get("name") for row in init_statuses if isinstance(row, dict)}
+                != {"wait-postgres", "verify-database-target"}
+            or {row.get("name") for row in container_statuses if isinstance(row, dict)}
+                != {"migrate"}):
+        _blocked("completed_matchmaking_container_set_invalid")
+    for row in [*init_statuses, *container_statuses]:
+        terminated = row.get("state", {}).get("terminated", {})
+        if (not isinstance(terminated, dict) or terminated.get("exitCode") != 0
+                or row.get("restartCount") != 0):
+            _blocked("completed_matchmaking_container_not_clean")
+    return {"source_sha": PRIOR_MATCHMAKING_SOURCE_SHA,
+        "input_hash": PRIOR_MATCHMAKING_INPUT_HASH,
+        "configmap_name": item["configmap_name"],
+        "configmap_uid": PRIOR_MATCHMAKING_CONFIGMAP_UID,
+        "job_name": item["job_name"], "job_uid": PRIOR_MATCHMAKING_JOB_UID,
+        "pod_name": PRIOR_MATCHMAKING_POD_NAME, "pod_uid": PRIOR_MATCHMAKING_POD_UID}
+
+
+def _validate_completed_pod_spec(pod, job):
+    """Bind the historical Pod's actual container spec to the accepted Job template."""
+    actual = copy.deepcopy(pod.get("spec", {})) if isinstance(pod, dict) else None
+    expected = job.get("spec", {}).get("template", {}).get("spec", {})
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        _blocked("completed_matchmaking_pod_spec_invalid")
+
+    # These fields were present in the captured completed Pod but absent from
+    # the Job template: scheduler assignment and exact API defaults only.
+    assigned_defaults = {
+        "nodeName": PRIOR_MATCHMAKING_POD_NODE_NAME,
+        "priority": 0,
+        "serviceAccount": "default",
+        "tolerations": [
+            {"effect": "NoExecute", "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists", "tolerationSeconds": 300},
+            {"effect": "NoExecute", "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists", "tolerationSeconds": 300},
+        ],
+    }
+    for key, value in assigned_defaults.items():
+        if actual.pop(key, object()) != value:
+            _blocked("completed_matchmaking_pod_spec_mismatch")
+    if not _matches_kubernetes_defaults(actual, expected, path=("template", "spec")):
+        _blocked("completed_matchmaking_pod_spec_mismatch")
+    return True
+
+
+def preflight(kube, root, expected_source, *, plan=None, continue_after_matchmaking=False):
     root = Path(root).resolve(strict=True)
     actual_source, dirty = _read_source_identity(root)
     validate_source(actual_source, expected_source, clean=not dirty)
@@ -590,13 +694,27 @@ def preflight(kube, root, expected_source, *, plan=None):
     ledgers = {}
     for item in plan:
         version, dirty = _read_ledger(kube, item, pod)
-        if dirty or version != item["baseline_version"]:
+        expected_version = (item["expected_version"] if continue_after_matchmaking
+            and item["service"] == "matchmaking" else item["baseline_version"])
+        if dirty or version != expected_version:
             _blocked("migration_ledger_preflight_failed")
         ledgers[item["service"]] = (version, dirty)
+    completed_matchmaking = None
+    execution_plan = plan
+    if continue_after_matchmaking:
+        completed_matchmaking = _completed_matchmaking_receipt(kube, root, postgres_identity["pod_ip"])
+        for item in plan[1:]:
+            if (_get_optional(kube, "configmap", item["configmap_name"]) is not None
+                    or _get_optional(kube, "job", item["job_name"]) is not None):
+                _blocked("continuation_target_collision")
+        execution_plan = plan[1:]
     return {"source_sha": actual_source, "namespace_uid": NAMESPACE_UID,
             "root": str(root),
             "postgres_pod": pod, "postgres_identity": postgres_identity,
-            "credential_secret": secret_identity, "ledgers": ledgers, "plan": plan}
+            "credential_secret": secret_identity, "ledgers": ledgers, "plan": plan,
+            "execution_plan": execution_plan,
+            "continue_after_matchmaking": continue_after_matchmaking,
+            "completed_matchmaking": completed_matchmaking}
 
 
 def _get_optional(kube, kind, name):
@@ -617,16 +735,30 @@ def execute(kube, prepared, *, timeout=600, poll_seconds=2):
     validate_source(current_source, prepared.get("source_sha"), clean=not dirty)
     if prepared.get("plan") != build_plan(root, current_source):
         _blocked("prepared_source_plan_changed")
+    expected_execution_plan = (prepared["plan"][1:]
+        if prepared.get("continue_after_matchmaking") else prepared["plan"])
+    if prepared.get("execution_plan", prepared["plan"]) != expected_execution_plan:
+        _blocked("prepared_execution_plan_invalid")
     _verify_live_targets(kube, prepared)
+    if prepared.get("continue_after_matchmaking"):
+        receipt = _completed_matchmaking_receipt(
+            kube, root, prepared["postgres_identity"]["pod_ip"])
+        if receipt != prepared.get("completed_matchmaking"):
+            _blocked("completed_matchmaking_receipt_changed")
+        prior_item = build_plan(root, PRIOR_MATCHMAKING_SOURCE_SHA)[0]
+        if _read_ledger(kube, prior_item, prepared["postgres_pod"]) != (TARGETS["matchmaking"], False):
+            _blocked("completed_matchmaking_ledger_changed")
     if not isinstance(timeout, int) or not 1 <= timeout <= 600:
         _blocked("execution_timeout_invalid")
-    for original_item in prepared["plan"]:
+    for original_item in prepared.get("execution_plan", prepared["plan"]):
         item = {**original_item, "postgres_ip": prepared["postgres_identity"]["pod_ip"]}
         _verify_live_targets(kube, prepared)
         current, dirty = _read_ledger(kube, item, prepared["postgres_pod"])
         if dirty or current != item["baseline_version"]:
             _blocked("migration_ledger_changed_before_create")
         existing_cm = _get_optional(kube, "configmap", item["configmap_name"])
+        if prepared.get("continue_after_matchmaking") and existing_cm is not None:
+            _blocked("continuation_target_collision")
         if existing_cm is None:
             _verify_live_targets(kube, prepared)
             created = kube.run(["create", "-f", "/dev/stdin", "-o", "json"], body=configmap_manifest(item))
@@ -636,6 +768,8 @@ def execute(kube, prepared, *, timeout=600, poll_seconds=2):
         else:
             validate_bound_object(existing_cm, item, "configmap")
         existing_job = _get_optional(kube, "job", item["job_name"])
+        if prepared.get("continue_after_matchmaking") and existing_job is not None:
+            _blocked("continuation_target_collision")
         if existing_job is not None:
             if not existing_job.get("status", {}).get("succeeded"):
                 _blocked("existing_job_will_not_be_replayed")
@@ -670,8 +804,9 @@ def preflight_summary(prepared):
     """Expose only reviewed public identities and migration ledger metadata."""
     postgres = prepared["postgres_identity"]
     secret = prepared["credential_secret"]
-    return {
-        "mode": "preflight-only",
+    summary = {
+        "mode": ("preflight-after-matchmaking" if prepared.get("continue_after_matchmaking")
+            else "preflight-only"),
         "source_sha": prepared["source_sha"],
         "namespace": NAMESPACE,
         "namespace_uid": prepared["namespace_uid"],
@@ -697,8 +832,12 @@ def preflight_summary(prepared):
         "migration_inputs": [{"service": item["service"], "database": item["database"],
             "input_sha256": item["input_hash"],
             "up_migrations": [{"name": name, "sha256": MIGRATION_HASHES[name]}
-                for name in item["new_up_migrations"]]} for item in prepared["plan"]],
+                for name in item["new_up_migrations"]]}
+            for item in prepared.get("execution_plan", prepared["plan"])],
     }
+    if prepared.get("completed_matchmaking") is not None:
+        summary["completed_matchmaking"] = prepared["completed_matchmaking"]
+    return summary
 
 
 def main(argv=None):
@@ -708,16 +847,21 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--preflight-only", action="store_true",
         help="run read-only target identity and ledger checks; create no resources")
+    mode.add_argument("--preflight-after-matchmaking", action="store_true",
+        help="validate the pinned completed Matchmaking prefix and absent Chat/Voice targets only")
     mode.add_argument("--apply", action="store_true", help="create target-only DEV Jobs after full preflight")
+    mode.add_argument("--continue-after-matchmaking", action="store_true",
+        help="create only Chat and Voice Jobs after validating the pinned completed Matchmaking receipt")
     args = parser.parse_args(argv)
     try:
         root = Path(args.root).resolve(strict=True)
         plan = build_plan(root, args.source_sha)
-        if args.preflight_only:
-            prepared = preflight(Kubectl(), root, args.source_sha, plan=plan)
+        if args.preflight_only or args.preflight_after_matchmaking:
+            prepared = preflight(Kubectl(), root, args.source_sha, plan=plan,
+                continue_after_matchmaking=args.preflight_after_matchmaking)
             print(json.dumps(preflight_summary(prepared), sort_keys=True, separators=(",", ":")))
             return 0
-        if not args.apply:
+        if not args.apply and not args.continue_after_matchmaking:
             print(json.dumps({"namespace": NAMESPACE, "source_sha": args.source_sha,
                 "services": [{"service": row["service"], "database": row["database"],
                     "baseline": row["baseline_version"], "target": row["expected_version"],
@@ -725,7 +869,8 @@ def main(argv=None):
                 sort_keys=True, separators=(",", ":")))
             return 0
         kube = Kubectl()
-        prepared = preflight(kube, root, args.source_sha, plan=plan)
+        prepared = preflight(kube, root, args.source_sha, plan=plan,
+            continue_after_matchmaking=args.continue_after_matchmaking)
         execute(kube, prepared)
         print("MATCH_SQUAD_DEV_MIGRATIONS_COMPLETE", flush=True)
         return 0
