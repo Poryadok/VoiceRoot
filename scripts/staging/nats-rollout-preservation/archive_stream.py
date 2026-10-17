@@ -24,9 +24,10 @@ MAX_ENTRIES = 262144
 MAX_ARCHIVE_BYTES = MAX_SOURCE_BYTES + (MAX_ENTRIES * 1024) + (1 << 20)
 MAX_FRAME_BYTES = 96 << 10
 MAX_MANIFEST_BYTES = 512 << 20
-FIELDS = frozenset(('schema', 'operation', 'nonce', 'pod_uid', 'kind', 'sequence', 'data'))
-MANIFEST_FIELDS = frozenset(('schema', 'operation', 'nonce', 'pod_uid', 'kind', 'sequence', 'data'))
-END_FIELDS = frozenset(('schema', 'operation', 'nonce', 'pod_uid', 'kind', 'frames',
+FIELDS = frozenset(('schema', 'operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'source_pv_uid',
+                    'kind', 'sequence', 'data'))
+MANIFEST_FIELDS = FIELDS
+END_FIELDS = frozenset(('schema', 'operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'source_pv_uid', 'kind', 'frames',
                         'manifest_frames', 'archive_sha256', 'manifest_sha256'))
 
 
@@ -38,7 +39,8 @@ def _fail(code):
     raise ArchiveStreamError('archive_stream_' + code)
 
 
-def _frame(raw, *, operation, nonce, pod_uid, sequence, manifest_sequence):
+def _frame(raw, *, operation, nonce, pod_uid, source_pvc_uid, source_pv_uid,
+           sequence, manifest_sequence):
     if len(raw) > MAX_FRAME_BYTES or not raw.endswith(b'\n') or raw.count(b'\n') != 1:
         _fail('frame_invalid')
     try:
@@ -51,6 +53,7 @@ def _frame(raw, *, operation, nonce, pod_uid, sequence, manifest_sequence):
         expected_sequence = manifest_sequence if row['kind'] == 'manifest' else sequence
         if (set(row) != FIELDS or row.get('schema') != SCHEMA or row.get('operation') != operation
             or row.get('nonce') != nonce or row.get('pod_uid') != pod_uid
+            or row.get('source_pvc_uid') != source_pvc_uid or row.get('source_pv_uid') != source_pv_uid
             or type(row.get('sequence')) is not int or row['sequence'] != expected_sequence
             or not isinstance(row.get('data'), str) or not row['data']):
             _fail('frame_identity_invalid')
@@ -66,6 +69,7 @@ def _frame(raw, *, operation, nonce, pod_uid, sequence, manifest_sequence):
         return row, chunk
     if (set(row) != END_FIELDS or row.get('schema') != SCHEMA or row.get('operation') != operation
         or row.get('nonce') != nonce or row.get('pod_uid') != pod_uid
+        or row.get('source_pvc_uid') != source_pvc_uid or row.get('source_pv_uid') != source_pv_uid
         or row.get('kind') != 'complete' or type(row.get('frames')) is not int
         or row['frames'] != sequence or type(row.get('manifest_frames')) is not int
         or not isinstance(row.get('archive_sha256'), str)
@@ -76,7 +80,8 @@ def _frame(raw, *, operation, nonce, pod_uid, sequence, manifest_sequence):
     return row, None
 
 
-def consume(lines, artifact, *, operation, nonce, pod_uid, persist_intent, persist_result,
+def consume(lines, artifact, *, operation, nonce, pod_uid, source_pvc_uid, source_pv_uid,
+            persist_intent, persist_result,
             max_bytes=MAX_ARCHIVE_BYTES, verify_archive=None, allow_existing=False):
     """Reconstruct one already-completed archive Job's stream into private custody.
 
@@ -86,7 +91,9 @@ def consume(lines, artifact, *, operation, nonce, pod_uid, persist_intent, persi
     """
     if (not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation)
         or not isinstance(nonce, str) or not re.fullmatch('[a-f0-9]{32}', nonce)
-        or not isinstance(pod_uid, str) or not re.fullmatch('[a-f0-9-]{36}', pod_uid)
+        or not isinstance(pod_uid, str) or not re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', pod_uid)
+        or not isinstance(source_pvc_uid, str) or not re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', source_pvc_uid)
+        or not isinstance(source_pv_uid, str) or not re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', source_pv_uid)
         or type(max_bytes) is not int or not 0 < max_bytes <= MAX_ARCHIVE_BYTES):
         _fail('identity_invalid')
     target = Path(artifact)
@@ -126,7 +133,8 @@ def consume(lines, artifact, *, operation, nonce, pod_uid, persist_intent, persi
     ended = False
     try:
         persist_intent({'state': 'ARCHIVE_STREAM_INTENT', 'operation': operation,
-                        'nonce': nonce, 'pod_uid': pod_uid, 'artifact': target.name})
+                        'nonce': nonce, 'pod_uid': pod_uid, 'source_pvc_uid': source_pvc_uid,
+                        'source_pv_uid': source_pv_uid, 'artifact': target.name})
         with os.fdopen(fd, 'wb') as output:
             for part in lines:
                 if not isinstance(part, (bytes, bytearray)):
@@ -140,7 +148,8 @@ def consume(lines, artifact, *, operation, nonce, pod_uid, persist_intent, persi
                     if ended:
                         _fail('trailing_data')
                     row, chunk = _frame(raw, operation=operation, nonce=nonce,
-                        pod_uid=pod_uid, sequence=sequence, manifest_sequence=manifest_sequence)
+                        pod_uid=pod_uid, source_pvc_uid=source_pvc_uid, source_pv_uid=source_pv_uid,
+                        sequence=sequence, manifest_sequence=manifest_sequence)
                     if chunk is None:
                         ended = True
                         if digest.hexdigest() != row['archive_sha256']:
@@ -202,7 +211,8 @@ def consume(lines, artifact, *, operation, nonce, pod_uid, persist_intent, persi
         try: os.fsync(folder)
         finally: os.close(folder)
         result = {'state': 'ARCHIVE_RESULT_READBACK', 'operation': operation, 'nonce': nonce,
-                  'pod_uid': pod_uid, 'artifact': target.name, 'bytes': total,
+                  'pod_uid': pod_uid, 'source_pvc_uid': source_pvc_uid, 'source_pv_uid': source_pv_uid,
+                  'artifact': target.name, 'bytes': total,
                   'archive_sha256': digest.hexdigest(),
                   'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True,
                       separators=(',', ':')).encode()).hexdigest()}

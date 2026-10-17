@@ -563,6 +563,61 @@ class OriginalLiveCensusCheckpointTests(unittest.TestCase):
             self.assertEqual(observed['context']['original_live_census'], census)
             self.assertEqual(observed['events'][0]['live_census_sha256'], transaction.canonical(census))
 
+    def test_native_context_never_reads_or_persists_host_pv_path(self):
+        from types import SimpleNamespace
+        class Native(SimpleNamespace):
+            @property
+            def final_path(self):
+                raise AssertionError('native context must not access a host PV path')
+        stage=Native(native_api=object(), expected={}, snapshots={}, original_snapshots={},
+            old_images={}, marker={}, service={}, final_claim={},
+            final_pv={'metadata':{'name':'pv-1','uid':'pv-uid','resourceVersion':'1'}})
+        context=transaction.context(stage)
+        self.assertNotIn('final_path',context)
+        self.assertEqual(context['final_pv'],{'metadata':{'name':'pv-1','uid':'pv-uid','resourceVersion':'1'}})
+
+    def test_native_context_rejects_pv_local_path_in_metadata(self):
+        from types import SimpleNamespace
+        stage=SimpleNamespace(native_api=object(), expected={}, snapshots={}, original_snapshots={},
+            old_images={}, marker={}, service={}, final_claim={},
+            final_pv={'metadata':{'name':'pv-1','uid':'pv-uid'},'spec':{'local':{'path':'/var/lib/k3s'}}})
+        with self.assertRaisesRegex(transaction.Blocked,'rollout_native_pv_path_forbidden'):
+            transaction.context(stage)
+
+    def test_native_reconstruction_uses_typed_stage_and_readonly_recovery(self):
+        import sys
+        from types import ModuleType, SimpleNamespace
+        calls=[]
+        class NativeStage:
+            def __init__(self,kube,operation,expected,journal,*,history=(),account_id=None):
+                calls.append((kube,operation,expected,tuple(history),account_id))
+                self.native_api=kube
+                self.recovered=False
+            def recover(self):
+                self.recovered=True
+        module=ModuleType('native_runtime_stage');module.NativeRolloutStage=NativeStage
+        expected={'source_claim':'voice-nats-jsdata-d20261017x','source_claim_uid':'claim-uid'}
+        context={'expected':expected,'snapshots':{},'original_snapshots':{},'old_images':{},
+            'marker':{},'service':{},'final_claim':{},'final_pv':{'metadata':{'name':'pv','uid':'pv-uid'}}}
+        state=self.state(context=context,events=[{'kind':'rollout_marker_write_complete'}])
+        api=object()
+        with patch.dict(sys.modules,{'native_runtime_stage':module}):
+            stage=transaction.reconstruct(None,state,lambda event:None,native_api=api)
+        self.assertIs(stage.native_api,api)
+        self.assertTrue(stage.recovered)
+        self.assertEqual(calls,[(api,state['operation'],expected,tuple(state['events']),None)])
+
+    def test_pathless_native_context_cannot_reconstruct_without_typed_api(self):
+        context=self.state()['context'];context.pop('final_path')
+        state=self.state(context=context)
+        with self.assertRaisesRegex(transaction.Blocked,'rollout_native_authority_missing'):
+            transaction.reconstruct(None,state,lambda event:None)
+
+    def test_native_authority_rejects_legacy_context_with_host_path(self):
+        state=self.state()
+        with self.assertRaisesRegex(transaction.Blocked,'rollout_native_context_contains_host_path'):
+            transaction.reconstruct(None,state,lambda event:None,native_api=object())
+
     def test_corrupt_new_snapshot_fails_reconstruction_but_digest_only_old_postcut_reconstructs(self):
         old = self.state(events=[{'kind':'original_hub_shutdown_intent','live_census_sha256':'a'*64}])
         old['cut']={'manifest_sha256':'already-proved'}

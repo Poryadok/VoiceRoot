@@ -12,34 +12,93 @@ import archive_stream
 import native_store
 import preserve
 import tokenless_job
-from tokenless_job_test import BINDING, FakeAPI, RUNNER_IMAGE
+import verification_job
+from tokenless_job_test import BINDING as BASE_BINDING, FakeAPI, RUNNER_IMAGE
 
 
 OP = 'a' * 12
 NONCE = 'b' * 32
 POD_UID = '12345678-1234-1234-1234-123456789abc'
+BINDING = BASE_BINDING | {'node_hostname': 'k3s-worker-1.internal'}
 
 
 def frames(archive, manifest, *, operation=OP, nonce=NONCE, pod_uid=POD_UID,
+           source_pvc_uid=BINDING['claim_uid'], source_pv_uid=BINDING['pv_uid'],
            corrupt_digest=False):
     raw = Path(archive).read_bytes()
     for sequence, offset in enumerate(range(0, len(raw), 48 << 10)):
         yield (json.dumps({'schema':archive_stream.SCHEMA,'operation':operation,'nonce':nonce,
-            'pod_uid':pod_uid,'kind':'data','sequence':sequence,
+            'pod_uid':pod_uid,'source_pvc_uid':source_pvc_uid,'source_pv_uid':source_pv_uid,
+            'kind':'data','sequence':sequence,
             'data':base64.b64encode(raw[offset:offset+(48<<10)]).decode('ascii')},
             sort_keys=True,separators=(',',':'))+'\n').encode()
     manifest_raw = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
     for sequence, offset in enumerate(range(0, len(manifest_raw), 48 << 10)):
         yield (json.dumps({'schema':archive_stream.SCHEMA,'operation':operation,'nonce':nonce,
-            'pod_uid':pod_uid,'kind':'manifest','sequence':sequence,
+            'pod_uid':pod_uid,'source_pvc_uid':source_pvc_uid,'source_pv_uid':source_pv_uid,
+            'kind':'manifest','sequence':sequence,
             'data':base64.b64encode(manifest_raw[offset:offset+(48<<10)]).decode('ascii')},
             sort_keys=True,separators=(',',':'))+'\n').encode()
     yield (json.dumps({'schema':archive_stream.SCHEMA,'operation':operation,'nonce':nonce,
-        'pod_uid':pod_uid,'kind':'complete','frames':(len(raw)+(48<<10)-1)//(48<<10),
+        'pod_uid':pod_uid,'source_pvc_uid':source_pvc_uid,'source_pv_uid':source_pv_uid,
+        'kind':'complete','frames':(len(raw)+(48<<10)-1)//(48<<10),
         'manifest_frames':(len(manifest_raw)+(48<<10)-1)//(48<<10),
         'archive_sha256':('0'*64 if corrupt_digest else hashlib.sha256(raw).hexdigest()),
         'manifest_sha256':hashlib.sha256(manifest_raw).hexdigest()},
         sort_keys=True,separators=(',',':'))+'\n').encode()
+
+
+class CurrentArchiveAPI:
+    """Exact current verification_job API projection for archive consumer tests."""
+    def __init__(self, wanted, source_binding, stream):
+        import copy
+        self.copy=copy
+        self.wanted=wanted
+        self.source_binding=source_binding
+        self.stream=stream
+        self.calls=[];self.deleted=False
+        self.job=copy.deepcopy(wanted)
+        self.job['metadata'].update(uid='33333333-3333-4333-8333-333333333333',
+            resourceVersion='10',generation=1)
+        self.job['status']={'succeeded':0,'failed':0}
+        uid=self.job['metadata']['uid'];name=wanted['metadata']['name']
+        template=wanted['spec']['template']
+        labels=copy.deepcopy(template['metadata']['labels']) | {
+            'batch.kubernetes.io/controller-uid':uid,'controller-uid':uid,
+            'batch.kubernetes.io/job-name':name,'job-name':name}
+        self.pod={'apiVersion':'v1','kind':'Pod','metadata':{
+            'name':name+'-abcde','namespace':tokenless_job.NAMESPACE,
+            'uid':POD_UID,'labels':labels,'ownerReferences':[{
+                'apiVersion':'batch/v1','kind':'Job','name':name,'uid':uid,
+                'controller':True,'blockOwnerDeletion':True}]},
+            'spec':copy.deepcopy(template['spec']),
+            'status':{'phase':'Running','containerStatuses':[{
+                'name':'nats-phase','containerID':'containerd://'+'7'*64,
+                'ready':True,'restartCount':0}]}}
+        self.pod['spec']['nodeName']=source_binding['node_name']
+        b=source_binding
+        self.claim={'metadata':{'name':b['claim_name'],'namespace':tokenless_job.NAMESPACE,'uid':b['claim_uid']},
+            'status':{'phase':'Bound','capacity':{'storage':'100Gi'}},'spec':{'volumeName':b['pv_name']}}
+        self.pv={'metadata':{'name':b['pv_name'],'uid':b['pv_uid']},
+            'spec':{'claimRef':{'namespace':tokenless_job.NAMESPACE,'name':b['claim_name'],'uid':b['claim_uid']},
+                'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[
+                    {'key':'kubernetes.io/hostname','operator':'In','values':[b['node_hostname']]}]}]}}}}
+        self.node={'metadata':{'name':b['node_name'],'labels':{'kubernetes.io/hostname':b['node_hostname']}},
+            'status':{'conditions':[{'type':'Ready','status':'True'}]}}
+
+    def get_pvc(self,namespace,name):return self.copy.deepcopy(self.claim)
+    def get_pv(self,name):return self.copy.deepcopy(self.pv)
+    def get_node(self,name):return self.copy.deepcopy(self.node)
+    def list_operation_jobs(self,namespace,operation):return []
+    def create_job(self,namespace,value):
+        self.calls.append(('create_job',namespace,self.copy.deepcopy(value)))
+        return self.copy.deepcopy(self.job)
+    def wait_job_pod(self,namespace,name,uid,timeout):return self.copy.deepcopy(self.pod)
+    def get_job_pod(self,namespace,name):return self.copy.deepcopy(self.pod)
+    def get_job(self,namespace,name):return self.copy.deepcopy(self.job)
+    def exec_pod_verification(self,namespace,pod_name,pod_uid,request,binding,action):
+        return self.stream(request,pod_uid,action)
+    def delete_job(self,namespace,name,uid):self.deleted=True;return True
 
 
 class ArchiveStreamTests(unittest.TestCase):
@@ -65,6 +124,7 @@ class ArchiveStreamTests(unittest.TestCase):
     def consume(self, source=None, **kwargs):
         return archive_stream.consume(source or frames(self.archive, self.manifest), self.artifact,
             operation=OP,nonce=NONCE,pod_uid=POD_UID,
+            source_pvc_uid=BINDING['claim_uid'],source_pv_uid=BINDING['pv_uid'],
             persist_intent=lambda row:self.events.append(('intent',row)),
             persist_result=lambda row:self.events.append(('result',row)),
             verify_archive=native_store.verify_archive,**kwargs)
@@ -94,6 +154,9 @@ class ArchiveStreamTests(unittest.TestCase):
         with self.assertRaisesRegex(archive_stream.ArchiveStreamError, 'frame_identity_invalid'):
             self.consume(frames(self.archive,self.manifest,pod_uid='f'*36))
         self.assertFalse(self.artifact.exists())
+        with self.assertRaisesRegex(archive_stream.ArchiveStreamError, 'frame_identity_invalid'):
+            self.consume(frames(self.archive,self.manifest,source_pvc_uid='9'*8+'-'+'9'*4+'-'+'9'*4+'-'+'9'*4+'-'+'9'*12))
+        self.assertFalse(self.artifact.exists())
 
     def test_artifact_path_is_create_only(self):
         self.artifact.write_bytes(b'preexisting')
@@ -120,25 +183,18 @@ class ArchiveStreamTests(unittest.TestCase):
     def test_production_capture_cut_uses_fixed_job_stream_and_canonical_readback(self):
         public_nonce = 'd' * 64
         request = {'operation': OP, 'nonce':hashlib.sha256((public_nonce + ':cold-cut-archive').encode()).hexdigest()[:32], 'phase': 'archive'}
-        wanted = tokenless_job.document(request, BINDING, RUNNER_IMAGE)
+        wanted = verification_job.document(request, {
+            'source_claim':BINDING['claim_name'],'source_uid':BINDING['claim_uid'],
+            'source_pv_name':BINDING['pv_name'],'source_pv_uid':BINDING['pv_uid'],
+            'source_node_name':BINDING['node_name'],'source_hostname':BINDING['node_hostname']}, RUNNER_IMAGE)
+        self.assertEqual(wanted['spec']['template']['spec']['affinity']['nodeAffinity']
+            ['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms'][0]
+            ['matchExpressions'][0]['values'],[BINDING['node_hostname']])
 
-        class API(FakeAPI):
-            def __init__(inner):
-                super().__init__(wanted)
-                inner.archive_nonce = request['nonce']
-                inner.list_calls = 0
-            def list_operation_jobs(inner, namespace, operation):
-                inner.list_calls += 1
-                self.assertEqual((namespace, operation), (tokenless_job.NAMESPACE, OP))
-                return []
-            def exec_pod_archive(inner, namespace, pod_name, pod_uid, operation, nonce, *, existing=False):
-                self.assertEqual((namespace,pod_name,pod_uid), (tokenless_job.NAMESPACE,
-                    inner.pod['metadata']['name'], inner.pod['metadata']['uid']))
-                self.assertEqual(operation, OP)
-                self.assertFalse(existing)
-                return frames(self.archive,self.manifest,nonce=nonce,pod_uid=pod_uid)
-
-        api = API()
+        def stream(req,pod_uid,action):
+            self.assertEqual(req['operation'],OP);self.assertEqual(action,'archive_create_and_stream')
+            return frames(self.archive,self.manifest,nonce=req['nonce'],pod_uid=pod_uid)
+        api = CurrentArchiveAPI(wanted,BINDING,stream)
         base = self.root / ('rollout-' + OP)
         base.mkdir(mode=0o700)
         journal = []
@@ -146,50 +202,64 @@ class ArchiveStreamTests(unittest.TestCase):
             persist_intent=journal.append,persist_result=journal.append)
         with patch.object(preserve,'native_catalog',return_value={
                 'account':'A','streams':[],'consumers':[]}), \
-             patch.object(preserve,'isolated_census',return_value={'streams':[]}), \
+             patch.object(tokenless_job.PvcArchiveRuntime,'capture_census',return_value={'streams':[]}), \
              patch.object(preserve,'verify_catalog'), \
              patch.object(preserve,'closed_native_states',return_value={}):
             cut = preserve.capture_cut(runtime,'/host/pv/path-must-not-be-opened',lambda:None)
         self.assertTrue(native_store.verify_archive(base/'rollout-before.tar',cut['manifest']))
         self.assertEqual(cut['manifest'],self.manifest)
-        self.assertEqual(api.list_calls,1)
         self.assertTrue(api.deleted)
         self.assertEqual(journal[-1]['state'],'ARCHIVE_RESULT_READBACK')
         created = next(call[2] for call in api.calls if call[0] == 'create_job')
         job = created['spec']
         pod_spec = job['template']['spec']
         container = pod_spec['containers'][0]
-        self.assertEqual(job['activeDeadlineSeconds'],43200)
+        self.assertEqual(job['activeDeadlineSeconds'],14400)
         self.assertNotIn('ttlSecondsAfterFinished',job)
         self.assertFalse(pod_spec['automountServiceAccountToken'])
-        self.assertEqual(pod_spec['securityContext']['runAsUser'],65532)
-        self.assertEqual(pod_spec['nodeName'],BINDING['node_name'])
-        self.assertEqual(container['command'],['/voice-nats-runner/phase'])
-        self.assertEqual(container['args'],['--serve','--operation',OP,'--nonce',request['nonce']])
+        self.assertEqual(pod_spec['securityContext']['runAsUser'],10000)
+        self.assertIn('affinity',pod_spec)
+        self.assertEqual(container['command'],['/usr/bin/python3','/voice-nats-runner/phase'])
+        self.assertEqual(container['args'],['--serve','--operation',OP,'--nonce',request['nonce'],
+            '--source-pvc-uid',BINDING['claim_uid'],'--source-pv-uid',BINDING['pv_uid']])
         self.assertEqual(container['env'],[{'name':'POD_UID','valueFrom':{'fieldRef':{'fieldPath':'metadata.uid'}}}])
-        self.assertEqual([volume['name'] for volume in pod_spec['volumes']],['data','scratch'])
+        self.assertEqual([volume['name'] for volume in pod_spec['volumes']],['source','output'])
         self.assertTrue(pod_spec['volumes'][0]['persistentVolumeClaim']['readOnly'])
         self.assertEqual(pod_spec['volumes'][1]['emptyDir']['sizeLimit'],'49Gi')
-        self.assertTrue(next(mount for mount in container['volumeMounts'] if mount['name']=='data')['readOnly'])
+        self.assertTrue(next(mount for mount in container['volumeMounts'] if mount['name']=='source')['readOnly'])
         self.assertEqual(container['resources']['limits']['ephemeral-storage'],'49Gi')
         self.assertEqual(len(pod_spec['containers']),1)
 
+    def test_rootless_capture_never_falls_back_to_docker_census(self):
+        class Rootless:
+            rootless = True
+            base = self.root
+            def no_operation_containers(inner, *, running_only=False): pass
+            def archive_selected_store(inner, target):
+                Path(target).write_bytes(self.archive.read_bytes())
+                return self.manifest
+        with patch.object(preserve,'native_catalog',return_value={'account':'A','streams':[],'consumers':[]}), \
+             patch.object(preserve,'verify_catalog'),patch.object(preserve,'closed_native_states',return_value={}), \
+             patch.object(preserve,'isolated_census') as docker_census:
+            with self.assertRaisesRegex(preserve.Blocked,'rootless_census_unavailable'):
+                preserve.capture_cut(Rootless(),'/host/pv/path-must-not-be-opened',lambda:None)
+        docker_census.assert_not_called()
+
     def test_interrupted_production_stream_reconciles_same_job_and_pod_only(self):
         request = {'operation': OP, 'nonce': 'c' * 32, 'phase': 'archive'}
-        wanted = tokenless_job.document(request,BINDING,RUNNER_IMAGE)
+        wanted = verification_job.document(request, {
+            'source_claim':BINDING['claim_name'],'source_uid':BINDING['claim_uid'],
+            'source_pv_name':BINDING['pv_name'],'source_pv_uid':BINDING['pv_uid'],
+            'source_node_name':BINDING['node_name'],'source_hostname':BINDING['node_hostname']}, RUNNER_IMAGE)
 
-        class API(FakeAPI):
-            def __init__(inner):
-                super().__init__(wanted)
-                inner.stream_count = 0
-            def exec_pod_archive(inner, namespace, pod_name, pod_uid, operation, nonce, *, existing=False):
-                inner.stream_count += 1
-                self.assertEqual(operation, OP)
-                self.assertEqual(nonce, request['nonce'])
-                self.assertTrue(existing if inner.stream_count > 1 else not existing)
-                all_frames = list(frames(self.archive,self.manifest,nonce=nonce,pod_uid=pod_uid))
-                return iter(all_frames[:1] if inner.stream_count == 1 else all_frames)
-        api = API(); events=[]
+        count=[0]
+        def stream(req,pod_uid,action):
+            count[0]+=1
+            self.assertEqual(req['operation'],OP)
+            self.assertEqual(action,'archive_same_pod_readback' if count[0]>1 else 'archive_create_and_stream')
+            all_frames=list(frames(self.archive,self.manifest,nonce=req['nonce'],pod_uid=pod_uid))
+            return iter(all_frames[:1] if count[0]==1 else all_frames)
+        api=CurrentArchiveAPI(wanted,BINDING,stream); events=[]
         base = self.root / ('rollout-' + OP); base.mkdir(mode=0o700)
         target = base/'rollout-before.tar'
         persist = lambda row: events.append(dict(row))
@@ -201,7 +271,7 @@ class ArchiveStreamTests(unittest.TestCase):
         self.assertFalse(target.exists()); self.assertFalse(getattr(api,'deleted',False))
         result=tokenless_job.reconcile_archive(api,request,BINDING,RUNNER_IMAGE,journal,target,
             persist_intent=persist,persist_result=persist,verify_archive=native_store.verify_archive)
-        self.assertEqual(api.stream_count,2)
+        self.assertEqual(count[0],2)
         self.assertEqual(result['archive_sha256'],self.manifest['archive_sha256'])
         self.assertTrue(api.deleted)
 

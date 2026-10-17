@@ -151,7 +151,8 @@ def drain(installed):
         row=directory.lstat()
         if not stat.S_ISDIR(row.st_mode) or row.st_uid!=0 or row.st_mode&0o002 or directory.name!='inbox' and row.st_mode&0o020:raise BridgeError('bridge_directory_untrusted')
     with operation_lock():
-        actions=Actions(installed/'code')
+        native_api,native_config=_installed_native_authority(installed)
+        actions=Actions(installed/'code',native_api=native_api,native_config=native_config)
         inbox=installed/'inbox';names=sorted(inbox.iterdir())
         if len(names)>128:raise BridgeError('bridge_inbox_bound')
         pending=list((installed/'processing').iterdir())
@@ -207,6 +208,23 @@ def drain(installed):
             import grp
             os.chown(response,0,grp.getgrnam('pmd').gr_gid);response.chmod(0o440)
             claimed.unlink()
+
+
+def _installed_native_authority(installed):
+    """Build the one typed Kubernetes client from the installed runner pins."""
+    import runner_manifest
+    import runner_service
+    from kube_json_api import KubernetesJSONAPI, TOKEN_AUDIENCE
+    code=(Path(installed)/'code').resolve(strict=True)
+    manifest=runner_manifest.load(code,owner_uid=0)
+    config=runner_service.load_config(package_root=code,owner_uid=0)
+    try:
+        runner_service.validate_installed_pins(config,manifest)
+    except runner_service.ServiceError as exc:
+        raise BridgeError('bridge_native_authority_pin_mismatch')
+    api=KubernetesJSONAPI(config['api_server'],config['ca_file'],config['token_file'],
+        audience=TOKEN_AUDIENCE,owner_uid=1000,trusted_config_uid=0)
+    return api,config
 
 
 if __name__=='__main__':

@@ -11,7 +11,7 @@ import sys
 import sysconfig
 
 
-CONFIG_SCHEMA = 'voice-nats-trusted-runner-config-v1'
+CONFIG_SCHEMA = 'voice-nats-trusted-runner-config-v4'
 CONFIG_FILE = Path('/etc/voice-nats-preservation/trusted-runner.json')
 CA_FILE = '/etc/voice-nats-preservation/k3s-ca.crt'
 TOKEN_FILE = '/var/lib/voice-nats-preservation/trusted-runner/token'
@@ -20,7 +20,8 @@ OPERATIONS_DIR = Path(STATE_DIR) / 'operations'
 SOCKET_PATH = '/run/voice-nats-preservation/runner.sock'
 SUBMITTER_GROUP = 'pmd'
 REQUIRED_CONFIG = frozenset(('schema', 'runner_source_sha', 'runner_closure_sha256',
-    'api_server', 'ca_file', 'token_file', 'state_dir', 'runner_image', 'storage_binding'))
+    'api_server', 'ca_file', 'token_file', 'state_dir', 'runner_image', 'phase_image',
+    'verification_pvc_size_bytes', 'verification_pvc_max_bytes', 'verification_storage_class'))
 
 
 class ServiceError(ValueError):
@@ -78,21 +79,28 @@ def load_config(path=CONFIG_FILE, package_root=None, *, owner_uid=0):
     if not isinstance(row.get('runner_image'), str) or not re.fullmatch(
         r'[a-z0-9./_-]+@sha256:[a-f0-9]{64}', row['runner_image']):
         _fail('image_invalid')
-    try:
-        from tokenless_job import validate_binding
-        binding = validate_binding(row['storage_binding'])
-    except (KeyError, ValueError):
-        _fail('binding_invalid')
-    return row | {'storage_binding': binding}
+    if not isinstance(row.get('phase_image'), str) or not re.fullmatch(
+        r'[a-z0-9./_-]+@sha256:[a-f0-9]{64}', row['phase_image']):
+        _fail('phase_image_invalid')
+    size = row.get('verification_pvc_size_bytes')
+    ceiling = row.get('verification_pvc_max_bytes')
+    if (type(size) is not int or not 0 < size <= (1 << 63) - 1
+        or type(ceiling) is not int or not 0 < ceiling <= (1 << 63) - 1 or size > ceiling):
+        _fail('verification_pvc_ceiling_invalid')
+    storage_class = row.get('verification_storage_class')
+    if (not isinstance(storage_class, str) or len(storage_class) > 253
+        or any(not label or len(label) > 63
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9]*[a-z0-9])?', label)
+            for label in storage_class.split('.'))):
+        _fail('verification_storage_class_invalid')
+    return row
 
 
-def binding_for(config, operation):
-    # The bootstrap pins stable storage identity. Per-release operation IDs and
-    # nonces are admitted dynamically and journaled by the runner; requiring a
-    # root config rewrite for every release would turn app data into code/config.
-    if not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation):
-        _fail('operation_invalid')
-    return config['storage_binding']
+def validate_installed_pins(config, installed):
+    """Keep the runner package trust pin distinct from the helper image pin."""
+    if (config.get('runner_closure_sha256') != installed.get('closure_sha256')
+        or config.get('phase_image') != installed.get('images', {}).get('nats_phase')):
+        _fail('installed_pin_mismatch')
 
 
 def _trusted_import_path(package_root):
@@ -139,9 +147,7 @@ def main():
     import runner_manifest
     installed = runner_manifest.load(package_root, owner_uid=0)
     config = load_config(package_root=package_root, owner_uid=0)
-    if (config['runner_closure_sha256'] != installed['closure_sha256']
-        or config['runner_image'] != installed['images']['nats_phase']):
-        _fail('installed_pin_mismatch')
+    validate_installed_pins(config, installed)
     from bridge_state import BridgeState
     from runner_actions import Actions
     from runner_rpc import Runner

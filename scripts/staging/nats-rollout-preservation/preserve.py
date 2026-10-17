@@ -48,7 +48,8 @@ def native_message_files(manifest):
 
 def _native_members(runtime,archive,manifest,paths,authority):
     from closed_archive import Archive
-    reader=Archive(runtime.base,archive,manifest,authority)
+    reader=Archive(runtime.base,archive,manifest,authority,
+        private_native=getattr(runtime,'rootless',False) is True)
     rows={f['path']:f for f in manifest['files']};result={}
     with tarfile.open(archive,'r|') as bundle:
         for member in bundle:
@@ -332,6 +333,8 @@ class ColdRelease:
 def isolated_census(runtime, archive, manifest, label, recovery=None,validate=None):
     if validate is not None:return closed_copy_census(runtime,archive,manifest,label,validate)
     if not verify_archive(archive,manifest):raise Blocked('rollout_archive_changed')
+    if getattr(runtime,'rootless',False):
+        return runtime.capture_census(archive,manifest,label,validate=validate)
     parent=Path(tempfile.mkdtemp(prefix=label+'-',dir=runtime.base))
     target=parent/'store'
     runtime.restore(archive,target,manifest)
@@ -462,7 +465,12 @@ def capture_cut(runtime, source, verify_fence,validate=None,*,live_catalog=None)
         if (live_catalog['account']!=catalog['account'] or live_streams!=set(catalog['streams'])
             or live_consumers!={(c['stream'],c['name']) for c in catalog['consumers']}):
             raise Blocked('rollout_native_live_inventory_changed')
-    row=isolated_census(runtime,archive,manifest,'rollout-before',validate=validate)
+    if getattr(runtime,'rootless',False) is True:
+        capture=getattr(runtime,'capture_census',None)
+        if not callable(capture):raise Blocked('rollout_rootless_census_unavailable')
+        row=capture(archive,manifest,'rollout-before',validate=validate)
+    else:
+        row=isolated_census(runtime,archive,manifest,'rollout-before',validate=validate)
     verify_catalog(catalog,row)
     states=closed_native_states(runtime,archive,manifest,row,verify_fence)
     if validate is not None:verify_fence()
@@ -474,9 +482,14 @@ def verify_post_apply(runtime, source, cut, verify_fence):
     # No cold cut may be replaced by an empty/new claim or silently reseeded.
     verify_fence()
     runtime.no_operation_containers(running_only=True)
-    attempt=Path(tempfile.mkdtemp(prefix='post-apply-',dir=runtime.base))
-    archive=attempt/'rollout-after.tar'
-    manifest=archive_closed_store(source,archive)
+    if getattr(runtime,'rootless',False):
+        attempt=runtime.base
+        archive=runtime.base/'rollout-after.tar'
+        manifest=runtime.archive_selected_store(archive)
+    else:
+        attempt=Path(tempfile.mkdtemp(prefix='post-apply-',dir=runtime.base))
+        archive=attempt/'rollout-after.tar'
+        manifest=archive_closed_store(source,archive)
     if native_inventory(manifest)!=native_inventory(cut['manifest']):
         raise Blocked('rollout_native_store_changed')
     verify_fence()

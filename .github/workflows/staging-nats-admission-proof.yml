@@ -1,0 +1,73 @@
+name: STAGING NATS admission proof
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/staging/nats-admission-proof/**'
+      - 'scripts/staging/nats-rollout-preservation/verification_job.py'
+      - '.github/workflows/staging-nats-admission-proof.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/staging/nats-admission-proof/**'
+      - 'scripts/staging/nats-rollout-preservation/verification_job.py'
+      - '.github/workflows/staging-nats-admission-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-apiserver-admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.2'
+          cache-dependency-path: scripts/staging/nats-admission-proof/go.sum
+      - name: Download pinned Go modules
+        working-directory: scripts/staging/nats-admission-proof
+        run: go mod download
+      - name: Prepare checksummed private envtest binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/nats-admission-envtest"
+          mkdir -p "$root"
+          archive="$RUNNER_TEMP/envtest-v1.34.1-linux-amd64.tar.gz"
+          curl --fail --silent --show-error --location \
+            https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.34.1/envtest-v1.34.1-linux-amd64.tar.gz \
+            --output "$archive"
+          echo 'c5e7c237ae18a8c65d0df1214b864ecd19aa9ff4f1383dbd477c202546d778c0f74efe15750ec38f57d8de26ba17cd62f404446cdd3c975399a5d4589de35cdd  '"$archive" | sha512sum --check --status
+          tar -xzf "$archive" -C "$root"
+          api="$root/kubebuilder/bin/kube-apiserver"
+          curl --fail --silent --show-error --location \
+            https://dl.k8s.io/v1.34.3/bin/linux/amd64/kube-apiserver \
+            --output "$RUNNER_TEMP/kube-apiserver-v1.34.3"
+          echo '3f676e71f2c933bc7cabb771f7c8d1c07803fcf1475affc9844587d780baee24  '"$RUNNER_TEMP/kube-apiserver-v1.34.3" | sha256sum --check --status
+          install -m 0755 "$RUNNER_TEMP/kube-apiserver-v1.34.3" "$api"
+          "$api" --version | grep -F 'Kubernetes v1.34.3'
+          "$root/kubebuilder/bin/etcd" --version | grep -F '3.6.5'
+          echo "ENVTEST_ASSETS=$root/kubebuilder/bin" >> "$GITHUB_ENV"
+      - name: Run upstream VAP API, PodExecOptions CONNECT, Job, Pod, and PVC matrices
+        shell: bash
+        run: |
+          set -euo pipefail
+          modcache="$(go env GOMODCACHE)"
+          docker run --rm --network none --user 1000:1000 \
+            --cap-drop=ALL --security-opt=no-new-privileges \
+            --memory=5g --cpus=2 --pids-limit=256 \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/work,readonly \
+            --mount type=bind,source="$modcache",target=/go/pkg/mod,readonly \
+            --mount type=bind,source="$ENVTEST_ASSETS",target=/envtest,readonly \
+            --workdir /work/scripts/staging/nats-admission-proof \
+            --env HOME=/tmp/home --env GOPATH=/tmp/gopath --env GOMODCACHE=/go/pkg/mod \
+            --env GOCACHE=/tmp/gocache --env GOPROXY=off --env GOSUMDB=off \
+            --env GOTOOLCHAIN=local --env GOMAXPROCS=2 --env KUBEBUILDER_ASSETS=/envtest \
+            --env NATS_VERIFICATION_JOB_SOURCE_DIR=/work/scripts/staging/nats-admission-proof/testdata/producer-e7721b3 \
+            golang@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c \
+            go test -count=1 -timeout=2m -p 2 ./...
