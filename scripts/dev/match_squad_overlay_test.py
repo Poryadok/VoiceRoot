@@ -198,6 +198,61 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         expected["spec"]["ports"].append(desired["spec"]["ports"][0])
         self.assertEqual(plan["desiredObservedSha256"], overlay.observed_render_hash(target, expected))
 
+    def test_unready_matchmaking_can_plan_only_the_reviewed_optional_listener_removal(self):
+        target = overlay.TARGETS[3]
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        base = sanitized_live_api_fixture()[(target.kind, target.name)]
+        base = copy.deepcopy(base)
+        base["metadata"]["generation"] = 3
+        base["status"].update({"observedGeneration": 3, "updatedReplicas": 1,
+                               "readyReplicas": 0, "availableReplicas": 0})
+        container = next(item for item in base["spec"]["template"]["spec"]["containers"]
+                         if item["name"] == overlay.CONTAINERS[target.name])
+        container["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        container["env"].append({"name": "S2S_JWKS_URLS_JSON", "value": "<redacted>"})
+        desired = copy.deepcopy(base)
+        desired_container = desired["spec"]["template"]["spec"]["containers"][0]
+        desired_container["env"] = [item for item in desired_container["env"]
+                                     if item["name"] != "S2S_JWKS_URLS_JSON"]
+        client = mock.Mock()
+        client.render.return_value = desired
+
+        plan = overlay.build_object_plan(client, target, base, patch_path)
+
+        self.assertFalse(plan["alreadySatisfied"])
+        self.assertEqual(plan["operations"][2:], [{
+            "op": "remove",
+            "path": "/spec/template/spec/containers/0/env/1",
+        }])
+        self.assertEqual(
+            plan["desiredObservedSha256"],
+            overlay.observed_render_hash(target, desired),
+        )
+
+        base_without_opt_in = copy.deepcopy(base)
+        base_without_opt_in["spec"]["template"]["spec"]["containers"][0]["env"] = [
+            item for item in base_without_opt_in["spec"]["template"]["spec"]["containers"][0]["env"]
+            if item["name"] != "S2S_JWKS_URLS_JSON"]
+        with self.assertRaisesRegex(overlay.OverlayError, "not ordinarily ready"):
+            overlay.build_object_plan(client, target, base_without_opt_in, patch_path)
+
+        chat = overlay.TARGETS[4]
+        unready_chat = sanitized_live_api_fixture()[(chat.kind, chat.name)]
+        unready_chat = copy.deepcopy(unready_chat)
+        unready_chat["spec"]["template"]["spec"]["containers"][0]["image"] = (
+            overlay.QUALIFIED_IMAGES[chat.name])
+        unready_chat["status"].update({"readyReplicas": 0, "availableReplicas": 0})
+        unready_chat["spec"]["template"]["spec"]["containers"][0]["env"].append(
+            {"name": "S2S_JWKS_URLS_JSON", "value": "<redacted>"})
+        with self.assertRaisesRegex(overlay.OverlayError, "not ordinarily ready"):
+            overlay.build_object_plan(client, chat, unready_chat, patch_path)
+
+        stale = copy.deepcopy(base)
+        stale["metadata"]["generation"] = 4
+        with self.assertRaisesRegex(overlay.OverlayError, "not ordinarily ready"):
+            overlay.build_object_plan(client, target, stale, patch_path)
+
     def test_existing_service_port_order_cannot_be_rewritten(self):
         base = captured_service("voice-chat", "service-uid", "17", [
             {"name": "http", "port": 8080, "targetPort": 8080},
@@ -273,6 +328,62 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                                               "value": desired_spec[object_field]
                                               if kind == "Deployment" else desired["spec"][object_field]}])
                 self.assertEqual(overlay._apply_append_operations(base, additions), desired)
+
+    def test_matchmaking_space_principal_opt_in_is_removed_without_other_env_changes(self):
+        base = captured_deployment(
+            "voice-matchmaking", "matchmaking",
+            overlay.EXPECTED_OBJECT_UIDS[("Deployment", "voice-matchmaking")], "31")
+        env = base["spec"]["template"]["spec"]["containers"][0]["env"]
+        env.append({"name": "S2S_JWKS_URLS_JSON", "value": "<redacted>"})
+        env.append({"name": "MATCHMAKING_REDIS_ADDR", "value": "<redacted>"})
+        desired = copy.deepcopy(base)
+        desired_env = desired["spec"]["template"]["spec"]["containers"][0]["env"]
+        desired_env[:] = [item for item in desired_env
+                          if item["name"] != "S2S_JWKS_URLS_JSON"]
+
+        operations = overlay.object_patch(base, desired)
+
+        self.assertEqual(operations[2:], [{
+            "op": "remove",
+            "path": "/spec/template/spec/containers/0/env/1",
+        }])
+        projected = overlay._apply_overlay_operations(
+            base, operations[2:], overlay._Target("Deployment", "voice-matchmaking", ""))
+        self.assertEqual(projected, desired)
+        self.assertEqual(
+            [item for item in projected["spec"]["template"]["spec"]["containers"][0]["env"]
+             if item["name"] == "MATCHMAKING_REDIS_ADDR"],
+            [{"name": "MATCHMAKING_REDIS_ADDR", "value": "<redacted>"}],
+        )
+
+    def test_matchmaking_principal_removal_is_exact_target_and_identity_only(self):
+        for target_name, env_name in (
+                ("voice-matchmaking", "OTHER_CONFIG"),
+                ("voice-chat", "S2S_JWKS_URLS_JSON")):
+            with self.subTest(target=target_name, env=env_name):
+                container = overlay.CONTAINERS[target_name]
+                base = captured_deployment(
+                    target_name, container,
+                    overlay.EXPECTED_OBJECT_UIDS[("Deployment", target_name)], "31")
+                base_env = base["spec"]["template"]["spec"]["containers"][0]["env"]
+                base_env.append({"name": env_name, "value": "<redacted>"})
+                desired = copy.deepcopy(base)
+                desired["spec"]["template"]["spec"]["containers"][0]["env"] = [
+                    item for item in desired["spec"]["template"]["spec"]["containers"][0]["env"]
+                    if item["name"] != env_name]
+                with self.assertRaisesRegex(overlay.OverlayError, "remove a list item"):
+                    overlay.object_patch(base, desired)
+
+    def test_matchmaking_patch_declares_only_the_reviewed_shared_s2s_removal(self):
+        root = Path(__file__).resolve().parents[2]
+        patch = (root / "deploy/dev/match-squad-trust-overlay/"
+                 "voice-matchmaking.runtime.patch.yaml").read_text(encoding="utf-8")
+        self.assertIn("name: S2S_JWKS_URLS_JSON\n              $patch: delete", patch)
+        self.assertNotIn("$patch: delete", "\n".join(
+            path.read_text(encoding="utf-8") for path in (
+                root / "deploy/dev/match-squad-trust-overlay/voice-chat.runtime.patch.yaml",
+                root / "deploy/dev/match-squad-trust-overlay/voice-voice.runtime.patch.yaml",
+                root / "deploy/dev/match-squad-trust-overlay/voice-gateway.patch.yaml")))
 
     def test_present_empty_list_parent_keeps_append_operation(self):
         base = captured_service("voice-chat", "service-uid", "17", [])
