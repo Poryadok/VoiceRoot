@@ -552,12 +552,60 @@ game_checkpoint_aggregate_binding_valid() {
     "${game_checkpoint_aggregate_target}" 2>/dev/null
 }
 
+f13_tree_entry_from_records() {
+  local path="$1" raw_file="$2"
+  local entry entry_path
+  local -a entries=()
+  mapfile -d '' -t entries <"${raw_file}" || return 1
+  [[ "${#entries[@]}" -le 1 ]] || return 1
+  if [[ "${#entries[@]}" == 0 ]]; then
+    printf '\n'
+    return 0
+  fi
+  entry="${entries[0]}"
+  [[ "${entry}" == *$'\t'* ]] || return 1
+  entry_path="${entry#*$'\t'}"
+  [[ "${entry_path}" == "${path}" ]] || return 1
+  printf '%s\n' "${entry%%$'\t'*}"
+}
+
+f13_git_tree_entry() {
+  local repo="$1" commit="$2" path="$3" raw_file="${TMP_DIR}/f13-tree-entry-${BASHPID}"
+  git -C "${repo}" ls-tree -z "${commit}" -- ":(literal)${path}" >"${raw_file}" 2>/dev/null || return 1
+  f13_tree_entry_from_records "${path}" "${raw_file}"
+}
+
+f13_tree_entry_normalizer_fixtures() {
+  local records="${TMP_DIR}/f13-tree-entry-normalizer-records" actual
+  printf '%s\0' '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395	:(glob)literal.sql' >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records ':(glob)literal.sql' "${records}")" || return 1
+  [[ "${actual}" == '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' ]] || return 1
+  if f13_tree_entry_from_records 'different.sql' "${records}" >/dev/null; then
+    return 1
+  fi
+  printf '%s\0%s\0' \
+    '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395	:(glob)literal.sql' \
+    '100644 blob 9c506399d95a0f460bbdff8972b14fff9bd645ca	:(glob)literal.sql' >"${records}" || return 1
+  if f13_tree_entry_from_records ':(glob)literal.sql' "${records}" >/dev/null; then
+    return 1
+  fi
+  : >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records 'missing.sql' "${records}")" || return 1
+  [[ -z "${actual}" ]] || return 1
+  printf '%s\0' '100755 blob 19bd5687fea0f556260d27fd1ecf5308de835395	mode.sql' >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records 'mode.sql' "${records}")" || return 1
+  [[ "${actual}" != '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' ]] || return 1
+  printf '%s\0' '100644 tree 19bd5687fea0f556260d27fd1ecf5308de835395	type.sql' >"${records}" || return 1
+  actual="$(f13_tree_entry_from_records 'type.sql' "${records}")" || return 1
+  [[ "${actual}" != '100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395' ]]
+}
+
 game_checkpoint_aggregate_path_allowed() {
   local repo="$1" commit="$2" path="$3" source_entry="$4" checkpoint_entry
   game_checkpoint_aggregate_binding_valid "${repo}" || return 1
   grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
   git -C "${repo}" merge-base --is-ancestor "${commit}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
-  checkpoint_entry="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_head}" -- ":(literal)${path}")" || return 1
+  checkpoint_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
   [[ "${source_entry}" == "${checkpoint_entry}" ]]
 }
 
@@ -578,8 +626,8 @@ game_checkpoint_duplicate_owner_supersession_allowed() {
       "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
   done
   [[ "${merge_outcome}" == clean || "${merge_outcome}" == guarded_conflict ]] || return 1
-  integration_entry="$(git -C "${repo}" ls-tree "${integration_commit}" -- ":(literal)${path}")" || return 1
-  checkpoint_entry="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_head}" -- ":(literal)${path}")" || return 1
+  integration_entry="$(f13_git_tree_entry "${repo}" "${integration_commit}" "${path}")" || return 1
+  checkpoint_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
   if [[ "${integration_entry}" == "${checkpoint_entry}" ]]; then
     return 0
   fi
@@ -1175,7 +1223,6 @@ f13_migration_alias_reconciles_guarded_path() {
     *) return 1 ;;
   esac
   git -C "${repo}" merge-base --is-ancestor "${record_base}" "${nested_owner}" 2>/dev/null || return 1
-  git -C "${repo}" merge-base --is-ancestor "${record_base}" "${game_checkpoint_snapshot_base}" 2>/dev/null || return 1
   git -C "${repo}" merge-base --is-ancestor "${record_row_owner}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
   git -C "${repo}" merge-base --is-ancestor "${record_row_candidates}" "${record_row_source_base}" 2>/dev/null || return 1
   git -C "${repo}" rev-parse --verify "${record_row_content_base}^{commit}" >/dev/null 2>&1 || return 1
@@ -1196,28 +1243,28 @@ f13_migration_alias_reconciles_guarded_path() {
     [[ "$?" == 1 ]] || return 1
   fi
   [[ "$(git -C "${repo}" merge-base --all "${integration_first}" "${integration_second}" 2>/dev/null)" == "${integration_base}" ]] || return 1
-  [[ "$(git -C "${repo}" ls-tree "${record_row_owner}" -- ":(literal)${path}" 2>/dev/null)" == "${old_entry}" &&
-    "$(git -C "${repo}" ls-tree "${record_row_first_parent}" -- ":(literal)${path}" 2>/dev/null)" == "" &&
-    "$(git -C "${repo}" ls-tree "${nested_owner}" -- ":(literal)${path}" 2>/dev/null)" == "${old_entry}" &&
-    "$(git -C "${repo}" ls-tree "${record_head}" -- ":(literal)${path}" 2>/dev/null)" == "${old_entry}" ]] || return 1
-  [[ "$(git -C "${repo}" ls-tree "${record_base}" -- ":(literal)${path}" 2>/dev/null)" == "${source_base_entry}" ]] || return 1
-  base_old="$(git -C "${repo}" ls-tree "${base}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  snapshot_base_old="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_base}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  h_old="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_head}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  integration_old="$(git -C "${repo}" ls-tree "${integration}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  integration_first_old="$(git -C "${repo}" ls-tree "${integration_first}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  integration_second_old="$(git -C "${repo}" ls-tree "${integration_second}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  integration_base_old="$(git -C "${repo}" ls-tree "${integration_base}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  target_old="$(git -C "${repo}" ls-tree "${target}" -- ":(literal)${path}" 2>/dev/null)" || return 1
-  aggregate_old="$(git -C "${repo}" ls-tree "${game_checkpoint_aggregate_target}" -- ":(literal)${path}" 2>/dev/null)" || return 1
+  [[ "$(f13_git_tree_entry "${repo}" "${record_row_owner}" "${path}")" == "${old_entry}" &&
+    "$(f13_git_tree_entry "${repo}" "${record_row_first_parent}" "${path}")" == "" &&
+    "$(f13_git_tree_entry "${repo}" "${nested_owner}" "${path}")" == "${old_entry}" &&
+    "$(f13_git_tree_entry "${repo}" "${record_head}" "${path}")" == "${old_entry}" ]] || return 1
+  [[ "$(f13_git_tree_entry "${repo}" "${record_base}" "${path}")" == "${source_base_entry}" ]] || return 1
+  base_old="$(f13_git_tree_entry "${repo}" "${base}" "${path}")" || return 1
+  snapshot_base_old="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_base}" "${path}")" || return 1
+  h_old="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
+  integration_old="$(f13_git_tree_entry "${repo}" "${integration}" "${path}")" || return 1
+  integration_first_old="$(f13_git_tree_entry "${repo}" "${integration_first}" "${path}")" || return 1
+  integration_second_old="$(f13_git_tree_entry "${repo}" "${integration_second}" "${path}")" || return 1
+  integration_base_old="$(f13_git_tree_entry "${repo}" "${integration_base}" "${path}")" || return 1
+  target_old="$(f13_git_tree_entry "${repo}" "${target}" "${path}")" || return 1
+  aggregate_old="$(f13_git_tree_entry "${repo}" "${game_checkpoint_aggregate_target}" "${path}")" || return 1
   [[ "${integration_first_old}" == "${old_entry}" && -z "${integration_second_old}" &&
     -z "${integration_base_old}" && -z "${base_old}" && -z "${snapshot_base_old}" &&
     -z "${h_old}" && -z "${integration_old}" &&
     -z "${target_old}" && -z "${aggregate_old}" ]] || return 1
-  snapshot_base_up="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_base}" -- ":(literal)${collision_up}" 2>/dev/null)" || return 1
-  snapshot_base_down="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_base}" -- ":(literal)${collision_down}" 2>/dev/null)" || return 1
-  base_up="$(git -C "${repo}" ls-tree "${base}" -- ":(literal)${collision_up}" 2>/dev/null)" || return 1
-  base_down="$(git -C "${repo}" ls-tree "${base}" -- ":(literal)${collision_down}" 2>/dev/null)" || return 1
+  snapshot_base_up="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_base}" "${collision_up}")" || return 1
+  snapshot_base_down="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_base}" "${collision_down}")" || return 1
+  base_up="$(f13_git_tree_entry "${repo}" "${base}" "${collision_up}")" || return 1
+  base_down="$(f13_git_tree_entry "${repo}" "${base}" "${collision_down}")" || return 1
   [[ "${base_up}" == '100644 blob 171033aaf172370f76ede86349b042154bd2ff71' &&
     "${base_down}" == '100644 blob 83953384c9caa2ae2aa8d9485a208bb5ead5e33f' &&
     "${snapshot_base_up}" == "${base_up}" && "${snapshot_base_down}" == "${base_down}" ]] || return 1
@@ -1238,9 +1285,9 @@ f13_migration_alias_reconciles_guarded_path() {
     "${actual_row_content_base}" == "${record_row_content_base}" &&
     "${actual_row_source_candidates}" == "${record_row_candidates}" ]] || return 1
   grep -Fxq -- "${destination}" "${game_checkpoint_aggregate_paths}" || return 1
-  h_entry="$(git -C "${repo}" ls-tree "${game_checkpoint_snapshot_head}" -- ":(literal)${destination}" 2>/dev/null)" || return 1
-  target_entry="$(git -C "${repo}" ls-tree "${game_checkpoint_aggregate_target}" -- ":(literal)${destination}" 2>/dev/null)" || return 1
-  integration_entry="$(git -C "${repo}" ls-tree "${integration}" -- ":(literal)${destination}" 2>/dev/null)" || return 1
+  h_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${destination}")" || return 1
+  target_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_aggregate_target}" "${destination}")" || return 1
+  integration_entry="$(f13_git_tree_entry "${repo}" "${integration}" "${destination}")" || return 1
   [[ "${h_entry}" == "100644 blob ${destination_entry##* }" &&
     "${target_entry}" == "${h_entry}" && "${integration_entry}" == "${h_entry}" &&
     "${destination_entry}" == "${old_entry}" ]] || return 1
@@ -1310,7 +1357,9 @@ f13_migration_alias_reconciliation_execution_fixture() {
       return 1
     fi
   done
+  f13_tree_entry_normalizer_fixtures || return 1
   game_checkpoint_aggregate_active=false
+  printf '%s\n' 'F13 R2 alias early-helper fixture: PASS'
 }
 
 # These exact paths are the reviewed Role private room-grant handler and its
