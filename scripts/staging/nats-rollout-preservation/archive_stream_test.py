@@ -21,21 +21,25 @@ POD_UID = '12345678-1234-1234-1234-123456789abc'
 
 
 def frames(archive, manifest, *, operation=OP, nonce=NONCE, pod_uid=POD_UID,
+           source_pvc_uid=BINDING['claim_uid'], source_pv_uid=BINDING['pv_uid'],
            corrupt_digest=False):
     raw = Path(archive).read_bytes()
     for sequence, offset in enumerate(range(0, len(raw), 48 << 10)):
         yield (json.dumps({'schema':archive_stream.SCHEMA,'operation':operation,'nonce':nonce,
-            'pod_uid':pod_uid,'kind':'data','sequence':sequence,
+            'pod_uid':pod_uid,'source_pvc_uid':source_pvc_uid,'source_pv_uid':source_pv_uid,
+            'kind':'data','sequence':sequence,
             'data':base64.b64encode(raw[offset:offset+(48<<10)]).decode('ascii')},
             sort_keys=True,separators=(',',':'))+'\n').encode()
     manifest_raw = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
     for sequence, offset in enumerate(range(0, len(manifest_raw), 48 << 10)):
         yield (json.dumps({'schema':archive_stream.SCHEMA,'operation':operation,'nonce':nonce,
-            'pod_uid':pod_uid,'kind':'manifest','sequence':sequence,
+            'pod_uid':pod_uid,'source_pvc_uid':source_pvc_uid,'source_pv_uid':source_pv_uid,
+            'kind':'manifest','sequence':sequence,
             'data':base64.b64encode(manifest_raw[offset:offset+(48<<10)]).decode('ascii')},
             sort_keys=True,separators=(',',':'))+'\n').encode()
     yield (json.dumps({'schema':archive_stream.SCHEMA,'operation':operation,'nonce':nonce,
-        'pod_uid':pod_uid,'kind':'complete','frames':(len(raw)+(48<<10)-1)//(48<<10),
+        'pod_uid':pod_uid,'source_pvc_uid':source_pvc_uid,'source_pv_uid':source_pv_uid,
+        'kind':'complete','frames':(len(raw)+(48<<10)-1)//(48<<10),
         'manifest_frames':(len(manifest_raw)+(48<<10)-1)//(48<<10),
         'archive_sha256':('0'*64 if corrupt_digest else hashlib.sha256(raw).hexdigest()),
         'manifest_sha256':hashlib.sha256(manifest_raw).hexdigest()},
@@ -65,6 +69,7 @@ class ArchiveStreamTests(unittest.TestCase):
     def consume(self, source=None, **kwargs):
         return archive_stream.consume(source or frames(self.archive, self.manifest), self.artifact,
             operation=OP,nonce=NONCE,pod_uid=POD_UID,
+            source_pvc_uid=BINDING['claim_uid'],source_pv_uid=BINDING['pv_uid'],
             persist_intent=lambda row:self.events.append(('intent',row)),
             persist_result=lambda row:self.events.append(('result',row)),
             verify_archive=native_store.verify_archive,**kwargs)
@@ -93,6 +98,9 @@ class ArchiveStreamTests(unittest.TestCase):
         self.assertFalse(self.artifact.exists())
         with self.assertRaisesRegex(archive_stream.ArchiveStreamError, 'frame_identity_invalid'):
             self.consume(frames(self.archive,self.manifest,pod_uid='f'*36))
+        self.assertFalse(self.artifact.exists())
+        with self.assertRaisesRegex(archive_stream.ArchiveStreamError, 'frame_identity_invalid'):
+            self.consume(frames(self.archive,self.manifest,source_pvc_uid='9'*8+'-'+'9'*4+'-'+'9'*4+'-'+'9'*4+'-'+'9'*12))
         self.assertFalse(self.artifact.exists())
 
     def test_artifact_path_is_create_only(self):
@@ -146,7 +154,7 @@ class ArchiveStreamTests(unittest.TestCase):
             persist_intent=journal.append,persist_result=journal.append)
         with patch.object(preserve,'native_catalog',return_value={
                 'account':'A','streams':[],'consumers':[]}), \
-             patch.object(preserve,'isolated_census',return_value={'streams':[]}), \
+             patch.object(tokenless_job.PvcArchiveRuntime,'capture_census',return_value={'streams':[]}), \
              patch.object(preserve,'verify_catalog'), \
              patch.object(preserve,'closed_native_states',return_value={}):
             cut = preserve.capture_cut(runtime,'/host/pv/path-must-not-be-opened',lambda:None)
@@ -173,6 +181,21 @@ class ArchiveStreamTests(unittest.TestCase):
         self.assertTrue(next(mount for mount in container['volumeMounts'] if mount['name']=='data')['readOnly'])
         self.assertEqual(container['resources']['limits']['ephemeral-storage'],'49Gi')
         self.assertEqual(len(pod_spec['containers']),1)
+
+    def test_rootless_capture_never_falls_back_to_docker_census(self):
+        class Rootless:
+            rootless = True
+            base = self.root
+            def no_operation_containers(inner, *, running_only=False): pass
+            def archive_selected_store(inner, target):
+                Path(target).write_bytes(self.archive.read_bytes())
+                return self.manifest
+        with patch.object(preserve,'native_catalog',return_value={'account':'A','streams':[],'consumers':[]}), \
+             patch.object(preserve,'verify_catalog'),patch.object(preserve,'closed_native_states',return_value={}), \
+             patch.object(preserve,'isolated_census') as docker_census:
+            with self.assertRaisesRegex(preserve.Blocked,'rootless_census_unavailable'):
+                preserve.capture_cut(Rootless(),'/host/pv/path-must-not-be-opened',lambda:None)
+        docker_census.assert_not_called()
 
     def test_interrupted_production_stream_reconciles_same_job_and_pod_only(self):
         request = {'operation': OP, 'nonce': 'c' * 32, 'phase': 'archive'}

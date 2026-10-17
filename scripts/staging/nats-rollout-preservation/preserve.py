@@ -462,7 +462,12 @@ def capture_cut(runtime, source, verify_fence,validate=None,*,live_catalog=None)
         if (live_catalog['account']!=catalog['account'] or live_streams!=set(catalog['streams'])
             or live_consumers!={(c['stream'],c['name']) for c in catalog['consumers']}):
             raise Blocked('rollout_native_live_inventory_changed')
-    row=isolated_census(runtime,archive,manifest,'rollout-before',validate=validate)
+    if getattr(runtime,'rootless',False) is True:
+        capture=getattr(runtime,'capture_census',None)
+        if not callable(capture):raise Blocked('rollout_rootless_census_unavailable')
+        row=capture(archive,manifest,'rollout-before',validate=validate)
+    else:
+        row=isolated_census(runtime,archive,manifest,'rollout-before',validate=validate)
     verify_catalog(catalog,row)
     states=closed_native_states(runtime,archive,manifest,row,verify_fence)
     if validate is not None:verify_fence()

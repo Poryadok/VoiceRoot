@@ -405,6 +405,7 @@ def _consume_archive(api, row, storage, wanted, job_uid, pod, artifact,
     result = archive_stream.consume(api.exec_pod_archive(NAMESPACE, pod_meta['name'], pod_meta['uid'],
         row['operation'], row['nonce'], existing=existing),
         artifact, operation=row['operation'], nonce=row['nonce'], pod_uid=pod_meta['uid'],
+        source_pvc_uid=storage['claim_uid'], source_pv_uid=storage['pv_uid'],
         allow_existing=existing,
         persist_intent=lambda value: persist_intent(value | {'phase':'archive','job_name': wanted['metadata']['name'],
             'job_uid': job_uid, 'pod_name': pod_meta['name'], 'pod_uid': pod_meta['uid'],
@@ -442,6 +443,7 @@ class PvcArchiveRuntime:
             or directory.st_uid != os.geteuid() or stat.S_IMODE(directory.st_mode) != 0o700):
             _fail('archive_runtime_directory_invalid')
         self.operation = operation
+        self.rootless = True
         self.request = {'operation': operation,
             'nonce': hashlib.sha256((request_nonce + ':cold-cut-archive').encode()).hexdigest()[:32],
             'phase': 'archive'}
@@ -462,3 +464,9 @@ class PvcArchiveRuntime:
             persist_intent=self.persist_intent, persist_result=self.persist_result,
             verify_archive=native_store.verify_archive)
         return result['manifest']
+
+    def capture_census(self, archive, manifest, label, *, validate=None):
+        # Until the source-split, target-only census ABI is installed, refusing
+        # PREPARE is safer than falling through to DockerRuntime's host-backed
+        # isolated_census path.
+        _fail('rootless_census_phase_unavailable')
