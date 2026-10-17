@@ -1262,6 +1262,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatThreadLoadError => 'Не удалось загрузить тред';
 
   @override
+  String get chatThreadRepliesUnavailable =>
+      'Ответы в этой беседе недоступны. Черновик сохранён; уберите адресата ответа, чтобы отправить обычное сообщение.';
+
+  @override
   String get chatChannelMainFeedBlocked => 'Пишите в тред или от имени канала';
 
   @override
