@@ -2962,7 +2962,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String guestConvertVerificationSubtitle(Object email) {
-    return 'Введите код, отправленный на $email. Гостевой доступ сохранится до подтверждения.';
+    return 'Введите код подтверждения для $email. Гостевой доступ сохранится до подтверждения.';
   }
 
   @override
