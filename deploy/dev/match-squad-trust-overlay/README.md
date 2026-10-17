@@ -4,17 +4,26 @@ This overlay belongs only to the `voice-dev` namespace and binds the MatchSquad 
 
 ```sh
 python3 -m unittest discover -s scripts/dev -p 'match_squad_runtime_overlay_test.py'
-kubectl create --dry-run=client -f deploy/dev/match-squad-trust-overlay/ -o yaml >/dev/null
+python3 -B -m unittest scripts.dev.match_squad_overlay_test
 
-kubectl --namespace voice-dev patch deployment voice-matchmaking --type=strategic --patch-file deploy/dev/match-squad-trust-overlay/voice-matchmaking.runtime.patch.yaml
-kubectl --namespace voice-dev patch deployment voice-chat --type=strategic --patch-file deploy/dev/match-squad-trust-overlay/voice-chat.runtime.patch.yaml
-kubectl --namespace voice-dev patch deployment voice-voice --type=strategic --patch-file deploy/dev/match-squad-trust-overlay/voice-voice.runtime.patch.yaml
-kubectl --namespace voice-dev patch deployment voice-gateway --type=strategic --patch-file deploy/dev/match-squad-trust-overlay/voice-gateway.patch.yaml
-kubectl --namespace voice-dev patch service voice-matchmaking --type=strategic --patch-file deploy/dev/match-squad-trust-overlay/voice-matchmaking.service.patch.yaml
-kubectl --namespace voice-dev patch service voice-chat --type=strategic --patch-file deploy/dev/match-squad-trust-overlay/voice-chat.service.patch.yaml
-kubectl --namespace voice-dev patch service voice-voice --type=strategic --patch-file deploy/dev/match-squad-trust-overlay/voice-voice.service.patch.yaml
+# First update all four workloads to the source-qualified linux/amd64 image
+# digests from the readiness packet. Then build an immutable local CAS plan.
+python3 -B scripts/dev/match_squad_overlay.py \
+  --root . --source-sha "$(git rev-parse HEAD)" \
+  --plan-file /tmp/match-squad-overlay-plan.json
+sha256sum /tmp/match-squad-overlay-plan.json
+
+# Review the plan hash and exact target list before the separately granted apply.
+python3 -B scripts/dev/match_squad_overlay.py \
+  --root . --source-sha "$(git rev-parse HEAD)" \
+  --plan-file /tmp/match-squad-overlay-plan.json \
+  --plan-sha256 'PASTE_THE_REVIEWED_64_HEX_DIGEST_HERE' --apply
 ```
 
 The Deployment patches provide the existing MatchSquad listeners and bind their `9092`, `9094`, `9095`, and Matchmaking JWKS `8443` ports through the corresponding Services. They add only the existing contract's Secret references and read-only mounts. Matchmaking uses `https://voice-matchmaking.voice-dev.svc:8443/internal/v1/principal/jwks.json`; Gateway's public JWKS host is `api-dev.comrade.click`. Matchmaking outbound Chat/Voice trust, Chat 9092 and Voice 9094's Matchmaking client trust, and Gateway's outbound Voice 9095 trust use `voice-match-squad-ca`. Voice 9095 still authenticates the Gateway media client with `voice-media-ca`; Gateway keeps its existing media client certificate and key. The Matchmaking JWKS trust bundle and Voice member's outbound JWKS trust remain unchanged. The application JWT principal, audience, RPC/request binding, and replay checks remain the authorization boundary.
 
-Do not apply these patches to staging or production. This patch set does not run database migrations, provision application credentials, install GameIntegration, select images, or prove a MatchFound-to-Voice admission flow. Those are separate ordered activation steps with their own exact-source and custody checks. Do not patch before the ConfigMap and all referenced Secrets exist and have been checked by public metadata only. A partial sequence is resumed by inspecting resource versions and applying only the remaining exact files; never reapply migrations or alter the issuer journal/volume to recover it. After rollout, verify ordinary Deployment readiness, all named Service endpoints, Matchmaking's verified JWKS readiness, and the real application flow before accepting activation.
+Do not apply this overlay to staging or production. It does not run migrations, provision credentials, install GameIntegration, select images, or prove a MatchFound-to-Voice admission flow. Those are separate ordered activation steps with exact-source and custody checks. Do not plan before the ConfigMap and referenced Secrets exist and have been checked by public metadata only.
+
+The applicator renders the seven reviewed patch files against live JSON and records the exact source commit, namespace UID, object UIDs/resourceVersions, source patch digests, and the post-patch projection digests in a mode-0600 plan. The projection is predicted by applying the exact generated JSON Patch append operations to a copy of each live object, so it follows API append order instead of local strategic-render list order. Existing list entries must retain their identity, value, and relative order. It refuses an existing plan path. Apply re-reads every object before the first mutation, verifies every source and render binding, and sends one atomic JSON Patch per changed object with UID and resourceVersion `test` operations. An already-satisfied target can be skipped only when a fresh read matches its planned UID, resourceVersion, full object hash, and desired projection; it receives no patch. This allows a reviewed plan to continue after a confirmed partial prefix without replaying that target. The fixed order publishes all three Services first, then rolls out Matchmaking, Chat, Voice, and Gateway. It admits only the four source-qualified image digests and the exact additive fields in this patch set. A conflict, drift, failed request, failed rollout, or uncertain response stops the sequence at that object; the successful prefix is preserved. Stop records distinguish `completed_prefix` (targets whose API state is verified, including Deployment rollout readiness) from `applied_prefix` (the confirmed-persistence lower bound for objects changed during that invocation). If a request times out or loses its response, the named failed target's persistence is unknown; fresh readback is required before planning again. Do not retry an old plan, roll back, recreate objects, or manually issue strategic patches after a partial result. Preserve the plan and object receipts for a fresh reviewed recovery decision.
+
+The tool changes only listener Service ports and Deployment template environment, ports, mounts, and volumes. Existing objects and unrelated fields remain intact. Voice 9095 continues to trust `voice-media-ca` for the Gateway client; the MatchSquad CA is used for the separately reviewed MatchSquad TLS paths. After rollout, verify ordinary Deployment readiness, all named Service endpoints, Matchmaking's verified JWKS readiness, and the real application flow before accepting activation.

@@ -518,6 +518,10 @@ void main() {
       );
       await tester.pump();
       expect(chats.calls, hasLength(callsBeforeProfileB));
+      // A new account starts from the default inbox. Select Requests explicitly
+      // on account B before verifying that A's late mutation cannot remove it.
+      container.read(chatInboxProvider.notifier).state = 'requests';
+      await tester.pump();
       _acceptCurrentRealtimeHello(container);
       await tester.pump();
       final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();

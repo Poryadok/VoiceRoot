@@ -1250,6 +1250,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatThreadLoadError => 'Could not load thread';
 
   @override
+  String get chatThreadRepliesUnavailable =>
+      'Replies are unavailable in this chat. Your draft is still here; remove the reply target to send it as a regular message.';
+
+  @override
   String get chatChannelMainFeedBlocked => 'Post in a thread or as the channel';
 
   @override

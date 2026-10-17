@@ -81,7 +81,8 @@ def validate_dev_source_build_receipt(build, source_sha, image):
     """Validate the complete producer receipt shared by DEV planning and execution."""
     expected = {'schema', 'source_sha', 'image_ref', 'build_context_sha256',
         'image_config_sha256', 'working_tree_clean', 'builder_kind', 'builder_run',
-        'builder_job', 'builder_sha', 'builder_tree'}
+        'builder_job', 'builder_sha', 'builder_tree', 'builder_artifact_id',
+        'builder_artifact_sha256', 'builder_output_index_sha256', 'builder_provenance_sha256'}
     digest = re.compile(r'[a-f0-9]{64}')
     commit = re.compile(r'[a-f0-9]{40}')
     if (not isinstance(build, dict) or set(build) != expected
@@ -98,11 +99,22 @@ def validate_dev_source_build_receipt(build, source_sha, image):
         raise Blocked('gis_dev_source_build_receipt_invalid')
     if build['builder_kind'] == 'github-actions':
         if (type(build.get('builder_run')) is not int or build['builder_run'] <= 0
-            or type(build.get('builder_job')) is not int or build['builder_job'] <= 0):
+            or type(build.get('builder_job')) is not int or build['builder_job'] <= 0
+            or type(build.get('builder_artifact_id')) is not int or build['builder_artifact_id'] <= 0
+            or not isinstance(build.get('builder_artifact_sha256'), str)
+            or not digest.fullmatch(build['builder_artifact_sha256'])
+            or build.get('builder_output_index_sha256') != image.rsplit('@sha256:', 1)[-1]
+            or not isinstance(build.get('builder_output_index_sha256'), str)
+            or not digest.fullmatch(build['builder_output_index_sha256'])
+            or not isinstance(build.get('builder_provenance_sha256'), str)
+            or not digest.fullmatch(build['builder_provenance_sha256'])):
             raise Blocked('gis_dev_source_build_receipt_invalid')
     elif build['builder_kind'] == 'local-build':
         if (build.get('builder_run') is not None or build.get('builder_job') is not None
-            or build['builder_sha'] != source_sha):
+            or build['builder_sha'] != source_sha or build.get('builder_artifact_id') is not None
+            or build.get('builder_artifact_sha256') is not None
+            or build.get('builder_output_index_sha256') is not None
+            or build.get('builder_provenance_sha256') is not None):
             raise Blocked('gis_dev_source_build_receipt_invalid')
     else:
         raise Blocked('gis_dev_source_build_receipt_invalid')
