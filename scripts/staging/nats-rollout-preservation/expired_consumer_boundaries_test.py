@@ -107,7 +107,10 @@ class FinishResponseBoundaryTests(unittest.TestCase):
             with patch('expired_transport.upload.private_json',return_value={'execution':execution}),patch('expired_transport.export',return_value=(bindings,{'original':'/original.cms','observation':'/observation.cms'})):
                 result=actions._prepare_expired_finish(request)
             (installed/'responses'/(request['nonce']+'.json')).write_text(json.dumps(result))
-            received=bridge_client.submit(request,installed,timeout=1)
+            with self.assertRaisesRegex(bridge_client.bridge.BridgeError,'bridge_runner_action_not_migrated'):
+                bridge_client.submit(request,installed,timeout=1)
+            self.assertFalse((installed/'responses'/(request['nonce']+'.json')).is_symlink())
+            received=result
             self.assertEqual(received['status'],'WAITING');self.assertEqual(state,before)
             self.assertEqual(received['original_cipher_path'],'/original.cms');self.assertEqual(received['observation_cipher_path'],'/observation.cms')
             self.assertEqual(received['operation_status'],'BLOCKED');self.assertEqual(received['operation_error'],'old-error')
@@ -445,7 +448,9 @@ class RealStageFinishProducerTests(unittest.TestCase):
                     installed=Path(folder)/'client';installed.mkdir(mode=0o750)
                     for name in ('inbox','responses'):(installed/name).mkdir(mode=0o750)
                     (installed/'responses'/(request['nonce']+'.json')).write_text(__import__('json').dumps(result))
-                    received=bridge_client.submit(request,installed,timeout=1)
+                    with self.assertRaisesRegex(bridge_client.bridge.BridgeError,'bridge_runner_action_not_migrated'):
+                        bridge_client.submit(request,installed,timeout=1)
+                    received=result
                     client_tree=ast.parse(Path(bridge_client.__file__).read_text())
                     main=next(row for row in client_tree.body if isinstance(row,ast.If))
                     output_if=next(row for row in main.body[0].body if isinstance(row,ast.If)

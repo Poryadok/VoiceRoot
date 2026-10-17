@@ -13,8 +13,10 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline')
 import bridge
 import deployment_report
 from errors import safe_error
+import runner_rpc
 
 INSTALLED=Path('/var/lib/voice-nats-preservation/installed')
+RUNNER_SOCKET=Path('/run/voice-nats-preservation/runner.sock')
 
 def request(args,environment):
     action=args[0] if args else ''
@@ -57,35 +59,22 @@ def request(args,environment):
     return bridge.validate(row)
 
 def submit(row,installed=INSTALLED,timeout=2400):
-    installed=Path(installed)
-    for path in (installed,installed/'inbox',installed/'responses'):
-        info=path.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_mode&0o002:raise bridge.BridgeError('bridge_client_directory_invalid')
-    path=installed/'inbox'/(row['nonce']+'.json')
-    response=installed/'responses'/path.name
-    if not response.exists() and not path.exists():
-        scratch=path.with_suffix('.pending')
-        fd=os.open(scratch,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-        try:
-            with os.fdopen(fd,'w') as stream:json.dump(row,stream);stream.flush();os.fsync(stream.fileno())
-            os.rename(scratch,path)
-        finally:
-            if scratch.exists():scratch.unlink()
-    deadline=time.monotonic()+timeout
-    while time.monotonic()<deadline:
-        try:fd=os.open(response,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
-        except FileNotFoundError:time.sleep(1);continue
-        try:
-            info=os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022 or info.st_nlink!=1 or not 1<=info.st_size<=65536:raise bridge.BridgeError('bridge_client_response_invalid')
-            result=json.loads(os.read(fd,65537))
-        finally:os.close(fd)
-        if result.get('status')=='BLOCKED':
-            error=bridge.BridgeError('bridge_root_request_blocked')
-            error.safe_result={'status':'BLOCKED','error':deployment_report.code(result.get('error'))}
-            raise error
-        return result
-    raise bridge.BridgeError('bridge_response_timeout_operation_requires_status')
+    if not isinstance(row,dict) or row.get('action')!='status':
+        raise bridge.BridgeError('bridge_runner_action_not_migrated')
+    request={'schema':runner_rpc.SCHEMA,'protocol':1,'action':'status',
+        'operation':row.get('operation'),'nonce':row.get('nonce')}
+    try:
+        response=runner_rpc.request(str(RUNNER_SOCKET),request,timeout=min(float(timeout),60.0))
+    except runner_rpc.RpcError as error:
+        raise bridge.BridgeError('bridge_runner_request_blocked') from error
+    if (not isinstance(response,dict) or response.get('status')!='COMPLETE'
+        or response.get('operation')!=request['operation'] or response.get('nonce')!=request['nonce']
+        or not isinstance(response.get('result'),dict)):
+        code=deployment_report.code(response.get('error')) if isinstance(response,dict) else 'runner_response_invalid'
+        error=bridge.BridgeError('bridge_runner_request_blocked')
+        error.safe_result={'status':'BLOCKED','error':code}
+        raise error
+    return response['result']
 
 def output_directory(environment):
     base=Path(environment['RUNNER_TEMP'])

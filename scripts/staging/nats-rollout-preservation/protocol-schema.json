@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Voice STAGING bridge runner request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "protocol", "action", "operation", "nonce"],
+  "properties": {
+    "schema": {"const": "voice-staging-bridge-runner-request-v1"},
+    "protocol": {"const": 1},
+    "action": {"const": "status"},
+    "operation": {"type": "string", "pattern": "^[a-f0-9]{12}$"},
+    "nonce": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}
