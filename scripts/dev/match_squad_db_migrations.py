@@ -36,6 +36,7 @@ PRIOR_MATCHMAKING_JOB_NAME = "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0"
 PRIOR_MATCHMAKING_JOB_UID = "5b581338-0e12-4199-8326-21c4ffe6b232"
 PRIOR_MATCHMAKING_POD_NAME = "voice-msq-migrate-matchmaking-1c1e2471e6-9870a4d0-wl425"
 PRIOR_MATCHMAKING_POD_UID = "2f333370-91f5-439e-a6e8-bc0e61b81573"
+PRIOR_MATCHMAKING_POD_NODE_NAME = "pmdebook"
 MIGRATION_FILES = {
     "matchmaking": (
         "000016_match_deadline_squad_recovery.up.sql",
@@ -628,6 +629,7 @@ def _completed_matchmaking_receipt(kube, root, postgres_ip):
     pod_status = pod.get("status", {})
     if pod_status.get("phase") != "Succeeded":
         _blocked("completed_matchmaking_pod_not_succeeded")
+    _validate_completed_pod_spec(pod, job)
     init_statuses = pod_status.get("initContainerStatuses", [])
     container_statuses = pod_status.get("containerStatuses", [])
     if (not isinstance(init_statuses, list) or not isinstance(container_statuses, list)
@@ -647,6 +649,34 @@ def _completed_matchmaking_receipt(kube, root, postgres_ip):
         "configmap_uid": PRIOR_MATCHMAKING_CONFIGMAP_UID,
         "job_name": item["job_name"], "job_uid": PRIOR_MATCHMAKING_JOB_UID,
         "pod_name": PRIOR_MATCHMAKING_POD_NAME, "pod_uid": PRIOR_MATCHMAKING_POD_UID}
+
+
+def _validate_completed_pod_spec(pod, job):
+    """Bind the historical Pod's actual container spec to the accepted Job template."""
+    actual = copy.deepcopy(pod.get("spec", {})) if isinstance(pod, dict) else None
+    expected = job.get("spec", {}).get("template", {}).get("spec", {})
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        _blocked("completed_matchmaking_pod_spec_invalid")
+
+    # These fields were present in the captured completed Pod but absent from
+    # the Job template: scheduler assignment and exact API defaults only.
+    assigned_defaults = {
+        "nodeName": PRIOR_MATCHMAKING_POD_NODE_NAME,
+        "priority": 0,
+        "serviceAccount": "default",
+        "tolerations": [
+            {"effect": "NoExecute", "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists", "tolerationSeconds": 300},
+            {"effect": "NoExecute", "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists", "tolerationSeconds": 300},
+        ],
+    }
+    for key, value in assigned_defaults.items():
+        if actual.pop(key, object()) != value:
+            _blocked("completed_matchmaking_pod_spec_mismatch")
+    if not _matches_kubernetes_defaults(actual, expected, path=("template", "spec")):
+        _blocked("completed_matchmaking_pod_spec_mismatch")
+    return True
 
 
 def preflight(kube, root, expected_source, *, plan=None, continue_after_matchmaking=False):

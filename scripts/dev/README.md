@@ -94,6 +94,14 @@ creates or replays a Matchmaking Job. If either remainder Job fails or becomes
 ambiguous, retain its objects and stop. This command has no general resume
 mode; later reconciliation requires a separately reviewed source path.
 
+The continuation receipt also compares the captured Pod's actual containers,
+commands, images, Secret references, volumes, security context and
+controller-assigned identity with the source-bound Job template. Only the
+captured scheduler/API fields (node assignment, priority, default service
+account and the two standard not-ready/unreachable tolerations) are admitted;
+the full sanitized Job and Pod API fixture rejects mutations to either init
+container, the migrate container, Secret reference or volume wiring.
+
 ## Fresh installation only
 
 `environment.py` renders captured staging workload/configuration identities into

@@ -188,6 +188,9 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         altered.pod["metadata"]["uid"] = "foreign-pod-uid"
         rejected_cases.append(("pod-uid", altered))
         altered = self.completed_prefix_target(root, source_sha)
+        altered.pod["metadata"]["ownerReferences"][0]["uid"] = "foreign-job-uid"
+        rejected_cases.append(("pod-owner", altered))
+        altered = self.completed_prefix_target(root, source_sha)
         altered.pod["status"]["containerStatuses"][0]["state"]["terminated"]["exitCode"] = 1
         rejected_cases.append(("container-exit", altered))
         rejected_cases.append(("old-ledger", self.completed_prefix_target(root, source_sha,
@@ -421,6 +424,7 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         actual = fixture["job"]
         self.assertTrue(runner.validate_bound_object(actual, item, "job"))
         self.assertTrue(runner.validate_terminal_job(actual, item))
+        self.assertTrue(runner._validate_completed_pod_spec(fixture["pod"], actual))
 
         mutated = copy.deepcopy(actual)
         mutated["spec"]["template"]["spec"]["securityContext"]["runAsUser"] = 65532
@@ -430,6 +434,24 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         mutated["spec"]["template"]["spec"]["containers"].append({"name": "foreign-sidecar"})
         with self.assertRaises(runner.Blocked):
             runner.validate_bound_object(mutated, item, "job")
+
+        pod_mutations = (
+            lambda pod: pod["spec"]["containers"][0]["command"].append("foreign-command"),
+            lambda pod: pod["spec"]["containers"][0].update({"image": "foreign/image:latest"}),
+            lambda pod: pod["spec"]["initContainers"][0]["command"].append("foreign-command"),
+            lambda pod: pod["spec"]["initContainers"][0].update({"image": "foreign/image:latest"}),
+            lambda pod: pod["spec"]["initContainers"][1]["env"][0]["valueFrom"]["secretKeyRef"].update(
+                {"name": "foreign-secret", "key": "foreign-key"}),
+            lambda pod: pod["spec"]["volumes"][0]["configMap"].update({"name": "foreign-config"}),
+            lambda pod: pod["spec"]["containers"].append({"name": "foreign-sidecar"}),
+            lambda pod: pod["spec"].setdefault("securityContext", {}).update({"runAsUser": 0}),
+            lambda pod: pod["spec"].update({"nodeName": "foreign-node"}),
+        )
+        for mutate in pod_mutations:
+            pod = copy.deepcopy(fixture["pod"])
+            mutate(pod)
+            with self.subTest(pod_spec=pod["spec"]), self.assertRaises(runner.Blocked):
+                runner._validate_completed_pod_spec(pod, actual)
 
     @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_migration_failure_log_is_allowlisted_and_never_emits_private_stderr(self):
