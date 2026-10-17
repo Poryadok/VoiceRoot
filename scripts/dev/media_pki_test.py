@@ -54,6 +54,44 @@ class MediaPkiTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pki.namespace_metadata(json.dumps(metadata).encode())
 
+    def test_secret_metadata_uses_selected_fields_without_payload_reads(self):
+        snapshots = [
+            (pki.MATCHMAKING_SECRET + '|' + pki.NAMESPACE + '|tls-uid|tls-rv|dev|voice-dev|operation-1').encode(),
+            (pki.MATCHMAKING_SECRET + '|' + pki.NAMESPACE + '|replacement-uid|replacement-rv|other|other|other').encode(),
+        ]
+
+        def select(*args):
+            self.assertEqual(args[:3], ('get', 'secret', pki.MATCHMAKING_SECRET))
+            self.assertIn('-o', args)
+            self.assertNotIn('json', args)
+            self.assertNotIn('.data', args[-1])
+            self.assertIn('{{if .metadata.labels}}', args[-1])
+            self.assertIn('{{if .metadata.annotations}}', args[-1])
+            return snapshots.pop(0)
+
+        with mock.patch.object(pki, 'kubectl', side_effect=select) as query:
+            value = pki.metadata('secret', pki.MATCHMAKING_SECRET)
+        self.assertEqual(value['uid'], 'tls-uid')
+        self.assertEqual(value['resourceVersion'], 'tls-rv')
+        self.assertEqual(value['labels'], pki.NAMESPACE_LABELS)
+        self.assertEqual(value['annotations'], {'voice.io/media-pki-operation': 'operation-1'})
+        self.assertEqual(query.call_count, 1)
+        self.assertEqual(len(snapshots), 1)
+
+    def test_namespace_metadata_query_uses_supported_go_template(self):
+        def select(args):
+            template = args[-1]
+            self.assertIn('{{if .metadata.labels}}', template)
+            self.assertIn('{{if .metadata.annotations}}', template)
+            return (pki.NAMESPACE + '||namespace-uid|namespace-rv|dev|voice-dev|').encode()
+
+        with mock.patch.object(pki, 'run', side_effect=select) as query:
+            value = pki.verify_namespace()
+        self.assertEqual(value['uid'], 'namespace-uid')
+        self.assertEqual(value['resourceVersion'], 'namespace-rv')
+        self.assertEqual(query.call_count, 1)
+        self.assertTrue(all('go-template=' in call.args[0][-1] for call in query.call_args_list))
+
     def test_export_is_exactly_dev_ca_and_three_tls_leaves(self):
         result = pki.safe_secret_list(secret_list())
         self.assertEqual(set(result), {pki.CA_SECRET, pki.MATCHMAKING_CA_SECRET, *pki.LEAF_SECRETS})

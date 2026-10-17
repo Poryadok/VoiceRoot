@@ -72,11 +72,33 @@ def kubectl(*args, input_bytes=None):
 
 
 def metadata(kind, name):
-    raw = kubectl('get', kind, name, '-o', 'go-template={{json .metadata}}')
-    value = json.loads(raw)
+    value = resource_metadata(kind, name, namespaced=True)
     if value.get('name') != name or value.get('namespace') != NAMESPACE or not value.get('uid') or not value.get('resourceVersion'):
         raise ValueError('unexpected DEV resource identity')
     return {key: value[key] for key in ('name', 'namespace', 'uid', 'resourceVersion', 'labels', 'annotations') if key in value}
+
+
+def resource_metadata(kind, name, *, namespaced):
+    """Read only selected metadata fields; never fetch a Secret's data payload."""
+    get = kubectl if namespaced else lambda *args: run(['kubectl', *args])
+    selector = ('go-template={{.metadata.name}}|{{.metadata.namespace}}|{{.metadata.uid}}|'
+                '{{.metadata.resourceVersion}}|'
+                '{{if .metadata.labels}}{{index .metadata.labels "voice.environment"}}{{end}}|'
+                '{{if .metadata.labels}}{{index .metadata.labels "app.kubernetes.io/managed-by"}}{{end}}|'
+                '{{if .metadata.annotations}}{{index .metadata.annotations "voice.io/media-pki-operation"}}{{end}}')
+    raw = get('get', kind, name, '-o', selector)
+    fields = raw.decode('utf-8').strip().split('|')
+    if len(fields) != 7:
+        raise ValueError('resource metadata query returned an unexpected shape')
+    result = dict(zip(('name', 'namespace', 'uid', 'resourceVersion'), fields[:4]))
+    labels = {key: value for key, value in zip(NAMESPACE_LABELS, fields[4:6])
+              if value and value != '<no value>'}
+    if labels:
+        result['labels'] = labels
+    operation = fields[6]
+    if operation and operation != '<no value>':
+        result['annotations'] = {'voice.io/media-pki-operation': operation}
+    return result
 
 
 def namespace_metadata(raw):
@@ -88,8 +110,8 @@ def namespace_metadata(raw):
 
 
 def verify_namespace():
-    return namespace_metadata(run(['kubectl', 'get', 'namespace', NAMESPACE,
-                                  '-o', 'go-template={{json .metadata}}']))
+    value = resource_metadata('namespace', NAMESPACE, namespaced=False)
+    return namespace_metadata(json.dumps(value).encode('utf-8'))
 
 
 def reject_existing_apply_journal(state_dir):
