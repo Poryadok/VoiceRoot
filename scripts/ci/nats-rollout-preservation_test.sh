@@ -9,7 +9,7 @@ docker run --rm --network none --entrypoint tar \
   golang@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c \
   -C /usr/local -cf - go | docker run --rm -i --pids-limit 128 --memory 2g \
   --mount "type=bind,source=${ROOT},target=/work,readonly" \
-  -e PYTHONPATH=/tmp/repo/scripts/staging/nats-known-baseline \
+  -e PYTHONPATH=/tmp/repo/scripts/dev:/tmp/repo/scripts/staging/nats-known-baseline:/tmp/repo/scripts/staging/nats-rollout-preservation \
   python@sha256:1b668429b3511ab407d8e00648891631b0b1a4d7e15e3ca70f38ab5b91ad4ab4 \
   sh -eu -c '
     tar -xf - -C /usr/local
