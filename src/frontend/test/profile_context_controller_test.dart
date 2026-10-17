@@ -18,8 +18,10 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/matchmaking_providers.dart';
 import 'package:voice_frontend/state/matchmaking_search_controller.dart';
+import 'package:voice_frontend/state/mobile_opened_chat_strip.dart';
 import 'package:voice_frontend/state/profile_context_controller.dart';
 import 'package:voice_frontend/state/social_providers.dart';
+import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 
 void main() {
@@ -118,7 +120,123 @@ void main() {
         expect(harness.container.read(selectedChatIdProvider), isNull);
       },
     );
+
+    test(
+      'logout clears auth-scoped navigation before account B logs in',
+      () async {
+        final harness = _ProfileContextHarness(
+          spaces: const SpaceListData(spaces: []),
+        );
+        addTearDown(harness.dispose);
+        harness.container.read(profileContextCoordinatorProvider);
+        harness.container.read(shellNavigationProvider);
+        _selectOldContext(harness.container);
+
+        final auth = harness.container.read(authControllerProvider.notifier);
+        await auth.logout();
+
+        expect(harness.container.read(selectedSpaceIdProvider), isNull);
+        expect(harness.container.read(selectedChatIdProvider), isNull);
+        expect(harness.container.read(selectedChatFolderIdProvider), isNull);
+        expect(harness.container.read(chatInboxProvider), 'main');
+        expect(
+          harness.container.read(shellSidePanelProvider),
+          ShellSidePanel.none,
+        );
+        expect(harness.container.read(mobileOpenedChatStripProvider), isEmpty);
+        expect(harness.container.read(chatListScrollOffsetProvider), 0);
+        expect(harness.container.read(chatListScrollRestoreProvider), isFalse);
+
+        await auth.applySession(
+          _session('profile-b', 'token-b', accountId: 'account-b'),
+        );
+
+        expect(harness.container.read(selectedSpaceIdProvider), isNull);
+        expect(harness.container.read(selectedChatIdProvider), isNull);
+        expect(harness.container.read(selectedChatFolderIdProvider), isNull);
+        expect(harness.container.read(chatInboxProvider), 'main');
+        expect(harness.container.read(mobileOpenedChatStripProvider), isEmpty);
+      },
+    );
+
+    test(
+      'logout clears auth-scoped navigation before a guest starts',
+      () async {
+        final harness = _ProfileContextHarness(
+          spaces: const SpaceListData(spaces: []),
+        );
+        addTearDown(harness.dispose);
+        harness.container.read(profileContextCoordinatorProvider);
+        harness.container.read(shellNavigationProvider);
+        _selectOldContext(harness.container);
+
+        final auth = harness.container.read(authControllerProvider.notifier);
+        await auth.logout();
+        final guest = _session(
+          'guest-profile',
+          'guest-token',
+          accountId: 'guest-account',
+        );
+        await auth.applySession(guest);
+        auth.state = auth.state.copyWith(isGuest: true);
+
+        expect(harness.container.read(selectedSpaceIdProvider), isNull);
+        expect(harness.container.read(selectedChatIdProvider), isNull);
+        expect(harness.container.read(selectedChatFolderIdProvider), isNull);
+        expect(harness.container.read(chatInboxProvider), 'main');
+      },
+    );
+
+    test(
+      'late old-account Space membership response cannot clear new account selection',
+      () async {
+        final requestStarted = Completer<void>();
+        final spacesResponse = Completer<SpaceListData>();
+        final harness = _ProfileContextHarness(
+          spaces: const SpaceListData(spaces: []),
+          onSpaces: () {
+            if (!requestStarted.isCompleted) requestStarted.complete();
+            return spacesResponse.future;
+          },
+        );
+        addTearDown(harness.dispose);
+        harness.container.read(profileContextCoordinatorProvider);
+        harness.container.read(shellNavigationProvider);
+        _selectOldContext(harness.container);
+
+        final auth = harness.container.read(authControllerProvider.notifier);
+        await harness.switchToB();
+        await requestStarted.future;
+
+        await auth.logout();
+        await auth.applySession(
+          _session('profile-c', 'token-c', accountId: 'account-c'),
+        );
+        harness.container.read(selectedSpaceIdProvider.notifier).state =
+            'space-c';
+        harness.container.read(selectedChatIdProvider.notifier).state =
+            'chat-c';
+
+        spacesResponse.complete(const SpaceListData(spaces: []));
+        await _flush();
+
+        expect(harness.container.read(selectedSpaceIdProvider), 'space-c');
+        expect(harness.container.read(selectedChatIdProvider), 'chat-c');
+      },
+    );
   });
+}
+
+void _selectOldContext(ProviderContainer container) {
+  container.read(selectedSpaceIdProvider.notifier).state = 'space-a';
+  container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+  container.read(selectedChatFolderIdProvider.notifier).state = 'folder-a';
+  container.read(chatInboxProvider.notifier).state = 'requests';
+  container.read(shellSidePanelProvider.notifier).state =
+      ShellSidePanel.members;
+  container.read(mobileOpenedChatStripProvider.notifier).openChat('chat-a');
+  container.read(chatListScrollOffsetProvider.notifier).state = 42;
+  container.read(chatListScrollRestoreProvider.notifier).state = true;
 }
 
 Future<void> _flush() => Future<void>.delayed(Duration.zero);
@@ -127,6 +245,7 @@ class _ProfileContextHarness {
   _ProfileContextHarness({
     required SpaceListData spaces,
     Future<http.Response> Function(http.Request request)? onRequest,
+    Future<SpaceListData> Function()? onSpaces,
   }) {
     final client = MockClient(onRequest ?? ((_) async => _emptyResponse(404)));
     final gateway = GatewayHttpClient(
@@ -163,7 +282,9 @@ class _ProfileContextHarness {
           ),
         ),
         realtimeEventProvider.overrideWith((_) => const Stream.empty()),
-        mySpacesProvider.overrideWith((_) async => spaces),
+        mySpacesProvider.overrideWith(
+          (_) => onSpaces?.call() ?? Future.value(spaces),
+        ),
       ],
     );
   }
@@ -177,10 +298,14 @@ class _ProfileContextHarness {
   void dispose() => container.dispose();
 }
 
-AuthSession _session(String profileId, String token) => AuthSession(
+AuthSession _session(
+  String profileId,
+  String token, {
+  String accountId = 'account-a',
+}) => AuthSession(
   accessToken: token,
   refreshToken: 'refresh-$profileId',
-  accountId: 'account-a',
+  accountId: accountId,
   activeProfileId: profileId,
   expiresInSeconds: 900,
 );

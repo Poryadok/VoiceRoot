@@ -36,10 +36,9 @@ Future<void> _onActiveProfileChanged(Ref ref) async {
   final activeSearch = ref.read(activeSearchSessionProvider);
   if (auth != null && activeSearch != null) {
     unawaited(
-      ref.read(voiceMatchmakingClientProvider).cancelSearch(
-        authorization: auth,
-        sessionId: activeSearch.id,
-      ),
+      ref
+          .read(voiceMatchmakingClientProvider)
+          .cancelSearch(authorization: auth, sessionId: activeSearch.id),
     );
     ref.read(activeSearchSessionProvider.notifier).state = null;
     ref.read(matchmakingSearchControllerProvider.notifier).clearRecovery();
@@ -47,16 +46,29 @@ Future<void> _onActiveProfileChanged(Ref ref) async {
 
   final selectedSpaceId = ref.read(selectedSpaceIdProvider);
   if (selectedSpaceId != null) {
-    try {
-      final spaces = await ref.read(mySpacesProvider.future);
-      final stillMember = spaces.spaces.any((s) => s.id == selectedSpaceId);
-      if (!stillMember) {
+    final requestIdentity = ref
+        .read(authControllerProvider.notifier)
+        .gatewayRequestIdentity;
+    if (requestIdentity != null) {
+      try {
+        final spaces = await ref.read(mySpacesProvider.future);
+        if (ref.read(authControllerProvider.notifier).gatewayRequestIdentity !=
+            requestIdentity) {
+          return;
+        }
+        final stillMember = spaces.spaces.any((s) => s.id == selectedSpaceId);
+        if (!stillMember) {
+          ref.read(shellNavigationProvider).exitSpace();
+          ref.read(selectedChatIdProvider.notifier).state = null;
+        }
+      } on Object {
+        if (ref.read(authControllerProvider.notifier).gatewayRequestIdentity !=
+            requestIdentity) {
+          return;
+        }
         ref.read(shellNavigationProvider).exitSpace();
         ref.read(selectedChatIdProvider.notifier).state = null;
       }
-    } on Object {
-      ref.read(shellNavigationProvider).exitSpace();
-      ref.read(selectedChatIdProvider.notifier).state = null;
     }
   }
 
@@ -86,10 +98,9 @@ Future<void> _migrateLocalAccentIfNeeded(Ref ref, String profileId) async {
   }
   if (hex == null) return;
 
-  final result = await ref.read(voiceUsersClientProvider).updateProfile(
-    authorization: auth,
-    accentColor: hex,
-  );
+  final result = await ref
+      .read(voiceUsersClientProvider)
+      .updateProfile(authorization: auth, accentColor: hex);
   if (result is UsersApiOk) {
     await storage.clearOverride(profileId);
     await storage.clearProfileIndex(profileId);

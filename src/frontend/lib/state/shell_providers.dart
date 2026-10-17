@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'mobile_opened_chat_strip.dart';
 import 'space_providers.dart';
@@ -94,12 +95,24 @@ class ShellNavigation {
 
   void toggleSidePanel(ShellSidePanel panel) {
     final current = _ref.read(shellSidePanelProvider);
-    _ref.read(shellSidePanelProvider.notifier).state =
-        current == panel ? ShellSidePanel.none : panel;
+    _ref.read(shellSidePanelProvider.notifier).state = current == panel
+        ? ShellSidePanel.none
+        : panel;
   }
 
   void closeSidePanel() {
     _ref.read(shellSidePanelProvider.notifier).state = ShellSidePanel.none;
+  }
+
+  void resetAuthScopedState() {
+    _ref.read(selectedSpaceIdProvider.notifier).state = null;
+    _ref.read(selectedChatIdProvider.notifier).state = null;
+    _ref.read(selectedChatFolderIdProvider.notifier).state = null;
+    _ref.read(chatInboxProvider.notifier).state = 'main';
+    _ref.read(shellSidePanelProvider.notifier).state = ShellSidePanel.none;
+    _ref.read(mobileOpenedChatStripProvider.notifier).clear();
+    _ref.read(chatListScrollOffsetProvider.notifier).state = 0;
+    _ref.read(chatListScrollRestoreProvider.notifier).state = false;
   }
 
   void setNavigationSection(NavigationSection section) {
@@ -120,6 +133,14 @@ class ShellNavigation {
   }
 }
 
-final shellNavigationProvider = Provider<ShellNavigation>(
-  (ref) => ShellNavigation(ref),
-);
+final shellNavigationProvider = Provider<ShellNavigation>((ref) {
+  final navigation = ShellNavigation(ref);
+  ref.listen<AuthState>(authControllerProvider, (previous, next) {
+    final previousAccountId = previous?.session?.accountId;
+    final nextAccountId = next.session?.accountId;
+    final accountChanged =
+        previousAccountId != null && previousAccountId != nextAccountId;
+    if (accountChanged) navigation.resetAuthScopedState();
+  });
+  return navigation;
+});
