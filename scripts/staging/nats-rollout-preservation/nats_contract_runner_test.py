@@ -14,9 +14,9 @@ from unittest.mock import patch
 from nats_contract_plan import digest
 from nats_contract_plan_test import Tests as PlanFixtures
 from nats_contract_runner import (SCHEMA, INPUT_SCHEMA, MAX_RESPONSE_BYTES, ContractRunnerError, NatsActor,
-    _canonical, _ensure_input_profile, _verify_input_receipt, action_readback, execute_action,
+    _canonical, _ensure_input_profile, _verify_input_receipt, _broker_receipt, action_readback, execute_action,
     inspect_action, load_plan, read_plan, main, _response_bytes,
-    validate_envelope, validate_plan)
+    read_broker_receipt, validate_envelope, validate_plan)
 
 
 def context(plan):
@@ -140,6 +140,24 @@ class ContractRunnerTests(unittest.TestCase):
         self.assertEqual(read_plan(state_root=self.state_root, binding=self.ctx), receipt)
         with self.assertRaises(ContractRunnerError):
             load_plan(self.raw, expected=self.ctx, state_root=self.state_root)
+
+    def test_broker_readback_is_exact_same_attempt_receipt_only(self):
+        load_plan(self.raw, expected=self.ctx, state_root=self.state_root)
+        started = {'schema': 'voice-nats-supervisor-v1', 'ok': True, 'running': True,
+            'pid': 410, 'started_at_ns': 1000}
+        start_receipt = _broker_receipt(self.state_root, self.ctx, 'start', lambda: started)
+        self.assertEqual(read_broker_receipt(state_root=self.state_root,
+            expected=self.ctx, action='start'), start_receipt)
+        stopped = {**started, 'running': False, 'finished_at_ns': 2000}
+        stop_receipt = _broker_receipt(self.state_root, self.ctx, 'stop', lambda: stopped)
+        self.assertEqual(read_broker_receipt(state_root=self.state_root,
+            expected=self.ctx, action='stop'), stop_receipt)
+        with self.assertRaises(ContractRunnerError):
+            read_broker_receipt(state_root=self.state_root,
+                expected={**self.ctx, 'pod_uid': '72345678-1234-1234-1234-123456789abc'},
+                action='start')
+        with self.assertRaises(ContractRunnerError):
+            read_broker_receipt(state_root=self.state_root, expected=self.ctx, action='status')
 
     def test_bad_pod_state_root_or_capture_binding_fails_before_filesystem_write(self):
         wrong = {**self.ctx, 'server_config_sha256': 'b' * 64}

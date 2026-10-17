@@ -466,6 +466,24 @@ class VerificationJobTests(unittest.TestCase):
             with self.assertRaises(jobs.VerificationJobError):
                 jobs.document(CONTRACT_REQUEST, invalid, IMAGE)
 
+    def test_contract_broker_receipt_readback_vectors_are_fixed_and_output_only(self):
+        vectors = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING)
+        for action in ('read-broker-start', 'read-broker-stop'):
+            with self.subTest(action=action):
+                vector = vectors[action]
+                self.assertEqual(vector[:3], ['/usr/bin/python3',
+                    '/voice-nats-runner/contract_runner.py', '--' + action])
+                self.assertIn('--pod-uid', vector)
+                self.assertIn(POD_UID, vector)
+                self.assertIn('--contract-attempt', vector)
+                self.assertEqual(vector[vector.index('--contract-attempt') + 1],
+                    CONTRACT_BINDING['contract_attempt'])
+                fixed = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING, action=action)
+                self.assertEqual(fixed, {'action': vector})
+        with self.assertRaises(jobs.VerificationJobError):
+            jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING,
+                action='read-broker-receipt')
+
 
 if __name__ == '__main__':
     unittest.main()
