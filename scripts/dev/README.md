@@ -87,6 +87,100 @@ namespace. `activate` can apply captured app configuration; do not use it for
 routine updates. Never use bootstrap to reset an existing dev installation.
 Captured state includes secrets and must remain root-only.
 
+## DEV media JWKS issuer recovery
+
+`media_pki.py` is a separate DEV-only issuer/rotation tool. It never accepts a
+namespace argument and refuses to run outside the designated Linux operator
+host. The issuer runs as UID/GID 10001 in a pinned local image
+with a Docker named volume at `/state`; the image initializes that volume as
+0700 and all generated CA/leaf key files are 0600. No CA key is put in a
+Kubernetes Secret, host bind mount, container socket, command argument, terminal
+output or receipt. `apply` streams the new material from the volume through
+process memory directly to `kubectl` stdin; it does not write the key-bearing
+payload to a host file. Receipts contain only public fingerprints, resource UID
+and resourceVersion pins, the prior public trust bundle, and Role trust-path
+settings. The pmd Docker operator is the custody administrator: Docker access
+can mount any named volume, so do not grant that host account to untrusted
+operators. Losing the volume requires a new DEV trust generation and another
+reviewed overlap rollout; it does not justify copying a key out of Kubernetes.
+
+Build the issuer image from the pinned base in `media-pki-issuer/Dockerfile`,
+record its immutable local image ID (`sha256:...`), then initialize the named
+volume once:
+
+```sh
+docker build -f scripts/dev/media-pki-issuer/Dockerfile -t voice-dev-media-pki-issuer:review scripts/dev/media-pki-issuer
+docker image inspect --format '{{.Id}}' voice-dev-media-pki-issuer:review
+python3 scripts/dev/media_pki.py prepare --issuer-image sha256:<image-id>
+```
+
+The CA is constrained to the exact DEV DNS identities `voice-voice`,
+`voice-gameintegration`, and `voice-matchmaking.voice-dev.svc`, has `pathLen=0`,
+and can sign only serverAuth leaves. The three leaf keys are distinct, each has
+its exact DNS SAN and 90-day validity. Before exporting a leaf, the issuer
+verifies its TLS chain and hostname. It also signs synthetic negative-chain
+fixtures only in ephemeral storage and requires OpenSSL to reject `voice-space`,
+`voice-gateway`, and `voice-matchmaking.voice-staging.svc` under the CA's actual
+name constraints.
+Before the one-time cluster cutover, `renew` creates fresh leaves under the
+current DEV CA without changing its root. It uses the operator lock and refuses
+to run once an apply journal exists, so it cannot invalidate a resumable receipt.
+This recovery tool does not implement a later 90-day Kubernetes leaf rotation;
+that requires a separately reviewed rotation operation and must not be attempted
+by manually editing or deleting the protected receipt.
+
+The named volume is the issuer's durable working custody; do not remove it as a
+rotation or repair step. This tool has no plaintext key export or automated
+backup command. If the volume is lost, treat that as loss of the issuer and
+perform a separately reviewed new DEV trust generation: initialize an empty
+volume, append its public root while retaining the existing JWKS bundle, then
+issue new leaves and cut over. Never remove an old root while a deployed leaf
+depends on it. An approved encrypted offline backup process is an operational
+prerequisite before relying on this issuer for long-lived recovery; do not
+improvise a host-side volume copy.
+
+`apply --confirm-dev-pki-change` is the reviewed cluster cutover. It only targets
+`voice-dev`, and requires the namespace's `voice.environment=dev` and
+`app.kubernetes.io/managed-by=voice-dev` ownership labels: append the new public
+root to `voice-media-ca.jwks-ca.crt` while preserving every prior bundle byte,
+switch `voice-role` outbound JWKS trust to that key, create the public-only
+`voice-matchmaking-principal-jwks-ca` and its server leaf Secret
+`voice-matchmaking-principal-jwks-tls` only if absent, create GIS TLS only if
+absent, replace the `voice-voice` TLS leaf with UID/resourceVersion CAS, and
+restart Role/Voice to load the projected trust and certificate files. Chat and
+Voice consume the dedicated Matchmaking CA Secret as read-only JWKS trust; the
+Matchmaking pod consumes its TLS Secret read-only. The Matchmaking runtime URL
+is `https://voice-matchmaking.voice-dev.svc:8443/internal/v1/principal/jwks.json`.
+The Compose alias and all Staging identities use their separate environment
+profiles and never use this DEV leaf.
+
+The operator reads the documented public-only `voice-media-ca` Secret and
+metadata, data-key names, type, ownership labels, and public `ca.crt`/`tls.crt`
+fields for its own operation-created Secrets. It never GETs the `tls.key` value.
+The inbound `ROLE_PRINCIPAL_CLIENT_CA_FILE` and `voice-media-ca.ca.crt` are
+unchanged. DNS name constraints keep the outbound root from authorizing Space,
+Gateway, or the Staging Matchmaking hostname.
+
+The tool records CAS pins before changing resources and never overwrites an
+existing operation journal. A forward-only boundary is persisted before the
+first trust mutation, because a later leaf may depend on that trust. After that
+boundary, `rollback` and `apply` re-entry refuse; the prior exposed Voice leaf
+key is never restored. Continue the exact operation with its pinned issuer image
+and protected journal:
+
+```sh
+python3 scripts/dev/media_pki.py resume --issuer-image sha256:<same-image-id> --confirm-dev-pki-change
+```
+
+`resume` verifies the fixed DEV namespace, CA bundle, Role trust configuration,
+public leaf fingerprints, operation annotations, and UID/resourceVersion pins
+before continuing forward. It fails closed on ambiguous drift; it does not
+replace or reset the receipt. Before the forward-only boundary, use
+`rollback --confirm-dev-pki-change` only when its saved resource pins still
+match. Verify the Role and Voice rollouts, then use the separate GIS installer's
+preflight/paused-start flow. Staging requires its own review and is never
+addressed by this tool.
+
 ## DEV Music NATS maintenance
 
 `nats_music_operator.py --profile voice-dev-current-deployment plan` and
