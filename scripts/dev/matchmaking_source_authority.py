@@ -29,6 +29,7 @@ MAX_BUILDX_ARTIFACT = 32 << 20
 MAX_JOB_LOG = 16 << 20
 SOURCE_SHA = re.compile(r"[a-f0-9]{40}\Z")
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
+_CURRENT_PHASE = "preflight"
 ACCEPT = ", ".join((
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.oci.image.manifest.v1+json",
@@ -48,9 +49,40 @@ _HTTPS = urllib.request.build_opener(_NoRedirect)
 class ReceiptError(RuntimeError):
     """A fixed, non-sensitive failure from the read-only receipt producer."""
 
+    def __init__(self, message="matchmaking_source_authority_rejected", *, phase=None,
+            code="validation_rejected", failure_class="ReceiptError", http_status=None):
+        super().__init__(message)
+        fixed_phase = phase in (
+            "preflight", "run-metadata", "source-capture", "source-preflight", "repository-pin",
+            "source-equivalence", "source-ci", "source-tree", "source-archive", "stack-lock-artifact",
+            "stack-lock-read", "stack-lock-parse", "master-recheck", "build-context-validation",
+            "publisher-repository", "publisher-job-metadata", "publisher-job-log",
+            "publisher-artifact-metadata", "publisher-artifact-content", "publisher-buildx-validation",
+            "receipt-binding", "receipt-write", "registry-token", "registry-index",
+            "registry-platform-manifest", "registry-config", "registry-image")
+        self.phase = phase if fixed_phase or phase in tuple(
+            "registry-image-" + name for name in authority.IMAGE_NAMES) else "unknown"
+        self.code = code if code in (
+            "validation_rejected", "http_error", "http_status", "network_error",
+            "transport_rejected", "response_schema_invalid", "archive_rejected",
+            "source_capture_rejected", "publisher_evidence_rejected", "receipt_write_rejected",
+            "internal_error") else "internal_error"
+        self.failure_class = failure_class if failure_class in (
+            "ReceiptError", "SourceError", "HTTPError", "HTTPResponse", "URLError",
+            "TimeoutError", "OSError", "KeyError", "TypeError", "ValueError",
+            "BadZipFile", "Other") else "Other"
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+
+    def safe_record(self):
+        record = {"status": "REJECTED", "phase": self.phase, "code": self.code,
+            "class": self.failure_class}
+        if self.http_status is not None:
+            record["http_status"] = self.http_status
+        return record
+
 
 def _reject():
-    raise ReceiptError("matchmaking_source_authority_rejected")
+    raise ReceiptError("matchmaking_source_authority_rejected", phase=_CURRENT_PHASE)
 
 
 def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY):
@@ -61,7 +93,9 @@ def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY):
     try:
         with _HTTPS.open(request, timeout=30) as response:
             if response.status != 200:
-                _reject()
+                status = response.status if type(response.status) is int and 100 <= response.status <= 599 else None
+                raise ReceiptError(phase=_CURRENT_PHASE, code="http_status",
+                    failure_class="HTTPResponse", http_status=status)
             declared = response.headers.get("Content-Length")
             if declared is not None and (not declared.isdigit() or int(declared) > limit):
                 _reject()
@@ -71,11 +105,21 @@ def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY):
             return body, dict(response.headers)
     except ReceiptError:
         raise
-    except (OSError, urllib.error.URLError, ValueError):
-        _reject()
+    except urllib.error.HTTPError as error:
+        status = error.code if type(error.code) is int and 100 <= error.code <= 599 else None
+        raise ReceiptError(phase=_CURRENT_PHASE, code="http_error",
+            failure_class="HTTPError", http_status=status) from None
+    except urllib.error.URLError:
+        raise ReceiptError(phase=_CURRENT_PHASE, code="network_error",
+            failure_class="URLError") from None
+    except (OSError, ValueError):
+        raise ReceiptError(phase=_CURRENT_PHASE, code="network_error",
+            failure_class="OSError") from None
 
 
 def _registry_token(name, username, github_token, cache):
+    global _CURRENT_PHASE
+    _CURRENT_PHASE = "registry-token"
     if name not in authority.IMAGE_NAMES or not username or not github_token:
         _reject()
     if name not in cache:
@@ -98,6 +142,9 @@ def _registry_token(name, username, github_token, cache):
 
 
 def _registry_get(name, reference, token, *, blob=False):
+    global _CURRENT_PHASE
+    _CURRENT_PHASE = "registry-config" if blob else (
+        "registry-index" if SOURCE_SHA.fullmatch(reference) else "registry-platform-manifest")
     if (name not in authority.IMAGE_NAMES or not isinstance(reference, str)
         or not (SOURCE_SHA.fullmatch(reference) or DIGEST.fullmatch(reference))):
         _reject()
@@ -109,6 +156,8 @@ def _registry_get(name, reference, token, *, blob=False):
 
 
 def _image_identity(name, tag, username, github_token, token_cache):
+    global _CURRENT_PHASE
+    _CURRENT_PHASE = "registry-image"
     if name not in authority.IMAGE_NAMES or tag != tag.lower() or not SOURCE_SHA.fullmatch(tag):
         _reject()
     token = _registry_token(name, username, github_token, token_cache)
@@ -160,6 +209,7 @@ def _image_identity(name, tag, username, github_token, token_cache):
         _reject()
     if not isinstance(child, dict) or child.get("schemaVersion") != 2:
         _reject()
+    _CURRENT_PHASE = "registry-config"
     config = child.get("config")
     if not isinstance(config, dict) or not DIGEST.fullmatch(str(config.get("digest", ""))) \
             or type(config.get("size")) is not int or not 0 < config["size"] <= MAX_REGISTRY_BODY:
@@ -188,6 +238,8 @@ def _image_identity(name, tag, username, github_token, token_cache):
 
 
 def _verified_buildx(run_id, run, sha, index_digest, headers, deadline, repo):
+    global _CURRENT_PHASE
+    _CURRENT_PHASE = "publisher-job-metadata"
     attempt = run["run_attempt"]
     jobs = authority._pages(authority.API + "/actions/runs/" + str(run_id)
         + "/attempts/" + str(attempt) + "/jobs", "jobs", headers, deadline)
@@ -209,9 +261,11 @@ def _verified_buildx(run_id, run, sha, index_digest, headers, deadline, repo):
         _reject()
     step = producers[0]
     post_step = post_steps[0]
+    _CURRENT_PHASE = "publisher-job-log"
     log, _ = authority._fetch(authority.API + "/actions/jobs/" + str(job["id"]) + "/logs",
         headers, MAX_JOB_LOG, deadline)
     published = _published_buildx_artifact(log)
+    _CURRENT_PHASE = "publisher-artifact-metadata"
     artifacts = authority._pages(authority.API + "/actions/runs/" + str(run_id)
         + "/artifacts", "artifacts", headers, deadline)
     candidates = [item for item in artifacts if item.get("id") == published["id"]
@@ -221,8 +275,10 @@ def _verified_buildx(run_id, run, sha, index_digest, headers, deadline, repo):
         and type(item.get("size_in_bytes")) is int
         and 0 < item["size_in_bytes"] <= MAX_BUILDX_ARTIFACT]
     verified = []
+    failures = []
     for candidate in candidates:
         try:
+            _CURRENT_PHASE = "publisher-artifact-content"
             artifact = authority._get(authority.API + "/actions/artifacts/"
                 + str(candidate["id"]), headers, deadline)
             workflow = artifact.get("workflow_run", {})
@@ -244,10 +300,24 @@ def _verified_buildx(run_id, run, sha, index_digest, headers, deadline, repo):
                 candidate["size_in_bytes"], IMAGE + "@" + index_digest,
                 run_id, attempt, sha, step, None, service="matchmaking")
             verified.append((candidate, evidence))
-        except Exception:
-            continue
+        except ReceiptError as error:
+            failures.append(error)
+        except authority.SourceError as error:
+            failures.append(ReceiptError(phase=error.phase or _CURRENT_PHASE,
+                code=error.code if error.code in ("validation_rejected", "transport_rejected",
+                    "response_schema_invalid", "archive_rejected", "http_error", "http_status",
+                    "network_error") else "source_capture_rejected",
+                failure_class=error.failure_class, http_status=error.http_status))
+        except Exception as error:
+            failure_class = type(error).__name__ if type(error).__name__ in (
+                "TimeoutError", "OSError", "KeyError", "TypeError", "ValueError", "BadZipFile") else "Other"
+            failures.append(ReceiptError(phase=_CURRENT_PHASE, code="internal_error",
+                failure_class=failure_class))
     if len(verified) != 1:
-        _reject()
+        if len(candidates) == 1 and len(failures) == 1:
+            raise failures[0]
+        raise ReceiptError(phase="publisher-buildx-validation",
+            code="publisher_evidence_rejected", failure_class="ReceiptError")
     return job, step, verified[0][0], verified[0][1]
 
 
@@ -315,6 +385,8 @@ def _verify_ci_build_source(source_root):
 
 
 def capture_receipt(run_id, github_token, github_actor, output_path):
+    global _CURRENT_PHASE
+    _CURRENT_PHASE = "preflight"
     if type(run_id) is not int or run_id <= 0 or not github_token or not github_actor:
         _reject()
     # Run the canonical V1 source capture unchanged, substituting only its image
@@ -322,6 +394,7 @@ def capture_receipt(run_id, github_token, github_actor, output_path):
     username = github_actor
     headers = authority._headers(github_token)
     deadline = time.monotonic() + 60
+    _CURRENT_PHASE = "run-metadata"
     run = authority._get(authority.API + "/actions/runs/" + str(run_id), headers, deadline)
     source_sha = run.get("head_sha") if isinstance(run, dict) else None
     if (run.get("id") != run_id or run.get("status") != "completed"
@@ -339,9 +412,16 @@ def capture_receipt(run_id, github_token, github_actor, output_path):
     original_resolver = authority._resolve_image
 
     def authenticated_resolver(name, tag, deadline):
+        global _CURRENT_PHASE
         if name not in authority.IMAGE_NAMES:
             _reject()
-        identity = _image_identity(name, tag, username, github_token, registry_tokens)
+        _CURRENT_PHASE = "registry-image"
+        try:
+            identity = _image_identity(name, tag, username, github_token, registry_tokens)
+        except ReceiptError as error:
+            raise authority.SourceError(phase=error.phase or _CURRENT_PHASE,
+                code=error.code, failure_class=error.failure_class,
+                http_status=error.http_status) from None
         identities[name] = identity
         return identity["image"]
 
@@ -349,14 +429,19 @@ def capture_receipt(run_id, github_token, github_actor, output_path):
     try:
         with tempfile.TemporaryDirectory(prefix="voice-matchmaking-authority-") as directory:
             Path(directory).chmod(0o700)
+            _CURRENT_PHASE = "source-capture"
             base = authority.capture_equivalent_master_source(github_token, run_id,
                 source_sha, Path(directory))
+            _CURRENT_PHASE = "build-context-validation"
             _verify_ci_build_source(directory)
             deadline = time.monotonic() + 120
+            _CURRENT_PHASE = "publisher-repository"
             repo = authority._get(authority.API, headers, deadline)
+            _CURRENT_PHASE = "publisher-job-metadata"
             job, step, artifact, build = _verified_buildx(run_id, run,
                 base["source_sha"], identities["matchmaking"]["index_digest"],
                 headers, deadline, repo)
+            _CURRENT_PHASE = "receipt-binding"
             selected = identities.get("matchmaking")
             if (not isinstance(selected, dict)
                 or selected["index_digest"] != "sha256:" + build["builder_output_index_sha256"]
@@ -377,13 +462,23 @@ def capture_receipt(run_id, github_token, github_actor, output_path):
             if base.get("schema") != "voice-source-authority-v1" or base.get("verified") is not True:
                 _reject()
             encoded = json.dumps(base, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+            _CURRENT_PHASE = "receipt-write"
             target = Path(output_path)
             target.write_bytes(encoded)
             return base
     except ReceiptError:
         raise
-    except Exception:
-        _reject()
+    except authority.SourceError as error:
+        raise ReceiptError(phase=error.phase or _CURRENT_PHASE,
+            code=error.code if error.code in ("validation_rejected", "transport_rejected",
+                "response_schema_invalid", "archive_rejected", "http_error", "http_status",
+                "network_error") else "source_capture_rejected",
+            failure_class=error.failure_class, http_status=error.http_status) from None
+    except Exception as error:
+        failure_class = type(error).__name__ if type(error).__name__ in (
+            "TimeoutError", "OSError", "KeyError", "TypeError", "ValueError", "BadZipFile") else "Other"
+        code = "response_schema_invalid" if failure_class in ("KeyError", "TypeError", "ValueError") else "internal_error"
+        raise ReceiptError(phase=_CURRENT_PHASE, code=code, failure_class=failure_class) from None
     finally:
         authority._resolve_image = original_resolver
 
@@ -401,7 +496,7 @@ def main(argv=None):
             "source_sha": receipt["source_sha"], "image": "matchmaking"}, sort_keys=True))
         return 0
     except ReceiptError as error:
-        print(str(error), file=sys.stderr)
+        print(json.dumps(error.safe_record(), sort_keys=True), file=sys.stderr)
         return 1
 
 
