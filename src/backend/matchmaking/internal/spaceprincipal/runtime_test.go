@@ -2,13 +2,18 @@ package spaceprincipal
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -83,6 +88,87 @@ func TestConfigAllowsGatewayOnlyTrustForTheCompleteMatchMethod(t *testing.T) {
 	}
 	if err := cfg.validate(); err != nil {
 		t.Fatalf("valid Gateway-only CompleteMatch trust rejected: %v", err)
+	}
+}
+
+func TestInitialJWKSRefreshWaitsForSpaceAndStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var attempts atomic.Int32
+	firstAttempt := make(chan time.Time, 1)
+	secondAttempt := make(chan time.Time, 1)
+	done := make(chan error, 1)
+	started := time.Now()
+	go func() {
+		done <- refreshInitialJWKS(ctx, "space", func(attempt context.Context, issuer string) error {
+			if issuer != "space" {
+				return errors.New("unexpected issuer")
+			}
+			if _, ok := attempt.Deadline(); !ok {
+				return errors.New("JWKS attempt has no deadline")
+			}
+			switch attempts.Add(1) {
+			case 1:
+				firstAttempt <- time.Now()
+				return &jwksSourceUnavailableError{cause: errors.New("Space DNS not ready")}
+			default:
+				secondAttempt <- time.Now()
+				return nil
+			}
+		})
+	}()
+	first := <-firstAttempt
+	second := <-secondAttempt
+	if second.Sub(first) < 200*time.Millisecond {
+		t.Fatalf("initial JWKS retry was not backoff-bounded: delay %v", second.Sub(first))
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("initial JWKS refresh after Space became available: %v", err)
+	}
+	if attempts.Load() != 2 || time.Since(started) > 3*time.Second {
+		t.Fatalf("initial JWKS attempts=%d elapsed=%v", attempts.Load(), time.Since(started))
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+	entered := make(chan struct{})
+	result := make(chan error, 1)
+	go func() {
+		result <- refreshInitialJWKS(ctx, "space", func(context.Context, string) error {
+			close(entered)
+			return &jwksSourceUnavailableError{cause: errors.New("Space DNS not ready")}
+		})
+	}()
+	<-entered
+	stop()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled initial JWKS refresh error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("initial JWKS refresh did not stop promptly on cancellation")
+	}
+}
+
+func TestInitialJWKSFetchRetriesOnlyAvailabilityErrors(t *testing.T) {
+	for name, err := range map[string]error{
+		"DNS":          &net.DNSError{Err: "no such host", Name: "space"},
+		"connection":   syscall.ECONNREFUSED,
+		"timeout":      context.DeadlineExceeded,
+		"unknown CA":   x509.UnknownAuthorityError{},
+		"invalid JWKS": errors.New("invalid Space principal JWKS response"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := retryableJWKSFetchError(err); got != (name == "DNS" || name == "connection" || name == "timeout") {
+				t.Fatalf("retryableJWKSFetchError(%v) = %v", err, got)
+			}
+		})
+	}
+	if _, ok := classifyJWKSBodyReadError(syscall.ECONNRESET).(*jwksSourceUnavailableError); !ok {
+		t.Fatal("transient JWKS body reset must retry the initial fetch")
+	}
+	if _, ok := classifyJWKSBodyReadError(errors.New("malformed body")).(*jwksSourceUnavailableError); ok {
+		t.Fatal("malformed JWKS body must remain a fatal response error")
 	}
 }
 

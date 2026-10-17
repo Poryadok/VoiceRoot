@@ -14,11 +14,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -144,6 +146,76 @@ type Runtime struct {
 	closeErr    error
 }
 
+type jwksSourceUnavailableError struct{ cause error }
+
+func (e *jwksSourceUnavailableError) Error() string { return "principal JWKS source unavailable" }
+func (e *jwksSourceUnavailableError) Unwrap() error { return e.cause }
+
+func retryableJWKSFetchError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var certificateErr *tls.CertificateVerificationError
+	var unknownAuthority x509.UnknownAuthorityError
+	var hostnameErr x509.HostnameError
+	var rootsErr x509.SystemRootsError
+	if errors.As(err, &certificateErr) || errors.As(err, &unknownAuthority) || errors.As(err, &hostnameErr) || errors.As(err, &rootsErr) {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		err = urlErr.Err
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func refreshInitialJWKS(ctx context.Context, issuer string, refresh func(context.Context, string) error) error {
+	backoff := 250 * time.Millisecond
+	for {
+		attempt, cancel := context.WithTimeout(ctx, dependencyTimeout)
+		err := refresh(attempt, issuer)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var unavailable *jwksSourceUnavailableError
+		if !errors.As(err, &unavailable) {
+			return err
+		}
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+		if backoff < 5*time.Second {
+			backoff *= 2
+			if backoff > 5*time.Second {
+				backoff = 5 * time.Second
+			}
+		}
+	}
+}
+
+func classifyJWKSBodyReadError(err error) error {
+	if errors.Is(err, io.ErrUnexpectedEOF) || retryableJWKSFetchError(err) {
+		return &jwksSourceUnavailableError{cause: err}
+	}
+	return errors.New("invalid Matchmaking principal JWKS response")
+}
+
 func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -195,14 +267,23 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		response, err := client.Do(request)
 		if err != nil {
+			if retryableJWKSFetchError(err) {
+				return nil, &jwksSourceUnavailableError{cause: err}
+			}
 			return nil, err
 		}
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
+			if response.StatusCode == http.StatusServiceUnavailable {
+				return nil, &jwksSourceUnavailableError{cause: errors.New("principal JWKS source returned HTTP 503")}
+			}
 			return nil, errors.New("matchmaking principal JWKS unavailable")
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 65537))
-		if err != nil || len(body) > 65536 {
+		if err != nil {
+			return nil, classifyJWKSBodyReadError(err)
+		}
+		if len(body) > 65536 {
 			return nil, errors.New("invalid Matchmaking principal JWKS response")
 		}
 		keys, err := principal.ParseJWKS(body)
@@ -227,19 +308,20 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	runtime := &Runtime{config: cfg, resolver: resolver, replay: replay, transport: transport,
 		credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs})}
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
-	defer cancel()
-	if err := replay.Ping(startup).Err(); err != nil {
+	pingErr := replay.Ping(startup).Err()
+	cancel()
+	if pingErr != nil {
 		_ = runtime.Close()
 		return nil, errors.New("matchmaking principal replay Redis unavailable")
 	}
 	if cfg.JWKSURL != "" {
-		if err := resolver.Refresh(startup, "space"); err != nil {
+		if err := refreshInitialJWKS(ctx, "space", resolver.Refresh); err != nil {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("load Space principal JWKS: %w", err)
 		}
 	}
 	if cfg.GatewayJWKSURL != "" {
-		if err := resolver.Refresh(startup, "gateway"); err != nil {
+		if err := refreshInitialJWKS(ctx, "gateway", resolver.Refresh); err != nil {
 			_ = runtime.Close()
 			return nil, errors.New("delegated user JWKS unavailable")
 		}

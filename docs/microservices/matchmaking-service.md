@@ -259,3 +259,11 @@ rotation while only the active ID signs new credentials. Consumers configure
 the exact HTTPS URL and a dedicated CA file; they fail closed if TLS trust or
 the JWKS document is unavailable. The endpoint is internal and must not be
 added to public ingress.
+
+When Space or Gateway principal verification is configured, Matchmaking keeps
+this JWKS publisher available while it loads the required initial issuer key
+sets. Only source-availability failures are retried with bounded requests and
+capped backoff. Matchmaking does not open ordinary health or gRPC listeners
+until each configured key set is valid. Invalid TLS trust, redirects, permanent
+HTTP errors, malformed key sets, and invalid configuration remain startup
+errors; cancellation stops the wait.

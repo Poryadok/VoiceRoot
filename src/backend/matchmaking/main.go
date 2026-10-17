@@ -61,6 +61,10 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 }
 
 func main() {
+	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	startupCtx, cancelStartup := context.WithCancel(shutdownCtx)
+	defer cancelStartup()
 	logger := httpserver.NewLogger(serviceName)
 	principalConfig, principalEnabled, err := spaceprincipal.LoadFromEnv()
 	if err != nil {
@@ -82,7 +86,10 @@ func main() {
 		// listeners verify Matchmaking principals during their own startup.
 		logger.Info("Matchmaking principal JWKS listening", slog.String("addr", jwksConfig.ListenAddr))
 		go func() {
-			errCh <- jwksServer.ServeTLS(jwksListener, "", "")
+			if err := jwksServer.ServeTLS(jwksListener, "", ""); err != nil && err != http.ErrServerClosed {
+				errCh <- err
+				cancelStartup()
+			}
 		}()
 	}
 	metricsReg := prometheus.NewRegistry()
@@ -142,8 +149,18 @@ func main() {
 			if redisQueue == nil {
 				log.Fatal("Matchmaking Space principal listener requires MATCHMAKING_REDIS_ADDR")
 			}
-			principalRuntime, err = spaceprincipal.New(context.Background(), principalConfig)
+			principalRuntime, err = spaceprincipal.New(startupCtx, principalConfig)
 			if err != nil {
+				select {
+				case startupErr := <-errCh:
+					if startupErr != nil && startupErr != http.ErrServerClosed {
+						log.Fatalf("Matchmaking principal startup: %v", startupErr)
+					}
+				default:
+				}
+				if shutdownCtx.Err() != nil {
+					return
+				}
 				log.Fatalf("Matchmaking Space principal runtime: %v", err)
 			}
 			defer func() { _ = principalRuntime.Close() }()
@@ -382,14 +399,12 @@ func main() {
 		errCh <- server.ListenAndServe()
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
-	case <-stop:
+	case <-shutdownCtx.Done():
 		ctx, cancel := context.WithTimeout(context.Background(), pkgruntimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
