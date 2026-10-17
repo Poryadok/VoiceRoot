@@ -724,7 +724,7 @@ def _contract_migration_document(request: dict, storage: dict, image: str) -> di
 
 def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | None = None,
         action: str | None = None, session_inputs: dict | None = None,
-        action_index: int | None = None) -> dict:
+        action_index: int | None = None, input_pod_uid: str | None = None) -> dict:
     """Return the only admitted in-band helper argv/query shapes for a fixed phase."""
     row = validate_request(request)
     if row['phase'] == 'bind-verification':
@@ -742,6 +742,9 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
         }
     if row['phase'] == 'census':
         storage = validate_binding(binding)
+        input_pod_uid = pod_uid if input_pod_uid is None else input_pod_uid
+        if not isinstance(input_pod_uid, str) or not UUID_RE.fullmatch(input_pod_uid):
+            _fail('input_pod_uid_invalid')
         if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
             or not isinstance(archive['sha256'], str)
             or not re.fullmatch(r'[a-f0-9]{64}', archive['sha256'])
@@ -762,11 +765,13 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
             '--session-attempt', session_inputs['attempt'],
             '--input-bundle-sha256', session_inputs['sha256'],
             '--input-bundle-bytes', str(session_inputs['bytes'])]
+        input_common = common + ['--input-pod-uid', input_pod_uid]
         return {
-            'census_load_inputs': binary + ['--load-inputs'] + common,
-            'census_read_input_receipt': binary + ['--read-input-receipt'] + common,
-            'census_receive_archive': binary + ['--receive-archive'] + common,
-            'census_same_pod_readback': binary + ['--read-receipt'] + common + ['--phase', 'census'],
+            'census_load_inputs': binary + ['--load-census-inputs'] + common,
+            'census_read_input_receipt': binary + ['--read-census-input-receipt'] + input_common,
+            'census_consume_inputs': binary + ['--consume-census-inputs'] + input_common,
+            'census_receive_archive': binary + ['--receive-archive'] + input_common,
+            'census_same_pod_readback': binary + ['--read-receipt'] + input_common + ['--phase', 'census'],
         }
     if row['phase'] == 'verification-session':
         storage = validate_selected_binding(binding)

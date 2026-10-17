@@ -38,6 +38,8 @@ MAX_INPUT_BYTES = 4 << 20
 INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds',
     'operator.jwt', 'account.jwt', 'system-account.jwt', 'account.public',
     'system-account.public', 'server.conf', 'fixture.json'))
+CENSUS_INPUT_SCHEMA = 'voice-nats-census-inputs-v1'
+CENSUS_INPUT_FILES = frozenset(('bootstrap.creds', 'server.conf'))
 VERIFY_PHASES = frozenset(('census',))
 RECEIPT_SCHEMA = 'voice-nats-verification-v1'
 CENSUS_SCHEMA = 'voice-nats-census-v1'
@@ -181,7 +183,7 @@ def _server_config(raw):
     raise ValueError('verification_inputs')
 
 
-def _input_binding(args):
+def _input_binding(args, *, pod_uid=None):
     source_uid = _storage_uid(getattr(args, 'source_pvc_uid', None), 'verification_source_pvc_uid')
     source_pv_uid = _storage_uid(getattr(args, 'source_pv_uid', None), 'verification_source_pv_uid')
     target_uid = _storage_uid(getattr(args, 'verification_pvc_uid', None), 'verification_target_pvc_uid')
@@ -200,8 +202,10 @@ def _input_binding(args):
         or not re.fullmatch('[a-f0-9]{64}', input_bundle_sha256 or '')
         or type(input_bundle_bytes) is not int or not 0 < input_bundle_bytes <= MAX_INPUT_BYTES):
         raise ValueError('verification_input_binding')
+    if pod_uid is None:
+        pod_uid = args.pod_uid
     return {'purpose': 'verification', 'operation': args.operation, 'nonce': args.nonce,
-        'pod_uid': args.pod_uid, 'source_pvc_uid': source_uid, 'source_pv_uid': source_pv_uid,
+        'pod_uid': pod_uid, 'source_pvc_uid': source_uid, 'source_pv_uid': source_pv_uid,
         'verification_pvc_uid': target_uid, 'verification_pv_uid': target_pv_uid,
         'archive_sha256': archive_sha, 'archive_bytes': archive_bytes,
         'session_attempt': session_attempt, 'input_bundle_sha256': input_bundle_sha256,
@@ -226,7 +230,11 @@ def read_input_receipt(args):
     if (not stat.S_ISDIR(directory.st_mode) or stat.S_ISLNK(directory.st_mode)
         or directory.st_uid != os.geteuid() or stat.S_IMODE(directory.st_mode) != 0o700):
         raise ValueError('verification_inputs_incomplete')
-    marker = _private_json(marker_path)
+    try:
+        marker = _private_json(marker_path)
+        receipt = _private_json(receipt_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        raise ValueError('verification_inputs_incomplete') from None
     if (not isinstance(marker, dict) or marker != {'schema': 'voice-nats-input-action-v1',
         'phase': 'inputs', **binding, 'state': 'STARTED'}):
         raise ValueError('verification_input_binding')
@@ -239,6 +247,262 @@ def read_input_receipt(args):
         raise ValueError('verification_inputs_incomplete')
     _private_inputs()
     _verify_session_input_projection(receipt)
+    return receipt
+
+
+def _census_input_action_paths(args):
+    state = VERIFY_ROOT / 'state' / args.operation / args.session_attempt
+    return state, state / 'census-inputs.started.json', state / 'census-inputs.receipt.json'
+
+
+def _verify_census_input_projection(receipt):
+    attempt_root = VERIFY_ROOT / 'state' / receipt['operation'] / receipt['session_attempt']
+    owned_dirs = (VERIFY_ROOT / 'state', VERIFY_ROOT / 'state' / receipt['operation'],
+        attempt_root, VERIFY_ROOT / 'kernelinputbundle', VERIFY_ROOT / 'inputs',
+        VERIFY_ROOT / 'inputs' / 'public')
+    for directory in owned_dirs:
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_incomplete')
+    bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public = VERIFY_ROOT / 'inputs' / 'public'
+    if (set(path.name for path in bundle.iterdir()) != {'bootstrap.creds'}
+        or set(path.name for path in public.iterdir()) != {'server.conf'}):
+        raise ValueError('verification_inputs_incomplete')
+    creds = _read_session_file(bundle / 'bootstrap.creds', max_bytes=256 << 10,
+        uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+    config = _read_session_file(public / 'server.conf', max_bytes=256 << 10,
+        uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+    kernel_hash = hashlib.sha256(json.dumps({'bootstrap.creds': hashlib.sha256(creds).hexdigest()},
+        sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    if (kernel_hash != receipt.get('kernel_bundle_sha256')
+        or hashlib.sha256(config).hexdigest() != receipt.get('server_config_sha256')):
+        raise ValueError('verification_inputs_incomplete')
+
+
+def read_census_input_receipt(args):
+    """Read the exact two-file, durable PREPARE census input projection."""
+    _require_verification_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    input_pod_uid = getattr(args, 'input_pod_uid', None)
+    _identity(argparse.Namespace(operation=args.operation, nonce=args.nonce, pod_uid=input_pod_uid))
+    binding = _input_binding(args, pod_uid=input_pod_uid)
+    state, marker_path, receipt_path = _census_input_action_paths(args)
+    directory = state.lstat()
+    if (not stat.S_ISDIR(directory.st_mode) or stat.S_ISLNK(directory.st_mode)
+        or directory.st_uid != os.geteuid() or stat.S_IMODE(directory.st_mode) != 0o700):
+        raise ValueError('verification_inputs_incomplete')
+    try:
+        marker = _private_json(marker_path)
+        receipt = _private_json(receipt_path)
+    except (OSError, ValueError):
+        raise ValueError('verification_inputs_incomplete') from None
+    expected_marker = {'schema': 'voice-nats-census-input-action-v1',
+        'phase': 'census-inputs', **binding, 'state': 'STARTED'}
+    if marker != expected_marker:
+        raise ValueError('verification_input_binding')
+    expected_receipt = {'schema': 'voice-nats-census-input-receipt-v1',
+        'phase': 'census-inputs', **binding, 'status': 'COMPLETE',
+        'file_count': len(CENSUS_INPUT_FILES)}
+    if (not isinstance(receipt, dict) or set(receipt) != set(expected_receipt) | {
+        'kernel_bundle_sha256', 'server_config_sha256'}
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
+        raise ValueError('verification_inputs_incomplete')
+    _verify_census_input_projection(receipt)
+    return receipt
+
+
+def _census_consumption_binding(args, input_receipt):
+    return {'purpose': 'verification', 'operation': args.operation, 'nonce': args.nonce,
+        'pod_uid': args.pod_uid, 'input_pod_uid': input_receipt['pod_uid'],
+        'source_pvc_uid': input_receipt['source_pvc_uid'],
+        'source_pv_uid': input_receipt['source_pv_uid'],
+        'verification_pvc_uid': input_receipt['verification_pvc_uid'],
+        'verification_pv_uid': input_receipt['verification_pv_uid'],
+        'archive_sha256': input_receipt['archive_sha256'],
+        'archive_bytes': input_receipt['archive_bytes'],
+        'session_attempt': input_receipt['session_attempt'],
+        'input_bundle_sha256': input_receipt['input_bundle_sha256'],
+        'input_bundle_bytes': input_receipt['input_bundle_bytes'],
+        'kernel_bundle_sha256': input_receipt['kernel_bundle_sha256'],
+        'server_config_sha256': input_receipt['server_config_sha256']}
+
+
+def read_census_consumption_receipt(args):
+    """Validate the loader receipt and same-attempt consumption receipt without mutation."""
+    input_receipt = read_census_input_receipt(args)
+    binding = _census_consumption_binding(args, input_receipt)
+    state, _, _ = _census_input_action_paths(argparse.Namespace(
+        operation=args.operation, session_attempt=args.session_attempt))
+    marker_path = state / 'census-consumption.started.json'
+    receipt_path = state / 'census-consumption.receipt.json'
+    try:
+        marker = _private_json(marker_path)
+        receipt = _private_json(receipt_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        raise ValueError('verification_input_consumption_unknown') from None
+    expected_marker = {'schema': 'voice-nats-census-consumption-action-v1',
+        'phase': 'census-consumption', **binding, 'state': 'STARTED'}
+    if marker != expected_marker:
+        raise ValueError('verification_input_consumption_unknown')
+    expected_receipt = {'schema': 'voice-nats-census-consumption-receipt-v1',
+        'phase': 'census-consumption', **binding, 'status': 'COMPLETE'}
+    if (not isinstance(receipt, dict) or set(receipt) != set(expected_receipt)
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
+        raise ValueError('verification_input_consumption_unknown')
+    return receipt
+
+
+def consume_census_inputs(args):
+    """Durably bind already-loaded census inputs to this exact execution Pod."""
+    _require_verification_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    input_receipt = read_census_input_receipt(args)
+    binding = _census_consumption_binding(args, input_receipt)
+    state, _, _ = _census_input_action_paths(argparse.Namespace(
+        operation=args.operation, session_attempt=args.session_attempt))
+    marker_path = state / 'census-consumption.started.json'
+    receipt_path = state / 'census-consumption.receipt.json'
+    if marker_path.exists() or receipt_path.exists():
+        if not marker_path.exists() or not receipt_path.exists():
+            raise ValueError('verification_input_consumption_unknown')
+        return read_census_consumption_receipt(args)
+    marker = {'schema': 'voice-nats-census-consumption-action-v1',
+        'phase': 'census-consumption', **binding, 'state': 'STARTED'}
+    fd = os.open(marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as marker_stream:
+        marker_stream.write(json.dumps(marker, sort_keys=True, separators=(',', ':')).encode())
+        marker_stream.flush(); os.fsync(marker_stream.fileno())
+    dirfd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(dirfd)
+    finally: os.close(dirfd)
+    receipt = {'schema': 'voice-nats-census-consumption-receipt-v1',
+        'phase': 'census-consumption', **binding, 'status': 'COMPLETE'}
+    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as receipt_stream:
+        receipt_stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
+        receipt_stream.flush(); os.fsync(receipt_stream.fileno())
+    dirfd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(dirfd)
+    finally: os.close(dirfd)
+    return receipt
+
+
+def load_census_inputs(raw=None, *, operation, nonce, pod_uid, binding_args, input_stream=None):
+    """Install only the trusted bootstrap credential and NATS config for PREPARE census."""
+    _require_verification_identity()
+    _identity(argparse.Namespace(operation=operation, nonce=nonce, pod_uid=pod_uid))
+    if os.environ.get('POD_UID') != pod_uid:
+        raise ValueError('verification_pod_identity')
+    binding = _input_binding(binding_args)
+    if (binding['operation'] != operation or binding['nonce'] != nonce
+        or binding['pod_uid'] != pod_uid):
+        raise ValueError('verification_input_binding')
+    state, marker_path, receipt_path = _census_input_action_paths(binding_args)
+    state_root = VERIFY_ROOT / 'state'
+    operation_root = state_root / operation
+    for directory in (state_root, operation_root):
+        directory.mkdir(mode=0o700, exist_ok=True)
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_custody')
+    state.mkdir(mode=0o700, exist_ok=False)
+    state_row = state.lstat()
+    if (not stat.S_ISDIR(state_row.st_mode) or stat.S_ISLNK(state_row.st_mode)
+        or state_row.st_uid != os.geteuid() or state_row.st_gid != os.getegid()
+        or stat.S_IMODE(state_row.st_mode) != 0o700 or any(state.iterdir())):
+        raise ValueError('verification_inputs_already_started')
+    marker_value = {'schema': 'voice-nats-census-input-action-v1',
+        'phase': 'census-inputs', **binding, 'state': 'STARTED'}
+    fd = os.open(marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as marker_stream:
+        marker_stream.write(json.dumps(marker_value, sort_keys=True, separators=(',', ':')).encode())
+        marker_stream.flush(); os.fsync(marker_stream.fileno())
+    for directory in (state, VERIFY_ROOT):
+        dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(dirfd)
+        finally: os.close(dirfd)
+    if raw is None:
+        if input_stream is None: input_stream = sys.stdin.buffer
+        raw = input_stream.read(MAX_INPUT_BYTES + 1)
+    if (not isinstance(raw, (bytes, bytearray)) or not 1 <= len(raw) <= MAX_INPUT_BYTES
+        or len(raw) != binding['input_bundle_bytes']
+        or hashlib.sha256(raw).hexdigest() != binding['input_bundle_sha256']):
+        raise ValueError('verification_inputs')
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value: raise ValueError('verification_inputs')
+            value[key] = item
+        return value
+    try:
+        bundle = json.loads(raw, object_pairs_hook=pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError('verification_inputs')))
+    except (ValueError, TypeError, UnicodeError):
+        raise ValueError('verification_inputs') from None
+    if (not isinstance(bundle, dict) or set(bundle) != {'schema', 'operation', 'nonce', 'pod_uid', 'files'}
+        or bundle.get('schema') != CENSUS_INPUT_SCHEMA
+        or bundle.get('operation') != operation or bundle.get('nonce') != nonce
+        or bundle.get('pod_uid') != pod_uid or not isinstance(bundle.get('files'), dict)
+        or set(bundle['files']) != CENSUS_INPUT_FILES):
+        raise ValueError('verification_inputs')
+    INPUT_ROOT.mkdir(mode=0o700, parents=False, exist_ok=False)
+    root = INPUT_ROOT.lstat()
+    if (not stat.S_ISDIR(root.st_mode) or root.st_uid != os.geteuid()
+        or stat.S_IMODE(root.st_mode) & 0o077):
+        raise ValueError('verification_inputs')
+    decoded = {}
+    for name, encoded in bundle['files'].items():
+        if not isinstance(encoded, str) or len(encoded) > 512 << 10:
+            raise ValueError('verification_inputs')
+        try:
+            import base64
+            data = base64.b64decode(encoded.encode('ascii'), validate=True)
+        except (ValueError, UnicodeError):
+            raise ValueError('verification_inputs') from None
+        if not 1 <= len(data) <= 256 << 10:
+            raise ValueError('verification_inputs')
+        decoded[name] = data
+    _server_config(decoded['server.conf'])
+    for name in sorted(CENSUS_INPUT_FILES):
+        _write_exclusive(INPUT_ROOT / name, decoded[name], mode=0o440)
+    fd = os.open(INPUT_ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+    kernel_bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public_root = VERIFY_ROOT / 'inputs' / 'public'
+    kernel_bundle.mkdir(mode=0o700, exist_ok=False)
+    (VERIFY_ROOT / 'inputs').mkdir(mode=0o700, exist_ok=True)
+    public_root.mkdir(mode=0o700, exist_ok=False)
+    _write_exclusive(kernel_bundle / 'bootstrap.creds', decoded['bootstrap.creds'], mode=0o440)
+    _write_exclusive(public_root / 'server.conf', decoded['server.conf'], mode=0o440)
+    kernel_hash = hashlib.sha256(json.dumps({'bootstrap.creds':
+        hashlib.sha256(decoded['bootstrap.creds']).hexdigest()}, sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+    for directory in (kernel_bundle, public_root, public_root.parent, state,
+        operation_root, state_root, VERIFY_ROOT):
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+    receipt = {'schema': 'voice-nats-census-input-receipt-v1',
+        'phase': 'census-inputs', **binding, 'status': 'COMPLETE',
+        'file_count': len(decoded), 'kernel_bundle_sha256': kernel_hash,
+        'server_config_sha256': hashlib.sha256(decoded['server.conf']).hexdigest()}
+    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as receipt_stream:
+        receipt_stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
+        receipt_stream.flush(); os.fsync(receipt_stream.fileno())
+    dirfd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(dirfd)
+    finally: os.close(dirfd)
     return receipt
 
 
@@ -411,6 +675,27 @@ def _private_inputs():
     return rows
 
 
+def _private_census_inputs():
+    rows = {}
+    if not INPUT_ROOT.is_dir() or INPUT_ROOT.is_symlink():
+        raise ValueError('verification_inputs')
+    entries = sorted(path.name for path in INPUT_ROOT.iterdir())
+    if set(entries) != CENSUS_INPUT_FILES:
+        raise ValueError('verification_inputs')
+    for name in entries:
+        path = INPUT_ROOT / name
+        row = path.lstat()
+        if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid() or row.st_nlink != 1
+            or stat.S_IMODE(row.st_mode) != 0o440 or not 1 <= row.st_size <= 256 << 10):
+            raise ValueError('verification_inputs')
+        data = path.read_bytes()
+        if len(data) != row.st_size:
+            raise ValueError('verification_inputs')
+        rows[name] = data
+    rows['server.conf'] = _server_config(rows['server.conf'])
+    return rows
+
+
 def _wait_nats(process, *, deadline_seconds=120, clock=time.monotonic, sleep=time.sleep,
                get=urlopen):
     deadline = clock() + deadline_seconds
@@ -513,7 +798,7 @@ def run_verification(phase_name, args, input_stream=None):
     verification, output, inputs = validate_verification_mounts(VERIFY_ROOT, OUT_ROOT, INPUT_ROOT,
         verification_pvc_uid=verification_uid)
     operation_state = verification / '.voice-nats-verification'
-    read_input_receipt(args)
+    read_census_consumption_receipt(args)
     allowed_verification = {operation_state, verification / 'state',
         verification / 'kernelinputbundle', verification / 'inputs'}
     if (any(path not in allowed_verification for path in verification.iterdir()) or any(output.iterdir())):
@@ -547,7 +832,7 @@ def run_verification(phase_name, args, input_stream=None):
     manifest = _receive_archive(input_stream, archive, archive_bytes, archive_sha256)
     store = verification / 'store'
     native_store.restore_closed_store(archive, store, manifest)
-    rows = _private_inputs()
+    rows = _private_census_inputs()
     config = output / 'verification-server.conf'
     fd = os.open(config, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'wb') as config_stream:
@@ -630,7 +915,7 @@ def read_verification_receipt(phase_name, args):
     _identity(args)
     if os.environ.get('POD_UID') != args.pod_uid:
         raise ValueError('verification_pod_identity')
-    read_input_receipt(args)
+    read_census_consumption_receipt(args)
     verification = VERIFY_ROOT.lstat()
     if (not stat.S_ISDIR(verification.st_mode) or stat.S_ISLNK(verification.st_mode)
         or not os.access(VERIFY_ROOT, os.W_OK)
@@ -1436,6 +1721,9 @@ def main(argv=None):
     mode.add_argument('--stream-existing', action='store_true')
     mode.add_argument('--load-inputs', action='store_true')
     mode.add_argument('--read-input-receipt', action='store_true')
+    mode.add_argument('--load-census-inputs', action='store_true')
+    mode.add_argument('--read-census-input-receipt', action='store_true')
+    mode.add_argument('--consume-census-inputs', action='store_true')
     mode.add_argument('--read-receipt', action='store_true')
     mode.add_argument('--bind-only', action='store_true')
     mode.add_argument('--serve-census', action='store_true')
@@ -1526,10 +1814,43 @@ def main(argv=None):
         result = read_input_receipt(args)
         _frame(result)
         return result
+    if args.load_census_inputs:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None or args.input_pod_uid is not None):
+            parser.error('load-census-inputs-shape')
+        result = load_census_inputs(None, operation=args.operation, nonce=args.nonce,
+            pod_uid=args.pod_uid, binding_args=args, input_stream=sys.stdin.buffer)
+        _frame(result)
+        return result
+    if args.read_census_input_receipt:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None or not args.input_pod_uid):
+            parser.error('read-census-input-receipt-shape')
+        result = read_census_input_receipt(args)
+        _frame(result)
+        return result
+    if args.consume_census_inputs:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None or not args.input_pod_uid):
+            parser.error('consume-census-inputs-shape')
+        result = consume_census_inputs(args)
+        _frame(result)
+        return result
     if args.read_receipt:
         if (args.phase is None or not args.source_pvc_uid or not args.source_pv_uid
             or not args.verification_pvc_uid or not args.verification_pv_uid
-            or not args.archive_sha256 or args.archive_bytes is None):
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.input_pod_uid is None or args.session_attempt is None
+            or args.input_bundle_sha256 is None or args.input_bundle_bytes is None):
             parser.error('verification-volume-identity-required')
         receipt = read_verification_receipt(args.phase, args)
         stream_census_readback(receipt)
@@ -1537,7 +1858,9 @@ def main(argv=None):
     if args.receive_archive:
         if (not args.source_pvc_uid or not args.source_pv_uid
             or not args.verification_pvc_uid or not args.verification_pv_uid
-            or not args.archive_sha256 or args.archive_bytes is None or args.phase is not None):
+            or not args.archive_sha256 or args.archive_bytes is None or args.phase is not None
+            or args.input_pod_uid is None or args.session_attempt is None
+            or args.input_bundle_sha256 is None or args.input_bundle_bytes is None):
             parser.error('verification-volume-identity-required')
         receipt = run_verification('census', args)
         return receipt
