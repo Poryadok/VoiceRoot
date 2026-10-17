@@ -63,6 +63,45 @@ Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
 
+MatchSquad schema activation uses the separate, fixed-scope
+`scripts/dev/match_squad_db_migrations.py` runner. It accepts only the three
+`voice-dev` databases (Matchmaking, Chat, Voice), pins the five reviewed UP
+migrations by SHA-256, and requires the exact source commit, clean tree,
+namespace UID, and clean baseline ledgers `15/22/10` before creating anything.
+It creates source-bound ConfigMaps and one-shot Jobs with digest-pinned images;
+it never invokes broad `apply_all`, updates Postgres credentials, runs DOWN SQL,
+or deletes/replays an interrupted Job. A failed or ambiguous Job remains for
+inspection and blocks another attempt. The one-shot Job verifies the exact
+`voice` role, database, captured ready Pod IP, and `sslmode=disable` DSN before
+writing its IP-bound URL into a mode-0600 memory-backed volume. The migrate
+container reads only that sealed URL; it does not re-read the mutable Secret or
+resolve the Postgres Service. Runner failures are generic and command output is
+kept private inside the ephemeral Job. Run
+`python3 scripts/dev/match_squad_db_migrations.py --source-sha
+<40-character-commit> --preflight-only` to perform namespaced read-only target
+checks and print only object metadata, required Secret key names, image pins,
+and the three migration ledger rows. This mode creates no resources. Use
+`--apply` only for a specifically authorized DEV activation after reviewing
+the exact source and preflight; it creates Kubernetes resources.
+
+If the pinned Matchmaking Job from source `1c1e2471e6d112e075c5f33f4f4602ceb00b0f0d`
+has already completed and its exact immutable ConfigMap, Job, Pod, and clean
+version-18 ledger receipt are still present, `--preflight-after-matchmaking`
+performs a read-only check for that one completion plus clean Chat/Voice
+baselines and absent continuation targets. Only that exact receipt enables
+`--continue-after-matchmaking`; it creates Chat then Voice targets and never
+creates or replays a Matchmaking Job. If either remainder Job fails or becomes
+ambiguous, retain its objects and stop. This command has no general resume
+mode; later reconciliation requires a separately reviewed source path.
+
+The continuation receipt also compares the captured Pod's actual containers,
+commands, images, Secret references, volumes, security context and
+controller-assigned identity with the source-bound Job template. Only the
+captured scheduler/API fields (node assignment, priority, default service
+account and the two standard not-ready/unreachable tolerations) are admitted;
+the full sanitized Job and Pod API fixture rejects mutations to either init
+container, the migrate container, Secret reference or volume wiring.
+
 ## Fresh installation only
 
 `environment.py` renders captured staging workload/configuration identities into
