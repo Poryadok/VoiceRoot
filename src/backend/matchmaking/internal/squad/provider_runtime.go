@@ -262,7 +262,7 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 			if err != nil || filepath.IsAbs(rel) || rel != filepath.Base(target) {
 				return nil, errors.New("matchmaking principal projected data link resolves outside its directory")
 			}
-				if !isProjectedSecretTimestamp(filepath.Base(target)) {
+			if !isProjectedSecretTimestamp(filepath.Base(target)) {
 				return nil, errors.New("matchmaking principal projected data link target is invalid")
 			}
 			targetInfo, err := os.Stat(target)
@@ -276,7 +276,7 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 			}
 			continue
 		default:
-				if isProjectedSecretTimestamp(entry.Name()) {
+			if isProjectedSecretTimestamp(entry.Name()) {
 				if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 					return nil, errors.New("matchmaking principal projected version directory is invalid")
 				}
