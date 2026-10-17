@@ -84,6 +84,16 @@ and the three migration ledger rows. This mode creates no resources. Use
 `--apply` only for a specifically authorized DEV activation after reviewing
 the exact source and preflight; it creates Kubernetes resources.
 
+If the pinned Matchmaking Job from source `1c1e2471e6d112e075c5f33f4f4602ceb00b0f0d`
+has already completed and its exact immutable ConfigMap, Job, Pod, and clean
+version-18 ledger receipt are still present, `--preflight-after-matchmaking`
+performs a read-only check for that one completion plus clean Chat/Voice
+baselines and absent continuation targets. Only that exact receipt enables
+`--continue-after-matchmaking`; it creates Chat then Voice targets and never
+creates or replays a Matchmaking Job. If either remainder Job fails or becomes
+ambiguous, retain its objects and stop. This command has no general resume
+mode; later reconciliation requires a separately reviewed source path.
+
 ## Fresh installation only
 
 `environment.py` renders captured staging workload/configuration identities into

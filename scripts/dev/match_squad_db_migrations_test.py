@@ -58,6 +58,167 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
                 return "voice-app-secrets|voice-dev|db-secret-uid|12|CHAT_DATABASE_URL MATCHMAKING_DATABASE_URL VOICE_DATABASE_URL "
             raise AssertionError("unexpected fake kubectl call: " + repr(args))
 
+    def completed_prefix_target(self, root, source_sha, *, ledger_overrides=None,
+            target_collision=None):
+        fixture_path = Path(__file__).parent / "testdata" / "match_squad_completed_job_api.json"
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        prior_item = {**runner.build_plan(root, runner.PRIOR_MATCHMAKING_SOURCE_SHA)[0],
+            "postgres_ip": "10.42.0.3"}
+        cm = runner.configmap_manifest(prior_item)
+        cm["metadata"].update({"uid": runner.PRIOR_MATCHMAKING_CONFIGMAP_UID,
+            "resourceVersion": "fixture-resource-version"})
+        job = copy.deepcopy(fixture["job"])
+        job["metadata"]["uid"] = runner.PRIOR_MATCHMAKING_JOB_UID
+        job["metadata"]["resourceVersion"] = "fixture-resource-version"
+        job["spec"]["selector"]["matchLabels"]["batch.kubernetes.io/controller-uid"] = runner.PRIOR_MATCHMAKING_JOB_UID
+        labels = job["spec"]["template"]["metadata"]["labels"]
+        labels["batch.kubernetes.io/controller-uid"] = runner.PRIOR_MATCHMAKING_JOB_UID
+        labels["controller-uid"] = runner.PRIOR_MATCHMAKING_JOB_UID
+        pod = copy.deepcopy(fixture["pod"])
+        pod["metadata"]["name"] = runner.PRIOR_MATCHMAKING_POD_NAME
+        pod["metadata"]["uid"] = runner.PRIOR_MATCHMAKING_POD_UID
+        pod["metadata"]["ownerReferences"][0]["uid"] = runner.PRIOR_MATCHMAKING_JOB_UID
+
+        class PrefixKube(self.ReadOnlyTarget):
+            def __init__(self):
+                super().__init__()
+                self.source_sha = source_sha
+                self.prior_item = prior_item
+                self.cm = cm
+                self.job = job
+                self.pod = pod
+                self.current_plan = runner.build_plan(root, source_sha)
+                self.ledgers = {"matchmaking": (18, False), "chat": (22, False), "voice": (10, False)}
+                if ledger_overrides:
+                    self.ledgers.update(ledger_overrides)
+                self.objects = {}
+                self.job_reads = {}
+                self.writes = []
+                self.next_uid = 0
+                self.target_collision = target_collision
+
+            def run(self, args, body=None, timeout=30):
+                if args[:2] == ["get", "pods"]:
+                    return {"items": [copy.deepcopy(self.pod)]}
+                if args[:2] == ["get", "endpointslices"]:
+                    result = super().run(args, body=body, timeout=timeout)
+                    result["items"][0]["endpoints"][0]["addresses"] = ["10.42.0.32"]
+                    return result
+                if args[0] == "exec":
+                    command = args[-1]
+                    service = next(name for name, db in runner.DATABASES.items()
+                        if "-d " + db + " " in command)
+                    version, dirty = self.ledgers[service]
+                    return f"{runner.DATABASES[service]}|{version}|{'t' if dirty else 'f'}\n"
+                if args[0] == "create":
+                    self.writes.append((body["kind"], body["metadata"]["name"]))
+                    self.next_uid += 1
+                    obj = copy.deepcopy(body)
+                    obj["metadata"].update({"uid": "new-uid-" + str(self.next_uid),
+                        "resourceVersion": str(100 + self.next_uid)})
+                    if body["kind"] == "Job":
+                        uid = obj["metadata"]["uid"]
+                        obj["spec"]["selector"] = {"matchLabels": {
+                            "batch.kubernetes.io/controller-uid": uid}}
+                        labels = obj["spec"]["template"]["metadata"]["labels"]
+                        labels.update({"batch.kubernetes.io/controller-uid": uid,
+                            "controller-uid": uid,
+                            "batch.kubernetes.io/job-name": body["metadata"]["name"],
+                            "job-name": body["metadata"]["name"]})
+                        obj["spec"]["template"]["spec"]["securityContext"] = {}
+                        obj["status"] = {"active": 1}
+                    key = (body["kind"].lower(), body["metadata"]["name"])
+                    self.objects[key] = obj
+                    return copy.deepcopy(obj)
+                return super().run(args, body=body, timeout=timeout)
+
+            def get(self, kind, name):
+                if kind in {"service", "statefulset", "pod"}:
+                    result = super().get(kind, name)
+                    if kind == "pod":
+                        result["status"]["podIP"] = "10.42.0.32"
+                    return result
+                if kind == "configmap" and name == self.prior_item["configmap_name"]:
+                    return copy.deepcopy(self.cm)
+                if kind == "job" and name == self.prior_item["job_name"]:
+                    return copy.deepcopy(self.job)
+                if self.target_collision == (kind, name):
+                    return {"metadata": {"name": name}}
+                key = (kind, name)
+                obj = self.objects.get(key)
+                if obj is None:
+                    return None
+                if kind == "job":
+                    reads = self.job_reads.get(name, 0)
+                    self.job_reads[name] = reads + 1
+                    if reads >= 1 and obj["status"].get("active"):
+                        service = next(service for service in runner.SERVICES
+                            if name.startswith("voice-msq-migrate-" + service + "-"))
+                        self.ledgers[service] = (runner.TARGETS[service], False)
+                        obj["status"] = {"succeeded": 1,
+                            "conditions": [{"type": "Complete", "status": "True"}]}
+                return copy.deepcopy(obj)
+
+        return PrefixKube()
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_completed_matchmaking_prefix_gates_readonly_chat_voice_continuation(self):
+        root = Path(__file__).resolve().parents[2]
+        source_sha = "a" * 40
+        kube = self.completed_prefix_target(root, source_sha)
+        with mock.patch.object(runner, "_read_source_identity", return_value=(source_sha, False)):
+            prepared = runner.preflight(kube, root, source_sha,
+                continue_after_matchmaking=True)
+        self.assertEqual(prepared["ledgers"], {
+            "matchmaking": (18, False), "chat": (22, False), "voice": (10, False)})
+        self.assertEqual([item["service"] for item in prepared["execution_plan"]], ["chat", "voice"])
+        self.assertEqual(prepared["completed_matchmaking"]["job_uid"],
+            runner.PRIOR_MATCHMAKING_JOB_UID)
+        summary = runner.preflight_summary(prepared)
+        self.assertEqual(summary["mode"], "preflight-after-matchmaking")
+        self.assertEqual([item["service"] for item in summary["migration_inputs"]], ["chat", "voice"])
+        self.assertEqual(kube.writes, [])
+
+        plan = runner.build_plan(root, source_sha)
+        rejected_cases = []
+        altered = self.completed_prefix_target(root, source_sha)
+        altered.job["metadata"]["uid"] = "foreign-job-uid"
+        rejected_cases.append(("job-uid", altered))
+        altered = self.completed_prefix_target(root, source_sha)
+        altered.pod["metadata"]["uid"] = "foreign-pod-uid"
+        rejected_cases.append(("pod-uid", altered))
+        altered = self.completed_prefix_target(root, source_sha)
+        altered.pod["status"]["containerStatuses"][0]["state"]["terminated"]["exitCode"] = 1
+        rejected_cases.append(("container-exit", altered))
+        rejected_cases.append(("old-ledger", self.completed_prefix_target(root, source_sha,
+            ledger_overrides={"matchmaking": (15, False)})))
+        rejected_cases.append(("dirty-remainder", self.completed_prefix_target(root, source_sha,
+            ledger_overrides={"chat": (22, True)})))
+        collision_item = plan[1]
+        rejected_cases.append(("target-collision", self.completed_prefix_target(root, source_sha,
+            target_collision=("job", collision_item["job_name"]))))
+        for label, rejected in rejected_cases:
+            with self.subTest(label=label), \
+                 mock.patch.object(runner, "_read_source_identity", return_value=(source_sha, False)), \
+                 self.assertRaises(runner.Blocked):
+                runner.preflight(rejected, root, source_sha, continue_after_matchmaking=True)
+            self.assertEqual(rejected.writes, [])
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_continue_after_matchmaking_executes_only_chat_and_voice(self):
+        root = Path(__file__).resolve().parents[2]
+        source_sha = "a" * 40
+        kube = self.completed_prefix_target(root, source_sha)
+        with mock.patch.object(runner, "_read_source_identity", return_value=(source_sha, False)):
+            prepared = runner.preflight(kube, root, source_sha,
+                continue_after_matchmaking=True)
+            runner.execute(kube, prepared, timeout=2, poll_seconds=0)
+        expected = [(kind, item["configmap_name"] if kind == "ConfigMap" else item["job_name"])
+            for item in prepared["execution_plan"] for kind in ("ConfigMap", "Job")]
+        self.assertEqual(kube.writes, expected)
+        self.assertEqual(kube.ledgers, {"matchmaking": (18, False), "chat": (23, False),
+            "voice": (11, False)})
+
     def test_target_only_runner_module_exists(self):
         self.assertIsNotNone(
             runner,
@@ -249,6 +410,26 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
             altered["spec"]["template"]["metadata"]["labels"][key] = bad_value
             with self.subTest(label=key), self.assertRaises(runner.Blocked):
                 runner.validate_bound_object(altered, item, "job")
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_sanitized_completed_job_api_fixture_matches_source_and_rejects_injection(self):
+        root = Path(__file__).resolve().parents[2]
+        fixture_path = Path(__file__).parent / "testdata" / "match_squad_completed_job_api.json"
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        prior_plan = runner.build_plan(root, "1c1e2471e6d112e075c5f33f4f4602ceb00b0f0d")
+        item = {**prior_plan[0], "postgres_ip": "10.42.0.32"}
+        actual = fixture["job"]
+        self.assertTrue(runner.validate_bound_object(actual, item, "job"))
+        self.assertTrue(runner.validate_terminal_job(actual, item))
+
+        mutated = copy.deepcopy(actual)
+        mutated["spec"]["template"]["spec"]["securityContext"]["runAsUser"] = 65532
+        with self.assertRaises(runner.Blocked):
+            runner.validate_bound_object(mutated, item, "job")
+        mutated = copy.deepcopy(actual)
+        mutated["spec"]["template"]["spec"]["containers"].append({"name": "foreign-sidecar"})
+        with self.assertRaises(runner.Blocked):
+            runner.validate_bound_object(mutated, item, "job")
 
     @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_migration_failure_log_is_allowlisted_and_never_emits_private_stderr(self):
