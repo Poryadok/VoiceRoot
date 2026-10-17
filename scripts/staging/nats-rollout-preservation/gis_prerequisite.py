@@ -403,8 +403,20 @@ def _create_once(kube, kind, obj, plan, saved, save):
     if verify_storage is not None:
         verify_storage()
     try:
-        created = kube.run(['create', '-f', '/dev/stdin', '-o', 'jsonpath-as-json={.metadata.name,.metadata.uid}'], body=obj)
-    except Exception:
+        # The comma selector is rejected by kubectl's JSONPath parser before it
+        # can return a server receipt. Parse the full JSON object privately and
+        # retain only its validated identity below.
+        created = kube.run(['create', '-f', '/dev/stdin', '-o', 'json'], body=obj)
+    except Exception as error:
+        returncode = getattr(error, 'returncode', None)
+        category = getattr(error, 'category', 'transport_error')
+        if type(returncode) is not int or returncode < 0:
+            returncode = None
+        if category not in {'invalid_output_format', 'forbidden', 'unauthorized',
+                            'not_found', 'conflict', 'timeout', 'api_error', 'transport_error'}:
+            category = 'transport_error'
+        plan.setdefault('create_failures', {})[key] = {
+            'returncode': returncode, 'category': category}
         try:
             observed = _read_named(kube, kind.lower(), name)
         except Exception:
@@ -420,12 +432,17 @@ def _create_once(kube, kind, obj, plan, saved, save):
             or (kind == 'job' and not _job_live_matches(observed, obj, uid))
             or (kind != 'job' and _spec_digest(observed) != wanted_sha)):
             raise Blocked('gis_prerequisite_create_outcome_unknown') from None
-        created = [name, uid]
+        created = observed
         existing = observed
-    if (not isinstance(created, list) or len(created) != 2 or created[0] != name
-        or not isinstance(created[1], str) or not UUID.fullmatch(created[1])):
+    metadata = created.get('metadata', {}) if isinstance(created, dict) else {}
+    uid = metadata.get('uid')
+    if (not isinstance(created, dict) or created.get('kind') != obj.get('kind')
+        or metadata.get('name') != name
+        or metadata.get('namespace') != plan.get('namespace', NS)
+        or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+        or not isinstance(uid, str) or not UUID.fullmatch(uid)):
         raise Blocked('gis_prerequisite_create_receipt_invalid')
-    record = {'uid': created[1], 'spec_sha256': wanted_sha}
+    record = {'uid': uid, 'spec_sha256': wanted_sha}
     saved[key] = record
     save(copy.deepcopy(plan))
     fresh = existing if existing is not None else _read_named(kube, kind.lower(), name)

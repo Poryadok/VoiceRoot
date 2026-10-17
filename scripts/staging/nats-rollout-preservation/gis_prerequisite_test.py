@@ -110,8 +110,12 @@ class FakeKube:
                         'containerStatuses': container_statuses}}
                 self.objects[('pod', name + '-pod')] = pod
                 self.events.append(('created-job', name))
+                if args[args.index('-o') + 1] == 'json':
+                    return copy.deepcopy(obj)
                 return [name, uid]
             self.objects[(kind, name)] = obj
+            if args[args.index('-o') + 1] == 'json':
+                return copy.deepcopy(obj)
             return [name, uid]
         if args[0] == 'wait':
             return copy.deepcopy(self.objects[('job', args[2].split('/', 1)[1])])
@@ -692,6 +696,59 @@ class Tests(unittest.TestCase):
         kube.rs['metadata']['ownerReferences'][0]['uid'] = '00000000-0000-0000-0000-000000000999'
         with self.assertRaisesRegex(gis.Blocked, 'endpoint_pod_invalid'):
             gis.verify_ready(kube, current, timeout=1, sleep=lambda _delay: None)
+
+
+class KubectlCreateReceiptContractTests(unittest.TestCase):
+    def test_create_uses_json_object_response_consumed_by_exact_uid_receipt(self):
+        obj = {'apiVersion': 'v1', 'kind': 'ConfigMap',
+            'metadata': {'name': 'voice-gis-contract', 'namespace': 'voice-staging',
+                'labels': {prerequisite.OP_LABEL: 'a'*12}}, 'data': {'query': 'fixture'}}
+        plan = {'operation': 'a'*12, 'namespace': 'voice-staging',
+            'prerequisite_phase': 'CREATING'}
+        kube = FakeKube()
+        original_run = kube.run
+        calls = []
+
+        def run(args, body=None, timeout=30):
+            calls.append(list(args))
+            if args[0] != 'create':
+                return original_run(args, body, timeout)
+            self.assertEqual(args[args.index('-o') + 1], 'json')
+            original_run(args, body, timeout)
+            return copy.deepcopy(kube.objects[('configmap', obj['metadata']['name'])])
+
+        kube.run = run
+        persisted = []
+        records = {}
+        created, record = prerequisite._create_once(kube, 'configmap', obj, plan, records,
+            persisted.append)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(record['uid'], created['metadata']['uid'])
+        self.assertEqual(record['spec_sha256'], prerequisite._spec_digest(obj))
+        self.assertEqual(records['configmap/' + obj['metadata']['name']], record)
+        self.assertEqual(len(persisted), 1)
+
+    def test_failed_create_records_only_safe_returncode_and_category(self):
+        obj = {'apiVersion': 'v1', 'kind': 'ConfigMap',
+            'metadata': {'name': 'voice-gis-contract', 'namespace': 'voice-staging',
+                'labels': {prerequisite.OP_LABEL: 'a'*12}}, 'data': {'query': 'fixture'}}
+        plan = {'operation': 'a'*12, 'namespace': 'voice-staging',
+            'prerequisite_phase': 'CREATING'}
+
+        class FailingKube(FakeKube):
+            def run(self, args, body=None, timeout=30):
+                if args[0] == 'create':
+                    error = RuntimeError('sensitive producer detail')
+                    error.returncode = 1
+                    error.category = 'invalid_output_format'
+                    raise error
+                return super().run(args, body, timeout)
+
+        with self.assertRaisesRegex(prerequisite.Blocked, 'create_outcome_unknown'):
+            prerequisite._create_once(FailingKube(), 'configmap', obj, plan, {}, lambda _row: None)
+        self.assertEqual(plan['create_failures']['configmap/voice-gis-contract'], {
+            'returncode': 1,
+            'category': 'invalid_output_format'})
 
 
 class DevReceiptProducerTests(unittest.TestCase):

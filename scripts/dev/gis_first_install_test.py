@@ -180,6 +180,22 @@ class KubectlOptionalSecretTests(unittest.TestCase):
                     gis.Kubectl(runner=runner).get_secret("optional-identity")
 
 
+class KubectlFailureReceiptTests(unittest.TestCase):
+    def test_failure_retains_only_safe_exit_and_category(self):
+        sensitive = "do-not-retain-this-payload"
+
+        def runner(_argv, **_kwargs):
+            return SimpleNamespace(returncode=1, stdout="", stderr=(
+                "error parsing jsonpath {.metadata.name,.metadata.uid}: " + sensitive))
+
+        with self.assertRaises(gis.KubeError) as caught:
+            gis.Kubectl(runner=runner).run(["create", "-f", "/dev/stdin", "-o",
+                "jsonpath-as-json={.metadata.name,.metadata.uid}"], body={"kind": "ConfigMap"})
+        self.assertEqual(caught.exception.returncode, 1)
+        self.assertEqual(caught.exception.category, "invalid_output_format")
+        self.assertNotIn(sensitive, str(caught.exception))
+
+
 class PrerequisiteSecretProbeAdapterTests(unittest.TestCase):
     def run_preflight(self, outputs):
         calls = []
@@ -260,6 +276,25 @@ class PartialOperationContinuationTests(unittest.TestCase):
             mutate(changed)
             with self.assertRaises(gis.Blocked):
                 gis._partial_state_admissible(changed)
+
+    def test_c2_sidecar_state_accepts_bounded_create_diagnostic_only(self):
+        state = self.fixture()
+        plan = state["plan"]
+        plan["inputs"] = {"configmaps": {"provision": "voice-gameintegration-runtime-role-sql",
+            "migrations": "voice-gameintegration-db-migrations",
+            "verify": "voice-gameintegration-db-verifier-sql"},
+            "jobs": {"provision": "voice-provision-gameintegration-runtime-role",
+                "migrate": "voice-migrate-gameintegration-db",
+                "verify": "voice-verify-gameintegration-db"}}
+        plan.update(prerequisite_phase="CREATING", created={}, jobs={})
+        self.assertTrue(gis._partial_state_compatible(copy.deepcopy(state), state))
+        plan["create_failures"] = {"configmap/voice-gameintegration-runtime-role-sql": {
+            "returncode": 1, "category": "invalid_output_format"}}
+        self.assertTrue(gis._partial_state_compatible(copy.deepcopy(state), state))
+        plan["create_failures"]["job/unreviewed"] = {
+            "returncode": 1, "category": "invalid_output_format"}
+        with self.assertRaises(gis.Blocked):
+            gis._partial_state_compatible(copy.deepcopy(state), state)
 
     def test_continuation_sidecar_requires_exact_prior_hash_for_atomic_replace(self):
         with tempfile.TemporaryDirectory() as folder:

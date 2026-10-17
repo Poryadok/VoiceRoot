@@ -811,9 +811,29 @@ def receipt_binding(source_sha, image_ref, build_receipt, namespace_uid):
 
 
 class KubeError(RuntimeError):
-    def __init__(self, status):
+    def __init__(self, status, *, returncode=None, category="api_error"):
         super().__init__("kubernetes_api_error")
         self.status = status
+        self.returncode = returncode
+        self.category = category
+
+
+def _safe_kubectl_error_category(stderr):
+    """Classify a kubectl failure without retaining or exposing its diagnostics."""
+    text = str(stderr or "").lower()
+    if "error parsing jsonpath" in text:
+        return "invalid_output_format"
+    if "forbidden" in text:
+        return "forbidden"
+    if "unauthorized" in text:
+        return "unauthorized"
+    if "notfound" in text or "not found" in text:
+        return "not_found"
+    if "conflict" in text or re.search(r"\b409\b", text):
+        return "conflict"
+    if "timeout" in text or "timed out" in text:
+        return "timeout"
+    return "api_error"
 
 
 class Kubectl:
@@ -841,7 +861,9 @@ class Kubectl:
             # Kubernetes errors can contain object contents; retain only status.
             code_match = re.search(r"\b(403|404|409|422)\b", result.stderr or "")
             status = int(code_match.group(1)) if code_match else 0
-            raise KubeError(status)
+            category = _safe_kubectl_error_category(result.stderr)
+            returncode = result.returncode if type(result.returncode) is int else None
+            raise KubeError(status, returncode=returncode, category=category)
         output = result.stdout
         # The prerequisite consumer relies on booleans from this one exact
         # kubectl go-template probe. Keep every other raw command output typed
@@ -1114,6 +1136,17 @@ def _partial_state_compatible(state, original):
     allowed_created = {"Service/voice-gameintegration", "Deployment/voice-gameintegration"}
     allowed_created.update("configmap/" + value for value in baseline.get("inputs", {}).get("configmaps", {}).values())
     allowed_created.update("job/" + value for value in baseline.get("inputs", {}).get("jobs", {}).values())
+    create_failures = plan.get("create_failures", {})
+    allowed_failure_categories = {"invalid_output_format", "forbidden", "unauthorized",
+        "not_found", "conflict", "timeout", "api_error", "transport_error"}
+    if (not isinstance(create_failures, dict)
+        or set(create_failures) - allowed_created
+        or any(not isinstance(row, dict) or set(row) != {"returncode", "category"}
+            or (row["returncode"] is not None
+                and (type(row["returncode"]) is not int or row["returncode"] < 0))
+            or row["category"] not in allowed_failure_categories
+            for row in create_failures.values())):
+        _blocked("gis_dev_partial_sidecar_create_failure_invalid")
     if (set(plan["created"]) - allowed_created
         or set(plan["jobs"]) - {"provision", "migrate", "verify"}
         or (plan.get("prerequisite_phase") == "CREATING" and plan.get("prerequisite_receipt") is not None)
