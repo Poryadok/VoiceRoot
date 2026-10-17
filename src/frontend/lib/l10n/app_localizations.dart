@@ -4508,6 +4508,12 @@ abstract class AppLocalizations {
   /// **'Manage sessions'**
   String get securitySessionsManage;
 
+  /// No description provided for @securityLinkedDevicesManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage linked devices'**
+  String get securityLinkedDevicesManage;
+
   /// No description provided for @securitySessionsCurrentDevice.
   ///
   /// In en, this message translates to:

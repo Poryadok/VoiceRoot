@@ -52,6 +52,7 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   );
   static const Key deleteAccountTotpKey = Key('security_delete_account_totp');
   static const Key activeSessionsButtonKey = Key('security_active_sessions');
+  static const Key linkedDevicesButtonKey = Key('security_linked_devices');
   static const Key changePasswordButtonKey = Key('security_change_password');
   static const Key changePasswordCurrentFieldKey = Key(
     'security_change_password_current',
@@ -917,6 +918,20 @@ class _SecuritySettingsScreenState
                           );
                         },
                   child: Text(l10n.securitySessionsManage),
+                ),
+                const SizedBox(height: 8),
+                VoiceSecondaryButton(
+                  key: SecuritySettingsScreen.linkedDevicesButtonKey,
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ActiveSessionsScreen(),
+                            ),
+                          );
+                        },
+                  child: Text(l10n.securityLinkedDevicesManage),
                 ),
                 const SizedBox(height: 16),
                 Text(

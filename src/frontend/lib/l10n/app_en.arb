@@ -1143,6 +1143,7 @@
   "securitySessionsTitle": "Active sessions",
   "securitySessionsHint": "Devices where you are signed in. Revoke access for devices you no longer use.",
   "securitySessionsManage": "Manage sessions",
+  "securityLinkedDevicesManage": "Manage linked devices",
   "securitySessionsCurrentDevice": "This device",
   "securitySessionsOtherDevice": "Other device",
   "securitySessionsCurrentBadge": "Current",
