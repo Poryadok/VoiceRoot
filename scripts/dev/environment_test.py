@@ -25,7 +25,41 @@ def source():
     ]
 
 
+def role_deployment():
+    return {'apiVersion': 'apps/v1', 'kind': 'Deployment',
+            'metadata': {'name': 'voice-role', 'namespace': 'voice-staging'},
+            'spec': {'replicas': 1, 'selector': {'matchLabels': {'app': 'voice-role'}},
+                     'template': {'metadata': {'labels': {'app': 'voice-role'}}, 'spec': {
+                         'containers': [{'name': 'role', 'image': 'registry/role@sha256:' + 'b' * 64,
+                                         'env': [{'name': 'ROLE_PRINCIPAL_CLIENT_CA_FILE',
+                                                  'value': '/etc/voice/media/ca/ca.crt'},
+                                                 {'name': 'S2S_JWKS_CA_FILE',
+                                                  'value': '/etc/voice/media/ca/ca.crt'}],
+                                         'volumeMounts': [{'name': 'media-ca',
+                                                           'mountPath': '/etc/voice/media/ca',
+                                                           'readOnly': True}]}],
+                         'volumes': [{'name': 'media-ca', 'secret': {
+                             'secretName': 'voice-media-ca',
+                             'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}]}}}}
+
+
 class IsolationTests(unittest.TestCase):
+    def test_dev_role_uses_outbound_bundle_without_broadening_inbound_mtls_ca(self):
+        role = dev.render([role_deployment()], 'pmdebook')[0]
+        env = {item['name']: item.get('value') for item in role['spec']['template']['spec']['containers'][0]['env']}
+        self.assertEqual(env['S2S_JWKS_CA_FILE'], '/etc/voice/media/ca/jwks-ca.crt')
+        self.assertEqual(env['ROLE_PRINCIPAL_CLIENT_CA_FILE'], '/etc/voice/media/ca/ca.crt')
+        volume = role['spec']['template']['spec']['volumes'][0]['secret']
+        self.assertEqual(volume['secretName'], 'voice-media-ca')
+        self.assertEqual(volume['items'], [{'key': 'ca.crt', 'path': 'ca.crt'},
+                                          {'key': 'jwks-ca.crt', 'path': 'jwks-ca.crt'}])
+
+    def test_role_trust_source_shape_fails_closed(self):
+        role = role_deployment()
+        role['spec']['template']['spec']['volumes'][0]['secret']['secretName'] = 'other-ca'
+        with self.assertRaises(ValueError):
+            dev.render([role], 'pmdebook')
+
     def test_volume_binding_annotations_do_not_survive_rendering(self):
         meta = {'annotations': {'pv.kubernetes.io/bind-completed': 'yes',
                                'volume.kubernetes.io/selected-node': 'old',
