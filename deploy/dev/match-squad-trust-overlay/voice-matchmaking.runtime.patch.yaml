@@ -42,7 +42,7 @@ spec:
             - name: MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE
               value: /etc/voice/principal-jwks/tls/tls.key
             - name: S2S_JWKS_URLS_JSON
-              value: '{"gateway":"https://api-dev.comrade.click/.well-known/voice-principal-jwks.json","space":"https://voice-space:8443/internal/v1/principal/jwks.json"}'
+              $patch: delete
           volumeMounts:
             - name: match-squad-client
               mountPath: /etc/voice/match-squad/client
