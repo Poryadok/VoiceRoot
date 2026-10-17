@@ -156,7 +156,7 @@ func LoadPrincipalJWKSListener(getenv func(string) string) (PrincipalJWKSListene
 		}
 	}
 	if _, _, err := net.SplitHostPort(values["MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR"]); err != nil {
-		return PrincipalJWKSListener{}, errors.New("Matchmaking principal JWKS listen address is invalid")
+		return PrincipalJWKSListener{}, errors.New("matchmaking principal JWKS listen address is invalid")
 	}
 	keys, err := loadMatchmakingPublicKeys(values["MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR"], values["MATCHMAKING_PRINCIPAL_ACTIVE_KID"])
 	if err != nil {
@@ -164,7 +164,7 @@ func LoadPrincipalJWKSListener(getenv func(string) string) (PrincipalJWKSListene
 	}
 	certificate, err := tls.LoadX509KeyPair(values["MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE"], values["MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE"])
 	if err != nil {
-		return PrincipalJWKSListener{}, errors.New("Matchmaking principal JWKS TLS identity is invalid")
+		return PrincipalJWKSListener{}, errors.New("matchmaking principal JWKS TLS identity is invalid")
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/internal/v1/principal/jwks.json", principal.JWKSHandlerKeys(keys))
