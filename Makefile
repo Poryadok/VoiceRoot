@@ -358,6 +358,7 @@ nats-leaf-topology-invariants-test:
 .PHONY: matchmaking-source-authority-test
 matchmaking-source-authority-test:
 	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_test.py"
+	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_workflow_test.py"
 
 .PHONY: staging-source-acquisition-workflow-test
 staging-source-acquisition-workflow-test:
