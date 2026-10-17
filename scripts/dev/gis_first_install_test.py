@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 
 import gis_dev_first_install as gis
 import gis_prerequisite
+import gis_first_install
 
 
 def encoded(values):
@@ -847,6 +848,156 @@ class PartialOperationContinuationTests(unittest.TestCase):
             self.assertEqual(set(binding["changed_files"]), gis._PARTIAL_CHANGED_PATHS)
             self.assertEqual(binding["candidate_source_sha"], git("rev-parse", "HEAD"))
             self.assertEqual(binding["backend_tree"], tree)
+
+
+class DevWorkloadProjectionTests(unittest.TestCase):
+    @staticmethod
+    def add_default(obj, path, value):
+        node = obj
+        for part in path[:-1]:
+            if part.isdigit():
+                node = node[int(part)]
+            else:
+                node = node.setdefault(part, {})
+        node.setdefault(path[-1], list(value) if isinstance(value, tuple) else value)
+
+    def fixture(self):
+        image = gis.IMAGE + "@sha256:" + "4" * 64
+        source = gis._source_pair(Path(__file__).resolve().parents[2], image)
+        intended = {row["kind"]: row for row in source["objects"]}
+        for row in intended.values():
+            row.setdefault("metadata", {}).setdefault("annotations", {})[gis_first_install.MARKER] = gis._PARTIAL_OPERATION
+        service = copy.deepcopy(intended["Service"])
+        service["metadata"].update(uid="c28155fe-017f-4d68-8b86-15a9b13dbbed", resourceVersion="3382156")
+        for path, value in gis._GIS_SERVICE_DEFAULTS.items():
+            self.add_default(service, path, value)
+        service["spec"].update(clusterIP="10.43.202.38", clusterIPs=["10.43.202.38"])
+        pin = {"name": "voice-gameintegration", "uid": service["metadata"]["uid"],
+            "resourceVersion": service["metadata"]["resourceVersion"], "operation": gis._PARTIAL_OPERATION,
+            "raw_spec_sha256": hashlib.sha256(json.dumps(service["spec"], sort_keys=True,
+                separators=(",", ":")).encode()).hexdigest(), "cluster_ip": "10.43.202.38"}
+        deployment = copy.deepcopy(intended["Deployment"])
+        deployment["metadata"].update(uid="10000000-0000-0000-0000-000000000001", resourceVersion="3382200")
+        for path, value in gis._GIS_DEPLOYMENT_DEFAULTS.items():
+            self.add_default(deployment, path, value)
+        return intended, service, deployment, pin
+
+    def test_projects_only_pinned_service_and_exact_deployment_defaults(self):
+        intended, service, deployment, pin = self.fixture()
+        projected_service = gis._gis_project_response(service, intended["Service"], service_pin=pin)
+        projected_deployment = gis._gis_project_response(deployment, intended["Deployment"])
+        self.assertEqual(gis_first_install.semantic(projected_service),
+            gis_first_install.semantic(intended["Service"]))
+        self.assertEqual(gis_first_install.semantic(projected_deployment),
+            gis_first_install.semantic(intended["Deployment"]))
+        self.assertEqual(projected_service["spec"]["clusterIP"], "10.43.202.38")
+
+    def test_service_identity_and_unknown_or_wrong_defaults_fail_closed(self):
+        intended, service, deployment, pin = self.fixture()
+        for mutate in (
+            lambda row: row["metadata"].update(uid="20000000-0000-0000-0000-000000000002"),
+            lambda row: row["spec"].update(clusterIP="10.43.0.99"),
+            lambda row: row["spec"]["ports"][0].update(targetPort=9090),
+            lambda row: row["spec"]["ports"][0].update(nodePort=32000),
+        ):
+            changed = copy.deepcopy(service)
+            mutate(changed)
+            with self.assertRaises(gis.Blocked):
+                gis._gis_project_response(changed, intended["Service"], service_pin=pin)
+        for mutate in (
+            lambda row: row["spec"]["template"]["spec"]["containers"][0].update(imagePullPolicy="Always"),
+            lambda row: row["spec"]["template"]["spec"]["containers"][0].update(terminationMessagePolicy="FallbackToLogsOnError"),
+            lambda row: row["spec"]["template"]["spec"].update(securityContext={"runAsUser": 0}),
+            lambda row: row["spec"].update(progressDeadlineSeconds=601),
+        ):
+            changed = copy.deepcopy(deployment)
+            mutate(changed)
+            with self.assertRaises(gis.Blocked):
+                gis._gis_project_response(changed, intended["Deployment"])
+
+    def test_projection_adapter_scopes_transforms_to_the_fixed_pair(self):
+        intended, service, deployment, pin = self.fixture()
+
+        class Kube:
+            def __init__(self):
+                other_service = {"kind": "Service", "metadata": {"name": "other"}, "spec": {}}
+                self.rows = [other_service, service, deployment]
+
+            def run(self, args, body=None, timeout=30):
+                if args == ["get", "services,deployments", "-o", "json"]:
+                    return {"apiVersion": "v1", "kind": "List", "metadata": {},
+                        "items": copy.deepcopy(self.rows)}
+                if args == ["create", "-f", "/dev/stdin", "-o", "json"]:
+                    return copy.deepcopy(body)
+                return {"kind": "Deployment", "metadata": {"name": "other"}}
+
+            def get(self, kind, name):
+                return {"kind": kind.title(), "metadata": {"name": name}}
+
+        adapter = gis.GisDevWorkloadProjection(Kube(),
+            {"operation": gis._PARTIAL_OPERATION, "objects": list(intended.values())}, pin)
+        rows = adapter.run(["get", "services,deployments", "-o", "json"])["items"]
+        self.assertEqual(rows[0]["spec"], {})
+        self.assertEqual(gis_first_install.semantic(rows[1]), gis_first_install.semantic(intended["Service"]))
+        self.assertEqual(gis_first_install.semantic(rows[2]), gis_first_install.semantic(intended["Deployment"]))
+
+
+class PartialV4AuthorizationTests(unittest.TestCase):
+    def fixture(self):
+        changed_files = {name: hashlib.sha256(name.encode()).hexdigest()
+            for name in sorted(gis._PARTIAL_CHANGED_PATHS)}
+        binding = {"old_source_sha": gis._PARTIAL_SOURCE_SHA,
+            "candidate_source_sha": "a" * 40, "changed_files": changed_files,
+            "backend_tree": "b" * 40, "image_ref": "image@sha256:" + "c" * 64,
+            "build_receipt_sha256": "d" * 64, "source_plan_sha256": "e" * 64,
+            "source_capture_sha256": "f" * 64, "inputs_sha256": "1" * 64}
+        v3_binding = {"candidate_source_sha": gis._PARTIAL_C10_CANDIDATE_SHA,
+            "changed_files": gis._PARTIAL_C10_CHANGED_FILE_SHA256}
+        v3_state = {"phase": "PLANNED"}
+        v3 = {"schema": "voice-dev-gis-partial-continuation-v3", "binding": v3_binding,
+            "state": v3_state, "secret_fingerprints_sha256": "2" * 64}
+        current_v2 = {"binding": {"candidate_source_sha": gis._PARTIAL_C5_CANDIDATE_SHA},
+            "state": {"phase": "PLANNED"}}
+        protected = {key: binding[key] for key in ("old_source_sha", "backend_tree",
+            "build_receipt_sha256", "image_ref", "source_plan_sha256", "source_capture_sha256", "inputs_sha256")}
+        checkpoint = {"operation": gis._PARTIAL_OPERATION, "service": {"uid": "svc"}}
+        auth = {"schema": "voice-dev-gis-c10-service-transition-authorization-v1",
+            "operation": gis._PARTIAL_OPERATION, "namespace_uid": "ns",
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "immutable_v1_sha256": gis._PARTIAL_V1_SIDECAR_SHA256,
+            "previous_v2_sha256": gis._PARTIAL_C5_V2_SHA256,
+            "previous_v2_binding_sha256": gis._digest(current_v2["binding"]),
+            "previous_v2_state_sha256": gis._digest(current_v2["state"]),
+            "previous_c5_authorization_sha256": gis._PARTIAL_C5_AUTH_SHA256,
+            "previous_v3_sha256": "3" * 64,
+            "previous_v3_binding_sha256": gis._digest(v3_binding),
+            "previous_v3_state_sha256": gis._digest(v3_state),
+            "previous_c10_authorization_sha256": gis._PARTIAL_C10_AUTH_SHA256,
+            "previous_candidate_source_sha": gis._PARTIAL_C10_CANDIDATE_SHA,
+            "previous_changed_files": gis._PARTIAL_C10_CHANGED_FILE_SHA256,
+            "previous_secret_fingerprints_sha256": v3["secret_fingerprints_sha256"],
+            "target_source_sha": binding["candidate_source_sha"],
+            "target_changed_files": changed_files,
+            "protected_binding": protected, "partial_checkpoint": checkpoint}
+        return binding, v3, current_v2, protected, checkpoint, auth
+
+    def test_v3_to_v4_authorization_requires_exact_source_and_checkpoint_pins(self):
+        binding, v3, current_v2, _, checkpoint, auth = self.fixture()
+        with patch.object(gis, "_PARTIAL_C10_V3_SHA256", "3" * 64), \
+             patch.object(gis, "_PARTIAL_C10_V3_BINDING_SHA256", gis._digest(v3["binding"])), \
+             patch.object(gis, "_PARTIAL_C10_V3_STATE_SHA256", gis._digest(v3["state"])), \
+             patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]):
+            self.assertTrue(gis._partial_v3_to_v4_authorized(v3, "3" * 64,
+                gis._PARTIAL_C10_AUTH_SHA256, binding, {}, {"namespace_uid": "ns"},
+                auth, "4" * 64, "4" * 64, checkpoint, current_v2, Path(".")))
+            for field, value in (("target_source_sha", "5" * 40),
+                    ("namespace_uid", "other"), ("previous_v3_state_sha256", "6" * 64)):
+                changed = copy.deepcopy(auth)
+                changed[field] = value
+                with self.subTest(field=field), self.assertRaises(gis.Blocked):
+                    gis._partial_v3_to_v4_authorized(v3, "3" * 64,
+                        gis._PARTIAL_C10_AUTH_SHA256, binding, {}, {"namespace_uid": "ns"},
+                        changed, "4" * 64, "4" * 64, checkpoint, current_v2, Path("."))
 
 
 class SourceAuthorityTests(unittest.TestCase):
