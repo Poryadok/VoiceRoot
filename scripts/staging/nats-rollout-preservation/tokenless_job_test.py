@@ -89,6 +89,14 @@ class FakeAPI:
         self.calls.append(('get_job_pod', namespace, name))
         return copy.deepcopy(self.pod)
 
+    def wait_job_pod(self, namespace, name, uid, timeout):
+        self.calls.append(('wait_job_pod', namespace, name, uid, timeout))
+        if self.job['metadata']['uid'] != uid: raise jobs.JobError('fixture_uid_changed')
+        self.pod['status'] = {'phase': 'Running', 'containerStatuses': [{
+            'name': 'nats-phase', 'containerID': 'containerd://' + '7' * 64,
+            'ready': True, 'restartCount': 0}]}
+        return copy.deepcopy(self.pod)
+
     def pod_logs(self, namespace, name):
         self.calls.append(('pod_logs', namespace, name))
         return json.dumps({'schema': jobs.RECEIPT_SCHEMA, 'status': 'COMPLETE', 'operation': REQUEST['operation'],

@@ -7,10 +7,12 @@ fixed protocol objects only; this module never invokes kubectl or a shell.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import socket
 import ssl
 import stat
 import time
@@ -27,6 +29,7 @@ TOKEN_RENEW_BEFORE_SECONDS = 1800
 MIN_OPERATION_TOKEN_SECONDS = 300
 MAX_JSON_RESPONSE = 4 << 20
 MAX_LOG_RESPONSE = 65536
+MAX_ARCHIVE_STREAM_BYTES = 66 << 30
 
 
 class KubeAPIError(ValueError):
@@ -100,7 +103,7 @@ class TokenFile:
         return token
 
 
-class KubernetesJSONAPI:
+class _KubernetesJSONAPIBase:
     """Small fixed-resource adapter over TLS; every request reloads the token file."""
     def __init__(self, api_server, ca_file, token_file, *, audience=TOKEN_AUDIENCE,
                  owner_uid=None, trusted_config_uid=0, opener=None, timeout=15, clock=time.time):
@@ -205,6 +208,18 @@ class KubernetesJSONAPI:
         if namespace != NAMESPACE: _fail('namespace_invalid')
         return self._request('POST', '/apis/batch/v1/namespaces/' + self._segment(namespace) + '/jobs', document)
 
+    def list_operation_jobs(self, namespace, operation):
+        if namespace != NAMESPACE: _fail('namespace_invalid')
+        if not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation):
+            _fail('operation_invalid')
+        selector = urlencode({'labelSelector': 'voice.io/nats-operation=' + operation})
+        result = self._request('GET', '/apis/batch/v1/namespaces/' + self._segment(namespace)
+            + '/jobs?' + selector)
+        items = result.get('items')
+        if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+            _fail('job_list_invalid')
+        return items
+
     def get_job(self, namespace, name):
         if namespace != NAMESPACE: _fail('namespace_invalid')
         return self._request('GET', '/apis/batch/v1/namespaces/' + self._segment(namespace) + '/jobs/' + self._segment(name))
@@ -234,11 +249,173 @@ class KubernetesJSONAPI:
             _fail('job_pod_cardinality_invalid')
         return owned[0]
 
+    def wait_job_pod(self, namespace, job_name, job_uid, timeout):
+        """Wait for the exact operation Job's one live Pod before pods/exec."""
+        if namespace != NAMESPACE or not isinstance(job_uid, str) or not re.fullmatch('[a-f0-9-]{36}', job_uid):
+            _fail('job_identity_invalid')
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            job = self.get_job(namespace, job_name)
+            if job.get('metadata', {}).get('uid') != job_uid:
+                _fail('job_identity_changed')
+            if job.get('status', {}).get('failed', 0) > 0:
+                _fail('job_failed')
+            pod = self.get_job_pod(namespace, job_name)
+            if pod.get('status', {}).get('phase') == 'Running':
+                statuses = pod.get('status', {}).get('containerStatuses', [])
+                if (len(statuses) != 1 or statuses[0].get('name') != 'nats-phase'
+                    or not isinstance(statuses[0].get('containerID'), str)
+                    or not statuses[0]['containerID'].startswith('containerd://')
+                    or statuses[0].get('restartCount') != 0 or statuses[0].get('ready') is not True):
+                    _fail('job_pod_container_invalid')
+                return pod
+            if pod.get('status', {}).get('phase') in ('Failed', 'Succeeded'):
+                _fail('archive_pod_not_live')
+            time.sleep(0.5)
+        _fail('job_pod_wait_timeout')
+
     def pod_logs(self, namespace, pod_name):
         if namespace != NAMESPACE: _fail('namespace_invalid')
         query = urlencode({'limitBytes': str(MAX_LOG_RESPONSE), 'timestamps': 'false'})
         return self._request('GET', '/api/v1/namespaces/' + self._segment(namespace) + '/pods/' + self._segment(pod_name) + '/log?' + query, log=True)
 
+    def exec_pod_archive(self, namespace, pod_name, pod_uid, operation, nonce, *, existing=False,
+                         max_bytes=MAX_ARCHIVE_STREAM_BYTES):
+        """Run one fixed archive helper command over Kubernetes pods/exec.
+
+        The trusted runner chooses only create-and-stream or stream-existing.
+        Both command vectors and all other URL parameters are constructed here;
+        callers cannot select a binary, shell, container, path, or flags.
+        """
+        if namespace != NAMESPACE: _fail('namespace_invalid')
+        if (not isinstance(pod_uid, str) or not re.fullmatch('[a-f0-9-]{36}', pod_uid)
+            or not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation)
+            or not isinstance(nonce, str) or not re.fullmatch('[a-f0-9]{32}', nonce)
+            or type(existing) is not bool or type(max_bytes) is not int
+            or not 0 < max_bytes <= MAX_ARCHIVE_STREAM_BYTES):
+            _fail('archive_stream_identity_invalid')
+        pod = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods/' + self._segment(pod_name))
+        meta = pod.get('metadata', {})
+        if meta.get('uid') != pod_uid or meta.get('namespace') != namespace:
+            _fail('archive_stream_pod_changed')
+        mode = '--stream-existing' if existing else '--create-and-stream'
+        command = ['/voice-nats-runner/phase', mode, '--operation', operation,
+                   '--nonce', nonce, '--pod-uid', pod_uid]
+        query = [('container', 'nats-phase'), ('stdin', 'false'), ('stdout', 'true'),
+                 ('stderr', 'false'), ('tty', 'false')]
+        query.extend(('command', item) for item in command)
+        path = '/api/v1/namespaces/' + self._segment(namespace) + '/pods/' + self._segment(pod_name) + '/exec?' + urlencode(query)
+        token = self._operation_token()
+        yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
+
+
+def _websocket_exec(api, path, token, *, max_bytes):
+    """Consume Kubernetes channel.k8s.io v5 stdout frames with a strict byte cap."""
+    parsed = urlsplit(api.origin)
+    host, port = parsed.hostname, parsed.port or 443
+    key = base64.b64encode(os.urandom(16)).decode('ascii')
+    sock = None
+    total = 0
+    try:
+        raw = socket.create_connection((host, port), timeout=max(api.timeout, 120))
+        sock = api.context.wrap_socket(raw, server_hostname=host)
+        request = (f'GET {path} HTTP/1.1\r\nHost: {parsed.netloc}\r\n'
+            f'Authorization: Bearer {token}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n'
+            f'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n'
+            'Sec-WebSocket-Protocol: v5.channel.k8s.io\r\n\r\n').encode('ascii')
+        sock.sendall(request)
+        response = sock.makefile('rb')
+        status = response.readline(4096)
+        headers = {}
+        while True:
+            line = response.readline(8192)
+            if not line or line in (b'\r\n', b'\n'):
+                break
+            if b':' not in line:
+                _fail('exec_handshake_invalid')
+            name, value = line.split(b':', 1)
+            headers[name.strip().lower()] = value.strip()
+        if (not status.startswith(b'HTTP/1.1 101 ') or headers.get(b'upgrade', b'').lower() != b'websocket'
+            or b'upgrade' not in headers.get(b'connection', b'').lower().split(b', ')
+            or headers.get(b'sec-websocket-protocol', b'').lower() != b'v5.channel.k8s.io'
+            or headers.get(b'sec-websocket-accept') != base64.b64encode(hashlib.sha1(
+                (key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode('ascii')).digest())):
+            _fail('exec_handshake_rejected')
+        while True:
+            first = response.read(2)
+            if not first:
+                _fail('exec_stream_truncated')
+            if len(first) != 2:
+                _fail('exec_frame_truncated')
+            fin, opcode = bool(first[0] & 0x80), first[0] & 0x0f
+            if first[0] & 0x70 or first[1] & 0x80:
+                _fail('exec_frame_invalid')
+            size = first[1] & 0x7f
+            if size == 126:
+                size = int.from_bytes(_read_exact(response, 2), 'big')
+            elif size == 127:
+                size = int.from_bytes(_read_exact(response, 8), 'big')
+            if size > (96 << 10) + 1:
+                _fail('exec_frame_too_large')
+            payload = _read_exact(response, size)
+            if opcode == 8:
+                break
+            if opcode == 9:
+                _send_ws_control(sock, 10, payload)
+                continue
+            if opcode in (10,):
+                continue
+            if opcode != 2 or not fin or not payload:
+                _fail('exec_frame_invalid')
+            channel, data = payload[0], payload[1:]
+            if channel == 1:
+                total += len(data)
+                if total > max_bytes:
+                    _fail('archive_stream_too_large')
+                if data:
+                    yield data
+            elif channel == 3:
+                try:
+                    result = json.loads(data)
+                except (ValueError, UnicodeError):
+                    _fail('exec_status_invalid')
+                if not isinstance(result, dict) or result.get('status') != 'Success':
+                    _fail('exec_command_failed')
+            elif channel in (0, 2):
+                if data:
+                    _fail('exec_unexpected_channel_data')
+            else:
+                _fail('exec_channel_invalid')
+    except KubeAPIError:
+        raise
+    except (OSError, ssl.SSLError, TimeoutError, ValueError):
+        _fail('exec_transport_failed')
+    finally:
+        if sock is not None:
+            try: sock.close()
+            except OSError: pass
+
+
+def _read_exact(stream, size):
+    parts = bytearray()
+    while len(parts) < size:
+        chunk = stream.read(size - len(parts))
+        if not chunk:
+            _fail('exec_frame_truncated')
+        parts.extend(chunk)
+    return bytes(parts)
+
+
+def _send_ws_control(sock, opcode, payload):
+    mask = os.urandom(4)
+    size = len(payload)
+    if size >= 126: _fail('exec_control_too_large')
+    masked = bytes(value ^ mask[i % 4] for i, value in enumerate(payload))
+    sock.sendall(bytes((0x80 | opcode, 0x80 | size)) + mask + masked)
+
+
+class KubernetesJSONAPI(_KubernetesJSONAPIBase):
     def delete_job(self, namespace, name, uid):
         if namespace != NAMESPACE: _fail('namespace_invalid')
         if not isinstance(uid, str) or not re.fullmatch('[a-f0-9-]{36}', uid):

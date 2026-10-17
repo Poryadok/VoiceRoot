@@ -1,0 +1,185 @@
+#!/usr/bin/python3
+"""Fixed, independently pinned non-root archive helper for the staging PVC."""
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import time
+
+import native_store
+
+
+SCHEMA = 'voice-nats-archive-stream-v1'
+CHUNK = 48 << 10
+MAX_BYTES = 48 << 30
+MAX_ENTRIES = 262144
+MAX_TAR_BYTES = MAX_BYTES + (MAX_ENTRIES * 1024) + (1 << 20)
+MAX_MANIFEST_BYTES = 512 << 20
+DATA_ROOT = Path('/data')
+OUT_ROOT = Path('/out')
+
+
+def _identity(args):
+    if (not re.fullmatch('[a-f0-9]{12}', args.operation)
+        or not re.fullmatch('[a-f0-9]{32}', args.nonce)
+        or not re.fullmatch('[a-f0-9-]{36}', args.pod_uid)):
+        raise ValueError('identity')
+
+
+def _frame(row):
+    sys.stdout.buffer.write(json.dumps(row, sort_keys=True, separators=(',', ':')).encode() + b'\n')
+    sys.stdout.buffer.flush()
+
+
+def _stream(archive, manifest, args):
+    _identity(args)
+    fd = os.open(archive, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    digest = hashlib.sha256()
+    size = 0
+    sequence = 0
+    with os.fdopen(fd, 'rb') as source:
+        before = os.fstat(fd)
+        if not 0 < before.st_size <= MAX_TAR_BYTES:
+            raise ValueError('archive-size')
+        while True:
+            data = source.read(CHUNK)
+            if not data:
+                break
+            size += len(data)
+            if size > MAX_TAR_BYTES:
+                raise ValueError('archive-size')
+            digest.update(data)
+            _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+                'pod_uid': args.pod_uid, 'kind': 'data', 'sequence': sequence,
+                'data': base64.b64encode(data).decode('ascii')})
+            sequence += 1
+        after = os.fstat(fd)
+        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+            after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            raise ValueError('archive-changed')
+    if digest.hexdigest() != manifest['archive_sha256']:
+        raise ValueError('archive-digest')
+    manifest_raw = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
+    if len(manifest_raw) > MAX_MANIFEST_BYTES:
+        raise ValueError('manifest-size')
+    manifest_digest = hashlib.sha256(manifest_raw).hexdigest()
+    manifest_frames = 0
+    for offset in range(0, len(manifest_raw), CHUNK):
+        _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+            'pod_uid': args.pod_uid, 'kind': 'manifest', 'sequence': manifest_frames,
+            'data': base64.b64encode(manifest_raw[offset:offset+CHUNK]).decode('ascii')})
+        manifest_frames += 1
+    _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+        'pod_uid': args.pod_uid, 'kind': 'complete', 'frames': sequence,
+        'manifest_frames': manifest_frames, 'archive_sha256': digest.hexdigest(),
+        'manifest_sha256': manifest_digest})
+
+
+def _manifest_path():
+    return OUT_ROOT / 'archive.manifest.json'
+
+
+def create_and_stream(args):
+    _identity(args)
+    target = OUT_ROOT / 'archive.tar'
+    marker = _manifest_path()
+    partial = OUT_ROOT / 'archive.partial.tar'
+    if target.exists() or marker.exists() or partial.exists():
+        # A previous invocation may have reached durable output before the
+        # caller lost its stream. Only explicit recovery may read it back.
+        raise ValueError('archive_already_started')
+    manifest = native_store.archive_closed_store(DATA_ROOT, partial)
+    if not native_store.verify_archive(partial, manifest):
+        raise ValueError('archive-verification')
+    os.link(partial, target, follow_symlinks=False)
+    partial.unlink()
+    manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
+    record = {'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+        'pod_uid': args.pod_uid, 'archive_sha256': manifest['archive_sha256'],
+        'manifest': manifest}
+    pending = marker.with_suffix('.pending')
+    fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as output:
+        output.write(json.dumps(record, sort_keys=True, separators=(',', ':')).encode())
+        output.flush()
+        os.fsync(output.fileno())
+    os.link(pending, marker, follow_symlinks=False)
+    pending.unlink()
+    directory = os.open(OUT_ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(directory)
+    finally: os.close(directory)
+    _stream(target, manifest, args)
+
+
+def stream_existing(args):
+    _identity(args)
+    target = OUT_ROOT / 'archive.tar'
+    record = _private_json(_manifest_path())
+    if (set(record) != {'schema', 'operation', 'nonce', 'pod_uid', 'archive_sha256', 'manifest'}
+        or record.get('schema') != SCHEMA or record.get('operation') != args.operation
+        or record.get('nonce') != args.nonce or record.get('pod_uid') != args.pod_uid
+        or record.get('archive_sha256') != record.get('manifest', {}).get('archive_sha256')
+        or native_store.verify_archive(target, record['manifest']) is not True):
+        raise ValueError('archive-readback-binding')
+    _stream(target, record['manifest'], args)
+
+
+def _private_json(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+            or before.st_nlink != 1 or before.st_mode & 0o077
+            or not 1 <= before.st_size <= MAX_MANIFEST_BYTES):
+            raise ValueError('manifest-custody')
+        raw = bytearray()
+        while len(raw) <= before.st_size:
+            part = os.read(fd, min(1 << 20, before.st_size + 1 - len(raw)))
+            if not part: break
+            raw.extend(part)
+        after = os.fstat(fd)
+        if (len(raw) != before.st_size or (before.st_dev, before.st_ino, before.st_size,
+            before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino,
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+            raise ValueError('manifest-changed')
+        return json.loads(raw)
+    finally:
+        os.close(fd)
+
+
+def serve(args):
+    _identity(args)
+    while True:
+        time.sleep(60)
+
+
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--serve', action='store_true')
+    mode.add_argument('--create-and-stream', action='store_true')
+    mode.add_argument('--stream-existing', action='store_true')
+    parser.add_argument('--operation', required=True)
+    parser.add_argument('--nonce', required=True)
+    parser.add_argument('--pod-uid', required=False)
+    args = parser.parse_args(argv)
+    if args.serve:
+        if args.pod_uid is not None: parser.error('serve-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        serve(args)
+    if args.pod_uid is None: parser.error('pod-uid-required')
+    (create_and_stream if args.create_and_stream else stream_existing)(args)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception:
+        # Kubernetes logs and exec status never receive archive data or paths.
+        sys.stderr.write('nats_phase_failed\n')
+        raise SystemExit(1)

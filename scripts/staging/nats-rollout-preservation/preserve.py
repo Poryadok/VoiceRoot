@@ -448,7 +448,12 @@ def capture_cut(runtime, source, verify_fence,validate=None,*,live_catalog=None)
     verify_fence()
     runtime.no_operation_containers(running_only=True)
     archive=runtime.base/'rollout-before.tar'
-    manifest=archive_closed_store(source,archive)
+    export=getattr(runtime,'archive_selected_store',None)
+    if export is None:
+        manifest=archive_closed_store(source,archive)
+    else:
+        manifest=export(archive)
+        if not verify_archive(archive,manifest):raise Blocked('rollout_native_archive_readback_invalid')
     verify_fence()
     catalog=native_catalog(runtime,archive,manifest,verify_fence)
     if live_catalog is not None:
