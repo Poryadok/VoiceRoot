@@ -1192,7 +1192,7 @@ class PartialV5DeploymentAdoptionTests(unittest.TestCase):
         v5["state"]["plan"]["phase"] = "STARTING"
         v5["state"]["plan_phase"] = "STARTING"
         v5["state"]["plan"]["receipt"] = {
-            "schema": gis.RESOURCE_RECEIPT_SCHEMA,
+            "schema": "voice-gis-first-install-resources-v1",
             "operation": gis._PARTIAL_OPERATION,
             "objects": {
                 "Service/voice-gameintegration": {"uid": service["uid"],
@@ -1230,6 +1230,14 @@ class PartialV5DeploymentAdoptionTests(unittest.TestCase):
                     "0" * 64, "0" * 64, object(), Path("."))
 
     def _recover(self, v5, v4, binding, checkpoint, authorization, v4_sha):
+        if v5["state"]["plan"].get("phase") == "STARTING":
+            created = v5["state"]["plan"]["created"]
+            v5["state"]["plan"]["receipt"] = {
+                "schema": "voice-gis-first-install-resources-v1",
+                "operation": gis._PARTIAL_OPERATION,
+                "objects": {key: {"uid": row["uid"],
+                    "spec_sha256": row["spec_sha256"]}
+                    for key, row in created.items()}}
         saved = []
         def save(plan):
             saved.append(copy.deepcopy(plan))
