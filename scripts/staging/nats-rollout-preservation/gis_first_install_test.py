@@ -1,5 +1,6 @@
 """Mocked ownership, replay and delete-precondition tests for GIS first install."""
 import copy
+import hashlib
 import json
 import unittest
 
@@ -79,8 +80,12 @@ def prerequisite(operation):
             'image_ids': {container: inputs['images'][image].replace('@', '@')
                           for container, image in image_role.items()},
             'complete': True, 'succeeded': 1, 'completion_time': '2026-10-17T00:00:00Z'}
-    configmaps = {role: {'name': name, 'uid': uid, 'spec_sha256': 'b'*64}
-                  for role, name in inputs['configmaps'].items()}
+    # The execution role is `migrate`; its source-owned ConfigMap key is
+    # `migrations`. Keep the fixture receipt shaped like execute()'s producer.
+    configmaps = {('migrations' if role == 'migrate' else role): {
+        'name': inputs['configmaps']['migrations' if role == 'migrate' else role],
+        'uid': uid, 'spec_sha256': 'b'*64}
+        for role in ('provision', 'migrate', 'verify')}
     database_identity = copy.deepcopy(operation['database_identity'])
     revalidation = {'namespace_uid': uid, 'service_uid': uid,
         'service_spec_sha256': '6'*64, 'endpoints': [{'uid': uid, 'pod_uids': [uid]}],
@@ -180,6 +185,44 @@ class RunKube:
             del self.objects[key]
             return {'status': 'Success'}
         raise AssertionError(args)
+
+
+class NamespaceTests(unittest.TestCase):
+    def test_default_namespace_remains_staging_and_dev_is_explicit(self):
+        service, deployment = manifests()
+        staging = gis.build_plan(service=service, deployment=deployment, operation='a'*12)
+        self.assertEqual({obj['metadata']['namespace'] for obj in staging['objects']}, {'voice-staging'})
+
+        service['metadata']['namespace'] = 'voice-dev'
+        deployment['metadata']['namespace'] = 'voice-dev'
+        image = next(row['image'] for row in deployment['spec']['template']['spec']['containers']
+                     if row['name'] == 'gameintegration')
+        builder_tree = 'f' * 40
+        build = {'schema': 'voice-dev-source-build-v2', 'source_sha': 'c'*40,
+            'image_ref': image, 'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
+            'image_config_sha256': 'e'*64, 'working_tree_clean': True,
+            'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
+            'builder_sha': 'c'*40, 'builder_tree': builder_tree}
+        source = {'schema': gis.SOURCE_SCHEMA, 'objects': [service, deployment]}
+        self.assertTrue(gis.validate_source_plan(source, namespace='voice-dev'))
+        dev = gis.bind_operation(source, 'b'*12,
+            {'mode': 'app-only', 'tag': 'c'*40, 'source_hashes': {},
+             'source_build_receipt': build}, namespace='voice-dev')
+        self.assertEqual(dev['namespace'], 'voice-dev')
+        self.assertEqual({obj['metadata']['namespace'] for obj in dev['objects']}, {'voice-dev'})
+        self.assertEqual(dev['source_build_receipt'], build)
+
+        dirty = dict(build, working_tree_clean=False)
+        with self.assertRaises(gis.Blocked):
+            gis.bind_operation(source, 'c'*12,
+                {'mode': 'app-only', 'tag': 'c'*40, 'source_hashes': {},
+                 'source_build_receipt': dirty}, namespace='voice-dev')
+
+    def test_namespace_is_not_an_arbitrary_target(self):
+        service, deployment = manifests()
+        with self.assertRaises(gis.Blocked):
+            gis.build_plan(service=service, deployment=deployment,
+                operation='a'*12, namespace='voice-production')
 
 
 class Tests(unittest.TestCase):

@@ -231,6 +231,77 @@ class Tests(unittest.TestCase):
         altered = dict(prerequisite.OUTPUT, schema_ledger_runtime_mutation_denied=False)
         self.assertNotEqual(altered, prerequisite.OUTPUT)
 
+    def test_dev_execute_emits_source_build_bound_receipt_not_staging_ci_receipt(self):
+        uid = '00000000-0000-0000-0000-000000000001'
+        image = 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'a' * 64
+        source_sha = 'b' * 40
+        inputs = {
+            'schema': 'voice-gis-prerequisite-v1', 'database': 'game_integration_db',
+            'configmaps': {'provision': 'cm-provision', 'migrations': 'cm-migrations', 'verify': 'cm-verify'},
+            'job_images': {'provision': {'provision': 'postgres'}, 'migrate': {'migrate': 'migrate'},
+                           'verify': {'verify': 'postgres'}},
+            'images': {'postgres': 'postgres@sha256:' + 'c' * 64, 'migrate': 'migrate@sha256:' + 'd' * 64},
+            'jobs': {'provision': 'voice-provision-gameintegration-runtime-role',
+                     'migrate': 'voice-migrate-gameintegration-db', 'verify': 'voice-verify-gameintegration-db'},
+        }
+        identity = {'namespace_uid': uid, 'service_uid': '00000000-0000-0000-0000-000000000002',
+            'service_spec_sha256': 'e' * 64, 'endpoints': [{'uid': '00000000-0000-0000-0000-000000000003',
+                                                            'pod_uids': ['00000000-0000-0000-0000-000000000004']}]}
+        builder_tree = '5' * 40
+        build = {'schema': 'voice-dev-source-build-v2', 'source_sha': source_sha, 'image_ref': image,
+            'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
+            'image_config_sha256': '1' * 64, 'working_tree_clean': True,
+            'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
+            'builder_sha': source_sha, 'builder_tree': builder_tree}
+        deployment = {'kind': 'Deployment', 'metadata': {'name': 'voice-gameintegration'}, 'spec': {
+            'template': {'spec': {'containers': [{'name': 'gameintegration', 'image': image}]}}}}
+        plan = {'namespace': 'voice-dev', 'phase': 'PLANNED', 'operation': '123456789abc',
+            'source_sha': source_sha, 'source_plan_sha256': '2' * 64, 'source_build_receipt': build,
+            'objects': [deployment], 'inputs': inputs, 'inputs_sha256': gis.digest(inputs),
+            'database_identity': identity, 'secret_metadata': {'uid': uid, 'resourceVersion': '5'},
+            'config_metadata': {'uid': uid, 'resourceVersion': '6'}, 'created': {}}
+        configmaps = {role: {'name': inputs['configmaps']['migrations' if role == 'migrate' else role],
+            'uid': uid, 'spec_sha256': '3' * 64} for role in prerequisite.JOB_ROLES}
+        jobs = {}
+        for role, name in inputs['jobs'].items():
+            logical = next(iter(inputs['job_images'][role].values()))
+            jobs[role] = {'name': name, 'uid': uid, 'spec_sha256': '4' * 64, 'pod_uid': uid,
+                'image_ids': {container: inputs['images'][logical] for container in inputs['job_images'][role]},
+                'complete': True, 'succeeded': 1, 'completion_time': '2026-10-17T00:00:00Z'}
+        create_records = []
+        for role in prerequisite.JOB_ROLES:
+            for kind, row in (('configmap', configmaps[role]), ('job', jobs[role])):
+                create_records.append((kind, row))
+        records = iter(create_records)
+
+        def create_once(_kube, kind, _obj, active_plan, _saved, _save):
+            stored_kind, row = next(records)
+            self.assertEqual(kind, stored_kind)
+            record = {'uid': row['uid'], 'spec_sha256': row['spec_sha256']}
+            active_plan['created'][f"{kind}/{row['name']}"] = record
+            return None, record
+
+        config_docs = {role: object() for role in prerequisite.JOB_ROLES}
+        job_docs = {role: object() for role in prerequisite.JOB_ROLES}
+        with patch.object(prerequisite, '_documents', return_value=(config_docs, job_docs)), \
+             patch.object(prerequisite, 'preflight', return_value=identity), \
+             patch.object(prerequisite, '_create_once', side_effect=create_once), \
+             patch.object(prerequisite, '_verify_job', side_effect=[
+                 (jobs[role], prerequisite.OUTPUT) for role in prerequisite.JOB_ROLES]), \
+             patch.object(prerequisite, 'source_inputs', return_value=inputs):
+            receipt = prerequisite.execute(object(), plan, Path('.'), {}, lambda _state: None)
+
+        self.assertEqual(receipt['schema'], gis.DEV_PREREQUISITE_SCHEMA)
+        self.assertEqual(receipt['source_build_receipt'], build)
+        self.assertEqual(receipt['source_build_receipt_sha256'], gis.digest(build))
+        self.assertNotIn('source_ci', receipt)
+        self.assertNotIn('custody_binding_sha256', receipt)
+        self.assertTrue(gis.validate_prerequisite_receipt(receipt, plan))
+        invalid = copy.deepcopy(receipt)
+        invalid['verifier']['ddl_denied'] = False
+        with self.assertRaises(gis.Blocked):
+            gis.validate_prerequisite_receipt(invalid, plan)
+
     def test_actual_collector_runs_source_owned_jobs_in_order_and_returns_bound_receipt(self):
         bound = capture(ROOT)
         inputs = prerequisite.source_inputs(ROOT, bound)
@@ -541,6 +612,72 @@ class Tests(unittest.TestCase):
         kube.rs['metadata']['ownerReferences'][0]['uid'] = '00000000-0000-0000-0000-000000000999'
         with self.assertRaisesRegex(gis.Blocked, 'endpoint_pod_invalid'):
             gis.verify_ready(kube, current, timeout=1, sleep=lambda _delay: None)
+
+
+class DevReceiptProducerTests(unittest.TestCase):
+    def test_execute_produces_distinct_source_build_bound_dev_receipt(self):
+        uid = '00000000-0000-0000-0000-000000000001'
+        image = 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'a' * 64
+        source_sha = 'b' * 40
+        inputs = {'schema': 'voice-gis-prerequisite-v1', 'database': 'game_integration_db',
+            'configmaps': {'provision': 'cm-provision', 'migrations': 'cm-migrations', 'verify': 'cm-verify'},
+            'job_images': {'provision': {'provision': 'postgres'}, 'migrate': {'migrate': 'migrate'},
+                'verify': {'verify': 'postgres'}},
+            'images': {'postgres': 'postgres@sha256:' + 'c' * 64, 'migrate': 'migrate@sha256:' + 'd' * 64},
+            'jobs': {'provision': 'voice-provision-gameintegration-runtime-role',
+                'migrate': 'voice-migrate-gameintegration-db', 'verify': 'voice-verify-gameintegration-db'}}
+        identity = {'namespace_uid': uid, 'service_uid': '00000000-0000-0000-0000-000000000002',
+            'service_spec_sha256': 'e' * 64, 'endpoints': [{'uid': '00000000-0000-0000-0000-000000000003',
+                'pod_uids': ['00000000-0000-0000-0000-000000000004']}]}
+        builder_tree = '5' * 40
+        build = {'schema': 'voice-dev-source-build-v2', 'source_sha': source_sha, 'image_ref': image,
+            'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
+            'image_config_sha256': '1' * 64, 'working_tree_clean': True,
+            'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
+            'builder_sha': source_sha, 'builder_tree': builder_tree}
+        deployment = {'kind': 'Deployment', 'metadata': {'name': 'voice-gameintegration'}, 'spec': {
+            'template': {'spec': {'containers': [{'name': 'gameintegration', 'image': image}]}}}}
+        plan = {'namespace': 'voice-dev', 'phase': 'PLANNED', 'operation': '123456789abc',
+            'source_sha': source_sha, 'source_plan_sha256': '2' * 64, 'source_build_receipt': build,
+            'objects': [deployment], 'inputs': inputs, 'inputs_sha256': gis.digest(inputs),
+            'database_identity': identity, 'secret_metadata': {'uid': uid, 'resourceVersion': '5'},
+            'config_metadata': {'uid': uid, 'resourceVersion': '6'}, 'created': {}}
+        configmaps = {role: {'name': inputs['configmaps']['migrations' if role == 'migrate' else role],
+            'uid': uid, 'spec_sha256': '3' * 64} for role in prerequisite.JOB_ROLES}
+        jobs = {}
+        for role, name in inputs['jobs'].items():
+            logical = next(iter(inputs['job_images'][role].values()))
+            jobs[role] = {'name': name, 'uid': uid, 'spec_sha256': '4' * 64, 'pod_uid': uid,
+                'image_ids': {container: inputs['images'][logical] for container in inputs['job_images'][role]},
+                'complete': True, 'succeeded': 1, 'completion_time': '2026-10-17T00:00:00Z'}
+        records = iter([(kind, row) for role in prerequisite.JOB_ROLES
+            for kind, row in (('configmap', configmaps[role]), ('job', jobs[role]))])
+
+        def create_once(_kube, kind, _obj, active_plan, _saved, _save):
+            record_kind, row = next(records)
+            self.assertEqual(kind, record_kind)
+            record = {'uid': row['uid'], 'spec_sha256': row['spec_sha256']}
+            active_plan['created'][f"{kind}/{row['name']}"] = record
+            return None, record
+
+        with patch.object(prerequisite, '_documents', return_value=({role: object() for role in prerequisite.JOB_ROLES},
+                {role: object() for role in prerequisite.JOB_ROLES})), \
+             patch.object(prerequisite, 'preflight', return_value=identity), \
+             patch.object(prerequisite, '_create_once', side_effect=create_once), \
+             patch.object(prerequisite, '_verify_job', side_effect=[
+                 (jobs[role], prerequisite.OUTPUT) for role in prerequisite.JOB_ROLES]), \
+             patch.object(prerequisite, 'source_inputs', return_value=inputs):
+            receipt = prerequisite.execute(object(), plan, Path('.'), {}, lambda _state: None)
+        self.assertEqual(receipt['schema'], gis.DEV_PREREQUISITE_SCHEMA)
+        self.assertEqual(receipt['source_build_receipt'], build)
+        self.assertEqual(receipt['source_build_receipt_sha256'], gis.digest(build))
+        self.assertNotIn('source_ci', receipt)
+        self.assertNotIn('custody_binding_sha256', receipt)
+        self.assertTrue(gis.validate_prerequisite_receipt(receipt, plan))
+        changed = copy.deepcopy(receipt)
+        changed['verifier']['ddl_denied'] = False
+        with self.assertRaises(gis.Blocked):
+            gis.validate_prerequisite_receipt(changed, plan)
 
 
 if __name__ == '__main__':
