@@ -9,9 +9,9 @@ spec:
       containers:
         - name: voice
           ports:
-            - name: match-squad-provider
+            - name: match-provider
               containerPort: 9094
-            - name: match-squad-member
+            - name: match-member
               containerPort: 9095
           env:
             - name: VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN
