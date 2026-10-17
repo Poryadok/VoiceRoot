@@ -58,6 +58,55 @@ func TestProviderTeardownClassificationKeepsUncertainFailuresRetryable(t *testin
 	}
 }
 
+func TestMatchSquadTeardownRetryDelayUsesBoundedExponentialBackoff(t *testing.T) {
+	tests := []struct {
+		attempt int
+		jitter  float64
+		want    time.Duration
+	}{
+		{attempt: 1, jitter: 0, want: time.Second},
+		{attempt: 1, jitter: 1, want: 1250 * time.Millisecond},
+		{attempt: 2, jitter: 1, want: 2500 * time.Millisecond},
+		{attempt: 99, jitter: 1, want: 5 * time.Minute},
+	}
+	for _, tt := range tests {
+		if got := matchSquadTeardownRetryDelay(tt.attempt, tt.jitter); got != tt.want {
+			t.Errorf("matchSquadTeardownRetryDelay(%d, %v) = %s, want %s", tt.attempt, tt.jitter, got, tt.want)
+		}
+	}
+	if got := matchSquadTeardownRetryDelay(2, -0.1); got != 2*time.Second {
+		t.Fatalf("negative jitter was not clamped: %s", got)
+	}
+	if got := matchSquadTeardownRetryDelay(2, 1.1); got != 2500*time.Millisecond {
+		t.Fatalf("jitter above one was not clamped: %s", got)
+	}
+}
+
+func TestMatchSquadTeardownAttemptsReceiveFreshTenSecondContext(t *testing.T) {
+	parent, cancelParent := context.WithCancel(context.Background())
+	defer cancelParent()
+
+	first, cancelFirst := matchSquadTeardownAttemptContext(parent)
+	firstDeadline, ok := first.Deadline()
+	if !ok || time.Until(firstDeadline) > 10*time.Second || time.Until(firstDeadline) < 9*time.Second {
+		t.Fatalf("first attempt deadline = %v, ok=%v", firstDeadline, ok)
+	}
+	cancelFirst()
+	if first.Err() == nil {
+		t.Fatal("first attempt context was not canceled")
+	}
+
+	second, cancelSecond := matchSquadTeardownAttemptContext(parent)
+	defer cancelSecond()
+	secondDeadline, ok := second.Deadline()
+	if !ok || !secondDeadline.After(firstDeadline) {
+		t.Fatalf("second attempt did not receive a fresh deadline: first=%v second=%v", firstDeadline, secondDeadline)
+	}
+	if second.Err() != nil {
+		t.Fatalf("canceling one attempt canceled a later attempt: %v", second.Err())
+	}
+}
+
 func TestProviderCallContextBindsExactRequestAndDropsCallerMetadata(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

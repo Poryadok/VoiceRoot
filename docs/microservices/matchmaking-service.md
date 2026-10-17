@@ -236,6 +236,14 @@ that key conflicts. Provider teardown and aggregate completion remain durable
 separate lifecycle steps; a successful HTTP response is not evidence that
 external Chat or Voice cleanup has completed.
 
+The recovery worker claims each incomplete provider operation independently and
+replays only its persisted request. Every RPC has a fresh 10-second deadline;
+transient failures persist a retry time using 1-second exponential backoff,
+bounded jitter and a 5-minute cap. Durable provider receipts reset the aggregate
+progress clock. Prometheus reports the oldest pending progress age and terminal
+contract-mismatch count: no progress for 15 minutes alerts, while a contract
+mismatch raises an immediate critical alert and is never retried automatically.
+
 ### MatchSquad principal JWKS publisher
 
 When MatchSquad principal verification is enabled, Matchmaking also publishes

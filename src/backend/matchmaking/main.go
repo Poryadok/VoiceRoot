@@ -93,6 +93,15 @@ func main() {
 		}()
 	}
 	metricsReg := prometheus.NewRegistry()
+	teardownOldestPendingProgressAge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "matchmaking_matchsquad_teardown_oldest_pending_progress_age_seconds",
+		Help: "Age of the oldest pending MatchSquad teardown aggregate without durable provider progress.",
+	})
+	teardownContractMismatches := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "matchmaking_matchsquad_teardown_contract_mismatches",
+		Help: "Number of pending MatchSquad teardown provider operations in terminal contract mismatch.",
+	})
+	metricsReg.MustRegister(teardownOldestPendingProgressAge, teardownContractMismatches)
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -121,6 +130,29 @@ func main() {
 		matchStore := &store.MatchStore{Pool: pool}
 		ratingStore := &store.RatingStore{Pool: pool}
 		banStore := &store.BanStore{Pool: pool}
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				alertCtx, alertCancel := context.WithTimeout(shutdownCtx, 3*time.Second)
+				alertState, err := matchStore.GetMatchSquadTeardownAlertState(alertCtx)
+				alertCancel()
+				if err != nil {
+					if shutdownCtx.Err() != nil {
+						return
+					}
+					logger.Warn("MatchSquad teardown alert-state query failed", slog.Any("error", err))
+				} else {
+					teardownOldestPendingProgressAge.Set(alertState.OldestPendingProgressAgeSeconds)
+					teardownContractMismatches.Set(float64(alertState.ContractMismatchCount))
+				}
+				select {
+				case <-shutdownCtx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
 
 		var events mmevents.Publisher = mmevents.NoopPublisher{}
 		eventsEnabled := false
@@ -189,14 +221,29 @@ func main() {
 			go func() {
 				ticker := time.NewTicker(2 * time.Second)
 				defer ticker.Stop()
-				for range ticker.C {
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				for {
+					select {
+					case <-shutdownCtx.Done():
+						return
+					case <-ticker.C:
+					}
+					ctx, cancel := context.WithTimeout(shutdownCtx, 5*time.Second)
 					if _, err := providerWorker.RunProvisioningOnce(ctx, 100); err != nil {
 						logger.Warn("MatchSquad provisioning recovery failed", slog.Any("error", err))
 					}
-					if _, err := providerWorker.RunTeardownOnce(ctx, 100); err != nil {
+					cancel()
+					if shutdownCtx.Err() != nil {
+						return
+					}
+					// Each incomplete provider gets an independent 10-second attempt
+					// context in the worker; a batch-level deadline must not shrink it.
+					if _, err := providerWorker.RunTeardownOnce(shutdownCtx, 100); err != nil {
 						logger.Warn("MatchSquad teardown dispatch failed", slog.Any("error", err))
 					}
+					if shutdownCtx.Err() != nil {
+						return
+					}
+					ctx, cancel = context.WithTimeout(shutdownCtx, 5*time.Second)
 					if _, err := providerWorker.RunCompactionOnce(ctx, 100); err != nil {
 						logger.Warn("MatchSquad compaction dispatch failed", slog.Any("error", err))
 					}

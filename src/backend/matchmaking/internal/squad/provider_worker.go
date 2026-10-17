@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -295,25 +297,29 @@ func (w *MatchSquadProviderWorker) RunTeardownOnce(ctx context.Context, limit in
 	completed := 0
 	var failures []error
 	for _, item := range items {
-		if err := w.Store.SetMatchSquadTeardownParticipantState(ctx, item.AggregateID, item.Provider, "IN_FLIGHT"); err != nil {
+		claimed, ok, err := w.Store.ClaimMatchSquadTeardownParticipant(ctx, item, 30*time.Second)
+		if err != nil {
 			failures = append(failures, fmt.Errorf("claim %s MatchSquad teardown participant: %w", item.Provider, err))
 			continue
 		}
-		receiptID, receiptBytes, err := w.teardown(ctx, item)
+		if !ok {
+			continue
+		}
+		receiptID, receiptBytes, err := w.teardown(ctx, claimed)
 		if err != nil {
-			nextState := "RETRYABLE_FAILURE"
 			if isTerminalProviderTeardownError(err) {
-				nextState = "CONTRACT_MISMATCH"
-			}
-			if stateErr := w.Store.SetMatchSquadTeardownParticipantState(ctx, item.AggregateID, item.Provider, nextState); stateErr != nil {
-				failures = append(failures, fmt.Errorf("record %s MatchSquad teardown failure: %w", item.Provider, stateErr))
+				if stateErr := w.Store.MarkMatchSquadTeardownContractMismatch(ctx, claimed, "contract_mismatch"); stateErr != nil {
+					failures = append(failures, fmt.Errorf("record %s MatchSquad teardown contract mismatch: %w", item.Provider, stateErr))
+				}
+			} else if stateErr := w.Store.ScheduleMatchSquadTeardownRetry(ctx, claimed, matchSquadTeardownRetryDelay(claimed.AttemptCount, rand.Float64()), matchSquadTeardownErrorClass(err)); stateErr != nil {
+				failures = append(failures, fmt.Errorf("schedule %s MatchSquad teardown retry: %w", item.Provider, stateErr))
 			}
 			failures = append(failures, fmt.Errorf("dispatch %s MatchSquad teardown: %w", item.Provider, err))
 			continue
 		}
 		if _, err := w.Store.RecordMatchSquadTeardownReceipt(ctx, item.AggregateID, item.Provider, receiptID, receiptBytes); err != nil {
 			if errors.Is(err, store.ErrMatchSquadConflict) {
-				if stateErr := w.Store.SetMatchSquadTeardownParticipantState(ctx, item.AggregateID, item.Provider, "CONTRACT_MISMATCH"); stateErr != nil {
+				if stateErr := w.Store.MarkMatchSquadTeardownContractMismatch(ctx, claimed, "receipt_mismatch"); stateErr != nil {
 					failures = append(failures, fmt.Errorf("record %s MatchSquad receipt mismatch: %w", item.Provider, stateErr))
 				}
 				failures = append(failures, fmt.Errorf("validate %s MatchSquad teardown receipt: %w", item.Provider, err))
@@ -339,6 +345,55 @@ func isTerminalProviderTeardownError(err error) bool {
 	}
 }
 
+func matchSquadTeardownRetryDelay(attempt int, jitter float64) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	if jitter < 0 {
+		jitter = 0
+	} else if jitter > 1 {
+		jitter = 1
+	}
+	shift := attempt - 1
+	if shift > 18 {
+		shift = 18
+	}
+	base := time.Second * time.Duration(1<<shift)
+	const capDelay = 5 * time.Minute
+	if base > capDelay {
+		base = capDelay
+	}
+	delay := base + time.Duration(float64(base/4)*jitter)
+	if delay > capDelay {
+		return capDelay
+	}
+	return delay
+}
+
+func matchSquadTeardownErrorClass(err error) string {
+	if errors.Is(err, errProviderContract) {
+		return "provider_contract"
+	}
+	switch status.Code(err) {
+	case codes.Unavailable:
+		return "unavailable"
+	case codes.Unauthenticated:
+		return "unauthenticated"
+	case codes.PermissionDenied:
+		return "permission_denied"
+	case codes.DeadlineExceeded:
+		return "deadline_exceeded"
+	case codes.Internal:
+		return "internal"
+	default:
+		return "transport_or_unknown"
+	}
+}
+
+func matchSquadTeardownAttemptContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 10*time.Second)
+}
+
 func (w *MatchSquadProviderWorker) teardown(ctx context.Context, item store.MatchSquadTeardownParticipant) (uuid.UUID, []byte, error) {
 	switch item.Provider {
 	case "chat":
@@ -349,7 +404,9 @@ func (w *MatchSquadProviderWorker) teardown(ctx context.Context, item store.Matc
 		if request.GetTeardownOperationId() != item.OperationID.String() || request.GetMatchId() == "" {
 			return uuid.Nil, nil, fmt.Errorf("%w: stored Chat teardown binding is invalid", errProviderContract)
 		}
-		callCtx, err := w.callContext(ctx, "chat", chatTeardownRPC, item.OperationID, request)
+		attemptCtx, cancel := matchSquadTeardownAttemptContext(ctx)
+		defer cancel()
+		callCtx, err := w.callContext(attemptCtx, "chat", chatTeardownRPC, item.OperationID, request)
 		if err != nil {
 			return uuid.Nil, nil, err
 		}
@@ -377,7 +434,9 @@ func (w *MatchSquadProviderWorker) teardown(ctx context.Context, item store.Matc
 		if request.GetTeardownOperationId() != item.OperationID.String() || request.GetMatchId() == "" {
 			return uuid.Nil, nil, fmt.Errorf("%w: stored Voice teardown binding is invalid", errProviderContract)
 		}
-		callCtx, err := w.callContext(ctx, "voice", voiceTeardownRPC, item.OperationID, request)
+		attemptCtx, cancel := matchSquadTeardownAttemptContext(ctx)
+		defer cancel()
+		callCtx, err := w.callContext(attemptCtx, "voice", voiceTeardownRPC, item.OperationID, request)
 		if err != nil {
 			return uuid.Nil, nil, err
 		}

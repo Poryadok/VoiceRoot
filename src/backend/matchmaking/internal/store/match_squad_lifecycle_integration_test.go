@@ -19,6 +19,105 @@ import (
 	"voice/backend/pkg/integrationtest"
 )
 
+func TestMatchSquadTeardownParticipantListReturnsOnlyDueRetries(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	matchID, _, _ := seedActiveDuoMatch(t, ctx, pool)
+
+	aggregateID := uuid.New()
+	hash := make([]byte, 32)
+	_, err := pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_operations
+		(match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,
+		 chat_operation_id,chat_request_sha256,chat_request_bytes,voice_operation_id)
+		VALUES ($1,$2,$3,$4,'provisioning',$5,$6,$7,$8)
+	`, matchID, uuid.New(), hash, []byte("manifest"), uuid.New(), hash, []byte("chat request"), uuid.New())
+	require.NoError(t, err)
+	chatOperationID, voiceOperationID := uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardowns
+		(aggregate_id,match_id,state,chat_teardown_operation_id,chat_teardown_request_sha256,chat_teardown_request_bytes,
+		 voice_teardown_operation_id,voice_teardown_request_sha256,voice_teardown_request_bytes)
+		VALUES ($1,$2,'pending',$3,$4,$5,$6,$7,$8)
+	`, aggregateID, matchID, chatOperationID, hash, []byte("chat teardown"), voiceOperationID, hash, []byte("voice teardown"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardown_participants
+		(aggregate_id,provider,operation_id,state,request_sha256,request_bytes)
+		VALUES ($1,'chat',$2,'RETRYABLE_FAILURE',$3,$4),($1,'voice',$5,'RETRYABLE_FAILURE',$3,$6)
+	`, aggregateID, chatOperationID, hash, []byte("chat teardown"), voiceOperationID, []byte("voice teardown"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+		UPDATE matchmaking_match_squad_teardown_participants
+		SET next_attempt_at=clock_timestamp()+interval '1 hour'
+		WHERE aggregate_id=$1 AND provider='voice'
+	`, aggregateID)
+	require.NoError(t, err)
+
+	items, err := (&MatchStore{Pool: pool}).ListPendingMatchSquadTeardownParticipants(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, items, 1, "not-yet-due provider retries must stay out of this worker batch")
+	require.Equal(t, aggregateID, items[0].AggregateID)
+	require.Equal(t, "chat", items[0].Provider)
+	require.Equal(t, 0, items[0].AttemptCount)
+
+	claimed, ok, err := (&MatchStore{Pool: pool}).ClaimMatchSquadTeardownParticipant(ctx, items[0], 30*time.Second)
+	require.NoError(t, err)
+	require.True(t, ok, "a due retry must be claimable")
+	require.Equal(t, 1, claimed.AttemptCount)
+	require.Positive(t, claimed.ClaimGeneration)
+	_, duplicateClaim, err := (&MatchStore{Pool: pool}).ClaimMatchSquadTeardownParticipant(ctx, items[0], 30*time.Second)
+	require.NoError(t, err)
+	require.False(t, duplicateClaim, "an active provider lease must prevent a duplicate concurrent dispatch")
+
+	started := time.Now().UTC()
+	require.NoError(t, (&MatchStore{Pool: pool}).ScheduleMatchSquadTeardownRetry(ctx, claimed, time.Second, "unavailable"))
+	var state, errorClass string
+	var attempts int
+	var nextAttempt, lastProgress time.Time
+	var claimUntil *time.Time
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT state,attempt_count,next_attempt_at,last_progress_at,claim_until,last_error_class
+		FROM matchmaking_match_squad_teardown_participants WHERE aggregate_id=$1 AND provider='chat'
+	`, aggregateID).Scan(&state, &attempts, &nextAttempt, &lastProgress, &claimUntil, &errorClass))
+	require.Equal(t, "RETRYABLE_FAILURE", state)
+	require.Equal(t, 1, attempts)
+	require.WithinDuration(t, started.Add(time.Second), nextAttempt, 250*time.Millisecond)
+	require.Nil(t, claimUntil)
+	require.Equal(t, "unavailable", errorClass)
+	require.True(t, lastProgress.Before(started), "a failed attempt is not durable progress")
+	items, err = (&MatchStore{Pool: pool}).ListPendingMatchSquadTeardownParticipants(ctx, 10)
+	require.NoError(t, err)
+	require.Empty(t, items, "scheduled retries must not run before next_attempt_at")
+	_, err = pool.Exec(ctx, `
+		UPDATE matchmaking_match_squad_teardown_participants
+		SET next_attempt_at=clock_timestamp()
+		WHERE aggregate_id=$1 AND provider='voice'
+	`, aggregateID)
+	require.NoError(t, err)
+	items, err = (&MatchStore{Pool: pool}).ListPendingMatchSquadTeardownParticipants(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	claimed, ok, err = (&MatchStore{Pool: pool}).ClaimMatchSquadTeardownParticipant(ctx, items[0], 30*time.Second)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NoError(t, (&MatchStore{Pool: pool}).MarkMatchSquadTeardownContractMismatch(ctx, claimed, "receipt_mismatch"))
+	_, err = pool.Exec(ctx, `
+		UPDATE matchmaking_match_squad_teardowns
+		SET teardown_last_progress_at=clock_timestamp()-interval '16 minutes'
+		WHERE aggregate_id=$1
+	`, aggregateID)
+	require.NoError(t, err)
+	alertState, err := (&MatchStore{Pool: pool}).GetMatchSquadTeardownAlertState(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, alertState.ContractMismatchCount, "terminal provider mismatch must surface for immediate paging")
+	require.Greater(t, alertState.OldestPendingProgressAgeSeconds, float64(900), "stalled aggregate must be alertable after 15 minutes without progress")
+}
+
 func TestMatchSquadCompactionIntentRequiresCompletedAggregateAndExactDueTime(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
