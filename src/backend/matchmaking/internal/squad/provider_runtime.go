@@ -7,9 +7,12 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -23,6 +26,7 @@ import (
 )
 
 var principalKIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+var projectedSecretTimestampPattern = regexp.MustCompile(`^\.\.\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}\.\d{9}$`)
 
 type providerRuntimeConfig struct {
 	ChatAddr, VoiceAddr                    string
@@ -49,6 +53,9 @@ func LoadProtectedProviderWorker(matchStore *store.MatchStore, getenv func(strin
 		"MATCHMAKING_MATCH_SQUAD_VOICE_SERVER_NAME": getenv("MATCHMAKING_MATCH_SQUAD_VOICE_SERVER_NAME"),
 		"MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR":    getenv("MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR"),
 		"MATCHMAKING_PRINCIPAL_ACTIVE_KID":          getenv("MATCHMAKING_PRINCIPAL_ACTIVE_KID"),
+		"MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR":    getenv("MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR"),
+		"MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE":  getenv("MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE"),
+		"MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE":   getenv("MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE"),
 	}
 	configured := false
 	for name, value := range values {
@@ -110,6 +117,65 @@ func LoadProtectedProviderWorker(matchStore *store.MatchStore, getenv func(strin
 	return worker, closeConnections, true, nil
 }
 
+// PrincipalJWKSListener is the HTTPS publisher for Matchmaking's own signed
+// principal keys. Its config is opt-in as one complete profile; the handler
+// contains public keys only and is intended for workload-TLS-protected access.
+type PrincipalJWKSListener struct {
+	ListenAddr string
+	TLSConfig  *tls.Config
+	Handler    http.Handler
+	Enabled    bool
+}
+
+// LoadPrincipalJWKSListener validates the complete signing and TLS profile
+// before exposing the active and next public keys through the internal route.
+func LoadPrincipalJWKSListener(getenv func(string) string) (PrincipalJWKSListener, error) {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	names := []string{
+		"MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR",
+		"MATCHMAKING_PRINCIPAL_ACTIVE_KID",
+		"MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR",
+		"MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE",
+		"MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE",
+	}
+	values := make(map[string]string, len(names))
+	configured := false
+	for _, name := range names {
+		value := strings.TrimSpace(getenv(name))
+		values[name] = value
+		configured = configured || value != ""
+	}
+	if !configured {
+		return PrincipalJWKSListener{}, nil
+	}
+	for _, name := range names {
+		if values[name] == "" {
+			return PrincipalJWKSListener{}, fmt.Errorf("partial Matchmaking principal JWKS configuration: %s is missing", name)
+		}
+	}
+	if _, _, err := net.SplitHostPort(values["MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR"]); err != nil {
+		return PrincipalJWKSListener{}, errors.New("Matchmaking principal JWKS listen address is invalid")
+	}
+	keys, err := loadMatchmakingPublicKeys(values["MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR"], values["MATCHMAKING_PRINCIPAL_ACTIVE_KID"])
+	if err != nil {
+		return PrincipalJWKSListener{}, err
+	}
+	certificate, err := tls.LoadX509KeyPair(values["MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE"], values["MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE"])
+	if err != nil {
+		return PrincipalJWKSListener{}, errors.New("Matchmaking principal JWKS TLS identity is invalid")
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/internal/v1/principal/jwks.json", principal.JWKSHandlerKeys(keys))
+	return PrincipalJWKSListener{
+		ListenAddr: values["MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR"],
+		TLSConfig:  &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}},
+		Handler:    mux,
+		Enabled:    true,
+	}, nil
+}
+
 func providerTLSCredentials(caFile, serverName string, certificate tls.Certificate) (credentials.TransportCredentials, error) {
 	caPEM, err := os.ReadFile(caFile)
 	if err != nil {
@@ -123,6 +189,31 @@ func providerTLSCredentials(caFile, serverName string, certificate tls.Certifica
 }
 
 func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, error) {
+	keys, err := loadMatchmakingSigningKeys(directory, activeKID)
+	if err != nil {
+		return nil, err
+	}
+	return principal.NewIssuer(principal.IssuerConfig{Issuer: "matchmaking", KeyID: activeKID, PrivateKey: keys[activeKID]})
+}
+
+func loadMatchmakingPublicKeys(directory, activeKID string) ([]principal.JWKSKey, error) {
+	keys, err := loadMatchmakingSigningKeys(directory, activeKID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(keys))
+	for kid := range keys {
+		ids = append(ids, kid)
+	}
+	sort.Strings(ids)
+	publicKeys := make([]principal.JWKSKey, 0, len(ids))
+	for _, kid := range ids {
+		publicKeys = append(publicKeys, principal.JWKSKey{KeyID: kid, PublicKey: &keys[kid].PublicKey})
+	}
+	return publicKeys, nil
+}
+
+func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.PrivateKey, error) {
 	directory, activeKID = strings.TrimSpace(directory), strings.TrimSpace(activeKID)
 	if directory == "" || !principalKIDPattern.MatchString(activeKID) {
 		return nil, errors.New("matchmaking principal signing configuration is invalid")
@@ -140,7 +231,38 @@ func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, erro
 		return nil, errors.New("matchmaking principal signing directory is unreadable")
 	}
 	keys := make(map[string]*rsa.PrivateKey, 2)
+	var projectedDataTarget string
+	var projectedVersionDirectories []string
 	for _, entry := range entries {
+		if entry.Name() == "..data" {
+			if entry.Type()&os.ModeSymlink == 0 {
+				return nil, errors.New("matchmaking principal projected data link is invalid")
+			}
+			target, err := filepath.EvalSymlinks(filepath.Join(canonicalDir, entry.Name()))
+			if err != nil {
+				return nil, errors.New("matchmaking principal projected data link is unavailable")
+			}
+			rel, err := filepath.Rel(canonicalDir, target)
+			if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return nil, errors.New("matchmaking principal projected data link resolves outside its directory")
+			}
+			if !projectedSecretTimestampPattern.MatchString(filepath.Base(target)) {
+				return nil, errors.New("matchmaking principal projected data link target is invalid")
+			}
+			targetInfo, err := os.Stat(target)
+			if err != nil || !targetInfo.IsDir() {
+				return nil, errors.New("matchmaking principal projected data link target is invalid")
+			}
+			projectedDataTarget = filepath.Base(target)
+			continue
+		}
+		if projectedSecretTimestampPattern.MatchString(entry.Name()) {
+			if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+				return nil, errors.New("matchmaking principal projected version directory is invalid")
+			}
+			projectedVersionDirectories = append(projectedVersionDirectories, entry.Name())
+			continue
+		}
 		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".pem") {
 			return nil, errors.New("matchmaking principal key directory must contain only PEM rotation keys")
 		}
@@ -175,6 +297,12 @@ func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, erro
 		}
 		keys[kid] = key
 	}
+	if projectedDataTarget != "" && (len(projectedVersionDirectories) != 1 || projectedVersionDirectories[0] != projectedDataTarget) {
+		return nil, errors.New("matchmaking principal projected version directory does not match its data link")
+	}
+	if projectedDataTarget == "" && len(projectedVersionDirectories) != 0 {
+		return nil, errors.New("matchmaking principal projected version directory has no data link")
+	}
 	if len(keys) != 2 || keys[activeKID] == nil {
 		return nil, errors.New("matchmaking principal key directory must contain current and next keys")
 	}
@@ -184,5 +312,5 @@ func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, erro
 			return nil, errors.New("matchmaking principal rotation keys must have distinct public keys")
 		}
 	}
-	return principal.NewIssuer(principal.IssuerConfig{Issuer: "matchmaking", KeyID: activeKID, PrivateKey: active})
+	return keys, nil
 }

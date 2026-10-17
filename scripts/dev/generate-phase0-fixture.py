@@ -122,6 +122,7 @@ def generate(destination):
             for index, (leaf, hostname) in enumerate(
                     (("role", "role"), ("auth", "auth"), ("proxy", "phase0-jwks"),
                      ("matchmaking-complete-grpc", "matchmaking"),
+                     ("matchmaking-jwks", "voice-matchmaking"),
                      ("gameintegration-jwks", "gameintegration"), ("voice-jwks", "voice"),
                      ("chat-gis-grpc", "chat"), ("voice-game-grpc", "voice"),
                      ("chat-match-squad-grpc", "chat"), ("voice-match-squad-grpc", "voice"),
@@ -208,6 +209,8 @@ def generate(destination):
                     root / "tls/matchmaking-client.key",
                     root / "tls/matchmaking-complete-grpc.crt",
                     root / "tls/matchmaking-complete-grpc.key",
+                    root / "tls/matchmaking-jwks.crt",
+                    root / "tls/matchmaking-jwks.key",
                     root / "ca/ca.crt",
                 ]
                 # Permit path traversal to only the owner-only files below;

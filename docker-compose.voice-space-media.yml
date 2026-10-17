@@ -1,5 +1,6 @@
 services:
   matchmaking:
+    expose: ["8443"]
     environment:
       MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR: chat:9092
       MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR: voice:9094
@@ -11,13 +12,18 @@ services:
       MATCHMAKING_MATCH_SQUAD_VOICE_SERVER_NAME: voice
       MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/matchmaking
       MATCHMAKING_PRINCIPAL_ACTIVE_KID: current
-    depends_on:
-      phase0-jwks:
-        condition: service_started
+      MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR: :8443
+      MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/matchmaking-jwks.crt
+      MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/matchmaking-jwks.key
+    networks:
+      default:
+        aliases: [voice-matchmaking]
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/matchmaking:/run/phase0/matchmaking:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-client.crt:/run/phase0/matchmaking-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-client.key:/run/phase0/matchmaking-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-jwks.crt:/run/phase0/matchmaking-jwks.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-jwks.key:/run/phase0/matchmaking-jwks.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
 
   chat:
@@ -27,13 +33,15 @@ services:
       CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE: /run/phase0/chat-match-squad-grpc.crt
       CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE: /run/phase0/chat-match-squad-grpc.key
       CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
-      CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/matchmaking/jwks.json
+      CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL: https://voice-matchmaking:8443/internal/v1/principal/jwks.json
       CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
       CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD: ""
     depends_on:
-      phase0-jwks:
+      matchmaking:
         condition: service_started
+      phase0-matchmaking-jwks-readiness:
+        condition: service_completed_successfully
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-match-squad-grpc.crt:/run/phase0/chat-match-squad-grpc.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-match-squad-grpc.key:/run/phase0/chat-match-squad-grpc.key:ro
@@ -120,7 +128,7 @@ services:
       VOICE_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-match-squad-grpc.crt
       VOICE_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-match-squad-grpc.key
       VOICE_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
-      VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/matchmaking/jwks.json
+      VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL: https://voice-matchmaking:8443/internal/v1/principal/jwks.json
       VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
       VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD: ""
@@ -147,6 +155,8 @@ services:
       S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/voice-client.key
     depends_on:
       phase0-jwks:
+        condition: service_started
+      matchmaking:
         condition: service_started
       phase0-matchmaking-jwks-readiness:
         condition: service_completed_successfully
@@ -211,8 +221,8 @@ services:
       - social_principal_ca:/run/phase0/space-ca:ro
 
   phase0-matchmaking-jwks-readiness:
-    # Voice performs a synchronous, certificate-verified JWKS refresh at startup.
-    # Gate it on the real public document instead of a timing delay.
+    # Chat and Voice synchronously verify Matchmaking's served JWKS at startup.
+    # Gate them on the real producer response instead of a timing delay.
     profiles: ["app"]
     image: node:24-alpine
     user: "65532:65532"
@@ -220,7 +230,7 @@ services:
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
     depends_on:
-      phase0-jwks:
+      matchmaking:
         condition: service_started
     volumes:
       - ./scripts/dev/phase0-matchmaking-jwks-readiness.js:/run/phase0/readiness.js:ro

@@ -28,7 +28,7 @@ CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 PROXY = "phase0-jwks"
 URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
-MATCHMAKING_JWKS_URL = f"https://{PROXY}:8443/matchmaking/jwks.json"
+MATCHMAKING_JWKS_URL = "https://voice-matchmaking:8443/internal/v1/principal/jwks.json"
 STARTUP_DIAGNOSTICS = ROOT / "scripts/ci/t31-startup-diagnostics.py"
 FIXTURE_RESTORER = ROOT / "scripts/dev/restore-phase0-fixture-owner.py"
 CAN_SET_MATCHSQUAD_UID = os.name == "posix" and (os.geteuid() == 0 or shutil.which("sudo"))
@@ -606,6 +606,11 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(self.media_source_at("matchmaking", environment[key]), "ca/ca.crt")
         self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR"]),
                          "matchmaking")
+        self.assertEqual(environment["MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR"], ":8443")
+        self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE"]),
+                         "tls/matchmaking-jwks.crt")
+        self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE"]),
+                         "tls/matchmaking-jwks.key")
         self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_MATCH_SQUAD_CLIENT_CERT_FILE"]),
                          "tls/matchmaking-client.crt")
         self.assertEqual(self.media_source_at("matchmaking", environment["MATCHMAKING_MATCH_SQUAD_CLIENT_KEY_FILE"]),
@@ -1014,13 +1019,20 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(Path(readiness_script["source"]).resolve(),
                          (ROOT / "scripts/dev/phase0-matchmaking-jwks-readiness.js").resolve())
         self.assertTrue(readiness_script["read_only"])
-        self.assertEqual(readiness["depends_on"]["phase0-jwks"]["condition"], "service_started")
+        self.assertEqual(readiness["depends_on"]["matchmaking"]["condition"], "service_started")
+        self.assertNotIn("phase0-jwks", readiness["depends_on"],
+                         "Matchmaking must publish its own issuer keys, not use the Phase0 proxy")
+        for consumer in ("chat", "voice"):
+            self.assertEqual(self.media_merged[consumer]["depends_on"][
+                "phase0-matchmaking-jwks-readiness"]["condition"], "service_completed_successfully",
+                f"{consumer} must wait for verified Matchmaking JWKS over HTTPS")
         self.assertEqual(self.media_merged["voice"]["depends_on"][
             "phase0-matchmaking-jwks-readiness"]["condition"], "service_completed_successfully")
         self.assertEqual(self.media_merged["voice"]["environment"]["VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL"],
                          MATCHMAKING_JWKS_URL)
         probe = (ROOT / "scripts/dev/phase0-matchmaking-jwks-readiness.js").read_text(encoding="utf-8")
         for marker in ("https.get", "ca,", "servername: endpoint.hostname", "response.statusCode !== 200",
+                       '"application/jwk-set+json", "application/json"',
                        "document.keys", 'key.kty === "RSA"', 'key.alg === "RS256"',
                        'Object.hasOwn(key, privateField)', '"dp", "dq", "qi", "oth"',
                        "phase0_matchmaking_jwks_readiness_failed category=", "ca_file_unavailable",
@@ -1286,7 +1298,8 @@ class ComposeTests(unittest.TestCase):
         allowed["notification"] = {"tls/notification-lifecycle.crt", "tls/notification-lifecycle.key",
                                    "ca/ca.crt", "ca/space-lifecycle-client-ca.crt"}
         allowed["matchmaking"] = {"ca/ca.crt", "tls/matchmaking-complete-grpc.crt",
-                                   "tls/matchmaking-complete-grpc.key"}
+                                   "tls/matchmaking-complete-grpc.key", "tls/matchmaking-jwks.crt",
+                                   "tls/matchmaking-jwks.key"}
         allowed["phase0-jwks"] = {"jwks/matchmaking/jwks.json", "jwks/gateway/jwks.json",
                                    "tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"}
         allowed["messaging"] = {"tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",

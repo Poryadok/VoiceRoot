@@ -235,3 +235,27 @@ same-actor replay returns the durable outcome, while a changed request under
 that key conflicts. Provider teardown and aggregate completion remain durable
 separate lifecycle steps; a successful HTTP response is not evidence that
 external Chat or Voice cleanup has completed.
+
+### MatchSquad principal JWKS publisher
+
+When MatchSquad principal verification is enabled, Matchmaking also publishes
+the public portion of its current and next RSA signing keys at
+`https://<matchmaking-service>:8443/internal/v1/principal/jwks.json`. The
+listener uses the existing `principal.JWKSHandlerKeys` representation and
+serves only GET over TLS 1.2 or newer. Its server certificate must identify
+the configured service DNS name; its private key and the signing-key directory
+are mounted read-only. The HTTPS JWKS identity is separate from the mTLS
+certificates used by the MatchSquad gRPC listeners.
+
+Configure `MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR`,
+`MATCHMAKING_PRINCIPAL_ACTIVE_KID`,
+`MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR`,
+`MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE`, and
+`MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE` as one complete profile. If every
+setting is absent, the publisher stays disabled; any partial or invalid
+profile fails startup. The directory contains the same two distinct RSA
+private-key files used by the issuer, so both key IDs remain available during
+rotation while only the active ID signs new credentials. Consumers configure
+the exact HTTPS URL and a dedicated CA file; they fail closed if TLS trust or
+the JWKS document is unavailable. The endpoint is internal and must not be
+added to public ingress.

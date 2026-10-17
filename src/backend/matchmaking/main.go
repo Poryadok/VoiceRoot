@@ -66,6 +66,25 @@ func main() {
 	if err != nil {
 		log.Fatalf("Matchmaking Space principal config: %v", err)
 	}
+	jwksConfig, err := squad.LoadPrincipalJWKSListener(os.Getenv)
+	if err != nil {
+		log.Fatalf("Matchmaking principal JWKS config: %v", err)
+	}
+	errCh := make(chan error, 2)
+	var jwksServer *http.Server
+	if jwksConfig.Enabled {
+		jwksListener, err := net.Listen("tcp", jwksConfig.ListenAddr)
+		if err != nil {
+			log.Fatalf("Matchmaking principal JWKS listen: %v", err)
+		}
+		jwksServer = &http.Server{Handler: jwksConfig.Handler, TLSConfig: jwksConfig.TLSConfig, ReadHeaderTimeout: 5 * time.Second}
+		// Publish before waiting for Chat/Voice gRPC readiness: their protected
+		// listeners verify Matchmaking principals during their own startup.
+		logger.Info("Matchmaking principal JWKS listening", slog.String("addr", jwksConfig.ListenAddr))
+		go func() {
+			errCh <- jwksServer.ServeTLS(jwksListener, "", "")
+		}()
+	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -358,7 +377,6 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(health, metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
@@ -382,6 +400,11 @@ func main() {
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
+		}
+		if jwksServer != nil {
+			if err := jwksServer.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }

@@ -4,7 +4,7 @@
 const fs = require("node:fs");
 const https = require("node:https");
 
-const endpoint = new URL("https://phase0-jwks:8443/matchmaking/jwks.json");
+const endpoint = new URL("https://voice-matchmaking:8443/internal/v1/principal/jwks.json");
 const ATTEMPT_TIMEOUT_MS = 2000;
 const FAILURE_CATEGORIES = new Set([
   "ca_file_unavailable",
@@ -54,7 +54,8 @@ function fetchPublicJwks(ca) {
         servername: endpoint.hostname,
       }, (response) => {
         if (response.statusCode !== 200 || response.headers.location ||
-            !String(response.headers["content-type"] || "").toLowerCase().startsWith("application/json")) {
+            !["application/jwk-set+json", "application/json"].some((contentType) =>
+              String(response.headers["content-type"] || "").toLowerCase().startsWith(contentType))) {
           response.resume();
         finish(new Error("jwks_http_response_invalid"));
           return;
