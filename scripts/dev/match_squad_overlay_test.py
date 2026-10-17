@@ -374,11 +374,14 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                 with self.assertRaisesRegex(overlay.OverlayError, "remove a list item"):
                     overlay.object_patch(base, desired)
 
-    def test_matchmaking_patch_declares_only_the_reviewed_shared_s2s_removal(self):
+    def test_matchmaking_patch_preserves_only_gateway_s2s_publisher(self):
         root = Path(__file__).resolve().parents[2]
         patch = (root / "deploy/dev/match-squad-trust-overlay/"
                  "voice-matchmaking.runtime.patch.yaml").read_text(encoding="utf-8")
-        self.assertIn("name: S2S_JWKS_URLS_JSON\n              $patch: delete", patch)
+        self.assertIn(
+            'name: S2S_JWKS_URLS_JSON\n              value: \'{"gateway":"https://api-dev.comrade.click/.well-known/voice-principal-jwks.json"}\'',
+            patch,
+        )
         self.assertNotIn("$patch: delete", "\n".join(
             path.read_text(encoding="utf-8") for path in (
                 root / "deploy/dev/match-squad-trust-overlay/voice-chat.runtime.patch.yaml",

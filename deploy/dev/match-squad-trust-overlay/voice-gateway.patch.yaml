@@ -19,9 +19,22 @@ spec:
               value: /etc/voice/media/client/tls.crt
             - name: GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_KEY_FILE
               value: /etc/voice/media/client/tls.key
+            - name: GATEWAY_MATCHMAKING_COMPLETE_GRPC_ADDR
+              value: voice-matchmaking:9092
+            - name: GATEWAY_MATCHMAKING_COMPLETE_TLS_CA_FILE
+              value: /etc/voice/match-squad/ca/ca.crt
+            - name: GATEWAY_MATCHMAKING_COMPLETE_TLS_SERVER_NAME
+              value: voice-matchmaking.voice-dev.svc
+            - name: GATEWAY_MATCHMAKING_COMPLETE_CLIENT_CERT_FILE
+              value: /etc/voice/match-squad/complete-client/tls.crt
+            - name: GATEWAY_MATCHMAKING_COMPLETE_CLIENT_KEY_FILE
+              value: /etc/voice/match-squad/complete-client/tls.key
           volumeMounts:
             - name: match-squad-ca
               mountPath: /etc/voice/match-squad/ca
+              readOnly: true
+            - name: matchmaking-complete-client-tls
+              mountPath: /etc/voice/match-squad/complete-client
               readOnly: true
       volumes:
         - name: match-squad-ca
@@ -30,3 +43,12 @@ spec:
             items:
               - key: ca.crt
                 path: ca.crt
+        - name: matchmaking-complete-client-tls
+          secret:
+            secretName: voice-gateway-matchmaking-complete-client-tls
+            defaultMode: 288
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
