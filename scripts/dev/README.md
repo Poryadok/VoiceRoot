@@ -63,6 +63,18 @@ Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
 
+MatchSquad schema activation uses the separate, fixed-scope
+`scripts/dev/match_squad_db_migrations.py` runner. It accepts only the three
+`voice-dev` databases (Matchmaking, Chat, Voice), pins the five reviewed UP
+migrations by SHA-256, and requires the exact source commit, clean tree,
+namespace UID, and clean baseline ledgers `15/22/10` before creating anything.
+It creates source-bound ConfigMaps and one-shot Jobs with digest-pinned images;
+it never invokes broad `apply_all`, updates Postgres credentials, runs DOWN SQL,
+or deletes/replays an interrupted Job. A failed or ambiguous Job remains for
+inspection and blocks another attempt. Use the runner only for a specifically
+authorized DEV activation after read-only preflight and source review; its
+`--apply` flag is a real Kubernetes write.
+
 ## Fresh installation only
 
 `environment.py` renders captured staging workload/configuration identities into
