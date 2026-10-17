@@ -260,6 +260,37 @@ void main() {
     },
   );
 
+  testWidgets('Security device controls fit compact and wide layouts', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = MockClient((request) async {
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/auth/2fa/status') {
+        return http.Response(jsonEncode({'enabled': false}), 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    for (final size in [const Size(390, 844), const Size(1280, 800)]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      await _pumpSecuritySettings(tester, client);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final activeSessions = tester.getRect(
+        find.byKey(SecuritySettingsScreen.activeSessionsButtonKey),
+      );
+      final linkedDevices = tester.getRect(find.text('Manage linked devices'));
+      expect(activeSessions.left, greaterThanOrEqualTo(0));
+      expect(activeSessions.right, lessThanOrEqualTo(size.width));
+      expect(linkedDevices.left, greaterThanOrEqualTo(0));
+      expect(linkedDevices.right, lessThanOrEqualTo(size.width));
+    }
+  });
+
   testWidgets(
     'Settings security entry exposes the documented password-change action',
     (tester) async {
