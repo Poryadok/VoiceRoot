@@ -364,9 +364,12 @@ def _job_live_matches(actual, wanted, uid):
     generated = {'batch.kubernetes.io/controller-uid': uid,
                  'batch.kubernetes.io/job-name': wanted['metadata']['name']}
     legacy = {'controller-uid': uid, 'job-name': wanted['metadata']['name']}
-    selector = spec.get('selector', {}).get('matchLabels', {})
-    expressions = spec.get('selector', {}).get('matchExpressions', [])
-    if expressions or selector != {'batch.kubernetes.io/controller-uid': uid}:
+    selector_object = spec.get('selector')
+    if ('selector' in wanted_spec or not isinstance(selector_object, dict)
+        or set(selector_object) != {'matchLabels'}):
+        return False
+    selector = selector_object.get('matchLabels')
+    if not isinstance(selector, dict) or selector != {'batch.kubernetes.io/controller-uid': uid}:
         return False
     actual_labels = spec.get('template', {}).get('metadata', {}).get('labels', {})
     if actual_labels not in ({**labels, **generated}, {**labels, **generated, **legacy}):

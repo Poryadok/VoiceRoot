@@ -477,12 +477,13 @@ class Tests(unittest.TestCase):
             mutated = copy.deepcopy(actual)
             mutated['spec']['template']['spec'][field] = value
             mutations.append(mutated)
-        for change in ('security', 'selector', 'label', 'image', 'command', 'args',
+        for change in ('security', 'selector', 'selector_sibling', 'label', 'image', 'command', 'args',
                 'env_ref', 'extra_container', 'extra_init', 'volume_source', 'mount'):
             mutated = copy.deepcopy(actual)
             pod = mutated['spec']['template']['spec']
             if change == 'security': pod['securityContext'] = {'runAsUser': 0}
             elif change == 'selector': mutated['spec']['selector']['matchLabels']['foreign'] = 'x'
+            elif change == 'selector_sibling': mutated['spec']['selector']['matchExpressions'] = []
             elif change == 'label': mutated['spec']['template']['metadata']['labels']['foreign'] = 'x'
             elif change == 'image': pod['containers'][0]['image'] = 'postgres:latest'
             elif change == 'command': pod['containers'][0]['command'][0] += ' altered'
@@ -497,6 +498,10 @@ class Tests(unittest.TestCase):
             mutations.append(mutated)
         for mutated in mutations:
             self.assertFalse(prerequisite._job_live_matches(mutated, wanted, uid))
+        desired_selector = copy.deepcopy(wanted)
+        desired_selector['spec']['selector'] = {'matchLabels': {
+            'batch.kubernetes.io/controller-uid': uid}}
+        self.assertFalse(prerequisite._job_live_matches(actual, desired_selector, uid))
 
     def test_successful_created_defaulted_job_is_adopted_without_duplicate_create(self):
         bound = capture(ROOT)
