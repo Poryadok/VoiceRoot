@@ -23,6 +23,7 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
+import 'package:voice_frontend/ui/settings/active_sessions_screen.dart';
 import 'package:voice_frontend/ui/settings/e2e_key_backup_screen.dart';
 import 'package:voice_frontend/ui/settings/security_settings_screen.dart';
 import 'package:voice_frontend/ui/settings/settings_sheet.dart';
@@ -224,6 +225,41 @@ Future<AuthController> _pumpSecuritySettings(
 }
 
 void main() {
+  testWidgets(
+    'Security keeps separate Active Sessions and Linked Devices routes to the sessions list',
+    (tester) async {
+      final client = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/2fa/status') {
+          return http.Response(jsonEncode({'enabled': false}), 200);
+        }
+        return http.Response('{}', 200);
+      });
+
+      await _pumpSecuritySettings(tester, client);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(SecuritySettingsScreen.activeSessionsButtonKey),
+        findsOneWidget,
+      );
+      expect(find.text('Manage linked devices'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(SecuritySettingsScreen.activeSessionsButtonKey),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(ActiveSessionsScreen.screenKey), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byKey(SecuritySettingsScreen.screenKey), findsOneWidget);
+
+      await tester.tap(find.text('Manage linked devices'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ActiveSessionsScreen.screenKey), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'Settings security entry exposes the documented password-change action',
     (tester) async {
