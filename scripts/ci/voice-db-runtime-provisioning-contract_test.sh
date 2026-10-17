@@ -754,7 +754,10 @@ f13_checkpoint_merge_tree_fixtures() {
   git -C "${repo}" config user.email 'voice-ci@example.invalid'
   git -C "${repo}" config commit.gpgsign false
   mkdir -p "${repo}/protos/voice/chat/v1"
-  printf '%s\n' 'left base' 'right base' >"${repo}/${guarded}"
+  printf '%s\n' 'left base' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
   printf '%s\n' 'other base' >"${repo}/${other}"
   git -C "${repo}" add . && git -C "${repo}" commit -qm 'F13 merge fixture base' || return 1
   base="$(git -C "${repo}" rev-parse HEAD)" || return 1
@@ -762,11 +765,17 @@ f13_checkpoint_merge_tree_fixtures() {
   # Both sides change disjoint lines in the guarded path; Git's clean merge is
   # the exact expected entry even though it differs from the source parent.
   git -C "${repo}" checkout -qb clean-source "${base}" || return 1
-  printf '%s\n' 'left source' 'right base' >"${repo}/${guarded}"
+  printf '%s\n' 'left source' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
   git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 clean source edit' || return 1
   source="$(git -C "${repo}" rev-parse HEAD)" || return 1
   git -C "${repo}" checkout -qb clean-parent "${base}" || return 1
-  printf '%s\n' 'left base' 'right parent' >"${repo}/${guarded}"
+  printf '%s\n' 'left base' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right parent' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
   git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 clean parent edit' || return 1
   parent="$(git -C "${repo}" rev-parse HEAD)" || return 1
   git -C "${repo}" merge --no-ff -qm 'F13 clean disjoint guarded merge' clean-source || return 1
@@ -802,12 +811,18 @@ f13_checkpoint_merge_tree_fixtures() {
   # An unrelated file conflict is allowed for this path-level comparison when
   # Git reports the guarded path as clean and its full entry matches the tree.
   git -C "${repo}" checkout -qb unrelated-source "${base}" || return 1
-  printf '%s\n' 'left source' 'right base' >"${repo}/${guarded}"
+  printf '%s\n' 'left source' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
   printf '%s\n' 'unrelated source' >"${repo}/${other}"
   git -C "${repo}" add . && git -C "${repo}" commit -qm 'F13 unrelated-conflict source' || return 1
   source="$(git -C "${repo}" rev-parse HEAD)" || return 1
   git -C "${repo}" checkout -qb unrelated-parent "${base}" || return 1
-  printf '%s\n' 'left base' 'right parent' >"${repo}/${guarded}"
+  printf '%s\n' 'left base' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right parent' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
   printf '%s\n' 'unrelated parent' >"${repo}/${other}"
   git -C "${repo}" add . && git -C "${repo}" commit -qm 'F13 unrelated-conflict parent' || return 1
   parent="$(git -C "${repo}" rev-parse HEAD)" || return 1
@@ -835,11 +850,17 @@ f13_checkpoint_merge_tree_fixtures() {
   # A conflict on the guarded path and a manual resolution that differs from
   # Git's clean result must both fail closed.
   git -C "${repo}" checkout -qb overlap-source "${base}" || return 1
-  printf '%s\n' 'left source' 'right base' >"${repo}/${guarded}"
+  printf '%s\n' 'left source' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
   git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 overlapping source edit' || return 1
   source="$(git -C "${repo}" rev-parse HEAD)" || return 1
   git -C "${repo}" checkout -qb overlap-parent "${base}" || return 1
-  printf '%s\n' 'left parent' 'right base' >"${repo}/${guarded}"
+  printf '%s\n' 'left parent' 'stable one' 'stable two' 'stable three' \
+    'stable four' 'stable five' 'stable six' 'stable seven' 'stable eight' \
+    'stable nine' 'stable ten' 'stable eleven' 'stable twelve' 'stable thirteen' \
+    'stable fourteen' 'right base' 'stable fifteen' 'stable sixteen' >"${repo}/${guarded}"
   git -C "${repo}" add "${guarded}" && git -C "${repo}" commit -qm 'F13 overlapping parent edit' || return 1
   parent="$(git -C "${repo}" rev-parse HEAD)" || return 1
   merge_output="${TMP_DIR}/f13-checkpoint-overlap-merge-tree"
