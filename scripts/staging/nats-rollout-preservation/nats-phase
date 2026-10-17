@@ -319,6 +319,63 @@ def run_verification(phase_name, args):
     return receipt
 
 
+def read_verification_receipt(phase_name, args):
+    """Read only the durable result for this exact Pod/operation; never replay it."""
+    _require_verification_identity()
+    if phase_name != 'census':
+        raise ValueError('verification_phase')
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    source = DATA_ROOT.lstat()
+    verification = VERIFY_ROOT.lstat()
+    if (not stat.S_ISDIR(source.st_mode) or stat.S_ISLNK(source.st_mode)
+        or not stat.S_ISDIR(verification.st_mode) or stat.S_ISLNK(verification.st_mode)
+        or DATA_ROOT.resolve() == VERIFY_ROOT.resolve() or os.access(DATA_ROOT, os.W_OK)
+        or os.access(VERIFY_ROOT, os.W_OK) is False
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'source_pvc_uid', '') or '')
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'verification_pvc_uid', '') or '')
+        or args.source_pvc_uid == args.verification_pvc_uid):
+        raise ValueError('verification_mounts')
+    operation_state = VERIFY_ROOT / '.voice-nats-verification'
+    directory = operation_state.lstat()
+    if (not stat.S_ISDIR(directory.st_mode) or stat.S_ISLNK(directory.st_mode)
+        or directory.st_uid != VERIFICATION_UID or stat.S_IMODE(directory.st_mode) != 0o700):
+        raise ValueError('verification_state_invalid')
+    expected_marker = {'schema', 'phase', 'operation', 'nonce', 'pod_uid',
+        'source_pvc_uid', 'verification_pvc_uid', 'state'}
+    marker = _private_json(operation_state / (args.operation + '-' + args.nonce + '.json'))
+    if (not isinstance(marker, dict) or set(marker) != expected_marker
+        or marker != {'schema': RECEIPT_SCHEMA, 'phase': phase_name,
+            'operation': args.operation, 'nonce': args.nonce, 'pod_uid': args.pod_uid,
+            'source_pvc_uid': args.source_pvc_uid,
+            'verification_pvc_uid': args.verification_pvc_uid, 'state': 'STARTED'}):
+        raise ValueError('verification_receipt_binding')
+    receipt_path = operation_state / (args.operation + '-' + args.nonce + '.receipt.json')
+    try:
+        row = receipt_path.lstat()
+    except FileNotFoundError:
+        raise ValueError('verification_receipt_incomplete') from None
+    if (not stat.S_ISREG(row.st_mode) or row.st_uid != VERIFICATION_UID
+        or stat.S_IMODE(row.st_mode) != 0o600 or row.st_nlink != 1
+        or not 1 <= row.st_size <= 16384):
+        raise ValueError('verification_receipt_incomplete')
+    receipt = _private_json(receipt_path)
+    if (not isinstance(receipt, dict) or set(receipt) != {
+            'schema', 'phase', 'operation', 'nonce', 'pod_uid', 'source_pvc_uid',
+            'verification_pvc_uid', 'archive_sha256', 'census_sha256', 'status'}
+        or receipt.get('schema') != RECEIPT_SCHEMA or receipt.get('phase') != phase_name
+        or receipt.get('operation') != args.operation or receipt.get('nonce') != args.nonce
+        or receipt.get('pod_uid') != args.pod_uid
+        or receipt.get('source_pvc_uid') != args.source_pvc_uid
+        or receipt.get('verification_pvc_uid') != args.verification_pvc_uid
+        or not re.fullmatch('[a-f0-9]{64}', receipt.get('archive_sha256', ''))
+        or not re.fullmatch('[a-f0-9]{64}', receipt.get('census_sha256', ''))
+        or receipt.get('status') != 'COMPLETE'):
+        raise ValueError('verification_receipt_binding')
+    return receipt
+
+
 def _frame(row):
     sys.stdout.buffer.write(json.dumps(row, sort_keys=True, separators=(',', ':')).encode() + b'\n')
     sys.stdout.buffer.flush()
@@ -458,6 +515,7 @@ def main(argv=None):
     mode.add_argument('--create-and-stream', action='store_true')
     mode.add_argument('--stream-existing', action='store_true')
     mode.add_argument('--load-inputs', action='store_true')
+    mode.add_argument('--read-receipt', action='store_true')
     mode.add_argument('--phase', choices=sorted(VERIFY_PHASES))
     parser.add_argument('--operation', required=True)
     parser.add_argument('--nonce', required=True)
@@ -477,6 +535,12 @@ def main(argv=None):
         result = load_inputs(raw, operation=args.operation, nonce=args.nonce, pod_uid=args.pod_uid)
         _frame(result)
         return result
+    if args.read_receipt:
+        if args.phase is None or not args.source_pvc_uid or not args.verification_pvc_uid:
+            parser.error('verification-volume-identity-required')
+        receipt = read_verification_receipt(args.phase, args)
+        _frame(receipt)
+        return receipt
     if args.phase:
         if not args.source_pvc_uid or not args.verification_pvc_uid:
             parser.error('verification-volume-identity-required')

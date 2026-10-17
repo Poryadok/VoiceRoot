@@ -8,11 +8,14 @@ REQUEST = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
 BINDING = {
     'source_claim': 'voice-nats-jsdata-d20261017a',
     'source_uid': '11111111-1111-4111-8111-111111111111',
-    'verification_claim': 'voice-nats-verify-d20261017a',
+    'source_pv_name': 'pv-voice-nats-source',
+    'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+    'source_node_name': 'k3s-worker-1',
+    'verification_claim': 'voice-nats-verify-' + 'a' * 12,
     'verification_uid': '22222222-2222-4222-8222-222222222222',
-    'pv_name': 'pv-voice-nats-verify',
-    'pv_uid': '33333333-3333-4333-8333-333333333333',
-    'node_name': 'k3s-worker-1',
+    'verification_pv_name': 'pv-voice-nats-verify',
+    'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+    'verification_node_name': 'k3s-worker-1',
 }
 IMAGE = 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'a' * 64
 POD_UID = '44444444-4444-4444-8444-444444444444'
@@ -26,6 +29,11 @@ class VerificationJobTests(unittest.TestCase):
         self.assertEqual(row['apiVersion'], 'batch/v1')
         self.assertEqual(row['kind'], 'Job')
         self.assertEqual(row['metadata']['namespace'], 'voice-staging')
+        pod_labels = row['spec']['template']['metadata']['labels']
+        selector_labels = row['spec']['selector']['matchLabels']
+        self.assertTrue(all(pod_labels.get(key) == value for key, value in selector_labels.items()))
+        self.assertEqual(selector_labels, {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
+        self.assertEqual(pod_labels[jobs.LABEL_JOB_SELECTOR], selector_labels[jobs.LABEL_JOB_SELECTOR])
         self.assertEqual(pod['automountServiceAccountToken'], False)
         self.assertEqual(pod['securityContext'], {
             'runAsNonRoot': True, 'runAsUser': 10000, 'runAsGroup': 10000,
@@ -60,7 +68,11 @@ class VerificationJobTests(unittest.TestCase):
     def test_source_and_verification_claim_identity_must_be_distinct_and_valid(self):
         for mutation in (
             {'verification_claim': BINDING['source_claim']},
+            {'verification_claim': 'voice-nats-verify-d20261017a'},
+            {'verification_claim': 'voice-nats-verify-' + 'g' * 12},
             {'verification_uid': BINDING['source_uid']},
+            {'verification_pv_uid': BINDING['source_pv_uid']},
+            {'verification_node_name': 'k3s-worker-2'},
             {'source_uid': '../admin'},
             {'verification_claim': 'untrusted'},
         ):
@@ -78,6 +90,14 @@ class VerificationJobTests(unittest.TestCase):
             '--operation', REQUEST['operation'], '--nonce', REQUEST['nonce'], '--pod-uid', POD_UID,
             '--source-pvc-uid', BINDING['source_uid'],
             '--verification-pvc-uid', BINDING['verification_uid']])
+        self.assertEqual(vectors['census_receipt_readback'], [
+            '/usr/bin/python3', '/voice-nats-runner/phase', '--read-receipt', '--phase', 'census',
+            '--operation', REQUEST['operation'], '--nonce', REQUEST['nonce'], '--pod-uid', POD_UID,
+            '--source-pvc-uid', BINDING['source_uid'],
+            '--verification-pvc-uid', BINDING['verification_uid']])
+        archive = jobs.exec_vectors(REQUEST | {'phase': 'archive'}, POD_UID, BINDING)
+        self.assertEqual(archive['archive_create_and_stream'][2], '--create-and-stream')
+        self.assertEqual(archive['archive_same_pod_readback'][2], '--stream-existing')
         with self.assertRaises(jobs.VerificationJobError):
             jobs.exec_vectors(REQUEST, 'not-a-pod-uid', BINDING)
 
