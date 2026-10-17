@@ -247,6 +247,7 @@ class PartialOperationContinuationTests(unittest.TestCase):
     def test_only_exact_frozen_pre_job_state_is_eligible(self):
         state = self.fixture()
         self.assertTrue(gis._partial_state_admissible(state))
+        self.assertTrue(gis._partial_state_compatible(copy.deepcopy(state), state))
         for mutate in (
             lambda row: row.update(operation="other"),
             lambda row: row.update(phase="READY"),
@@ -273,6 +274,14 @@ class PartialOperationContinuationTests(unittest.TestCase):
             self.assertNotEqual(updated, expected)
             with self.assertRaises(gis.Blocked):
                 gis._save_continuation(path, first, expected_sha256=expected)
+
+    def test_partial_recovery_lock_rejects_second_writer(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'state.json'
+            with gis._partial_operation_lock(path):
+                with self.assertRaisesRegex(gis.Blocked, 'gis_dev_partial_operation_busy'):
+                    with gis._partial_operation_lock(path):
+                        self.fail('second writer entered the same operation')
 
     def test_source_compatibility_requires_clean_descendant_and_exact_changed_paths(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -586,16 +595,45 @@ class ReadOnlyDatabasePreflightTests(unittest.TestCase):
                 if args[:2] == ['get', 'endpointslices']:
                     return {'items': [{'endpoints': [{'conditions': {'ready': True},
                         'targetRef': {'kind': 'Pod', 'name': 'voice-postgres-0', 'uid': 'p'}}]}]}
-                return 't\n'
+                if args[:2] == ['get', 'configmap']:
+                    return {'data': {'POSTGRES_USER': 'postgres'}}
+                if '-d postgres' in args[-1]: return 'postgres\n'
+                return 'false|false\n'
 
         kube = Kube()
         with patch('gis_prerequisite._endpoint_identity', return_value=identity):
             self.assertEqual(gis._database_exists_readonly(kube, identity), identity)
-        query = kube.calls[-1]
-        self.assertEqual(query[:2], ['exec', 'voice-postgres-0'])
-        self.assertIn('pg_database', query[-1])
-        self.assertNotIn('POSTGRES_PASSWORD', ' '.join(query))
-        self.assertNotIn('PGPASSWORD=', ' '.join(query))
+        queries = [call for call in kube.calls if call[:2] == ['exec', 'voice-postgres-0']]
+        self.assertEqual(len(queries), 2)
+        self.assertIn('pg_database', queries[0][-1])
+        self.assertIn('schema_migrations', queries[1][-1])
+        query_text = ' '.join(' '.join(call) for call in queries)
+        self.assertNotIn('POSTGRES_PASSWORD', query_text)
+        self.assertNotIn('PGPASSWORD=', query_text)
+
+    def test_wrong_owner_migration_ledger_and_runtime_role_block_initial_install(self):
+        identity = {'namespace_uid': 'n', 'service_uid': 's',
+            'service_spec_sha256': 'a' * 64, 'endpoints': [{'uid': 'e', 'pod_uids': ['p']}]}
+
+        class Kube:
+            def __init__(self, owner='postgres', catalog='false|false'):
+                self.owner, self.catalog = owner, catalog
+            def run(self, args, timeout=30):
+                if args[:2] == ['get', 'endpointslices']:
+                    return {'items': [{'endpoints': [{'conditions': {'ready': True},
+                        'targetRef': {'kind': 'Pod', 'name': 'voice-postgres-0', 'uid': 'p'}}]}]}
+                if args[:2] == ['get', 'configmap']:
+                    return {'data': {'POSTGRES_USER': 'postgres'}}
+                if '-d postgres' in args[-1]: return self.owner + '\n'
+                return self.catalog + '\n'
+
+        with patch('gis_prerequisite._endpoint_identity', return_value=identity):
+            for kube in (Kube(owner='other'), Kube(catalog='true|false'), Kube(catalog='false|true')):
+                with self.subTest(owner=kube.owner, catalog=kube.catalog):
+                    with self.assertRaises(gis.Blocked):
+                        gis._database_exists_readonly(kube, identity)
+            self.assertEqual(gis._database_exists_readonly(Kube(catalog='true|true'),
+                identity, require_initial_absence=False), identity)
 
     def test_missing_database_fails_closed_before_any_write(self):
         identity = {'namespace_uid': 'n', 'service_uid': 's',
@@ -739,7 +777,7 @@ class InstallerInvocationTests(unittest.TestCase):
                 patch.object(gis, '_capture_prerequisite_sources', return_value={'source': 'hash'}),
                 patch.object(gis_prerequisite, 'source_inputs', return_value=inputs),
                 patch.object(gis_prerequisite, '_endpoint_identity', return_value=database_identity),
-                patch.object(gis, '_database_exists_readonly', side_effect=lambda *_args:
+                patch.object(gis, '_database_exists_readonly', side_effect=lambda *_args, **_kwargs:
                     events.append('database-readonly')),
                 patch.object(gis, 'apply_secret_plan', side_effect=lambda *_args:
                     events.append('secret-write')),

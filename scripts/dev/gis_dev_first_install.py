@@ -6,6 +6,7 @@ verification, paused pair creation, guarded start, readiness, and rollback to
 the shared GIS prerequisite and first-install transactions.
 """
 import base64
+import contextlib
 import copy
 import json
 import hashlib
@@ -15,6 +16,7 @@ import re
 import secrets
 import subprocess
 import sys
+import stat
 import tarfile
 import tempfile
 from pathlib import Path
@@ -938,8 +940,8 @@ def _source_pair(root, image_ref):
     return {"schema": gis.SOURCE_SCHEMA, "objects": rows}
 
 
-def _database_exists_readonly(kube, expected_identity):
-    """Check the fixed target DB through a ready PostgreSQL pod without writes."""
+def _database_exists_readonly(kube, expected_identity, *, require_initial_absence=True):
+    """Check fixed DB ownership and initial-install catalog state without writes."""
     import gis_prerequisite
     identity = gis_prerequisite._endpoint_identity(kube, NAMESPACE)
     if identity != expected_identity:
@@ -954,13 +956,30 @@ def _database_exists_readonly(kube, expected_identity):
                 pods.append(target.get("name"))
     if not pods or any(not isinstance(name, str) or not re.fullmatch(r"[a-z0-9-]{1,63}", name) for name in pods):
         _blocked("gis_dev_database_endpoint_invalid")
-    query = "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'game_integration_db');"
+    config = kube.run(["get", "configmap", "voice-app-config", "-o", "json"])
+    owner = config.get("data", {}).get("POSTGRES_USER") if isinstance(config, dict) else None
+    if not isinstance(owner, str) or not re.fullmatch(r"[a-z_][a-z0-9_]{0,31}", owner):
+        _blocked("gis_dev_database_owner_expectation_invalid")
+    query = ("SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_catalog.pg_database "
+        "WHERE datname = 'game_integration_db';")
     command = ["exec", pods[0], "-c", "postgres", "--", "sh", "-c",
         'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" '
         '-d postgres -Atqc "' + query + '"']
-    result = kube.run(command, timeout=30)
-    if result.strip() not in {"t", "true"}:
+    database_owner = kube.run(command, timeout=30)
+    if database_owner.strip() != owner:
         _blocked("gis_dev_database_missing")
+    state_query = ("SELECT (pg_catalog.to_regclass('public.schema_migrations') IS NOT NULL)::text "
+        "|| '|' || EXISTS (SELECT 1 FROM pg_catalog.pg_roles "
+        "WHERE rolname = 'gameintegration_runtime')::text;")
+    state_command = ["exec", pods[0], "-c", "postgres", "--", "sh", "-c",
+        'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" '
+        '-d game_integration_db -Atqc "' + state_query + '"']
+    catalog = kube.run(state_command, timeout=30).strip()
+    if catalog not in {"false|false", "true|false", "false|true", "true|true"}:
+        _blocked("gis_dev_database_catalog_invalid")
+    ledger_present, runtime_role_present = catalog.split("|")
+    if require_initial_absence and (ledger_present == "true" or runtime_role_present == "true"):
+        _blocked("gis_dev_database_initial_state_changed")
     if gis_prerequisite._endpoint_identity(kube, NAMESPACE) != expected_identity:
         _blocked("gis_dev_database_identity_changed")
     return identity
@@ -1072,17 +1091,35 @@ def _partial_state_compatible(state, original):
                 "source_build_receipt", "source_capture", "inputs", "inputs_sha256"):
         if plan.get(key) != baseline.get(key):
             _blocked("gis_dev_partial_sidecar_plan_invalid")
-    if (plan.get("phase") not in ("PLANNED", "CREATING", "STARTING", "CREATED", "STARTED")
+    verified_jobs = plan.get("jobs")
+    verified_job_receipts = (isinstance(verified_jobs, dict)
+        and set(verified_jobs) == {"provision", "migrate", "verify"}
+        and all(isinstance(row, dict) and row.get("complete") is True
+            and row.get("succeeded") == 1
+            and isinstance(row.get("uid"), str)
+            and re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", row["uid"])
+            and isinstance(row.get("spec_sha256"), str) and HASH.fullmatch(row["spec_sha256"])
+            for row in verified_jobs.values()))
+    pristine = (plan.get("phase") == "PLANNED"
+        and state.get("plan_phase") in (None, "PLANNED")
+        and plan.get("prerequisite_phase") is None
+        and plan.get("prerequisite_receipt") is None
+        and plan.get("created") in (None, {}) and plan.get("jobs") in (None, {}))
+    if not pristine and (plan.get("phase") not in ("PLANNED", "CREATING", "STARTING", "CREATED", "STARTED")
         or plan.get("prerequisite_phase") not in ("CREATING", "VERIFIED")
         or not isinstance(plan.get("created"), dict) or not isinstance(plan.get("jobs"), dict)):
         _blocked("gis_dev_partial_sidecar_plan_invalid")
+    if pristine:
+        return True
     allowed_created = {"Service/voice-gameintegration", "Deployment/voice-gameintegration"}
     allowed_created.update("configmap/" + value for value in baseline.get("inputs", {}).get("configmaps", {}).values())
     allowed_created.update("job/" + value for value in baseline.get("inputs", {}).get("jobs", {}).values())
     if (set(plan["created"]) - allowed_created
         or set(plan["jobs"]) - {"provision", "migrate", "verify"}
         or (plan.get("prerequisite_phase") == "CREATING" and plan.get("prerequisite_receipt") is not None)
-        or (plan.get("prerequisite_phase") == "VERIFIED" and not isinstance(plan.get("prerequisite_receipt"), dict))):
+        or (plan.get("prerequisite_phase") == "VERIFIED"
+            and plan.get("prerequisite_receipt") is None
+            and not verified_job_receipts)):
         _blocked("gis_dev_partial_sidecar_plan_invalid")
     return True
 
@@ -1142,7 +1179,7 @@ def _partial_secret_fingerprints(kube, state):
     return result
 
 
-def install(source_root, image_ref, state_path, *, kube=None, apply=False, operation=None,
+def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=False, operation=None,
             builder_run=38984047252, builder_job=117252300427,
             local_build=False, local_build_receipt=None, build_receipt_factory=source_build_receipt,
             secret_plan_factory=build_secret_plan, source_verifier=verify_current_source,
@@ -1332,8 +1369,6 @@ def install(source_root, image_ref, state_path, *, kube=None, apply=False, opera
         before = state.get("database_identity")
         if not isinstance(before, dict):
             _blocked("gis_dev_database_identity_missing")
-        if _database_exists_readonly(kube, before) != before:
-            _blocked("gis_dev_database_identity_changed")
 
     def save_plan(value):
         state["plan"] = copy.deepcopy(value)
@@ -1342,6 +1377,10 @@ def install(source_root, image_ref, state_path, *, kube=None, apply=False, opera
 
     try:
         if not plan.get("prerequisite_receipt"):
+            owned_jobs = gis_prerequisite.reconcile_existing_jobs(
+                kube, plan, root, code_capture, save_plan)
+            _database_exists_readonly(kube, before,
+                require_initial_absence=not owned_jobs)
             source_verifier(root, operator_source_sha, build_receipt["builder_tree"])
             receipt = gis_prerequisite.execute(kube, plan, root, code_capture, save_plan)
             plan["prerequisite_receipt"] = receipt
@@ -1368,6 +1407,57 @@ def install(source_root, image_ref, state_path, *, kube=None, apply=False, opera
                 state["phase"] = "ROLLBACK_REQUIRED"
                 persist_state()
         raise
+
+
+@contextlib.contextmanager
+def _partial_operation_lock(state_path):
+    """Serialize same-operation continuation across the full recovery call."""
+    path = Path(str(state_path) + ".continuation.lock")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    flags = os.O_CREAT | os.O_RDWR
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+            or (os.name != "nt" and info.st_mode & 0o077)
+            or (hasattr(os, "geteuid") and info.st_uid != os.geteuid())):
+            _blocked("gis_dev_partial_lock_invalid")
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        else:
+            os.chmod(path, 0o600)
+        if os.name == "nt":
+            import msvcrt
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            except OSError:
+                _blocked("gis_dev_partial_operation_busy")
+            unlock = lambda: msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                _blocked("gis_dev_partial_operation_busy")
+            unlock = lambda: fcntl.flock(fd, fcntl.LOCK_UN)
+        try:
+            yield
+        finally:
+            unlock()
+    finally:
+        os.close(fd)
+
+
+def install(source_root, image_ref, state_path, *, resume_partial=False, **kwargs):
+    if resume_partial:
+        with _partial_operation_lock(state_path):
+            return _install_unlocked(source_root, image_ref, state_path,
+                resume_partial=True, **kwargs)
+    return _install_unlocked(source_root, image_ref, state_path,
+        resume_partial=False, **kwargs)
 
 
 def main(argv=None):

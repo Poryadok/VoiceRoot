@@ -348,6 +348,28 @@ class Tests(unittest.TestCase):
         self.assertEqual(receipt['schema'], gis.PREREQUISITE_SCHEMA)
         self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
 
+    def test_restart_after_job_create_before_receipt_reconciles_same_job(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'namespace': 'voice-staging',
+            'source_sha': 'b'*40, 'source_plan_sha256': 'c'*64, 'phase': 'PLANNED',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound,
+            'source_ci': {'run_id': 1, 'run_attempt': 1, 'workflow_id': 1,
+                'tree_sha': 'd'*40, 'lock_artifact_id': 1, 'lock_sha256': 'e'*64},
+            'custody_binding_sha256': 'f'*64}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        kube = FakeKube()
+        prerequisite._create_once(kube, 'job', jobs['provision'], plan,
+            plan['created'], lambda _row: None)
+        plan['created'] = {}  # Simulate process loss before the durable receipt write.
+        saved = []
+        self.assertTrue(prerequisite.reconcile_existing_jobs(kube, plan, ROOT, bound, saved.append))
+        self.assertIn('job/' + inputs['jobs']['provision'], plan['created'])
+        prerequisite.execute(kube, plan, ROOT, bound, saved.append)
+        created = [event[1] for event in kube.events if event[:1] == ('created-job',)]
+        self.assertEqual(created.count(inputs['jobs']['provision']), 1)
+
     def test_ambiguous_job_create_response_adopts_only_exact_same_operation_object(self):
         bound = capture(ROOT)
         inputs = prerequisite.source_inputs(ROOT, bound)

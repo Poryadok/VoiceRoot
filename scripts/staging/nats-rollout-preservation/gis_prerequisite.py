@@ -437,6 +437,43 @@ def _create_once(kube, kind, obj, plan, saved, save):
     return fresh, record
 
 
+def reconcile_existing_jobs(kube, plan, source_root, code_capture, save):
+    """Adopt only exact operation-owned Jobs after an interrupted create."""
+    if plan.get('prerequisite_phase') not in ('CREATING', 'VERIFIED'):
+        return False
+    _, wanted_jobs = _documents(source_root, plan, code_capture)
+    created = plan.setdefault('created', {})
+    observed_any = False
+    for role in JOB_ROLES:
+        wanted = wanted_jobs[role]
+        name = wanted['metadata']['name']
+        key = 'job/' + name
+        live = _read_named(kube, 'job', name)
+        record = created.get(key) or plan.setdefault('jobs', {}).get(role)
+        if live is None:
+            if record is not None:
+                raise Blocked('gis_prerequisite_recorded_resource_missing')
+            continue
+        observed_any = True
+        metadata = live.get('metadata', {})
+        uid = metadata.get('uid')
+        if (metadata.get('namespace') != plan.get('namespace', NS)
+            or metadata.get('name') != name or not isinstance(uid, str) or not UUID.fullmatch(uid)
+            or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+            or not _job_live_matches(live, wanted, uid)):
+            raise Blocked('gis_prerequisite_foreign_resource_present')
+        if record is None:
+            record = {'uid': uid, 'spec_sha256': _spec_digest(wanted)}
+            created[key] = record
+            save(copy.deepcopy(plan))
+        elif (record.get('uid') != uid
+            or record.get('spec_sha256') != _spec_digest(wanted)):
+            raise Blocked('gis_prerequisite_resource_changed')
+    if plan.get('prerequisite_phase') == 'VERIFIED' and not observed_any:
+        raise Blocked('gis_prerequisite_recorded_resource_missing')
+    return observed_any
+
+
 def _verify_job(kube, role, obj, record, inputs, plan):
     name = obj['metadata']['name']
     try:
