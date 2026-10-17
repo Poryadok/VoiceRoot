@@ -46,6 +46,8 @@ class KubeNotFound(KubeAPIError):
 
 _UID = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 _SOURCE_CLAIM = re.compile(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}')
+_CAPTURE_SECRET = re.compile(r'voice-nats-(?:operator|bootstrap-credentials|service-credentials)-r[0-9]{8}[a-z0-9]{0,8}|voice-nats-bootstrap-contract-[a-f0-9]{24}|voice-nats-hub-tls-r[0-9]{8}[a-z0-9]{0,8}')
+_CAPTURE_CONFIGMAP = re.compile(r'voice-nats-(?:notification|analytics-chat|search|realtime)-bootstrap')
 
 
 def _fail(code):
@@ -215,10 +217,34 @@ class _KubernetesJSONAPIBase:
         return self._request('GET', '/api/v1/namespaces/' + self._segment(name))
 
     def get_configmap(self, namespace, name):
-        if namespace != NAMESPACE or name not in ('voice-nats-generation', 'voice-app-config'):
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or (name not in ('voice-nats-generation', 'voice-app-config')
+                and not _CAPTURE_CONFIGMAP.fullmatch(name))):
             _fail('configmap_invalid')
         return self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
             + '/configmaps/' + self._segment(name))
+
+    def get_secret(self, namespace, name):
+        if namespace != NAMESPACE or not isinstance(name, str) or not _CAPTURE_SECRET.fullmatch(name):
+            _fail('secret_invalid')
+        row = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/secrets/' + self._segment(name))
+        metadata = row.get('metadata')
+        if (not isinstance(metadata, dict) or metadata.get('name') != name
+            or metadata.get('namespace') != namespace
+            or not isinstance(metadata.get('uid'), str) or not _UID.fullmatch(metadata['uid'])
+            or not isinstance(metadata.get('resourceVersion'), str) or not metadata['resourceVersion']):
+            _fail('secret_identity_invalid')
+        return row
+
+    def get_secret_metadata(self, namespace, name):
+        """Read only the fixed TLS Secret identity needed for capture provenance."""
+        if (namespace != NAMESPACE or not isinstance(name, str)
+            or not re.fullmatch(r'voice-nats-hub-tls-r[0-9]{8}[a-z0-9]{0,8}', name)):
+            _fail('secret_metadata_invalid')
+        row = self.get_secret(namespace, name)
+        metadata = row['metadata']
+        return {key: metadata[key] for key in ('name', 'namespace', 'uid', 'resourceVersion')}
 
     def get_deployment(self, namespace, name):
         if (namespace != NAMESPACE or not isinstance(name, str)

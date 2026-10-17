@@ -1,4 +1,5 @@
 import base64,copy,hashlib,os,sys,tempfile,types,unittest
+import stat
 from pathlib import Path
 from unittest.mock import patch
 if os.name=='nt':sys.modules.setdefault('fcntl',types.ModuleType('fcntl'))
@@ -30,6 +31,56 @@ def fixture():
     return Kube(),receipt,rows,sha
 
 class Tests(unittest.TestCase):
+    def test_native_capture_reader_limits_resources_to_bound_generation_and_contract(self):
+        class Api:
+            def __init__(self): self.calls=[]
+            def get_secret(self,**kwargs): self.calls.append(('secret',kwargs)); return {'kind':'Secret'}
+            def get_secret_metadata(self,**kwargs): self.calls.append(('secret_meta',kwargs)); return {'uid':'u'}
+            def get_configmap(self,**kwargs): self.calls.append(('configmap',kwargs)); return {'kind':'ConfigMap'}
+        api=Api();reader=root_main.NativeCaptureReader(api,GENERATION,{'scripts':[{'part':'analytics-chat'}]})
+        reader.get('secret','voice-nats-operator-'+GENERATION)
+        reader.get('secret','voice-nats-bootstrap-contract-'+'a'*24)
+        reader.get('configmap','voice-nats-analytics-chat-bootstrap')
+        reader.secret_meta('voice-nats-hub-tls-'+GENERATION)
+        self.assertEqual(len(api.calls),4)
+        with self.assertRaisesRegex(root_main.Blocked,'capture_secret_resource_not_allowlisted'):
+            reader.get('secret','voice-nats-operator-r20200101')
+        with self.assertRaisesRegex(root_main.Blocked,'capture_resource_not_allowlisted'):
+            reader.get('configmap','voice-nats-search-bootstrap')
+        with self.assertRaisesRegex(root_main.Blocked,'capture_secret_metadata_not_allowlisted'):
+            reader.secret_meta('voice-nats-operator-'+GENERATION)
+
+    def test_capture_inputs_returns_validated_public_account_only_to_explicit_callback(self):
+        kube,receipt,rows,sha=fixture();captured=[]
+        with tempfile.TemporaryDirectory() as td,patch.object(selection,'ACCOUNT_SHA',sha),\
+                patch.object(root_main.os,'chown',create=True):
+            provenance=root_main.capture_inputs(kube,Path(td),{'scripts':[]},GENERATION,
+                bootstrap_enrollment=receipt,public_account_callback=captured.append)
+        self.assertEqual(captured,['A'+'A'*55])
+        self.assertNotIn('account_id',provenance)
+        self.assertNotIn('A'+'A'*55,repr(provenance))
+
+    @unittest.skipUnless(os.geteuid()==65532 and os.getegid()==65532,
+        'native private output requires the production runner UID/GID')
+    def test_native_capture_output_is_private_runner_owned_and_create_only(self):
+        kube,receipt,rows,sha=fixture();captured=[]
+        with tempfile.TemporaryDirectory() as td,patch.object(selection,'ACCOUNT_SHA',sha):
+            base=Path(td)
+            provenance=root_main.capture_inputs(kube,base,{'scripts':[]},GENERATION,
+                bootstrap_enrollment=receipt,public_account_callback=captured.append,native_private=True)
+            self.assertEqual(captured,['A'+'A'*55])
+            self.assertNotIn('account_id',provenance)
+            for path in (base,base/'inputs',base/'inputs'/'bootstrap.creds',
+                    base/'inputs'/'social.creds',base/'inputs'/'realtime.creds',
+                    base/'inputs'/'account.public',base/'server.conf'):
+                info=path.lstat()
+                self.assertFalse(stat.S_ISLNK(info.st_mode))
+                self.assertEqual((info.st_uid,info.st_gid),(65532,65532))
+                self.assertEqual(stat.S_IMODE(info.st_mode),0o700 if path in (base,base/'inputs') else 0o600)
+            with self.assertRaisesRegex(root_main.Blocked,'capture_private_directory_create_failed'):
+                root_main.capture_inputs(kube,base,{'scripts':[]},GENERATION,
+                    bootstrap_enrollment=receipt,native_private=True)
+
     def test_v4_enrollment_preserves_old_receipt_and_all_three_defaults(self):
         from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS
         kube,previous,rows,sha=fixture()

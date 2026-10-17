@@ -323,6 +323,33 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
                 digest(altered), operation=operation, original_template=original, action='restore')
         request.assert_not_called()
 
+    def test_capture_configmaps_are_fixed_to_canonical_bootstrap_roles(self):
+        with patch.object(self.api, '_request', return_value={'kind': 'ConfigMap'}) as request:
+            self.api.get_configmap('voice-staging', 'voice-nats-analytics-chat-bootstrap')
+        self.assertIn('/configmaps/voice-nats-analytics-chat-bootstrap', request.call_args.args[1])
+        for name in ('voice-nats-unknown-bootstrap', 'voice-nats-generation-extra', 'voice-app-config-secret'):
+            with self.subTest(name=name), self.assertRaises(kube.KubeAPIError):
+                self.api.get_configmap('voice-staging', name)
+
+    def test_generation_secret_reads_are_fixed_and_tls_metadata_drops_secret_data(self):
+        secret = {'metadata': {'name': 'voice-nats-hub-tls-r20261017a',
+            'namespace': 'voice-staging', 'uid': '11111111-1111-4111-8111-111111111111',
+            'resourceVersion': '42'}, 'data': {'tls.key': 'private'}}
+        operator = copy.deepcopy(secret)
+        operator['metadata']['name'] = 'voice-nats-operator-r20261017a'
+        with patch.object(self.api, '_request', side_effect=[operator, secret]) as request:
+            row = self.api.get_secret('voice-staging', 'voice-nats-operator-r20261017a')
+            metadata = self.api.get_secret_metadata('voice-staging', 'voice-nats-hub-tls-r20261017a')
+        self.assertEqual(row, operator)
+        self.assertNotIn('data', metadata)
+        self.assertEqual(metadata['uid'], secret['metadata']['uid'])
+        self.assertEqual(request.call_count, 2)
+        for namespace, name in (('default', 'voice-nats-operator-r20261017a'),
+                ('voice-staging', 'other-secret'),
+                ('voice-staging', 'voice-nats-hub-tls-r20261017a')):
+            with self.subTest(namespace=namespace, name=name), self.assertRaises(kube.KubeAPIError):
+                self.api.get_secret(namespace, name)
+
     def test_job_create_read_logs_and_uid_precondition_delete_are_json_contracts(self):
         payload = {'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': 'job'}}
         with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'):

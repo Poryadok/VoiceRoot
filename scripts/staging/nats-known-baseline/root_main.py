@@ -129,7 +129,79 @@ def public_read(path,limit=256<<10):
     finally: os.close(fd)
 
 
-def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=None):
+class NativeCaptureReader:
+    """Expose only generation-bound capture reads through the typed API."""
+    SECRET_ROLES=frozenset(('operator','bootstrap-credentials','service-credentials'))
+    CONFIG_ROLES=frozenset(('realtime','notification','analytics-chat','search'))
+
+    def __init__(self,api,generation,contract):
+        if (not re.fullmatch(r'r[0-9]{8}[a-z0-9]{0,8}',generation)
+            or not isinstance(contract,dict) or not isinstance(contract.get('scripts'),list)):
+            raise Blocked('capture_reader_binding_invalid')
+        parts=[]
+        for row in contract['scripts']:
+            if not isinstance(row,dict) or row.get('part') not in self.CONFIG_ROLES:
+                raise Blocked('capture_reader_script_invalid')
+            parts.append(row['part'])
+        if len(set(parts))!=len(parts):raise Blocked('capture_reader_script_invalid')
+        self.api=api
+        self.generation=generation
+        self.configmaps={'voice-nats-generation','voice-app-config'}|{
+            'voice-nats-'+part+'-bootstrap' for part in parts}
+
+    def get(self,kind,name):
+        if kind=='secret':
+            if name in {'voice-nats-'+role+'-'+self.generation for role in self.SECRET_ROLES}:
+                return self.api.get_secret(namespace='voice-staging',name=name)
+            if re.fullmatch(r'voice-nats-bootstrap-contract-[a-f0-9]{24}',str(name)):
+                return self.api.get_secret(namespace='voice-staging',name=name)
+            raise Blocked('capture_secret_resource_not_allowlisted')
+        if kind=='configmap' and name in self.configmaps:
+            return self.api.get_configmap(namespace='voice-staging',name=name)
+        raise Blocked('capture_resource_not_allowlisted')
+
+    def secret_meta(self,name):
+        expected='voice-nats-hub-tls-'+self.generation
+        if name!=expected:raise Blocked('capture_secret_metadata_not_allowlisted')
+        return self.api.get_secret_metadata(namespace='voice-staging',name=name)
+
+
+def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=None,
+                  public_account_callback=None, native_private=False):
+    if public_account_callback is not None and not callable(public_account_callback):
+        raise Blocked('account_identity_callback_invalid')
+    if type(native_private) is not bool:raise Blocked('capture_output_mode_invalid')
+    base=Path(base)
+    if native_private:
+        try:base_stat=base.lstat()
+        except OSError:raise Blocked('capture_private_base_unavailable') from None
+        if (os.geteuid()!=65532 or os.getegid()!=65532
+            or not stat.S_ISDIR(base_stat.st_mode) or stat.S_ISLNK(base_stat.st_mode)
+            or base_stat.st_uid!=65532 or base_stat.st_gid!=65532
+            or stat.S_IMODE(base_stat.st_mode)!=0o700):
+            raise Blocked('capture_private_runner_custody_invalid')
+
+    def write_artifact(path,raw):
+        if not native_private:
+            path.write_bytes(raw);path.chmod(0o440);os.chown(path,0,65532)
+            return
+        flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW
+        fd=os.open(path,flags,0o600)
+        try:
+            view=memoryview(raw)
+            while view:
+                count=os.write(fd,view)
+                if count<=0:raise OSError('short_write')
+                view=view[count:]
+            os.fsync(fd)
+            info=os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid!=65532 or info.st_gid!=65532
+                or stat.S_IMODE(info.st_mode)!=0o600 or info.st_nlink!=1 or info.st_size!=len(raw)):
+                raise Blocked('capture_private_file_custody_invalid')
+        finally:os.close(fd)
+        parent_fd=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:os.fsync(parent_fd)
+        finally:os.close(parent_fd)
     generation=CURRENT['generation'] if generation is None else generation
     if not re.fullmatch(r'r[0-9]{8}[a-z0-9]{0,8}',generation):
         raise Blocked('captured_generation_invalid')
@@ -140,7 +212,16 @@ def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=N
         from bootstrap_selection import select
         selected['bootstrap']=select(kube,bootstrap_enrollment,generation)
     secrets={role:kube.get('secret',name) for role,name in selected.items()}
-    inputs=base/'inputs'; inputs.mkdir(mode=0o750); os.chown(inputs,0,65532); inputs.chmod(0o750)
+    inputs=base/'inputs'
+    if native_private:
+        try:inputs.mkdir(mode=0o700)
+        except OSError:raise Blocked('capture_private_directory_create_failed') from None
+        info=inputs.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode)
+            or info.st_uid!=65532 or info.st_gid!=65532 or stat.S_IMODE(info.st_mode)!=0o700):
+            raise Blocked('capture_private_directory_custody_invalid')
+    else:
+        inputs.mkdir(mode=0o750); os.chown(inputs,0,65532); inputs.chmod(0o750)
     provenance={}
     tls='voice-nats-hub-tls-'+generation
     metadata=kube.secret_meta(tls)
@@ -155,11 +236,11 @@ def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=N
         return raw
     for role in ('bootstrap','social','realtime'):
         raw=secret('bootstrap' if role=='bootstrap' else 'services',role+'.creds')
-        path=inputs/(role+'.creds'); path.write_bytes(raw); path.chmod(0o440); os.chown(path,0,65532)
+        path=inputs/(role+'.creds'); write_artifact(path,raw)
     tokens={key:secret('operator',key).decode().strip() for key in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
     for key in ('account.public','system-account.public'):
         if not re.fullmatch(r'A[A-Z2-7]{55}',tokens[key]): raise Blocked('account_identity_invalid')
-    path=inputs/'account.public';path.write_text(tokens['account.public']);path.chmod(0o440);os.chown(path,0,65532)
+    path=inputs/'account.public';write_artifact(path,tokens['account.public'].encode())
     for key in ('operator.jwt','account.jwt','system-account.jwt'):
         if not re.fullmatch(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',tokens[key]): raise Blocked('public_jwt_invalid')
     q=json.dumps
@@ -167,7 +248,7 @@ def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=N
         'operator: '+q(tokens['operator.jwt'])+'\nsystem_account: '+q(tokens['system-account.public'])+
         '\nresolver: MEMORY\nresolver_preload: { '+q(tokens['account.public'])+': '+q(tokens['account.jwt'])+
         ', '+q(tokens['system-account.public'])+': '+q(tokens['system-account.jwt'])+' }\njetstream { store_dir: /data }\n')
-    path=base/'server.conf'; path.write_text(config); path.chmod(0o440); os.chown(path,0,65532)
+    path=base/'server.conf';write_artifact(path,config.encode())
     for script in contract['scripts']:
         role=script['part']; name='voice-nats-'+role+'-bootstrap'
         row=kube.get('configmap',name); raw=row['data']['bootstrap.sh'].encode()
@@ -175,7 +256,11 @@ def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=N
             row['metadata']['resourceVersion']!=script['configMapResourceVersion'] or
             hashlib.sha256(raw).hexdigest()!=script['sha256'] or len(raw)!=script['bytes']):
             raise Blocked('deployed_bootstrap_contract_changed')
-        path=base/('bootstrap-'+role+'.sh'); path.write_bytes(raw); path.chmod(0o440); os.chown(path,0,65532)
+        path=base/('bootstrap-'+role+'.sh');write_artifact(path,raw)
+    if public_account_callback is not None:
+        # The public ID is exposed only to the trusted in-process consumer that
+        # needs to bind a live census; it is never added to provenance/checkpoint.
+        public_account_callback(tokens['account.public'])
     return provenance
 
 
