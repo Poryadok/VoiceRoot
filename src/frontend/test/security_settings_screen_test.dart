@@ -245,6 +245,9 @@ void main() {
       );
       expect(find.text('Manage linked devices'), findsOneWidget);
 
+      await tester.ensureVisible(
+        find.byKey(SecuritySettingsScreen.activeSessionsButtonKey),
+      );
       await tester.tap(
         find.byKey(SecuritySettingsScreen.activeSessionsButtonKey),
       );
@@ -254,6 +257,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(SecuritySettingsScreen.screenKey), findsOneWidget);
 
+      await tester.ensureVisible(find.text('Manage linked devices'));
       await tester.tap(find.text('Manage linked devices'));
       await tester.pumpAndSettle();
       expect(find.byKey(ActiveSessionsScreen.screenKey), findsOneWidget);
