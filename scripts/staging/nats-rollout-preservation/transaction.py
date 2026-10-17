@@ -154,7 +154,11 @@ def context(stage):
 
 def _shutdown_census_intent(events):
     if not isinstance(events,list):raise Blocked('rollout_original_live_census_binding_invalid')
-    intents=[event for event in events if isinstance(event,dict) and event.get('kind')=='original_hub_shutdown_intent']
+    # The legacy runtime journals one shutdown intent, while the native typed
+    # API separates that same pre-shutdown proof into its finalizer-add intent.
+    # Both carry the identical digest before the Hub write boundary.
+    intents=[event for event in events if isinstance(event,dict) and event.get('kind') in
+        ('original_hub_shutdown_intent','original_hub_finalizer_add_intent')]
     if len(intents)>1:raise Blocked('rollout_original_live_census_binding_invalid')
     return intents[0] if intents else None
 
@@ -298,7 +302,7 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         import gis_first_install as gis
         gis.validate_transition_binding(gis_transition,kube)
         state['gis_transition']=copy.deepcopy(gis_transition)
-    if gis_first_install is None and target.get('mode') in ('full','app-only'):
+    if native_api is None and gis_first_install is None and target.get('mode') in ('full','app-only'):
         try:active_release=private_json(guard.ROOT/'installed'/'active-release.json')
         except FileNotFoundError:active_release={}
         if ('gis_first_install_transition' in active_release and gis_transition is None):
@@ -327,8 +331,14 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             # existing workloads, then verifies those same UIDs/templates
             # after the GIS-only target has been applied.
             snapshot_names=existing
-        try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
-        except FileNotFoundError:enrollment=None
+        if native_api is None:
+            try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
+            except FileNotFoundError:enrollment=None
+        else:
+            # Native mode consumes only the generation-bound API capture. The
+            # legacy root-owned enrollment file is outside this runner's
+            # authority and is never opened or inferred from ambient disk.
+            enrollment=None
         account_id=None
         if native_api is not None:
             import native_runtime_stage

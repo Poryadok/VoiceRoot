@@ -820,7 +820,8 @@ class NativeRolloutStage:
         add_intent = {'kind': 'original_hub_finalizer_add_intent', 'pod_name': pm['name'],
             'pod_uid': pm['uid'], 'resource_version': pm['resourceVersion'],
             'expected_finalizers': list(finals), 'finalizer': finalizer,
-            'live_census_sha256': self.original_live_census.get('sha256')}
+            'live_census_sha256': hashlib.sha256(json.dumps(self.original_live_census,
+                sort_keys=True, separators=(',', ':')).encode()).hexdigest()}
         add_intent['intent_id'] = _sha(add_intent)
         self._assert_source_identity()
         self.owned_marker()
