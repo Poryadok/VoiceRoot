@@ -188,6 +188,43 @@ class NatsPhaseTests(unittest.TestCase):
                 phase.stream_census_readback({'receipt': receipt, 'census': census})
         self.assertEqual(output.buffer.getvalue(), b'')
 
+    def test_bind_only_is_fixed_nonroot_readonly_mount_probe(self):
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            role='verification')
+        before = [(p.name, p.lstat().st_uid, p.lstat().st_gid, p.lstat().st_mode,
+            p.lstat().st_ino) for p in self.verification.iterdir()]
+        output = Output()
+        with patch.object(phase.os, 'geteuid', return_value=65532), \
+             patch.object(phase.os, 'getegid', return_value=65532), \
+             patch.dict(phase.os.environ, {'POD_UID': POD_UID}), \
+             patch.object(phase.sys, 'stdout', output):
+            result = phase.main(['--bind-only', '--operation', OPERATION,
+                '--nonce', NONCE, '--role', 'verification'])
+        self.assertEqual(result, {'schema': 'voice-nats-bind-mount-v1',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'role': 'verification', 'mounted': True})
+        after = [(p.name, p.lstat().st_uid, p.lstat().st_gid, p.lstat().st_mode,
+            p.lstat().st_ino) for p in self.verification.iterdir()]
+        self.assertEqual(after, before)
+        self.assertEqual(output.buffer.getvalue(), b'')
+
+    def test_bind_only_rejects_wrong_uid_or_role_before_target_io(self):
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            role='restore')
+        with patch.object(phase.os, 'geteuid', return_value=10000), \
+             patch.object(phase.os, 'getegid', return_value=10000), \
+             patch.dict(phase.os.environ, {'POD_UID': POD_UID}), \
+             patch.object(type(phase.VERIFY_ROOT), 'lstat', side_effect=AssertionError('must reject before mount I/O')):
+            with self.assertRaisesRegex(ValueError, 'bind_profile'):
+                phase.bind_only(args)
+        args.role = 'arbitrary'
+        with patch.object(phase.os, 'geteuid', return_value=65532), \
+             patch.object(phase.os, 'getegid', return_value=65532), \
+             patch.dict(phase.os.environ, {'POD_UID': POD_UID}), \
+             patch.object(type(phase.VERIFY_ROOT), 'lstat', side_effect=AssertionError('must reject before mount I/O')):
+            with self.assertRaisesRegex(ValueError, 'bind_profile'):
+                phase.bind_only(args)
+
     def test_census_interruption_without_receipt_is_not_replayed(self):
         state = self.verification / '.voice-nats-verification'
         state.mkdir(mode=0o700)

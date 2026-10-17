@@ -101,6 +101,51 @@ class VerificationJobTests(unittest.TestCase):
         with self.assertRaises(jobs.VerificationJobError):
             jobs.exec_vectors(REQUEST, 'not-a-pod-uid', BINDING)
 
+    def test_wffc_verification_binder_is_target_only_readonly_and_node_affinity_bound(self):
+        request = REQUEST | {'phase': 'bind-verification'}
+        target = {'role': 'verification', 'claim_name': 'voice-nats-verify-' + request['operation'],
+            'target_uid': '22222222-2222-4222-8222-222222222222', 'node_name': 'k3s-worker-1'}
+        row = jobs.document(request, target, IMAGE)
+        pod = row['spec']['template']['spec']
+        container = pod['containers'][0]
+        labels = row['spec']['template']['metadata']['labels']
+        self.assertEqual(row['metadata']['labels'][jobs.LABEL_PHASE], 'bind-verification')
+        self.assertEqual(row['spec']['selector']['matchLabels'], {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
+        self.assertEqual(labels[jobs.LABEL_JOB_SELECTOR], row['metadata']['name'])
+        self.assertEqual(pod['automountServiceAccountToken'], False)
+        self.assertEqual(pod['securityContext'], {'runAsNonRoot': True, 'runAsUser': 65532,
+            'runAsGroup': 65532, 'seccompProfile': {'type': 'RuntimeDefault'}})
+        self.assertNotIn('nodeName', pod)
+        self.assertEqual(pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']
+            ['nodeSelectorTerms'][0]['matchExpressions'], [{'key': 'kubernetes.io/hostname',
+                'operator': 'In', 'values': ['k3s-worker-1']}])
+        self.assertEqual(container['command'], ['/usr/bin/python3', '/voice-nats-runner/phase'])
+        self.assertEqual(container['args'], ['--bind-only', '--operation', request['operation'],
+            '--nonce', request['nonce'], '--role', 'verification'])
+        self.assertEqual(container['volumeMounts'], [{'name': 'target', 'mountPath': '/verify', 'readOnly': True}])
+        self.assertEqual(pod['volumes'], [{'name': 'target', 'persistentVolumeClaim': {
+            'claimName': target['claim_name'], 'readOnly': True}}])
+        self.assertNotIn('fsGroup', pod['securityContext'])
+        self.assertNotIn('hostPath', str(pod))
+        self.assertNotIn('secret', str(pod).lower())
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'binder_has_no_exec'):
+            jobs.exec_vectors(request, POD_UID, target)
+
+    def test_wffc_restore_binder_is_separate_role_and_pins_journaled_attempt_name(self):
+        request = REQUEST | {'phase': 'bind-restore'}
+        target = {'role': 'restore', 'claim_name': 'voice-nats-restore-' + request['operation'] + '-1234abcd',
+            'target_uid': '33333333-3333-4333-8333-333333333333', 'node_name': 'k3s-worker-1'}
+        row = jobs.document(request, target, IMAGE)
+        pod = row['spec']['template']['spec']
+        self.assertEqual(pod['containers'][0]['args'][-1], 'restore')
+        self.assertEqual(pod['volumes'][0]['persistentVolumeClaim']['claimName'], target['claim_name'])
+        for invalid in (target | {'role': 'verification'},
+            target | {'claim_name': 'voice-nats-restore-' + request['operation'] + '-1234abcdx'},
+            target | {'node_name': '../worker'},
+            target | {'target_uid': '../uid'}):
+            with self.subTest(invalid=invalid), self.assertRaises(jobs.VerificationJobError):
+                jobs.document(request, invalid, IMAGE)
+
 
 if __name__ == '__main__':
     unittest.main()

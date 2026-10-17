@@ -16,7 +16,8 @@ LABEL_OPERATION = 'voice.io/nats-operation'
 LABEL_NONCE = 'voice.io/nats-job-nonce'
 LABEL_PHASE = 'voice.io/nats-job-phase'
 LABEL_JOB_SELECTOR = 'voice.io/nats-phase-job'
-PHASES = frozenset(('archive', 'census'))
+PHASES = frozenset(('archive', 'census', 'bind-verification', 'bind-restore'))
+VERIFICATION_BINDING_FIELDS = frozenset(('role', 'claim_name', 'target_uid', 'node_name'))
 FIELDS = frozenset(('operation', 'nonce', 'phase'))
 BINDING_FIELDS = frozenset((
     'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name',
@@ -80,6 +81,28 @@ def validate_image(value: object) -> str:
     return value
 
 
+def validate_binder_binding(request: dict, value: object) -> dict:
+    row = validate_request(request)
+    if not isinstance(value, dict) or set(value) != VERIFICATION_BINDING_FIELDS:
+        _fail('binder_binding_invalid')
+    expected_role = 'verification' if row['phase'] == 'bind-verification' else 'restore'
+    if value.get('role') != expected_role:
+        _fail('binder_role_invalid')
+    if not isinstance(value.get('target_uid'), str) or not UUID_RE.fullmatch(value['target_uid']):
+        _fail('binder_target_uid_invalid')
+    if expected_role == 'verification':
+        expected_claim = 'voice-nats-verify-' + row['operation']
+        if value.get('claim_name') != expected_claim:
+            _fail('binder_claim_invalid')
+    elif (not isinstance(value.get('claim_name'), str)
+        or not re.fullmatch(r'voice-nats-restore-' + row['operation'] + r'-[a-f0-9]{8}', value['claim_name'])):
+        _fail('binder_claim_invalid')
+    if (not isinstance(value.get('node_name'), str)
+        or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value['node_name'])):
+        _fail('binder_node_invalid')
+    return copy.deepcopy(value)
+
+
 def job_name(request: dict) -> str:
     row = validate_request(request)
     suffix = hashlib.sha256((row['operation'] + ':' + row['nonce'] + ':' + row['phase']).encode()).hexdigest()[:16]
@@ -88,8 +111,11 @@ def job_name(request: dict) -> str:
 
 def document(request: dict, binding: dict, trusted_image: str) -> dict:
     row = validate_request(request)
-    storage = validate_binding(binding)
     image = validate_image(trusted_image)
+    if row['phase'] in ('bind-verification', 'bind-restore'):
+        storage = validate_binder_binding(row, binding)
+        return _binder_document(row, storage, image)
+    storage = validate_binding(binding)
     name = job_name(row)
     labels = {LABEL_OPERATION: row['operation'], LABEL_NONCE: row['nonce'],
         LABEL_PHASE: row['phase'], LABEL_JOB_SELECTOR: name}
@@ -152,9 +178,66 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
     }
 
 
+def _binder_document(request: dict, binding: dict, image: str) -> dict:
+    name = job_name(request)
+    labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
+        LABEL_PHASE: request['phase'], LABEL_JOB_SELECTOR: name}
+    return {
+        'apiVersion': 'batch/v1',
+        'kind': 'Job',
+        'metadata': {'name': name, 'namespace': NAMESPACE, 'labels': copy.deepcopy(labels)},
+        'spec': {
+            'backoffLimit': 0,
+            'activeDeadlineSeconds': 600,
+            'manualSelector': True,
+            'selector': {'matchLabels': {LABEL_JOB_SELECTOR: name}},
+            'template': {
+                'metadata': {'labels': labels},
+                'spec': {
+                    'automountServiceAccountToken': False,
+                    'serviceAccountName': 'default',
+                    'restartPolicy': 'Never',
+                    'securityContext': {
+                        'runAsNonRoot': True,
+                        'runAsUser': 65532,
+                        'runAsGroup': 65532,
+                        'seccompProfile': {'type': 'RuntimeDefault'},
+                    },
+                    'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {
+                        'nodeSelectorTerms': [{'matchExpressions': [{'key': 'kubernetes.io/hostname',
+                            'operator': 'In', 'values': [binding['node_name']]}]}]}}},
+                    'containers': [{
+                        'name': 'nats-phase',
+                        'image': image,
+                        'imagePullPolicy': 'IfNotPresent',
+                        'command': ['/usr/bin/python3', '/voice-nats-runner/phase'],
+                        'args': ['--bind-only', '--operation', request['operation'],
+                            '--nonce', request['nonce'], '--role', binding['role']],
+                        'env': [{'name': 'POD_UID', 'valueFrom': {'fieldRef': {'fieldPath': 'metadata.uid'}}}],
+                        'securityContext': {
+                            'allowPrivilegeEscalation': False,
+                            'readOnlyRootFilesystem': True,
+                            'capabilities': {'drop': ['ALL']},
+                        },
+                        'resources': {
+                            'requests': {'cpu': '50m', 'memory': '32Mi', 'ephemeral-storage': '16Mi'},
+                            'limits': {'cpu': '250m', 'memory': '128Mi', 'ephemeral-storage': '32Mi'},
+                        },
+                        'volumeMounts': [{'name': 'target', 'mountPath': '/verify', 'readOnly': True}],
+                    }],
+                    'volumes': [{'name': 'target', 'persistentVolumeClaim': {
+                        'claimName': binding['claim_name'], 'readOnly': True}}],
+                },
+            },
+        },
+    }
+
+
 def exec_vectors(request: dict, pod_uid: str, binding: dict) -> dict:
     """Return the only admitted in-band helper argv/query shapes for a fixed phase."""
     row = validate_request(request)
+    if row['phase'] in ('bind-verification', 'bind-restore'):
+        _fail('binder_has_no_exec')
     storage = validate_binding(binding)
     if not isinstance(pod_uid, str) or not UUID_RE.fullmatch(pod_uid):
         _fail('pod_uid_invalid')

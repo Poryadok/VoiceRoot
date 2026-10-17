@@ -13,7 +13,7 @@
   ],
   "inputs": {
     "scripts/staging/nats-rollout-preservation/Dockerfile": "ecacd5406eec28eefdffcaa2ef845e771ad136414691f740c6af368d4d45f729",
-    "scripts/staging/nats-rollout-preservation/nats-phase": "2f5e7099d867d1cc8aec913af638bd419052b11afe70e5035ecbe72e8d96b2b8",
+    "scripts/staging/nats-rollout-preservation/nats-phase": "8f04e17bcc509192b6498a03c59836d0bd81900da0a9879c0c2c50dd91d9dc38",
     "scripts/staging/nats-rollout-preservation/native_store.py": "3f9b177ecbcec7463801ba3ed44724c3068696482804d4d586696a305da813c0",
     "scripts/staging/nats-known-baseline/controller.py": "dd9fee1b93309b38cfb8023787142a2cd5ea3dd925100744fcc2a6b66beb629f",
     "scripts/staging/nats-known-baseline/go.mod": "b1c71d9f1c670cb5826fc03d13c32cd94154b3033a203d628eaba70ef380cd29",

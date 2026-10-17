@@ -427,6 +427,27 @@ def read_verification_receipt(phase_name, args):
     return {'receipt': receipt, 'census': census}
 
 
+def bind_only(args):
+    """Open a read-only mount of one newly created WFFC target, then exit.
+
+    Kubernetes attachment and typed API readback establish claim/PV identity;
+    this fixed process only causes scheduling and proves the target mount exists.
+    It has no source volume, fsGroup, file writes, or caller-provided path.
+    """
+    if (args.role not in ('verification', 'restore')
+        or os.geteuid() != 65532 or os.getegid() != 65532):
+        raise ValueError('bind_profile')
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('bind_pod_identity')
+    row = VERIFY_ROOT.lstat()
+    if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
+        raise ValueError('bind_target_mount')
+    return {'schema': 'voice-nats-bind-mount-v1', 'operation': args.operation,
+        'nonce': args.nonce, 'pod_uid': args.pod_uid, 'role': args.role,
+        'mounted': True}
+
+
 def _frame(row):
     encoded = json.dumps(row, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
     if len(encoded) + 1 > MAX_READBACK_LINE:
@@ -590,17 +611,25 @@ def main(argv=None):
     mode.add_argument('--stream-existing', action='store_true')
     mode.add_argument('--load-inputs', action='store_true')
     mode.add_argument('--read-receipt', action='store_true')
+    mode.add_argument('--bind-only', action='store_true')
     mode.add_argument('--phase', choices=sorted(VERIFY_PHASES))
     parser.add_argument('--operation', required=True)
     parser.add_argument('--nonce', required=True)
     parser.add_argument('--pod-uid', required=False)
     parser.add_argument('--source-pvc-uid')
     parser.add_argument('--verification-pvc-uid')
+    parser.add_argument('--role', choices=('verification', 'restore'))
     args = parser.parse_args(argv)
     if args.serve:
         if args.pod_uid is not None: parser.error('serve-shape')
         args.pod_uid = os.environ.get('POD_UID', '')
         serve(args)
+    if args.bind_only:
+        if (args.role is None or args.phase is not None or args.source_pvc_uid is not None
+            or args.verification_pvc_uid is not None or args.pod_uid is not None):
+            parser.error('bind-only-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        return bind_only(args)
     if args.pod_uid is None: parser.error('pod-uid-required')
     if args.load_inputs:
         if args.source_pvc_uid is not None or args.verification_pvc_uid is not None:
