@@ -1,5 +1,7 @@
 import copy
+import contextlib
 import hashlib
+import io
 import json
 import sys
 import tempfile
@@ -157,6 +159,75 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         self.assertEqual(operations[0], {"op": "test", "path": "/metadata/uid",
                                          "value": "4f99e5d7-15ed-4ce9-bbc4-cd999fa91475"})
         self.assertEqual([op["value"]["port"] for op in operations[2:]], [9094, 9095])
+
+    def test_service_plan_hash_matches_json_patch_append_order(self):
+        target = overlay.TARGETS[0]
+        base = sanitized_live_api_fixture()[(target.kind, target.name)]
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"].insert(0, {
+            "name": "principal-jwks", "port": 8443, "protocol": "TCP",
+            "targetPort": "principal-jwks"})
+        client = mock.Mock()
+        client.render.return_value = desired
+        patch_path = Path(__file__).resolve().parents[2] / "deploy/dev/match-squad-trust-overlay" / target.patch_file
+        plan = overlay.build_object_plan(client, target, base, patch_path)
+        expected = copy.deepcopy(base)
+        expected["spec"]["ports"].append(desired["spec"]["ports"][0])
+        self.assertEqual(plan["desiredObservedSha256"], overlay.observed_render_hash(target, expected))
+
+    def test_existing_service_port_order_cannot_be_rewritten(self):
+        base = captured_service("voice-chat", "service-uid", "17", [
+            {"name": "http", "port": 8080, "targetPort": 8080},
+            {"name": "grpc", "port": 9090, "targetPort": 9090}])
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"] = [desired["spec"]["ports"][1],
+                                     desired["spec"]["ports"][0],
+                                     {"name": "match-squad-principal", "port": 9092,
+                                      "targetPort": "match-squad-principal"}]
+        with self.assertRaisesRegex(overlay.OverlayError, "existing list order"):
+            overlay.object_patch(base, desired)
+
+    def test_deployment_patch_predictions_append_each_list_in_operation_order(self):
+        base = sanitized_live_api_fixture()[("Deployment", "voice-voice")]
+        desired = copy.deepcopy(base)
+        pod_spec = desired["spec"]["template"]["spec"]
+        pod_spec["containers"][0]["env"].append({"name": "NEW_ENV", "value": "x"})
+        pod_spec["containers"][0]["ports"].extend([
+            {"name": "new-a", "containerPort": 9094},
+            {"name": "new-b", "containerPort": 9095}])
+        pod_spec["containers"][0]["volumeMounts"].append(
+            {"name": "new-volume", "mountPath": "/new", "readOnly": True})
+        pod_spec["volumes"].append({"name": "new-volume", "configMap": {"name": "new-config"}})
+        operations = overlay.object_patch(base, desired)
+        self.assertEqual([op["path"] for op in operations[2:]], [
+            "/spec/template/spec/containers/0/env/-",
+            "/spec/template/spec/containers/0/ports/-",
+            "/spec/template/spec/containers/0/ports/-",
+            "/spec/template/spec/containers/0/volumeMounts/-",
+            "/spec/template/spec/volumes/-"])
+        self.assertEqual([op["value"]["name"] for op in operations[2:]],
+                         ["NEW_ENV", "new-a", "new-b", "new-volume", "new-volume"])
+
+    def test_api_postcondition_failure_marks_same_uid_new_rv_as_persisted(self):
+        target = overlay.TARGETS[0]
+        base = captured_service("voice-matchmaking", overlay.EXPECTED_OBJECT_UIDS[
+            ("Service", "voice-matchmaking")], "17", [
+                {"name": "http", "port": 8080, "targetPort": 8080}])
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"].append({"name": "principal-jwks", "port": 8443,
+                                           "targetPort": "principal-jwks"})
+        plan = {"kind": "Service", "name": target.name, "patchFile": target.patch_file,
+                "uid": base["metadata"]["uid"], "resourceVersion": "17",
+                "operations": overlay.object_patch(base, desired),
+                "desiredObservedSha256": "f" * 64}
+        actual = copy.deepcopy(base)
+        actual["metadata"]["resourceVersion"] = "18"
+        actual["spec"]["ports"].append(desired["spec"]["ports"][1])
+        client = overlay.KubectlClient()
+        with mock.patch.object(client, "call", return_value=actual):
+            with self.assertRaisesRegex(overlay.OverlayError, "did not match") as raised:
+                client.apply(plan)
+        self.assertTrue(raised.exception.persisted)
 
     def test_api_patch_request_is_single_guarded_json_patch(self):
         target = overlay.TARGETS[1]
@@ -435,8 +506,9 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                              "voice-chat": ("match-squad-principal", 9092),
                              "voice-voice": ("match-squad-provider", 9094)}
                     name, port = ports[target.name]
-                    desired["spec"]["ports"].append({"name": name, "port": port,
-                                                       "targetPort": name})
+                    if not any(item.get("name") == name for item in desired["spec"]["ports"]):
+                        desired["spec"]["ports"].append({"name": name, "port": port,
+                                                           "targetPort": name})
                 else:
                     pod_spec = desired["spec"]["template"]["spec"]
                     main = next(c for c in pod_spec["containers"]
@@ -486,6 +558,47 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                                                "voice-voice", "voice-gateway"])
             self.assertEqual(plan_path.stat().st_mode & 0o777, 0o600)
 
+    def test_partial_plan_skips_exactly_satisfied_first_service_without_patch(self):
+        client = self.fake_client()
+        first = client.current[("Service", "voice-matchmaking")]
+        first["spec"]["ports"].append({"name": "principal-jwks", "port": 8443,
+                                         "targetPort": "principal-jwks"})
+        source_sha = "a" * 40
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory(prefix="overlay-partial-resume-") as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            with mock.patch.object(overlay, "_source_identity", return_value=source_sha):
+                overlay.execute(root, source_sha, plan_path, client=client)
+                plan = json.loads(plan_path.read_text(encoding="utf-8"))
+                self.assertTrue(plan["targets"][0]["alreadySatisfied"])
+                self.assertEqual(plan["targets"][0]["operations"], [
+                    {"op": "test", "path": "/metadata/uid", "value": first["metadata"]["uid"]},
+                    {"op": "test", "path": "/metadata/resourceVersion",
+                     "value": first["metadata"]["resourceVersion"]}])
+                plan_sha = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                overlay.execute(root, source_sha, plan_path, plan_sha,
+                                apply=True, client=client)
+        self.assertNotIn(("Service", "voice-matchmaking"), client.attempts)
+        self.assertEqual(client.applied, [(item.kind, item.name) for item in overlay.TARGETS[1:]])
+
+    def test_partial_plan_rejects_drift_before_any_suffix_patch(self):
+        client = self.fake_client()
+        first = client.current[("Service", "voice-matchmaking")]
+        first["spec"]["ports"].append({"name": "principal-jwks", "port": 8443,
+                                         "targetPort": "principal-jwks"})
+        source_sha = "a" * 40
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory(prefix="overlay-partial-drift-") as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            with mock.patch.object(overlay, "_source_identity", return_value=source_sha):
+                overlay.execute(root, source_sha, plan_path, client=client)
+                first["spec"]["selector"]["app"] = "unexpected"
+                plan_sha = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                with self.assertRaisesRegex(overlay.OverlayError, "target drift"):
+                    overlay.execute(root, source_sha, plan_path, plan_sha,
+                                    apply=True, client=client)
+        self.assertEqual(client.attempts, [])
+
     def test_plan_digest_tampering_is_rejected(self):
         plan = {"format": 1, "sourceSha": "a" * 40}
         with tempfile.TemporaryDirectory(prefix="overlay-plan-") as tmp:
@@ -515,6 +628,33 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         self.assertEqual(client.applied, client.attempts[:-1])
         self.assertEqual(client.rollouts, ["voice-matchmaking"])
         self.assertEqual(client.rollback_calls, 0)
+
+    def test_stop_reports_a_persisted_unverified_target_separately(self):
+        client = self.fake_client()
+        source_sha = "a" * 40
+        root = Path(__file__).resolve().parents[2]
+        original_apply = client.apply
+
+        def mismatch(plan):
+            if (plan["kind"], plan["name"]) == ("Service", "voice-matchmaking"):
+                error = overlay.OverlayError("synthetic postcondition mismatch")
+                error.persisted = True
+                raise error
+            return original_apply(plan)
+
+        client.apply = mismatch
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory(prefix="overlay-partial-prefix-") as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            with mock.patch.object(overlay, "_source_identity", return_value=source_sha):
+                overlay.execute(root, source_sha, plan_path, client=client)
+                plan_sha = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                with contextlib.redirect_stderr(stderr):
+                    with self.assertRaisesRegex(overlay.OverlayError, "first failed target"):
+                        overlay.execute(root, source_sha, plan_path, plan_sha,
+                                        apply=True, client=client)
+        self.assertIn("completed_prefix=0 applied_prefix=1", stderr.getvalue())
+        self.assertEqual(client.applied, [])
 
 
 if __name__ == "__main__":
