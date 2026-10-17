@@ -111,6 +111,25 @@ def sanitized_live_api_fixture():
 
 
 class MatchSquadOverlayApplicatorTests(unittest.TestCase):
+    def test_ci_filter_and_required_job_reach_the_focused_contract_suite(self):
+        root = Path(__file__).resolve().parents[2]
+        filters = (root / ".github/ci/path-filters.yml").read_text(encoding="utf-8")
+        workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        gate = (root / ".github/ci/verify-required-jobs.sh").read_text(encoding="utf-8")
+        self.assertIn("match_squad_overlay:", filters)
+        for path in (
+                "scripts/dev/match_squad_overlay.py",
+                "scripts/dev/match_squad_overlay_test.py",
+                "scripts/dev/match_squad_runtime_overlay.py",
+                "scripts/dev/match_squad_runtime_overlay_test.py",
+                "deploy/dev/match-squad-trust-overlay/**"):
+            self.assertIn("- " + path, filters)
+        self.assertIn("match_squad_overlay: ${{ steps.filter.outputs.match_squad_overlay }}", workflow)
+        self.assertIn("needs.changes.outputs.match_squad_overlay == 'true'", workflow)
+        self.assertIn("- match-squad-overlay", workflow)
+        self.assertIn("JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}", workflow)
+        self.assertIn('check_if "${RUN_MATCH_SQUAD_OVERLAY:-false}" match-squad-overlay', gate)
+
     def test_actual_sanitized_api_fixture_identities_and_unrelated_fields(self):
         captured = sanitized_live_api_fixture()
         self.assertEqual(len(captured), 7)
@@ -257,17 +276,63 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         desired["spec"]["replicas"] = 2
         with self.assertRaises(overlay.OverlayError):
             overlay.object_patch(base, desired)
-
         desired = copy.deepcopy(base)
         desired["spec"]["template"]["metadata"]["annotations"] = {"unexpected": "yes"}
         with self.assertRaises(overlay.OverlayError):
             overlay.object_patch(base, desired)
-
         desired = copy.deepcopy(base)
         desired["spec"]["template"]["spec"]["containers"][0]["env"].append(
             {"name": "EXISTING_CONFIG", "value": "overridden"})
         with self.assertRaises(overlay.OverlayError):
             overlay.object_patch(base, desired)
+
+    def test_existing_list_items_are_immutable_even_when_identity_is_unchanged(self):
+        cases = []
+        service = captured_service("voice-chat", "uid", "2", [
+            {"name": "grpc", "port": 9090, "targetPort": 9090, "protocol": "TCP"}])
+        changed = copy.deepcopy(service)
+        changed["spec"]["ports"][0]["targetPort"] = 9091
+        cases.append((service, changed))
+        changed = copy.deepcopy(service)
+        changed["spec"]["ports"][0]["protocol"] = "UDP"
+        cases.append((service, changed))
+
+        deployment = captured_deployment("voice-chat", "chat", "uid", "2")
+        container = deployment["spec"]["template"]["spec"]["containers"][0]
+        container["env"] = [{"name": "EXISTING_CONFIG", "value": "original"}]
+        changed = copy.deepcopy(deployment)
+        changed["spec"]["template"]["spec"]["containers"][0]["env"][0]["value"] = "changed"
+        cases.append((deployment, changed))
+        changed = copy.deepcopy(deployment)
+        changed["spec"]["template"]["spec"]["containers"][0]["env"][0] = {
+            "name": "EXISTING_CONFIG", "valueFrom": {"secretKeyRef": {"name": "other", "key": "value"}}}
+        cases.append((deployment, changed))
+
+        container["volumeMounts"] = [{"name": "existing", "mountPath": "/data", "readOnly": True}]
+        changed = copy.deepcopy(deployment)
+        changed["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0]["mountPath"] = "/other"
+        cases.append((deployment, changed))
+        changed = copy.deepcopy(deployment)
+        changed["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0]["readOnly"] = False
+        cases.append((deployment, changed))
+        changed = copy.deepcopy(deployment)
+        changed["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0]["subPath"] = "other"
+        cases.append((deployment, changed))
+
+        deployment["spec"]["template"]["spec"]["volumes"] = [{
+            "name": "existing", "configMap": {"name": "existing-config"}}]
+        changed = copy.deepcopy(deployment)
+        changed["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] = "other-config"
+        cases.append((deployment, changed))
+        changed = copy.deepcopy(deployment)
+        changed["spec"]["template"]["spec"]["volumes"][0] = {
+            "name": "existing", "secret": {"secretName": "other-secret"}}
+        cases.append((deployment, changed))
+
+        for base, desired in cases:
+            with self.subTest(kind=base["kind"], name=base["metadata"]["name"], desired=desired):
+                with self.assertRaisesRegex(overlay.OverlayError, "existing list item"):
+                    overlay.object_patch(base, desired)
 
     def test_rejects_uid_resourceversion_and_namespace_drift(self):
         base = captured_service("voice-chat", "uid", "2", [])

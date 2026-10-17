@@ -168,27 +168,6 @@ def _list_identity(item, field):
     raise OverlayError("unapproved list field")
 
 
-def _diff_mapping(old, new, path):
-    """Emit leaf operations only; removal and type changes are never admitted."""
-    operations = []
-    for key, old_value in old.items():
-        if key not in new:
-            raise OverlayError("overlay would remove a field")
-        new_value = new[key]
-        child = path + "/" + _pointer(key)
-        if isinstance(old_value, dict) and isinstance(new_value, dict):
-            operations.extend(_diff_mapping(old_value, new_value, child))
-        elif old_value != new_value:
-            if isinstance(old_value, (dict, list)) or isinstance(new_value, (dict, list)):
-                raise OverlayError("overlay changes an existing object shape")
-            operations.append({"op": "replace", "path": child, "value": new_value})
-    for key, new_value in new.items():
-        if key not in old:
-            operations.append({"op": "add", "path": path + "/" + _pointer(key),
-                               "value": new_value})
-    return operations
-
-
 def _append_or_merge(old_list, new_list, path, identity_field):
     if not isinstance(old_list, list) or not isinstance(new_list, list):
         raise OverlayError("overlay list shape is invalid")
@@ -210,8 +189,7 @@ def _append_or_merge(old_list, new_list, path, identity_field):
     for index, old_item in enumerate(old_list):
         identity = _list_identity(old_item, identity_field)
         if new_by_id[identity] != old_item:
-            operations.extend(_diff_mapping(old_item, new_by_id[identity],
-                                            path + "/" + str(index)))
+            raise OverlayError("overlay would modify an existing list item")
     for new_item in new_list:
         identity = _list_identity(new_item, identity_field)
         if identity not in old_by_id:
