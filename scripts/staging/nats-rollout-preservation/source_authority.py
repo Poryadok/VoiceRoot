@@ -50,7 +50,7 @@ class SourceError(ValueError):
 
 def _source_diagnostic(error, phase):
     if isinstance(error, SourceError):
-        return SourceError(phase=error.phase or phase, code=error.code,
+        return SourceError(phase=error.phase if error.phase != 'unknown' else phase, code=error.code,
             failure_class=error.failure_class, http_status=error.http_status)
     if isinstance(error, transport.CustodyError):
         return SourceError(phase=phase, code='transport_rejected', failure_class='CustodyError')

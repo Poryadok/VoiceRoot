@@ -294,6 +294,14 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(error.phase, "unknown")
         self.assertNotIn("private.example", json.dumps({"phase": error.phase}))
 
+    def test_fixed_source_rejection_uses_enclosing_phase_after_normalization(self):
+        with self.assertRaises(receipt.authority.SourceError) as raised:
+            receipt.authority._fail()
+        diagnostic = receipt.authority._source_diagnostic(raised.exception, "source-tree")
+        self.assertEqual(diagnostic.phase, "source-tree")
+        hostile = receipt.authority.SourceError(phase="private-response-url")
+        self.assertEqual(receipt.authority._source_diagnostic(hostile, "source-tree").phase, "source-tree")
+
     def test_registry_http_diagnostic_is_allowlisted_and_does_not_expose_response_data(self):
         secret = "private-token-and-response-body"
         error = urllib.error.HTTPError("https://ghcr.io/token?secret=" + secret,
