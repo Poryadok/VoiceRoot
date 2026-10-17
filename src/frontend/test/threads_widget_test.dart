@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -31,6 +32,12 @@ void main() {
           InMemoryAuthSessionStorage(),
         ),
         authControllerProvider.overrideWith(authenticatedAuthController),
+        chatListControllerProvider.overrideWith(
+          (ref) => _ThreadsEnabledChatListController(
+            ref,
+            ref.read(authControllerProvider).activeProfileId!,
+          ),
+        ),
         gatewayConfigProvider.overrideWithValue(
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
@@ -86,6 +93,27 @@ void main() {
 
     expect(find.text('Reply'), findsOneWidget);
   });
+}
+
+class _ThreadsEnabledChatListController extends ChatListController {
+  _ThreadsEnabledChatListController(super.ref, String profileId) : super() {
+    state = ChatListState(
+      profileId: profileId,
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-thread',
+            type: 'CHAT_TYPE_GROUP',
+            creatorProfileId: profileId,
+            threadsEnabled: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
 }
 
 class _NoopRealtimeHub extends RealtimeHub {

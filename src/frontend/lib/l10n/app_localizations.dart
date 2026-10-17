@@ -2270,6 +2270,12 @@ abstract class AppLocalizations {
   /// **'Could not load thread'**
   String get chatThreadLoadError;
 
+  /// No description provided for @chatThreadRepliesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Replies are unavailable in this chat. Your draft is still here; remove the reply target to send it as a regular message.'**
+  String get chatThreadRepliesUnavailable;
+
   /// No description provided for @chatChannelMainFeedBlocked.
   ///
   /// In en, this message translates to:

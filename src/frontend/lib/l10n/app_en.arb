@@ -570,6 +570,7 @@
   "chatThreadTitle": "Thread",
   "chatThreadEmpty": "No replies yet",
   "chatThreadLoadError": "Could not load thread",
+  "chatThreadRepliesUnavailable": "Replies are unavailable in this chat. Your draft is still here; remove the reply target to send it as a regular message.",
   "chatChannelMainFeedBlocked": "Post in a thread or as the channel",
   "chatMessageAddReaction": "Add reaction",
   "chatMessagePin": "Pin message",

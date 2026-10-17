@@ -533,6 +533,7 @@
   "chatThreadTitle": "Тред",
   "chatThreadEmpty": "Пока нет ответов",
   "chatThreadLoadError": "Не удалось загрузить тред",
+  "chatThreadRepliesUnavailable": "Ответы в этой беседе недоступны. Черновик сохранён; уберите адресата ответа, чтобы отправить обычное сообщение.",
   "chatChannelMainFeedBlocked": "Пишите в тред или от имени канала",
   "chatMessageAddReaction": "Добавить реакцию",
   "chatMessagePin": "Закрепить сообщение",

@@ -223,7 +223,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         final room = container.read(chatRoomControllerProvider(_chatId));
-        expect(scheduledRequests, hasLength(1));
+        expect(scheduledRequests, isEmpty);
         expect(unexpectedRequests, isEmpty);
         expect(room.isLoadingScheduledMessages, isFalse);
         expect(room.scheduledMessagesError, isNull);

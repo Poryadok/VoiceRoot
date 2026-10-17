@@ -269,6 +269,8 @@ Normative menu — [screen-controls.md](../design/screen-controls.md) §3.6c. **
 
 > **Implementation status:** `send_silent` is shipped in `SendMessageRequest`, durable Messaging storage, `message.sent` and Notification push consumption; composer remains open. P-008 ships the `delivery_schedule`/scheduled-RPC wire contract, `scheduled_messages` table and event metadata fields, but `SendMessage` rejects a populated schedule until the handler/worker slice. Scheduled event metadata uses `was_scheduled = 9` and optional `scheduled_at = 10` after the shipped `MessageSent.send_silent = 8`. Normative contract — [messaging-service.md](../microservices/messaging-service.md) § Send options, § Scheduled messages ([todo/backend.md](../todo/backend.md)).
 
+The frontend hides scheduled-message loading and send options unless the deployment explicitly sets `VOICE_FEATURE_SCHEDULED_MESSAGES=true`. Keep it disabled until the scheduled handler and worker are available; the default is `false`.
+
 ### Side panel (desktop) / sheets (mobile)
 
 Normative mode table — [screen-controls.md](../design/screen-controls.md) §1.9. Header toggle (`icon.sidePanel`, a11y «Информация о чате») открывает **один** из modes в `Panel/Shell/SideHost` (H) или sheet/push (V):
