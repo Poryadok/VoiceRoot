@@ -34,7 +34,7 @@ func TestKernelUIDPhaseBoundary(t *testing.T) {
 		uid   int
 		want  bool
 	}{
-		{"census", 10000, true},
+		{"census", 10000, false},
 		{"census", 65532, true},
 		{"seed", 65532, true},
 		{"verify-closed", 65532, true},

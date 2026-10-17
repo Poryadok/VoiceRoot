@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -51,10 +52,7 @@ func kernelUIDAllowed(phase string, uid int) bool {
 	if !knownKernelPhase(phase) {
 		return false
 	}
-	if uid == 65532 {
-		return true
-	}
-	return phase == "census" && uid == 10000
+	return uid == 65532
 }
 
 func isolatedKernelForPhase(phase string) bool {
@@ -101,10 +99,19 @@ func connectRole(role string) (*nats.Conn, error) {
 	return nc, nil
 }
 
-func readSnapshot() (fixtureSnapshot, error) {
-	b, e := privateInput("fixture.json")
-	if e != nil {
-		return fixtureSnapshot{}, e
+func readSnapshot(sessionState bool) (fixtureSnapshot, error) {
+	var b []byte
+	var e error
+	if sessionState {
+		b, e = readSessionSnapshot("/state/kernel_seed.output")
+		if e != nil {
+			return fixtureSnapshot{}, fixedError("fixture_snapshot_invalid")
+		}
+	} else {
+		b, e = privateInput("fixture.json")
+		if e != nil {
+			return fixtureSnapshot{}, e
+		}
 	}
 	var s fixtureSnapshot
 	d := json.NewDecoder(bytes.NewReader(b))
@@ -113,6 +120,32 @@ func readSnapshot() (fixtureSnapshot, error) {
 		return fixtureSnapshot{}, fixedError("fixture_snapshot_invalid")
 	}
 	return s, nil
+}
+
+func readSessionSnapshot(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() < 1 || info.Size() > 256<<10 {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || int(stat.Uid) != os.Geteuid() || int(stat.Gid) != os.Getegid() {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	f := os.NewFile(uintptr(fd), path)
+	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, (256<<10)+1))
+	if err != nil || len(raw) != info.Size() || len(raw) > 256<<10 {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	return raw, nil
 }
 
 func writeResult(name string, v any) error {
@@ -138,6 +171,7 @@ func runKernel(args []string) error {
 	flags := flag.NewFlagSet("known-nats-kernel", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	phase := flags.String("phase", "", "fixed owned isolation phase")
+	sessionState := flags.Bool("session-state", false, "read the durable session seed snapshot")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return fixedError("kernel_isolation_invalid")
 	}
@@ -176,7 +210,7 @@ func runKernel(args []string) error {
 		}
 		return writeResult("fixture.json", s)
 	}
-	s, e := readSnapshot()
+	s, e := readSnapshot(*sessionState)
 	if e != nil {
 		return e
 	}

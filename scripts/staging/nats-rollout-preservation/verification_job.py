@@ -16,7 +16,7 @@ LABEL_OPERATION = 'voice.io/nats-operation'
 LABEL_NONCE = 'voice.io/nats-job-nonce'
 LABEL_PHASE = 'voice.io/nats-job-phase'
 LABEL_JOB_SELECTOR = 'voice.io/nats-phase-job'
-PHASES = frozenset(('archive', 'census', 'restore', 'bind-verification', 'bind-restore'))
+PHASES = frozenset(('archive', 'census', 'bind-verification', 'verification-session'))
 VERIFICATION_BINDING_FIELDS = frozenset(('role', 'claim_name', 'target_uid', 'node_name'))
 FIELDS = frozenset(('operation', 'nonce', 'phase'))
 BINDING_FIELDS = frozenset((
@@ -25,8 +25,17 @@ BINDING_FIELDS = frozenset((
     'verification_node_name'))
 ARCHIVE_BINDING_FIELDS = frozenset((
     'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name'))
-RESTORE_BINDING_FIELDS = frozenset((
-    'restore_claim', 'restore_attempt', 'restore_uid', 'restore_pv_name', 'restore_pv_uid', 'restore_node_name'))
+SELECTED_BINDING_FIELDS = BINDING_FIELDS | frozenset(('session_attempt', 'input_pod_uid',
+    'input_bundle_sha256', 'input_bundle_bytes', 'kernel_bundle_sha256',
+    'server_config_sha256', 'archive_sha256', 'archive_bytes'))
+SELECTED_ACTIONS = frozenset((
+    'bootstrap-realtime', 'bootstrap-notification', 'bootstrap-analytics-chat',
+    'bootstrap-search', 'kernel-census', 'kernel-seed', 'kernel-verify-closed', 'kernel-drain',
+    'kernel-verify-drained', 'broker-ready', 'broker-restart-prepare',
+    'broker-restart-complete', 'session-close', 'session-stop'))
+KERNEL_PHASES = {
+    'kernel-census': 'census', 'kernel-seed': 'seed', 'kernel-verify-closed': 'verify-closed',
+    'kernel-drain': 'drain', 'kernel-verify-drained': 'verify-drained'}
 IMAGE_RE = re.compile(r'[a-z0-9./_-]+@sha256:[a-f0-9]{64}')
 UUID_RE = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 _API_METADATA = frozenset(('uid', 'resourceVersion', 'generation', 'creationTimestamp', 'managedFields'))
@@ -44,6 +53,10 @@ _JOB_DEFAULTS = {
     ('spec', 'template', 'spec', 'priority'): 0,
     ('spec', 'template', 'spec', 'containers', 0, 'terminationMessagePath'): '/dev/termination-log',
     ('spec', 'template', 'spec', 'containers', 0, 'terminationMessagePolicy'): 'File',
+    ('spec', 'template', 'spec', 'containers', 1, 'terminationMessagePath'): '/dev/termination-log',
+    ('spec', 'template', 'spec', 'containers', 1, 'terminationMessagePolicy'): 'File',
+    ('spec', 'template', 'spec', 'initContainers', 0, 'terminationMessagePath'): '/dev/termination-log',
+    ('spec', 'template', 'spec', 'initContainers', 0, 'terminationMessagePolicy'): 'File',
 }
 _POD_DEFAULTS = {path[3:]: value
     for path, value in _JOB_DEFAULTS.items() if path[:2] == ('spec', 'template')}
@@ -115,22 +128,24 @@ def validate_archive_binding(value: object) -> dict:
     return copy.deepcopy(value)
 
 
-def validate_restore_binding(request: dict, value: object) -> dict:
-    row = validate_request(request)
-    if row['phase'] != 'restore' or not isinstance(value, dict) or set(value) != RESTORE_BINDING_FIELDS:
-        _fail('restore_binding_invalid')
-    if (not isinstance(value['restore_attempt'], str)
-        or not re.fullmatch(r'[a-f0-9]{8}', value['restore_attempt'])):
-        _fail('restore_attempt_invalid')
-    if value['restore_claim'] != 'voice-nats-restore-' + row['operation'] + '-' + value['restore_attempt']:
-        _fail('restore_claim_invalid')
-    if not isinstance(value['restore_uid'], str) or not UUID_RE.fullmatch(value['restore_uid']) \
-        or not isinstance(value['restore_pv_uid'], str) or not UUID_RE.fullmatch(value['restore_pv_uid']):
-        _fail('storage_uid_invalid')
-    for field in ('restore_pv_name', 'restore_node_name'):
-        if not isinstance(value[field], str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value[field]):
-            _fail('storage_name_invalid')
-    return copy.deepcopy(value)
+def validate_selected_binding(value: object) -> dict:
+    if not isinstance(value, dict) or set(value) != SELECTED_BINDING_FIELDS:
+        _fail('selected_binding_invalid')
+    storage = validate_binding({key: value[key] for key in BINDING_FIELDS})
+    attempt = value.get('session_attempt')
+    if not isinstance(attempt, str) or not re.fullmatch(r'[a-f0-9]{8}', attempt):
+        _fail('selected_attempt_invalid')
+    for field in ('input_pod_uid',):
+        if not isinstance(value[field], str) or not UUID_RE.fullmatch(value[field]):
+            _fail('selected_input_uid_invalid')
+    for field in ('input_bundle_sha256', 'kernel_bundle_sha256', 'server_config_sha256', 'archive_sha256'):
+        if not isinstance(value[field], str) or not re.fullmatch(r'[a-f0-9]{64}', value[field]):
+            _fail('selected_input_digest_invalid')
+    if (type(value['input_bundle_bytes']) is not int or not 0 < value['input_bundle_bytes'] <= (4 << 20)
+        or type(value['archive_bytes']) is not int
+        or not 0 < value['archive_bytes'] <= (48 << 30) + (262144 * 1024) + (1 << 20)):
+        _fail('selected_input_size_invalid')
+    return storage | {key: value[key] for key in SELECTED_BINDING_FIELDS - BINDING_FIELDS}
 
 
 def validate_image(value: object) -> str:
@@ -143,17 +158,12 @@ def validate_binder_binding(request: dict, value: object) -> dict:
     row = validate_request(request)
     if not isinstance(value, dict) or set(value) != VERIFICATION_BINDING_FIELDS:
         _fail('binder_binding_invalid')
-    expected_role = 'verification' if row['phase'] == 'bind-verification' else 'restore'
-    if value.get('role') != expected_role:
+    if value.get('role') != 'verification':
         _fail('binder_role_invalid')
     if not isinstance(value.get('target_uid'), str) or not UUID_RE.fullmatch(value['target_uid']):
         _fail('binder_target_uid_invalid')
-    if expected_role == 'verification':
-        expected_claim = 'voice-nats-verify-' + row['operation']
-        if value.get('claim_name') != expected_claim:
-            _fail('binder_claim_invalid')
-    elif (not isinstance(value.get('claim_name'), str)
-        or not re.fullmatch(r'voice-nats-restore-' + row['operation'] + r'-[a-f0-9]{8}', value['claim_name'])):
+    expected_claim = 'voice-nats-verify-' + row['operation']
+    if value.get('claim_name') != expected_claim:
         _fail('binder_claim_invalid')
     if (not isinstance(value.get('node_name'), str)
         or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value['node_name'])):
@@ -331,15 +341,15 @@ def verify_pod(actual: object, wanted_template: dict, job_uid: str, phase: str,
 def document(request: dict, binding: dict, trusted_image: str) -> dict:
     row = validate_request(request)
     image = validate_image(trusted_image)
-    if row['phase'] in ('bind-verification', 'bind-restore'):
+    if row['phase'] == 'bind-verification':
         storage = validate_binder_binding(row, binding)
         return _binder_document(row, storage, image)
     if row['phase'] == 'archive':
         return _archive_document(row, validate_archive_binding(binding), image)
     if row['phase'] == 'census':
         return _census_document(row, validate_binding(binding), image)
-    if row['phase'] == 'restore':
-        return _restore_document(row, validate_restore_binding(row, binding), image)
+    if row['phase'] == 'verification-session':
+        return _selected_store_document(row, validate_selected_binding(binding), image)
     _fail('phase_unsupported')
 
 
@@ -524,51 +534,84 @@ def _binder_document(request: dict, binding: dict, image: str) -> dict:
     }
 
 
-def _restore_document(request: dict, storage: dict, image: str) -> dict:
-    """Restore a verified archive to one fresh promotable claim; never mount source."""
+def _selected_store_document(request: dict, storage: dict, image: str) -> dict:
+    """Create a scratch-only broker session; source IDs are metadata, never mounts."""
     name = job_name(request)
     labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
-        LABEL_PHASE: 'restore', LABEL_JOB_SELECTOR: name}
+        LABEL_PHASE: 'verification-session', LABEL_JOB_SELECTOR: name}
+    common = ['--operation', request['operation'], '--nonce', request['nonce'],
+        '--session-attempt', storage['session_attempt'], '--source-pvc-uid', storage['source_uid'],
+        '--source-pv-uid', storage['source_pv_uid'], '--verification-pvc-uid', storage['verification_uid'],
+        '--verification-pv-uid', storage['verification_pv_uid'],
+        '--input-pod-uid', storage['input_pod_uid'],
+        '--input-bundle-sha256', storage['input_bundle_sha256'],
+        '--input-bundle-bytes', str(storage['input_bundle_bytes']),
+        '--kernel-bundle-sha256', storage['kernel_bundle_sha256'],
+        '--server-config-sha256', storage['server_config_sha256'],
+        '--archive-sha256', storage['archive_sha256'], '--archive-bytes', str(storage['archive_bytes'])]
     return {
         'apiVersion': 'batch/v1', 'kind': 'Job',
         'metadata': {'name': name, 'namespace': NAMESPACE, 'labels': copy.deepcopy(labels)},
         'spec': {
             'backoffLimit': 0, 'activeDeadlineSeconds': 14400, 'manualSelector': True,
+            'podReplacementPolicy': 'Never',
             'selector': {'matchLabels': {LABEL_JOB_SELECTOR: name}},
             'template': {'metadata': {'labels': labels}, 'spec': {
                 'automountServiceAccountToken': False, 'serviceAccountName': 'default',
                 'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {
                     'nodeSelectorTerms': [{'matchExpressions': [{'key': 'kubernetes.io/hostname',
-                        'operator': 'In', 'values': [storage['restore_node_name']]}]}]}}},
+                        'operator': 'In', 'values': [storage['source_node_name']]}]}]}}},
                 'restartPolicy': 'Never',
-                'securityContext': {'runAsNonRoot': True, 'runAsUser': 10000, 'runAsGroup': 10000,
-                    'fsGroup': 10000, 'fsGroupChangePolicy': 'OnRootMismatch',
+                'securityContext': {'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+                    'fsGroup': 65532, 'fsGroupChangePolicy': 'OnRootMismatch',
                     'seccompProfile': {'type': 'RuntimeDefault'}},
+                'initContainers': [{
+                    'name': 'nats', 'restartPolicy': 'Always', 'image': image,
+                    'imagePullPolicy': 'IfNotPresent',
+                    'command': ['/usr/bin/python3', '/voice-nats-runner/nats-supervisor'],
+                    'args': [],
+                    'securityContext': {'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+                        'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True,
+                        'capabilities': {'drop': ['ALL']},
+                        'seccompProfile': {'type': 'RuntimeDefault'}},
+                    'resources': {'requests': {'cpu': '500m', 'memory': '512Mi', 'ephemeral-storage': '1Gi'},
+                        'limits': {'cpu': '2', 'memory': '2Gi', 'ephemeral-storage': '2Gi'}},
+                    'volumeMounts': [
+                        {'name': 'scratch', 'mountPath': '/data', 'subPath': 'store'},
+                        {'name': 'scratch', 'mountPath': '/server.conf', 'subPath': 'inputs/public/server.conf',
+                            'readOnly': True},
+                    ],
+                }],
                 'containers': [{
-                    'name': 'nats-phase', 'image': image, 'imagePullPolicy': 'IfNotPresent',
+                    'name': 'control', 'image': image, 'imagePullPolicy': 'IfNotPresent',
                     'command': ['/usr/bin/python3', '/voice-nats-runner/phase'],
-                    'args': ['--serve-restore', '--operation', request['operation'], '--nonce', request['nonce'],
-                        '--restore-attempt', storage['restore_attempt'], '--restore-pvc-uid', storage['restore_uid'],
-                        '--restore-pv-uid', storage['restore_pv_uid']],
+                    'args': ['--serve-selected-session'] + common,
                     'env': [{'name': 'POD_UID', 'valueFrom': {'fieldRef': {'fieldPath': 'metadata.uid'}}}],
                     'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True,
                         'capabilities': {'drop': ['ALL']}},
-                    'resources': {'requests': {'cpu': '500m', 'memory': '512Mi', 'ephemeral-storage': '49Gi'},
-                        'limits': {'cpu': '2', 'memory': '2Gi', 'ephemeral-storage': '49Gi'}},
-                    'volumeMounts': [{'name': 'target', 'mountPath': '/restore'},
-                        {'name': 'output', 'mountPath': '/out'}],
+                    'resources': {'requests': {'cpu': '250m', 'memory': '256Mi', 'ephemeral-storage': '256Mi'},
+                        'limits': {'cpu': '1', 'memory': '1Gi', 'ephemeral-storage': '512Mi'}},
+                    'volumeMounts': [
+                        {'name': 'scratch', 'mountPath': '/inputs', 'subPath': 'kernelinputbundle', 'readOnly': True},
+                        {'name': 'scratch', 'mountPath': '/state',
+                            'subPath': 'state/' + request['operation'] + '/' + storage['session_attempt']},
+                        {'name': 'output', 'mountPath': '/out'},
+                    ],
                 }],
-                'volumes': [{'name': 'target', 'persistentVolumeClaim': {'claimName': storage['restore_claim']}},
-                    {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}}],
+                'volumes': [
+                    {'name': 'scratch', 'persistentVolumeClaim': {'claimName': storage['verification_claim']}},
+                    {'name': 'output', 'emptyDir': {'sizeLimit': '256Mi'}},
+                ],
             }},
         },
     }
 
 
-def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | None = None) -> dict:
+def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | None = None,
+        action: str | None = None, session_inputs: dict | None = None) -> dict:
     """Return the only admitted in-band helper argv/query shapes for a fixed phase."""
     row = validate_request(request)
-    if row['phase'] in ('bind-verification', 'bind-restore'):
+    if row['phase'] == 'bind-verification':
         _fail('binder_has_no_exec')
     if not isinstance(pod_uid, str) or not UUID_RE.fullmatch(pod_uid):
         _fail('pod_uid_invalid')
@@ -588,28 +631,82 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
             or not re.fullmatch(r'[a-f0-9]{64}', archive['sha256'])
             or type(archive['bytes']) is not int or not 0 < archive['bytes'] <= (48 << 30) + (262144 * 1024) + (1 << 20)):
             _fail('archive_input_invalid')
+        if (not isinstance(session_inputs, dict) or set(session_inputs) != {'attempt', 'sha256', 'bytes'}
+            or not isinstance(session_inputs['attempt'], str)
+            or not re.fullmatch(r'[a-f0-9]{8}', session_inputs['attempt'])
+            or not isinstance(session_inputs['sha256'], str)
+            or not re.fullmatch(r'[a-f0-9]{64}', session_inputs['sha256'])
+            or type(session_inputs['bytes']) is not int
+            or not 0 < session_inputs['bytes'] <= (4 << 20)):
+            _fail('session_inputs_invalid')
         common += ['--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
             '--verification-pvc-uid', storage['verification_uid'],
             '--verification-pv-uid', storage['verification_pv_uid'],
-            '--archive-sha256', archive['sha256'], '--archive-bytes', str(archive['bytes'])]
+            '--archive-sha256', archive['sha256'], '--archive-bytes', str(archive['bytes']),
+            '--session-attempt', session_inputs['attempt'],
+            '--input-bundle-sha256', session_inputs['sha256'],
+            '--input-bundle-bytes', str(session_inputs['bytes'])]
         return {
             'census_load_inputs': binary + ['--load-inputs'] + common,
             'census_read_input_receipt': binary + ['--read-input-receipt'] + common,
             'census_receive_archive': binary + ['--receive-archive'] + common,
             'census_same_pod_readback': binary + ['--read-receipt'] + common + ['--phase', 'census'],
         }
-    if row['phase'] == 'restore':
-        storage = validate_restore_binding(row, binding)
-        if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
-            or not isinstance(archive['sha256'], str)
-            or not re.fullmatch(r'[a-f0-9]{64}', archive['sha256'])
-            or type(archive['bytes']) is not int or not 0 < archive['bytes'] <= (48 << 30) + (262144 * 1024) + (1 << 20)):
-            _fail('archive_input_invalid')
-        common += ['--restore-pvc-uid', storage['restore_uid'], '--restore-pv-uid', storage['restore_pv_uid'],
-            '--restore-attempt', storage['restore_attempt'], '--archive-sha256', archive['sha256'],
-            '--archive-bytes', str(archive['bytes'])]
-        return {
-            'restore_archive_once': binary + ['--restore-archive'] + common,
-            'restore_same_pod_readback': binary + ['--restore-readback'] + common,
+    if row['phase'] == 'verification-session':
+        storage = validate_selected_binding(binding)
+        if action is not None and action not in SELECTED_ACTIONS:
+            _fail('selected_action_invalid')
+        session = common + ['--session-attempt', storage['session_attempt'],
+            '--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
+            '--verification-pvc-uid', storage['verification_uid'],
+            '--verification-pv-uid', storage['verification_pv_uid'],
+            '--input-pod-uid', storage['input_pod_uid'],
+            '--input-bundle-sha256', storage['input_bundle_sha256'],
+            '--input-bundle-bytes', str(storage['input_bundle_bytes']),
+            '--kernel-bundle-sha256', storage['kernel_bundle_sha256'],
+            '--server-config-sha256', storage['server_config_sha256'],
+            '--archive-sha256', storage['archive_sha256'], '--archive-bytes', str(storage['archive_bytes'])]
+        names = ('bootstrap-realtime', 'bootstrap-notification', 'bootstrap-analytics-chat',
+            'bootstrap-search', 'kernel-census', 'kernel-seed', 'kernel-verify-closed', 'kernel-drain',
+            'broker-ready', 'broker-restart-prepare', 'broker-restart-complete',
+            'kernel-verify-drained', 'session-close')
+        if action is not None:
+            action_vector = binary + ['--session-action', action] + session
+            if action == 'session-stop':
+                return {'action': action_vector}
+            return {
+                'action': action_vector,
+                'readback': binary + ['--session-readback', '--action', action] + session,
+            }
+        vectors = {
+            'actions': {name: binary + ['--session-action', name] + session for name in names},
+            'readbacks': {name: binary + ['--session-readback', '--action', name] + session for name in names},
+            'nats_health': ['/bin/busybox', 'wget', '-q', '-O', '-', 'http://127.0.0.1:8222/healthz'],
+            'session_close': binary + ['--session-action', 'session-close'] + session,
+            'session_close_readback': binary + ['--session-readback', '--action', 'session-close'] + session,
+            'session_stop': binary + ['--session-action', 'session-stop'] + session,
         }
+        return vectors
     _fail('phase_transport_unsupported')
+
+
+def selected_exec_contracts(request: dict, pod_uid: str, binding: dict) -> dict:
+    """Return exact Kubernetes exec parameters; callers cannot vary stream flags or container."""
+    row = validate_request(request)
+    if row['phase'] != 'verification-session':
+        _fail('selected_phase_required')
+    vectors = exec_vectors(row, pod_uid, binding)
+    contracts = {}
+    for name, command in vectors['actions'].items():
+        contracts['action:' + name] = {'container': 'control', 'command': command,
+            'stdin': False, 'stdout': True, 'stderr': False, 'tty': False}
+    for name, command in vectors['readbacks'].items():
+        contracts['readback:' + name] = {'container': 'control', 'command': command,
+            'stdin': False, 'stdout': True, 'stderr': False, 'tty': False}
+    contracts['nats-health'] = {'container': 'nats', 'command': vectors['nats_health'],
+        'stdin': False, 'stdout': True, 'stderr': False, 'tty': False}
+    contracts['session-close'] = {'container': 'control', 'command': vectors['session_close'],
+        'stdin': False, 'stdout': True, 'stderr': False, 'tty': False}
+    contracts['session-stop'] = {'container': 'control', 'command': vectors['session_stop'],
+        'stdin': False, 'stdout': True, 'stderr': False, 'tty': False}
+    return contracts

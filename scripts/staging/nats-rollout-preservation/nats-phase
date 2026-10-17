@@ -7,9 +7,11 @@ import json
 import os
 from pathlib import Path
 import re
+import socket
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.request import urlopen
 
@@ -28,16 +30,15 @@ MAX_READBACK_LINE = 96 << 10
 DATA_ROOT = Path('/data')
 OUT_ROOT = Path('/out')
 VERIFY_ROOT = Path('/verify')
-RESTORE_ROOT = Path('/restore')
 INPUT_ROOT = Path('/inputs/private')
+SESSION_INPUT_ROOT = Path('/inputs')
 KERNEL = Path('/voice-nats-runner/kernel')
 NATS_SERVER = Path('/usr/local/bin/nats-server')
 MAX_INPUT_BYTES = 4 << 20
 INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds',
     'operator.jwt', 'account.jwt', 'system-account.jwt', 'account.public',
-    'system-account.public', 'server.conf'))
+    'system-account.public', 'server.conf', 'fixture.json'))
 VERIFY_PHASES = frozenset(('census',))
-RESTORE_PHASES = frozenset(('restore',))
 RECEIPT_SCHEMA = 'voice-nats-verification-v1'
 CENSUS_SCHEMA = 'voice-nats-census-v1'
 CENSUS_READBACK_SCHEMA = 'voice-nats-census-readback-v1'
@@ -45,10 +46,31 @@ ARCHIVE_UID = 10000
 ARCHIVE_GID = 10000
 VERIFICATION_UID = 65532
 VERIFICATION_GID = 65532
-RESTORE_UID = 10000
-RESTORE_GID = 10000
 CENSUS_INPUT_MAGIC = b'VOICE-NATS-CENSUS-INPUT-v1\0'
-RESTORE_INPUT_MAGIC = b'VOICE-NATS-RESTORE-INPUT-v1\0'
+SESSION_ACTIONS = frozenset((
+    'bootstrap-realtime', 'bootstrap-notification', 'bootstrap-analytics-chat',
+    'bootstrap-search', 'kernel-census', 'kernel-seed', 'kernel-verify-closed',
+    'kernel-drain', 'broker-ready', 'broker-restart-prepare', 'broker-restart-complete',
+    'kernel-verify-drained', 'session-close', 'session-stop'))
+SESSION_KERNEL_PHASES = {
+    'kernel-census': 'census', 'kernel-seed': 'seed',
+    'kernel-verify-closed': 'verify-closed', 'kernel-drain': 'drain',
+    'kernel-verify-drained': 'verify-drained'}
+SESSION_BOOTSTRAP_SCRIPTS = {
+    'bootstrap-realtime': '/voice-nats-runner/bootstrap/realtime-bootstrap.sh',
+    'bootstrap-notification': '/voice-nats-runner/bootstrap/notification-bootstrap.sh',
+    'bootstrap-analytics-chat': '/voice-nats-runner/bootstrap/analytics-chat-bootstrap.sh',
+    'bootstrap-search': '/voice-nats-runner/bootstrap/search-bootstrap.sh'}
+SESSION_ROOT = Path('/state')
+SESSION_SOCKET = SESSION_ROOT / 'session.sock'
+SESSION_MAX_MESSAGE = 16 << 10
+SESSION_MAX_OUTPUT = 64 << 20
+SESSION_FRAME = 48 << 10
+SESSION_FRAME_LINE = 96 << 10
+SESSION_UID = 65532
+SESSION_GID = 65532
+SESSION_INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds', 'fixture.json'))
+SUPERVISOR_PORT = 9444
 
 
 def _identity(args):
@@ -86,12 +108,6 @@ def _require_verification_identity():
     """The disposable census helper runs as its fixed non-root scratch owner."""
     if os.geteuid() != VERIFICATION_UID or os.getegid() != VERIFICATION_GID:
         raise ValueError('verification_identity')
-
-
-def _require_restore_identity():
-    """Promotable restore targets must be created by the canonical Hub owner."""
-    if os.geteuid() != RESTORE_UID or os.getegid() != RESTORE_GID:
-        raise ValueError('restore_identity')
 
 
 def source_readable_by_archive_helper(root, *, uid=ARCHIVE_UID, gid=ARCHIVE_GID):
@@ -146,19 +162,6 @@ def validate_verification_mounts(verification, output, inputs, *, verification_p
     return paths
 
 
-def validate_restore_mounts(target, output, *, target_pvc_uid):
-    paths = [Path(target), Path(output)]
-    for path in paths:
-        row = path.lstat()
-        if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
-            raise ValueError('restore_mounts')
-    if (paths[0].resolve() == paths[1].resolve()
-        or not re.fullmatch('[a-f0-9-]{36}', target_pvc_uid or '')
-        or not os.access(paths[0], os.W_OK) or not os.access(paths[1], os.W_OK)):
-        raise ValueError('restore_mounts')
-    return paths
-
-
 def _server_config(raw):
     if not isinstance(raw, bytes) or not 1 <= len(raw) <= 256 << 10:
         raise ValueError('verification_inputs')
@@ -185,20 +188,30 @@ def _input_binding(args):
     target_pv_uid = _storage_uid(getattr(args, 'verification_pv_uid', None), 'verification_target_pv_uid')
     archive_sha = getattr(args, 'archive_sha256', '')
     archive_bytes = getattr(args, 'archive_bytes', None)
+    kernel_sha = getattr(args, 'kernel_bundle_sha256', '')
+    server_sha = getattr(args, 'server_config_sha256', '')
+    session_attempt = getattr(args, 'session_attempt', '')
+    input_bundle_sha256 = getattr(args, 'input_bundle_sha256', '')
+    input_bundle_bytes = getattr(args, 'input_bundle_bytes', None)
     if (source_uid == target_uid or source_pv_uid == target_pv_uid
         or not re.fullmatch('[a-f0-9]{64}', archive_sha or '')
-        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES):
+        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES
+        or not re.fullmatch('[a-f0-9]{8}', session_attempt or '')
+        or not re.fullmatch('[a-f0-9]{64}', input_bundle_sha256 or '')
+        or type(input_bundle_bytes) is not int or not 0 < input_bundle_bytes <= MAX_INPUT_BYTES):
         raise ValueError('verification_input_binding')
     return {'purpose': 'verification', 'operation': args.operation, 'nonce': args.nonce,
         'pod_uid': args.pod_uid, 'source_pvc_uid': source_uid, 'source_pv_uid': source_pv_uid,
         'verification_pvc_uid': target_uid, 'verification_pv_uid': target_pv_uid,
-        'archive_sha256': archive_sha, 'archive_bytes': archive_bytes}
+        'archive_sha256': archive_sha, 'archive_bytes': archive_bytes,
+        'session_attempt': session_attempt, 'input_bundle_sha256': input_bundle_sha256,
+        'input_bundle_bytes': input_bundle_bytes}
 
 
 def _input_action_paths(args):
-    state = VERIFY_ROOT / '.voice-nats-verification'
-    marker = state / (args.operation + '-' + args.nonce + '.inputs.started.json')
-    receipt = state / (args.operation + '-' + args.nonce + '.inputs.receipt.json')
+    state = VERIFY_ROOT / 'state' / args.operation / args.session_attempt
+    marker = state / 'inputs.started.json'
+    receipt = state / 'inputs.receipt.json'
     return state, marker, receipt
 
 
@@ -218,10 +231,14 @@ def read_input_receipt(args):
         'phase': 'inputs', **binding, 'state': 'STARTED'}):
         raise ValueError('verification_input_binding')
     receipt = _private_json(receipt_path)
-    if (not isinstance(receipt, dict) or receipt != {'schema': 'voice-nats-input-receipt-v1',
-        'phase': 'inputs', **binding, 'status': 'COMPLETE', 'file_count': len(INPUT_FILES)}):
+    expected_receipt = {'schema': 'voice-nats-input-receipt-v1',
+        'phase': 'inputs', **binding, 'status': 'COMPLETE', 'file_count': len(INPUT_FILES)}
+    if (not isinstance(receipt, dict) or set(receipt) != set(expected_receipt) | {
+        'kernel_bundle_sha256', 'server_config_sha256'}
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
         raise ValueError('verification_inputs_incomplete')
     _private_inputs()
+    _verify_session_input_projection(receipt)
     return receipt
 
 
@@ -236,8 +253,16 @@ def load_inputs(raw=None, *, operation, nonce, pod_uid, binding_args, input_stre
         or binding['pod_uid'] != pod_uid):
         raise ValueError('verification_input_binding')
     state, marker_path, receipt_path = _input_action_paths(binding_args)
-    if not state.exists():
-        state.mkdir(mode=0o700)
+    state_root = VERIFY_ROOT / 'state'
+    operation_root = state_root / operation
+    for directory in (state_root, operation_root):
+        directory.mkdir(mode=0o700, exist_ok=True)
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_custody')
+    state.mkdir(mode=0o700, exist_ok=False)
     state_row = state.lstat()
     if (not stat.S_ISDIR(state_row.st_mode) or stat.S_ISLNK(state_row.st_mode)
         or state_row.st_uid != os.geteuid() or stat.S_IMODE(state_row.st_mode) != 0o700
@@ -256,7 +281,9 @@ def load_inputs(raw=None, *, operation, nonce, pod_uid, binding_args, input_stre
     if raw is None:
         if input_stream is None: input_stream = sys.stdin.buffer
         raw = input_stream.read(MAX_INPUT_BYTES + 1)
-    if not isinstance(raw, (bytes, bytearray)) or not 1 <= len(raw) <= MAX_INPUT_BYTES:
+    if (not isinstance(raw, (bytes, bytearray)) or not 1 <= len(raw) <= MAX_INPUT_BYTES
+        or len(raw) != binding['input_bundle_bytes']
+        or hashlib.sha256(raw).hexdigest() != binding['input_bundle_sha256']):
         raise ValueError('verification_inputs')
     def pairs(items):
         value = {}
@@ -300,8 +327,29 @@ def load_inputs(raw=None, *, operation, nonce, pod_uid, binding_args, input_stre
     fd = os.open(INPUT_ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try: os.fsync(fd)
     finally: os.close(fd)
+    # The census Pod's emptyDir is temporary. Persist a disjoint fixed bundle
+    # and broker-only config projection on this operation's nonpromotable PVC
+    # before reporting the input action COMPLETE.
+    session_root = state
+    kernel_bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public_root = VERIFY_ROOT / 'inputs' / 'public'
+    kernel_bundle.mkdir(mode=0o700, exist_ok=False)
+    (VERIFY_ROOT / 'inputs').mkdir(mode=0o700, exist_ok=True)
+    public_root.mkdir(mode=0o700, exist_ok=False)
+    for name in sorted(SESSION_INPUT_FILES):
+        _write_exclusive(kernel_bundle / name, decoded[name], mode=0o440)
+    _write_exclusive(public_root / 'server.conf', decoded['server.conf'], mode=0o440)
+    kernel_bundle_hash = hashlib.sha256(json.dumps({name: hashlib.sha256(decoded[name]).hexdigest()
+        for name in sorted(SESSION_INPUT_FILES)}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    for directory in (kernel_bundle, public_root, public_root.parent, session_root,
+        operation_root, state_root, VERIFY_ROOT):
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(fd)
+        finally: os.close(fd)
     receipt = {'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs',
-        **binding, 'status': 'COMPLETE', 'file_count': len(decoded)}
+        **binding, 'status': 'COMPLETE', 'file_count': len(decoded),
+        'kernel_bundle_sha256': kernel_bundle_hash,
+        'server_config_sha256': hashlib.sha256(decoded['server.conf']).hexdigest()}
     fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'wb') as receipt_stream:
         receipt_stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
@@ -310,6 +358,36 @@ def load_inputs(raw=None, *, operation, nonce, pod_uid, binding_args, input_stre
     try: os.fsync(dirfd)
     finally: os.close(dirfd)
     return receipt
+
+
+def _verify_session_input_projection(receipt):
+    owned_dirs = (
+        VERIFY_ROOT / 'state', VERIFY_ROOT / 'state' / receipt['operation'],
+        VERIFY_ROOT / 'state' / receipt['operation'] / receipt['session_attempt'],
+        VERIFY_ROOT / 'kernelinputbundle', VERIFY_ROOT / 'inputs', VERIFY_ROOT / 'inputs' / 'public')
+    for directory in owned_dirs:
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_incomplete')
+    bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public = VERIFY_ROOT / 'inputs' / 'public'
+    if (set(path.name for path in bundle.iterdir()) != SESSION_INPUT_FILES
+        or set(path.name for path in public.iterdir()) != {'server.conf'}):
+        raise ValueError('verification_inputs_incomplete')
+    digests = {}
+    for name in sorted(SESSION_INPUT_FILES):
+        raw = _read_session_file(bundle / name, max_bytes=256 << 10,
+            uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+        digests[name] = hashlib.sha256(raw).hexdigest()
+    config = _read_session_file(public / 'server.conf', max_bytes=256 << 10,
+        uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+    bundle_hash = hashlib.sha256(json.dumps(digests, sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+    if (bundle_hash != receipt.get('kernel_bundle_sha256')
+        or hashlib.sha256(config).hexdigest() != receipt.get('server_config_sha256')):
+        raise ValueError('verification_inputs_incomplete')
 
 
 def _private_inputs():
@@ -436,8 +514,16 @@ def run_verification(phase_name, args, input_stream=None):
         verification_pvc_uid=verification_uid)
     operation_state = verification / '.voice-nats-verification'
     read_input_receipt(args)
-    if (any(path != operation_state for path in verification.iterdir()) or any(output.iterdir())):
+    allowed_verification = {operation_state, verification / 'state',
+        verification / 'kernelinputbundle', verification / 'inputs'}
+    if (any(path not in allowed_verification for path in verification.iterdir()) or any(output.iterdir())):
         raise ValueError('verification_already_started')
+    if not operation_state.exists():
+        operation_state.mkdir(mode=0o700)
+    state_row = operation_state.lstat()
+    if (not stat.S_ISDIR(state_row.st_mode) or stat.S_ISLNK(state_row.st_mode)
+        or state_row.st_uid != os.geteuid() or stat.S_IMODE(state_row.st_mode) != 0o700):
+        raise ValueError('verification_state_invalid')
     marker = operation_state / (args.operation + '-' + args.nonce + '.census.started.json')
     marker_value = {'schema': RECEIPT_SCHEMA, 'phase': phase_name, 'purpose': 'verification',
         'operation': args.operation, 'nonce': args.nonce, 'pod_uid': args.pod_uid,
@@ -628,113 +714,6 @@ def read_verification_receipt(phase_name, args):
     return {'receipt': receipt, 'census': census}
 
 
-def _restore_binding(args):
-    target_uid = _storage_uid(getattr(args, 'restore_pvc_uid', None), 'restore_pvc_uid')
-    target_pv_uid = _storage_uid(getattr(args, 'restore_pv_uid', None), 'restore_pv_uid')
-    attempt = getattr(args, 'restore_attempt', '')
-    archive_sha = getattr(args, 'archive_sha256', '')
-    archive_bytes = getattr(args, 'archive_bytes', None)
-    if (not re.fullmatch('[a-f0-9]{8}', attempt or '')
-        or not re.fullmatch('[a-f0-9]{64}', archive_sha or '')
-        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES):
-        raise ValueError('restore_binding')
-    return {'purpose': 'replacement', 'operation': args.operation, 'nonce': args.nonce,
-        'pod_uid': args.pod_uid, 'restore_attempt': attempt, 'restore_pvc_uid': target_uid,
-        'restore_pv_uid': target_pv_uid, 'archive_sha256': archive_sha, 'archive_bytes': archive_bytes}
-
-
-def restore_archive(args, input_stream=None):
-    """Consume one authenticated archive stream into a fresh promotable target PVC."""
-    _require_restore_identity()
-    _identity(args)
-    if os.environ.get('POD_UID') != args.pod_uid:
-        raise ValueError('restore_pod_identity')
-    binding = _restore_binding(args)
-    target, output = validate_restore_mounts(RESTORE_ROOT, OUT_ROOT,
-        target_pvc_uid=binding['restore_pvc_uid'])
-    if any(target.iterdir()) or any(output.iterdir()):
-        raise ValueError('restore_target_not_empty')
-    marker_path = output / (args.operation + '-' + args.nonce + '.restore.started.json')
-    receipt_path = output / (args.operation + '-' + args.nonce + '.restore.receipt.json')
-    marker = {'schema': 'voice-nats-restore-v1', 'phase': 'restore', **binding, 'state': 'STARTED'}
-    fd = os.open(marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'wb') as stream:
-        stream.write(json.dumps(marker, sort_keys=True, separators=(',', ':')).encode())
-        stream.flush(); os.fsync(stream.fileno())
-    fd = os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try: os.fsync(fd)
-    finally: os.close(fd)
-
-    archive = output / 'restore-input.tar'
-    if input_stream is None: input_stream = sys.stdin.buffer
-    # The shared decoder verifies canonical manifest bytes, tar length/digest,
-    # and the native_store manifest before extraction.
-    manifest = _receive_archive(input_stream, archive, binding['archive_bytes'],
-        binding['archive_sha256'], magic=RESTORE_INPUT_MAGIC)
-    work = target / '.voice-nats-restore-work'
-    native_store.restore_closed_store(archive, work, manifest)
-    # The PVC mount root already exists. Move the validated store entries out
-    # of one fixed temporary directory so the promoted claim has the same root
-    # layout as the Hub's /data mount, without chown/chmod or source co-mount.
-    for entry in sorted(work.iterdir(), key=lambda path: path.name):
-        row = entry.lstat()
-        if (not re.fullmatch(r'[A-Za-z0-9_.-]{1,255}', entry.name)
-            or not (stat.S_ISDIR(row.st_mode) or stat.S_ISREG(row.st_mode))
-            or entry.is_symlink()):
-            raise ValueError('restore_output_shape')
-        os.rename(entry, target / entry.name)
-    work.rmdir()
-    for directory in (target, output):
-        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try: os.fsync(fd)
-        finally: os.close(fd)
-    receipt = {'schema': 'voice-nats-restore-v1', 'phase': 'restore', **binding,
-        'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True,
-            separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest(),
-        'status': 'COMPLETE'}
-    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'wb') as stream:
-        stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
-        stream.flush(); os.fsync(stream.fileno())
-    fd = os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try: os.fsync(fd)
-    finally: os.close(fd)
-    return receipt
-
-
-class _ManifestPrefixedStream:
-    """Adapt the restore envelope to the shared bounded archive decoder."""
-    def __init__(self, stream): self.stream = stream
-    def read(self, size=-1): return self.stream.read(size)
-
-
-def read_restore_receipt(args):
-    _require_restore_identity()
-    _identity(args)
-    if os.environ.get('POD_UID') != args.pod_uid:
-        raise ValueError('restore_pod_identity')
-    binding = _restore_binding(args)
-    _, output = validate_restore_mounts(RESTORE_ROOT, OUT_ROOT,
-        target_pvc_uid=binding['restore_pvc_uid'])
-    try:
-        marker = _private_json(output / (args.operation + '-' + args.nonce + '.restore.started.json'))
-    except FileNotFoundError:
-        raise ValueError('restore_receipt_incomplete') from None
-    wanted = {'schema': 'voice-nats-restore-v1', 'phase': 'restore', **binding, 'state': 'STARTED'}
-    if marker != wanted:
-        raise ValueError('restore_receipt_binding')
-    try:
-        receipt = _private_json(output / (args.operation + '-' + args.nonce + '.restore.receipt.json'))
-    except FileNotFoundError:
-        raise ValueError('restore_receipt_incomplete') from None
-    if (not isinstance(receipt, dict) or set(receipt) != set(wanted) - {'state'} | {'manifest_sha256', 'status'}
-        or any(receipt.get(key) != value for key, value in wanted.items() if key != 'state')
-        or not re.fullmatch('[a-f0-9]{64}', receipt.get('manifest_sha256', ''))
-        or receipt.get('status') != 'COMPLETE'):
-        raise ValueError('restore_receipt_binding')
-    return receipt
-
-
 def bind_only(args):
     """Open a read-only mount of one newly created WFFC target, then exit.
 
@@ -742,7 +721,7 @@ def bind_only(args):
     this fixed process only causes scheduling and proves the target mount exists.
     It has no source volume, fsGroup, file writes, or caller-provided path.
     """
-    if (args.role not in ('verification', 'restore')
+    if (args.role != 'verification'
         or os.geteuid() != 65532 or os.getegid() != 65532):
         raise ValueError('bind_profile')
     _identity(args)
@@ -915,6 +894,523 @@ def _private_json(path):
         os.close(fd)
 
 
+def _session_binding(args):
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('session_pod_identity')
+    if not re.fullmatch('[a-f0-9]{8}', args.session_attempt or ''):
+        raise ValueError('session_attempt')
+    input_pod_uid = getattr(args, 'input_pod_uid', '')
+    input_sha = getattr(args, 'input_bundle_sha256', '')
+    input_bytes = getattr(args, 'input_bundle_bytes', None)
+    archive_sha = getattr(args, 'archive_sha256', '')
+    archive_bytes = getattr(args, 'archive_bytes', None)
+    kernel_sha = getattr(args, 'kernel_bundle_sha256', '')
+    server_sha = getattr(args, 'server_config_sha256', '')
+    if (not re.fullmatch('[a-f0-9-]{36}', input_pod_uid or '')
+        or not re.fullmatch('[a-f0-9]{64}', input_sha or '')
+        or type(input_bytes) is not int or not 0 < input_bytes <= MAX_INPUT_BYTES
+        or not re.fullmatch('[a-f0-9]{64}', archive_sha or '')
+        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES
+        or not re.fullmatch('[a-f0-9]{64}', kernel_sha or '')
+        or not re.fullmatch('[a-f0-9]{64}', server_sha or '')):
+        raise ValueError('session_input_binding')
+    return {
+        'schema': 'voice-nats-session-action-v1',
+        'operation': args.operation,
+        'nonce': args.nonce,
+        'pod_uid': args.pod_uid,
+        'input_pod_uid': input_pod_uid,
+        'session_attempt': args.session_attempt,
+        'input_bundle_sha256': input_sha,
+        'input_bundle_bytes': input_bytes,
+        'archive_sha256': archive_sha,
+        'archive_bytes': archive_bytes,
+        'kernel_bundle_sha256': kernel_sha,
+        'server_config_sha256': server_sha,
+        'source_pvc_uid': _storage_uid(args.source_pvc_uid, 'session_source_pvc_uid'),
+        'source_pv_uid': _storage_uid(args.source_pv_uid, 'session_source_pv_uid'),
+        'verification_pvc_uid': _storage_uid(args.verification_pvc_uid, 'session_verification_pvc_uid'),
+        'verification_pv_uid': _storage_uid(args.verification_pv_uid, 'session_verification_pv_uid'),
+    }
+
+
+def _session_consume_inputs(binding, root):
+    """Validate the prior loader Pod's durable bundle and journal this Pod's adoption."""
+    root = _session_state_root(root)
+    started_path = root / 'input-consumption.started.json'
+    receipt_path = root / 'input-consumption.receipt.json'
+    intent = {'schema': 'voice-nats-session-input-consumption-v1', 'state': 'STARTED',
+        **{key: binding[key] for key in ('operation', 'nonce', 'pod_uid', 'input_pod_uid',
+            'session_attempt', 'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256',
+            'archive_bytes', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
+            'verification_pv_uid')}}
+    if started_path.exists() or receipt_path.exists():
+        raise ValueError('session_input_consumption_unknown')
+    _write_exclusive(started_path, json.dumps(intent, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    input_root = SESSION_INPUT_ROOT
+    row = input_root.lstat()
+    if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+        or row.st_uid != SESSION_UID or row.st_gid != SESSION_GID
+        or stat.S_IMODE(row.st_mode) != 0o700
+        or set(path.name for path in input_root.iterdir()) != SESSION_INPUT_FILES):
+        raise ValueError('session_inputs')
+    digests = {}
+    for name in sorted(SESSION_INPUT_FILES):
+        raw = _read_session_file(input_root / name, max_bytes=256 << 10,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o440, code='session_inputs')
+        digests[name] = hashlib.sha256(raw).hexdigest()
+    bundle_sha = hashlib.sha256(json.dumps(digests, sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+    if bundle_sha != binding['kernel_bundle_sha256']:
+        raise ValueError('session_inputs_digest')
+    loader_started = root / 'inputs.started.json'
+    loader_receipt = root / 'inputs.receipt.json'
+    started = _read_session_file(loader_started, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_inputs_incomplete')
+    receipt_raw = _read_session_file(loader_receipt, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_inputs_incomplete')
+    try:
+        started_value = json.loads(started)
+        receipt = json.loads(receipt_raw)
+    except (UnicodeError, ValueError):
+        raise ValueError('session_inputs_incomplete') from None
+    input_binding = {'purpose': 'verification', 'operation': binding['operation'],
+        'nonce': binding['nonce'], 'pod_uid': binding['input_pod_uid'],
+        'source_pvc_uid': binding['source_pvc_uid'], 'source_pv_uid': binding['source_pv_uid'],
+        'verification_pvc_uid': binding['verification_pvc_uid'],
+        'verification_pv_uid': binding['verification_pv_uid'],
+        'archive_sha256': binding['archive_sha256'], 'archive_bytes': binding['archive_bytes'],
+        'session_attempt': binding['session_attempt'],
+        'input_bundle_sha256': binding['input_bundle_sha256'],
+        'input_bundle_bytes': binding['input_bundle_bytes']}
+    expected_started = {'schema': 'voice-nats-input-action-v1', 'phase': 'inputs',
+        **input_binding, 'state': 'STARTED'}
+    expected_receipt = {'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs',
+        **input_binding, 'status': 'COMPLETE', 'file_count': len(INPUT_FILES),
+        'kernel_bundle_sha256': binding['kernel_bundle_sha256'],
+        'server_config_sha256': binding['server_config_sha256']}
+    if (started_value != expected_started or not isinstance(receipt, dict)
+        or set(receipt) != set(expected_receipt)
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())
+        or receipt.get('kernel_bundle_sha256') != bundle_sha):
+        raise ValueError('session_inputs_incomplete')
+    complete = {'schema': intent['schema'], 'state': 'COMPLETE',
+        **{key: intent[key] for key in intent if key not in ('schema', 'state')},
+        'kernel_bundle_sha256': bundle_sha,
+        'server_config_sha256': receipt['server_config_sha256']}
+    _write_exclusive(receipt_path, json.dumps(complete, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    return complete
+
+
+def _session_state_root(root=SESSION_ROOT):
+    root = Path(root)
+    row = root.lstat()
+    if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+        or row.st_uid != SESSION_UID or row.st_gid != SESSION_GID
+        or stat.S_IMODE(row.st_mode) != 0o700):
+        raise ValueError('session_state_custody')
+    return root
+
+
+def _write_exclusive(path, raw, mode=0o600):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+    try:
+        view = memoryview(raw)
+        while view:
+            count = os.write(fd, view)
+            if count <= 0:
+                raise ValueError('session_state_write')
+            view = view[count:]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(parent_fd)
+    finally:
+        os.close(parent_fd)
+
+
+def _session_action_paths(root, action):
+    if action not in SESSION_ACTIONS:
+        raise ValueError('session_action_invalid')
+    slug = action.replace('-', '_')
+    return root / (slug + '.started.json'), root / (slug + '.receipt.json'), root / (slug + '.output')
+
+
+def _session_inputs():
+    root = SESSION_INPUT_ROOT
+    row = root.lstat()
+    if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
+        raise ValueError('session_inputs')
+    entries = sorted(path.name for path in root.iterdir())
+    expected = sorted(SESSION_INPUT_FILES)
+    if entries != expected:
+        raise ValueError('session_inputs')
+    data = {}
+    for name in expected:
+        path = root / name
+        data[name] = _read_session_file(path, max_bytes=256 << 10,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o440, code='session_inputs')
+    return data
+
+
+def _read_session_file(path, *, max_bytes, uid=None, gid=None,
+        mode=0o600, code='session_state_file'):
+    """Read one fixed private file without following links or accepting swaps."""
+    if uid is None:
+        uid = SESSION_UID
+    if gid is None:
+        gid = SESSION_GID
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if hasattr(os, 'O_CLOEXEC'):
+        flags |= os.O_CLOEXEC
+    fd = os.open(path, flags)
+    try:
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != uid or before.st_gid != gid
+            or before.st_nlink != 1 or stat.S_IMODE(before.st_mode) != mode
+            or not 0 < before.st_size <= max_bytes):
+            raise ValueError(code)
+        chunks = []
+        remaining = before.st_size
+        while remaining:
+            chunk = os.read(fd, min(1 << 20, remaining))
+            if not chunk:
+                raise ValueError(code)
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        if os.read(fd, 1):
+            raise ValueError(code)
+        after = os.fstat(fd)
+        if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+            raise ValueError(code)
+        return b''.join(chunks)
+    finally:
+        os.close(fd)
+
+
+def _perform_session_action(action, root):
+    if action in SESSION_KERNEL_PHASES:
+        _session_inputs()
+        phase = SESSION_KERNEL_PHASES[action]
+        command = [str(KERNEL), '--phase', phase]
+        if phase in ('verify-closed', 'drain', 'verify-drained'):
+            command.append('--session-state')
+        result = subprocess.run(command, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800, check=False)
+        if result.returncode != 0:
+            raise ValueError('session_kernel_failed')
+        name = 'census.json' if phase == 'census' else 'fixture.json' if phase == 'seed' else None
+        if name is None:
+            return None
+        source = OUT_ROOT / name
+        raw = _read_session_file(source, max_bytes=SESSION_MAX_OUTPUT,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_kernel_output')
+        target = root / (action.replace('-', '_') + '.output')
+        _write_exclusive(target, raw)
+        return {'output_name': target.name, 'output_sha256': hashlib.sha256(raw).hexdigest(),
+            'output_bytes': len(raw)}
+    script = SESSION_BOOTSTRAP_SCRIPTS.get(action)
+    if script is not None:
+        _session_inputs()
+        env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/tmp',
+            'NATS_URL': 'nats://127.0.0.1:4222',
+            'NATS_CREDS': '/inputs/bootstrap.creds'}
+        result = subprocess.run(['/bin/sh', script], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+            timeout=1800, check=False)
+        if result.returncode != 0:
+            raise ValueError('session_bootstrap_failed')
+        return None
+    if action in ('broker-ready', 'broker-restart-prepare', 'broker-restart-complete',
+        'session-close', 'session-stop'):
+        command = {'broker-ready': 'start', 'broker-restart-prepare': 'stop',
+            'broker-restart-complete': 'start', 'session-close': 'stop',
+            'session-stop': 'shutdown'}[action]
+        _supervisor_call(command)
+        return None
+    raise ValueError('session_action_invalid')
+
+
+def _supervisor_call(action, *, connector=socket.create_connection):
+    if action not in ('start', 'stop', 'status', 'shutdown'):
+        raise ValueError('supervisor_action_invalid')
+    request = {'schema': 'voice-nats-supervisor-v1', 'action': action}
+    raw = json.dumps(request, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    if len(raw) > 256:
+        raise ValueError('supervisor_request')
+    with connector(('127.0.0.1', SUPERVISOR_PORT), timeout=10) as client:
+        client.sendall(raw)
+        response = bytearray()
+        while len(response) <= 256:
+            part = client.recv(1)
+            if not part or part == b'\n':
+                break
+            response.extend(part)
+        if not part or len(response) > 256:
+            raise ValueError('supervisor_response')
+    try:
+        value = json.loads(response)
+    except (UnicodeError, ValueError):
+        raise ValueError('supervisor_response') from None
+    fields = {'schema', 'ok', 'running'} | ({'stopping'} if action == 'shutdown' else set())
+    expected_running = action == 'start'
+    if (not isinstance(value, dict) or set(value) != fields
+        or value.get('schema') != 'voice-nats-supervisor-v1' or value.get('ok') is not True
+        or value.get('running') is not expected_running
+        or (action == 'shutdown' and value.get('stopping') is not True)):
+        raise ValueError('supervisor_action_failed')
+    return value
+
+
+def _session_receipt(action, binding, root, *, perform):
+    started_path, receipt_path, output_path = _session_action_paths(root, action)
+    started = {'schema': binding['schema'], 'state': 'STARTED', 'action': action,
+        **{key: binding[key] for key in binding if key != 'schema'}}
+    if receipt_path.exists():
+        receipt, output = _session_readback(action, binding, root)
+        if output is not None:
+            output.close()
+        return receipt
+    if started_path.exists():
+        existing = json.loads(_read_session_file(started_path, max_bytes=SESSION_MAX_MESSAGE,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_started_custody'))
+        if existing != started:
+            raise ValueError('session_started_identity')
+        raise ValueError('session_action_unknown')
+    _write_exclusive(started_path, json.dumps(started, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    details = perform(action, root)
+    receipt = {'schema': binding['schema'], 'state': 'COMPLETE', 'action': action,
+        **{key: binding[key] for key in binding if key != 'schema'}}
+    if details:
+        receipt.update(details)
+    _write_exclusive(receipt_path, json.dumps(receipt, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    return receipt
+
+
+def _session_readback(action, binding, root):
+    _session_state_root(root)
+    started_path, receipt_path, output_path = _session_action_paths(root, action)
+    if not started_path.exists() or not receipt_path.exists():
+        raise ValueError('session_receipt_missing')
+    started = json.loads(_read_session_file(started_path, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_started_custody'))
+    receipt = json.loads(_read_session_file(receipt_path, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_receipt_custody'))
+    identity = {key: binding[key] for key in binding if key != 'schema'}
+    expected_started = {'schema': binding['schema'], 'state': 'STARTED', 'action': action, **identity}
+    expected_receipt = {'schema': binding['schema'], 'state': 'COMPLETE', 'action': action, **identity}
+    output_fields = {'output_name', 'output_bytes', 'output_sha256'}
+    if (started != expected_started or not isinstance(receipt, dict)
+        or not set(receipt) in (set(expected_receipt), set(expected_receipt) | output_fields)
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
+        raise ValueError('session_receipt_identity')
+    output_values = {key: receipt.get(key) for key in output_fields}
+    if any(value is not None for value in output_values.values()):
+        if set(receipt) != set(expected_receipt) | output_fields:
+            raise ValueError('session_receipt_output')
+        output = output_values['output_name']
+        if (output != output_path.name or type(output_values['output_bytes']) is not int
+            or not isinstance(output_values['output_sha256'], str)
+            or not re.fullmatch('[a-f0-9]{64}', output_values['output_sha256'])):
+            raise ValueError('session_receipt_output')
+        fd = os.open(root / output, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != SESSION_UID
+            or before.st_gid != SESSION_GID or before.st_nlink != 1
+            or stat.S_IMODE(before.st_mode) != 0o600
+            or before.st_size != output_values['output_bytes']
+            or before.st_size > SESSION_MAX_OUTPUT):
+            os.close(fd)
+            raise ValueError('session_receipt_output')
+        digest = hashlib.sha256()
+        read_size = 0
+        while True:
+            part = os.read(fd, 1 << 20)
+            if not part:
+                break
+            digest.update(part)
+            read_size += len(part)
+        after = os.fstat(fd)
+        if (read_size != before.st_size or (before.st_dev, before.st_ino, before.st_size,
+            before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino,
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            or digest.hexdigest() != output_values['output_sha256']):
+            os.close(fd)
+            raise ValueError('session_receipt_output')
+        os.lseek(fd, 0, os.SEEK_SET)
+        output_stream = os.fdopen(fd, 'rb')
+    else:
+        if output_path.exists():
+            raise ValueError('session_receipt_output')
+        output_stream = None
+    return receipt, output_stream
+
+
+def _session_rpc(args, *, readback):
+    action = getattr(args, 'action', None)
+    if action not in SESSION_ACTIONS:
+        raise ValueError('session_action_invalid')
+    binding = _session_binding(args)
+    request = {'schema': 'voice-nats-session-rpc-v1', 'action': action,
+        'readback': bool(readback), 'binding': binding}
+    raw = json.dumps(request, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() + b'\n'
+    if len(raw) > SESSION_MAX_MESSAGE:
+        raise ValueError('session_rpc_size')
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        client.settimeout(30)
+        client.connect(str(SESSION_SOCKET))
+        client.sendall(raw)
+        response = bytearray()
+        while len(response) <= SESSION_MAX_MESSAGE:
+            part = client.recv(1)
+            if not part or part == b'\n':
+                break
+            response.extend(part)
+        if len(response) > SESSION_MAX_MESSAGE or not part:
+            raise ValueError('session_rpc_response')
+        result = json.loads(response)
+        if not isinstance(result, dict) or result.get('ok') is not True or not isinstance(result.get('receipt'), dict):
+            raise ValueError('session_rpc_failed')
+        receipt = result['receipt']
+        if not readback:
+            if client.recv(1):
+                raise ValueError('session_rpc_response')
+            _frame(receipt)
+            return receipt
+        expected = receipt.get('output_bytes', 0)
+        if type(expected) is not int or not 0 <= expected <= SESSION_MAX_OUTPUT:
+            raise ValueError('session_rpc_response')
+        with tempfile.TemporaryFile(dir=OUT_ROOT) as payload:
+            digest = hashlib.sha256()
+            remaining = expected
+            while remaining:
+                part = client.recv(min(SESSION_FRAME, remaining))
+                if not part:
+                    raise ValueError('session_rpc_output')
+                payload.write(part)
+                digest.update(part)
+                remaining -= len(part)
+            if client.recv(1):
+                raise ValueError('session_rpc_output')
+            if digest.hexdigest() != receipt.get('output_sha256', hashlib.sha256(b'').hexdigest()):
+                raise ValueError('session_rpc_output')
+            payload.seek(0)
+            stream_session_readback(receipt, payload, expected)
+        return receipt
+    finally:
+        client.close()
+
+
+def stream_session_readback(receipt, stream, size):
+    common = {key: receipt[key] for key in ('operation', 'nonce', 'pod_uid', 'session_attempt',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid', 'action')}
+    frames = 0
+    offset = 0
+    while offset < size:
+        chunk = stream.read(min(SESSION_FRAME, size - offset))
+        if not chunk:
+            raise ValueError('session_readback_output')
+        record = {'schema': 'voice-nats-session-readback-v1', 'kind': 'data', **common,
+            'sequence': frames, 'data': base64.b64encode(chunk).decode('ascii')}
+        line = json.dumps(record, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+        if len(line) > SESSION_FRAME_LINE:
+            raise ValueError('session_readback_frame')
+        sys.stdout.buffer.write(line)
+        frames += 1
+        offset += len(chunk)
+    complete = {'schema': 'voice-nats-session-readback-v1', 'kind': 'complete', **common,
+        'status': 'COMPLETE', 'frames': frames, 'byte_count': size,
+        'output_sha256': receipt.get('output_sha256', hashlib.sha256(b'').hexdigest()),
+        'receipt': receipt}
+    line = json.dumps(complete, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    if len(line) > SESSION_FRAME_LINE:
+        raise ValueError('session_readback_frame')
+    sys.stdout.buffer.write(line)
+    sys.stdout.buffer.flush()
+
+
+def _serve_session(args):
+    _require_verification_identity()
+    binding = _session_binding(args)
+    root = _session_state_root()
+    _session_consume_inputs(binding, root)
+    if SESSION_SOCKET.exists() or SESSION_SOCKET.is_symlink():
+        raise ValueError('session_socket_exists')
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        server.bind(str(SESSION_SOCKET))
+        os.chmod(SESSION_SOCKET, 0o600)
+        server.listen(4)
+        server.settimeout(1.0)
+        closing = False
+        while not closing:
+            try:
+                conn, _ = server.accept()
+            except socket.timeout:
+                continue
+            with conn:
+                conn.settimeout(30)
+                if hasattr(socket, 'SO_PEERCRED'):
+                    import struct
+                    credentials = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i'))
+                    _pid, uid, gid = struct.unpack('3i', credentials)
+                    if uid != SESSION_UID or gid != SESSION_GID:
+                        raise ValueError('session_peer_identity')
+                data = bytearray()
+                while len(data) <= SESSION_MAX_MESSAGE and b'\n' not in data:
+                    part = conn.recv(4096)
+                    if not part:
+                        break
+                    data.extend(part)
+                line, sep, trailing = bytes(data).partition(b'\n')
+                if not sep or trailing or len(line) > SESSION_MAX_MESSAGE:
+                    raise ValueError('session_rpc_request')
+                request = json.loads(line)
+                if (not isinstance(request, dict) or set(request) != {'schema', 'action', 'readback', 'binding'}
+                    or request.get('schema') != 'voice-nats-session-rpc-v1'
+                    or request.get('binding') != binding or type(request.get('readback')) is not bool
+                    or request.get('action') not in SESSION_ACTIONS):
+                    raise ValueError('session_rpc_request')
+                action = request['action']
+                if request['readback']:
+                    receipt, output = _session_readback(action, binding, root)
+                else:
+                    if action == 'session-stop':
+                        _session_readback('session-close', binding, root)
+                    receipt = _session_receipt(action, binding, root,
+                        perform=_perform_session_action)
+                response = {'ok': True, 'receipt': receipt}
+                encoded = json.dumps(response, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() + b'\n'
+                if len(encoded) > SESSION_MAX_MESSAGE:
+                    raise ValueError('session_rpc_response')
+                conn.sendall(encoded)
+                if request['readback'] and output is not None:
+                    try:
+                        while True:
+                            chunk = output.read(SESSION_FRAME)
+                            if not chunk:
+                                break
+                            conn.sendall(chunk)
+                    finally:
+                        output.close()
+                closing = action == 'session-stop' and not request['readback']
+    finally:
+        server.close()
+        try:
+            SESSION_SOCKET.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def serve(args):
     _require_archive_helper_identity()
     _identity(args)
@@ -932,18 +1428,6 @@ def serve_census(args):
         time.sleep(60)
 
 
-def serve_restore(args):
-    _require_restore_identity()
-    _identity(args)
-    _storage_uid(args.restore_pvc_uid, 'restore_pvc_uid')
-    _storage_uid(args.restore_pv_uid, 'restore_pv_uid')
-    if (not re.fullmatch('[a-f0-9]{8}', args.restore_attempt or '')
-        or os.environ.get('POD_UID') != args.pod_uid):
-        raise ValueError('restore_pod_identity')
-    while True:
-        time.sleep(60)
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(add_help=False)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -956,9 +1440,9 @@ def main(argv=None):
     mode.add_argument('--bind-only', action='store_true')
     mode.add_argument('--serve-census', action='store_true')
     mode.add_argument('--receive-archive', action='store_true')
-    mode.add_argument('--serve-restore', action='store_true')
-    mode.add_argument('--restore-archive', action='store_true')
-    mode.add_argument('--restore-readback', action='store_true')
+    mode.add_argument('--serve-selected-session', action='store_true')
+    mode.add_argument('--session-action', action='store_true')
+    mode.add_argument('--session-readback', action='store_true')
     mode.add_argument('--phase', choices=sorted(VERIFY_PHASES))
     parser.add_argument('--operation', required=True)
     parser.add_argument('--nonce', required=True)
@@ -967,12 +1451,16 @@ def main(argv=None):
     parser.add_argument('--source-pv-uid')
     parser.add_argument('--verification-pvc-uid')
     parser.add_argument('--verification-pv-uid')
-    parser.add_argument('--restore-pvc-uid')
-    parser.add_argument('--restore-pv-uid')
-    parser.add_argument('--restore-attempt')
+    parser.add_argument('--session-attempt')
+    parser.add_argument('--input-pod-uid')
+    parser.add_argument('--input-bundle-sha256')
+    parser.add_argument('--input-bundle-bytes', type=int)
+    parser.add_argument('--kernel-bundle-sha256')
+    parser.add_argument('--server-config-sha256')
+    parser.add_argument('--action', choices=sorted(SESSION_ACTIONS))
     parser.add_argument('--archive-sha256')
     parser.add_argument('--archive-bytes', type=int)
-    parser.add_argument('--role', choices=('verification', 'restore'))
+    parser.add_argument('--role', choices=('verification',))
     args = parser.parse_args(argv)
     if args.serve:
         if args.pod_uid is not None: parser.error('serve-shape')
@@ -988,14 +1476,17 @@ def main(argv=None):
             parser.error('serve-census-shape')
         args.pod_uid = os.environ.get('POD_UID', '')
         serve_census(args)
-    if args.serve_restore:
-        if (args.pod_uid is not None or args.phase is not None or args.source_pvc_uid is not None
-            or args.verification_pvc_uid is not None or args.archive_sha256 is not None
-            or args.archive_bytes is not None or not args.restore_pvc_uid or not args.restore_pv_uid
-            or not args.restore_attempt):
-            parser.error('serve-restore-shape')
+    if args.serve_selected_session:
+        if (args.pod_uid is not None or args.phase is not None
+            or args.role is not None or args.action is not None
+            or args.input_pod_uid is None or args.input_bundle_sha256 is None
+            or args.input_bundle_bytes is None or args.kernel_bundle_sha256 is None
+            or args.server_config_sha256 is None or args.archive_sha256 is None
+            or args.archive_bytes is None):
+            parser.error('serve-selected-session-shape')
         args.pod_uid = os.environ.get('POD_UID', '')
-        serve_restore(args)
+        _serve_session(args)
+        return
     if args.bind_only:
         if (args.role is None or args.phase is not None or args.source_pvc_uid is not None
             or args.verification_pvc_uid is not None or args.pod_uid is not None):
@@ -1003,10 +1494,23 @@ def main(argv=None):
         args.pod_uid = os.environ.get('POD_UID', '')
         return bind_only(args)
     if args.pod_uid is None: parser.error('pod-uid-required')
+    if args.session_action or args.session_readback:
+        if (args.action is None or args.phase is not None
+            or args.role is not None or args.input_pod_uid is None
+            or args.input_bundle_sha256 is None or args.input_bundle_bytes is None
+            or args.kernel_bundle_sha256 is None or args.server_config_sha256 is None
+            or args.archive_sha256 is None or args.archive_bytes is None
+            or args.session_attempt is None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid):
+            parser.error('session-action-shape')
+        _session_rpc(args, readback=args.session_readback)
+        return
     if args.load_inputs:
         if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
             or not args.verification_pvc_uid or not args.verification_pv_uid
-            or not args.archive_sha256 or args.archive_bytes is None):
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None):
             parser.error('load-inputs-shape')
         result = load_inputs(None, operation=args.operation, nonce=args.nonce,
             pod_uid=args.pod_uid, binding_args=args, input_stream=sys.stdin.buffer)
@@ -1015,7 +1519,9 @@ def main(argv=None):
     if args.read_input_receipt:
         if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
             or not args.verification_pvc_uid or not args.verification_pv_uid
-            or not args.archive_sha256 or args.archive_bytes is None):
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None):
             parser.error('read-input-receipt-shape')
         result = read_input_receipt(args)
         _frame(result)
@@ -1035,24 +1541,6 @@ def main(argv=None):
             parser.error('verification-volume-identity-required')
         receipt = run_verification('census', args)
         return receipt
-    if args.restore_archive:
-        if (args.phase is not None or args.source_pvc_uid is not None
-            or args.verification_pvc_uid is not None or not args.restore_pvc_uid
-            or not args.restore_pv_uid or not args.restore_attempt or not args.archive_sha256
-            or args.archive_bytes is None):
-            parser.error('restore-archive-shape')
-        result = restore_archive(args)
-        _frame(result)
-        return result
-    if args.restore_readback:
-        if (args.phase is not None or args.source_pvc_uid is not None
-            or args.verification_pvc_uid is not None or not args.restore_pvc_uid
-            or not args.restore_pv_uid or not args.restore_attempt or not args.archive_sha256
-            or args.archive_bytes is None):
-            parser.error('restore-readback-shape')
-        result = read_restore_receipt(args)
-        _frame(result)
-        return result
     (create_and_stream if args.create_and_stream else stream_existing)(args)
 
 

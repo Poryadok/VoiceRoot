@@ -1,0 +1,106 @@
+#!/usr/bin/python3
+"""Fixed loopback supervisor for the isolated verification NATS child."""
+import json
+import os
+import signal
+import socket
+import subprocess
+import time
+
+
+PORT = 9444
+SERVER = '/usr/local/bin/nats-server'
+CONFIG = '/server.conf'
+SCHEMA = 'voice-nats-supervisor-v1'
+MAX_LINE = 256
+
+
+class BrokerSupervisor:
+    def __init__(self, popen=subprocess.Popen):
+        self._popen = popen
+        self.child = None
+        self.stopping = False
+
+    def handle(self, action):
+        if action == 'start':
+            if self.child is not None and self.child.poll() is None:
+                raise ValueError('already_running')
+            self.child = self._popen([SERVER, '--config', CONFIG], stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+            return {'running': True}
+        if action == 'stop':
+            if self.child is not None and self.child.poll() is None:
+                self.child.terminate()
+                try:
+                    self.child.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    raise ValueError('stop_incomplete') from None
+            self.child = None
+            return {'running': False}
+        if action == 'status':
+            return {'running': self.child is not None and self.child.poll() is None}
+        if action == 'shutdown':
+            if self.child is not None and self.child.poll() is None:
+                raise ValueError('shutdown_while_running')
+            self.stopping = True
+            return {'running': False, 'stopping': True}
+        raise ValueError('action_invalid')
+
+
+def _response(supervisor, line):
+    try:
+        value = json.loads(line)
+        if (not isinstance(value, dict) or set(value) != {'schema', 'action'}
+            or value['schema'] != SCHEMA
+            or value['action'] not in ('start', 'stop', 'status', 'shutdown')):
+            raise ValueError('request_invalid')
+        return {'schema': SCHEMA, 'ok': True, **supervisor.handle(value['action'])}
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return {'schema': SCHEMA, 'ok': False}
+
+
+def serve(*, host='127.0.0.1', port=PORT, supervisor=None, server_factory=socket.socket):
+    if host != '127.0.0.1' or port != PORT:
+        raise ValueError('listener_invalid')
+    supervisor = supervisor or BrokerSupervisor()
+    listener = server_factory(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind((host, port))
+    listener.listen(4)
+    listener.settimeout(1.0)
+    try:
+        while not supervisor.stopping:
+            try:
+                conn, _ = listener.accept()
+            except socket.timeout:
+                if supervisor.child is not None and supervisor.child.poll() is not None:
+                    supervisor.child = None
+                continue
+            with conn:
+                conn.settimeout(5)
+                line = bytearray()
+                while len(line) <= MAX_LINE and b'\n' not in line:
+                    part = conn.recv(MAX_LINE + 1 - len(line))
+                    if not part:
+                        break
+                    line.extend(part)
+                raw, separator, trailing = bytes(line).partition(b'\n')
+                if not separator or trailing or len(raw) > MAX_LINE:
+                    result = {'schema': SCHEMA, 'ok': False}
+                else:
+                    result = _response(supervisor, raw)
+                conn.sendall(json.dumps(result, sort_keys=True, separators=(',', ':')).encode() + b'\n')
+    finally:
+        listener.close()
+        if supervisor.child is not None and supervisor.child.poll() is None:
+            supervisor.handle('stop')
+
+
+if __name__ == '__main__':
+    try:
+        if os.geteuid() != 65532 or os.getegid() != 65532:
+            raise ValueError('identity')
+        serve()
+    except Exception:
+        # This channel never logs NATS configuration or process output.
+        raise SystemExit(1)
