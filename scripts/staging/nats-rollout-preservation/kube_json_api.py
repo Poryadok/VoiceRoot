@@ -30,6 +30,9 @@ MIN_OPERATION_TOKEN_SECONDS = 300
 MAX_JSON_RESPONSE = 4 << 20
 MAX_LOG_RESPONSE = 65536
 MAX_ARCHIVE_STREAM_BYTES = 66 << 30
+MAX_CENSUS_MANIFEST_BYTES = 512 << 20
+MAX_EXEC_STDIN_CHUNK = 48 << 10
+CENSUS_INPUT_MAGIC = b'VOICE-NATS-CENSUS-INPUT-v1\0'
 
 
 class KubeAPIError(ValueError):
@@ -367,6 +370,50 @@ class _KubernetesJSONAPIBase:
         token = self._operation_token()
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
 
+    def exec_pod_census_input(self, namespace, pod_name, pod_uid, request, binding,
+                              archive_path, manifest_bytes, archive_sha256, archive_bytes):
+        """Stream one verified archive into the fixed, operation-scoped census helper.
+
+        The request and binding are converted to the producer's single closed
+        receive-archive vector. The archive remains file-backed throughout; an
+        interrupted stream is an unknown helper outcome and must be reconciled
+        through its same-Pod receipt, never replayed here.
+        """
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        if (not isinstance(manifest_bytes, bytes) or not 0 < len(manifest_bytes) <= MAX_CENSUS_MANIFEST_BYTES
+            or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_ARCHIVE_STREAM_BYTES
+            or not isinstance(archive_sha256, str) or not re.fullmatch('[a-f0-9]{64}', archive_sha256)):
+            _fail('census_input_invalid')
+        _validate_canonical_manifest(manifest_bytes)
+        try:
+            import verification_job
+            vectors = verification_job.exec_vectors(request, pod_uid, binding,
+                archive={'sha256': archive_sha256, 'bytes': archive_bytes})
+        except (ImportError, TypeError, ValueError):
+            _fail('verification_exec_request_invalid')
+        argv = vectors.get('census_receive_archive')
+        if not isinstance(argv, list) or not argv:
+            _fail('verification_exec_action_invalid')
+        pod = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods/' + self._segment(pod_name))
+        metadata = pod.get('metadata', {})
+        if metadata.get('uid') != pod_uid or metadata.get('namespace') != namespace:
+            _fail('verification_exec_pod_changed')
+        # Check file custody and digest before opening a one-shot mutating stream.
+        source = _open_verified_archive(archive_path, archive_bytes, archive_sha256)
+        try:
+            query = [('container', 'nats-phase'), ('stdin', 'true'), ('stdout', 'true'),
+                     ('stderr', 'false'), ('tty', 'false')]
+            query.extend(('command', item) for item in argv)
+            path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
+                + self._segment(pod_name) + '/exec?' + urlencode(query))
+            token = self._operation_token()
+            _websocket_exec_input(self, path, token, source, manifest_bytes,
+                archive_bytes=archive_bytes, archive_sha256=archive_sha256)
+        finally:
+            os.close(source)
+
     def read_verification_census(self, namespace, pod_name, pod_uid, request, binding):
         """Return a validated, identity-bound census from its durable same-Pod receipt."""
         try:
@@ -467,6 +514,198 @@ def _websocket_exec(api, path, token, *, max_bytes):
     except (OSError, ssl.SSLError, TimeoutError, ValueError):
         _fail('exec_transport_failed')
     finally:
+        if sock is not None:
+            try: sock.close()
+            except OSError: pass
+
+
+def _open_verified_archive(path, expected_bytes, expected_sha256):
+    """Open a private immutable archive artifact and verify exact bytes/hash."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+            or stat.S_IMODE(before.st_mode) != 0o600 or before.st_nlink != 1
+            or before.st_size != expected_bytes):
+            _fail('census_archive_custody_invalid')
+        digest = hashlib.sha256()
+        total = 0
+        while True:
+            chunk = os.read(fd, MAX_EXEC_STDIN_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > expected_bytes:
+                _fail('census_archive_size_changed')
+            digest.update(chunk)
+        after = os.fstat(fd)
+        if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            or total != expected_bytes or digest.hexdigest() != expected_sha256):
+            _fail('census_archive_digest_mismatch')
+        os.lseek(fd, 0, os.SEEK_SET)
+        return fd
+    except KubeAPIError:
+        try: os.close(fd)
+        except (OSError, UnboundLocalError): pass
+        raise
+    except OSError:
+        try: os.close(fd)
+        except (OSError, UnboundLocalError): pass
+        _fail('census_archive_unavailable')
+
+
+def _validate_canonical_manifest(raw):
+    try:
+        value = json.loads(raw, object_pairs_hook=_unique_json_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError('non-finite JSON')))
+        canonical = json.dumps(value, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        _fail('census_manifest_invalid')
+    if canonical != raw:
+        _fail('census_manifest_noncanonical')
+
+
+def _unique_json_pairs(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError('duplicate JSON field')
+        value[key] = item
+    return value
+
+
+def _ws_binary(sock, payload):
+    """Send one masked client binary WebSocket frame."""
+    mask = os.urandom(4)
+    size = len(payload)
+    if size > 65535:
+        _fail('exec_input_frame_too_large')
+    header = bytes((0x82, 0x80 | (size if size < 126 else 126)))
+    if size >= 126:
+        header += size.to_bytes(2, 'big')
+    masked = bytes(value ^ mask[i % 4] for i, value in enumerate(payload))
+    sock.sendall(header + mask + masked)
+
+
+def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archive_bytes, archive_sha256):
+    """Duplex v5 exec for the one fixed census receive action.
+
+    The helper contract emits no stdout while consuming input. We therefore
+    stream with TCP backpressure, send the v5 stdin half-close, then require an
+    empty stdout and one successful Kubernetes status before returning.
+    """
+    parsed = urlsplit(api.origin)
+    host, port = parsed.hostname, parsed.port or 443
+    key = base64.b64encode(os.urandom(16)).decode('ascii')
+    sock = None
+    response = None
+    try:
+        raw = socket.create_connection((host, port), timeout=max(api.timeout, 120))
+        sock = api.context.wrap_socket(raw, server_hostname=host)
+        request = (f'GET {path} HTTP/1.1\r\nHost: {parsed.netloc}\r\n'
+            f'Authorization: Bearer {token}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n'
+            f'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n'
+            'Sec-WebSocket-Protocol: v5.channel.k8s.io\r\n\r\n').encode('ascii')
+        sock.sendall(request)
+        response = sock.makefile('rb')
+        status = response.readline(4096)
+        headers = {}
+        while True:
+            line = response.readline(8192)
+            if not line or line in (b'\r\n', b'\n'):
+                break
+            if b':' not in line:
+                _fail('exec_handshake_invalid')
+            name, value = line.split(b':', 1)
+            headers[name.strip().lower()] = value.strip()
+        if (not status.startswith(b'HTTP/1.1 101 ') or headers.get(b'upgrade', b'').lower() != b'websocket'
+            or b'upgrade' not in headers.get(b'connection', b'').lower().split(b', ')
+            or headers.get(b'sec-websocket-protocol', b'').lower() != b'v5.channel.k8s.io'
+            or headers.get(b'sec-websocket-accept') != base64.b64encode(hashlib.sha1(
+                (key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode('ascii')).digest())):
+            _fail('exec_handshake_rejected')
+        # Prefix carries only the bounded canonical manifest; tar bytes remain
+        # read directly from the custody-checked descriptor in fixed chunks.
+        for prefix in (CENSUS_INPUT_MAGIC, len(manifest_bytes).to_bytes(4, 'big'),
+                       manifest_bytes, archive_bytes.to_bytes(8, 'big')):
+            for offset in range(0, len(prefix), MAX_EXEC_STDIN_CHUNK):
+                _ws_binary(sock, b'\x00' + prefix[offset:offset + MAX_EXEC_STDIN_CHUNK])
+        digest = hashlib.sha256()
+        total = 0
+        while True:
+            chunk = os.read(archive_fd, MAX_EXEC_STDIN_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > archive_bytes:
+                _fail('census_archive_size_changed')
+            digest.update(chunk)
+            _ws_binary(sock, b'\x00' + chunk)
+        if total != archive_bytes or digest.hexdigest() != archive_sha256:
+            _fail('census_archive_changed_during_exec')
+        # Kubernetes client-go v5 StreamClose payload: channel id 0 (stdin).
+        _ws_binary(sock, b'\xff\x00')
+        status_seen = False
+        while True:
+            first = response.read(2)
+            if not first:
+                _fail('exec_stream_truncated')
+            if len(first) != 2:
+                _fail('exec_frame_truncated')
+            fin, opcode = bool(first[0] & 0x80), first[0] & 0x0f
+            if first[0] & 0x70 or first[1] & 0x80:
+                _fail('exec_frame_invalid')
+            size = first[1] & 0x7f
+            if size == 126:
+                size = int.from_bytes(_read_exact(response, 2), 'big')
+            elif size == 127:
+                size = int.from_bytes(_read_exact(response, 8), 'big')
+            if size > (96 << 10) + 1:
+                _fail('exec_frame_too_large')
+            payload = _read_exact(response, size)
+            if opcode == 8:
+                break
+            if opcode == 9:
+                _send_ws_control(sock, 10, payload)
+                continue
+            if opcode == 10:
+                continue
+            if opcode != 2 or not fin or not payload:
+                _fail('exec_frame_invalid')
+            channel, data = payload[0], payload[1:]
+            if channel == 1:
+                if data:
+                    _fail('census_input_unexpected_stdout')
+            elif channel == 3:
+                if status_seen:
+                    _fail('exec_status_duplicate')
+                try:
+                    result = json.loads(data)
+                except (ValueError, UnicodeError):
+                    _fail('exec_status_invalid')
+                if not isinstance(result, dict) or result.get('status') != 'Success':
+                    _fail('exec_command_failed')
+                status_seen = True
+            elif channel in (0, 2):
+                if data:
+                    _fail('exec_unexpected_channel_data')
+            else:
+                _fail('exec_channel_invalid')
+        if not status_seen:
+            _fail('exec_status_missing')
+        after = os.fstat(archive_fd)
+        if not stat.S_ISREG(after.st_mode) or after.st_size != archive_bytes:
+            _fail('census_archive_changed_during_exec')
+    except KubeAPIError:
+        raise
+    except (OSError, ssl.SSLError, TimeoutError, ValueError):
+        _fail('exec_input_transport_failed')
+    finally:
+        if response is not None:
+            try: response.close()
+            except OSError: pass
         if sock is not None:
             try: sock.close()
             except OSError: pass

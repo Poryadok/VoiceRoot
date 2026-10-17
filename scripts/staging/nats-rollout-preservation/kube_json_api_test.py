@@ -3,6 +3,9 @@ import json
 import base64
 import os
 import ssl
+import hashlib
+import socket
+import threading
 import tempfile
 import unittest
 from pathlib import Path
@@ -182,6 +185,90 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(query['command'], verification_job.exec_vectors(
             request, pod_uid, binding)['census_receipt_readback'])
         self.assertEqual(execute.call_args.kwargs['max_bytes'], census_stream.MAX_TRANSPORT_BYTES)
+
+    def test_census_input_duplex_streams_bounded_file_envelope_and_half_closes(self):
+        archive = (self.root / 'archive.tar')
+        archive_bytes = bytes(range(251)) * 1100
+        archive.write_bytes(archive_bytes); archive.chmod(0o600)
+        manifest = b'{"files":[],"schema":"fixture"}'
+        digest = hashlib.sha256(archive_bytes).hexdigest()
+        client, server = socket.socketpair()
+        received = bytearray()
+        largest = 0
+        failure = []
+
+        def read_exact(sock, size):
+            output = bytearray()
+            while len(output) < size:
+                chunk = sock.recv(size - len(output))
+                if not chunk: raise EOFError('socket closed')
+                output.extend(chunk)
+            return bytes(output)
+
+        def serve():
+            nonlocal largest
+            try:
+                header = bytearray()
+                while not header.endswith(b'\r\n\r\n'):
+                    header.extend(server.recv(4096))
+                key = next(line.split(b':', 1)[1].strip().decode()
+                    for line in header.split(b'\r\n') if line.lower().startswith(b'sec-websocket-key:'))
+                accept = base64.b64encode(hashlib.sha1((key +
+                    '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest())
+                server.sendall(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'
+                    b'Connection: Upgrade\r\nSec-WebSocket-Protocol: v5.channel.k8s.io\r\n'
+                    b'Sec-WebSocket-Accept: ' + accept + b'\r\n\r\n')
+                while True:
+                    first = read_exact(server, 2)
+                    size = first[1] & 0x7f
+                    if size == 126: size = int.from_bytes(read_exact(server, 2), 'big')
+                    elif size == 127: size = int.from_bytes(read_exact(server, 8), 'big')
+                    mask = read_exact(server, 4)
+                    payload = read_exact(server, size)
+                    payload = bytes(value ^ mask[i % 4] for i, value in enumerate(payload))
+                    largest = max(largest, len(payload))
+                    if payload == b'\xff\x00': break
+                    if not payload or payload[0] != 0: raise AssertionError('not stdin channel')
+                    received.extend(payload[1:])
+                status = b'\x03' + json.dumps({'status': 'Success'}).encode()
+                server.sendall(bytes((0x82, len(status))) + status + b'\x88\x00')
+            except BaseException as error:
+                failure.append(error)
+            finally:
+                server.close()
+
+        worker = threading.Thread(target=serve, daemon=True); worker.start()
+        fake_context = type('Context', (), {'wrap_socket': staticmethod(lambda raw, server_hostname: raw)})()
+        self.api.context = fake_context
+        source_fd = kube._open_verified_archive(archive, len(archive_bytes), digest)
+        try:
+            with patch.object(kube.socket, 'create_connection', return_value=client):
+                kube._websocket_exec_input(self.api, '/exec?stdin=true', 'opaque-token',
+                    source_fd, manifest, archive_bytes=len(archive_bytes), archive_sha256=digest)
+        finally:
+            os.close(source_fd)
+        worker.join(timeout=5)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(failure, [])
+        expected = (kube.CENSUS_INPUT_MAGIC + len(manifest).to_bytes(4, 'big') + manifest
+            + len(archive_bytes).to_bytes(8, 'big') + archive_bytes)
+        self.assertEqual(bytes(received), expected)
+        self.assertLessEqual(largest, kube.MAX_EXEC_STDIN_CHUNK + 1)
+
+    def test_census_input_manifest_must_be_canonical_duplicate_free_json(self):
+        for raw in (b'{"z":1,"a":2}', b'{"a":1,"a":2}', b'{"x":NaN}'):
+            with self.subTest(manifest=raw), self.assertRaises(kube.KubeAPIError):
+                kube._validate_canonical_manifest(raw)
+        self.assertIsNone(kube._validate_canonical_manifest(b'{"a":2,"z":1}'))
+
+    def test_census_input_archive_requires_private_regular_file_and_exact_digest(self):
+        archive = self.root / 'bad-archive.tar'
+        archive.write_bytes(b'archive'); archive.chmod(0o600)
+        with self.assertRaisesRegex(kube.KubeAPIError, 'census_archive_digest_mismatch'):
+            kube._open_verified_archive(archive, 7, '0' * 64)
+        archive.chmod(0o640)
+        with self.assertRaisesRegex(kube.KubeAPIError, 'census_archive_custody_invalid'):
+            kube._open_verified_archive(archive, 7, hashlib.sha256(b'archive').hexdigest())
 
     def test_read_verification_census_returns_only_validated_same_pod_census(self):
         request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
