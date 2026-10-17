@@ -18,6 +18,78 @@ TREE = 'b' * 40
 
 
 class SourceTests(unittest.TestCase):
+    def test_equivalent_master_requires_ancestor_and_identical_bounded_build_inputs(self):
+        source, current = 'a' * 40, 'b' * 40
+        tree_root = '1' * 40
+        entries = {
+            'root': {'src': ('tree', '2' * 40), '.github': ('tree', '3' * 40), 'scripts': ('tree', '4' * 40)},
+            'src': {'backend': ('tree', '5' * 40)},
+            '.github': {'workflows': ('tree', '6' * 40)},
+            'workflows': {'ci.yml': ('blob', '7' * 40)},
+            'scripts': {'ci': ('tree', '8' * 40)},
+            'ci': {'backend-docker-context.txt': ('blob', '9' * 40),
+                'staging-image-catalog.json': ('blob', 'c' * 40)},
+        }
+
+        active_commit = source
+        drift = None
+
+        def api(url, _headers, _deadline):
+            nonlocal active_commit
+            if '/compare/' in url:
+                # GitHub's compare response has base_commit and merge_base_commit,
+                # but no head_commit; the requested head is separately pinned by ref.
+                return {'base_commit': {'sha': source},
+                    'merge_base_commit': {'sha': source}, 'status': 'ahead', 'ahead_by': 3}
+            if '/git/commits/' in url:
+                sha = url.rsplit('/', 1)[-1]
+                active_commit = sha
+                return {'sha': sha, 'tree': {'sha': tree_root}}
+            tree_sha = url.rsplit('/', 1)[-1]
+            reverse = {'2' * 40: 'src', '3' * 40: '.github', '4' * 40: 'scripts',
+                '6' * 40: 'workflows', '8' * 40: 'ci'}
+            if tree_sha == tree_root:
+                values = entries['root']
+            else:
+                values = entries[reverse[tree_sha]]
+            if active_commit == current:
+                if drift == 'src/backend' and tree_sha == '2' * 40:
+                    values = {'backend': ('tree', 'f' * 40)}
+                elif drift == '.github/workflows/ci.yml' and tree_sha == '6' * 40:
+                    values = {'ci.yml': ('blob', 'f' * 40)}
+                elif drift == 'scripts/ci/backend-docker-context.txt' and tree_sha == '8' * 40:
+                    values = {'backend-docker-context.txt': ('blob', 'f' * 40),
+                        'staging-image-catalog.json': ('blob', 'c' * 40)}
+                elif drift == 'scripts/ci/staging-image-catalog.json' and tree_sha == '8' * 40:
+                    values = {'backend-docker-context.txt': ('blob', '9' * 40),
+                        'staging-image-catalog.json': ('blob', 'f' * 40)}
+            return {'sha': tree_sha, 'truncated': False,
+                'tree': [{'path': name, 'type': kind, 'sha': digest}
+                    for name, (kind, digest) in values.items()]}
+
+        with patch.object(module, '_get', side_effect=api):
+            result = module._equivalent_master_source({}, source, current, 1)
+        self.assertEqual(result['current_master_sha_before'], current)
+        self.assertTrue(result['source_is_ancestor'])
+        self.assertEqual(result['equivalent_inputs']['src/backend']['git_object_sha1'], '5' * 40)
+
+        for drift_path in ('src/backend', '.github/workflows/ci.yml',
+            'scripts/ci/backend-docker-context.txt', 'scripts/ci/staging-image-catalog.json'):
+            with self.subTest(drift=drift_path):
+                drift = drift_path
+                with patch.object(module, '_get', side_effect=api), self.assertRaises(module.SourceError):
+                    module._equivalent_master_source({}, source, current, 1)
+        drift = None
+
+    def test_equivalent_master_rejects_diverged_or_descendant_sources(self):
+        source, current = 'a' * 40, 'b' * 40
+        for status, merge_base in (('diverged', 'c' * 40), ('behind', source), ('ahead', 'c' * 40)):
+            with self.subTest(status=status, merge_base=merge_base):
+                compare = {'base_commit': {'sha': source},
+                    'merge_base_commit': {'sha': merge_base}, 'status': status, 'ahead_by': 2}
+                with patch.object(module, '_get', return_value=compare), self.assertRaises(module.SourceError):
+                    module._equivalent_master_source({}, source, current, 1)
+
     def test_closed_image_authority_matches_catalog_including_gameintegration(self):
         catalog=json.loads((SOURCE/'scripts/ci/staging-image-catalog.json').read_text())
         names={row['name'] for row in catalog['images']}

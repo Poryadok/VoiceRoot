@@ -204,9 +204,13 @@ def _timestamp(value):
 
 
 def _verify_buildx_artifact(raw, artifact_id, expected_size, image_ref, run_id, attempt,
-                            builder_sha, step, runner):
+                            builder_sha, step, runner, *, service="gameintegration"):
     """Verify the authenticated Actions artifact's Buildx record, provenance and OCI descriptor."""
     from pathlib import PurePosixPath
+    if service not in ("gameintegration", "matchmaking"):
+        _blocked("gis_dev_build_record_invalid")
+    image = "ghcr.io/poryadok/voiceroot/" + service
+    dockerfile = "src/backend/" + service
     if not isinstance(raw, bytes) or not 1 <= len(raw) <= 32 << 20 or len(raw) != expected_size:
         _blocked("gis_dev_build_record_invalid")
     artifact_sha = hashlib.sha256(raw).hexdigest()
@@ -244,7 +248,7 @@ def _verify_buildx_artifact(raw, artifact_id, expected_size, image_ref, run_id, 
                 if (attrs.get("vcs:source") != "https://github.com/Poryadok/VoiceRoot"
                     or attrs.get("vcs:revision") != builder_sha
                     or attrs.get("vcs:localdir:context") != "src/backend"
-                    or attrs.get("vcs:localdir:dockerfile") != "src/backend/gameintegration"
+                    or attrs.get("vcs:localdir:dockerfile") != dockerfile
                     or attrs.get("filename") != "Dockerfile"
                     or expected_builder not in attrs.get("attest:provenance", "")):
                     continue
@@ -252,7 +256,7 @@ def _verify_buildx_artifact(raw, artifact_id, expected_size, image_ref, run_id, 
                 if (not isinstance(exporters, list) or len(exporters) != 1
                     or exporters[0].get("Type") != "image"
                     or exporters[0].get("Attrs", {}).get("push") != "true"
-                    or exporters[0].get("Attrs", {}).get("name") != IMAGE + ":" + builder_sha):
+                    or exporters[0].get("Attrs", {}).get("name") != image + ":" + builder_sha):
                     continue
                 output_rows = record.get("Result", {}).get("Results", {})
                 output = output_rows.get("0") if isinstance(output_rows, dict) else None
@@ -284,7 +288,7 @@ def _verify_buildx_artifact(raw, artifact_id, expected_size, image_ref, run_id, 
                 finished = _timestamp(provenance.get("runDetails", {}).get("metadata", {}).get("finishedOn"))
                 if (provenance.get("runDetails", {}).get("builder", {}).get("id") != expected_builder
                     or args != {"vcs:localdir:context": "src/backend",
-                        "vcs:localdir:dockerfile": "src/backend/gameintegration",
+                        "vcs:localdir:dockerfile": dockerfile,
                         "vcs:revision": builder_sha,
                         "vcs:source": "https://github.com/Poryadok/VoiceRoot"}
                     or root.get("configSource", {}).get("path") != "Dockerfile"

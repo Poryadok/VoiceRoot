@@ -28,16 +28,16 @@ ARCHIVE_BINDING_FIELDS = frozenset((
 SELECTED_BINDING_FIELDS = BINDING_FIELDS | frozenset(('session_attempt', 'input_pod_uid',
     'input_bundle_sha256', 'input_bundle_bytes', 'kernel_bundle_sha256',
     'server_config_sha256', 'archive_sha256', 'archive_bytes'))
-CONTRACT_BINDING_FIELDS = BINDING_FIELDS | frozenset(('contract_attempt', 'input_pod_uid',
-    'input_attempt', 'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256',
-    'archive_bytes', 'kernel_bundle_sha256', 'plan_sha256', 'plan_bytes',
-    'server_config_sha256'))
+CONTRACT_BINDING_FIELDS = BINDING_FIELDS | frozenset(('contract_attempt',
+    'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256', 'archive_bytes',
+    'plan_sha256', 'plan_bytes', 'server_config_sha256', 'bootstrap_creds_sha256',
+    'bootstrap_creds_bytes', 'server_config_bytes'))
 SELECTED_ACTIONS = frozenset((
     'bootstrap-realtime', 'bootstrap-notification', 'bootstrap-analytics-chat',
     'bootstrap-search', 'kernel-census', 'kernel-seed', 'kernel-verify-closed', 'kernel-drain',
     'kernel-verify-drained', 'broker-ready', 'broker-restart-prepare',
     'broker-restart-complete', 'session-close', 'session-stop'))
-CONTRACT_ACTIONS = frozenset(('load-plan', 'broker-start', 'broker-stop', 'broker-status',
+CONTRACT_ACTIONS = frozenset(('load-plan', 'read-plan', 'broker-start', 'broker-stop', 'broker-status',
     'inspect-action', 'execute-action', 'readback-action'))
 KERNEL_PHASES = {
     'kernel-census': 'census', 'kernel-seed': 'seed', 'kernel-verify-closed': 'verify-closed',
@@ -167,17 +167,20 @@ def validate_contract_binding(value: object) -> dict:
     storage = validate_binding({key: value[key] for key in BINDING_FIELDS})
     if not isinstance(value.get('contract_attempt'), str) or not re.fullmatch(r'[a-f0-9]{8}', value['contract_attempt']):
         _fail('contract_attempt_invalid')
-    if not isinstance(value.get('input_pod_uid'), str) or not UUID_RE.fullmatch(value['input_pod_uid']):
-        _fail('contract_input_uid_invalid')
-    if not isinstance(value.get('input_attempt'), str) or not re.fullmatch(r'[a-f0-9]{8}', value['input_attempt']):
-        _fail('contract_input_attempt_invalid')
-    for field in ('input_bundle_sha256', 'archive_sha256', 'kernel_bundle_sha256', 'plan_sha256', 'server_config_sha256'):
+    for field in ('input_bundle_sha256', 'archive_sha256', 'plan_sha256', 'server_config_sha256',
+        'bootstrap_creds_sha256'):
         if not isinstance(value.get(field), str) or not re.fullmatch(r'[a-f0-9]{64}', value[field]):
             _fail('contract_input_digest_invalid')
-    if type(value.get('input_bundle_bytes')) is not int or not 0 < value['input_bundle_bytes'] <= (4 << 20):
+    if type(value.get('input_bundle_bytes')) is not int or not 0 < value['input_bundle_bytes'] <= (2 << 20):
         _fail('contract_input_bundle_size_invalid')
     if type(value.get('plan_bytes')) is not int or not 1 <= value['plan_bytes'] <= (1 << 20):
         _fail('contract_input_size_invalid')
+    if (type(value.get('bootstrap_creds_bytes')) is not int
+        or not 0 < value['bootstrap_creds_bytes'] <= (256 << 10)):
+        _fail('contract_credentials_size_invalid')
+    if (type(value.get('server_config_bytes')) is not int
+        or not 0 < value['server_config_bytes'] <= (256 << 10)):
+        _fail('contract_server_config_size_invalid')
     if type(value.get('archive_bytes')) is not int or not 0 < value['archive_bytes'] <= (48 << 30):
         _fail('contract_archive_size_invalid')
     return storage | {key: value[key] for key in CONTRACT_BINDING_FIELDS - BINDING_FIELDS}
@@ -657,14 +660,16 @@ def _contract_migration_document(request: dict, storage: dict, image: str) -> di
         '--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
         '--verification-pvc-uid', storage['verification_uid'],
         '--verification-pv-uid', storage['verification_pv_uid'],
-        '--input-pod-uid', storage['input_pod_uid'], '--plan-sha256', storage['plan_sha256'],
+        '--plan-sha256', storage['plan_sha256'],
         '--plan-bytes', str(storage['plan_bytes']),
-        '--input-attempt', storage['input_attempt'], '--archive-sha256', storage['archive_sha256'],
+        '--archive-sha256', storage['archive_sha256'],
         '--archive-bytes', str(storage['archive_bytes']),
         '--input-bundle-sha256', storage['input_bundle_sha256'],
         '--input-bundle-bytes', str(storage['input_bundle_bytes']),
-        '--kernel-bundle-sha256', storage['kernel_bundle_sha256'],
-        '--server-config-sha256', storage['server_config_sha256']]
+        '--server-config-sha256', storage['server_config_sha256'],
+        '--server-config-bytes', str(storage['server_config_bytes']),
+        '--bootstrap-creds-sha256', storage['bootstrap_creds_sha256'],
+        '--bootstrap-creds-bytes', str(storage['bootstrap_creds_bytes'])]
     return {
         'apiVersion': 'batch/v1', 'kind': 'Job',
         'metadata': {'name': name, 'namespace': NAMESPACE, 'labels': copy.deepcopy(labels)},
@@ -693,8 +698,7 @@ def _contract_migration_document(request: dict, storage: dict, image: str) -> di
                         'limits': {'cpu': '2', 'memory': '2Gi', 'ephemeral-storage': '2Gi'}},
                     'volumeMounts': [
                         {'name': 'source', 'mountPath': '/data'},
-                        {'name': 'scratch', 'mountPath': '/server.conf',
-                            'subPath': 'inputs/public/server.conf', 'readOnly': True},
+                        {'name': 'broker-config', 'mountPath': '/broker-config', 'readOnly': True},
                     ],
                 }],
                 'containers': [{
@@ -707,15 +711,14 @@ def _contract_migration_document(request: dict, storage: dict, image: str) -> di
                     'resources': {'requests': {'cpu': '250m', 'memory': '256Mi', 'ephemeral-storage': '256Mi'},
                         'limits': {'cpu': '1', 'memory': '1Gi', 'ephemeral-storage': '512Mi'}},
                     'volumeMounts': [
-                        {'name': 'scratch', 'mountPath': '/inputs/private',
-                            'subPath': 'kernelinputbundle', 'readOnly': True},
-                        {'name': 'scratch', 'mountPath': '/state',
-                            'subPath': 'state/' + request['operation']},
+                        {'name': 'broker-config', 'mountPath': '/broker-config'},
+                        {'name': 'control-state', 'mountPath': '/state'},
                     ],
                 }],
                 'volumes': [
                     {'name': 'source', 'persistentVolumeClaim': {'claimName': storage['source_claim']}},
-                    {'name': 'scratch', 'persistentVolumeClaim': {'claimName': storage['verification_claim']}},
+                    {'name': 'broker-config', 'emptyDir': {'sizeLimit': '1Mi'}},
+                    {'name': 'control-state', 'emptyDir': {'sizeLimit': '16Mi'}},
                 ],
             }},
         },
@@ -816,22 +819,26 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
             '--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
             '--verification-pvc-uid', storage['verification_uid'],
             '--verification-pv-uid', storage['verification_pv_uid'],
-            '--input-pod-uid', storage['input_pod_uid'], '--plan-sha256', storage['plan_sha256'],
+            '--plan-sha256', storage['plan_sha256'],
             '--plan-bytes', str(storage['plan_bytes']),
-            '--input-attempt', storage['input_attempt'], '--archive-sha256', storage['archive_sha256'],
+            '--archive-sha256', storage['archive_sha256'],
             '--archive-bytes', str(storage['archive_bytes']),
             '--input-bundle-sha256', storage['input_bundle_sha256'],
             '--input-bundle-bytes', str(storage['input_bundle_bytes']),
-            '--kernel-bundle-sha256', storage['kernel_bundle_sha256'],
-            '--server-config-sha256', storage['server_config_sha256']]
+            '--server-config-sha256', storage['server_config_sha256'],
+            '--server-config-bytes', str(storage['server_config_bytes']),
+            '--bootstrap-creds-sha256', storage['bootstrap_creds_sha256'],
+            '--bootstrap-creds-bytes', str(storage['bootstrap_creds_bytes'])]
         if action is None:
             return {name: contract_binary + [flag] + common for name, flag in (
-                ('load-plan', '--load-plan'), ('broker-start', '--broker-start'),
+                ('load-plan', '--load-plan'), ('read-plan', '--read-plan'), ('broker-start', '--broker-start'),
                 ('broker-stop', '--broker-stop'), ('broker-status', '--broker-status'))}
         if action not in CONTRACT_ACTIONS:
             _fail('contract_action_invalid')
         if action == 'load-plan':
             return {'action': contract_binary + ['--load-plan'] + common, 'stdin': True}
+        if action == 'read-plan':
+            return {'action': contract_binary + ['--read-plan'] + common}
         if action in ('broker-start', 'broker-stop', 'broker-status'):
             return {'action': contract_binary + ['--broker-' + action.split('-', 1)[1]] + common}
         if action in ('inspect-action', 'execute-action', 'readback-action'):
