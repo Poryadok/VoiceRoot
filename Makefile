@@ -309,7 +309,7 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test matchmaking-source-authority-test
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
 	$(BASH) "$(ROOT)/scripts/staging/nats-bootstrap-policy_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-generation-contract_test.sh"
@@ -324,6 +324,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
 	python3 "$(ROOT)/scripts/ci/space_media_admission_diagnostics_test.py"
 	python3 "$(ROOT)/scripts/ci/auth_session_floor_diagnostics_test.py"
+
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-live_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-nats-jetstream-check_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-rollout-contract-test.sh"
@@ -353,6 +354,11 @@ nats-rollout-preservation-test:
 nats-leaf-topology-invariants-test:
 	$(BASH) "$(ROOT)/scripts/ci/nats-leaf-topology-invariants-test_test.sh"
 	python3 "$(ROOT)/scripts/staging/nats-search-probe-workflow_test.py"
+
+.PHONY: matchmaking-source-authority-test
+matchmaking-source-authority-test:
+	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_test.py"
+	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_workflow_test.py"
 
 .PHONY: staging-source-acquisition-workflow-test
 staging-source-acquisition-workflow-test:

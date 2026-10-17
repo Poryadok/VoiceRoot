@@ -8,3 +8,6 @@ spec:
     - name: principal-jwks
       port: 8443
       targetPort: principal-jwks
+    - name: principal
+      port: 9092
+      targetPort: principal

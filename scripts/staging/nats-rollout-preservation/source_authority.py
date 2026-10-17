@@ -400,18 +400,57 @@ def same_image_content(actual, target, deadline):
     return a['manifest_image']==b['manifest_image'] and a['config_sha256']==b['config_sha256']
 
 
-def capture_source(token, run_id, source_sha, destination, *, provisional_staging=False):
-    """Capture current master passive bytes; resolve authorized same-CI tags.
+def _path_tree_sha(headers, commit_sha, path, deadline, *, expected_type):
+    commit = _get(API + '/git/commits/' + commit_sha, headers, deadline)
+    if commit.get('sha') != commit_sha or not re.fullmatch(r'[a-f0-9]{40}', commit.get('tree', {}).get('sha', '')): _fail()
+    tree_sha = commit['tree']['sha']
+    parts = path.split('/')
+    for index, part in enumerate(parts):
+        tree = _get(API + '/git/trees/' + tree_sha, headers, deadline)
+        if tree.get('sha') != tree_sha or tree.get('truncated') is not False or not isinstance(tree.get('tree'), list): _fail()
+        matches = [row for row in tree['tree'] if isinstance(row, dict) and row.get('path') == part]
+        if len(matches) != 1: _fail()
+        row = matches[0]
+        final = index == len(parts) - 1
+        if (not re.fullmatch(r'[a-f0-9]{40}', str(row.get('sha', '')))
+            or row.get('type') != (expected_type if final else 'tree')): _fail()
+        tree_sha = row['sha']
+    return tree_sha
 
-    Digests are independently resolved at capture, not recorded by the CI tag
-    artifact. Trust assumes authorized project GHCR package publishers. No
-    caller image map, metadata URL or downloaded source code is executed.
-    """
+
+def _equivalent_master_source(headers, source_sha, master_sha, deadline):
+    if not re.fullmatch(r'[a-f0-9]{40}', source_sha) or not re.fullmatch(r'[a-f0-9]{40}', master_sha): _fail()
+    comparison = _get(API + '/compare/' + source_sha + '...' + master_sha, headers, deadline)
+    status = comparison.get('status')
+    ahead_by = comparison.get('ahead_by')
+    if (comparison.get('base_commit', {}).get('sha') != source_sha
+        or comparison.get('merge_base_commit', {}).get('sha') != source_sha
+        or type(ahead_by) is not int or ahead_by < 0
+        or source_sha == master_sha and (status != 'identical' or ahead_by != 0)
+        or source_sha != master_sha and (status != 'ahead' or ahead_by <= 0)): _fail()
+    paths = ('src/backend', '.github/workflows/ci.yml',
+        'scripts/ci/backend-docker-context.txt', 'scripts/ci/staging-image-catalog.json')
+    bindings = {}
+    for path in paths:
+        expected_type = 'tree' if path == 'src/backend' else 'blob'
+        source = _path_tree_sha(headers, source_sha, path, deadline, expected_type=expected_type)
+        current = _path_tree_sha(headers, master_sha, path, deadline, expected_type=expected_type)
+        if source != current: _fail()
+        bindings[path] = {'git_object_sha1': source}
+    return {'current_master_sha_before': master_sha, 'equivalent_inputs': bindings,
+        'source_is_ancestor': True}
+
+
+def _capture_source_at_master(token, run_id, source_sha, destination, master_sha, *, provisional_staging=False):
     try:
         if type(run_id) is not int or run_id <= 0 or not isinstance(source_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', source_sha): _fail()
         destination = _destination(destination); headers = _headers(token); deadline = time.monotonic() + 600
-        repo = _head(headers, source_sha, deadline)
+        repo = _head(headers, master_sha, deadline)
         if type(provisional_staging) is not bool: _fail()
+        equivalence = None
+        if master_sha != source_sha:
+            if provisional_staging: _fail()
+            equivalence = _equivalent_master_source(headers, source_sha, master_sha, deadline)
         run, jobs = (_provisional_ci if provisional_staging else _ci)(headers, run_id, source_sha, repo, deadline)
         commit = _get(API + '/git/commits/' + source_sha, headers, deadline)
         if commit['sha'] != source_sha or not re.fullmatch(r'[a-f0-9]{40}', commit['tree']['sha']): _fail()
@@ -447,15 +486,44 @@ def capture_source(token, run_id, source_sha, destination, *, provisional_stagin
                 lock = zipped.read(members[0])
         tags = _lock(lock, source_sha, destination)
         images = {name: _resolve_image(name, tag, deadline) for name, tag in sorted(tags.items())}
-        _head(headers, source_sha, deadline)
+        _head(headers, master_sha, deadline)
+        if equivalence is not None:
+            equivalence['current_master_sha_after'] = master_sha
         result = {'schema': 'voice-source-authority-v1', 'repository': REPO, 'source_sha': source_sha,
             'workflow_id': WORKFLOW, 'run_id': run_id, 'run_attempt': run['run_attempt'], 'tree_sha': tree['sha'],
             'source_files': dict(sorted(files.items())), 'images': images, 'lock_artifact_id': artifact_id,
             'lock_sha256': hashlib.sha256(lock).hexdigest(), 'image_provenance': 'independently resolved trusted CI tag',
             'verified': True}
+        if equivalence is not None:
+            result['source_equivalence'] = equivalence
         if provisional_staging:
             result['provisional_staging'] = True
             revalidate_ci(token, result)
         return result
+    except Exception:
+        raise SourceError('source_authority_rejected') from None
+
+
+def capture_source(token, run_id, source_sha, destination, *, provisional_staging=False):
+    """Capture only the currently pinned master source and its canonical CI."""
+    return _capture_source_at_master(token, run_id, source_sha, destination, source_sha,
+        provisional_staging=provisional_staging)
+
+
+def capture_equivalent_master_source(token, run_id, source_sha, destination):
+    """Capture a successful historical master CI only when current build inputs match.
+
+    The source must be an actual ancestor of the pinned current master. The full
+    backend tree and the CI workflow/context/catalog that select its build must
+    be byte-identical. The current master ref is pinned before and after capture.
+    """
+    try:
+        headers = _headers(token)
+        deadline = time.monotonic() + 60
+        ref = _get(API + '/git/ref/heads/master', headers, deadline)
+        master_sha = ref.get('object', {}).get('sha') if ref.get('ref') == 'refs/heads/master' else None
+        if not isinstance(master_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', master_sha): _fail()
+        return _capture_source_at_master(token, run_id, source_sha, destination, master_sha,
+            provisional_staging=False)
     except Exception:
         raise SourceError('source_authority_rejected') from None

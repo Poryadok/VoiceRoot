@@ -9,7 +9,7 @@ spec:
       containers:
         - name: chat
           ports:
-            - name: match-squad-principal
+            - name: match-principal
               containerPort: 9092
           env:
             - name: CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN
