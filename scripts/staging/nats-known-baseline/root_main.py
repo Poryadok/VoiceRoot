@@ -46,11 +46,12 @@ def operator_error(error):
     return 'exception_'+type(error).__name__ if type(error).__name__ in types else 'exception_unclassified'
 
 @contextmanager
-def operation_lock():
+def operation_lock(*,owner_uid=0):
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('operation_lock_owner_invalid')
     fd=os.open(ROOT/'known-baseline.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK,0o600)
     try:
         s=os.fstat(fd)
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o077 or s.st_nlink!=1:
+        if not stat.S_ISREG(s.st_mode) or s.st_uid!=owner_uid or s.st_mode&0o077 or s.st_nlink!=1:
             raise Blocked('operation_lock_custody_invalid')
         try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:raise Blocked('operation_already_running') from None
@@ -80,12 +81,13 @@ def observe_refence(state,staging):
         state['stage_fenced']=True;state['fence_status']='VERIFIED'
 
 
-def private_json(path,*,limit=2<<20):
+def private_json(path,*,limit=2<<20,owner_uid=0):
     if type(limit) is not int or not 0<limit<=128<<20:raise Blocked('checkpoint_limit_invalid')
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('checkpoint_owner_invalid')
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     try:
         s=os.fstat(fd)
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o077 or not 1<=s.st_size<=limit:
+        if not stat.S_ISREG(s.st_mode) or s.st_uid!=owner_uid or s.st_mode&0o077 or not 1<=s.st_size<=limit:
             raise Blocked('checkpoint_custody_invalid')
         raw=os.read(fd,s.st_size+1)
         if len(raw)!=s.st_size: raise Blocked('checkpoint_size_changed')
@@ -93,12 +95,13 @@ def private_json(path,*,limit=2<<20):
     finally: os.close(fd)
 
 
-def checkpoint_json(path):
-    return private_json(path,limit=MAX_CHECKPOINT_BYTES)
+def checkpoint_json(path,*,owner_uid=0):
+    return private_json(path,limit=MAX_CHECKPOINT_BYTES,owner_uid=owner_uid)
 
 
-def save(path, row,*,limit=2<<20):
+def save(path, row,*,limit=2<<20,owner_uid=0):
     if type(limit) is not int or not 0<limit<=128<<20:raise Blocked('journal_limit_invalid')
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('journal_owner_invalid')
     raw=json.dumps(row,sort_keys=True,indent=2).encode()+b'\n'
     if len(raw)>limit: raise Blocked('journal_size_limit')
     temporary=path.with_name(path.name+'.next')
@@ -111,8 +114,8 @@ def save(path, row,*,limit=2<<20):
     finally: os.close(directory)
 
 
-def save_checkpoint(path,row):
-    return save(path,row,limit=MAX_CHECKPOINT_BYTES)
+def save_checkpoint(path,row,*,owner_uid=0):
+    return save(path,row,limit=MAX_CHECKPOINT_BYTES,owner_uid=owner_uid)
 
 
 def public_read(path,limit=256<<10):

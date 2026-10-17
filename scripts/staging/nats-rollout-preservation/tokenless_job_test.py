@@ -129,6 +129,10 @@ class TokenlessJobTests(unittest.TestCase):
         pod = created['spec']['template']['spec']
         self.assertFalse(pod['automountServiceAccountToken'])
         self.assertEqual(pod['nodeName'], BINDING['node_name'])
+        self.assertEqual(pod['securityContext'], {
+            'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+            'fsGroup': 10000, 'fsGroupChangePolicy': 'OnRootMismatch',
+            'seccompProfile': {'type': 'RuntimeDefault'}})
         self.assertEqual(pod['volumes'][0]['persistentVolumeClaim']['claimName'], BINDING['claim_name'])
         self.assertEqual(created['spec']['ttlSecondsAfterFinished'], 600)
         self.assertEqual(api.job['spec']['template']['spec']['serviceAccountName'], 'default')
@@ -163,6 +167,8 @@ class TokenlessJobTests(unittest.TestCase):
             lambda api: api.pod['metadata']['ownerReferences'][0].update(uid='55555555-5555-4555-8555-555555555555'),
             lambda api: api.pod['spec'].update(automountServiceAccountToken=True),
             lambda api: api.pod['spec'].update(nodeName='other-node'),
+            lambda api: api.pod['spec']['securityContext'].update(fsGroup=2000),
+            lambda api: api.pod['spec']['securityContext'].pop('fsGroup'),
             lambda api: api.pod['status'].update(phase='Running'),
         ):
             api = FakeAPI(jobs.document(REQUEST, BINDING, RUNNER_IMAGE))

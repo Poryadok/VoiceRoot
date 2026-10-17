@@ -102,4 +102,25 @@ class ReceiptSizeTest(unittest.TestCase):
             path.write_bytes(b' '*(2<<20)+b'{}');path.chmod(0o440)
             with self.assertRaises(guard.Blocked):self.read_receipt(path,root)
 
+class RunnerStateRootTest(unittest.TestCase):
+    def test_runner_state_configuration_binds_exact_private_operations_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);state=root/'state';operations=state/'operations'
+            state.mkdir(mode=0o700);operations.mkdir(mode=0o700)
+            with patch.object(guard,'RUNNER_STATE_ROOT',state):
+                self.assertEqual(guard.configure_runner_state(state),operations)
+                self.assertEqual(guard.ROOT,operations)
+                self.assertEqual(guard.OWNER_UID,os.geteuid())
+                with self.assertRaises(guard.Blocked):guard.configure_runner_state(root/'different')
+
+    def test_runner_state_cannot_be_configured_by_uid_zero_or_mutable_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);state=root/'state';operations=state/'operations'
+            state.mkdir(mode=0o700);operations.mkdir(mode=0o700)
+            with patch.object(guard,'RUNNER_STATE_ROOT',state),patch.object(guard.os,'geteuid',return_value=0):
+                with self.assertRaises(guard.Blocked):guard.configure_runner_state(state)
+            operations.chmod(0o770)
+            with patch.object(guard,'RUNNER_STATE_ROOT',state):
+                with self.assertRaises(guard.Blocked):guard.configure_runner_state(state)
+
 if __name__=='__main__':unittest.main()

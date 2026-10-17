@@ -92,7 +92,12 @@ def document(request: dict, binding: dict, runner_image: str) -> dict:
             'nodeName': storage['node_name'],
                     'serviceAccountName': 'default',
                     'restartPolicy': 'Never',
-                    'securityContext': {'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532, 'seccompProfile': {'type': 'RuntimeDefault'}},
+                    # Match the existing STAGING broker's supported local-PV
+                    # ownership contract. Kubelet applies this group on mount;
+                    # the runner never chowns a host/PV path.
+                    'securityContext': {'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+                        'fsGroup': 10000, 'fsGroupChangePolicy': 'OnRootMismatch',
+                        'seccompProfile': {'type': 'RuntimeDefault'}},
                     'containers': [{
                         'name': 'nats-phase',
                         'image': image,

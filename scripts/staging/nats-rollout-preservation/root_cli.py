@@ -22,27 +22,29 @@ from stage_runtime import Kube, HUB
 
 ROOT=guard.ROOT
 
-def private_json(path):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20)
-def save(path,row):root_save(path,row,limit=128<<20)
+def private_json(path,*,owner_uid=0):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20,owner_uid=owner_uid)
+def save(path,row,*,owner_uid=0):root_save(path,row,limit=128<<20,owner_uid=owner_uid)
 
 
-def operation_path(raw):
+def operation_path(raw,*,owner_uid=0):
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('rollout_owner_invalid')
     base=Path(raw)
     if base.parent!=ROOT or not re.fullmatch(r'rollout-[a-f0-9]{12}',base.name):raise Blocked('rollout_path_invalid')
     s=base.lstat()
-    if not stat.S_ISDIR(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise Blocked('rollout_directory_untrusted')
+    if not stat.S_ISDIR(s.st_mode) or s.st_uid!=owner_uid or s.st_mode&0o022:raise Blocked('rollout_directory_untrusted')
     return base
 
 
-def public_code_sha(path):
+def public_code_sha(path,*,owner_uid=0):
     """Hash public captured code as the runner, without root-only O_NOATIME."""
     path=Path(path)
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('rollout_code_owner_invalid')
     fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,
         s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
     parent_before=path.parent.lstat()
     parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_NONBLOCK)
     try:
-        if (not stat.S_ISDIR(parent_before.st_mode) or parent_before.st_uid!=0
+        if (not stat.S_ISDIR(parent_before.st_mode) or parent_before.st_uid!=owner_uid
             or parent_before.st_mode&0o022
             or fingerprint(parent_before)!=fingerprint(os.fstat(parent))):
             raise Blocked('rollout_code_custody_invalid')
@@ -50,7 +52,7 @@ def public_code_sha(path):
         fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
         try:
             opened=os.fstat(fd)
-            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=owner_uid
                 or opened.st_mode&0o022 or opened.st_nlink!=1
                 or not 0<=opened.st_size<=16<<20 or fingerprint(before)!=fingerprint(opened)):
                 raise Blocked('rollout_code_custody_invalid')
@@ -69,7 +71,8 @@ def public_code_sha(path):
     finally:os.close(parent)
 
 
-def code_binding(code):
+def code_binding(code,*,owner_uid=0):
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('rollout_code_owner_invalid')
     manifest=json.loads(public_read(code/'capture-manifest.json'))
     if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
@@ -79,19 +82,20 @@ def code_binding(code):
         for parent in (path,*path.parents):
             try:s=parent.lstat()
             except FileNotFoundError:raise Blocked('rollout_code_custody_invalid') from None
-            if s.st_uid!=0 or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode):raise Blocked('rollout_code_custody_invalid')
+            if s.st_uid!=owner_uid or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode):raise Blocked('rollout_code_custody_invalid')
             if parent==code:break
-        if public_code_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')
+        if public_code_sha(path,owner_uid=owner_uid)!=wanted:raise Blocked('rollout_captured_code_changed')
     return manifest
 
 
-def rollout_directory_kind(base):
+def rollout_directory_kind(base,*,owner_uid=0):
     """Launcher captures are code, never operations or an idle-state waiver."""
     base=Path(base);s=base.lstat()
-    if not stat.S_ISDIR(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('rollout_owner_invalid')
+    if not stat.S_ISDIR(s.st_mode) or s.st_uid!=owner_uid or s.st_mode&0o022:
         raise Blocked('rollout_inventory_directory_untrusted')
     if re.fullmatch(r'rollout-code-[a-f0-9]{32}',base.name):
-        try:code_binding(base)
+        try:code_binding(base,owner_uid=owner_uid)
         except FileNotFoundError:raise Blocked('rollout_capture_incomplete') from None
         return 'capture'
     if not re.fullmatch(r'rollout-[a-f0-9]{12}',base.name):

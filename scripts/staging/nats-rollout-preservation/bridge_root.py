@@ -23,16 +23,24 @@ from controller import Blocked
 from nats_active_contract import validate_identity as validate_active_contract_identity
 
 INSTALLED=guard.ROOT/'installed'
+STATE_OWNER_UID=0
 
-def private_json(path):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20)
-def save(path,row):root_save(path,row,limit=128<<20)
+def configure_state_owner(owner_uid):
+    global STATE_OWNER_UID
+    if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('bridge_state_owner_invalid')
+    STATE_OWNER_UID=owner_uid
+
+def private_json(path):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20,owner_uid=STATE_OWNER_UID)
+def save(path,row):root_save(path,row,limit=128<<20,owner_uid=STATE_OWNER_UID)
 
 def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
 
 class Actions:
-    def __init__(self,code):
-        self.code=Path(code);self.binding=root_cli.code_binding(self.code)
+    def __init__(self,code,*,owner_uid=0):
+        configure_state_owner(owner_uid)
+        self.owner_uid=owner_uid
+        self.code=Path(code);self.binding=root_cli.code_binding(self.code,owner_uid=owner_uid)
 
     def _report(self,name,status):
         observer=getattr(self,'_observer',None)
@@ -45,7 +53,7 @@ class Actions:
         finally:self._observer=None
 
     def state(self,operation):
-        base=root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)))
+        base=root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)),owner_uid=self.owner_uid)
         state=private_json(base/'checkpoint.json')
         if state.get('operation')!=operation:raise Blocked('bridge_operation_custody_invalid')
         if state.get('operator_retirement') is not None:
@@ -99,7 +107,7 @@ class Actions:
         rows=list(guard.ROOT.glob('rollout-*'))
         if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
         for base in rows:
-            if root_cli.rollout_directory_kind(base)=='capture':continue
+            if root_cli.rollout_directory_kind(base,owner_uid=self.owner_uid)=='capture':continue
             if not (base/'checkpoint.json').exists():raise Blocked('bridge_incomplete_operation_present')
             row=private_json(base/'checkpoint.json')
             if row.get('status') not in ('PASS','ROLLED_BACK'):
@@ -367,7 +375,7 @@ class Actions:
         rows=list(guard.ROOT.glob('rollout-*'))
         if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
         for path in rows:
-            if root_cli.rollout_directory_kind(path)=='capture' or path==base:continue
+            if root_cli.rollout_directory_kind(path,owner_uid=self.owner_uid)=='capture' or path==base:continue
             if private_json(path/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):
                 raise Blocked('paused_recovery_other_operation_present')
         source_run,execution=self._dispatcher(request)
@@ -396,7 +404,7 @@ class Actions:
         rows=list(guard.ROOT.glob('rollout-*'))
         if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
         for path in rows:
-            if path==base or root_cli.rollout_directory_kind(path)=='capture':continue
+            if path==base or root_cli.rollout_directory_kind(path,owner_uid=self.owner_uid)=='capture':continue
             if private_json(path/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):
                 raise Blocked('preserved_upload_other_operation_active')
         source_run,execution=self._dispatcher(request);execution['nonce']=request['nonce']
@@ -593,7 +601,7 @@ class Actions:
             expired_transport.put(slot/'paused-checkpoint.json',state)
             kernel=self.code/'nats-known-baseline'/'kernel'
             def checksum(stream,consumer,raw):
-                if root_cli.code_binding(self.code)!=self.binding:raise Blocked('expired_finish_helper_changed')
+                if root_cli.code_binding(self.code,owner_uid=self.owner_uid)!=self.binding:raise Blocked('expired_finish_helper_changed')
                 result=subprocess.run([str(kernel),'--metadata-checksum',stream,consumer],input=raw,
                     stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=5,
                     env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent','LC_ALL':'C'})
@@ -721,7 +729,7 @@ class Actions:
             'helper_binding':self.binding,'retained_target':admission['target']})
         kernel=self.code/'nats-known-baseline'/'kernel'
         def checksum(stream,consumer,raw):
-            if root_cli.code_binding(self.code)!=self.binding:raise Blocked('expired_recovery_helper_changed')
+            if root_cli.code_binding(self.code,owner_uid=self.owner_uid)!=self.binding:raise Blocked('expired_recovery_helper_changed')
             result=subprocess.run([str(kernel),'--metadata-checksum',stream,consumer],input=raw,
                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=5,
                 env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent','LC_ALL':'C'})
