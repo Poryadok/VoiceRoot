@@ -171,7 +171,10 @@ rg "chat_id.*<uuid>" .local/dev.ndjson
 
 ### E2E сценарий: отправка DM
 
-Автоматизация: `scripts/staging/smoke-request-id.sh` (register ×2 → WS → DM → Loki chain assert).
+The script `scripts/staging/smoke-request-id.sh` is the DEV variant described
+below; its email lifecycle uses the DEV-only verification mail fixture and it
+refuses other namespaces. This section's staging procedure remains a manual
+check against already verified staging test accounts.
 
 1. **Войти** (REST login через Gateway) и сохранить access token.
 2. **Открыть WS** к Realtime (`/ws` через Gateway) с тем же JWT — иначе `ws_fanout` не появится у получателя.
@@ -188,6 +191,40 @@ rg "chat_id.*<uuid>" .local/dev.ndjson
 | 5 | `ws_fanout` | `realtime` |
 
 На пути также допустимы `grpc_call` в других Tier-0 сервисах и поля `chat_id`, `message_id`, `event_id` в JSON.
+
+### DEV account and request-id smoke
+
+The automated smoke creates two disposable `voice-qa.test` accounts, checks
+their session-bound `EMAIL_PENDING` state, retrieves each delivered OTP from the
+documented `voice-dev-mail` loopback endpoint, and verifies using the normal
+authenticated Auth route. It then exercises normal password login and refresh,
+creates a DM, sends and reads a message, confirms the receiver's WebSocket
+subscription and matching `message_create` frame, and checks the
+Gateway-to-Realtime Loki chain. No database or administrative account access is
+used. It requires the DEV and observability namespaces, Gateway ingress, and
+`curl`, `kubectl`, `python3`, Node.js 24, `npm`, and `tar` in the Linux execution
+environment. The script fetches `ws` 8.21.0 from the official npm registry into
+its private temporary directory and verifies the published SHA-512 integrity
+before use (`Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==`):
+
+```bash
+VOICE_STAGING_URL=https://api-dev.comrade.click \
+VOICE_STAGING_NAMESPACE=voice-dev \
+VOICE_STAGING_WS_URL=wss://api-dev.comrade.click/ws \
+scripts/staging/smoke-request-id.sh
+```
+
+The DEV mail fixture access is documented in [`scripts/dev/README.md`](../scripts/dev/README.md).
+For repeat runs, `VOICE_SMOKE_SESSION_FILE` may point to an absolute path
+outside the checkout. The script stores the verified account pair and rotated
+refresh tokens there as an owner-only mode-0600 file; subsequent runs use the
+normal Auth refresh endpoint instead of registering or logging in again. The
+fixture is bound to the canonical `https://api-dev.comrade.click` origin and
+`voice-dev` namespace; a fixture from an older unbound schema or another
+environment is rejected before any refresh request. Keep that file private
+and do not commit it. Refresh and access credentials are kept in mode-0600
+private files while issuing requests; the WebSocket client reads its bearer
+token from a private file rather than a process argument.
 
 ### LogQL (Explore или Grafana)
 
