@@ -842,6 +842,8 @@ class Kubectl:
             raise KubeError(status)
         output = result.stdout
         if "-o" in args and "json" in args:
+            if "--ignore-not-found=true" in args and output == "":
+                return ""
             try:
                 return json.loads(output)
             except Exception:
@@ -852,12 +854,13 @@ class Kubectl:
         return self.run(["get", "namespace", NAMESPACE, "-o", "json"])
 
     def get_secret(self, name):
-        try:
-            return self.run(["get", "secret", name, "-o", "json"])
-        except KubeError as error:
-            if error.status == 404:
-                return None
-            raise
+        # kubectl's supported --ignore-not-found contract returns success and
+        # empty output only when this named object is absent. API authorization,
+        # transport, and other failures remain non-zero and fail closed.
+        output = self.run(["get", "secret", name, "--ignore-not-found=true", "-o", "json"])
+        if output == "":
+            return None
+        return output
 
     def get(self, kind, name):
         return self.run(["get", kind.lower(), name, "-o", "json"])

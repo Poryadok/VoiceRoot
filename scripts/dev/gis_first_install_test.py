@@ -142,6 +142,34 @@ def materials():
     }
 
 
+class KubectlOptionalSecretTests(unittest.TestCase):
+    def test_installed_kubectl_not_found_contract_returns_none(self):
+        calls = []
+
+        def runner(argv, **kwargs):
+            calls.append(argv)
+            self.assertIn("--ignore-not-found=true", argv)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        kube = gis.Kubectl(runner=runner)
+        self.assertIsNone(kube.get_secret("optional-identity"))
+        self.assertEqual(len(calls), 1)
+
+    def test_secret_denials_and_api_failures_do_not_become_absence(self):
+        for stderr in (
+            'Error from server (Forbidden): secrets "optional-identity" is forbidden',
+            'Error from server (Unauthorized): the server requires credentials',
+            'Error from server (Conflict): resource version changed',
+            'Unable to connect to the server: timeout',
+        ):
+            def runner(argv, **kwargs):
+                return SimpleNamespace(returncode=1, stdout="", stderr=stderr)
+
+            with self.subTest(stderr=stderr.split(":", 1)[0]):
+                with self.assertRaises(gis.KubeError):
+                    gis.Kubectl(runner=runner).get_secret("optional-identity")
+
+
 class SourceAuthorityTests(unittest.TestCase):
     def test_build_receipt_binds_clean_source_and_immutable_image(self):
         source = 'a' * 40
