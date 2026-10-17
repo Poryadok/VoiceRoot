@@ -123,6 +123,27 @@ def clean_meta(meta):
     meta.setdefault('labels', {}).update(LABEL)
 
 
+def separate_role_jwks_trust(obj):
+    """Keep outbound issuer trust separate from Role's inbound client CA."""
+    if obj.get('kind') != 'Deployment' or obj.get('metadata', {}).get('name') != 'voice-role':
+        return
+    containers = obj['spec']['template']['spec'].get('containers', [])
+    role = next((container for container in containers if container.get('name') == 'role'), None)
+    if role is None:
+        raise ValueError('voice-role container missing')
+    ca_file = next((env for env in role.get('env', []) if env.get('name') == 'S2S_JWKS_CA_FILE'), None)
+    if ca_file is None or ca_file.get('value') != '/etc/voice/media/ca/ca.crt':
+        raise ValueError('unexpected voice-role JWKS trust source')
+    ca_file['value'] = '/etc/voice/media/ca/jwks-ca.crt'
+    volume = next((volume for volume in obj['spec']['template']['spec'].get('volumes', [])
+                   if volume.get('name') == 'media-ca'), None)
+    if volume is None or volume.get('secret', {}).get('secretName') != 'voice-media-ca':
+        raise ValueError('unexpected voice-role media CA volume')
+    items = volume['secret'].setdefault('items', [])
+    if not any(item.get('key') == 'jwks-ca.crt' and item.get('path') == 'jwks-ca.crt' for item in items):
+        items.append({'key': 'jwks-ca.crt', 'path': 'jwks-ca.crt'})
+
+
 def render(snapshot, node):
     output = []
     for original in snapshot:
@@ -134,6 +155,7 @@ def render(snapshot, node):
         kind, meta = obj['kind'], obj['metadata']
         clean_meta(meta)
         obj.pop('status', None)
+        separate_role_jwks_trust(obj)
         spec = obj.get('spec', {})
         if kind in ('Deployment', 'StatefulSet', 'Job'):
             pod = spec['template']['spec']

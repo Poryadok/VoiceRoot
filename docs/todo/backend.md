@@ -242,6 +242,8 @@ and Voice IDs denied while history remains.
 
 ### Voice
 
+- [ ] **[Voice/DEV Ops] Add reviewed 90-day JWKS TLS leaf rotation for the constrained DEV issuer** — the current media PKI tool supports the one-time DEV trust bootstrap and exposed-leaf cutover only; its 90-day leaves have no later Kubernetes rotation workflow. Do not mutate the protected cutover journal or run issuer `renew` after it exists. Keep the existing inbound mTLS CA unchanged and update only the outbound JWKS trust/leaf projection with UID/resourceVersion guards. Staging requires an independent identity and CA. — [DEV tooling](../scripts/dev/README.md#dev-media-jwks-issuer-and-cutover)
+
 
 - [x] **[Voice] Space voice rooms: fail-open если `SPACE_GRPC_ADDR` unset** — **done:** `ensureSpaceMember` fail-closed `FailedPrecondition` when `SpaceMembers` nil; `space_member_degradation_test.go`.
 - [x] **[Voice] `LeaveCall` group** — aliases больше не убивают сессию: group → `RemoveParticipant`, end if empty. 1:1 Leave всё ещё `EndCall`.
