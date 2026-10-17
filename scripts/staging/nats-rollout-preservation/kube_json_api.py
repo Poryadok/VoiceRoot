@@ -16,6 +16,7 @@ import re
 import socket
 import ssl
 import stat
+import tempfile
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
@@ -32,6 +33,9 @@ MAX_JSON_RESPONSE = 4 << 20
 MAX_LOG_RESPONSE = 65536
 MAX_ARCHIVE_STREAM_BYTES = 66 << 30
 MAX_CENSUS_MANIFEST_BYTES = 512 << 20
+MAX_VERIFICATION_INPUT_BYTES = 4 << 20
+VERIFICATION_INPUT_FILES = frozenset(('bootstrap.creds','social.creds','realtime.creds',
+    'fixture.json','server.conf'))
 MAX_EXEC_STDIN_CHUNK = 48 << 10
 CENSUS_INPUT_MAGIC = b'VOICE-NATS-CENSUS-INPUT-v1\0'
 
@@ -699,13 +703,15 @@ class _KubernetesJSONAPIBase:
         token = self._operation_token()
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
 
-    def exec_pod_verification(self, namespace, pod_name, pod_uid, request, binding, action, *, archive=None):
+    def exec_pod_verification(self, namespace, pod_name, pod_uid, request, binding, action, *, archive=None,
+                              session_inputs=None):
         """Run only a producer-declared readback vector in the bound Pod."""
         if namespace != NAMESPACE:
             _fail('namespace_invalid')
         try:
             import verification_job
-            vectors = verification_job.exec_vectors(request, pod_uid, binding, archive=archive)
+            vectors = verification_job.exec_vectors(request, pod_uid, binding, archive=archive,
+                session_inputs=session_inputs)
         except (ImportError, TypeError, ValueError):
             _fail('verification_exec_request_invalid')
         if action not in vectors or action in ('census_load_inputs', 'census_receive_archive', 'restore_archive_once'):
@@ -766,8 +772,79 @@ class _KubernetesJSONAPIBase:
             chunks.append(chunk)
         return b''.join(chunks)
 
+    def exec_pod_verification_input(self, namespace, pod_name, pod_uid, request, binding,
+                              archive, session_inputs, bundle_bytes):
+        """Send one bounded canonical input bundle to the fixed census loader.
+
+        The only accepted action is the producer's first, create-once loader
+        vector. The payload is raw canonical JSON on stdin; no shell, path, or
+        candidate-selected command is accepted. A dropped connection is an
+        unknown outcome and callers may only use same-Pod receipt readback.
+        """
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        if (not isinstance(bundle_bytes, bytes) or not 0 < len(bundle_bytes) <= MAX_VERIFICATION_INPUT_BYTES):
+            _fail('verification_input_bundle_invalid')
+        try:
+            row=json.loads(bundle_bytes.decode('utf-8'),object_pairs_hook=_unique_json_pairs,
+                parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+            canonical=json.dumps(row,sort_keys=True,separators=(',',':'),ensure_ascii=False,
+                allow_nan=False).encode('utf-8')
+        except (UnicodeDecodeError,ValueError,TypeError,RecursionError):
+            _fail('verification_input_bundle_invalid')
+        if (bundle_bytes!=canonical or not isinstance(request,dict) or not isinstance(row,dict)
+            or set(row)!={'schema','operation','nonce','pod_uid','files'}
+            or row.get('schema')!='voice-nats-verification-inputs-v1'
+            or row.get('operation')!=request.get('operation') or row.get('nonce')!=request.get('nonce')
+            or row.get('pod_uid')!=pod_uid or not isinstance(row.get('files'),dict)
+            or set(row['files'])!=VERIFICATION_INPUT_FILES):
+            _fail('verification_input_bundle_identity_invalid')
+        for value in row['files'].values():
+            if not isinstance(value,str):_fail('verification_input_bundle_file_invalid')
+            try:decoded=base64.b64decode(value,validate=True)
+            except (ValueError,base64.binascii.Error):_fail('verification_input_bundle_file_invalid')
+            if not 0<len(decoded)<=256<<10:_fail('verification_input_bundle_file_invalid')
+        try:
+            import verification_job
+            expected = hashlib.sha256(bundle_bytes).hexdigest()
+            if (not isinstance(session_inputs, dict) or session_inputs.get('sha256') != expected
+                or session_inputs.get('bytes') != len(bundle_bytes)):
+                _fail('verification_input_bundle_binding_invalid')
+            vectors = verification_job.exec_vectors(request, pod_uid, binding,
+                archive=archive, session_inputs=session_inputs)
+        except (ImportError, TypeError, ValueError):
+            _fail('verification_exec_request_invalid')
+        argv = vectors.get('census_load_inputs')
+        if not isinstance(argv, list) or not argv:
+            _fail('verification_exec_action_invalid')
+        pod = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods/' + self._segment(pod_name))
+        metadata = pod.get('metadata', {})
+        if metadata.get('uid') != pod_uid or metadata.get('namespace') != namespace:
+            _fail('verification_exec_pod_changed')
+        # tempfile.TemporaryFile is anonymous on the supported Linux runner.
+        # The descriptor remains private to this process and never gains a
+        # pathname that could enter a journal or candidate-controlled tree.
+        with tempfile.TemporaryFile() as source:
+            os.fchmod(source.fileno(), 0o600)
+            source.write(bundle_bytes)
+            source.flush(); os.fsync(source.fileno()); source.seek(0)
+            info = os.fstat(source.fileno())
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                or info.st_gid != os.getegid() or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_nlink != 0 or info.st_size != len(bundle_bytes)):
+                _fail('verification_input_descriptor_custody_invalid')
+            query = [('container', 'nats-phase'), ('stdin', 'true'), ('stdout', 'true'),
+                ('stderr', 'false'), ('tty', 'false')]
+            query.extend(('command', item) for item in argv)
+            path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
+                + self._segment(pod_name) + '/exec?' + urlencode(query))
+            token = self._operation_token()
+            _websocket_exec_input(self, path, token, source.fileno(), b'',
+                archive_bytes=len(bundle_bytes), archive_sha256=expected, raw_stdin=True)
+
     def exec_pod_census_input(self, namespace, pod_name, pod_uid, request, binding,
-                              archive_path, manifest_bytes, archive_sha256, archive_bytes):
+                              archive_path, manifest_bytes, archive_sha256, archive_bytes, session_inputs):
         """Stream one verified archive into the fixed, operation-scoped census helper.
 
         The request and binding are converted to the producer's single closed
@@ -785,7 +862,8 @@ class _KubernetesJSONAPIBase:
         try:
             import verification_job
             vectors = verification_job.exec_vectors(request, pod_uid, binding,
-                archive={'sha256': archive_sha256, 'bytes': archive_bytes})
+                archive={'sha256': archive_sha256, 'bytes': archive_bytes},
+                session_inputs=session_inputs)
         except (ImportError, TypeError, ValueError):
             _fail('verification_exec_request_invalid')
         argv = vectors.get('census_receive_archive')
@@ -810,7 +888,7 @@ class _KubernetesJSONAPIBase:
         finally:
             os.close(source)
 
-    def read_verification_census(self, namespace, pod_name, pod_uid, request, binding, archive):
+    def read_verification_census(self, namespace, pod_name, pod_uid, request, binding, archive, session_inputs):
         """Return a validated, identity-bound census from its durable same-Pod receipt."""
         try:
             import census_stream
@@ -824,7 +902,7 @@ class _KubernetesJSONAPIBase:
                 or type(archive['bytes']) is not int or not 0 < archive['bytes'] <= MAX_ARCHIVE_STREAM_BYTES):
                 _fail('verification_census_archive_invalid')
             chunks = self.exec_pod_verification(namespace, pod_name, pod_uid,
-                row, storage, 'census_same_pod_readback', archive=archive)
+                row, storage, 'census_same_pod_readback', archive=archive, session_inputs=session_inputs)
             return census_stream.consume(chunks, operation=row['operation'], nonce=row['nonce'],
                 pod_uid=pod_uid, source_pvc_uid=storage['source_uid'],
                 source_pv_uid=storage['source_pv_uid'],
@@ -992,7 +1070,8 @@ def _ws_binary(sock, payload):
     sock.sendall(header + mask + masked)
 
 
-def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archive_bytes, archive_sha256):
+def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archive_bytes, archive_sha256,
+                          raw_stdin=False):
     """Duplex v5 exec for the one fixed census receive action.
 
     The helper contract emits no stdout while consuming input. We therefore
@@ -1029,12 +1108,16 @@ def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archi
             or headers.get(b'sec-websocket-accept') != base64.b64encode(hashlib.sha1(
                 (key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode('ascii')).digest())):
             _fail('exec_handshake_rejected')
-        # Prefix carries only the bounded canonical manifest; tar bytes remain
-        # read directly from the custody-checked descriptor in fixed chunks.
-        for prefix in (CENSUS_INPUT_MAGIC, len(manifest_bytes).to_bytes(4, 'big'),
-                       manifest_bytes, archive_bytes.to_bytes(8, 'big')):
-            for offset in range(0, len(prefix), MAX_EXEC_STDIN_CHUNK):
-                _ws_binary(sock, b'\x00' + prefix[offset:offset + MAX_EXEC_STDIN_CHUNK])
+        # Census archive transfer has a fixed binary envelope; bounded JSON
+        # input upload is raw stdin using this same v5 transport and closure.
+        if raw_stdin:
+            if manifest_bytes != b'':
+                _fail('exec_raw_input_envelope_invalid')
+        else:
+            for prefix in (CENSUS_INPUT_MAGIC, len(manifest_bytes).to_bytes(4, 'big'),
+                           manifest_bytes, archive_bytes.to_bytes(8, 'big')):
+                for offset in range(0, len(prefix), MAX_EXEC_STDIN_CHUNK):
+                    _ws_binary(sock, b'\x00' + prefix[offset:offset + MAX_EXEC_STDIN_CHUNK])
         digest = hashlib.sha256()
         total = 0
         while True:

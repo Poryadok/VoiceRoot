@@ -417,11 +417,13 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         pod_uid = '44444444-4444-4444-8444-444444444444'
         pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
         archive = {'sha256': 'a' * 64, 'bytes': 123}
+        session_inputs = {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456}
         with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
              patch.object(self.api, '_request', return_value=pod), \
              patch.object(kube, '_websocket_exec', return_value=iter((b'receipt',))) as execute:
             result = list(self.api.exec_pod_verification('voice-staging', 'pod', pod_uid,
-                request, binding, 'census_same_pod_readback', archive=archive))
+                request, binding, 'census_same_pod_readback', archive=archive,
+                session_inputs=session_inputs))
         self.assertEqual(result, [b'receipt'])
         path, token = execute.call_args.args[1:]
         self.assertEqual(token, 'opaque-test-token')
@@ -433,7 +435,8 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(query['stderr'], ['false'])
         self.assertEqual(query['tty'], ['false'])
         self.assertEqual(query['command'], verification_job.exec_vectors(
-            request, pod_uid, binding, archive=archive)['census_same_pod_readback'])
+            request, pod_uid, binding, archive=archive,
+            session_inputs=session_inputs)['census_same_pod_readback'])
         self.assertEqual(execute.call_args.kwargs['max_bytes'], census_stream.MAX_TRANSPORT_BYTES)
 
     def test_census_input_duplex_streams_bounded_file_envelope_and_half_closes(self):
@@ -508,6 +511,121 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(bytes(received), expected)
         self.assertLessEqual(largest, kube.MAX_EXEC_STDIN_CHUNK + 1)
 
+    def test_verification_inputs_use_raw_bounded_json_stdin(self):
+        bundle = b'{"files":{},"nonce":"' + b'b' * 32 + b'","operation":"' + b'a' * 12 + b'","pod_uid":"44444444-4444-4444-8444-444444444444","schema":"voice-nats-verification-inputs-v1"}'
+        archive = (self.root / 'input-archive.tar')
+        archive.write_bytes(bundle); archive.chmod(0o600)
+        digest = hashlib.sha256(bundle).hexdigest()
+        client, server = socket.socketpair()
+        client.settimeout(10); server.settimeout(10)
+        received = bytearray(); failure = []
+
+        def read_exact(sock, size):
+            output = bytearray()
+            while len(output) < size:
+                chunk = sock.recv(size - len(output))
+                if not chunk: raise EOFError('socket closed')
+                output.extend(chunk)
+            return bytes(output)
+
+        def serve():
+            try:
+                header = bytearray()
+                while not header.endswith(b'\r\n\r\n'):
+                    header.extend(server.recv(4096))
+                key = next(line.split(b':', 1)[1].strip().decode()
+                    for line in header.split(b'\r\n') if line.lower().startswith(b'sec-websocket-key:'))
+                accept = base64.b64encode(hashlib.sha1((key +
+                    '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest())
+                server.sendall(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'
+                    b'Connection: Upgrade\r\nSec-WebSocket-Protocol: v5.channel.k8s.io\r\n'
+                    b'Sec-WebSocket-Accept: ' + accept + b'\r\n\r\n')
+                while True:
+                    first = read_exact(server, 2)
+                    size = first[1] & 0x7f
+                    if size == 126: size = int.from_bytes(read_exact(server, 2), 'big')
+                    elif size == 127: size = int.from_bytes(read_exact(server, 8), 'big')
+                    mask = read_exact(server, 4)
+                    payload = read_exact(server, size)
+                    payload = bytes(value ^ mask[i % 4] for i, value in enumerate(payload))
+                    if payload == b'\xff\x00': break
+                    if not payload or payload[0] != 0: raise AssertionError('not stdin channel')
+                    received.extend(payload[1:])
+                status = b'\x03' + json.dumps({'status': 'Success'}).encode()
+                server.sendall(bytes((0x82, len(status))) + status + b'\x88\x00')
+            except BaseException as error:
+                failure.append(error)
+            finally:
+                server.close()
+
+        worker = threading.Thread(target=serve, daemon=True); worker.start()
+        fake_context = type('Context', (), {'wrap_socket': staticmethod(lambda raw, server_hostname: raw)})()
+        self.api.context = fake_context
+        source_fd = kube._open_verified_archive(archive, len(bundle), digest)
+        try:
+            with patch.object(kube.socket, 'create_connection', return_value=client):
+                kube._websocket_exec_input(self.api, '/exec?stdin=true', 'opaque-token',
+                    source_fd, b'', archive_bytes=len(bundle), archive_sha256=digest, raw_stdin=True)
+        finally:
+            os.close(source_fd)
+        worker.join(timeout=5)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(failure, [])
+        self.assertEqual(bytes(received), bundle)
+
+    def test_verification_input_method_accepts_only_fixed_loader_vector(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
+        binding = {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'pv-voice-nats-source',
+            'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+            'source_node_name': 'k3s-worker-1',
+            'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'verification_uid': '22222222-2222-4222-8222-222222222222',
+            'verification_pv_name': 'pv-voice-nats-verify',
+            'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+            'verification_node_name': 'k3s-worker-1',
+        }
+        pod_uid = '44444444-4444-4444-8444-444444444444'
+        files = {name: base64.b64encode(b'x').decode() for name in kube.VERIFICATION_INPUT_FILES}
+        bundle = json.dumps({'schema': 'voice-nats-verification-inputs-v1', 'operation': request['operation'],
+            'nonce': request['nonce'], 'pod_uid': pod_uid, 'files': files}, sort_keys=True,
+            separators=(',', ':'), ensure_ascii=False).encode()
+        archive_binding = {'sha256': 'c' * 64, 'bytes': 123}
+        input_binding = {'attempt': 'd' * 8, 'sha256': hashlib.sha256(bundle).hexdigest(), 'bytes': len(bundle)}
+        pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
+        with patch.object(self.api, '_request', return_value=pod), \
+             patch.object(self.api.tokens, 'read', return_value='opaque-token'), \
+             patch.object(kube, '_websocket_exec_input') as execute:
+            self.api.exec_pod_verification_input('voice-staging', 'pod', pod_uid, request, binding,
+                archive_binding, input_binding, bundle)
+        path, token = execute.call_args.args[1:3]
+        self.assertEqual(token, 'opaque-token')
+        self.assertTrue(path.startswith('/api/v1/namespaces/voice-staging/pods/pod/exec?'))
+        from urllib.parse import parse_qs, urlsplit
+        query = parse_qs(urlsplit(path).query)
+        self.assertEqual(query['container'], ['nats-phase'])
+        self.assertEqual(query['stdin'], ['true'])
+        self.assertEqual(query['stdout'], ['true'])
+        self.assertEqual(query['stderr'], ['false'])
+        self.assertEqual(query['tty'], ['false'])
+        self.assertEqual(query['command'], verification_job.exec_vectors(request, pod_uid, binding,
+            archive=archive_binding, session_inputs=input_binding)['census_load_inputs'])
+        self.assertEqual(execute.call_args.kwargs, {'archive_bytes': len(bundle),
+            'archive_sha256': hashlib.sha256(bundle).hexdigest(), 'raw_stdin': True})
+
+    def test_verification_input_rejects_bad_binding_before_api_io(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
+        pod_uid = '44444444-4444-4444-8444-444444444444'
+        bundle = b'{}'
+        with patch.object(self.api, '_request') as get:
+            with self.assertRaises(kube.KubeAPIError):
+                self.api.exec_pod_verification_input('voice-staging', 'pod', pod_uid, request, {},
+                    {'sha256': 'c' * 64, 'bytes': 123}, {'attempt': 'd' * 8, 'sha256': '0' * 64,
+                    'bytes': len(bundle)}, bundle)
+        get.assert_not_called()
+
     def test_census_input_manifest_must_be_canonical_duplicate_free_json(self):
         for raw in (b'{"z":1,"a":2}', b'{"a":1,"a":2}', b'{"x":NaN}'):
             with self.subTest(manifest=raw), self.assertRaises(kube.KubeAPIError):
@@ -539,6 +657,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
         archive = {'sha256': 'a' * 64, 'bytes': 123}
+        session_inputs = {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456}
         with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
              patch.object(self.api, '_request', return_value={'metadata': {
                  'uid': pod_uid, 'namespace': 'voice-staging'}}), \
@@ -546,7 +665,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
              patch.object(census_stream, 'consume',
                  side_effect=lambda chunks, **kwargs: (list(chunks), kwargs)) as consume:
             result = self.api.read_verification_census('voice-staging', 'pod', pod_uid,
-                request, binding, archive)
+                request, binding, archive, session_inputs)
         self.assertEqual(result, ([b'framed-output'], {
             'operation': request['operation'], 'nonce': request['nonce'], 'pod_uid': pod_uid,
             'source_pvc_uid': binding['source_uid'],
@@ -577,7 +696,8 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
              self.assertRaises(kube.KubeAPIError):
             self.api.read_verification_census('voice-staging', 'pod',
                 '44444444-4444-4444-8444-444444444444', request, binding,
-                {'sha256': 'a' * 64, 'bytes': 123})
+                {'sha256': 'a' * 64, 'bytes': 123},
+                {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456})
         read.assert_not_called()
         execute.assert_not_called()
 
@@ -591,6 +711,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify', 'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
             'verification_node_name': 'k3s-worker-1'}
+        session_inputs = {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456}
         with self.assertRaises(kube.KubeAPIError):
             list(self.api.exec_pod_verification('voice-staging', 'pod',
                 '44444444-4444-4444-8444-444444444444', request, binding, 'arbitrary'))
@@ -601,7 +722,8 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             with self.assertRaises(kube.KubeAPIError):
                 list(self.api.exec_pod_verification('voice-staging', 'pod',
                     '44444444-4444-4444-8444-444444444444', request, binding,
-                    'census_same_pod_readback', archive={'sha256': 'a' * 64, 'bytes': 123}))
+                    'census_same_pod_readback', archive={'sha256': 'a' * 64, 'bytes': 123},
+                    session_inputs=session_inputs))
         execute.assert_not_called()
 
     def test_rejects_non_https_or_unpinned_server_before_network(self):
