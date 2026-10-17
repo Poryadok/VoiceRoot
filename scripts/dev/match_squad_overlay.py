@@ -457,9 +457,7 @@ def build_object_plan(client, target, base, patch_path):
     validate_target(target, base)
     if base["metadata"]["uid"] != EXPECTED_OBJECT_UIDS[(target.kind, target.name)]:
         raise OverlayError("target object UID is outside the bound DEV activation")
-    patch_bytes = patch_path.read_bytes()
-    desired = strategic_render(client, target, base, patch_path)
-    operations = object_patch(base, desired)
+    operations = None
     if target.kind == "Deployment":
         status = base.get("status", {})
         replicas = base.get("spec", {}).get("replicas", 1)
@@ -467,20 +465,32 @@ def build_object_plan(client, target, base, patch_path):
         updated = status.get("updatedReplicas", 0) >= replicas
         ready = (status.get("readyReplicas", 0) >= replicas and
                  status.get("availableReplicas", 0) >= replicas)
-        recoverable_matchmaking_opt_in = (
-            replicas > 0 and generation_current and updated and
-            _is_exact_matchmaking_listener_removal(target, base, operations))
-        recoverable_matchmaking_fs_group = (
-            replicas > 0 and generation_current and updated and
-            _is_exact_matchmaking_fs_group_recovery(target, base, operations))
-        if not (generation_current and updated and ready) and not (
-                recoverable_matchmaking_opt_in or recoverable_matchmaking_fs_group):
-            raise OverlayError("Deployment is not ordinarily ready: " + target.name)
+        if not (generation_current and updated and ready):
+            possible_recovery = (
+                target.name == "voice-matchmaking" and replicas > 0 and
+                generation_current and updated and (
+                    _has_reviewed_matchmaking_listener_opt_in(target, base) or
+                    sha256_bytes(canonical_bytes(base.get("spec", {}).get(
+                        "template", {}))) == MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256))
+            if not possible_recovery:
+                raise OverlayError("Deployment is not ordinarily ready: " + target.name)
+            desired = strategic_render(client, target, base, patch_path)
+            operations = object_patch(base, desired)
+            recoverable_matchmaking_opt_in = _is_exact_matchmaking_listener_removal(
+                target, base, operations)
+            recoverable_matchmaking_fs_group = _is_exact_matchmaking_fs_group_recovery(
+                target, base, operations)
+            if not (recoverable_matchmaking_opt_in or recoverable_matchmaking_fs_group):
+                raise OverlayError("unready Matchmaking recovery projection is not exact")
         containers = base["spec"]["template"]["spec"]["containers"]
         app_container = next(container for container in containers
                              if container.get("name") == CONTAINERS[target.name])
         if app_container.get("image") != QUALIFIED_IMAGES[target.name]:
             raise OverlayError("source-qualified application image not active: " + target.name)
+    patch_bytes = patch_path.read_bytes()
+    if operations is None:
+        desired = strategic_render(client, target, base, patch_path)
+        operations = object_patch(base, desired)
     already_satisfied = len(operations) == 2
     return {
         "kind": target.kind, "name": target.name,
