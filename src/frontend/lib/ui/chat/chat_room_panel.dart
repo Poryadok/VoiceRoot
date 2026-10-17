@@ -96,6 +96,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key inputKey = Key('chat_room_input');
   static const Key sendKey = Key('chat_room_send');
   static const Key sendRetryKey = Key('chat_room_send_retry');
+  static const Key replyTargetCancelKey = Key('chat_room_reply_target_cancel');
   static const Key attachKey = Key('chat_room_attach');
   static const Key attachmentUploadFailureKey = Key(
     'chat_attachment_upload_failure',
@@ -428,6 +429,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   String _roomErrorText(AppLocalizations l10n, String raw) {
+    if (raw.toLowerCase().contains('threads are disabled for this chat')) {
+      return l10n.chatThreadRepliesUnavailable;
+    }
     return chatRoomErrorMessage(l10n, raw);
   }
 
@@ -578,6 +582,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
+    final scheduledMessagesEnabled = ref
+        .watch(gatewayConfigProvider)
+        .scheduledMessagesEnabled;
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
       final textAttempt = _pendingTextSend;
       if (textAttempt != null && !_isTextSendActorCurrent(textAttempt)) {
@@ -596,7 +603,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         });
       }
       _scheduledMessagesRequested = false;
-      if (next.activeProfileId != null &&
+      if (scheduledMessagesEnabled &&
+          next.activeProfileId != null &&
           ref.read(selectedChatIdProvider) == widget.chatId) {
         _scheduledMessagesRequested = true;
         unawaited(
@@ -610,7 +618,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (previous != next && next != widget.chatId) {
         setState(_cancelTextSend);
       }
-      if (next != widget.chatId || _scheduledMessagesRequested) return;
+      if (!scheduledMessagesEnabled ||
+          next != widget.chatId ||
+          _scheduledMessagesRequested) {
+        return;
+      }
       _scheduledMessagesRequested = true;
       unawaited(
         ref
@@ -618,7 +630,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             .loadScheduledMessages(),
       );
     });
-    if (!_scheduledMessagesRequested &&
+    if (scheduledMessagesEnabled &&
+        !_scheduledMessagesRequested &&
         activeId != null &&
         ref.read(selectedChatIdProvider) == widget.chatId) {
       _scheduledMessagesRequested = true;
@@ -692,9 +705,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     String? spaceId;
     var slowModeSeconds = 0;
     var isGroup = false;
+    final chatListState = ref.watch(chatListControllerProvider);
+    final listBelongsToViewer =
+        activeId != null && chatListState.profileId == activeId;
     VoiceChat? chatMeta;
     ChatListItem? chatListItem;
-    for (final item in ref.watch(chatListControllerProvider).items) {
+    for (final item
+        in listBelongsToViewer ? chatListState.items : const <ChatListItem>[]) {
       if (item.chatId == widget.chatId) {
         chatMeta = item.chat;
         chatListItem = item;
@@ -709,6 +726,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     final replyTarget = ref.watch(chatReplyTargetProvider(widget.chatId));
     final activeThreadId = ref.watch(chatActiveThreadProvider(widget.chatId));
+    final threadsEnabled = chatMeta?.threadsEnabled == true;
     final ephemeralMessages = ref.watch(
       ephemeralMessagesProvider(widget.chatId),
     );
@@ -721,11 +739,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         isOffline ||
         room.isDmPeerDeleted ||
         (blockChannelMainFeed && replyTarget == null);
-    final chatListState = ref.watch(chatListControllerProvider);
     final roomBelongsToViewer =
         activeId != null && room.historyProfileId == activeId;
-    final listBelongsToViewer =
-        activeId != null && chatListState.profileId == activeId;
     final peerId = isGroup
         ? null
         : resolveDmPeerForChatId(
@@ -1502,21 +1517,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       ),
                     ),
                     trailing: IconButton(
+                      key: ChatRoomPanel.replyTargetCancelKey,
                       icon: const Icon(Icons.close, size: 18),
-                      onPressed: () {
-                        ref
-                                .read(
-                                  chatReplyTargetProvider(
-                                    widget.chatId,
-                                  ).notifier,
-                                )
-                                .state =
-                            null;
-                      },
+                      onPressed: _cancelReplyTarget,
                     ),
                   ),
                 ),
-              _buildScheduledMessagesSection(room, l10n),
+              if (scheduledMessagesEnabled)
+                _buildScheduledMessagesSection(room, l10n),
               if (textSendFailed && _pendingTextSend != null)
                 _buildTextSendFailure(
                   l10n,
@@ -1673,7 +1681,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         onLongPress:
                             room.isSending ||
                                 _uploadingAttachment ||
-                                composerBlocked
+                                composerBlocked ||
+                                !scheduledMessagesEnabled
                             ? null
                             : _openScheduledSendMenu,
                         isLoading: room.isSending || _textSendInFlight,
@@ -1686,7 +1695,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             ],
           ),
         ),
-        if (activeThreadId != null)
+        if (activeThreadId != null && threadsEnabled)
           SizedBox(
             width: 320,
             child: ThreadSidePanel(
@@ -1699,16 +1708,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       .map((m) => m.content)
                       .firstOrNull ??
                   '',
-              onClose: () {
-                ref
-                        .read(chatActiveThreadProvider(widget.chatId).notifier)
-                        .state =
-                    null;
-                ref
-                        .read(chatReplyTargetProvider(widget.chatId).notifier)
-                        .state =
-                    null;
-              },
+              onClose: _cancelReplyTarget,
             ),
           ),
       ],
@@ -1790,7 +1790,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   Future<void> _openScheduledSendMenu() async {
     final chatId = widget.chatId;
-    if (_composer.text.trim().isEmpty ||
+    if (!ref.read(gatewayConfigProvider).scheduledMessagesEnabled ||
+        _composer.text.trim().isEmpty ||
         _isDmPeerDeleted() ||
         !_isCurrentChat(chatId)) {
       return;
@@ -2341,6 +2342,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _textSendFailed = false;
   }
 
+  void _cancelReplyTarget() {
+    final target = ref.read(chatReplyTargetProvider(widget.chatId));
+    ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
+    ref.read(chatActiveThreadProvider(widget.chatId).notifier).state = null;
+    final attempt = _pendingTextSend;
+    if (attempt?.replyTarget?.id == target?.id && _textSendFailed) {
+      ref
+          .read(chatRoomControllerProvider(widget.chatId).notifier)
+          .discardFailedMessage();
+      setState(_cancelTextSend);
+    }
+  }
+
   bool _isTextSendActorCurrent(_TextSendAttempt attempt) =>
       mounted &&
       ref.read(authControllerProvider.notifier).gatewayRequestIdentity ==
@@ -2713,6 +2727,17 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   bool _isCurrentChat(String chatId) =>
       mounted && widget.chatId == chatId && !_isDmPeerDeleted();
 
+  bool _threadsEnabledForCurrentChat() {
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    final list = ref.read(chatListControllerProvider);
+    if (profileId == null || list.profileId != profileId) return false;
+    return list.items
+            .where((item) => item.chatId == widget.chatId)
+            .map((item) => item.chat.threadsEnabled)
+            .firstOrNull ==
+        true;
+  }
+
   bool _isCurrentAttachmentOperation(int operation, String chatId) =>
       operation == _attachmentOperation && _isCurrentChat(chatId);
 
@@ -2729,6 +2754,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted;
 
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
+    final threadsEnabled = _threadsEnabledForCurrentChat();
     String? spaceId;
     var canUseSpaceMessageModeration = false;
     for (final item in ref.read(chatListControllerProvider).items) {
@@ -2755,11 +2781,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     title: Text(sheetL10n.chatMessageAddReaction),
                     onTap: () => Navigator.of(context).pop('react'),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.reply_outlined),
-                    title: Text(sheetL10n.chatMessageReply),
-                    onTap: () => Navigator.of(context).pop('reply'),
-                  ),
+                  if (threadsEnabled)
+                    ListTile(
+                      leading: const Icon(Icons.reply_outlined),
+                      title: Text(sheetL10n.chatMessageReply),
+                      onTap: () => Navigator.of(context).pop('reply'),
+                    ),
                   if (!ref
                       .read(chatRoomControllerProvider(widget.chatId))
                       .isDmPeerDeleted)
@@ -2883,6 +2910,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         );
       }
     } else if (action == 'reply') {
+      if (!_threadsEnabledForCurrentChat()) return;
       ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = message;
       ref.read(chatActiveThreadProvider(widget.chatId).notifier).state =
           message.id;
