@@ -20,6 +20,11 @@ BINDING = {
     'verification_node_name': 'k3s-worker-1',
     'verification_hostname': 'worker-label-1',
 }
+VERIFICATION_ATTEMPT = '1234abcd'
+CENSUS_BINDING = BINDING | {
+    'verification_attempt': VERIFICATION_ATTEMPT,
+    'verification_claim': 'voice-nats-verify-' + 'a' * 12 + '-' + VERIFICATION_ATTEMPT,
+}
 IMAGE = 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'a' * 64
 POD_UID = '44444444-4444-4444-8444-444444444444'
 ARCHIVE_REQUEST = REQUEST | {'phase': 'archive'}
@@ -149,9 +154,12 @@ class VerificationJobTests(unittest.TestCase):
         for image in ('candidate:latest', IMAGE.replace('a' * 64, 'z' * 64)):
             with self.subTest(image=image), self.assertRaises(jobs.VerificationJobError):
                 jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, image)
-        census = jobs.document(REQUEST, BINDING, IMAGE)
+        census = jobs.document(REQUEST, CENSUS_BINDING, IMAGE)
         pod = census['spec']['template']['spec']
         self.assertEqual(census['metadata']['labels'][jobs.LABEL_PHASE], 'census')
+        self.assertEqual(census['metadata']['labels'][jobs.LABEL_VERIFICATION_ATTEMPT], VERIFICATION_ATTEMPT)
+        self.assertEqual(census['spec']['template']['metadata']['labels'][jobs.LABEL_VERIFICATION_ATTEMPT],
+            VERIFICATION_ATTEMPT)
         self.assertEqual(pod['securityContext'], {
             'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
             'fsGroup': 65532, 'fsGroupChangePolicy': 'OnRootMismatch',
@@ -162,7 +170,7 @@ class VerificationJobTests(unittest.TestCase):
             '/inputs': {'name': 'inputs', 'mountPath': '/inputs'}})
         self.assertEqual({v['name']: v for v in pod['volumes']}, {
             'target': {'name': 'target', 'persistentVolumeClaim': {
-                'claimName': BINDING['verification_claim']}},
+                'claimName': CENSUS_BINDING['verification_claim']}},
             'output': {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}},
             'inputs': {'name': 'inputs', 'emptyDir': {'sizeLimit': '16Mi'}}})
         self.assertNotIn('source', {volume['name'] for volume in pod['volumes']})
@@ -170,9 +178,9 @@ class VerificationJobTests(unittest.TestCase):
         self.assertNotIn('nodeName', pod)
 
     def test_census_vectors_are_fixed_target_only_upload_then_same_pod_readback(self):
-        vectors = jobs.exec_vectors(REQUEST, POD_UID, BINDING,
+        vectors = jobs.exec_vectors(REQUEST, POD_UID, CENSUS_BINDING,
             {'sha256': 'd' * 64, 'bytes': 1234},
-            session_inputs={'attempt': '1234abcd', 'sha256': 'e' * 64, 'bytes': 512},
+            session_inputs={'attempt': VERIFICATION_ATTEMPT, 'sha256': 'e' * 64, 'bytes': 512},
             input_pod_uid='77777777-7777-4777-8777-777777777777')
         upload = vectors['census_receive_archive']
         self.assertEqual(upload[:3], ['/usr/bin/python3', '/voice-nats-runner/phase', '--receive-archive'])
@@ -197,7 +205,28 @@ class VerificationJobTests(unittest.TestCase):
         self.assertEqual(set(vectors), {'census_load_inputs', 'census_read_input_receipt',
             'census_consume_inputs', 'census_receive_archive', 'census_same_pod_readback'})
         with self.assertRaises(jobs.VerificationJobError):
-            jobs.exec_vectors(REQUEST, POD_UID, BINDING)
+            jobs.exec_vectors(REQUEST, POD_UID, CENSUS_BINDING,
+                {'sha256': 'd' * 64, 'bytes': 1234},
+                session_inputs={'attempt': 'deadbeef', 'sha256': 'e' * 64, 'bytes': 512})
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'verification_claim_attempt_mismatch'):
+            jobs.document(REQUEST, CENSUS_BINDING | {'verification_claim': 'voice-nats-verify-' + 'a' * 12}, IMAGE)
+        for invalid_attempt in ('1234abcdx', '../abcdefg', '1234567A', ''):
+            invalid = CENSUS_BINDING | {'verification_attempt': invalid_attempt}
+            with self.subTest(attempt=invalid_attempt), self.assertRaises(jobs.VerificationJobError):
+                jobs.document(REQUEST, invalid, IMAGE)
+
+    def test_census_job_identity_is_derived_from_the_persisted_attempt(self):
+        other_attempt = 'deadbeef'
+        other = CENSUS_BINDING | {
+            'verification_attempt': other_attempt,
+            'verification_claim': 'voice-nats-verify-' + REQUEST['operation'] + '-' + other_attempt,
+        }
+        first = jobs.document(REQUEST, CENSUS_BINDING, IMAGE)
+        second = jobs.document(REQUEST, other, IMAGE)
+        self.assertNotEqual(first['metadata']['name'], second['metadata']['name'])
+        self.assertEqual(first['metadata']['labels'][jobs.LABEL_VERIFICATION_ATTEMPT], VERIFICATION_ATTEMPT)
+        with self.assertRaises(jobs.VerificationJobError):
+            jobs.job_name(REQUEST)
 
     def test_selected_store_replacement_and_promotable_restore_are_not_supported(self):
         for phase in ('restore', 'bind-restore'):
@@ -228,7 +257,8 @@ class VerificationJobTests(unittest.TestCase):
 
     def test_wffc_verification_binder_is_target_only_readonly_and_node_affinity_bound(self):
         request = REQUEST | {'phase': 'bind-verification'}
-        target = {'role': 'verification', 'claim_name': 'voice-nats-verify-' + request['operation'],
+        target = {'role': 'verification', 'claim_name': CENSUS_BINDING['verification_claim'],
+            'verification_attempt': VERIFICATION_ATTEMPT,
             'target_uid': '22222222-2222-4222-8222-222222222222', 'node_name': 'k3s-worker-1',
             'hostname': 'worker-label-1'}
         row = jobs.document(request, target, IMAGE)
@@ -236,6 +266,7 @@ class VerificationJobTests(unittest.TestCase):
         container = pod['containers'][0]
         labels = row['spec']['template']['metadata']['labels']
         self.assertEqual(row['metadata']['labels'][jobs.LABEL_PHASE], 'bind-verification')
+        self.assertEqual(row['metadata']['labels'][jobs.LABEL_VERIFICATION_ATTEMPT], VERIFICATION_ATTEMPT)
         self.assertEqual(row['spec']['selector']['matchLabels'], {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
         self.assertEqual(labels[jobs.LABEL_JOB_SELECTOR], row['metadata']['name'])
         self.assertEqual(pod['automountServiceAccountToken'], False)
