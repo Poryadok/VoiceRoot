@@ -31,9 +31,40 @@ SOURCE_CACHE_DIR = Path('/var/lib/voice-nats-preservation/installed/source-archi
 IMAGE_NAMES = frozenset(('analytics', 'bot', 'chat', 'file', 'gateway', 'matchmaking', 'messaging',
     'moderation', 'notification', 'realtime', 'role', 'search', 'social', 'space', 'story', 'subscription',
     'user', 'voice', 'auth', 'web', 'developer-portal', 'admin', 'gameintegration', 'nats-hub-config-renderer'))
+_DIAGNOSTIC_PHASES = frozenset((
+    'source-preflight', 'repository-pin', 'source-equivalence', 'source-ci', 'source-tree',
+    'source-archive', 'stack-lock-artifact', 'stack-lock-read', 'stack-lock-parse',
+    'master-recheck', 'master-ref', 'source-capture',
+    'registry-token', 'registry-index', 'registry-platform-manifest', 'registry-config', 'registry-image',
+    *('registry-image-' + name for name in IMAGE_NAMES),
+))
 
 class SourceError(ValueError):
-    pass
+    def __init__(self, message='source_authority_rejected', *, phase=None, code='validation_rejected', failure_class='SourceError', http_status=None):
+        super().__init__(message)
+        self.phase = phase if isinstance(phase, str) and phase in _DIAGNOSTIC_PHASES else 'unknown'
+        self.code = code if code in ('validation_rejected', 'transport_rejected', 'response_schema_invalid', 'archive_rejected', 'http_error', 'http_status', 'network_error') else 'internal_error'
+        self.failure_class = failure_class if failure_class in ('SourceError', 'CustodyError', 'KeyError', 'TypeError', 'ValueError', 'OSError', 'BadZipFile', 'HTTPError', 'HTTPResponse', 'URLError', 'TimeoutError', 'Other') else 'Other'
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+
+
+def _source_diagnostic(error, phase):
+    if isinstance(error, SourceError):
+        return SourceError(phase=error.phase or phase, code=error.code,
+            failure_class=error.failure_class, http_status=error.http_status)
+    if isinstance(error, transport.CustodyError):
+        return SourceError(phase=phase, code='transport_rejected', failure_class='CustodyError')
+    if isinstance(error, KeyError):
+        return SourceError(phase=phase, code='response_schema_invalid', failure_class='KeyError')
+    if isinstance(error, TypeError):
+        return SourceError(phase=phase, code='response_schema_invalid', failure_class='TypeError')
+    if isinstance(error, ValueError):
+        return SourceError(phase=phase, code='response_schema_invalid', failure_class='ValueError')
+    if isinstance(error, OSError):
+        return SourceError(phase=phase, code='transport_rejected', failure_class='OSError')
+    if isinstance(error, zipfile.BadZipFile):
+        return SourceError(phase=phase, code='archive_rejected', failure_class='BadZipFile')
+    return SourceError(phase=phase, code='internal_error', failure_class='Other')
 
 
 def _fail():
@@ -442,21 +473,27 @@ def _equivalent_master_source(headers, source_sha, master_sha, deadline):
 
 
 def _capture_source_at_master(token, run_id, source_sha, destination, master_sha, *, provisional_staging=False):
+    phase = 'source-preflight'
     try:
         if type(run_id) is not int or run_id <= 0 or not isinstance(source_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', source_sha): _fail()
         destination = _destination(destination); headers = _headers(token); deadline = time.monotonic() + 600
+        phase = 'repository-pin'
         repo = _head(headers, master_sha, deadline)
         if type(provisional_staging) is not bool: _fail()
         equivalence = None
         if master_sha != source_sha:
             if provisional_staging: _fail()
+            phase = 'source-equivalence'
             equivalence = _equivalent_master_source(headers, source_sha, master_sha, deadline)
+        phase = 'source-ci'
         run, jobs = (_provisional_ci if provisional_staging else _ci)(headers, run_id, source_sha, repo, deadline)
+        phase = 'source-tree'
         commit = _get(API + '/git/commits/' + source_sha, headers, deadline)
         if commit['sha'] != source_sha or not re.fullmatch(r'[a-f0-9]{40}', commit['tree']['sha']): _fail()
         tree = _get(API + '/git/trees/' + commit['tree']['sha'] + '?recursive=1', headers, deadline)
         if tree['sha'] != commit['tree']['sha']: _fail()
         if shutil.disk_usage(tempfile.gettempdir()).free < MAX_ARCHIVE: _fail()
+        phase = 'source-archive'
         with cached_archive(source_sha) as cached:
             if cached is not None:
                 files = _capture_tar(cached,destination,tree,source_sha,deadline,cached=True)
@@ -464,6 +501,7 @@ def _capture_source_at_master(token, run_id, source_sha, destination, master_sha
                 with tempfile.TemporaryFile() as archive:
                     _fetch(API + '/tarball/' + source_sha, headers, MAX_ARCHIVE, deadline, target=archive)
                     files = _capture_tar(archive, destination, tree, source_sha, deadline)
+        phase = 'stack-lock-artifact'
         artifacts = _pages(API + '/actions/runs/' + str(run_id) + '/artifacts', 'artifacts', headers, deadline)
         candidates = [artifact for artifact in artifacts if artifact['name'] == 'staging-stack-lock']
         if len(candidates) != 1 or type(candidates[0]['id']) is not int: _fail()
@@ -475,6 +513,7 @@ def _capture_source_at_master(token, run_id, source_sha, destination, master_sha
                 or workflow['head_repository_id'] != repo['id']
                 or not transport._timestamp(job['started_at']) <= transport._timestamp(artifact['created_at']) <= transport._timestamp(job['completed_at'])
                 or transport._timestamp(artifact['expires_at']) <= transport.datetime.now(transport.timezone.utc)): _fail()
+        phase = 'stack-lock-read'
         with tempfile.TemporaryFile() as archive:
             count, _ = _fetch(API + '/actions/artifacts/' + str(artifact_id) + '/zip', headers, 4 * 1024 ** 2, deadline, target=archive)
             if type(artifact.get('size_in_bytes')) is not int or count != artifact['size_in_bytes']: _fail()
@@ -484,8 +523,13 @@ def _capture_source_at_master(token, run_id, source_sha, destination, master_sha
                 if len(members) != 1 or members[0].filename != 'stack.lock.yaml' or members[0].is_dir() or members[0].file_size > 1024 * 1024: _fail()
                 if stat.S_IFMT(members[0].external_attr >> 16) not in (0, stat.S_IFREG) or members[0].flag_bits & 1: _fail()
                 lock = zipped.read(members[0])
+        phase = 'stack-lock-parse'
         tags = _lock(lock, source_sha, destination)
-        images = {name: _resolve_image(name, tag, deadline) for name, tag in sorted(tags.items())}
+        images = {}
+        for name, tag in sorted(tags.items()):
+            phase = 'registry-image-' + name
+            images[name] = _resolve_image(name, tag, deadline)
+        phase = 'master-recheck'
         _head(headers, master_sha, deadline)
         if equivalence is not None:
             equivalence['current_master_sha_after'] = master_sha
@@ -500,8 +544,8 @@ def _capture_source_at_master(token, run_id, source_sha, destination, master_sha
             result['provisional_staging'] = True
             revalidate_ci(token, result)
         return result
-    except Exception:
-        raise SourceError('source_authority_rejected') from None
+    except Exception as error:
+        raise _source_diagnostic(error, phase) from None
 
 
 def capture_source(token, run_id, source_sha, destination, *, provisional_staging=False):
@@ -517,13 +561,17 @@ def capture_equivalent_master_source(token, run_id, source_sha, destination):
     backend tree and the CI workflow/context/catalog that select its build must
     be byte-identical. The current master ref is pinned before and after capture.
     """
+    phase = 'master-ref'
     try:
         headers = _headers(token)
         deadline = time.monotonic() + 60
         ref = _get(API + '/git/ref/heads/master', headers, deadline)
         master_sha = ref.get('object', {}).get('sha') if ref.get('ref') == 'refs/heads/master' else None
         if not isinstance(master_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', master_sha): _fail()
+        phase = 'source-capture'
         return _capture_source_at_master(token, run_id, source_sha, destination, master_sha,
             provisional_staging=False)
+    except SourceError:
+        raise
     except Exception:
-        raise SourceError('source_authority_rejected') from None
+        raise SourceError(phase=phase) from None
