@@ -690,8 +690,9 @@ def main(argv=None):
     except (Blocked, KubeBlocked) as error:
         print("BLOCKED=" + str(error), file=sys.stderr)
         return 2
-    except KubeError:
-        print("BLOCKED=kubernetes_api_error", file=sys.stderr)
+    except KubeError as error:
+        print("BLOCKED=kubernetes_api_error stage=" + error.stage +
+            " status=" + str(error.status), file=sys.stderr)
         return 2
 
 
