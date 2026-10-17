@@ -55,6 +55,22 @@ def require_success(result):
     return result.stdout
 
 
+def safe_service_uid_failure_category(stderr):
+    """Classify the UID-drop check without exposing child output or paths."""
+    message = (stderr or "").lower()
+    if "unknown user" in message or "unknown uid" in message:
+        return "target_uid_unavailable"
+    if "not in the sudoers" in message or "a password is required" in message:
+        return "sudo_authorization_unavailable"
+    if "permission denied" in message or "permissionerror" in message:
+        return "service_uid_access_denied"
+    if "assertionerror" in message:
+        return "service_uid_metadata_or_read_assertion"
+    if "traceback" in message:
+        return "service_uid_child_failed"
+    return "service_uid_command_failed"
+
+
 def require_binary(name):
     if not shutil.which(name):
         raise AssertionError(f"required offline test prerequisite missing: {name}")
@@ -393,6 +409,8 @@ sys.exit(code)
                  service_dest / "ca/ca.crt"]
         read_check = (
             "import pathlib,stat,sys\n"
+            "import os\n"
+            "assert (os.geteuid(),os.getegid())==(65532,65532)\n"
             "for raw in sys.argv[1:]:\n"
             " p=pathlib.Path(raw); s=p.stat(); expected=0o700 if p.is_dir() else 0o600\n"
             " assert (s.st_uid,s.st_gid)==(65532,65532) and stat.S_IMODE(s.st_mode)==expected\n"
@@ -411,9 +429,20 @@ sys.exit(code)
                                     timeout=90, preexec_fn=drop_to_service_uid)
         else:
             require_binary("sudo")
-            command = ("sudo", "-n", "-u", "#65532", sys.executable, "-c", read_check, *paths)
+            drop_to_service_uid = (
+                "import os,sys\n"
+                "read_check=sys.argv.pop(1)\n"
+                "os.setgroups([]); os.setgid(65532); os.setuid(65532)\n"
+                "exec(read_check, {'__name__':'__main__'})"
+            )
+            command = ("sudo", "-n", "-u", "root", sys.executable, "-c",
+                       drop_to_service_uid, read_check, *paths)
             result = run(*command)
-        require_success(result)
+        if result.returncode:
+            category = safe_service_uid_failure_category(result.stderr)
+            raise AssertionError(
+                f"service UID read check failed with exit code {result.returncode} "
+                f"(category={category})")
 
 
 class ComposeTests(unittest.TestCase):
