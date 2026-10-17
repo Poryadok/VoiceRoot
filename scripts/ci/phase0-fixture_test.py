@@ -86,13 +86,16 @@ class FixtureTests(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.dest = Path(cls.temp.name) / "fixture"
         generator_env = os.environ.copy()
-        if CAN_SET_MATCHSQUAD_UID:
-            Path(cls.temp.name).chmod(0o711)
-            generator_env["PHASE0_MATCHSQUAD_FIXTURE_UID"] = "65532"
+        generator_env.pop("PHASE0_MATCHSQUAD_FIXTURE_UID", None)
         cls.generated = run(sys.executable, GENERATOR, cls.dest, env=generator_env)
-        if CAN_SET_MATCHSQUAD_UID:
-            cls.addClassCleanup(restore_fixture_owner, cls.dest)
         require_success(cls.generated)
+
+    @unittest.skipUnless(os.name == "posix" and os.geteuid() != 0 and shutil.which("sudo"),
+                         "covers non-root CI runners that can provision the service UID")
+    def test_general_fixture_inputs_remain_readable_by_the_test_user(self):
+        path = self.dest / "matchmaking/current.pem"
+        self.assertEqual(path.stat().st_uid, os.getuid())
+        self.assertTrue(path.read_bytes().startswith(b"-----BEGIN PRIVATE KEY-----"))
 
     def openssl(self, *args, input=None):
         return require_success(run("openssl", *args, input=input))
@@ -356,31 +359,38 @@ sys.exit(code)
                 dirs[:] = [name for name in dirs if name != "matchmaking"]
         for path in paths:
             if path.is_dir():
-                expected = (0o711 if CAN_SET_MATCHSQUAD_UID and path in
-                            (self.dest, self.dest / "tls", self.dest / "ca") else 0o700)
-                self.assertEqual(stat.S_IMODE(path.stat().st_mode), expected)
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
             elif path.suffix in (".pem", ".key", ".p12"):
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 
     @unittest.skipUnless(CAN_SET_MATCHSQUAD_UID, "UID ownership is verified in Linux CI")
     def test_match_squad_fixture_is_private_and_readable_by_service_uid(self):
-        self.assertEqual(stat.S_IMODE(Path(self.temp.name).stat().st_mode), 0o711)
-        owned_directory = self.dest / "matchmaking"
+        service_temp = tempfile.TemporaryDirectory(prefix="voice-phase0-service-test-")
+        self.addCleanup(service_temp.cleanup)
+        service_root = Path(service_temp.name)
+        service_root.chmod(0o711)
+        service_dest = service_root / "fixture"
+        service_env = os.environ.copy()
+        service_env["PHASE0_MATCHSQUAD_FIXTURE_UID"] = "65532"
+        require_success(run(sys.executable, GENERATOR, service_dest, env=service_env))
+        self.addCleanup(restore_fixture_owner, service_dest)
+        self.assertEqual(stat.S_IMODE(service_root.stat().st_mode), 0o711)
+        owned_directory = service_dest / "matchmaking"
         self.assertEqual((owned_directory.stat().st_uid, owned_directory.stat().st_gid), (65532, 65532))
         self.assertEqual(stat.S_IMODE(owned_directory.stat().st_mode), 0o700)
         owned = [owned_directory,
-                 self.dest / "matchmaking/current.pem", self.dest / "matchmaking/next.pem",
-                 self.dest / "tls/chat-match-squad-grpc.crt",
-                 self.dest / "tls/chat-match-squad-grpc.key",
-                 self.dest / "tls/voice-match-squad-grpc.crt",
-                 self.dest / "tls/voice-match-squad-grpc.key",
-                  self.dest / "tls/voice-match-squad-member-grpc.crt",
-                  self.dest / "tls/voice-match-squad-member-grpc.key",
-                 self.dest / "tls/matchmaking-client.crt",
-                 self.dest / "tls/matchmaking-client.key",
-                 self.dest / "tls/matchmaking-complete-grpc.crt",
-                 self.dest / "tls/matchmaking-complete-grpc.key",
-                 self.dest / "ca/ca.crt"]
+                 service_dest / "matchmaking/current.pem", service_dest / "matchmaking/next.pem",
+                 service_dest / "tls/chat-match-squad-grpc.crt",
+                 service_dest / "tls/chat-match-squad-grpc.key",
+                 service_dest / "tls/voice-match-squad-grpc.crt",
+                 service_dest / "tls/voice-match-squad-grpc.key",
+                 service_dest / "tls/voice-match-squad-member-grpc.crt",
+                 service_dest / "tls/voice-match-squad-member-grpc.key",
+                 service_dest / "tls/matchmaking-client.crt",
+                 service_dest / "tls/matchmaking-client.key",
+                 service_dest / "tls/matchmaking-complete-grpc.crt",
+                 service_dest / "tls/matchmaking-complete-grpc.key",
+                 service_dest / "ca/ca.crt"]
         read_check = (
             "import pathlib,stat,sys\n"
             "for raw in sys.argv[1:]:\n"
