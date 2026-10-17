@@ -10,10 +10,11 @@ scratch PVC shape using explicit fixture values for trusted storage settings.
 The matrices exercise actual upstream admission for Job, Pod, PVC, and CONNECT
 requests, including denial controls for changed fields.
 
-The exact producer snapshot is `testdata/producer-e7721b3/verification_job.py`,
-from immutable commit `e7721b3af5e68b2e06e7053a2d79307279149008`. It defines
-source-only archive and target-only census Jobs, plus `bind-verification` and
-`bind-restore`. Census has no source PVC mount; archive bytes arrive through
+The exact producer snapshot is `testdata/producer-95f3d4c49/verification_job.py`,
+from immutable commit `95f3d4c49` (`verification_job.py` blob
+`56346d5585b366398feee1040d44f9fc84266c56`). It defines source-only archive,
+target-only census and restore Jobs, plus `bind-verification` and `bind-restore`.
+Census and restore never mount the source PVC; archive bytes arrive through
 fixed exec vectors which bind operation, nonce, Pod/PVC/PV identities, archive
 digest, and byte count. Synthetic image digest, storage capacities/classes,
 and Job-controller username are fixture parameters only; they do not prove a

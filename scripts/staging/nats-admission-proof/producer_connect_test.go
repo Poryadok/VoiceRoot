@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	producerConnectPolicyName  = "voice-nats-archive-connect-contract"
-	producerConnectBindingName = "voice-nats-archive-connect-contract"
-	producerConnectDenyMessage = "exec does not match the producer archive protocol"
+	producerConnectPolicyName  = "voice-nats-helper-connect-contract"
+	producerConnectBindingName = "voice-nats-helper-connect-contract"
+	producerConnectDenyMessage = "exec does not match the fixed helper protocol"
 )
 
 func TestProducerConnectVAPEvaluatesBothFixedVectors(t *testing.T) {
@@ -59,11 +59,14 @@ func TestProducerConnectVAPEvaluatesBothFixedVectors(t *testing.T) {
 	archivePodName := archiveJobName + "-proof"
 	censusJobName := fixture.CensusJob["metadata"].(map[string]interface{})["name"].(string)
 	censusPodName := censusJobName + "-proof"
+	restoreJobName := fixture.RestoreJob["metadata"].(map[string]interface{})["name"].(string)
+	restorePodName := restoreJobName + "-proof"
 	kubelet := startFakeKubelet(t)
 	createFakeNode(ctx, t, client, kubelet)
 	createProducerPodFixture(ctx, t, client, fixture.Job, archivePodName)
 	createProducerPodFixture(ctx, t, client, fixture.CensusJob, censusPodName)
-	installProducerConnectPolicy(ctx, t, client, fixture, map[string]string{"archive": archivePodName, "census": censusPodName})
+	createProducerPodFixture(ctx, t, client, fixture.RestoreJob, restorePodName)
+	installProducerConnectPolicy(ctx, t, client, fixture, map[string]string{"archive": archivePodName, "census": censusPodName, "restore": restorePodName})
 
 	create := execRequest{method: http.MethodPost, namespace: namespace, name: archivePodName, username: runner,
 		container: "nats-phase", stdout: true, command: fixture.ExecVectors["archive_create_and_stream"]}
@@ -77,12 +80,18 @@ func TestProducerConnectVAPEvaluatesBothFixedVectors(t *testing.T) {
 		container: "nats-phase", stdin: true, stdout: true, command: fixture.CensusExecVectors["census_receive_archive"]}
 	censusReadback := execRequest{method: http.MethodPost, namespace: namespace, name: censusPodName, username: runner,
 		container: "nats-phase", stdout: true, command: fixture.CensusExecVectors["census_same_pod_readback"]}
+	restoreArchive := execRequest{method: http.MethodPost, namespace: namespace, name: restorePodName, username: runner,
+		container: "nats-phase", stdin: true, stdout: true, command: fixture.RestoreExecVectors["restore_archive_once"]}
+	restoreReadback := execRequest{method: http.MethodPost, namespace: namespace, name: restorePodName, username: runner,
+		container: "nats-phase", stdout: true, command: fixture.RestoreExecVectors["restore_same_pod_readback"]}
 	assertProducerConnectAllowed(t, cfg, create)
 	assertProducerConnectAllowed(t, cfg, readback)
 	assertProducerConnectAllowed(t, cfg, censusLoad)
 	assertProducerConnectAllowed(t, cfg, censusInputReadback)
 	assertProducerConnectAllowed(t, cfg, censusReceive)
 	assertProducerConnectAllowed(t, cfg, censusReadback)
+	assertProducerConnectAllowed(t, cfg, restoreArchive)
+	assertProducerConnectAllowed(t, cfg, restoreReadback)
 	for _, tc := range []struct {
 		name string
 		base execRequest
@@ -106,6 +115,10 @@ func TestProducerConnectVAPEvaluatesBothFixedVectors(t *testing.T) {
 		{"census missing stdin", censusReceive, func(r *execRequest) { r.stdin = false }},
 		{"census operation drift", censusReceive, func(r *execRequest) { r.command[2] = strings.Repeat("f", 12) }},
 		{"census wrong target Pod", censusReadback, func(r *execRequest) { r.name = archivePodName }},
+		{"restore shell command", restoreArchive, func(r *execRequest) { r.command = []string{"/bin/sh", "-c", "id"} }},
+		{"restore attempt drift", restoreArchive, func(r *execRequest) { r.command[14] = "deadbeee" }},
+		{"restore missing stdin", restoreArchive, func(r *execRequest) { r.stdin = false }},
+		{"restore wrong target Pod", restoreReadback, func(r *execRequest) { r.name = censusPodName }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			request := tc.base.clone()
@@ -224,5 +237,8 @@ func producerConnectExpression(fixture producerFixture, podNames map[string]stri
 	censusInputReceipt := "(!has(object.stdin) || object.stdin == false) && object.command == " + list(fixture.CensusExecVectors["census_read_input_receipt"])
 	censusReceive := "has(object.stdin) && object.stdin == true && object.command == " + list(fixture.CensusExecVectors["census_receive_archive"])
 	censusReadback := "(!has(object.stdin) || object.stdin == false) && object.command == " + list(fixture.CensusExecVectors["census_same_pod_readback"])
-	return "(" + common + ") && ((" + archiveName + " && ((" + archiveCreate + ") || (" + archiveReadback + "))) || (" + censusName + " && ((" + censusLoad + ") || (" + censusInputReceipt + ") || (" + censusReceive + ") || (" + censusReadback + "))) )"
+	restoreName := "request.name == " + q(podNames["restore"])
+	restoreArchive := "has(object.stdin) && object.stdin == true && object.command == " + list(fixture.RestoreExecVectors["restore_archive_once"])
+	restoreReadback := "(!has(object.stdin) || object.stdin == false) && object.command == " + list(fixture.RestoreExecVectors["restore_same_pod_readback"])
+	return "(" + common + ") && ((" + archiveName + " && ((" + archiveCreate + ") || (" + archiveReadback + "))) || (" + censusName + " && ((" + censusLoad + ") || (" + censusInputReceipt + ") || (" + censusReceive + ") || (" + censusReadback + "))) || (" + restoreName + " && ((" + restoreArchive + ") || (" + restoreReadback + "))) )"
 }
