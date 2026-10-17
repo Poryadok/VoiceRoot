@@ -21,7 +21,8 @@ SOCKET_PATH = '/run/voice-nats-preservation/runner.sock'
 SUBMITTER_GROUP = 'pmd'
 REQUIRED_CONFIG = frozenset(('schema', 'runner_source_sha', 'runner_closure_sha256',
     'api_server', 'ca_file', 'token_file', 'state_dir', 'runner_image', 'phase_image', 'storage_binding',
-    'verification_pvc_size_bytes', 'verification_pvc_max_bytes', 'verification_storage_class'))
+    'verification_pvc_size_bytes', 'verification_pvc_max_bytes', 'verification_storage_class',
+    'replacement_pvc_size_bytes', 'replacement_pvc_max_bytes', 'replacement_storage_class'))
 
 
 class ServiceError(ValueError):
@@ -93,6 +94,18 @@ def load_config(path=CONFIG_FILE, package_root=None, *, owner_uid=0):
             or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9]*[a-z0-9])?', label)
             for label in storage_class.split('.'))):
         _fail('verification_storage_class_invalid')
+    replacement_size = row.get('replacement_pvc_size_bytes')
+    replacement_ceiling = row.get('replacement_pvc_max_bytes')
+    if (type(replacement_size) is not int or not 0 < replacement_size <= (1 << 63) - 1
+        or type(replacement_ceiling) is not int or not 0 < replacement_ceiling <= (1 << 63) - 1
+        or replacement_size > replacement_ceiling):
+        _fail('replacement_pvc_ceiling_invalid')
+    replacement_storage_class = row.get('replacement_storage_class')
+    if (not isinstance(replacement_storage_class, str) or len(replacement_storage_class) > 253
+        or any(not label or len(label) > 63
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9]*[a-z0-9])?', label)
+            for label in replacement_storage_class.split('.'))):
+        _fail('replacement_storage_class_invalid')
     try:
         from tokenless_job import validate_binding
         binding = validate_binding(row['storage_binding'])
