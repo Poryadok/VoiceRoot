@@ -331,7 +331,8 @@ untouched.
 
 Build the issuer image on the approved private Linux operator host from the
 clean reviewed source commit, label it with that source commit, and pin the
-result by its local immutable `sha256:` image ID. Use the exact staging-template
+result by its local immutable `sha256:` image ID. The Dockerfile pins the
+`python:3.13-slim-bookworm` base by digest. Use the exact staging-template
 SHA-256 and current DEV namespace UID from the reviewed activation packet. The
 CLI is Linux-only. `preflight` is read-only;
 `prepare`, `apply`, and `resume` all require `--confirm-dev-match-squad-pki-change`.
