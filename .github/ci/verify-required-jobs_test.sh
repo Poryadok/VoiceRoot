@@ -73,6 +73,10 @@ run_gate 1 \
   GLOBAL=true \
   JOB_PROTOBUF=success JOB_COMPOSE_CONFIG=success JOB_CI_SCRIPT_TESTS=skipped
 
+echo "== MatchSquad overlay path requires its focused Linux regression job =="
+run_gate 0 RUN_MATCH_SQUAD_OVERLAY=true JOB_MATCH_SQUAD_OVERLAY=success
+run_gate 1 RUN_MATCH_SQUAD_OVERLAY=true JOB_MATCH_SQUAD_OVERLAY=skipped
+
 echo "== global with skipped golangci fails (regression guard) =="
 all_jobs_success
 run_gate 1 \
