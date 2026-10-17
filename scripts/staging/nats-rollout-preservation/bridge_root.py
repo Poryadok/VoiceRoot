@@ -524,7 +524,8 @@ class Actions:
             if state.get('expired_recovery_authority') is not None:
                 raise Blocked('expired_native_explicit_finish_required')
             receipt=guard.protected_receipt(base/'apply-authorization.json')
-            result=transaction.finish(Kube(),base,state,receipt,request['claim_rv'],state['contract'])
+            result=transaction.finish(Kube(),base,state,receipt,request['claim_rv'],state['contract'],
+                native_api=self.native_api,native_config=self.native_config)
             self._active_release(result)
             return summary(result)
         raise Blocked('bridge_action_invalid')
@@ -704,7 +705,8 @@ class Actions:
         fresh()
         authority=expired_finish.commit_authority(base,state,slot,execution,stage=stage,verify_source=fresh)
         result=transaction.finish(Kube(),base,state,guard.protected_receipt(base/'apply-authorization.json'),
-            stage.marker['metadata']['resourceVersion'],state['contract'],finish_authority=authority,publication=self._active_release)
+            stage.marker['metadata']['resourceVersion'],state['contract'],finish_authority=authority,
+            publication=self._active_release,native_api=self.native_api,native_config=self.native_config)
         return summary(state)
 
     def _finish_expired_native(self,request):
@@ -715,7 +717,8 @@ class Actions:
             raise Blocked('expired_native_finish_execution_changed')
         fresh()
         result=transaction.finish(Kube(),base,state,guard.protected_receipt(base/'apply-authorization.json'),
-            request['claim_rv'],state['contract'],publication=self._active_release)
+            request['claim_rv'],state['contract'],publication=self._active_release,
+            native_api=self.native_api,native_config=self.native_config)
         return summary(result)
 
     def _produce_expired_observation(self,request):

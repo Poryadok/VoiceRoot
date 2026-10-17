@@ -11,11 +11,42 @@ import tempfile
 import unittest
 from pathlib import Path
 from urllib.error import HTTPError
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import kube_json_api as kube
 import census_stream
 import verification_job
+
+
+class ContractReceiptWrapperTests(unittest.TestCase):
+    def test_receipt_kinds_map_only_to_fixed_same_pod_vectors(self):
+        api=object.__new__(kube.KubernetesJSONAPI)
+        api.exec_pod_contract=Mock(return_value=b'{"status":"COMPLETE"}')
+        request={'operation':'0123456789ab','nonce':'a'*32,'phase':'contract-migration'}
+        binding={'contract_attempt':'a1b2c3d4'}
+        with patch.object(verification_job,'validate_request',return_value=request), \
+             patch.object(verification_job,'validate_contract_binding',return_value=binding):
+            for kind,action,index in (
+                ('input','read-plan',None),
+                ('broker-start','read-broker-start',None),
+                ('broker-stop','read-broker-stop',None),
+                ('action','readback-action',3),
+            ):
+                api.exec_pod_contract.reset_mock()
+                raw=api.read_contract_receipt('voice-staging','voice-job-pod','1'*36,
+                    request,binding,'a1b2c3d4',kind,action_index=index)
+                self.assertEqual(raw,b'{"status":"COMPLETE"}')
+                api.exec_pod_contract.assert_called_once_with('voice-staging','voice-job-pod',
+                    '1'*36,request,binding,action,action_index=index)
+            api.exec_pod_contract.reset_mock()
+            with self.assertRaises(kube.KubeAPIError):
+                api.read_contract_receipt('voice-staging','voice-job-pod','1'*36,
+                    request,binding,'deadbeef','input')
+            api.exec_pod_contract.assert_not_called()
+            with self.assertRaises(kube.KubeAPIError):
+                api.read_contract_receipt('voice-staging','voice-job-pod','1'*36,
+                    request,binding,'a1b2c3d4','input',action_index=0)
+            api.exec_pod_contract.assert_not_called()
 
 
 def jwt(audience, expiry):

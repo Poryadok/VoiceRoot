@@ -833,6 +833,33 @@ class _KubernetesJSONAPIBase:
         chunks = _websocket_exec(self, path, token, max_bytes=MAX_LOG_RESPONSE)
         return b''.join(chunks)
 
+    def read_contract_receipt(self, namespace, pod_name, pod_uid, request, binding,
+                              contract_attempt, receipt_kind, *, action_index=None):
+        """Read one fixed same-Pod contract receipt without selecting an argv."""
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        try:
+            import verification_job
+            row = verification_job.validate_request(request)
+            storage = verification_job.validate_contract_binding(binding)
+        except (ImportError, TypeError, ValueError):
+            _fail('contract_receipt_request_invalid')
+        if (row.get('phase') != 'contract-migration'
+            or not isinstance(contract_attempt, str)
+            or storage.get('contract_attempt') != contract_attempt):
+            _fail('contract_receipt_binding_invalid')
+        actions = {
+            'input': 'read-plan',
+            'broker-start': 'read-broker-start',
+            'broker-stop': 'read-broker-stop',
+            'action': 'readback-action',
+        }
+        action = actions.get(receipt_kind)
+        if action is None or (receipt_kind == 'action') != (action_index is not None):
+            _fail('contract_receipt_kind_invalid')
+        return self.exec_pod_contract(namespace, pod_name, pod_uid, row, storage,
+            action, action_index=action_index)
+
     def exec_hub_jsz(self, namespace, pod_name, pod_uid, container, *, timeout_seconds=30):
         """Read the captured Hub's fixed loopback JSZ endpoint over pods/exec."""
         if (namespace != NAMESPACE or container != 'nats' or type(timeout_seconds) is not int

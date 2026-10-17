@@ -245,6 +245,62 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
+def native_preservation_runtime(base,state,stage,native_api,native_config,cut,phase):
+    """Build the fixed rootless archive/census adapter for a captured source.
+
+    The source identity stored in the operation is an expectation only. Resolve
+    it again before every producer phase and verify the native stage fence
+    before recording that phase in the operation journal.
+    """
+    if native_api is None or not isinstance(native_config,dict):
+        raise Blocked('rollout_native_authority_missing')
+    if phase not in ('finish','rollback'):
+        raise Blocked('rollout_native_preservation_phase_invalid')
+    expected=state.get('native_source_binding')
+    if not isinstance(expected,dict):
+        raise Blocked('rollout_native_source_binding_invalid')
+    try:
+        import kube_json_api
+        resolved=kube_json_api.resolve_source_binding(native_api,
+            operation=state['operation'],expected=expected)
+    except Exception:
+        raise Blocked('rollout_native_source_binding_changed') from None
+    stage.verify_final_storage()
+    source=resolved['binding']
+    binding={'claim_name':source['source_claim'],'claim_uid':source['source_uid'],
+        'pv_name':source['source_pv_name'],'pv_uid':source['source_pv_uid'],
+        'node_name':source['source_node_name'],
+        'node_hostname':resolved['proof']['node_hostname']}
+    census=cut.get('census') if isinstance(cut,dict) else None
+    account_id=census.get('account') if isinstance(census,dict) else None
+    if not isinstance(account_id,str):
+        raise Blocked('rollout_native_census_account_missing')
+    nonce_key='native_'+phase+'_preservation_nonce'
+    nonce=state.get(nonce_key)
+    if nonce is None:
+        nonce=secrets.token_hex(32)
+        state[nonce_key]=nonce
+        save(Path(base)/'checkpoint.json',state)
+    if not isinstance(nonce,str) or not re.fullmatch(r'[a-f0-9]{64}',nonce):
+        raise Blocked('rollout_native_preservation_nonce_invalid')
+    journal=checkpoint_journal(base,state,lambda:stage)
+    def persist(event):
+        try:
+            kube_json_api.resolve_source_binding(native_api,
+                operation=state['operation'],expected=expected)
+            stage.verify_final_storage()
+        except Exception:
+            raise Blocked('rollout_native_source_changed_before_phase') from None
+        journal({'kind':'native_preservation_phase','operation':state['operation'],
+            'consumer_phase':phase,**copy.deepcopy(event)})
+    import tokenless_job
+    return tokenless_job.PvcArchiveRuntime(native_api,base,binding,
+        native_config.get('phase_image'),state['operation'],nonce,
+        persist_intent=persist,persist_result=persist,account_id=account_id,
+        verification_pvc_size_bytes=native_config.get('verification_pvc_size_bytes'),
+        verification_storage_class=native_config.get('verification_storage_class'))
+
+
 def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,native_api=None,native_config=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
@@ -722,11 +778,13 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         state['context']=context(stage);save(Path(base)/'checkpoint.json',state);raise
 
 
-def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None):
+def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None,
+           native_api=None,native_config=None):
     import provisional
     provisional.receipt_binding(state,receipt)
     if finish_authority is not None:
-        return finish_only(kube,base,state,receipt,contract,finish_authority,publication=publication)
+        return finish_only(kube,base,state,receipt,contract,finish_authority,
+            publication=publication,native_api=native_api,native_config=native_config)
     if state['phase']!='PAUSED_APPLY' or state['status']!='WAITING':
         raise Blocked('rollout_finish_phase_invalid')
     if receipt!=state.get('authorization') or receipt.get('operation')!=state['operation'] or receipt.get('target')!=state['target']:
@@ -736,7 +794,7 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
         raise Blocked('rollout_finish_authorization_expired')
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
-    stage=reconstruct(kube,state,journal)
+    stage=reconstruct(kube,state,journal,native_api=native_api)
     active_recovery=state.get('expired_recovery_authority')
     def resume_authority():
         if dt.datetime.now(dt.timezone.utc)>=expires:raise Blocked('rollout_finish_authorization_expired')
@@ -761,9 +819,14 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
     if 'nonnats' in state:state['nonnats_applied']=nonnats_runtime.verify(kube,state['nonnats'],state['nonnats_binding'],stage,applied=True)
     state['context']=context(stage);state['phase']='POST_APPLY_PROOF';save(Path(base)/'checkpoint.json',state)
     try:
-        runtime=DockerRuntime(base,state['operation'])
         baseline=state.get('nats_migration',{}).get('cut',state['cut'])
-        state['preservation']=verify_post_apply(runtime,stage.final_path,baseline,stage.verify_final_storage)
+        if native_api is None:
+            runtime=DockerRuntime(base,state['operation'])
+            source=stage.final_path
+        else:
+            runtime=native_preservation_runtime(base,state,stage,native_api,native_config,baseline,'finish')
+            source=None
+        state['preservation']=verify_post_apply(runtime,source,baseline,stage.verify_final_storage)
         stage.verified();state['context']=context(stage);save(Path(base)/'checkpoint.json',state)
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
         attach_closed_preservation(base,state,stage,resume_authority)
@@ -870,14 +933,15 @@ def attach_closed_preservation(base,state,stage,authority,*,nonce=None,admitted_
     return runtime
 
 
-def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
+def finish_only(kube,base,state,receipt,contract,reference,*,publication=None,
+                native_api=None,native_config=None):
     # Expired application permission is preserved history. A separately loaded
     # root proof permits missing resumes only; never authorize/apply/migrate.
     if receipt!=state.get('authorization') or receipt.get('target')!=state['target']:
         raise Blocked('rollout_finish_authorization_changed')
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
-    stage=reconstruct(kube,state,journal)
+    stage=reconstruct(kube,state,journal,native_api=native_api)
     import expired_finish
     engine=expired_finish.bind(base,state,reference,stage,journal)
     revalidate_inputs(kube,contract,state['provenance'])
@@ -905,7 +969,7 @@ def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
         raise
 
 
-def rollback(kube,base,state,receipt,claim_rv,contract):
+def rollback(kube,base,state,receipt,claim_rv,contract,*,native_api=None,native_config=None):
     # An application which has resumed may have newer NATS/DB state. It needs
     # a fresh preservation transaction; this recovery never replays a backup.
     if state['phase'] not in ('PAUSED_APPLY','POST_APPLY_PROOF','ROLLBACK_TEMPLATES') or state['target']['mode']!='images-only':
@@ -914,7 +978,7 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
         raise Blocked('rollout_rollback_authorization_changed')
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
-    stage=reconstruct(kube,state,journal)
+    stage=reconstruct(kube,state,journal,native_api=native_api)
     revalidate_inputs(kube,contract,state['provenance'])
     def rollback_resume_authority():
         if receipt!=state.get('authorization') or receipt.get('target')!=state['target']:
@@ -948,7 +1012,12 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
         stage.restore_original_templates()
         state['phase']='ROLLBACK_PROOF';save(Path(base)/'checkpoint.json',state)
         baseline=state.get('nats_migration',{}).get('cut',state['cut'])
-        state['preservation']=verify_post_apply(DockerRuntime(base,state['operation']),stage.final_path,baseline,stage.verify_final_storage)
+        if native_api is None:
+            runtime=DockerRuntime(base,state['operation']);source=stage.final_path
+        else:
+            runtime=native_preservation_runtime(base,state,stage,native_api,native_config,baseline,'rollback')
+            source=None
+        state['preservation']=verify_post_apply(runtime,source,baseline,stage.verify_final_storage)
         stage.verified()
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
         attach_closed_preservation(base,state,stage,rollback_resume_authority)
