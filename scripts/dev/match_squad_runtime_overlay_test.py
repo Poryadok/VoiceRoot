@@ -46,7 +46,6 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
             "MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR",
             "voice-chat:9092",
             "voice-voice:9094",
-            "https://api-dev.comrade.click/.well-known/voice-principal-jwks.json",
             "MATCHMAKING_MATCH_SQUAD_CHAT_CA_FILE",
             "MATCHMAKING_MATCH_SQUAD_VOICE_CA_FILE",
             "voice-matchmaking-principal-signing",
@@ -54,6 +53,7 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
             "voice-matchmaking-client-tls",
         ):
             self.assertIn(value, matchmaking)
+        self.assertIn("name: S2S_JWKS_URLS_JSON\n              $patch: delete", matchmaking)
         chat = source("voice-chat.runtime.patch.yaml")
         for value in (
             "CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN",
