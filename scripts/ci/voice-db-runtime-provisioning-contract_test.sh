@@ -552,9 +552,29 @@ game_checkpoint_aggregate_binding_valid() {
     "${game_checkpoint_aggregate_target}" 2>/dev/null
 }
 
+f13_tree_entry_tuple_for_path() {
+  local path="$1" entry="$2" tuple entry_path mode type oid extra
+  if [[ -z "${entry}" ]]; then
+    printf '\n'
+    return 0
+  fi
+  if [[ "${entry}" == *$'\t'* ]]; then
+    entry_path="${entry#*$'\t'}"
+    [[ "${entry_path}" == "${path}" ]] || return 1
+    tuple="${entry%%$'\t'*}"
+  else
+    tuple="${entry}"
+  fi
+  IFS=' ' read -r mode type oid extra <<<"${tuple}"
+  [[ -z "${extra}" &&
+    "${mode}" =~ ^(040000|100644|100755|120000|160000)$ &&
+    "${type}" =~ ^(blob|tree|commit)$ &&
+    "${oid}" =~ ^[0-9a-f]{40,64}$ ]] || return 1
+  printf '%s\n' "${tuple}"
+}
+
 f13_tree_entry_from_records() {
-  local path="$1" raw_file="$2"
-  local entry entry_path
+  local path="$1" raw_file="$2" entry
   local -a entries=()
   mapfile -d '' -t entries <"${raw_file}" || return 1
   [[ "${#entries[@]}" -le 1 ]] || return 1
@@ -564,9 +584,30 @@ f13_tree_entry_from_records() {
   fi
   entry="${entries[0]}"
   [[ "${entry}" == *$'\t'* ]] || return 1
-  entry_path="${entry#*$'\t'}"
-  [[ "${entry_path}" == "${path}" ]] || return 1
-  printf '%s\n' "${entry%%$'\t'*}"
+  f13_tree_entry_tuple_for_path "${path}" "${entry}"
+}
+
+f13_tree_entry_raw_for_path() {
+  local path="$1" raw_file="$2" entry
+  local -a entries=()
+  mapfile -d '' -t entries <"${raw_file}" || return 1
+  [[ "${#entries[@]}" -le 1 ]] || return 1
+  if [[ "${#entries[@]}" == 0 ]]; then
+    printf '\n'
+    return 0
+  fi
+  entry="${entries[0]}"
+  [[ "${entry}" == *$'\t'* && "${entry#*$'\t'}" == "${path}" ]] || return 1
+  # Validate the mode/type/OID while retaining ls-tree's raw record form for
+  # callers whose established comparison contract is raw-to-raw.
+  f13_tree_entry_tuple_for_path "${path}" "${entry}" >/dev/null || return 1
+  printf '%s\n' "${entry}"
+}
+
+f13_git_tree_entry_record() {
+  local repo="$1" commit="$2" path="$3" raw_file="${TMP_DIR}/f13-tree-record-${BASHPID}"
+  git -C "${repo}" ls-tree -z "${commit}" -- ":(literal)${path}" >"${raw_file}" 2>/dev/null || return 1
+  f13_tree_entry_raw_for_path "${path}" "${raw_file}"
 }
 
 f13_git_tree_entry() {
@@ -605,7 +646,7 @@ game_checkpoint_aggregate_path_allowed() {
   game_checkpoint_aggregate_binding_valid "${repo}" || return 1
   grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" || return 1
   git -C "${repo}" merge-base --is-ancestor "${commit}" "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
-  checkpoint_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
+  checkpoint_entry="$(f13_git_tree_entry_record "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
   [[ "${source_entry}" == "${checkpoint_entry}" ]]
 }
 
@@ -626,8 +667,8 @@ game_checkpoint_duplicate_owner_supersession_allowed() {
       "${game_checkpoint_snapshot_head}" 2>/dev/null || return 1
   done
   [[ "${merge_outcome}" == clean || "${merge_outcome}" == guarded_conflict ]] || return 1
-  integration_entry="$(f13_git_tree_entry "${repo}" "${integration_commit}" "${path}")" || return 1
-  checkpoint_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
+  integration_entry="$(f13_git_tree_entry_record "${repo}" "${integration_commit}" "${path}")" || return 1
+  checkpoint_entry="$(f13_git_tree_entry_record "${repo}" "${game_checkpoint_snapshot_head}" "${path}")" || return 1
   if [[ "${integration_entry}" == "${checkpoint_entry}" ]]; then
     return 0
   fi
@@ -1156,6 +1197,7 @@ f13_migration_alias_reconciles_guarded_path() {
   local collision_down='src/backend/migrations/voice_db/000010_space_media_admission.down.sql'
   local base_up base_down snapshot_base_up snapshot_base_down h_entry target_entry integration_entry
   local base_old snapshot_base_old h_old integration_old integration_first_old integration_second_old integration_base_old target_old aggregate_old resolved_content_base
+  local normalized_saved_guarded normalized_saved_source normalized_destination
   [[ "${game_checkpoint_aggregate_active}" == true &&
     "${target}" == "${game_checkpoint_aggregate_head}" &&
     -n "${game_checkpoint_snapshot_record}" &&
@@ -1194,10 +1236,12 @@ f13_migration_alias_reconciles_guarded_path() {
     integration integration_first integration_second integration_base destination destination_entry <<<"${row}"
   record_base="${nested_source_base}"
   record_head="${nested_source_head}"
+  normalized_saved_guarded="$(f13_tree_entry_tuple_for_path "${path}" "${saved_guarded_entry}")" || return 1
+  normalized_saved_source="$(f13_tree_entry_tuple_for_path "${path}" "${saved_source_entry}")" || return 1
   [[ "${owners[${path}]}" == "${record_row_owner}" &&
     "${alias_path}" == "${path}" && "${owner}" == "${nested_owner}" &&
     "${source_head}" == "${nested_source_head}" &&
-    "${saved_guarded_entry}" == "${old_entry}" && "${saved_source_entry}" == "${old_entry}" &&
+    "${normalized_saved_guarded}" == "${old_entry}" && "${normalized_saved_source}" == "${old_entry}" &&
     "${record_row_owner}" == 0590ac862c5027ff9266f8403af1011ef2134f63 &&
     "${record_row_first_parent}" == 5a42388c95377d7d0b718e823b35f317a71bf851 &&
     "${record_row_source_base}" == 53529ea60dec670e64d1ae61724a7b8daff582bc &&
@@ -1271,6 +1315,8 @@ f13_migration_alias_reconciles_guarded_path() {
   [[ "$(awk -F'\t' -v candidate="${destination}" '$1 == candidate { n++ } END { print n+0 }' "${output}")" == 1 &&
     -n "${owners[${destination}]+present}" &&
     -n "${owner_source_entries[${destination}]+present}" ]] || return 1
+  normalized_destination="$(f13_tree_entry_tuple_for_path "${destination}" "${owner_source_entries[${destination}]}")" || return 1
+  [[ "${normalized_destination}" == "${destination_entry}" ]] || return 1
   row_count="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { n++; row=$0 } END { print n+0 }' "${output}")"
   [[ "${row_count}" == 1 ]] || return 1
   row="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { print; exit }' "${output}")"
@@ -1308,6 +1354,7 @@ f13_migration_alias_reconciliation_execution_fixture() {
   local nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry
   local integration integration_first integration_second integration_base destination destination_entry
   local destination_parent output old_path
+  local fixture_old_record fixture_destination_record normalized_guarded normalized_source normalized_destination
   local -A owners=() owner_content_bases=() owner_source_heads=() owner_source_entries=()
   local -A guarded_entries=() guarded_entry_commits=()
 
@@ -1338,11 +1385,13 @@ f13_migration_alias_reconciliation_execution_fixture() {
     owners["${path}"]="${row_owner}"
     owner_content_bases["${path}"]="${row_content_base}"
     owner_source_heads["${path}"]="${row_source_head}"
-    owner_source_entries["${path}"]="${old_entry}"
-    guarded_entries["${path}"]="${old_entry}"
+    fixture_old_record="${old_entry}"$'\t'"${path}"
+    owner_source_entries["${path}"]="${fixture_old_record}"
+    guarded_entries["${path}"]="${fixture_old_record}"
     guarded_entry_commits["${path}"]="${nested_owner}"
     owners["${destination}"]="${row_candidates}"
-    owner_source_entries["${destination}"]="${destination_entry}"
+    fixture_destination_record="${destination_entry}"$'\t'"${destination}"
+    owner_source_entries["${destination}"]="${fixture_destination_record}"
     destination_parent="$(git -C "${repo}" rev-parse "${row_candidates}^1" 2>/dev/null)" || return 1
     output="${TMP_DIR}/f13-alias-execution-map"
     awk -F '\t' -v candidate="${path}" '$1 == candidate { for (i=1; i<=8; i++) printf "%s%s", $i, (i==8 ? ORS : FS) }' \
@@ -1352,7 +1401,7 @@ f13_migration_alias_reconciliation_execution_fixture() {
       "${row_candidates}" "${row_candidates}" "${row_candidates}" >>"${output}" || return 1
     if ! f13_migration_alias_reconciles_guarded_path "${repo}" "${event_base}" \
       "${source_head}" "${path}" "${nested_owner}" "${row_content_base}" \
-      "${nested_head}" "${old_entry}" "${old_entry}" "${output}"; then
+      "${nested_head}" "${fixture_old_record}" "${fixture_old_record}" "${output}"; then
       game_checkpoint_aggregate_active=false
       return 1
     fi
