@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import gis_dev_first_install as gis
+import gis_prerequisite
 
 
 def encoded(values):
@@ -177,6 +178,139 @@ class KubectlOptionalSecretTests(unittest.TestCase):
             with self.subTest(stdout=stdout):
                 with self.assertRaises(gis.Blocked):
                     gis.Kubectl(runner=runner).get_secret("optional-identity")
+
+
+class PrerequisiteSecretProbeAdapterTests(unittest.TestCase):
+    def run_preflight(self, outputs):
+        calls = []
+
+        def runner(argv, **kwargs):
+            calls.append(argv)
+            if len(calls) > len(outputs):
+                return SimpleNamespace(returncode=0, stdout="true", stderr="")
+            output, status = outputs[len(calls) - 1]
+            return SimpleNamespace(returncode=status, stdout=output,
+                stderr="Error from server (Forbidden)" if status else "")
+
+        client = gis.Kubectl(runner=runner)
+
+        class Kube:
+            def run(self, args, **kwargs):
+                return client.run(args, **kwargs)
+
+            def secret_meta(self, name):
+                return {"uid": "secret-uid", "resourceVersion": "12"}
+
+            def get(self, kind, name):
+                return {"metadata": {"uid": "config-uid", "resourceVersion": "13"},
+                    "data": {"POSTGRES_USER": "voice"}}
+
+        identity = {"namespace_uid": "namespace-uid", "service_uid": "service-uid",
+            "service_spec_sha256": "a" * 64, "endpoints": [{"uid": "slice-uid", "pod_uids": ["pod-uid"]}]}
+        plan = {"phase": "PLANNED", "inputs_sha256": "b" * 64, "namespace": "voice-dev"}
+        with patch.object(gis_prerequisite, "_endpoint_identity", return_value=identity):
+            result = gis_prerequisite.preflight(Kube(), plan)
+        return result, calls
+
+    def test_real_probe_command_maps_only_exact_true_false_for_consumer(self):
+        identity, calls = self.run_preflight([("true", 0)] * 3)
+        self.assertEqual(identity["namespace_uid"], "namespace-uid")
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(call[4] == "secret" and call[5] == "voice-app-secrets"
+            and call[6] == "-o" and call[7].startswith("go-template=") for call in calls))
+        self.assertIsInstance(gis.Kubectl(runner=lambda *_a, **_k:
+            SimpleNamespace(returncode=0, stdout="true", stderr="")).run(["get", "pods"]), str)
+
+    def test_false_empty_malformed_and_nonzero_probe_results_fail_closed(self):
+        for output, status, expected in (("false", 0, gis_prerequisite.Blocked),
+                ("", 0, gis.Blocked), ("True", 0, gis.Blocked), ("true\n", 0, gis.Blocked),
+                ("", 1, gis.KubeError)):
+            with self.subTest(output=output, status=status), self.assertRaises(expected):
+                self.run_preflight([(output, status)])
+
+
+class PartialOperationContinuationTests(unittest.TestCase):
+    def fixture(self):
+        plan = {"phase": "PLANNED", "source_sha": gis._PARTIAL_SOURCE_SHA,
+            "namespace_uid": "00000000-0000-0000-0000-000000000001",
+            "inputs": {}, "inputs_sha256": gis._digest({}), "source_capture": {},
+            "source_plan_sha256": "a" * 64}
+        receipt = {name: {"uid": "00000000-0000-0000-0000-00000000000" + str(index),
+            "resourceVersion": str(index)} for index, name in enumerate(
+                (gis.APP_SECRET, gis.SIGNER_SECRET, gis.WORKLOAD_SECRET), 2)}
+        return {"schema": "voice-dev-gis-first-install-state-v1",
+            "operation": gis._PARTIAL_OPERATION, "source_sha": gis._PARTIAL_SOURCE_SHA,
+            "phase": "SECRETS_APPLIED", "secrets_applied": True,
+            "namespace_uid": plan["namespace_uid"], "database_identity": {},
+            "secret_write_receipt": receipt, "plan": plan}
+
+    def test_only_exact_frozen_pre_job_state_is_eligible(self):
+        state = self.fixture()
+        self.assertTrue(gis._partial_state_admissible(state))
+        for mutate in (
+            lambda row: row.update(operation="other"),
+            lambda row: row.update(phase="READY"),
+            lambda row: row["plan"].update(phase="CREATING"),
+            lambda row: row["plan"].update(created={"job/x": {}}),
+            lambda row: row["plan"].update(prerequisite_receipt={}),
+            lambda row: row["secret_write_receipt"].pop(gis.APP_SECRET),
+        ):
+            changed = copy.deepcopy(state)
+            mutate(changed)
+            with self.assertRaises(gis.Blocked):
+                gis._partial_state_admissible(changed)
+
+    def test_continuation_sidecar_requires_exact_prior_hash_for_atomic_replace(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "continuation.json"
+            first = {"schema": "voice-dev-gis-partial-continuation-v1", "state": {"phase": "SECRETS_APPLIED"}}
+            expected = gis._save_continuation(path, first)
+            self.assertEqual(path.read_bytes(), json.dumps(first, sort_keys=True,
+                separators=(",", ":")).encode())
+            second = copy.deepcopy(first)
+            second["state"]["phase"] = "PREREQUISITE_RESUME_REQUIRED"
+            updated = gis._save_continuation(path, second, expected_sha256=expected)
+            self.assertNotEqual(updated, expected)
+            with self.assertRaises(gis.Blocked):
+                gis._save_continuation(path, first, expected_sha256=expected)
+
+    def test_source_compatibility_requires_clean_descendant_and_exact_changed_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+
+            def git(*args):
+                return gis.subprocess.run(["git", "-C", str(root), *args], check=True,
+                    capture_output=True, text=True).stdout.strip()
+
+            git("init")
+            git("config", "user.email", "gis-test@example.invalid")
+            git("config", "user.name", "GIS test")
+            for name in gis._PARTIAL_CHANGED_PATHS:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("old\n", encoding="utf-8")
+            backend = root / "src/backend/gameintegration"
+            backend.mkdir(parents=True)
+            (backend / "sentinel.go").write_text("package gameintegration\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-m", "baseline")
+            old_sha = git("rev-parse", "HEAD")
+            tree = git("rev-parse", "HEAD:src/backend")
+            for name in gis._PARTIAL_CHANGED_PATHS:
+                (root / name).write_text("reviewed change\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-m", "operator recovery")
+            journal_sha = gis._PARTIAL_JOURNAL_SHA256
+            state = {"source_sha": old_sha,
+                "source_build_receipt": {"source_sha": old_sha, "image_ref": "image@sha256:" + "a"*64,
+                    "builder_tree": tree},
+                "plan": {"source_sha": old_sha, "source_plan_sha256": "b"*64,
+                    "source_capture": {}, "inputs_sha256": "c"*64}}
+            with patch.object(gis, "_PARTIAL_SOURCE_SHA", old_sha):
+                binding = gis._partial_source_binding(root, state, journal_sha)
+            self.assertEqual(set(binding["changed_files"]), gis._PARTIAL_CHANGED_PATHS)
+            self.assertEqual(binding["candidate_source_sha"], git("rev-parse", "HEAD"))
+            self.assertEqual(binding["backend_tree"], tree)
 
 
 class SourceAuthorityTests(unittest.TestCase):

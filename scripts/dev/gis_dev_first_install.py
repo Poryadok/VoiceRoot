@@ -841,6 +841,19 @@ class Kubectl:
             status = int(code_match.group(1)) if code_match else 0
             raise KubeError(status)
         output = result.stdout
+        # The prerequisite consumer relies on booleans from this one exact
+        # kubectl go-template probe. Keep every other raw command output typed
+        # as text; in particular, never coerce UID/resourceVersion values.
+        probe = re.fullmatch(
+            r'go-template=\{\{if index \.data "(POSTGRES_PASSWORD|GAME_INTEGRATION_DB_PASSWORD|GAME_INTEGRATION_DATABASE_URL)"\}\}true\{\{else\}\}false\{\{end\}\}',
+            args[4] if len(args) == 5 else '')
+        if (len(args) == 5 and args[:4] == ["get", "secret", APP_SECRET, "-o"]
+            and probe is not None):
+            if output == "true":
+                return True
+            if output == "false":
+                return False
+            _blocked("gis_dev_kubectl_probe_response_invalid")
         if "-o" in args and "json" in args:
             if "--ignore-not-found=true" in args and output == "":
                 return ""
@@ -966,40 +979,266 @@ def _save_plan(state_path, state):
     os.chmod(path, 0o600)
 
 
+_PARTIAL_OPERATION = "737e63e3aaee"
+_PARTIAL_SOURCE_SHA = "860b995dd883ade2b79996f9fcbe34302b3c7bac"
+_PARTIAL_JOURNAL_SHA256 = "659d0379811afa39c22d056b0b3cf9787a3d50d5dbef2f275bc9524ddd19cac1"
+_PARTIAL_CHANGED_PATHS = {
+    "scripts/dev/gis_dev_first_install.py",
+    "scripts/dev/gis_first_install_test.py",
+    "scripts/staging/nats-rollout-preservation/gis_prerequisite.py",
+    "scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py",
+}
+
+
+def _git_text(root, args, *, runner=subprocess.run):
+    try:
+        return runner(["git", "-C", str(root), *args], check=True,
+            capture_output=True, text=True, timeout=15).stdout.strip()
+    except Exception:
+        _blocked("gis_dev_partial_source_binding_invalid")
+
+
+def _partial_source_binding(root, state, original_sha, *, runner=subprocess.run):
+    """Bind this one recovery to an allowlisted clean operator/test source delta."""
+    candidate = _git_text(root, ["rev-parse", "HEAD"], runner=runner)
+    status = _git_text(root, ["status", "--porcelain=v1", "--untracked-files=all"], runner=runner)
+    ancestor = _git_text(root, ["merge-base", _PARTIAL_SOURCE_SHA, candidate], runner=runner)
+    if (status or not SOURCE.fullmatch(candidate) or original_sha != _PARTIAL_JOURNAL_SHA256
+        or ancestor != _PARTIAL_SOURCE_SHA):
+        _blocked("gis_dev_partial_source_binding_invalid")
+    changed = _git_text(root, ["diff", "--name-only", "--no-renames", _PARTIAL_SOURCE_SHA, candidate], runner=runner)
+    paths = set(changed.splitlines())
+    if paths != _PARTIAL_CHANGED_PATHS:
+        _blocked("gis_dev_partial_source_paths_invalid")
+    files = {name: hashlib.sha256((Path(root) / name).read_bytes()).hexdigest()
+        for name in sorted(paths)}
+    backend_tree, _ = _source_backend_context(root, runner)
+    receipt = state.get("source_build_receipt", {})
+    if (state.get("source_sha") != _PARTIAL_SOURCE_SHA
+        or receipt.get("source_sha") != _PARTIAL_SOURCE_SHA
+        or receipt.get("builder_tree") != backend_tree
+        or state.get("plan", {}).get("source_sha") != _PARTIAL_SOURCE_SHA):
+        _blocked("gis_dev_partial_source_binding_invalid")
+    return {"old_source_sha": _PARTIAL_SOURCE_SHA, "candidate_source_sha": candidate,
+        "changed_files": files, "backend_tree": backend_tree,
+        "image_ref": receipt.get("image_ref"),
+        "build_receipt_sha256": _digest(receipt),
+        "source_plan_sha256": state.get("plan", {}).get("source_plan_sha256"),
+        "source_capture_sha256": _digest(state.get("plan", {}).get("source_capture")),
+        "inputs_sha256": state.get("plan", {}).get("inputs_sha256")}
+
+
+def _partial_state_admissible(state):
+    plan = state.get("plan") if isinstance(state, dict) else None
+    receipt = state.get("secret_write_receipt") if isinstance(state, dict) else None
+    if (not isinstance(plan, dict) or state.get("schema") != "voice-dev-gis-first-install-state-v1"
+        or state.get("operation") != _PARTIAL_OPERATION
+        or state.get("source_sha") != _PARTIAL_SOURCE_SHA
+        or state.get("phase") != "SECRETS_APPLIED" or state.get("secrets_applied") is not True
+        or state.get("plan_phase") not in (None, "PLANNED") or plan.get("phase") != "PLANNED"
+        or plan.get("prerequisite_phase") is not None or plan.get("prerequisite_receipt") is not None
+        or plan.get("created") not in (None, {}) or plan.get("jobs") not in (None, {})
+        or plan.get("source_sha") != _PARTIAL_SOURCE_SHA
+        or not isinstance(receipt, dict) or set(receipt) != {APP_SECRET, SIGNER_SECRET, WORKLOAD_SECRET}
+        or not isinstance(plan.get("inputs"), dict)
+        or plan.get("inputs_sha256") != _digest(plan.get("inputs"))
+        or not isinstance(plan.get("source_capture"), dict)
+        or not isinstance(plan.get("source_plan_sha256"), str)
+        or not HASH.fullmatch(plan["source_plan_sha256"])
+        or plan.get("namespace_uid") != state.get("namespace_uid")
+        or not isinstance(state.get("database_identity"), dict)):
+        _blocked("gis_dev_partial_state_not_resumable")
+    for expected in receipt.values():
+        if (not isinstance(expected, dict) or set(expected) != {"uid", "resourceVersion"}
+            or not isinstance(expected["uid"], str)
+            or not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", expected["uid"])
+            or not isinstance(expected["resourceVersion"], str)
+            or not re.fullmatch(r"[1-9][0-9]{0,31}", expected["resourceVersion"])):
+            _blocked("gis_dev_partial_state_not_resumable")
+    return True
+
+
+def _partial_state_compatible(state, original):
+    """Ensure sidecar progress preserves the frozen authority fields."""
+    if not isinstance(state, dict) or not isinstance(original, dict):
+        _blocked("gis_dev_partial_sidecar_state_invalid")
+    for key in ("schema", "operation", "namespace_uid", "source_sha", "source_build_receipt",
+                "database_identity", "secret_write_receipt", "secrets_applied"):
+        if state.get(key) != original.get(key):
+            _blocked("gis_dev_partial_sidecar_state_invalid")
+    plan = state.get("plan")
+    baseline = original.get("plan", {})
+    for key in ("operation", "namespace_uid", "source_sha", "source_plan_sha256",
+                "source_build_receipt", "source_capture", "inputs", "inputs_sha256"):
+        if plan.get(key) != baseline.get(key):
+            _blocked("gis_dev_partial_sidecar_plan_invalid")
+    if (plan.get("phase") not in ("PLANNED", "CREATING", "STARTING", "CREATED", "STARTED")
+        or plan.get("prerequisite_phase") not in ("CREATING", "VERIFIED")
+        or not isinstance(plan.get("created"), dict) or not isinstance(plan.get("jobs"), dict)):
+        _blocked("gis_dev_partial_sidecar_plan_invalid")
+    allowed_created = {"Service/voice-gameintegration", "Deployment/voice-gameintegration"}
+    allowed_created.update("configmap/" + value for value in baseline.get("inputs", {}).get("configmaps", {}).values())
+    allowed_created.update("job/" + value for value in baseline.get("inputs", {}).get("jobs", {}).values())
+    if (set(plan["created"]) - allowed_created
+        or set(plan["jobs"]) - {"provision", "migrate", "verify"}
+        or (plan.get("prerequisite_phase") == "CREATING" and plan.get("prerequisite_receipt") is not None)
+        or (plan.get("prerequisite_phase") == "VERIFIED" and not isinstance(plan.get("prerequisite_receipt"), dict))):
+        _blocked("gis_dev_partial_sidecar_plan_invalid")
+    return True
+
+
+def _save_continuation(path, document, expected_sha256=None):
+    """Atomically create or compare-and-replace the private continuation sidecar."""
+    path = Path(path)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    if path.exists():
+        previous = path.read_bytes()
+        if expected_sha256 is None or hashlib.sha256(previous).hexdigest() != expected_sha256:
+            _blocked("gis_dev_partial_sidecar_changed")
+    elif expected_sha256 is not None:
+        _blocked("gis_dev_partial_sidecar_missing")
+    raw = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+    temporary = path.with_name(path.name + "." + secrets.token_hex(8) + ".tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+        if expected_sha256 is None:
+            os.link(temporary, path)
+            temporary.unlink()
+        else:
+            os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    except Exception:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        _blocked("gis_dev_partial_sidecar_write_failed")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _partial_secret_fingerprints(kube, state):
+    """Validate same-operation Secret custody and return hashes only."""
+    receipt = state["secret_write_receipt"]
+    expected_types = {APP_SECRET: "Opaque", SIGNER_SECRET: "Opaque", WORKLOAD_SECRET: "Opaque"}
+    result = {}
+    for name in sorted(receipt):
+        secret = kube.get_secret(name)
+        metadata = secret.get("metadata", {}) if isinstance(secret, dict) else {}
+        data = secret.get("data") if isinstance(secret, dict) else None
+        if (not isinstance(data, dict) or not data
+            or metadata.get("namespace") != NAMESPACE or metadata.get("name") != name
+            or metadata.get("uid") != receipt[name].get("uid")
+            or metadata.get("resourceVersion") != receipt[name].get("resourceVersion")
+            or secret.get("type", "Opaque") != expected_types[name]
+            or metadata.get("annotations", {}).get(OPERATION_ANNOTATION) != _PARTIAL_OPERATION):
+            _blocked("gis_dev_partial_secret_binding_changed")
+        fingerprint = hashlib.sha256(json.dumps(data, sort_keys=True,
+            separators=(",", ":")).encode()).hexdigest()
+        result[name] = {"uid": metadata["uid"], "resourceVersion": metadata["resourceVersion"],
+            "type": expected_types[name], "data_sha256": fingerprint}
+    return result
+
+
 def install(source_root, image_ref, state_path, *, kube=None, apply=False, operation=None,
             builder_run=38984047252, builder_job=117252300427,
             local_build=False, local_build_receipt=None, build_receipt_factory=source_build_receipt,
-            secret_plan_factory=build_secret_plan, source_verifier=verify_current_source):
+            secret_plan_factory=build_secret_plan, source_verifier=verify_current_source,
+            resume_partial=False):
     """Run the fixed DEV-only install through source, DB, Secret, and GIS guards."""
     if not apply:
         _blocked("gis_dev_apply_flag_required")
     import gis_first_install as gis
     import gis_prerequisite
     root = Path(source_root).resolve(strict=True)
-    # A receipt passed by the CLI or a test seam is only a locator. Reproduce
-    # authority from the producer and registry before it can enter the plan.
-    if local_build_receipt is not None:
-        local_kind = (isinstance(local_build_receipt, dict)
-            and local_build_receipt.get("builder_kind") == "local-build")
-        if not isinstance(local_build_receipt, dict) or local_build_receipt.get("image_ref") != image_ref:
-            _blocked("gis_dev_source_build_receipt_invalid")
-        source_sha, build_receipt = build_receipt_factory(root, image_ref,
-            local_build=local_kind)
-        if build_receipt != local_build_receipt:
-            _blocked("gis_dev_source_build_receipt_changed")
+    state_file = Path(state_path)
+    original_state_raw = None
+    original_state = None
+    candidate_source_sha = None
+    if resume_partial:
+        try:
+            original_state_raw = state_file.read_bytes()
+            if hashlib.sha256(original_state_raw).hexdigest() != _PARTIAL_JOURNAL_SHA256:
+                _blocked("gis_dev_partial_journal_changed")
+            original_state = json.loads(original_state_raw)
+        except Blocked:
+            raise
+        except Exception:
+            _blocked("gis_dev_partial_journal_invalid")
+        _partial_state_admissible(original_state)
+        candidate_source_sha = _git_text(root, ["rev-parse", "HEAD"])
+        source_build = original_state["source_build_receipt"]
+        validate_build_receipt(_PARTIAL_SOURCE_SHA, image_ref, source_build, clean=True)
+        if source_build.get("image_ref") != image_ref:
+            _blocked("gis_dev_partial_image_changed")
+        source_sha, build_receipt = _PARTIAL_SOURCE_SHA, copy.deepcopy(source_build)
+        source_verifier(root, candidate_source_sha, source_build["builder_tree"])
     else:
-        source_sha, build_receipt = build_receipt_factory(root, image_ref,
-            builder_run=builder_run, builder_job=builder_job, local_build=local_build)
-    validate_build_receipt(source_sha, image_ref, build_receipt, clean=True)
-    source_verifier(root, source_sha, build_receipt["builder_tree"])
+        # A receipt passed by the CLI or a test seam is only a locator. Reproduce
+        # authority from the producer and registry before it can enter the plan.
+        if local_build_receipt is not None:
+            local_kind = (isinstance(local_build_receipt, dict)
+                and local_build_receipt.get("builder_kind") == "local-build")
+            if not isinstance(local_build_receipt, dict) or local_build_receipt.get("image_ref") != image_ref:
+                _blocked("gis_dev_source_build_receipt_invalid")
+            source_sha, build_receipt = build_receipt_factory(root, image_ref,
+                local_build=local_kind)
+            if build_receipt != local_build_receipt:
+                _blocked("gis_dev_source_build_receipt_changed")
+        else:
+            source_sha, build_receipt = build_receipt_factory(root, image_ref,
+                builder_run=builder_run, builder_job=builder_job, local_build=local_build)
+        validate_build_receipt(source_sha, image_ref, build_receipt, clean=True)
+        source_verifier(root, source_sha, build_receipt["builder_tree"])
+    operator_source_sha = candidate_source_sha or source_sha
     kube = kube or Kubectl()
     namespace = kube.get_namespace().get("metadata", {})
     if namespace.get("name") != NAMESPACE or not isinstance(namespace.get("uid"), str):
         _blocked("gis_dev_namespace_identity_invalid")
 
-    state_file = Path(state_path)
     prior = None
-    if state_file.exists():
+    continuation_path = Path(str(state_path) + ".continuation.json")
+    continuation = None
+    continuation_sha256 = None
+    if resume_partial:
+        if namespace["uid"] != original_state.get("namespace_uid"):
+            _blocked("gis_dev_partial_namespace_changed")
+        binding = _partial_source_binding(root, original_state, _PARTIAL_JOURNAL_SHA256)
+        if continuation_path.exists():
+            try:
+                raw = continuation_path.read_bytes()
+                continuation = json.loads(raw)
+            except Exception:
+                _blocked("gis_dev_partial_sidecar_invalid")
+            continuation_sha256 = hashlib.sha256(raw).hexdigest()
+            if (not isinstance(continuation, dict)
+                or set(continuation) != {"schema", "original_journal_sha256", "binding", "secret_fingerprints", "state"}
+                or continuation.get("schema") != "voice-dev-gis-partial-continuation-v1"
+                or continuation.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+                or continuation.get("binding") != binding):
+                _blocked("gis_dev_partial_sidecar_binding_changed")
+            prior = continuation.get("state")
+            _partial_state_compatible(prior, original_state)
+            current_fingerprints = _partial_secret_fingerprints(kube, original_state)
+            if continuation.get("secret_fingerprints") != current_fingerprints:
+                _blocked("gis_dev_partial_secret_binding_changed")
+        else:
+            _partial_state_admissible(original_state)
+            validate_secret_write_receipt(kube, original_state["secret_write_receipt"], _PARTIAL_OPERATION)
+            fingerprints = _partial_secret_fingerprints(kube, original_state)
+            continuation = {"schema": "voice-dev-gis-partial-continuation-v1",
+                "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
+                "binding": binding, "secret_fingerprints": fingerprints,
+                "state": copy.deepcopy(original_state)}
+            continuation_sha256 = _save_continuation(continuation_path, continuation)
+            prior = original_state
+        if (not isinstance(prior, dict) or prior.get("operation") != _PARTIAL_OPERATION
+            or prior.get("namespace_uid") != namespace["uid"]):
+            _blocked("gis_dev_partial_sidecar_state_invalid")
+        operation = _PARTIAL_OPERATION
+    elif state_file.exists():
         try:
             prior = json.loads(state_file.read_text(encoding="utf-8"))
         except Exception:
@@ -1023,7 +1262,15 @@ def install(source_root, image_ref, state_path, *, kube=None, apply=False, opera
         "source_build_receipt": build_receipt, "source_hashes": {
             "deploy/staging/services.yaml": hashlib.sha256(
                 (root / "deploy/staging/services.yaml").read_bytes()).hexdigest()}}
-    if prior is None:
+    if resume_partial:
+        state = prior
+        plan = state["plan"]
+        code_capture = plan.get("source_capture")
+        if (plan.get("operation") != operation or plan.get("namespace_uid") != namespace["uid"]
+            or plan.get("inputs") != gis_prerequisite.source_inputs(root, code_capture)
+            or gis.digest(source_plan) != plan.get("source_plan_sha256")):
+            _blocked("gis_dev_state_source_changed")
+    elif prior is None:
         plan = gis.bind_operation(source_plan, operation, target, namespace=NAMESPACE)
         plan["source_build_receipt"] = copy.deepcopy(build_receipt)
         plan["source_root"] = str(root)
@@ -1042,33 +1289,46 @@ def install(source_root, image_ref, state_path, *, kube=None, apply=False, opera
         plan = state["plan"]
         code_capture = plan.get("source_capture")
         if (plan.get("operation") != operation or plan.get("namespace_uid") != namespace["uid"]
-            or plan.get("inputs") != gis_prerequisite.source_inputs(root, code_capture)):
+            or plan.get("inputs") != gis_prerequisite.source_inputs(root, code_capture)
+            or gis.digest(source_plan) != plan.get("source_plan_sha256")):
             _blocked("gis_dev_state_source_changed")
+
+    def persist_state():
+        nonlocal continuation_sha256
+        if not resume_partial:
+            _save_plan(state_path, state)
+            return
+        continuation["state"] = copy.deepcopy(state)
+        continuation_sha256 = _save_continuation(continuation_path, continuation,
+            expected_sha256=continuation_sha256)
 
     # This checks the existing stable TLS Secret before generating any key or
     # planning the additive application Secret updates.
     if not state.get("secrets_applied"):
         secret_plan = secret_plan_factory(kube, operation=operation)
         state["phase"] = "TLS_VERIFIED"
-        _save_plan(state_path, state)
+        persist_state()
         before = gis_prerequisite._endpoint_identity(kube, NAMESPACE)
         _database_exists_readonly(kube, before)
         state["database_identity"] = before
         state["phase"] = "DATABASE_VERIFIED"
-        _save_plan(state_path, state)
+        persist_state()
         if before["namespace_uid"] != namespace["uid"]:
             _blocked("gis_dev_namespace_identity_changed")
-        source_verifier(root, source_sha, build_receipt["builder_tree"])
+        source_verifier(root, operator_source_sha, build_receipt["builder_tree"])
         apply_secret_plan(kube, secret_plan)
         state["secret_write_receipt"] = secret_write_receipt(kube, secret_plan, operation)
         state["secrets_applied"] = True
         state["phase"] = "SECRETS_APPLIED"
-        _save_plan(state_path, state)
+        persist_state()
         plan["database_identity"] = copy.deepcopy(before)
         if plan.get("phase") not in ("PLANNED", "CREATING", "STARTING"):
             _blocked("gis_dev_resume_phase_invalid")
     else:
         validate_secret_write_receipt(kube, state.get("secret_write_receipt", {}), operation)
+        if resume_partial:
+            if continuation.get("secret_fingerprints") != _partial_secret_fingerprints(kube, original_state):
+                _blocked("gis_dev_partial_secret_binding_changed")
         before = state.get("database_identity")
         if not isinstance(before, dict):
             _blocked("gis_dev_database_identity_missing")
@@ -1078,11 +1338,11 @@ def install(source_root, image_ref, state_path, *, kube=None, apply=False, opera
     def save_plan(value):
         state["plan"] = copy.deepcopy(value)
         state["plan_phase"] = value.get("phase")
-        _save_plan(state_path, state)
+        persist_state()
 
     try:
         if not plan.get("prerequisite_receipt"):
-            source_verifier(root, source_sha, build_receipt["builder_tree"])
+            source_verifier(root, operator_source_sha, build_receipt["builder_tree"])
             receipt = gis_prerequisite.execute(kube, plan, root, code_capture, save_plan)
             plan["prerequisite_receipt"] = receipt
             save_plan(plan)
@@ -1093,15 +1353,20 @@ def install(source_root, image_ref, state_path, *, kube=None, apply=False, opera
         ready = gis.verify_ready(kube, plan)
         state["phase"] = "READY"
         state["ready_receipt"] = ready
-        _save_plan(state_path, state)
+        persist_state()
         return ready
     except Exception:
-        if plan.get("created"):
+        if resume_partial:
+            # The recovery sidecar is the durable same-operation journal. Keep
+            # prerequisite ConfigMaps/Jobs and their phase/identity records for
+            # exact reread; never run GIS Service/Deployment rollback here.
+            persist_state()
+        elif plan.get("created"):
             try:
                 gis.rollback(kube, plan, save_plan)
             except Exception:
                 state["phase"] = "ROLLBACK_REQUIRED"
-                _save_plan(state_path, state)
+                persist_state()
         raise
 
 
@@ -1121,10 +1386,12 @@ def main(argv=None):
     parser.add_argument("--local-build", action="store_true",
         help="admit only an image validated against the exact clean local source context")
     parser.add_argument("--apply", action="store_true", help="run guarded DEV Secret, migration, and workload steps")
+    parser.add_argument("--resume-partial-operation", action="store_true",
+        help="continue only the frozen GIS operation 737e63e3aaee through its reviewed sidecar")
     args = parser.parse_args(argv)
     try:
         if args.build_and_publish:
-            if not args.image_tag or args.image_ref or not args.apply or not args.state:
+            if not args.image_tag or args.image_ref or not args.apply or not args.state or args.resume_partial_operation:
                 _blocked("gis_dev_build_arguments_invalid")
             prior = None
             if Path(args.state).exists():
@@ -1155,7 +1422,8 @@ def main(argv=None):
         if not args.image_ref or not args.state:
             _blocked("gis_dev_install_arguments_invalid")
         ready = install(args.source_root, args.image_ref, args.state, apply=args.apply,
-            builder_run=args.builder_run, builder_job=args.builder_job, local_build=args.local_build)
+            builder_run=args.builder_run, builder_job=args.builder_job, local_build=args.local_build,
+            resume_partial=args.resume_partial_operation)
         print("GIS_DEV_FIRST_INSTALL=READY " + ready["deployment_uid"])
         return 0
     except Blocked as error:

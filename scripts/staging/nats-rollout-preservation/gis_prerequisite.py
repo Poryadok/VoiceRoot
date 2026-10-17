@@ -375,7 +375,22 @@ def _create_once(kube, kind, obj, plan, saved, save):
     existing = _read_named(kube, kind.lower(), name)
     if existing is not None:
         if record is None:
-            raise Blocked('gis_prerequisite_foreign_resource_present')
+            metadata = existing.get('metadata', {})
+            uid = metadata.get('uid')
+            # A create response can be lost after the API committed the exact
+            # operation-owned object. Adopt it only while this same operation
+            # is durably in CREATING and every identity/spec guard matches.
+            if (plan.get('prerequisite_phase') != 'CREATING'
+                or metadata.get('namespace') != plan.get('namespace', NS)
+                or metadata.get('name') != name
+                or not isinstance(uid, str) or not UUID.fullmatch(uid)
+                or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+                or (kind == 'job' and not _job_live_matches(existing, obj, uid))
+                or (kind != 'job' and _spec_digest(existing) != wanted_sha)):
+                raise Blocked('gis_prerequisite_foreign_resource_present')
+            record = {'uid': uid, 'spec_sha256': wanted_sha}
+            saved[key] = record
+            save(copy.deepcopy(plan))
         if (existing.get('metadata', {}).get('uid') != record.get('uid')
             or existing.get('metadata', {}).get('labels', {}).get(OP_LABEL) != plan['operation']
             or (kind == 'job' and not _job_live_matches(existing, obj, record.get('uid')))
@@ -394,16 +409,26 @@ def _create_once(kube, kind, obj, plan, saved, save):
             observed = _read_named(kube, kind.lower(), name)
         except Exception:
             raise Blocked('gis_prerequisite_create_outcome_unknown') from None
-        if observed is not None:
+        if observed is None:
             raise Blocked('gis_prerequisite_create_outcome_unknown') from None
-        raise Blocked('gis_prerequisite_create_outcome_unknown') from None
+        metadata = observed.get('metadata', {})
+        uid = metadata.get('uid')
+        if (metadata.get('namespace') != plan.get('namespace', NS)
+            or metadata.get('name') != name
+            or not isinstance(uid, str) or not UUID.fullmatch(uid)
+            or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+            or (kind == 'job' and not _job_live_matches(observed, obj, uid))
+            or (kind != 'job' and _spec_digest(observed) != wanted_sha)):
+            raise Blocked('gis_prerequisite_create_outcome_unknown') from None
+        created = [name, uid]
+        existing = observed
     if (not isinstance(created, list) or len(created) != 2 or created[0] != name
         or not isinstance(created[1], str) or not UUID.fullmatch(created[1])):
         raise Blocked('gis_prerequisite_create_receipt_invalid')
     record = {'uid': created[1], 'spec_sha256': wanted_sha}
     saved[key] = record
     save(copy.deepcopy(plan))
-    fresh = _read_named(kube, kind.lower(), name)
+    fresh = existing if existing is not None else _read_named(kube, kind.lower(), name)
     if (fresh.get('metadata', {}).get('uid') != record['uid']
         or fresh.get('metadata', {}).get('labels', {}).get(OP_LABEL) != plan['operation']
         or (kind == 'job' and not _job_live_matches(fresh, obj, record['uid']))

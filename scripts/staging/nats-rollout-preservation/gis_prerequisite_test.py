@@ -324,6 +324,61 @@ class Tests(unittest.TestCase):
         self.assertTrue(gis.validate_prerequisite_receipt(receipt, plan))
         self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
 
+    def test_failed_job_verification_resumes_same_operation_without_duplicate_job(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'source_sha': 'b'*40,
+            'source_plan_sha256': 'c'*64, 'source_ci': {'run_id': 1, 'run_attempt': 1,
+                'workflow_id': 1, 'tree_sha': 'd'*40, 'lock_artifact_id': 1, 'lock_sha256': 'e'*64},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound,
+            'custody_binding_sha256': 'f'*64, 'phase': 'PLANNED'}
+        kube = FakeKube()
+        saved = []
+        with patch.object(prerequisite, '_verify_job', side_effect=prerequisite.Blocked('verify interrupted')):
+            with self.assertRaises(prerequisite.Blocked):
+                prerequisite.execute(kube, plan, ROOT, bound, saved.append)
+        self.assertEqual(plan['prerequisite_phase'], 'CREATING')
+        self.assertIn('job/' + inputs['jobs']['provision'], plan['created'])
+        before = [event[1] for event in kube.events if event[:1] == ('created-job',)]
+        receipt = prerequisite.execute(kube, plan, ROOT, bound, saved.append)
+        after = [event[1] for event in kube.events if event[:1] == ('created-job',)]
+        self.assertEqual(before, [inputs['jobs']['provision']])
+        self.assertEqual(after, [inputs['jobs'][role] for role in prerequisite.JOB_ROLES])
+        self.assertEqual(len(after), len(set(after)))
+        self.assertEqual(receipt['schema'], gis.PREREQUISITE_SCHEMA)
+        self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
+
+    def test_ambiguous_job_create_response_adopts_only_exact_same_operation_object(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'namespace': 'voice-staging',
+            'source_sha': 'b'*40, 'source_plan_sha256': 'c'*64, 'phase': 'PLANNED',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound,
+            'source_ci': {'run_id': 1, 'run_attempt': 1, 'workflow_id': 1,
+                'tree_sha': 'd'*40, 'lock_artifact_id': 1, 'lock_sha256': 'e'*64},
+            'custody_binding_sha256': 'f'*64}
+        configmaps, jobs = prerequisite._documents(ROOT, plan, bound)
+        kube = FakeKube()
+        original_run = kube.run
+        lost = {'done': False}
+
+        def run(args, body=None, timeout=30):
+            result = original_run(args, body, timeout)
+            if args[0] == 'create' and body.get('kind') == 'Job' and not lost['done']:
+                lost['done'] = True
+                raise RuntimeError('create response lost')
+            return result
+
+        kube.run = run
+        saved = []
+        result, record = prerequisite._create_once(kube, 'job', jobs['provision'],
+            plan, plan['created'], saved.append)
+        self.assertEqual(result['metadata']['uid'], record['uid'])
+        self.assertEqual(len([event for event in kube.events if event[:1] == ('created-job',)]), 1)
+        prerequisite._create_once(kube, 'job', jobs['provision'], plan, plan['created'], saved.append)
+        self.assertEqual(len([event for event in kube.events if event[:1] == ('created-job',)]), 1)
+
     def test_authorize_gis_stage_orders_real_producer_jobs_before_only_pair_creates(self):
         import transaction
         class FullKube(FakeKube):
