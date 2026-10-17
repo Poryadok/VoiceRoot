@@ -37,7 +37,9 @@ class SourceTests(unittest.TestCase):
         def api(url, _headers, _deadline):
             nonlocal active_commit
             if '/compare/' in url:
-                return {'base_commit': {'sha': source}, 'head_commit': {'sha': current},
+                # GitHub's compare response has base_commit and merge_base_commit,
+                # but no head_commit; the requested head is separately pinned by ref.
+                return {'base_commit': {'sha': source},
                     'merge_base_commit': {'sha': source}, 'status': 'ahead', 'ahead_by': 3}
             if '/git/commits/' in url:
                 sha = url.rsplit('/', 1)[-1]
@@ -83,7 +85,7 @@ class SourceTests(unittest.TestCase):
         source, current = 'a' * 40, 'b' * 40
         for status, merge_base in (('diverged', 'c' * 40), ('behind', source), ('ahead', 'c' * 40)):
             with self.subTest(status=status, merge_base=merge_base):
-                compare = {'base_commit': {'sha': source}, 'head_commit': {'sha': current},
+                compare = {'base_commit': {'sha': source},
                     'merge_base_commit': {'sha': merge_base}, 'status': status, 'ahead_by': 2}
                 with patch.object(module, '_get', return_value=compare), self.assertRaises(module.SourceError):
                     module._equivalent_master_source({}, source, current, 1)
