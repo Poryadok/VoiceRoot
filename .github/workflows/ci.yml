@@ -129,7 +129,7 @@ jobs:
   protobuf:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.protos == 'true' ||
@@ -172,7 +172,7 @@ jobs:
   compose-config:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.compose == 'true' ||
@@ -228,7 +228,7 @@ jobs:
   ci-script-tests:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (
@@ -266,7 +266,7 @@ jobs:
   match-squad-overlay:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.match_squad_overlay == 'true' ||
@@ -285,7 +285,7 @@ jobs:
   flutter:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
@@ -667,7 +667,7 @@ jobs:
   golangci:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
@@ -712,7 +712,7 @@ jobs:
   backend-go-pkg:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_pkg == 'true' ||
        needs.changes.outputs.global == 'true' ||
@@ -734,7 +734,7 @@ jobs:
   nats-hub-config-renderer-image:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
         (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.compose == 'true')) ||
@@ -779,7 +779,7 @@ jobs:
   minio-server-image-publish:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
@@ -817,7 +817,7 @@ jobs:
   backend-go:
     needs: [changes, backend-go-pkg]
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.backend-go-pkg.result != 'failure' &&
       needs.backend-go-pkg.result != 'cancelled' &&
@@ -876,7 +876,7 @@ jobs:
   backend-go-integration-pr:
     needs: [changes, backend-go-pkg]
     if: >-
-      always() &&
+      !cancelled() &&
       github.event_name == 'pull_request' &&
       needs.changes.result == 'success' &&
       needs.backend-go-pkg.result != 'failure' &&
@@ -905,7 +905,7 @@ jobs:
   staging-images-push:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
@@ -956,7 +956,7 @@ jobs:
   staging-images-promote:
     needs: [changes, staging-images-push]
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.staging-images-push.result != 'failure' &&
       github.event_name == 'push' &&
@@ -1042,7 +1042,7 @@ jobs:
   backend-auth:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_auth == 'true' ||
@@ -1118,7 +1118,7 @@ jobs:
   developer-portal:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_developer_portal == 'true' ||
@@ -1217,7 +1217,7 @@ jobs:
   web:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_web == 'true' ||
@@ -1375,7 +1375,7 @@ jobs:
   admin:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_admin == 'true' ||
@@ -1475,7 +1475,7 @@ jobs:
   flutter-android-smoke:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
@@ -1506,7 +1506,7 @@ jobs:
   flutter-web-integration:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
@@ -1533,7 +1533,7 @@ jobs:
   flutter-device-driver:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
@@ -1562,7 +1562,7 @@ jobs:
   flutter-ios:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
@@ -1588,7 +1588,7 @@ jobs:
     name: Key-backup golden (${{ matrix.platform }})
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
@@ -1696,7 +1696,7 @@ jobs:
   flutter-windows:
     needs: [changes, flutter]
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
         needs.changes.outputs.windows_desktop == 'true') ||
@@ -1844,7 +1844,7 @@ jobs:
   compose-e2e:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
@@ -2007,7 +2007,7 @@ jobs:
   a1-e2e:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
@@ -2053,7 +2053,7 @@ jobs:
   a1-flutter-profile-handoff:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
@@ -2106,7 +2106,7 @@ jobs:
   minio-mc-image-publish:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
@@ -2143,7 +2143,7 @@ jobs:
   a1-attachment-restart-proof:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
