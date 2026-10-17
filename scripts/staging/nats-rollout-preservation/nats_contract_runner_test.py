@@ -3,11 +3,15 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from contextlib import redirect_stderr
+from io import StringIO
+from unittest.mock import patch
 
 from nats_contract_plan import digest
 from nats_contract_plan_test import Tests as PlanFixtures
 from nats_contract_runner import (SCHEMA, ContractRunnerError, NatsActor,
-    _canonical, action_readback, execute_action, inspect_action, load_plan,
+    _canonical, _ensure_input_profile, _verify_input_receipt, action_readback, execute_action,
+    inspect_action, load_plan, main,
     validate_envelope, validate_plan)
 
 
@@ -21,6 +25,12 @@ def context(plan):
         'source_pv_uid': '32345678-1234-1234-1234-123456789abc',
         'verification_pvc_uid': '42345678-1234-1234-1234-123456789abc',
         'verification_pv_uid': '52345678-1234-1234-1234-123456789abc',
+        'input_pod_uid': '62345678-1234-1234-1234-123456789abc',
+        'input_attempt': 'abcde123', 'archive_sha256': 'a' * 64, 'archive_bytes': 4096,
+        'input_bundle_sha256': '7' * 64,
+        'input_bundle_bytes': 1024,
+        'kernel_bundle_sha256': '8' * 64,
+        'server_config_sha256': '9' * 64,
     }
 
 
@@ -89,7 +99,8 @@ class ContractRunnerTests(unittest.TestCase):
         actor = FakeActor(isolation_check=lambda: None)
         actor.current[action['object']] = copy.deepcopy(action['before'])
         with tempfile.TemporaryDirectory() as tmp:
-            load_plan(self.input, expected=self.ctx, state_root=Path(tmp))
+            state = Path(tmp) / self.ctx['operation']; state.mkdir()
+            load_plan(self.input, expected=self.ctx, state_root=state)
             inspection = inspect_action(self.plan, action_index, actor)
             self.assertEqual(inspection['state'], 'BEFORE')
             self.assertEqual(inspection['before_sha256'], digest(action['before']))
@@ -101,10 +112,10 @@ class ContractRunnerTests(unittest.TestCase):
                 'migration_attempt': self.ctx['contract_attempt']}
             receipt = execute_action(self.plan, action_index, binding={**self.ctx,
                 'plan_sha256': digest(self.plan)}, before_event_sha256=hashlib_sha(intent),
-                issued_event_sha256=hashlib_sha(issued), state_root=Path(tmp), actor=actor)
+                issued_event_sha256=hashlib_sha(issued), state_root=state, actor=actor)
             self.assertEqual(receipt['status'], 'COMPLETE')
             self.assertEqual(actor.mutations, [action['api']])
-            self.assertEqual(action_readback(state_root=Path(tmp), binding={**self.ctx,
+            self.assertEqual(action_readback(state_root=state, binding={**self.ctx,
                 'plan_sha256': digest(self.plan)}, index=action_index), receipt)
 
     def test_interrupted_action_is_unknown_and_cannot_be_replayed(self):
@@ -113,7 +124,8 @@ class ContractRunnerTests(unittest.TestCase):
         actor.current[action['object']] = copy.deepcopy(action['before'])
         actor.mutate = lambda *_args: (_ for _ in ()).throw(RuntimeError('interrupted'))
         with tempfile.TemporaryDirectory() as tmp:
-            load_plan(self.input, expected=self.ctx, state_root=Path(tmp))
+            state = Path(tmp) / self.ctx['operation']; state.mkdir()
+            load_plan(self.input, expected=self.ctx, state_root=state)
             intent = {'kind': 'nats_contract_intent', 'object': action['object'], 'api': action['api'],
                 'before_sha256': digest(action['before']), 'target_sha256': digest(action['after']),
                 'migration_attempt': self.ctx['contract_attempt']}
@@ -124,13 +136,13 @@ class ContractRunnerTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 execute_action(self.plan, 0, binding=binding,
                     before_event_sha256=hashlib_sha(intent), issued_event_sha256=hashlib_sha(issued),
-                    state_root=Path(tmp), actor=actor)
+                    state_root=state, actor=actor)
             with self.assertRaises(ContractRunnerError):
-                action_readback(state_root=Path(tmp), binding=binding, index=0)
+                action_readback(state_root=state, binding=binding, index=0)
             with self.assertRaises(ContractRunnerError):
                 execute_action(self.plan, 0, binding=binding,
                     before_event_sha256=hashlib_sha(intent), issued_event_sha256=hashlib_sha(issued),
-                    state_root=Path(tmp), actor=actor)
+                    state_root=state, actor=actor)
             self.assertEqual(actor.mutations, [])
 
     def test_actor_uses_fixed_cli_without_shell_or_secret_payload(self):
@@ -144,7 +156,8 @@ class ContractRunnerTests(unittest.TestCase):
         import nats_contract_runner
         original = nats_contract_runner._supervisor
         nats_contract_runner._supervisor = lambda _action: {
-            'schema': 'voice-nats-supervisor-v1', 'ok': True, 'running': True}
+            'schema': 'voice-nats-supervisor-v1', 'ok': True, 'running': True,
+            'pid': 123, 'started_at_ns': 456}
         try:
             self.assertEqual(actor.info_config('chat_events'), {'name': 'chat_events'})
         finally:
@@ -154,6 +167,97 @@ class ContractRunnerTests(unittest.TestCase):
         self.assertEqual(command[-2], '$JS.API.STREAM.INFO.chat_events')
         self.assertEqual(kwargs['stderr'], -3)
         self.assertEqual(command[command.index('--creds') + 1], '/inputs/private/bootstrap.creds')
+
+    def test_input_profile_requires_exact_files_and_bound_digests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rows = {'bootstrap.creds': b'boot', 'social.creds': b'social',
+                'realtime.creds': b'realtime', 'fixture.json': b'{}'}
+            for name, raw in rows.items():
+                path = root / name
+                path.write_bytes(raw)
+                path.chmod(0o440)
+            import hashlib
+            bundle_hash = hashlib.sha256(json.dumps(
+                {name: hashlib.sha256(rows[name]).hexdigest()
+                 for name in sorted(set(rows) - {'server.conf'})},
+                sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            expected = {'kernel_bundle_sha256': bundle_hash,
+                'server_config_sha256': 'a' * 64}
+            import nats_contract_runner as module
+            with patch.object(module, 'INPUT_ROOT', root), patch.object(module, 'CREDS', root / 'bootstrap.creds'):
+                _ensure_input_profile(expected)
+                (root / 'client.key').write_bytes(b'private')
+                with self.assertRaises(ContractRunnerError):
+                    _ensure_input_profile(expected)
+
+    def test_actor_isolation_requires_running_contract_supervisor(self):
+        actor = NatsActor(isolation_check=lambda: None)
+        running = {'schema': 'voice-nats-supervisor-v1', 'ok': True, 'running': True,
+            'pid': 123, 'started_at_ns': 456}
+        with patch('nats_contract_runner._contract_supervisor', return_value=running):
+            actor.assert_closed_isolation()
+        with patch('nats_contract_runner._contract_supervisor', return_value={**running, 'running': False}):
+            with self.assertRaises(ContractRunnerError):
+                actor.assert_closed_isolation()
+        bound = NatsActor(isolation_check=lambda: None,
+            expected_broker=lambda: {'pid': 123, 'started_at_ns': 456})
+        with patch('nats_contract_runner._contract_supervisor', return_value=running):
+            bound.assert_closed_isolation()
+        with patch('nats_contract_runner._contract_supervisor', return_value={**running, 'pid': 124}):
+            with self.assertRaises(ContractRunnerError):
+                bound.assert_closed_isolation()
+
+    def test_input_receipt_is_bound_to_exact_loader_and_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / self.ctx['input_attempt']
+            state.mkdir(mode=0o700)
+            receipt = {'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs',
+                'purpose': 'verification', 'operation': self.ctx['operation'],
+                'nonce': self.ctx['nonce'], 'pod_uid': self.ctx['input_pod_uid'],
+                'source_pvc_uid': self.ctx['source_pvc_uid'], 'source_pv_uid': self.ctx['source_pv_uid'],
+                'verification_pvc_uid': self.ctx['verification_pvc_uid'],
+                'verification_pv_uid': self.ctx['verification_pv_uid'],
+                'archive_sha256': self.ctx['archive_sha256'], 'archive_bytes': self.ctx['archive_bytes'],
+                'session_attempt': self.ctx['input_attempt'],
+                'input_bundle_sha256': self.ctx['input_bundle_sha256'],
+                'input_bundle_bytes': self.ctx['input_bundle_bytes'], 'status': 'COMPLETE',
+                'file_count': 5, 'kernel_bundle_sha256': self.ctx['kernel_bundle_sha256'],
+                'server_config_sha256': self.ctx['server_config_sha256']}
+            (state / 'inputs.receipt.json').write_bytes(_canonical(receipt))
+            (state / 'inputs.receipt.json').chmod(0o600)
+            self.assertEqual(_verify_input_receipt(self.ctx, state_root=Path(tmp)), receipt)
+            receipt['archive_sha256'] = 'b' * 64
+            (state / 'inputs.receipt.json').write_bytes(_canonical(receipt))
+            with self.assertRaises(ContractRunnerError):
+                _verify_input_receipt(self.ctx, state_root=Path(tmp))
+
+    def test_cli_rejects_arbitrary_command_without_echoing_arguments(self):
+        stderr = StringIO()
+        with redirect_stderr(stderr):
+            result = main(['--load-plan', '--operation', '012345abcdef', '--command', '/bin/sh'])
+        self.assertEqual(result, 2)
+        self.assertEqual(stderr.getvalue(), 'contract_runner_failed\n')
+
+    def test_cli_binds_request_to_downward_api_pod_uid_before_state_access(self):
+        args = ['--readback-action', '--operation', self.ctx['operation'], '--nonce', self.ctx['nonce'],
+            '--pod-uid', self.ctx['pod_uid'], '--contract-attempt', self.ctx['contract_attempt'],
+            '--source-pvc-uid', self.ctx['source_pvc_uid'], '--source-pv-uid', self.ctx['source_pv_uid'],
+            '--verification-pvc-uid', self.ctx['verification_pvc_uid'],
+            '--verification-pv-uid', self.ctx['verification_pv_uid'],
+            '--input-pod-uid', self.ctx['input_pod_uid'], '--input-attempt', self.ctx['input_attempt'],
+            '--input-bundle-sha256', self.ctx['input_bundle_sha256'],
+            '--input-bundle-bytes', str(self.ctx['input_bundle_bytes']),
+            '--archive-sha256', self.ctx['archive_sha256'], '--archive-bytes', str(self.ctx['archive_bytes']),
+            '--kernel-bundle-sha256', self.ctx['kernel_bundle_sha256'],
+            '--server-config-sha256', self.ctx['server_config_sha256'],
+            '--plan-sha256', digest(self.plan), '--plan-bytes', '100', '--action-index', '0']
+        stderr = StringIO()
+        with patch.dict('os.environ', {'POD_UID': '72345678-1234-1234-1234-123456789abc'}), \
+                redirect_stderr(stderr):
+            result = main(args)
+        self.assertEqual(result, 2)
+        self.assertEqual(stderr.getvalue(), 'contract_runner_failed\n')
 
 
 def hashlib_sha(value):

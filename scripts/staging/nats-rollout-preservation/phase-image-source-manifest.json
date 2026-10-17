@@ -37,13 +37,13 @@
     "scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/notification-bootstrap.sh": "1cc7ef5cbcf5bbcbc05ce46c49a9b811dc71afbd02879988ef390897fb9da26c",
     "scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/realtime-bootstrap.sh": "a22a6739aa9cbcf27a2f3680e6dbe29c82ebe2769f9eb3c202e5783ac02740fa",
     "scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/search-bootstrap.sh": "2ac580d2afb2f111d4fef2b97a54e96ddf4135e44ad66eb3cc000a795a34b4b3",
-    "scripts/staging/nats-rollout-preservation/Dockerfile": "9da88ee09b53e309db43fa3927c5cd50b26d682b1d85a2c8753a110f23767b65",
+    "scripts/staging/nats-rollout-preservation/Dockerfile": "45c79ceb75f61ea6b024bb5e472ba38f10246789f04189aba0260d6108cd894f",
     "scripts/staging/nats-rollout-preservation/native_store.py": "3f9b177ecbcec7463801ba3ed44724c3068696482804d4d586696a305da813c0",
     "scripts/staging/nats-rollout-preservation/nats-phase": "4b5cea71253ebaa6c6c58f153d4c89b5312a874e1620567a2268b5d5ce8dd9ec",
-    "scripts/staging/nats-rollout-preservation/nats-supervisor": "cf89b62b53ac4c89c380dead53a1a03cf64aaef943fa51673e0565adfe44551f",
+    "scripts/staging/nats-rollout-preservation/nats-supervisor": "52f5e5bbeb1eaba0c27437c4e35cb32ecdd680408cf06fb354cca297da1103fa",
     "scripts/staging/nats-rollout-preservation/nats_contract_actor.py": "98d1cd844e3eea8dde791b65ac4cee08b85d91b09b2bd0d12f9d6e5d901517d7",
     "scripts/staging/nats-rollout-preservation/nats_contract_plan.py": "f1e7745dffd777c64324b10e45d3d8f1105c71ab2aac454f76131163dee7b291",
-    "scripts/staging/nats-rollout-preservation/nats_contract_runner.py": "0238b28476b5b535192303b06ba6eb7947c8bfebdd435a37b1e8bceca261765d"
+    "scripts/staging/nats-rollout-preservation/nats_contract_runner.py": "11c8643f27c980f0717ba5541a758f6fdbe38fde690761ee18a5f4a8f481673e"
   },
   "qualification": "Source checkpoint: trusted helper package includes a fixed canonical NATS contract plan validator and per-action executor. The producer validates plan digest and closed APIs, stores action STARTED before a single NATS mutation, and exposes same-attempt receipt readback. Host orchestration must persist intent and issued events before invoking apply; ambiguous actions are never replayed. Archive and disposable census/session profiles remain unchanged. The contract-migration Kubernetes Job, transaction consumer, registry image and independent final review are not yet qualified; no live proof is claimed."
 }

@@ -12,23 +12,32 @@ BINDING = {
     'source_pv_name': 'pv-voice-nats-source',
     'source_pv_uid': '55555555-5555-4555-8555-555555555555',
     'source_node_name': 'k3s-worker-1',
+    'source_hostname': 'worker-label-1',
     'verification_claim': 'voice-nats-verify-' + 'a' * 12,
     'verification_uid': '22222222-2222-4222-8222-222222222222',
     'verification_pv_name': 'pv-voice-nats-verify',
     'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
     'verification_node_name': 'k3s-worker-1',
+    'verification_hostname': 'worker-label-1',
 }
 IMAGE = 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'a' * 64
 POD_UID = '44444444-4444-4444-8444-444444444444'
 ARCHIVE_REQUEST = REQUEST | {'phase': 'archive'}
 ARCHIVE_BINDING = {key: BINDING[key] for key in (
-    'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name')}
+    'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name', 'source_hostname')}
 SESSION_REQUEST = REQUEST | {'phase': 'verification-session'}
 SESSION_BINDING = BINDING | {'session_attempt': '1234abcd',
     'input_pod_uid': '55555555-5555-4555-8555-555555555555',
     'input_bundle_sha256': 'e' * 64, 'input_bundle_bytes': 512,
     'kernel_bundle_sha256': 'f' * 64, 'server_config_sha256': '1' * 64,
     'archive_sha256': 'd' * 64, 'archive_bytes': 1234}
+CONTRACT_REQUEST = REQUEST | {'phase': 'contract-migration'}
+CONTRACT_BINDING = BINDING | {'contract_attempt': 'a1b2c3d4',
+    'input_pod_uid': '55555555-5555-4555-8555-555555555555',
+    'input_attempt': '1111aaaa', 'archive_sha256': 'a' * 64, 'archive_bytes': 8192,
+    'input_bundle_sha256': '6' * 64, 'input_bundle_bytes': 2048,
+    'kernel_bundle_sha256': '7' * 64, 'plan_sha256': '8' * 64,
+    'plan_bytes': 16384, 'server_config_sha256': '9' * 64}
 
 
 class VerificationJobTests(unittest.TestCase):
@@ -125,7 +134,7 @@ class VerificationJobTests(unittest.TestCase):
         self.assertNotIn('nodeName', pod)
         self.assertEqual(pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']
             ['nodeSelectorTerms'][0]['matchExpressions'], [{'key': 'kubernetes.io/hostname',
-                'operator': 'In', 'values': [ARCHIVE_BINDING['source_node_name']]}])
+                'operator': 'In', 'values': [ARCHIVE_BINDING['source_hostname']]}])
         self.assertNotIn('hostPath', str(pod))
         self.assertNotIn('secret', str(pod).lower())
 
@@ -216,7 +225,8 @@ class VerificationJobTests(unittest.TestCase):
     def test_wffc_verification_binder_is_target_only_readonly_and_node_affinity_bound(self):
         request = REQUEST | {'phase': 'bind-verification'}
         target = {'role': 'verification', 'claim_name': 'voice-nats-verify-' + request['operation'],
-            'target_uid': '22222222-2222-4222-8222-222222222222', 'node_name': 'k3s-worker-1'}
+            'target_uid': '22222222-2222-4222-8222-222222222222', 'node_name': 'k3s-worker-1',
+            'hostname': 'worker-label-1'}
         row = jobs.document(request, target, IMAGE)
         pod = row['spec']['template']['spec']
         container = pod['containers'][0]
@@ -230,7 +240,7 @@ class VerificationJobTests(unittest.TestCase):
         self.assertNotIn('nodeName', pod)
         self.assertEqual(pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']
             ['nodeSelectorTerms'][0]['matchExpressions'], [{'key': 'kubernetes.io/hostname',
-                'operator': 'In', 'values': ['k3s-worker-1']}])
+                'operator': 'In', 'values': ['worker-label-1']}])
         self.assertEqual(container['command'], ['/usr/bin/python3', '/voice-nats-runner/phase'])
         self.assertEqual(container['args'], ['--bind-only', '--operation', request['operation'],
             '--nonce', request['nonce'], '--role', 'verification'])
@@ -251,7 +261,7 @@ class VerificationJobTests(unittest.TestCase):
         self.assertEqual(row['spec']['selector']['matchLabels'], {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
         self.assertEqual(labels[jobs.LABEL_JOB_SELECTOR], row['metadata']['name'])
         self.assertEqual(row['spec']['backoffLimit'], 0)
-        self.assertEqual(row['spec']['podReplacementPolicy'], 'Never')
+        self.assertEqual(row['spec']['podReplacementPolicy'], 'Failed')
         self.assertEqual(pod['restartPolicy'], 'Never')
         self.assertEqual(pod['automountServiceAccountToken'], False)
         self.assertEqual(pod['securityContext']['fsGroup'], 65532)
@@ -348,6 +358,71 @@ class VerificationJobTests(unittest.TestCase):
             SESSION_BINDING | {'source_uid': '../pvc'}):
             with self.subTest(invalid=invalid), self.assertRaises(jobs.VerificationJobError):
                 jobs.document(SESSION_REQUEST, invalid, IMAGE)
+
+    def test_contract_migration_job_separates_source_writer_from_control_and_scratch(self):
+        row = jobs.document(CONTRACT_REQUEST, CONTRACT_BINDING, IMAGE)
+        pod = row['spec']['template']['spec']
+        self.assertEqual(row['spec']['backoffLimit'], 0)
+        self.assertEqual(row['spec']['podReplacementPolicy'], 'Failed')
+        self.assertEqual(row['spec']['selector']['matchLabels'],
+            {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
+        self.assertEqual(row['spec']['template']['metadata']['labels'][jobs.LABEL_JOB_SELECTOR],
+            row['metadata']['name'])
+        self.assertEqual(pod['automountServiceAccountToken'], False)
+        self.assertNotIn('fsGroup', pod['securityContext'])
+        self.assertEqual(pod['securityContext']['runAsUser'], 65532)
+        self.assertEqual(pod['securityContext']['supplementalGroups'], [65532])
+        nats = pod['initContainers'][0]
+        self.assertEqual(nats['restartPolicy'], 'Always')
+        self.assertEqual(nats['securityContext']['runAsUser'], 10000)
+        self.assertEqual(nats['securityContext']['runAsGroup'], 10000)
+        self.assertEqual(nats['args'], ['--contract'])
+        self.assertEqual(nats['volumeMounts'], [
+            {'name': 'source', 'mountPath': '/data'},
+            {'name': 'scratch', 'mountPath': '/server.conf',
+                'subPath': 'inputs/public/server.conf', 'readOnly': True},
+        ])
+        control = pod['containers'][0]
+        self.assertNotIn('runAsUser', control['securityContext'])
+        self.assertNotIn('runAsGroup', control['securityContext'])
+        self.assertEqual(control['args'][:2], ['--serve', '--operation'])
+        self.assertEqual(control['volumeMounts'], [
+            {'name': 'scratch', 'mountPath': '/inputs/private',
+                'subPath': 'kernelinputbundle', 'readOnly': True},
+            {'name': 'scratch', 'mountPath': '/state',
+                'subPath': 'state/' + CONTRACT_REQUEST['operation']},
+        ])
+        self.assertNotIn('source', [row['name'] for row in control['volumeMounts']])
+        self.assertNotIn('hostPath', str(pod))
+        self.assertNotIn('secret', str(pod).lower())
+
+    def test_contract_action_vectors_are_closed_and_journal_hash_bound(self):
+        vectors = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING)
+        self.assertEqual(vectors['load-plan'][:2],
+            ['/usr/bin/python3', '/voice-nats-runner/contract_runner.py'])
+        for field in ('--input-attempt', '--archive-sha256', '--archive-bytes',
+            '--server-config-sha256'):
+            self.assertIn(field, vectors['load-plan'])
+        mutation = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING,
+            action='execute-action', action_index=2,
+            session_inputs={'intent_sha256': 'a' * 64, 'issued_sha256': 'b' * 64})['action']
+        self.assertIn('--action-index', mutation)
+        self.assertEqual(mutation[mutation.index('--action-index') + 1], '2')
+        self.assertEqual(mutation[mutation.index('--intent-sha256') + 1], 'a' * 64)
+        self.assertEqual(mutation[mutation.index('--issued-sha256') + 1], 'b' * 64)
+        with self.assertRaises(jobs.VerificationJobError):
+            jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING,
+                action='execute-action', action_index=2,
+                session_inputs={'intent_sha256': 'a' * 64, 'issued_sha256': 'b' * 64,
+                    'command': ['/bin/sh']})
+        with self.assertRaises(jobs.VerificationJobError):
+            jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING,
+                action='execute-action', action_index=7,
+                session_inputs={'intent_sha256': 'a' * 64, 'issued_sha256': 'b' * 64})
+        for invalid in (CONTRACT_BINDING | {'contract_attempt': '../escape'},
+            CONTRACT_BINDING | {'plan_bytes': True}, CONTRACT_BINDING | {'command': 'nats'}):
+            with self.assertRaises(jobs.VerificationJobError):
+                jobs.document(CONTRACT_REQUEST, invalid, IMAGE)
 
 
 if __name__ == '__main__':
