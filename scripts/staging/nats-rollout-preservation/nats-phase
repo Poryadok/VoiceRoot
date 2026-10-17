@@ -28,6 +28,7 @@ MAX_READBACK_LINE = 96 << 10
 DATA_ROOT = Path('/data')
 OUT_ROOT = Path('/out')
 VERIFY_ROOT = Path('/verify')
+RESTORE_ROOT = Path('/restore')
 INPUT_ROOT = Path('/inputs/private')
 KERNEL = Path('/voice-nats-runner/kernel')
 NATS_SERVER = Path('/usr/local/bin/nats-server')
@@ -36,6 +37,7 @@ INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds',
     'operator.jwt', 'account.jwt', 'system-account.jwt', 'account.public',
     'system-account.public', 'server.conf'))
 VERIFY_PHASES = frozenset(('census',))
+RESTORE_PHASES = frozenset(('restore',))
 RECEIPT_SCHEMA = 'voice-nats-verification-v1'
 CENSUS_SCHEMA = 'voice-nats-census-v1'
 CENSUS_READBACK_SCHEMA = 'voice-nats-census-readback-v1'
@@ -43,7 +45,10 @@ ARCHIVE_UID = 10000
 ARCHIVE_GID = 10000
 VERIFICATION_UID = 65532
 VERIFICATION_GID = 65532
+RESTORE_UID = 10000
+RESTORE_GID = 10000
 CENSUS_INPUT_MAGIC = b'VOICE-NATS-CENSUS-INPUT-v1\0'
+RESTORE_INPUT_MAGIC = b'VOICE-NATS-RESTORE-INPUT-v1\0'
 
 
 def _identity(args):
@@ -81,6 +86,12 @@ def _require_verification_identity():
     """The disposable census helper runs as its fixed non-root scratch owner."""
     if os.geteuid() != VERIFICATION_UID or os.getegid() != VERIFICATION_GID:
         raise ValueError('verification_identity')
+
+
+def _require_restore_identity():
+    """Promotable restore targets must be created by the canonical Hub owner."""
+    if os.geteuid() != RESTORE_UID or os.getegid() != RESTORE_GID:
+        raise ValueError('restore_identity')
 
 
 def source_readable_by_archive_helper(root, *, uid=ARCHIVE_UID, gid=ARCHIVE_GID):
@@ -132,6 +143,19 @@ def validate_verification_mounts(verification, output, inputs, *, verification_p
         or not os.access(paths[1], os.W_OK)
         or not os.access(paths[2], os.W_OK)):
         raise ValueError('verification_mounts')
+    return paths
+
+
+def validate_restore_mounts(target, output, *, target_pvc_uid):
+    paths = [Path(target), Path(output)]
+    for path in paths:
+        row = path.lstat()
+        if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
+            raise ValueError('restore_mounts')
+    if (paths[0].resolve() == paths[1].resolve()
+        or not re.fullmatch('[a-f0-9-]{36}', target_pvc_uid or '')
+        or not os.access(paths[0], os.W_OK) or not os.access(paths[1], os.W_OK)):
+        raise ValueError('restore_mounts')
     return paths
 
 
@@ -335,8 +359,8 @@ def _read_exact(stream, size):
     return bytes(chunks)
 
 
-def _receive_archive(stream, archive_path, expected_bytes, expected_sha256):
-    if _read_exact(stream, len(CENSUS_INPUT_MAGIC)) != CENSUS_INPUT_MAGIC:
+def _receive_archive(stream, archive_path, expected_bytes, expected_sha256, *, magic=CENSUS_INPUT_MAGIC):
+    if _read_exact(stream, len(magic)) != magic:
         raise ValueError('verification_input_header')
     manifest_size = int.from_bytes(_read_exact(stream, 4), 'big')
     if not 1 <= manifest_size <= MAX_MANIFEST_BYTES:
@@ -604,6 +628,113 @@ def read_verification_receipt(phase_name, args):
     return {'receipt': receipt, 'census': census}
 
 
+def _restore_binding(args):
+    target_uid = _storage_uid(getattr(args, 'restore_pvc_uid', None), 'restore_pvc_uid')
+    target_pv_uid = _storage_uid(getattr(args, 'restore_pv_uid', None), 'restore_pv_uid')
+    attempt = getattr(args, 'restore_attempt', '')
+    archive_sha = getattr(args, 'archive_sha256', '')
+    archive_bytes = getattr(args, 'archive_bytes', None)
+    if (not re.fullmatch('[a-f0-9]{8}', attempt or '')
+        or not re.fullmatch('[a-f0-9]{64}', archive_sha or '')
+        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES):
+        raise ValueError('restore_binding')
+    return {'purpose': 'replacement', 'operation': args.operation, 'nonce': args.nonce,
+        'pod_uid': args.pod_uid, 'restore_attempt': attempt, 'restore_pvc_uid': target_uid,
+        'restore_pv_uid': target_pv_uid, 'archive_sha256': archive_sha, 'archive_bytes': archive_bytes}
+
+
+def restore_archive(args, input_stream=None):
+    """Consume one authenticated archive stream into a fresh promotable target PVC."""
+    _require_restore_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('restore_pod_identity')
+    binding = _restore_binding(args)
+    target, output = validate_restore_mounts(RESTORE_ROOT, OUT_ROOT,
+        target_pvc_uid=binding['restore_pvc_uid'])
+    if any(target.iterdir()) or any(output.iterdir()):
+        raise ValueError('restore_target_not_empty')
+    marker_path = output / (args.operation + '-' + args.nonce + '.restore.started.json')
+    receipt_path = output / (args.operation + '-' + args.nonce + '.restore.receipt.json')
+    marker = {'schema': 'voice-nats-restore-v1', 'phase': 'restore', **binding, 'state': 'STARTED'}
+    fd = os.open(marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(json.dumps(marker, sort_keys=True, separators=(',', ':')).encode())
+        stream.flush(); os.fsync(stream.fileno())
+    fd = os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+    archive = output / 'restore-input.tar'
+    if input_stream is None: input_stream = sys.stdin.buffer
+    # The shared decoder verifies canonical manifest bytes, tar length/digest,
+    # and the native_store manifest before extraction.
+    manifest = _receive_archive(input_stream, archive, binding['archive_bytes'],
+        binding['archive_sha256'], magic=RESTORE_INPUT_MAGIC)
+    work = target / '.voice-nats-restore-work'
+    native_store.restore_closed_store(archive, work, manifest)
+    # The PVC mount root already exists. Move the validated store entries out
+    # of one fixed temporary directory so the promoted claim has the same root
+    # layout as the Hub's /data mount, without chown/chmod or source co-mount.
+    for entry in sorted(work.iterdir(), key=lambda path: path.name):
+        row = entry.lstat()
+        if (not re.fullmatch(r'[A-Za-z0-9_.-]{1,255}', entry.name)
+            or not (stat.S_ISDIR(row.st_mode) or stat.S_ISREG(row.st_mode))
+            or entry.is_symlink()):
+            raise ValueError('restore_output_shape')
+        os.rename(entry, target / entry.name)
+    work.rmdir()
+    for directory in (target, output):
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+    receipt = {'schema': 'voice-nats-restore-v1', 'phase': 'restore', **binding,
+        'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True,
+            separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest(),
+        'status': 'COMPLETE'}
+    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
+        stream.flush(); os.fsync(stream.fileno())
+    fd = os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+    return receipt
+
+
+class _ManifestPrefixedStream:
+    """Adapt the restore envelope to the shared bounded archive decoder."""
+    def __init__(self, stream): self.stream = stream
+    def read(self, size=-1): return self.stream.read(size)
+
+
+def read_restore_receipt(args):
+    _require_restore_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('restore_pod_identity')
+    binding = _restore_binding(args)
+    _, output = validate_restore_mounts(RESTORE_ROOT, OUT_ROOT,
+        target_pvc_uid=binding['restore_pvc_uid'])
+    try:
+        marker = _private_json(output / (args.operation + '-' + args.nonce + '.restore.started.json'))
+    except FileNotFoundError:
+        raise ValueError('restore_receipt_incomplete') from None
+    wanted = {'schema': 'voice-nats-restore-v1', 'phase': 'restore', **binding, 'state': 'STARTED'}
+    if marker != wanted:
+        raise ValueError('restore_receipt_binding')
+    try:
+        receipt = _private_json(output / (args.operation + '-' + args.nonce + '.restore.receipt.json'))
+    except FileNotFoundError:
+        raise ValueError('restore_receipt_incomplete') from None
+    if (not isinstance(receipt, dict) or set(receipt) != set(wanted) - {'state'} | {'manifest_sha256', 'status'}
+        or any(receipt.get(key) != value for key, value in wanted.items() if key != 'state')
+        or not re.fullmatch('[a-f0-9]{64}', receipt.get('manifest_sha256', ''))
+        or receipt.get('status') != 'COMPLETE'):
+        raise ValueError('restore_receipt_binding')
+    return receipt
+
+
 def bind_only(args):
     """Open a read-only mount of one newly created WFFC target, then exit.
 
@@ -801,6 +932,18 @@ def serve_census(args):
         time.sleep(60)
 
 
+def serve_restore(args):
+    _require_restore_identity()
+    _identity(args)
+    _storage_uid(args.restore_pvc_uid, 'restore_pvc_uid')
+    _storage_uid(args.restore_pv_uid, 'restore_pv_uid')
+    if (not re.fullmatch('[a-f0-9]{8}', args.restore_attempt or '')
+        or os.environ.get('POD_UID') != args.pod_uid):
+        raise ValueError('restore_pod_identity')
+    while True:
+        time.sleep(60)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(add_help=False)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -813,6 +956,9 @@ def main(argv=None):
     mode.add_argument('--bind-only', action='store_true')
     mode.add_argument('--serve-census', action='store_true')
     mode.add_argument('--receive-archive', action='store_true')
+    mode.add_argument('--serve-restore', action='store_true')
+    mode.add_argument('--restore-archive', action='store_true')
+    mode.add_argument('--restore-readback', action='store_true')
     mode.add_argument('--phase', choices=sorted(VERIFY_PHASES))
     parser.add_argument('--operation', required=True)
     parser.add_argument('--nonce', required=True)
@@ -821,6 +967,9 @@ def main(argv=None):
     parser.add_argument('--source-pv-uid')
     parser.add_argument('--verification-pvc-uid')
     parser.add_argument('--verification-pv-uid')
+    parser.add_argument('--restore-pvc-uid')
+    parser.add_argument('--restore-pv-uid')
+    parser.add_argument('--restore-attempt')
     parser.add_argument('--archive-sha256')
     parser.add_argument('--archive-bytes', type=int)
     parser.add_argument('--role', choices=('verification', 'restore'))
@@ -839,6 +988,14 @@ def main(argv=None):
             parser.error('serve-census-shape')
         args.pod_uid = os.environ.get('POD_UID', '')
         serve_census(args)
+    if args.serve_restore:
+        if (args.pod_uid is not None or args.phase is not None or args.source_pvc_uid is not None
+            or args.verification_pvc_uid is not None or args.archive_sha256 is not None
+            or args.archive_bytes is not None or not args.restore_pvc_uid or not args.restore_pv_uid
+            or not args.restore_attempt):
+            parser.error('serve-restore-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        serve_restore(args)
     if args.bind_only:
         if (args.role is None or args.phase is not None or args.source_pvc_uid is not None
             or args.verification_pvc_uid is not None or args.pod_uid is not None):
@@ -878,6 +1035,24 @@ def main(argv=None):
             parser.error('verification-volume-identity-required')
         receipt = run_verification('census', args)
         return receipt
+    if args.restore_archive:
+        if (args.phase is not None or args.source_pvc_uid is not None
+            or args.verification_pvc_uid is not None or not args.restore_pvc_uid
+            or not args.restore_pv_uid or not args.restore_attempt or not args.archive_sha256
+            or args.archive_bytes is None):
+            parser.error('restore-archive-shape')
+        result = restore_archive(args)
+        _frame(result)
+        return result
+    if args.restore_readback:
+        if (args.phase is not None or args.source_pvc_uid is not None
+            or args.verification_pvc_uid is not None or not args.restore_pvc_uid
+            or not args.restore_pv_uid or not args.restore_attempt or not args.archive_sha256
+            or args.archive_bytes is None):
+            parser.error('restore-readback-shape')
+        result = read_restore_receipt(args)
+        _frame(result)
+        return result
     (create_and_stream if args.create_and_stream else stream_existing)(args)
 
 

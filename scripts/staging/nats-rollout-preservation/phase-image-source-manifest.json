@@ -13,7 +13,7 @@
   ],
   "inputs": {
     "scripts/staging/nats-rollout-preservation/Dockerfile": "ecacd5406eec28eefdffcaa2ef845e771ad136414691f740c6af368d4d45f729",
-    "scripts/staging/nats-rollout-preservation/nats-phase": "2c130cd43858832cd647ab5bd7b841613cffefa1735c4704d4b34a4c05f5ecab",
+    "scripts/staging/nats-rollout-preservation/nats-phase": "4ddb2df11821a5f06f96eb4229a8b5a79b84ff8554f08d4387eb1efc68ef3017",
     "scripts/staging/nats-rollout-preservation/native_store.py": "3f9b177ecbcec7463801ba3ed44724c3068696482804d4d586696a305da813c0",
     "scripts/staging/nats-known-baseline/controller.py": "dd9fee1b93309b38cfb8023787142a2cd5ea3dd925100744fcc2a6b66beb629f",
     "scripts/staging/nats-known-baseline/go.mod": "b1c71d9f1c670cb5826fc03d13c32cd94154b3033a203d628eaba70ef380cd29",
@@ -34,5 +34,5 @@
     "scripts/staging/nats-known-baseline/retained_grants.go": "f44f946525b32ddda97439885c6ad25d732d25d5682828d5a9794e17eb76f22a",
     "scripts/staging/nats-known-baseline/retained_grants_test.go": "95b5871fd9e6d1a8307b90abaf5000bb5ada90304d166d51906b9cd5b83f5959"
   },
-  "qualification": "Source checkpoint: archive uses a source-only read-only PVC Job; census uses a separate target-only scratch PVC and a bounded streamed archive-ingest action. Census results and action receipts are durable and bind the same operation, nonce, Pod, and PVC/PV UIDs. The registry image is not yet published or digest-qualified; image rebuild, publication, and independent image/kernel review remain outstanding."
+  "qualification": "Source checkpoint: archive uses a source-only read-only PVC Job; census uses a separate target-only nonpromotable scratch PVC; promotable restore uses a separate target-only UID/GID 10000 claim and canonical mount-root layout. Archive ingest is a bounded single stream with STARTED/COMPLETE receipt binding; interrupted actions are never replayed. The registry image is not yet published or digest-qualified; image rebuild, publication, and independent image/kernel review remain outstanding."
 }

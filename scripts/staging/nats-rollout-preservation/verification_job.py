@@ -16,7 +16,7 @@ LABEL_OPERATION = 'voice.io/nats-operation'
 LABEL_NONCE = 'voice.io/nats-job-nonce'
 LABEL_PHASE = 'voice.io/nats-job-phase'
 LABEL_JOB_SELECTOR = 'voice.io/nats-phase-job'
-PHASES = frozenset(('archive', 'census', 'bind-verification', 'bind-restore'))
+PHASES = frozenset(('archive', 'census', 'restore', 'bind-verification', 'bind-restore'))
 VERIFICATION_BINDING_FIELDS = frozenset(('role', 'claim_name', 'target_uid', 'node_name'))
 FIELDS = frozenset(('operation', 'nonce', 'phase'))
 BINDING_FIELDS = frozenset((
@@ -25,6 +25,8 @@ BINDING_FIELDS = frozenset((
     'verification_node_name'))
 ARCHIVE_BINDING_FIELDS = frozenset((
     'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name'))
+RESTORE_BINDING_FIELDS = frozenset((
+    'restore_claim', 'restore_attempt', 'restore_uid', 'restore_pv_name', 'restore_pv_uid', 'restore_node_name'))
 IMAGE_RE = re.compile(r'[a-z0-9./_-]+@sha256:[a-f0-9]{64}')
 UUID_RE = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 _API_METADATA = frozenset(('uid', 'resourceVersion', 'generation', 'creationTimestamp', 'managedFields'))
@@ -108,6 +110,24 @@ def validate_archive_binding(value: object) -> dict:
         or not re.fullmatch(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}', value['source_claim'])):
         _fail('source_claim_invalid')
     for field in ('source_pv_name', 'source_node_name'):
+        if not isinstance(value[field], str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value[field]):
+            _fail('storage_name_invalid')
+    return copy.deepcopy(value)
+
+
+def validate_restore_binding(request: dict, value: object) -> dict:
+    row = validate_request(request)
+    if row['phase'] != 'restore' or not isinstance(value, dict) or set(value) != RESTORE_BINDING_FIELDS:
+        _fail('restore_binding_invalid')
+    if (not isinstance(value['restore_attempt'], str)
+        or not re.fullmatch(r'[a-f0-9]{8}', value['restore_attempt'])):
+        _fail('restore_attempt_invalid')
+    if value['restore_claim'] != 'voice-nats-restore-' + row['operation'] + '-' + value['restore_attempt']:
+        _fail('restore_claim_invalid')
+    if not isinstance(value['restore_uid'], str) or not UUID_RE.fullmatch(value['restore_uid']) \
+        or not isinstance(value['restore_pv_uid'], str) or not UUID_RE.fullmatch(value['restore_pv_uid']):
+        _fail('storage_uid_invalid')
+    for field in ('restore_pv_name', 'restore_node_name'):
         if not isinstance(value[field], str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value[field]):
             _fail('storage_name_invalid')
     return copy.deepcopy(value)
@@ -318,6 +338,8 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
         return _archive_document(row, validate_archive_binding(binding), image)
     if row['phase'] == 'census':
         return _census_document(row, validate_binding(binding), image)
+    if row['phase'] == 'restore':
+        return _restore_document(row, validate_restore_binding(row, binding), image)
     _fail('phase_unsupported')
 
 
@@ -502,6 +524,47 @@ def _binder_document(request: dict, binding: dict, image: str) -> dict:
     }
 
 
+def _restore_document(request: dict, storage: dict, image: str) -> dict:
+    """Restore a verified archive to one fresh promotable claim; never mount source."""
+    name = job_name(request)
+    labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
+        LABEL_PHASE: 'restore', LABEL_JOB_SELECTOR: name}
+    return {
+        'apiVersion': 'batch/v1', 'kind': 'Job',
+        'metadata': {'name': name, 'namespace': NAMESPACE, 'labels': copy.deepcopy(labels)},
+        'spec': {
+            'backoffLimit': 0, 'activeDeadlineSeconds': 14400, 'manualSelector': True,
+            'selector': {'matchLabels': {LABEL_JOB_SELECTOR: name}},
+            'template': {'metadata': {'labels': labels}, 'spec': {
+                'automountServiceAccountToken': False, 'serviceAccountName': 'default',
+                'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {
+                    'nodeSelectorTerms': [{'matchExpressions': [{'key': 'kubernetes.io/hostname',
+                        'operator': 'In', 'values': [storage['restore_node_name']]}]}]}}},
+                'restartPolicy': 'Never',
+                'securityContext': {'runAsNonRoot': True, 'runAsUser': 10000, 'runAsGroup': 10000,
+                    'fsGroup': 10000, 'fsGroupChangePolicy': 'OnRootMismatch',
+                    'seccompProfile': {'type': 'RuntimeDefault'}},
+                'containers': [{
+                    'name': 'nats-phase', 'image': image, 'imagePullPolicy': 'IfNotPresent',
+                    'command': ['/usr/bin/python3', '/voice-nats-runner/phase'],
+                    'args': ['--serve-restore', '--operation', request['operation'], '--nonce', request['nonce'],
+                        '--restore-attempt', storage['restore_attempt'], '--restore-pvc-uid', storage['restore_uid'],
+                        '--restore-pv-uid', storage['restore_pv_uid']],
+                    'env': [{'name': 'POD_UID', 'valueFrom': {'fieldRef': {'fieldPath': 'metadata.uid'}}}],
+                    'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True,
+                        'capabilities': {'drop': ['ALL']}},
+                    'resources': {'requests': {'cpu': '500m', 'memory': '512Mi', 'ephemeral-storage': '49Gi'},
+                        'limits': {'cpu': '2', 'memory': '2Gi', 'ephemeral-storage': '49Gi'}},
+                    'volumeMounts': [{'name': 'target', 'mountPath': '/restore'},
+                        {'name': 'output', 'mountPath': '/out'}],
+                }],
+                'volumes': [{'name': 'target', 'persistentVolumeClaim': {'claimName': storage['restore_claim']}},
+                    {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}}],
+            }},
+        },
+    }
+
+
 def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | None = None) -> dict:
     """Return the only admitted in-band helper argv/query shapes for a fixed phase."""
     row = validate_request(request)
@@ -534,5 +597,19 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
             'census_read_input_receipt': binary + ['--read-input-receipt'] + common,
             'census_receive_archive': binary + ['--receive-archive'] + common,
             'census_same_pod_readback': binary + ['--read-receipt'] + common + ['--phase', 'census'],
+        }
+    if row['phase'] == 'restore':
+        storage = validate_restore_binding(row, binding)
+        if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
+            or not isinstance(archive['sha256'], str)
+            or not re.fullmatch(r'[a-f0-9]{64}', archive['sha256'])
+            or type(archive['bytes']) is not int or not 0 < archive['bytes'] <= (48 << 30) + (262144 * 1024) + (1 << 20)):
+            _fail('archive_input_invalid')
+        common += ['--restore-pvc-uid', storage['restore_uid'], '--restore-pv-uid', storage['restore_pv_uid'],
+            '--restore-attempt', storage['restore_attempt'], '--archive-sha256', archive['sha256'],
+            '--archive-bytes', str(archive['bytes'])]
+        return {
+            'restore_archive_once': binary + ['--restore-archive'] + common,
+            'restore_same_pod_readback': binary + ['--restore-readback'] + common,
         }
     _fail('phase_transport_unsupported')
