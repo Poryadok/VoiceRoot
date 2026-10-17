@@ -37,7 +37,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
-	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check
+	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check complete-match-pki-test
 
 ifeq ($(OS),Windows_NT)
 GAME_INTEGRATION_BOOTSTRAP_RUN = set CGO_ENABLED=0&& go test -run "^TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs$$" -count=1 ./internal/httpapi
@@ -309,7 +309,7 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test matchmaking-source-authority-test
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test matchmaking-source-authority-test complete-match-pki-test
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
 	$(BASH) "$(ROOT)/scripts/staging/nats-bootstrap-policy_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-generation-contract_test.sh"
@@ -359,6 +359,10 @@ nats-leaf-topology-invariants-test:
 matchmaking-source-authority-test:
 	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_test.py"
 	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_workflow_test.py"
+
+.PHONY: complete-match-pki-test
+complete-match-pki-test:
+	python3 "$(ROOT)/scripts/dev/complete_match_pki_test.py"
 
 .PHONY: staging-source-acquisition-workflow-test
 staging-source-acquisition-workflow-test:
