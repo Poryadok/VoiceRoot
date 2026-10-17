@@ -99,6 +99,50 @@ class FakeKube:
 
 
 class MatchSquadPKITests(unittest.TestCase):
+    def test_owned_volume_accepts_exact_cli_identity_among_prefixed_siblings(self):
+        name = 'voice-dev-match-squad-pki'
+        labels = {'voice.environment': 'dev',
+                  'voice.dev/match-squad-pki-operation': OPERATION}
+        listing = subprocess.CompletedProcess(
+            ['docker', 'volume', 'ls'], 0,
+            stdout='\n'.join((name, name + '-repro-01', name + '-repro-02', name + '-repro-03')) + '\n',
+            stderr='')
+        inspected = subprocess.CompletedProcess(
+            ['docker', 'volume', 'inspect', name], 0,
+            stdout=json.dumps([{'Name': name, 'Driver': 'local', 'Scope': 'local',
+                                'Labels': labels}]), stderr='')
+
+        with mock.patch.object(pki, 'run_result', side_effect=[listing, inspected, inspected]) as run:
+            self.assertEqual(pki._ensure_volume_absent_or_owned(OPERATION), name)
+            self.assertEqual(pki._verify_volume_owned(OPERATION), name)
+
+        calls = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(calls[0], ['docker', 'volume', 'ls', '--format={{.Name}}'])
+        self.assertEqual(calls[1], ['docker', 'volume', 'inspect', name])
+        self.assertEqual(calls[2], ['docker', 'volume', 'inspect', name])
+
+    def test_owned_volume_inspection_rejects_wrong_or_ambiguous_records(self):
+        name = 'voice-dev-match-squad-pki'
+        labels = {'voice.environment': 'dev',
+                  'voice.dev/match-squad-pki-operation': OPERATION}
+        good = {'Name': name, 'Driver': 'local', 'Scope': 'local', 'Labels': labels}
+        invalid = (
+            {'Name': name + '-other', 'Driver': 'local', 'Scope': 'local', 'Labels': labels},
+            {'Name': name, 'Driver': 'other', 'Scope': 'local', 'Labels': labels},
+            {'Name': name, 'Driver': 'local', 'Scope': 'global', 'Labels': labels},
+            {'Name': name, 'Driver': 'local', 'Scope': 'local',
+             'Labels': {'voice.environment': 'dev',
+                        'voice.dev/match-squad-pki-operation': 'msq-' + '0' * 32}},
+        )
+        for rows in ([], [good, good], {'Name': name, 'Driver': 'local', 'Scope': 'local', 'Labels': labels},
+                     *([row] for row in invalid)):
+            with self.subTest(rows=rows), \
+                    mock.patch.object(pki, 'run_result', return_value=subprocess.CompletedProcess(
+                        ['docker', 'volume', 'inspect', name], 0,
+                        stdout=json.dumps(rows), stderr='')), \
+                    self.assertRaises(ValueError):
+                pki._verify_volume_owned(OPERATION)
+
     def legacy_journal(self):
         old_pins = {'sourceSha': '39828e6f69d5567cbfeadabd9536ea6ef2a8f786',
                     'templateSha256': '5ad1c0250574abfadda4bbcf8baa3cd3b3a1525be811f303ea9ea40161e67e0e'}
