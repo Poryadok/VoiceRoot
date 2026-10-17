@@ -29,10 +29,16 @@ owner-reference shape, and a UUID-shaped owner UID; runtime must still compare
 that UID with the exact Job UID and reread Pod/container identity before every
 exec or recovery action. The test parameters use only a fixture image digest
 and controller username; they do not prove a published image or installed
-STAGING identity. Archive/census/binder tests still use their older captured
-producer fixture; this checkpoint does not claim current census-template
-coverage. The production census schema and published image digest remain
-separate gates. Tests run only in the private Linux control plane and never
+STAGING identity. Archive/census/binder Job and Pod tests still use their
+older captured producer fixture. The separate census CONNECT test consumes
+current vectors from immutable producer commit
+`3e8bae3b84363d0aa5ac34579c7b1415233e67ab`; its Job template is unchanged,
+and its vectors add `consume-census-inputs` while binding the input Pod UID,
+bundle digest, archive digest, and storage UIDs. All five census vectors pass
+the real API/VAP test; changed argv, stream mode, container, Pod, and actor are
+denied. This command-admission proof does not validate census receipt contents.
+The production census schema and published image digest remain separate gates.
+Tests run only in the private Linux control plane and never
 contact STAGING/DEV. See the parent artifact
 `tmp/slave-driver/pr-refresh-20261016/RUN/staging-admission-proof-selected-session-20261017.md`
 for exact hashes, results, and remaining target-enforcement gates.
