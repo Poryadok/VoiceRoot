@@ -130,7 +130,13 @@ python3 scripts/dev/gis_dev_first_install.py \
 
 For another published image, pass its successful master-push run and
 `staging-images-push (gameintegration)` job IDs using `--builder-run` and
-`--builder-job`. The installer pins Kubernetes requests to `voice-dev`, checks
+`--builder-job`. Those IDs only locate evidence: the tool checks the completed
+workflow, job and Buildx step through the GitHub API, downloads the run's
+`.dockerbuild` artifact, and verifies its BuildKit source context, SLSA
+provenance, producer-step time window, linux/amd64 output descriptor and exact
+registry digest. It also compares the builder commit's `src/backend` Git tree
+to the operator checkout; a digest mentioned in unrelated job output cannot
+authorize the image. The installer pins Kubernetes requests to `voice-dev`, checks
 the OCI index/child/config against the registry digest and pulled image, and
 verifies the source backend tree at the CI builder commit. It also verifies the
 stable TLS Secret and runs a read-only `pg_database` existence query before any
