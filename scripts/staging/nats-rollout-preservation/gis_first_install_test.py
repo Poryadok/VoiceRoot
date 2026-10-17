@@ -202,7 +202,10 @@ class NamespaceTests(unittest.TestCase):
             'image_ref': image, 'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
             'image_config_sha256': 'e'*64, 'working_tree_clean': True,
             'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
-            'builder_sha': 'c'*40, 'builder_tree': builder_tree}
+            'builder_sha': 'c'*40, 'builder_tree': builder_tree,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'a'*64,
+            'builder_output_index_sha256': image.rsplit('@sha256:', 1)[-1],
+            'builder_provenance_sha256': 'b'*64}
         source = {'schema': gis.SOURCE_SCHEMA, 'objects': [service, deployment]}
         self.assertTrue(gis.validate_source_plan(source, namespace='voice-dev'))
         dev = gis.bind_operation(source, 'b'*12,

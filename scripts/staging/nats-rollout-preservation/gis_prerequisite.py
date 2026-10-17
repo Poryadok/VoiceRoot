@@ -348,23 +348,85 @@ def _read_named(kube, kind, name):
 
 
 def _job_live_matches(actual, wanted, uid):
-    if _spec_digest(actual) != _spec_digest(wanted):
+    actual_meta = actual.get('metadata', {})
+    wanted_meta = wanted.get('metadata', {})
+    if (actual.get('kind') != 'Job' or wanted.get('kind') != 'Job'
+        or actual_meta.get('name') != wanted_meta.get('name')
+        or actual_meta.get('namespace') != wanted_meta.get('namespace')
+        or actual_meta.get('uid') != uid
+        or actual_meta.get('labels', {}).get(OP_LABEL) != wanted_meta.get('labels', {}).get(OP_LABEL)):
         return False
-    spec = actual.get('spec', {})
-    if spec.get('manualSelector', False) is not False or spec.get('completions', 1) != 1 or spec.get('parallelism', 1) != 1:
+    spec = copy.deepcopy(actual.get('spec'))
+    wanted_spec = copy.deepcopy(wanted.get('spec'))
+    if not isinstance(spec, dict) or not isinstance(wanted_spec, dict):
         return False
     labels = wanted['spec']['template']['metadata'].get('labels', {})
     generated = {'batch.kubernetes.io/controller-uid': uid,
                  'batch.kubernetes.io/job-name': wanted['metadata']['name']}
     legacy = {'controller-uid': uid, 'job-name': wanted['metadata']['name']}
-    selector = spec.get('selector', {}).get('matchLabels', {})
-    expressions = spec.get('selector', {}).get('matchExpressions', [])
-    if expressions or selector not in (generated, {**generated, **legacy}):
+    selector_object = spec.get('selector')
+    if ('selector' in wanted_spec or not isinstance(selector_object, dict)
+        or set(selector_object) != {'matchLabels'}):
+        return False
+    selector = selector_object.get('matchLabels')
+    if not isinstance(selector, dict) or selector != {'batch.kubernetes.io/controller-uid': uid}:
         return False
     actual_labels = spec.get('template', {}).get('metadata', {}).get('labels', {})
     if actual_labels not in ({**labels, **generated}, {**labels, **generated, **legacy}):
         return False
-    return True
+    spec.pop('selector', None)
+    wanted_spec.pop('selector', None)
+    for key, value in {'completionMode': 'NonIndexed', 'completions': 1,
+            'manualSelector': False, 'parallelism': 1,
+            'podReplacementPolicy': 'TerminatingOrFailed', 'suspend': False}.items():
+        if wanted_spec.get(key) is None:
+            if spec.get(key) != value:
+                return False
+            spec.pop(key, None)
+    template = spec.get('template', {})
+    wanted_template = wanted_spec.get('template', {})
+    template_metadata = template.get('metadata', {})
+    wanted_metadata = wanted_template.get('metadata', {})
+    template_metadata['labels'] = copy.deepcopy(labels)
+    wanted_metadata['labels'] = copy.deepcopy(labels)
+    pod = template.get('spec', {})
+    wanted_pod = wanted_template.get('spec', {})
+    for key, value in {'dnsPolicy': 'ClusterFirst', 'schedulerName': 'default-scheduler',
+            'terminationGracePeriodSeconds': 30}.items():
+        if wanted_pod.get(key) is None:
+            if pod.get(key) != value:
+                return False
+            pod.pop(key, None)
+    if wanted_pod.get('securityContext') is None:
+        if pod.get('securityContext') != {}:
+            return False
+        pod.pop('securityContext', None)
+    for group in ('containers', 'initContainers'):
+        actual_rows = pod.get(group, [])
+        wanted_rows = wanted_pod.get(group, [])
+        if not isinstance(actual_rows, list) or len(actual_rows) != len(wanted_rows):
+            return False
+        for actual_row, wanted_row in zip(actual_rows, wanted_rows):
+            defaults = {'imagePullPolicy': 'IfNotPresent',
+                'terminationMessagePath': '/dev/termination-log',
+                'terminationMessagePolicy': 'File'}
+            for key, value in defaults.items():
+                if wanted_row.get(key) is None:
+                    if actual_row.get(key) != value:
+                        return False
+                    actual_row.pop(key, None)
+    actual_volumes = pod.get('volumes', [])
+    wanted_volumes = wanted_pod.get('volumes', [])
+    if not isinstance(actual_volumes, list) or len(actual_volumes) != len(wanted_volumes):
+        return False
+    for actual_volume, wanted_volume in zip(actual_volumes, wanted_volumes):
+        actual_cm = actual_volume.get('configMap')
+        wanted_cm = wanted_volume.get('configMap')
+        if isinstance(actual_cm, dict) and isinstance(wanted_cm, dict) and wanted_cm.get('defaultMode') is None:
+            if actual_cm.get('defaultMode') != 420:
+                return False
+            actual_cm.pop('defaultMode', None)
+    return _canonical(spec) == _canonical(wanted_spec)
 
 
 def _create_once(kube, kind, obj, plan, saved, save):
@@ -375,7 +437,22 @@ def _create_once(kube, kind, obj, plan, saved, save):
     existing = _read_named(kube, kind.lower(), name)
     if existing is not None:
         if record is None:
-            raise Blocked('gis_prerequisite_foreign_resource_present')
+            metadata = existing.get('metadata', {})
+            uid = metadata.get('uid')
+            # A create response can be lost after the API committed the exact
+            # operation-owned object. Adopt it only while this same operation
+            # is durably in CREATING and every identity/spec guard matches.
+            if (plan.get('prerequisite_phase') != 'CREATING'
+                or metadata.get('namespace') != plan.get('namespace', NS)
+                or metadata.get('name') != name
+                or not isinstance(uid, str) or not UUID.fullmatch(uid)
+                or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+                or (kind == 'job' and not _job_live_matches(existing, obj, uid))
+                or (kind != 'job' and _spec_digest(existing) != wanted_sha)):
+                raise Blocked('gis_prerequisite_foreign_resource_present')
+            record = {'uid': uid, 'spec_sha256': wanted_sha}
+            saved[key] = record
+            save(copy.deepcopy(plan))
         if (existing.get('metadata', {}).get('uid') != record.get('uid')
             or existing.get('metadata', {}).get('labels', {}).get(OP_LABEL) != plan['operation']
             or (kind == 'job' and not _job_live_matches(existing, obj, record.get('uid')))
@@ -388,28 +465,95 @@ def _create_once(kube, kind, obj, plan, saved, save):
     if verify_storage is not None:
         verify_storage()
     try:
-        created = kube.run(['create', '-f', '/dev/stdin', '-o', 'jsonpath-as-json={.metadata.name,.metadata.uid}'], body=obj)
-    except Exception:
+        # The comma selector is rejected by kubectl's JSONPath parser before it
+        # can return a server receipt. Parse the full JSON object privately and
+        # retain only its validated identity below.
+        created = kube.run(['create', '-f', '/dev/stdin', '-o', 'json'], body=obj)
+    except Exception as error:
+        returncode = getattr(error, 'returncode', None)
+        category = getattr(error, 'category', 'transport_error')
+        if type(returncode) is not int or returncode < 0:
+            returncode = None
+        if category not in {'invalid_output_format', 'forbidden', 'unauthorized',
+                            'not_found', 'conflict', 'timeout', 'api_error', 'transport_error'}:
+            category = 'transport_error'
+        plan.setdefault('create_failures', {})[key] = {
+            'returncode': returncode, 'category': category}
         try:
             observed = _read_named(kube, kind.lower(), name)
         except Exception:
             raise Blocked('gis_prerequisite_create_outcome_unknown') from None
-        if observed is not None:
+        if observed is None:
             raise Blocked('gis_prerequisite_create_outcome_unknown') from None
-        raise Blocked('gis_prerequisite_create_outcome_unknown') from None
-    if (not isinstance(created, list) or len(created) != 2 or created[0] != name
-        or not isinstance(created[1], str) or not UUID.fullmatch(created[1])):
+        metadata = observed.get('metadata', {})
+        uid = metadata.get('uid')
+        if (metadata.get('namespace') != plan.get('namespace', NS)
+            or metadata.get('name') != name
+            or not isinstance(uid, str) or not UUID.fullmatch(uid)
+            or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+            or (kind == 'job' and not _job_live_matches(observed, obj, uid))
+            or (kind != 'job' and _spec_digest(observed) != wanted_sha)):
+            raise Blocked('gis_prerequisite_create_outcome_unknown') from None
+        created = observed
+        existing = observed
+    metadata = created.get('metadata', {}) if isinstance(created, dict) else {}
+    uid = metadata.get('uid')
+    if (not isinstance(created, dict) or created.get('kind') != obj.get('kind')
+        or metadata.get('name') != name
+        or metadata.get('namespace') != plan.get('namespace', NS)
+        or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+        or not isinstance(uid, str) or not UUID.fullmatch(uid)):
         raise Blocked('gis_prerequisite_create_receipt_invalid')
-    record = {'uid': created[1], 'spec_sha256': wanted_sha}
+    record = {'uid': uid, 'spec_sha256': wanted_sha}
     saved[key] = record
     save(copy.deepcopy(plan))
-    fresh = _read_named(kube, kind.lower(), name)
+    fresh = existing if existing is not None else _read_named(kube, kind.lower(), name)
     if (fresh.get('metadata', {}).get('uid') != record['uid']
         or fresh.get('metadata', {}).get('labels', {}).get(OP_LABEL) != plan['operation']
         or (kind == 'job' and not _job_live_matches(fresh, obj, record['uid']))
         or (kind != 'job' and _spec_digest(fresh) != wanted_sha)):
         raise Blocked('gis_prerequisite_created_resource_changed')
     return fresh, record
+
+
+def reconcile_existing_jobs(kube, plan, source_root, code_capture, save):
+    """Adopt only exact operation-owned Jobs after an interrupted create."""
+    if plan.get('prerequisite_phase') not in ('CREATING', 'VERIFIED'):
+        return False
+    _, wanted_jobs = _documents(source_root, plan, code_capture)
+    created = plan.setdefault('created', {})
+    observed_any = False
+    for role in JOB_ROLES:
+        wanted = wanted_jobs[role]
+        name = wanted['metadata']['name']
+        key = 'job/' + name
+        live = _read_named(kube, 'job', name)
+        record = created.get(key) or plan.setdefault('jobs', {}).get(role)
+        if live is None:
+            if record is not None:
+                raise Blocked('gis_prerequisite_recorded_resource_missing')
+            continue
+        observed_any = True
+        metadata = live.get('metadata', {})
+        uid = metadata.get('uid')
+        if (metadata.get('namespace') != plan.get('namespace', NS)
+            or metadata.get('name') != name or not isinstance(uid, str) or not UUID.fullmatch(uid)
+            or metadata.get('labels', {}).get(OP_LABEL) != plan.get('operation')
+            or not _job_live_matches(live, wanted, uid)):
+            raise Blocked('gis_prerequisite_foreign_resource_present')
+        if record is None:
+            record = {'uid': uid, 'spec_sha256': _spec_digest(wanted)}
+            created[key] = record
+            save(copy.deepcopy(plan))
+        elif (record.get('uid') != uid
+            or record.get('spec_sha256') != _spec_digest(wanted)):
+            raise Blocked('gis_prerequisite_resource_changed')
+        proof, _ = _verify_job(kube, role, wanted, record, plan['inputs'], plan)
+        plan.setdefault('jobs', {})[role] = proof
+        save(copy.deepcopy(plan))
+    if plan.get('prerequisite_phase') == 'VERIFIED' and not observed_any:
+        raise Blocked('gis_prerequisite_recorded_resource_missing')
+    return observed_any
 
 
 def _verify_job(kube, role, obj, record, inputs, plan):
@@ -420,10 +564,14 @@ def _verify_job(kube, role, obj, record, inputs, plan):
     except Exception:
         raise Blocked('gis_prerequisite_job_wait_failed') from None
     conditions = live.get('status', {}).get('conditions', [])
-    if (live.get('metadata', {}).get('uid') != record['uid']
+    waited_metadata = waited.get('metadata', {}) if isinstance(waited, dict) else {}
+    if (not isinstance(waited, dict) or waited.get('kind') != 'Job'
+        or waited_metadata.get('name') != name
+        or waited_metadata.get('namespace') != plan.get('namespace', NS)
+        or waited_metadata.get('uid') != record['uid']
+        or live.get('metadata', {}).get('uid') != record['uid']
         or live.get('metadata', {}).get('labels', {}).get(OP_LABEL) != plan['operation']
         or not _job_live_matches(live, obj, record['uid'])
-        or not isinstance(waited, dict) or waited.get('metadata', {}).get('uid') != record['uid']
         or live.get('status', {}).get('succeeded') != 1
         or live.get('status', {}).get('failed', 0) != 0
         or not any(row.get('type') == 'Complete' and row.get('status') == 'True' for row in conditions)):

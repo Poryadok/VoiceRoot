@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,6 +11,7 @@ import yaml
 
 import gis_prerequisite as prerequisite
 import gis_first_install as gis
+import gis_dev_first_install as dev_gis
 import gis_first_install_test as gis_fi_test
 import controller
 
@@ -31,6 +33,30 @@ def capture(root):
     paths.update('src/backend/migrations/game_integration_db/' + row['name']
                  for row in inputs['migrations'])
     return {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in paths}
+
+
+def api_default_job(obj, uid):
+    """Model the exact observed Kubernetes v1.34 Job/Pod defaults and labels."""
+    job = copy.deepcopy(obj)
+    spec = job['spec']
+    name = job['metadata']['name']
+    spec.update(completionMode='NonIndexed', completions=1, manualSelector=False,
+        parallelism=1, podReplacementPolicy='TerminatingOrFailed', suspend=False,
+        selector={'matchLabels': {'batch.kubernetes.io/controller-uid': uid}})
+    labels = spec['template']['metadata'].setdefault('labels', {})
+    labels.update({'batch.kubernetes.io/controller-uid': uid,
+        'batch.kubernetes.io/job-name': name, 'controller-uid': uid, 'job-name': name})
+    pod = spec['template']['spec']
+    pod.update(dnsPolicy='ClusterFirst', schedulerName='default-scheduler',
+        securityContext={}, terminationGracePeriodSeconds=30)
+    for group in ('containers', 'initContainers'):
+        for container in pod.get(group, []):
+            container.update(imagePullPolicy='IfNotPresent',
+                terminationMessagePath='/dev/termination-log', terminationMessagePolicy='File')
+    for volume in pod.get('volumes', []):
+        if isinstance(volume.get('configMap'), dict):
+            volume['configMap']['defaultMode'] = 420
+    return job
 
 
 class FakeKube:
@@ -87,7 +113,9 @@ class FakeKube:
             if kind == 'job':
                 generated = {'batch.kubernetes.io/controller-uid': uid,
                     'batch.kubernetes.io/job-name': name}
-                obj['spec']['selector'] = {'matchLabels': generated}
+                obj = api_default_job(obj, uid)
+                obj['spec']['selector'] = {'matchLabels': {
+                    'batch.kubernetes.io/controller-uid': uid}}
                 obj['spec']['manualSelector'] = False
                 obj['spec']['template']['metadata'].setdefault('labels', {}).update(generated)
                 obj['status'] = {'succeeded': 1, 'failed': 0,
@@ -110,8 +138,12 @@ class FakeKube:
                         'containerStatuses': container_statuses}}
                 self.objects[('pod', name + '-pod')] = pod
                 self.events.append(('created-job', name))
+                if args[args.index('-o') + 1] == 'json':
+                    return copy.deepcopy(obj)
                 return [name, uid]
             self.objects[(kind, name)] = obj
+            if args[args.index('-o') + 1] == 'json':
+                return copy.deepcopy(obj)
             return [name, uid]
         if args[0] == 'wait':
             return copy.deepcopy(self.objects[('job', args[2].split('/', 1)[1])])
@@ -252,7 +284,10 @@ class Tests(unittest.TestCase):
             'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
             'image_config_sha256': '1' * 64, 'working_tree_clean': True,
             'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
-            'builder_sha': source_sha, 'builder_tree': builder_tree}
+            'builder_sha': source_sha, 'builder_tree': builder_tree,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'a' * 64,
+            'builder_output_index_sha256': image.rsplit('@sha256:', 1)[-1],
+            'builder_provenance_sha256': 'b' * 64}
         deployment = {'kind': 'Deployment', 'metadata': {'name': 'voice-gameintegration'}, 'spec': {
             'template': {'spec': {'containers': [{'name': 'gameintegration', 'image': image}]}}}}
         plan = {'namespace': 'voice-dev', 'phase': 'PLANNED', 'operation': '123456789abc',
@@ -320,6 +355,173 @@ class Tests(unittest.TestCase):
         self.assertEqual(set(receipt['jobs']), {'provision', 'migrate', 'verify'})
         self.assertTrue(gis.validate_prerequisite_receipt(receipt, plan))
         self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
+
+    def test_failed_job_verification_resumes_same_operation_without_duplicate_job(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'source_sha': 'b'*40,
+            'source_plan_sha256': 'c'*64, 'source_ci': {'run_id': 1, 'run_attempt': 1,
+                'workflow_id': 1, 'tree_sha': 'd'*40, 'lock_artifact_id': 1, 'lock_sha256': 'e'*64},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound,
+            'custody_binding_sha256': 'f'*64, 'phase': 'PLANNED'}
+        kube = FakeKube()
+        saved = []
+        with patch.object(prerequisite, '_verify_job', side_effect=prerequisite.Blocked('verify interrupted')):
+            with self.assertRaises(prerequisite.Blocked):
+                prerequisite.execute(kube, plan, ROOT, bound, saved.append)
+        self.assertEqual(plan['prerequisite_phase'], 'CREATING')
+        self.assertIn('job/' + inputs['jobs']['provision'], plan['created'])
+        before = [event[1] for event in kube.events if event[:1] == ('created-job',)]
+        receipt = prerequisite.execute(kube, plan, ROOT, bound, saved.append)
+        after = [event[1] for event in kube.events if event[:1] == ('created-job',)]
+        self.assertEqual(before, [inputs['jobs']['provision']])
+        self.assertEqual(after, [inputs['jobs'][role] for role in prerequisite.JOB_ROLES])
+        self.assertEqual(len(after), len(set(after)))
+        self.assertEqual(receipt['schema'], gis.PREREQUISITE_SCHEMA)
+        self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
+
+    def test_restart_after_job_create_before_receipt_reconciles_same_job(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'namespace': 'voice-staging',
+            'source_sha': 'b'*40, 'source_plan_sha256': 'c'*64, 'phase': 'PLANNED',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound,
+            'source_ci': {'run_id': 1, 'run_attempt': 1, 'workflow_id': 1,
+                'tree_sha': 'd'*40, 'lock_artifact_id': 1, 'lock_sha256': 'e'*64},
+            'custody_binding_sha256': 'f'*64}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        kube = FakeKube()
+        prerequisite._create_once(kube, 'job', jobs['provision'], plan,
+            plan['created'], lambda _row: None)
+        plan['created'] = {}  # Simulate process loss before the durable receipt write.
+        saved = []
+        self.assertTrue(prerequisite.reconcile_existing_jobs(kube, plan, ROOT, bound, saved.append))
+        self.assertIn('job/' + inputs['jobs']['provision'], plan['created'])
+        prerequisite.execute(kube, plan, ROOT, bound, saved.append)
+        created = [event[1] for event in kube.events if event[:1] == ('created-job',)]
+        self.assertEqual(created.count(inputs['jobs']['provision']), 1)
+
+    def test_ambiguous_job_create_response_adopts_only_exact_same_operation_object(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'namespace': 'voice-staging',
+            'source_sha': 'b'*40, 'source_plan_sha256': 'c'*64, 'phase': 'PLANNED',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound,
+            'source_ci': {'run_id': 1, 'run_attempt': 1, 'workflow_id': 1,
+                'tree_sha': 'd'*40, 'lock_artifact_id': 1, 'lock_sha256': 'e'*64},
+            'custody_binding_sha256': 'f'*64}
+        configmaps, jobs = prerequisite._documents(ROOT, plan, bound)
+        kube = FakeKube()
+        original_run = kube.run
+        lost = {'done': False}
+
+        def run(args, body=None, timeout=30):
+            result = original_run(args, body, timeout)
+            if args[0] == 'create' and body.get('kind') == 'Job' and not lost['done']:
+                lost['done'] = True
+                raise RuntimeError('create response lost')
+            return result
+
+        kube.run = run
+        saved = []
+        result, record = prerequisite._create_once(kube, 'job', jobs['provision'],
+            plan, plan['created'], saved.append)
+        self.assertEqual(result['metadata']['uid'], record['uid'])
+        self.assertEqual(len([event for event in kube.events if event[:1] == ('created-job',)]), 1)
+        prerequisite._create_once(kube, 'job', jobs['provision'], plan, plan['created'], saved.append)
+        self.assertEqual(len([event for event in kube.events if event[:1] == ('created-job',)]), 1)
+
+    def test_job_live_projection_accepts_only_exact_kubernetes_v134_defaults(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'namespace': 'voice-staging',
+            'source_sha': 'b'*40, 'source_plan_sha256': 'c'*64, 'phase': 'PLANNED',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        wanted = jobs['provision']
+        uid = '00000000-0000-0000-0000-000000000099'
+        actual = api_default_job(wanted, uid)
+        actual['metadata']['uid'] = uid
+        self.assertTrue(prerequisite._job_live_matches(actual, wanted, uid))
+
+        mutations = []
+        for path, value in (
+            ('mode', 384), ('optional', True), ('items', [{'key': 'other', 'path': 'other'}]),
+        ):
+            mutated = copy.deepcopy(actual)
+            cm = mutated['spec']['template']['spec']['volumes'][0]['configMap']
+            if path == 'mode': cm['defaultMode'] = value
+            elif path == 'optional': cm['optional'] = value
+            else: cm['items'] = value
+            mutations.append(mutated)
+        for group, field, value in (
+            ('containers', 'imagePullPolicy', 'Always'),
+            ('containers', 'terminationMessagePath', '/tmp/changed'),
+            ('initContainers', 'terminationMessagePolicy', 'FallbackToLogsOnError'),
+        ):
+            mutated = copy.deepcopy(actual)
+            mutated['spec']['template']['spec'][group][0][field] = value
+            mutations.append(mutated)
+        for field, value in (
+            ('completionMode', 'Indexed'), ('completions', 2), ('manualSelector', True),
+            ('parallelism', 2), ('podReplacementPolicy', 'Failed'), ('suspend', True),
+        ):
+            mutated = copy.deepcopy(actual)
+            mutated['spec'][field] = value
+            mutations.append(mutated)
+        for field, value in (
+            ('dnsPolicy', 'Default'), ('schedulerName', 'foreign-scheduler'),
+            ('terminationGracePeriodSeconds', 31),
+        ):
+            mutated = copy.deepcopy(actual)
+            mutated['spec']['template']['spec'][field] = value
+            mutations.append(mutated)
+        for change in ('security', 'selector', 'selector_sibling', 'label', 'image', 'command', 'args',
+                'env_ref', 'extra_container', 'extra_init', 'volume_source', 'mount'):
+            mutated = copy.deepcopy(actual)
+            pod = mutated['spec']['template']['spec']
+            if change == 'security': pod['securityContext'] = {'runAsUser': 0}
+            elif change == 'selector': mutated['spec']['selector']['matchLabels']['foreign'] = 'x'
+            elif change == 'selector_sibling': mutated['spec']['selector']['matchExpressions'] = []
+            elif change == 'label': mutated['spec']['template']['metadata']['labels']['foreign'] = 'x'
+            elif change == 'image': pod['containers'][0]['image'] = 'postgres:latest'
+            elif change == 'command': pod['containers'][0]['command'][0] += ' altered'
+            elif change == 'args': pod['containers'][0]['args'] = ['unexpected']
+            elif change == 'env_ref':
+                env = next(row for row in pod['containers'][0]['env'] if row['name'] == 'PGPASSWORD')
+                env['valueFrom']['secretKeyRef']['key'] = 'OTHER'
+            elif change == 'extra_container': pod['containers'].append(copy.deepcopy(pod['containers'][0]))
+            elif change == 'extra_init': pod['initContainers'].append(copy.deepcopy(pod['initContainers'][0]))
+            elif change == 'volume_source': pod['volumes'][0]['configMap']['name'] = 'foreign'
+            elif change == 'mount': pod['containers'][0]['volumeMounts'][0]['mountPath'] = '/tmp/changed'
+            mutations.append(mutated)
+        for mutated in mutations:
+            self.assertFalse(prerequisite._job_live_matches(mutated, wanted, uid))
+        desired_selector = copy.deepcopy(wanted)
+        desired_selector['spec']['selector'] = {'matchLabels': {
+            'batch.kubernetes.io/controller-uid': uid}}
+        self.assertFalse(prerequisite._job_live_matches(actual, desired_selector, uid))
+
+    def test_successful_created_defaulted_job_is_adopted_without_duplicate_create(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'operation': 'a'*12, 'namespace': 'voice-staging',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        kube = FakeKube()
+        actual = api_default_job(jobs['provision'], '00000000-0000-0000-0000-000000000099')
+        actual['metadata'].update(uid='00000000-0000-0000-0000-000000000099', resourceVersion='8')
+        kube.objects[('job', actual['metadata']['name'])] = actual
+        saved = []
+        got, record = prerequisite._create_once(kube, 'job', jobs['provision'], plan,
+            plan['created'], saved.append)
+        self.assertEqual(got['metadata']['uid'], record['uid'])
+        self.assertEqual(record['spec_sha256'], prerequisite._spec_digest(jobs['provision']))
+        self.assertFalse(any(event[:1] == ('created-job',) for event in kube.events))
 
     def test_authorize_gis_stage_orders_real_producer_jobs_before_only_pair_creates(self):
         import transaction
@@ -614,6 +816,122 @@ class Tests(unittest.TestCase):
             gis.verify_ready(kube, current, timeout=1, sleep=lambda _delay: None)
 
 
+class KubectlWaitProducerConsumerContractTests(unittest.TestCase):
+    def test_completed_process_wait_json_flows_through_adapter_to_job_verifier(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'operation': 'a'*12, 'namespace': dev_gis.NAMESPACE,
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        wanted = jobs['provision']
+        uid = '00000000-0000-0000-0000-000000000099'
+        actual = api_default_job(wanted, uid)
+        actual['metadata'].update(uid=uid, resourceVersion='38')
+        actual['status'] = {'succeeded': 1, 'failed': 0,
+            'completionTime': '2026-10-17T10:58:22Z',
+            'conditions': [{'type': 'Complete', 'status': 'True'}]}
+        spec = wanted['spec']['template']['spec']
+        def statuses(group):
+            return [{'name': row['name'], 'imageID': 'docker-pullable://' + row['image'],
+                'state': {'terminated': {'exitCode': 0}}} for row in spec.get(group, [])]
+        pod = {'metadata': {'name': wanted['metadata']['name'] + '-pod',
+            'namespace': dev_gis.NAMESPACE, 'uid': '00000000-0000-0000-0000-000000000098',
+            'ownerReferences': [{'kind': 'Job', 'uid': uid, 'controller': True}]},
+            'status': {'phase': 'Succeeded', 'initContainerStatuses': statuses('initContainers'),
+                'containerStatuses': statuses('containers')}}
+        calls = []
+        wait_response = [actual]
+
+        def runner(argv, **kwargs):
+            calls.append(argv)
+            self.assertEqual(argv[1:3], ['--namespace', dev_gis.NAMESPACE])
+            args = argv[3:]
+            if args[0] == 'wait':
+                self.assertEqual(args, ['wait', '--for=condition=complete',
+                    'job/' + wanted['metadata']['name'], '--timeout=600s', '-o', 'json'])
+                return subprocess.CompletedProcess(argv, 0, json.dumps(wait_response[0]), '')
+            if args[:2] == ['get', 'job']:
+                return subprocess.CompletedProcess(argv, 0, json.dumps(actual), '')
+            if args[:2] == ['get', 'pods']:
+                return subprocess.CompletedProcess(argv, 0, json.dumps({'items': [pod]}), '')
+            raise AssertionError(args)
+
+        adapter = dev_gis.Kubectl(runner=runner)
+        class Kube:
+            def run(self, args, **kwargs):
+                return adapter.run(args, **kwargs)
+            def get(self, kind, name):
+                return self.run(['get', kind, name, '-o', 'json'])
+
+        record = {'uid': uid, 'spec_sha256': prerequisite._spec_digest(wanted)}
+        proof, verifier_output = prerequisite._verify_job(
+            Kube(), 'provision', wanted, record, inputs, plan)
+        self.assertIsNone(verifier_output)
+        self.assertEqual(proof['uid'], uid)
+        self.assertEqual(proof['pod_uid'], pod['metadata']['uid'])
+        self.assertTrue(proof['complete'])
+        self.assertEqual(len(calls), 3)
+        self.assertEqual([call[3] for call in calls], ['wait', 'get', 'get'])
+        wait_response[0] = copy.deepcopy(actual)
+        wait_response[0]['metadata']['name'] = 'voice-verify-gameintegration-db'
+        with self.assertRaisesRegex(prerequisite.Blocked, 'job_not_complete'):
+            prerequisite._verify_job(Kube(), 'provision', wanted, record, inputs, plan)
+        self.assertEqual([call[3] for call in calls], ['wait', 'get', 'get', 'wait', 'get'])
+
+
+class KubectlCreateReceiptContractTests(unittest.TestCase):
+    def test_create_uses_json_object_response_consumed_by_exact_uid_receipt(self):
+        obj = {'apiVersion': 'v1', 'kind': 'ConfigMap',
+            'metadata': {'name': 'voice-gis-contract', 'namespace': 'voice-staging',
+                'labels': {prerequisite.OP_LABEL: 'a'*12}}, 'data': {'query': 'fixture'}}
+        plan = {'operation': 'a'*12, 'namespace': 'voice-staging',
+            'prerequisite_phase': 'CREATING'}
+        kube = FakeKube()
+        original_run = kube.run
+        calls = []
+
+        def run(args, body=None, timeout=30):
+            calls.append(list(args))
+            if args[0] != 'create':
+                return original_run(args, body, timeout)
+            self.assertEqual(args[args.index('-o') + 1], 'json')
+            original_run(args, body, timeout)
+            return copy.deepcopy(kube.objects[('configmap', obj['metadata']['name'])])
+
+        kube.run = run
+        persisted = []
+        records = {}
+        created, record = prerequisite._create_once(kube, 'configmap', obj, plan, records,
+            persisted.append)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(record['uid'], created['metadata']['uid'])
+        self.assertEqual(record['spec_sha256'], prerequisite._spec_digest(obj))
+        self.assertEqual(records['configmap/' + obj['metadata']['name']], record)
+        self.assertEqual(len(persisted), 1)
+
+    def test_failed_create_records_only_safe_returncode_and_category(self):
+        obj = {'apiVersion': 'v1', 'kind': 'ConfigMap',
+            'metadata': {'name': 'voice-gis-contract', 'namespace': 'voice-staging',
+                'labels': {prerequisite.OP_LABEL: 'a'*12}}, 'data': {'query': 'fixture'}}
+        plan = {'operation': 'a'*12, 'namespace': 'voice-staging',
+            'prerequisite_phase': 'CREATING'}
+
+        class FailingKube(FakeKube):
+            def run(self, args, body=None, timeout=30):
+                if args[0] == 'create':
+                    error = RuntimeError('sensitive producer detail')
+                    error.returncode = 1
+                    error.category = 'invalid_output_format'
+                    raise error
+                return super().run(args, body, timeout)
+
+        with self.assertRaisesRegex(prerequisite.Blocked, 'create_outcome_unknown'):
+            prerequisite._create_once(FailingKube(), 'configmap', obj, plan, {}, lambda _row: None)
+        self.assertEqual(plan['create_failures']['configmap/voice-gis-contract'], {
+            'returncode': 1,
+            'category': 'invalid_output_format'})
+
+
 class DevReceiptProducerTests(unittest.TestCase):
     def test_execute_produces_distinct_source_build_bound_dev_receipt(self):
         uid = '00000000-0000-0000-0000-000000000001'
@@ -634,7 +952,10 @@ class DevReceiptProducerTests(unittest.TestCase):
             'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
             'image_config_sha256': '1' * 64, 'working_tree_clean': True,
             'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
-            'builder_sha': source_sha, 'builder_tree': builder_tree}
+            'builder_sha': source_sha, 'builder_tree': builder_tree,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'a' * 64,
+            'builder_output_index_sha256': image.rsplit('@sha256:', 1)[-1],
+            'builder_provenance_sha256': 'b' * 64}
         deployment = {'kind': 'Deployment', 'metadata': {'name': 'voice-gameintegration'}, 'spec': {
             'template': {'spec': {'containers': [{'name': 'gameintegration', 'image': image}]}}}}
         plan = {'namespace': 'voice-dev', 'phase': 'PLANNED', 'operation': '123456789abc',
