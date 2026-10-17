@@ -397,7 +397,7 @@ class _KubernetesJSONAPIBase:
 
     def cas_rollout_marker(self, name, operation, expected_uid, expected_rv,
                            expected_phase, new_phase, *, expected_claim,
-                           new_claim=None, release=False):
+                           release=False):
         phases = ('active', 'rollout-capturing', 'rollout-prepared',
             'rollout-applying', 'rollout-verified')
         transitions = {
@@ -407,21 +407,14 @@ class _KubernetesJSONAPIBase:
             'rollout-applying': 'rollout-verified',
             'rollout-verified': 'active',
         }
-        claim_switch = (expected_phase == new_phase and expected_phase in
-            ('rollout-capturing', 'rollout-prepared', 'rollout-applying', 'rollout-verified')
-            and new_claim is not None and new_claim != expected_claim and release is False)
         if (name != 'voice-nats-generation' or not isinstance(operation, str)
             or not re.fullmatch(r'[a-f0-9]{12}', operation)
             or not isinstance(expected_uid, str) or not _UID.fullmatch(expected_uid)
             or not isinstance(expected_rv, str) or not expected_rv.isdigit()
-            or expected_phase not in phases or (transitions.get(expected_phase) != new_phase and not claim_switch)
-            or not isinstance(expected_claim, str)
-                or not (re.fullmatch(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}', expected_claim)
-                    or re.fullmatch(r'voice-nats-restore-' + operation + r'-[a-f0-9]{8}', expected_claim))
-            or new_claim is not None and (not isinstance(new_claim, str)
-                or not re.fullmatch(r'voice-nats-restore-' + operation + r'-[a-f0-9]{8}', new_claim))
+            or expected_phase not in phases or transitions.get(expected_phase) != new_phase
+            or not isinstance(expected_claim, str) or not _SOURCE_CLAIM.fullmatch(expected_claim)
             or type(release) is not bool
-            or release != (expected_phase == 'rollout-verified' and new_phase == 'active') and not claim_switch):
+            or release != (expected_phase == 'rollout-verified' and new_phase == 'active')):
             _fail('marker_cas_request_invalid')
         current = self.get_configmap(NAMESPACE, name)
         metadata, data = current.get('metadata', {}), current.get('data', {})
@@ -449,8 +442,6 @@ class _KubernetesJSONAPIBase:
                 {'op': 'test', 'path': '/data/knownRolloutOperation', 'value': operation},
                 {'op': 'replace', 'path': '/data/phase', 'value': new_phase},
             ))
-        if new_claim is not None:
-            patch.append({'op': 'replace', 'path': '/data/dataPVC', 'value': new_claim})
         if release:
             patch.append({'op': 'remove', 'path': '/data/knownRolloutOperation'})
         return self._request('PATCH', '/api/v1/namespaces/' + self._segment(NAMESPACE)
@@ -535,10 +526,10 @@ class _KubernetesJSONAPIBase:
         return items
 
     def list_hub_pods(self, namespace, labels):
-        if namespace != NAMESPACE or labels != {'app': 'voice-nats-hub'}:
+        if namespace != NAMESPACE or labels != {'app': 'voice-nats-pvc-candidate'}:
             _fail('pod_selector_invalid')
         result = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
-            + '/pods?' + urlencode({'labelSelector': 'app=voice-nats-hub', 'limit': '2048'}))
+            + '/pods?' + urlencode({'labelSelector': 'app=voice-nats-pvc-candidate', 'limit': '2048'}))
         items = result.get('items')
         if not isinstance(items, list) or len(items) > 2048 or not all(isinstance(item, dict) for item in items):
             _fail('pod_list_invalid')
@@ -1197,12 +1188,12 @@ def resolve_source_binding(api, *, operation, expected=None):
     try:
         namespace = api.get_namespace(NAMESPACE)
         marker = api.get_configmap(NAMESPACE, 'voice-nats-generation')
-        hub = api.get_deployment(NAMESPACE, 'voice-nats-hub')
+        hub = api.get_deployment(NAMESPACE, 'voice-nats-pvc-candidate')
         ns_meta, marker_meta, hub_meta = (namespace['metadata'], marker['metadata'], hub['metadata'])
         data = marker['data']
         if (ns_meta['name'] != NAMESPACE or not _UID.fullmatch(ns_meta['uid'])
             or marker_meta['name'] != 'voice-nats-generation' or marker_meta['namespace'] != NAMESPACE
-            or not _UID.fullmatch(marker_meta['uid']) or hub_meta['name'] != 'voice-nats-hub'
+            or not _UID.fullmatch(marker_meta['uid']) or hub_meta['name'] != 'voice-nats-pvc-candidate'
             or hub_meta['namespace'] != NAMESPACE or not _UID.fullmatch(hub_meta['uid'])
             or not isinstance(data.get('generation'), str) or not data['generation']):
             _fail('source_marker_invalid')
@@ -1212,7 +1203,8 @@ def resolve_source_binding(api, *, operation, expected=None):
             fenced = False
         elif ((data.get('phase') == 'known-baseline-maintenance'
                 and data.get('knownBaselineOperation') == operation)
-            or (data.get('phase') == 'known-rollout-maintenance'
+            or (data.get('phase') in ('known-rollout-maintenance', 'rollout-capturing',
+                    'rollout-prepared', 'rollout-applying', 'rollout-verified')
                 and data.get('knownRolloutOperation') == operation)):
             fenced = True
         else:
@@ -1270,9 +1262,9 @@ def resolve_source_binding(api, *, operation, expected=None):
             or sum(1 for row in conditions if row.get('type') == 'Ready' and row.get('status') == 'True') != 1):
             _fail('source_node_not_ready')
         selector = hub['spec']['selector']['matchLabels']
-        if selector != {'app': 'voice-nats-hub'}:
+        if selector != {'app': 'voice-nats-pvc-candidate'}:
             _fail('source_hub_selector_invalid')
-        pods = api.list_hub_pods(NAMESPACE, {'app': 'voice-nats-hub'})
+        pods = api.list_hub_pods(NAMESPACE, {'app': 'voice-nats-pvc-candidate'})
         active_pods = [pod for pod in pods if not pod.get('metadata', {}).get('deletionTimestamp')]
         if ((fenced and active_pods) or (not fenced and not active_pods)
             or any(pod.get('spec', {}).get('nodeName') not in ('', node_name)

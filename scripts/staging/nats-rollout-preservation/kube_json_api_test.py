@@ -106,14 +106,14 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
     def test_native_stage_gets_are_namespaced_and_fixed_kind(self):
         with patch.object(self.api, '_request', return_value={'metadata': {}}) as get:
             self.api.get_service('voice-staging', 'voice-nats')
-            self.api.get_pod('voice-staging', 'voice-nats-hub-0')
-            self.api.get_replicaset('voice-staging', 'voice-nats-hub-abc')
+            self.api.get_pod('voice-staging', 'voice-nats-pvc-candidate-0')
+            self.api.get_replicaset('voice-staging', 'voice-nats-pvc-candidate-abc')
             self.api.get_deployment('voice-staging', 'voice-gateway')
         paths = [call.args[1] for call in get.call_args_list]
         self.assertEqual(paths, [
             '/api/v1/namespaces/voice-staging/services/voice-nats',
-            '/api/v1/namespaces/voice-staging/pods/voice-nats-hub-0',
-            '/apis/apps/v1/namespaces/voice-staging/replicasets/voice-nats-hub-abc',
+            '/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-0',
+            '/apis/apps/v1/namespaces/voice-staging/replicasets/voice-nats-pvc-candidate-abc',
             '/apis/apps/v1/namespaces/voice-staging/deployments/voice-gateway'])
         for method, args in ((self.api.get_service, ('default', 'voice-nats')),
                              (self.api.get_pod, ('voice-staging', '../escape')),
@@ -141,21 +141,21 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
                 self.api.list_control_objects('voice-staging')
 
     def test_hub_pod_list_uses_only_the_fixed_selector_and_rejects_truncation(self):
-        item = {'metadata': {'name': 'voice-nats-hub-0'}}
+        item = {'metadata': {'name': 'voice-nats-pvc-candidate-0'}}
         with patch.object(self.api, '_request', return_value={'items': [item]}) as get:
-            self.assertEqual(self.api.list_hub_pods('voice-staging', {'app': 'voice-nats-hub'}), [item])
-        self.assertIn('labelSelector=app%3Dvoice-nats-hub', get.call_args.args[1])
+            self.assertEqual(self.api.list_hub_pods('voice-staging', {'app': 'voice-nats-pvc-candidate'}), [item])
+        self.assertIn('labelSelector=app%3Dvoice-nats-pvc-candidate', get.call_args.args[1])
         self.assertIn('limit=2048', get.call_args.args[1])
-        for args in (('default', {'app': 'voice-nats-hub'}),
+        for args in (('default', {'app': 'voice-nats-pvc-candidate'}),
                      ('voice-staging', {'app': 'other'}),
-                     ('voice-staging', {'app': 'voice-nats-hub', 'role': 'hub'})):
+                     ('voice-staging', {'app': 'voice-nats-pvc-candidate', 'role': 'hub'})):
             with self.subTest(args=args), patch.object(self.api, '_request') as request, \
                  self.assertRaises(kube.KubeAPIError):
                 self.api.list_hub_pods(*args)
             request.assert_not_called()
         with patch.object(self.api, '_request', return_value={'items': [], 'metadata': {'continue': 'next'}}):
             with self.assertRaises(kube.KubeAPIError):
-                self.api.list_hub_pods('voice-staging', {'app': 'voice-nats-hub'})
+                self.api.list_hub_pods('voice-staging', {'app': 'voice-nats-pvc-candidate'})
 
     def test_hub_jsz_uses_exact_pod_uid_fixed_command_and_bounded_stdout(self):
         pod_uid = '44444444-4444-4444-8444-444444444444'
@@ -163,7 +163,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         with patch.object(self.api, 'get_pod', return_value=pod), \
              patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
              patch.object(kube, '_websocket_exec', return_value=iter((b'{"account":', b'"A"}'))) as execute:
-            self.assertEqual(self.api.exec_hub_jsz('voice-staging', 'voice-nats-hub-0', pod_uid, 'nats'),
+            self.assertEqual(self.api.exec_hub_jsz('voice-staging', 'voice-nats-pvc-candidate-0', pod_uid, 'nats'),
                 b'{"account":"A"}')
         path, token = execute.call_args.args[1:]
         self.assertEqual(token, 'opaque-test-token')
@@ -180,7 +180,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         with patch.object(self.api, 'get_pod', return_value={'metadata': {'uid': '55555555-5555-4555-8555-555555555555', 'namespace': 'voice-staging'}}), \
              patch.object(self.api, '_operation_token') as token_read, \
              self.assertRaises(kube.KubeAPIError):
-            self.api.exec_hub_jsz('voice-staging', 'voice-nats-hub-0', pod_uid, 'nats')
+            self.api.exec_hub_jsz('voice-staging', 'voice-nats-pvc-candidate-0', pod_uid, 'nats')
         token_read.assert_not_called()
 
     def test_owned_pod_finalizer_cas_tests_uid_resource_version_and_exact_list(self):
@@ -218,10 +218,10 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         replacement['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = 'new'
         with patch.object(self.api, 'get_deployment', return_value=current), \
              patch.object(self.api, '_request', return_value={'kind': 'Deployment'}) as patch_request:
-            self.api.cas_rollout_deployment('voice-staging', 'voice-nats-hub', uid, '12', 1, digest,
+            self.api.cas_rollout_deployment('voice-staging', 'voice-nats-pvc-candidate', uid, '12', 1, digest,
                 new_replicas=0, new_template=replacement, expected_jsdata_claim='old', new_jsdata_claim='new')
         method, path, patch_doc = patch_request.call_args.args
-        self.assertEqual((method, path), ('PATCH', '/apis/apps/v1/namespaces/voice-staging/deployments/voice-nats-hub'))
+        self.assertEqual((method, path), ('PATCH', '/apis/apps/v1/namespaces/voice-staging/deployments/voice-nats-pvc-candidate'))
         self.assertEqual(patch_doc[:3], [
             {'op': 'test', 'path': '/metadata/uid', 'value': uid},
             {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '12'},
@@ -231,7 +231,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(patch_doc[4]['value'], replacement)
         with patch.object(self.api, 'get_deployment', return_value=current), \
              patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
-            self.api.cas_rollout_deployment('voice-staging', 'voice-nats-hub', uid, '12', 1, 'f' * 64,
+            self.api.cas_rollout_deployment('voice-staging', 'voice-nats-pvc-candidate', uid, '12', 1, 'f' * 64,
                 new_replicas=0)
         request.assert_not_called()
 
@@ -281,30 +281,6 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
                  patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
                 self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '12',
                     phase, target, expected_claim=claim, release=release)
-            request.assert_not_called()
-
-    def test_rollout_marker_allows_only_owned_same_phase_claim_switch(self):
-        uid = '44444444-4444-4444-8444-444444444444'
-        operation = '0123456789ab'
-        attempt = 'abcdef12'
-        source = 'voice-nats-jsdata-d20261017a'
-        target = f'voice-nats-restore-{operation}-{attempt}'
-        marker = {'metadata': {'uid': uid, 'resourceVersion': '12'}, 'data': {
-            'phase': 'rollout-applying', 'dataPVC': source,
-            'knownRolloutOperation': operation, 'generation': 'r20261017a'}}
-        with patch.object(self.api, 'get_configmap', return_value=marker), \
-             patch.object(self.api, '_request', return_value={'kind': 'ConfigMap'}) as patch_request:
-            self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '12',
-                'rollout-applying', 'rollout-applying', expected_claim=source, new_claim=target)
-        self.assertEqual(patch_request.call_args.args[2][-1],
-            {'op': 'replace', 'path': '/data/dataPVC', 'value': target})
-        for bad_target in ('voice-nats-restore-' + 'f' * 12 + '-' + attempt,
-                           'voice-nats-jsdata-d20261017b'):
-            with self.subTest(target=bad_target), \
-                 patch.object(self.api, 'get_configmap', return_value=marker), \
-                 patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
-                self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '12',
-                    'rollout-applying', 'rollout-applying', expected_claim=source, new_claim=bad_target)
             request.assert_not_called()
 
     def test_user_bootstrap_template_install_and_restore_are_exact(self):
@@ -440,6 +416,9 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         manifest = b'{"files":[],"schema":"fixture"}'
         digest = hashlib.sha256(archive_bytes).hexdigest()
         client, server = socket.socketpair()
+        # Keep a protocol regression from hanging this private fixture forever.
+        client.settimeout(10)
+        server.settimeout(10)
         received = bytearray()
         largest = 0
         failure = []
@@ -695,9 +674,9 @@ class SourceAPI:
         self.marker = {'metadata': {'name': 'voice-nats-generation', 'namespace': 'voice-staging',
             'uid': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'},
             'data': {'phase': 'active', 'generation': '123', 'dataPVC': 'voice-nats-jsdata-d20261017a'}}
-        self.hub = {'metadata': {'name': 'voice-nats-hub', 'namespace': 'voice-staging',
+        self.hub = {'metadata': {'name': 'voice-nats-pvc-candidate', 'namespace': 'voice-staging',
             'uid': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'},
-            'spec': {'selector': {'matchLabels': {'app': 'voice-nats-hub'}}, 'template': {'spec': {
+            'spec': {'selector': {'matchLabels': {'app': 'voice-nats-pvc-candidate'}}, 'template': {'spec': {
                 'volumes': [{'name': 'jsdata', 'persistentVolumeClaim': {'claimName': 'voice-nats-jsdata-d20261017a'}}]}}}}
         self.claim = {'metadata': {'name': 'voice-nats-jsdata-d20261017a', 'namespace': 'voice-staging',
             'uid': '11111111-1111-4111-8111-111111111111'}, 'spec': {'volumeName': 'voice-nats-pv-a',
@@ -711,7 +690,7 @@ class SourceAPI:
         self.nodes = [{'metadata': {'name': 'node-actual-name', 'uid': '33333333-3333-4333-8333-333333333333',
             'labels': {'kubernetes.io/hostname': 'node-hostname-label'}}, 'status': {'conditions': [
                 {'type': 'Ready', 'status': 'True'}]}}]
-        self.pods = [{'metadata': {'name': 'voice-nats-hub-0', 'uid': '44444444-4444-4444-8444-444444444444'},
+        self.pods = [{'metadata': {'name': 'voice-nats-pvc-candidate-0', 'uid': '44444444-4444-4444-8444-444444444444'},
             'spec': {'nodeName': 'node-actual-name', 'volumes': [{'name': 'jsdata',
                 'persistentVolumeClaim': {'claimName': 'voice-nats-jsdata-d20261017a'}}]}}]
 
