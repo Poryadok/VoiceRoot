@@ -5,26 +5,26 @@
     "registryPullDigest": null,
     "platform": "linux/amd64",
     "user": "10000:10000",
-    "entrypoint": ["/usr/bin/python3", "/voice-nats-runner/phase"]
+    "entrypoint": [
+      "/usr/bin/python3",
+      "/voice-nats-runner/phase"
+    ]
   },
   "baseImages": [
     "golang@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c",
     "nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb"
   ],
   "inputs": {
-    "scripts/staging/nats-rollout-preservation/Dockerfile": "ecacd5406eec28eefdffcaa2ef845e771ad136414691f740c6af368d4d45f729",
-    "scripts/staging/nats-rollout-preservation/nats-phase": "4ddb2df11821a5f06f96eb4229a8b5a79b84ff8554f08d4387eb1efc68ef3017",
-    "scripts/staging/nats-rollout-preservation/native_store.py": "3f9b177ecbcec7463801ba3ed44724c3068696482804d4d586696a305da813c0",
-    "scripts/staging/nats-known-baseline/controller.py": "dd9fee1b93309b38cfb8023787142a2cd5ea3dd925100744fcc2a6b66beb629f",
-    "scripts/staging/nats-known-baseline/go.mod": "b1c71d9f1c670cb5826fc03d13c32cd94154b3033a203d628eaba70ef380cd29",
-    "scripts/staging/nats-known-baseline/go.sum": "4cd76b6920e3cdc28f7650264307c4bea6499a0e77ae0a1378c8d5fe8b5b9da7",
     "scripts/staging/nats-known-baseline/census.go": "473ba2a019a9ff2f958007b3b6a781bbf66bb475e9ecf2f04eb0e68be78e1b8f",
     "scripts/staging/nats-known-baseline/census_test.go": "b4f3e16c10225151f35f486b3939da4162ca606de89933d22de6eafa4ed7b51a",
+    "scripts/staging/nats-known-baseline/controller.py": "dd9fee1b93309b38cfb8023787142a2cd5ea3dd925100744fcc2a6b66beb629f",
     "scripts/staging/nats-known-baseline/docker_inputs_test.go": "037f5633ca30eaef3db1b95120e0119f654348c2b8000988c3957a1443e9ea1e",
     "scripts/staging/nats-known-baseline/fixture.go": "d98f817833ecc87cd234c569ec1fa8a8e88131377c9bc3120c04fc57b37723a6",
     "scripts/staging/nats-known-baseline/fixture_test.go": "cd65f3fcac90ceb8b5fffeefbb14929861bae23e10799be90188add71246e862",
-    "scripts/staging/nats-known-baseline/isolation_test.go": "b7837636818be03787b18b35d1b804d101d294bb8c7f87e9f5e05f0f0ab0e8bc",
-    "scripts/staging/nats-known-baseline/main.go": "bddbcb8148d58dd725bb8d1dac2265f6036bcd61b56cdacc7b25f0a6953d5b8e",
+    "scripts/staging/nats-known-baseline/go.mod": "b1c71d9f1c670cb5826fc03d13c32cd94154b3033a203d628eaba70ef380cd29",
+    "scripts/staging/nats-known-baseline/go.sum": "4cd76b6920e3cdc28f7650264307c4bea6499a0e77ae0a1378c8d5fe8b5b9da7",
+    "scripts/staging/nats-known-baseline/isolation_test.go": "d60ccac584922bcd2708571c50cc9dcb9a6edf384f2215b569fcda9bb12b72ee",
+    "scripts/staging/nats-known-baseline/main.go": "9d587f20b53d77b4b02f0570f50480218db9963112d0dcd76875ee06629baee0",
     "scripts/staging/nats-known-baseline/native_checksum.go": "d4b1835069ca989c808d2fa5994ffee279437d8163b726571fa3aed983d9fb74",
     "scripts/staging/nats-known-baseline/native_checksum_test.go": "6af64d4e4a846a57db29ba6b36517393c80447d7ab378cd1600d15cbfc48bf36",
     "scripts/staging/nats-known-baseline/native_consumer_state.go": "6e0090cd16ff50be42dd92dc2dfb4bcc17c1d42a3197efb858b02deed0d21c8e",
@@ -32,7 +32,18 @@
     "scripts/staging/nats-known-baseline/owned_readonly.go": "43d7706fb136c4a90ad61664237c0ec1fdd09eaa3bfa325112991f84699eacd2",
     "scripts/staging/nats-known-baseline/owned_readonly_test.go": "bc1dd2e76976d716684823b6f1e55400cd19c811ad3252ff1f0a25e1306b3eb8",
     "scripts/staging/nats-known-baseline/retained_grants.go": "f44f946525b32ddda97439885c6ad25d732d25d5682828d5a9794e17eb76f22a",
-    "scripts/staging/nats-known-baseline/retained_grants_test.go": "95b5871fd9e6d1a8307b90abaf5000bb5ada90304d166d51906b9cd5b83f5959"
+    "scripts/staging/nats-known-baseline/retained_grants_test.go": "95b5871fd9e6d1a8307b90abaf5000bb5ada90304d166d51906b9cd5b83f5959",
+    "scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/analytics-chat-bootstrap.sh": "556040d71737c912213dbb52658bd7bf8dd0a61e4f11c3f13505471b01dd4c60",
+    "scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/notification-bootstrap.sh": "1cc7ef5cbcf5bbcbc05ce46c49a9b811dc71afbd02879988ef390897fb9da26c",
+    "scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/realtime-bootstrap.sh": "a22a6739aa9cbcf27a2f3680e6dbe29c82ebe2769f9eb3c202e5783ac02740fa",
+    "scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/search-bootstrap.sh": "2ac580d2afb2f111d4fef2b97a54e96ddf4135e44ad66eb3cc000a795a34b4b3",
+    "scripts/staging/nats-rollout-preservation/Dockerfile": "45c79ceb75f61ea6b024bb5e472ba38f10246789f04189aba0260d6108cd894f",
+    "scripts/staging/nats-rollout-preservation/native_store.py": "3f9b177ecbcec7463801ba3ed44724c3068696482804d4d586696a305da813c0",
+    "scripts/staging/nats-rollout-preservation/nats-phase": "4b5cea71253ebaa6c6c58f153d4c89b5312a874e1620567a2268b5d5ce8dd9ec",
+    "scripts/staging/nats-rollout-preservation/nats-supervisor": "52f5e5bbeb1eaba0c27437c4e35cb32ecdd680408cf06fb354cca297da1103fa",
+    "scripts/staging/nats-rollout-preservation/nats_contract_actor.py": "98d1cd844e3eea8dde791b65ac4cee08b85d91b09b2bd0d12f9d6e5d901517d7",
+    "scripts/staging/nats-rollout-preservation/nats_contract_plan.py": "f1e7745dffd777c64324b10e45d3d8f1105c71ab2aac454f76131163dee7b291",
+    "scripts/staging/nats-rollout-preservation/nats_contract_runner.py": "11c8643f27c980f0717ba5541a758f6fdbe38fde690761ee18a5f4a8f481673e"
   },
-  "qualification": "Source checkpoint: archive uses a source-only read-only PVC Job; census uses a separate target-only nonpromotable scratch PVC; promotable restore uses a separate target-only UID/GID 10000 claim and canonical mount-root layout. Archive ingest is a bounded single stream with STARTED/COMPLETE receipt binding; interrupted actions are never replayed. The registry image is not yet published or digest-qualified; image rebuild, publication, and independent image/kernel review remain outstanding."
+  "qualification": "Source checkpoint: trusted helper package includes a fixed canonical NATS contract plan validator and per-action executor. The producer validates plan digest and closed APIs, stores action STARTED before a single NATS mutation, and exposes same-attempt receipt readback. Host orchestration must persist intent and issued events before invoking apply; ambiguous actions are never replayed. Archive and disposable census/session profiles remain unchanged. The contract-migration Kubernetes Job, transaction consumer, registry image and independent final review are not yet qualified; no live proof is claimed."
 }

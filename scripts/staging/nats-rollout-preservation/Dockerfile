@@ -21,11 +21,16 @@ COPY scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/*.
 COPY --from=kernel-build /out/kernel /voice-nats-runner/kernel
 COPY scripts/staging/nats-rollout-preservation/nats-phase /voice-nats-runner/phase
 COPY scripts/staging/nats-rollout-preservation/nats-supervisor /voice-nats-runner/nats-supervisor
+COPY scripts/staging/nats-rollout-preservation/nats_contract_plan.py /voice-nats-runner/nats_contract_plan.py
+COPY scripts/staging/nats-rollout-preservation/nats_contract_actor.py /voice-nats-runner/nats_contract_actor.py
+COPY scripts/staging/nats-rollout-preservation/nats_contract_runner.py /voice-nats-runner/nats_contract_runner.py
+COPY scripts/staging/nats-rollout-preservation/nats_contract_runner.py /voice-nats-runner/contract_runner.py
 COPY scripts/staging/nats-rollout-preservation/native_store.py /voice-nats-runner/native_store.py
 COPY scripts/staging/nats-known-baseline/controller.py /voice-nats-runner/controller.py
 RUN mkdir -p /data /verify /out /inputs /state /voice-nats-runner/bootstrap \
  && chmod 0555 /voice-nats-runner/bootstrap/*.sh \
  && chmod 0555 /voice-nats-runner/nats-supervisor \
+ && chmod 0555 /voice-nats-runner/contract_runner.py \
  && chown 10000:10000 /data /verify /out /inputs /state \
  && chmod 0700 /data /verify /out /inputs /state
 ENV PYTHONPATH=/voice-nats-runner PYTHONDONTWRITEBYTECODE=1
