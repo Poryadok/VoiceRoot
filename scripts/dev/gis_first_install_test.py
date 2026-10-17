@@ -21,7 +21,7 @@ def encoded(values):
     return {key: base64.b64encode(value).decode('ascii') for key, value in values.items()}
 
 
-def buildx_artifact(source, run_id, attempt, *, revision=None, context='src/backend',
+def buildx_artifact(source, run_id, attempt, *, service='gameintegration', revision=None, context='src/backend',
                     output_digest=None, started='2026-10-17T00:01:33Z',
                     finished='2026-10-17T00:02:08Z'):
     """Build a minimal authenticated Buildx history-record artifact."""
@@ -41,7 +41,7 @@ def buildx_artifact(source, run_id, attempt, *, revision=None, context='src/back
     provenance = json.dumps({'buildDefinition': {'externalParameters': {
         'request': {'root': {'configSource': {'path': 'Dockerfile'},
             'request': {'args': {'vcs:localdir:context': context,
-                'vcs:localdir:dockerfile': 'src/backend/gameintegration',
+                'vcs:localdir:dockerfile': 'src/backend/' + service,
                 'vcs:revision': revision,
                 'vcs:source': 'https://github.com/Poryadok/VoiceRoot'}}}}}},
         'runDetails': {'builder': {'id': builder},
@@ -57,9 +57,10 @@ def buildx_artifact(source, run_id, attempt, *, revision=None, context='src/back
     config_desc = blob(json.dumps({'FrontendAttrs': {
         'attest:provenance': 'type=provenance,builder-id=' + builder,
         'filename': 'Dockerfile', 'vcs:localdir:context': context,
-        'vcs:localdir:dockerfile': 'src/backend/gameintegration',
+        'vcs:localdir:dockerfile': 'src/backend/' + service,
         'vcs:revision': revision, 'vcs:source': 'https://github.com/Poryadok/VoiceRoot'},
-        'Exporters': [{'Type': 'image', 'Attrs': {'name': gis.IMAGE + ':' + source,
+        'Exporters': [{'Type': 'image', 'Attrs': {'name':
+            'ghcr.io/poryadok/voiceroot/' + service + ':' + source,
             'push': 'true'}}],
         'Result': {'Results': {'0': {'media_type': 'application/vnd.oci.image.index.v1+json',
             'digest': 'sha256:' + output_digest, 'size': len(image_index)}}},
@@ -1473,6 +1474,23 @@ class SourceAuthorityTests(unittest.TestCase):
             with self.assertRaises(gis.Blocked):
                 gis._verify_buildx_artifact(raw, 13, len(raw), target, 11, 1,
                     source, step, None)
+
+    def test_buildx_record_verifies_matchmaking_using_fixed_context_and_tag(self):
+        source = 'a' * 40
+        raw, index_digest, _child, _config, _index = buildx_artifact(
+            source, 11, 1, service='matchmaking')
+        result = gis._verify_buildx_artifact(raw, 13, len(raw),
+            'ghcr.io/poryadok/voiceroot/matchmaking@sha256:' + index_digest,
+            11, 1, source,
+            {'started_at': '2026-10-17T00:01:32Z', 'completed_at': '2026-10-17T00:02:22Z'},
+            None, service='matchmaking')
+        self.assertEqual(result['builder_output_index_sha256'], index_digest)
+        with self.assertRaises(gis.Blocked):
+            gis._verify_buildx_artifact(raw, 13, len(raw),
+                'ghcr.io/poryadok/voiceroot/matchmaking@sha256:' + index_digest,
+                11, 1, source,
+                {'started_at': '2026-10-17T00:01:32Z', 'completed_at': '2026-10-17T00:02:22Z'},
+                None, service='social')
 
     def test_dirty_source_blocks_before_image_inspection(self):
         source = 'a' * 40
