@@ -16,8 +16,10 @@ LABEL_OPERATION = 'voice.io/nats-operation'
 LABEL_NONCE = 'voice.io/nats-job-nonce'
 LABEL_PHASE = 'voice.io/nats-job-phase'
 LABEL_JOB_SELECTOR = 'voice.io/nats-phase-job'
+LABEL_VERIFICATION_ATTEMPT = 'voice.io/nats-verification-attempt'
 PHASES = frozenset(('archive', 'census', 'bind-verification', 'verification-session', 'contract-migration'))
 VERIFICATION_BINDING_FIELDS = frozenset(('role', 'claim_name', 'target_uid', 'node_name', 'hostname'))
+VERIFICATION_ATTEMPT_BINDING_FIELDS = VERIFICATION_BINDING_FIELDS | frozenset(('verification_attempt',))
 FIELDS = frozenset(('operation', 'nonce', 'phase'))
 BINDING_FIELDS = frozenset((
     'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name', 'source_hostname',
@@ -124,6 +126,28 @@ def validate_binding(value: object) -> dict:
     return copy.deepcopy(value)
 
 
+def validate_census_binding(request: dict, value: object) -> dict:
+    """Bind each disposable census PVC to its persisted, never-replaced attempt."""
+    row = validate_request(request)
+    if not isinstance(value, dict) or set(value) != BINDING_FIELDS | frozenset(('verification_attempt',)):
+        _fail('census_binding_invalid')
+    attempt = value.get('verification_attempt')
+    if not isinstance(attempt, str) or not re.fullmatch(r'[a-f0-9]{8}', attempt):
+        _fail('verification_attempt_invalid')
+    expected_claim = 'voice-nats-verify-' + row['operation'] + '-' + attempt
+    if value.get('verification_claim') != expected_claim:
+        _fail('verification_claim_attempt_mismatch')
+    base = {key: value[key] for key in BINDING_FIELDS}
+    # Keep the common storage validator strict without widening its accepted
+    # claim names for archive, selected-session, or contract-migration callers.
+    legacy = copy.deepcopy(base)
+    legacy['verification_claim'] = 'voice-nats-verify-' + row['operation']
+    storage = validate_binding(legacy)
+    storage['verification_claim'] = expected_claim
+    storage['verification_attempt'] = attempt
+    return storage
+
+
 def validate_archive_binding(value: object) -> dict:
     if not isinstance(value, dict) or set(value) != ARCHIVE_BINDING_FIELDS:
         _fail('archive_binding_invalid')
@@ -194,13 +218,16 @@ def validate_image(value: object) -> str:
 
 def validate_binder_binding(request: dict, value: object) -> dict:
     row = validate_request(request)
-    if not isinstance(value, dict) or set(value) != VERIFICATION_BINDING_FIELDS:
+    if not isinstance(value, dict) or set(value) != VERIFICATION_ATTEMPT_BINDING_FIELDS:
         _fail('binder_binding_invalid')
     if value.get('role') != 'verification':
         _fail('binder_role_invalid')
     if not isinstance(value.get('target_uid'), str) or not UUID_RE.fullmatch(value['target_uid']):
         _fail('binder_target_uid_invalid')
-    expected_claim = 'voice-nats-verify-' + row['operation']
+    attempt = value.get('verification_attempt')
+    if not isinstance(attempt, str) or not re.fullmatch(r'[a-f0-9]{8}', attempt):
+        _fail('verification_attempt_invalid')
+    expected_claim = 'voice-nats-verify-' + row['operation'] + '-' + attempt
     if value.get('claim_name') != expected_claim:
         _fail('binder_claim_invalid')
     if (not isinstance(value.get('node_name'), str)
@@ -212,9 +239,16 @@ def validate_binder_binding(request: dict, value: object) -> dict:
     return copy.deepcopy(value)
 
 
-def job_name(request: dict) -> str:
+def job_name(request: dict, verification_attempt: str | None = None) -> str:
     row = validate_request(request)
-    suffix = hashlib.sha256((row['operation'] + ':' + row['nonce'] + ':' + row['phase']).encode()).hexdigest()[:16]
+    material = row['operation'] + ':' + row['nonce'] + ':' + row['phase']
+    if row['phase'] in ('census', 'bind-verification'):
+        if not isinstance(verification_attempt, str) or not re.fullmatch(r'[a-f0-9]{8}', verification_attempt):
+            _fail('verification_attempt_invalid')
+        material += ':' + verification_attempt
+    elif verification_attempt is not None:
+        _fail('verification_attempt_unexpected')
+    suffix = hashlib.sha256(material.encode()).hexdigest()[:16]
     return 'voice-nats-' + row['phase'] + '-' + suffix
 
 
@@ -388,7 +422,7 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
     if row['phase'] == 'archive':
         return _archive_document(row, validate_archive_binding(binding), image)
     if row['phase'] == 'census':
-        return _census_document(row, validate_binding(binding), image)
+        return _census_document(row, validate_census_binding(row, binding), image)
     if row['phase'] == 'verification-session':
         return _selected_store_document(row, validate_selected_binding(binding), image)
     if row['phase'] == 'contract-migration':
@@ -459,9 +493,10 @@ def _archive_document(request: dict, storage: dict, image: str) -> dict:
 
 def _census_document(request: dict, storage: dict, image: str) -> dict:
     """Run a disposable census on its own target PVC; the selected source is metadata only."""
-    name = job_name(request)
+    name = job_name(request, storage['verification_attempt'])
     labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
-        LABEL_PHASE: 'census', LABEL_JOB_SELECTOR: name}
+        LABEL_PHASE: 'census', LABEL_JOB_SELECTOR: name,
+        LABEL_VERIFICATION_ATTEMPT: storage['verification_attempt']}
     return {
         'apiVersion': 'batch/v1',
         'kind': 'Job',
@@ -523,9 +558,10 @@ def _census_document(request: dict, storage: dict, image: str) -> dict:
 
 
 def _binder_document(request: dict, binding: dict, image: str) -> dict:
-    name = job_name(request)
+    name = job_name(request, binding['verification_attempt'])
     labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
-        LABEL_PHASE: request['phase'], LABEL_JOB_SELECTOR: name}
+        LABEL_PHASE: request['phase'], LABEL_JOB_SELECTOR: name,
+        LABEL_VERIFICATION_ATTEMPT: binding['verification_attempt']}
     return {
         'apiVersion': 'batch/v1',
         'kind': 'Job',
@@ -744,7 +780,7 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
             'archive_same_pod_readback': binary + ['--stream-existing'] + common,
         }
     if row['phase'] == 'census':
-        storage = validate_binding(binding)
+        storage = validate_census_binding(row, binding)
         input_pod_uid = pod_uid if input_pod_uid is None else input_pod_uid
         if not isinstance(input_pod_uid, str) or not UUID_RE.fullmatch(input_pod_uid):
             _fail('input_pod_uid_invalid')
@@ -761,6 +797,8 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
             or type(session_inputs['bytes']) is not int
             or not 0 < session_inputs['bytes'] <= (4 << 20)):
             _fail('session_inputs_invalid')
+        if session_inputs['attempt'] != storage['verification_attempt']:
+            _fail('census_attempt_mismatch')
         common += ['--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
             '--verification-pvc-uid', storage['verification_uid'],
             '--verification-pv-uid', storage['verification_pv_uid'],
