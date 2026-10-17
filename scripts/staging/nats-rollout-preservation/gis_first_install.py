@@ -14,6 +14,7 @@ import re
 import time
 
 NS = 'voice-staging'
+ALLOWED_NAMESPACES = (NS, 'voice-dev')
 SERVICE = ('Service', 'voice-gameintegration')
 DEPLOYMENT = ('Deployment', 'voice-gameintegration')
 IDENTITIES = (SERVICE, DEPLOYMENT)
@@ -23,6 +24,7 @@ RESOURCE_RECEIPT_SCHEMA = 'voice-gis-first-install-resources-v1'
 TRANSITION_RECEIPT_SCHEMA = 'voice-gis-first-install-transition-v1'
 SOURCE_SCHEMA = 'voice-gis-first-install-source-v1'
 PREREQUISITE_SCHEMA = 'voice-gis-prerequisite-receipt-v1'
+DEV_PREREQUISITE_SCHEMA = 'voice-dev-gis-prerequisite-receipt-v1'
 
 
 class Blocked(RuntimeError):
@@ -33,34 +35,84 @@ class Blocked(RuntimeError):
         self.code = code
 
 
-def validate_source_plan(plan):
+def _namespace(plan=None, namespace=NS):
+    value = plan.get('namespace', NS) if namespace is None and isinstance(plan, dict) else namespace
+    if value not in ALLOWED_NAMESPACES:
+        raise Blocked('gis_first_install_namespace_invalid')
+    return value
+
+
+def validate_source_plan(plan, *, namespace=NS):
     """Accept only the source compiler's exact two-object target packet."""
+    namespace = _namespace(namespace=namespace)
     if not isinstance(plan, dict) or set(plan) != {'schema', 'objects'} or plan.get('schema') != SOURCE_SCHEMA:
         raise Blocked('gis_first_install_source_plan_invalid')
     objects = plan.get('objects')
     if not isinstance(objects, list) or len(objects) != 2 or {_identity(obj) for obj in objects} != set(IDENTITIES):
         raise Blocked('gis_first_install_source_pair_invalid')
     for obj in objects:
-        if obj.get('metadata', {}).get('namespace', NS) != NS:
+        if obj.get('metadata', {}).get('namespace', namespace) != namespace:
             raise Blocked('gis_first_install_namespace_invalid')
     return True
 
 
-def bind_operation(source_plan, operation, target):
+def bind_operation(source_plan, operation, target, *, namespace=NS):
     """Turn the source-only pair into a private, operation-specific journal."""
-    validate_source_plan(source_plan)
+    namespace = _namespace(namespace=namespace)
+    validate_source_plan(source_plan, namespace=namespace)
     if target.get('mode') not in ('full', 'app-only') or target.get('tag') is None:
         raise Blocked('gis_first_install_admission_invalid')
     objects = {_identity(obj): obj for obj in source_plan['objects']}
-    plan = build_plan(service=objects[SERVICE], deployment=objects[DEPLOYMENT], operation=operation)
+    plan = build_plan(service=objects[SERVICE], deployment=objects[DEPLOYMENT], operation=operation,
+                      namespace=namespace)
     plan.update(source_sha=target['tag'], source_plan_sha256=digest(source_plan),
                 source_hashes=copy.deepcopy(target.get('source_hashes', {})),
                 phase='PLANNED')
+    if namespace == 'voice-dev':
+        build = target.get('source_build_receipt')
+        image = next((row.get('image') for row in objects[DEPLOYMENT].get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                      if isinstance(row, dict) and row.get('name') == 'gameintegration'), None)
+        validate_dev_source_build_receipt(build, target['tag'], image)
+        plan['source_build_receipt'] = copy.deepcopy(build)
     return plan
+
+
+def validate_dev_source_build_receipt(build, source_sha, image):
+    """Validate the complete producer receipt shared by DEV planning and execution."""
+    expected = {'schema', 'source_sha', 'image_ref', 'build_context_sha256',
+        'image_config_sha256', 'working_tree_clean', 'builder_kind', 'builder_run',
+        'builder_job', 'builder_sha', 'builder_tree'}
+    digest = re.compile(r'[a-f0-9]{64}')
+    commit = re.compile(r'[a-f0-9]{40}')
+    if (not isinstance(build, dict) or set(build) != expected
+        or build.get('schema') != 'voice-dev-source-build-v2'
+        or build.get('source_sha') != source_sha or build.get('image_ref') != image
+        or build.get('working_tree_clean') is not True
+        or not isinstance(image, str)
+        or not re.fullmatch(r'ghcr\.io/poryadok/voiceroot/gameintegration@sha256:[a-f0-9]{64}', image)
+        or not isinstance(build.get('builder_sha'), str) or not commit.fullmatch(build['builder_sha'])
+        or not isinstance(build.get('builder_tree'), str) or not commit.fullmatch(build['builder_tree'])
+        or build.get('build_context_sha256') != hashlib.sha256(build['builder_tree'].encode('ascii')).hexdigest()
+        or not isinstance(build.get('build_context_sha256'), str) or not digest.fullmatch(build['build_context_sha256'])
+        or not isinstance(build.get('image_config_sha256'), str) or not digest.fullmatch(build['image_config_sha256'])):
+        raise Blocked('gis_dev_source_build_receipt_invalid')
+    if build['builder_kind'] == 'github-actions':
+        if (type(build.get('builder_run')) is not int or build['builder_run'] <= 0
+            or type(build.get('builder_job')) is not int or build['builder_job'] <= 0):
+            raise Blocked('gis_dev_source_build_receipt_invalid')
+    elif build['builder_kind'] == 'local-build':
+        if (build.get('builder_run') is not None or build.get('builder_job') is not None
+            or build['builder_sha'] != source_sha):
+            raise Blocked('gis_dev_source_build_receipt_invalid')
+    else:
+        raise Blocked('gis_dev_source_build_receipt_invalid')
+    return True
 
 
 def validate_prerequisite_receipt(receipt, plan):
     """Validate the private root-collected, non-secret database proof."""
+    if _namespace(plan, namespace=None) == 'voice-dev':
+        return validate_dev_prerequisite_receipt(receipt, plan)
     if not isinstance(receipt, dict) or set(receipt) != {
         'schema', 'operation', 'source_sha', 'source_plan_sha256', 'source_ci', 'inputs_sha256',
         'inputs', 'namespace_uid', 'database', 'database_identity', 'configmaps', 'jobs',
@@ -175,6 +227,104 @@ def validate_prerequisite_receipt(receipt, plan):
     return True
 
 
+def validate_dev_prerequisite_receipt(receipt, plan):
+    """Bind DEV DB execution to its local source-build receipt, never a CI receipt."""
+    expected = {'schema', 'operation', 'source_sha', 'source_plan_sha256', 'source_build_receipt',
+        'source_build_receipt_sha256', 'inputs_sha256', 'inputs', 'namespace_uid', 'database',
+        'database_identity', 'configmaps', 'jobs', 'verifier', 'revalidation'}
+    if not isinstance(receipt, dict) or set(receipt) != expected:
+        raise Blocked('gis_dev_prerequisite_receipt_invalid')
+    build = plan.get('source_build_receipt')
+    deployment = next((obj for obj in plan.get('objects', []) if _identity(obj) == DEPLOYMENT), {})
+    images = {row.get('image') for row in deployment.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+              if isinstance(row, dict)}
+    sha = re.compile(r'[a-f0-9]{64}')
+    uid = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
+    if (receipt['schema'] != DEV_PREREQUISITE_SCHEMA or receipt['operation'] != plan.get('operation')
+        or receipt['source_sha'] != plan.get('source_sha') or receipt['source_plan_sha256'] != plan.get('source_plan_sha256')
+        or receipt['source_build_receipt'] != build or not isinstance(build, dict)
+        or not _dev_source_build_receipt_valid(build, plan.get('source_sha'), build.get('image_ref'))
+        or receipt['source_build_receipt_sha256'] != digest(build)
+        or build.get('image_ref') not in images
+        or not isinstance(build.get('image_ref'), str)
+        or not re.fullmatch(r'ghcr\.io/poryadok/voiceroot/gameintegration@sha256:[a-f0-9]{64}', build['image_ref'])
+        or not isinstance(build.get('build_context_sha256'), str) or not sha.fullmatch(build['build_context_sha256'])
+        or not isinstance(build.get('image_config_sha256'), str) or not sha.fullmatch(build['image_config_sha256'])
+        or not isinstance(receipt['inputs_sha256'], str) or not sha.fullmatch(receipt['inputs_sha256'])
+        or receipt['inputs'] != plan.get('inputs') or receipt['inputs_sha256'] != digest(receipt['inputs'])
+        or not isinstance(receipt['namespace_uid'], str) or not uid.fullmatch(receipt['namespace_uid'])
+        or receipt['database'] != 'game_integration_db'):
+        raise Blocked('gis_dev_prerequisite_receipt_binding_invalid')
+    identity = receipt['database_identity']
+    if (not isinstance(identity, dict) or set(identity) != {'namespace_uid', 'service_uid', 'service_spec_sha256', 'endpoints'}
+        or identity.get('namespace_uid') != receipt['namespace_uid'] or identity != plan.get('database_identity')
+        or not isinstance(identity.get('service_uid'), str) or not uid.fullmatch(identity['service_uid'])
+        or not isinstance(identity.get('service_spec_sha256'), str) or not sha.fullmatch(identity['service_spec_sha256'])
+        or not isinstance(identity.get('endpoints'), list) or not identity['endpoints']):
+        raise Blocked('gis_dev_prerequisite_database_identity_invalid')
+    expected_configmaps = {'provision': plan.get('inputs', {}).get('configmaps', {}).get('provision'),
+        'migrations': plan.get('inputs', {}).get('configmaps', {}).get('migrations'),
+        'verify': plan.get('inputs', {}).get('configmaps', {}).get('verify')}
+    configmaps = receipt['configmaps']
+    if not isinstance(configmaps, dict) or set(configmaps) != set(expected_configmaps):
+        raise Blocked('gis_dev_prerequisite_configmaps_invalid')
+    for role, name in expected_configmaps.items():
+        row = configmaps[role]
+        if (not isinstance(row, dict) or set(row) != {'name', 'uid', 'spec_sha256'} or row['name'] != name
+            or not isinstance(row['uid'], str) or not uid.fullmatch(row['uid'])
+            or not isinstance(row['spec_sha256'], str) or not sha.fullmatch(row['spec_sha256'])):
+            raise Blocked('gis_dev_prerequisite_configmaps_invalid')
+    expected_jobs = {'provision': 'voice-provision-gameintegration-runtime-role',
+        'migrate': 'voice-migrate-gameintegration-db', 'verify': 'voice-verify-gameintegration-db'}
+    jobs = receipt['jobs']
+    if not isinstance(jobs, dict) or set(jobs) != set(expected_jobs):
+        raise Blocked('gis_dev_prerequisite_jobs_invalid')
+    for role, name in expected_jobs.items():
+        row = jobs[role]
+        if (not isinstance(row, dict) or set(row) != {'name', 'uid', 'spec_sha256', 'pod_uid', 'image_ids',
+            'complete', 'succeeded', 'completion_time'} or row['name'] != name
+            or not isinstance(row['uid'], str) or not uid.fullmatch(row['uid'])
+            or not isinstance(row['pod_uid'], str) or not uid.fullmatch(row['pod_uid'])
+            or not isinstance(row['spec_sha256'], str) or not sha.fullmatch(row['spec_sha256'])
+            or not isinstance(row['image_ids'], dict) or not row['image_ids']
+            or any(not isinstance(value, str) or '@sha256:' not in value for value in row['image_ids'].values())
+            or row['complete'] is not True or type(row['succeeded']) is not int or row['succeeded'] != 1
+            or not isinstance(row['completion_time'], str) or not row['completion_time']):
+            raise Blocked('gis_dev_prerequisite_job_binding_invalid')
+        wanted = plan.get('inputs', {}).get('job_images', {}).get(role, {})
+        pinned_images = plan.get('inputs', {}).get('images', {})
+        if set(row['image_ids']) != set(wanted) or any(
+            not isinstance(pinned_images.get(logical), str)
+            or '@sha256:' not in pinned_images[logical]
+            or not row['image_ids'][key].endswith(pinned_images[logical].split('@', 1)[1])
+            for key, logical in wanted.items()):
+            raise Blocked('gis_dev_prerequisite_job_image_invalid')
+    verifier = receipt['verifier']
+    required_verifier = {'schema': 'voice-gis-verifier-v1', 'database': 'game_integration_db',
+        'migration_version': 31, 'dirty': False, 'runtime_role': 'gameintegration_runtime',
+        'role_restricted': True, 'table_grants': 'select_insert_update_delete',
+        'sequence_grants': 'usage_select', 'ddl_denied': True,
+        'schema_ledger_runtime_mutation_denied': True}
+    if verifier != required_verifier:
+        raise Blocked('gis_dev_prerequisite_verifier_invalid')
+    revalidation = receipt['revalidation']
+    if (not isinstance(revalidation, dict) or revalidation != {
+        'namespace_uid': identity['namespace_uid'], 'service_uid': identity['service_uid'],
+        'service_spec_sha256': identity['service_spec_sha256'], 'endpoints': identity['endpoints'],
+        'secret_metadata': {'name': 'voice-app-secrets', **plan.get('secret_metadata', {})},
+        'config_metadata': plan.get('config_metadata')}):
+        raise Blocked('gis_dev_prerequisite_revalidation_invalid')
+    return True
+
+
+def _dev_source_build_receipt_valid(build, source_sha, image):
+    try:
+        validate_dev_source_build_receipt(build, source_sha, image)
+        return True
+    except (Blocked, KeyError, TypeError, ValueError):
+        return False
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
 
@@ -210,13 +360,14 @@ def _conflict(error):
     return getattr(error, 'status', None) == 409 or getattr(error, 'status_code', None) == 409
 
 
-def build_plan(*, service, deployment, operation):
+def build_plan(*, service, deployment, operation, namespace=NS):
     """Bind only the two approved resource specs.
 
     This helper is not admission. The root bridge must complete source/CI,
     stack-lock, preservation, NATS custody, and GIS DB prerequisite checks
     before calling it, and keep those verified records in its private journal.
     """
+    namespace = _namespace(namespace=namespace)
     if not isinstance(operation, str) or not re.fullmatch(r'[a-f0-9]{12}', operation):
         raise Blocked('gis_first_install_operation_invalid')
     if _identity(service) != SERVICE or _identity(deployment) != DEPLOYMENT:
@@ -225,9 +376,9 @@ def build_plan(*, service, deployment, operation):
     deployment = copy.deepcopy(deployment)
     for obj in (service, deployment):
         metadata = obj['metadata']
-        if metadata.get('namespace', NS) != NS:
+        if metadata.get('namespace', namespace) != namespace:
             raise Blocked('gis_first_install_namespace_invalid')
-        metadata['namespace'] = NS
+        metadata['namespace'] = namespace
         annotations = metadata.setdefault('annotations', {})
         if MARKER in annotations:
             raise Blocked('gis_first_install_source_marker_forbidden')
@@ -240,9 +391,12 @@ def build_plan(*, service, deployment, operation):
         raise Blocked('gis_first_install_source_replicas_invalid')
     spec['replicas'] = 0
     objects = {SERVICE: service, DEPLOYMENT: deployment}
-    return {'schema': SCHEMA, 'operation': operation,
+    plan = {'schema': SCHEMA, 'operation': operation,
             'spec_sha256': {f'{kind}/{name}': digest(semantic(obj)) for (kind, name), obj in objects.items()},
             'objects': [service, deployment], 'phase': 'PLANNED', 'created': {}}
+    if namespace != NS:
+        plan['namespace'] = namespace
+    return plan
 
 
 def _read_pair(kube, plan):
@@ -524,10 +678,11 @@ def verify_ready(kube, plan, *, timeout=300, clock=time.monotonic, sleep=time.sl
         if (type(generation) is int and status.get('observedGeneration', 0) >= generation
             and status.get('readyReplicas', 0) == 1 and status.get('updatedReplicas', 0) == 1
             and status.get('availableReplicas', 0) == 1):
-            endpoints = _ready_service_endpoints(kube, service, deployment_uid)
+            endpoints = _ready_service_endpoints(kube, service, deployment_uid,
+                                                 namespace=_namespace(plan, namespace=None))
             if endpoints:
                 return {'schema': 'voice-gis-first-install-ready-v1',
-                    'namespace': NS, 'service_uid': service_uid,
+                    'namespace': _namespace(plan, namespace=None), 'service_uid': service_uid,
                     'service_spec_sha256': digest(semantic(service)),
                     'deployment_uid': deployment_uid,
                     'deployment_spec_sha256': digest(semantic(deployment)),
@@ -536,7 +691,8 @@ def verify_ready(kube, plan, *, timeout=300, clock=time.monotonic, sleep=time.sl
     raise Blocked('gis_first_install_ready_timeout')
 
 
-def _ready_service_endpoints(kube, service, deployment_uid):
+def _ready_service_endpoints(kube, service, deployment_uid, *, namespace=NS):
+    namespace = _namespace(namespace=namespace)
     response = kube.run(['get', 'endpointslices', '-l',
         'kubernetes.io/service-name=voice-gameintegration', '-o', 'json'])
     rows = response.get('items') if isinstance(response, dict) else None
@@ -568,7 +724,7 @@ def _ready_service_endpoints(kube, service, deployment_uid):
             rs_uids = {owner.get('uid') for owner in owners
                        if owner.get('kind') == 'ReplicaSet' and owner.get('controller') is True}
             if (pod.get('metadata', {}).get('uid') != target['uid']
-                or pod.get('metadata', {}).get('namespace') != NS
+                or pod.get('metadata', {}).get('namespace') != namespace
                 or any(pod.get('metadata', {}).get('labels', {}).get(key) != value for key, value in selector.items())
                 or not any(condition.get('type') == 'Ready' and condition.get('status') == 'True'
                            for condition in pod.get('status', {}).get('conditions', []))
@@ -598,7 +754,7 @@ def transition_receipt(plan, ready, *, source_ci, custody, target_mode):
     payload = {'schema': TRANSITION_RECEIPT_SCHEMA, 'operation': plan['operation'],
         'source_sha': plan['source_sha'], 'source_plan_sha256': plan['source_plan_sha256'],
         'source_ci': copy.deepcopy(source_ci), 'target_mode': target_mode,
-        'namespace': NS, 'namespace_uid': plan['prerequisite_receipt']['namespace_uid'],
+        'namespace': _namespace(plan, namespace=None), 'namespace_uid': plan['prerequisite_receipt']['namespace_uid'],
         'database_prerequisite_sha256': digest(plan['prerequisite_receipt']),
         'resource_receipt': copy.deepcopy(plan['receipt']), 'ready': copy.deepcopy(ready),
         'custody': copy.deepcopy(custody), 'workload_transition': {'from': 22, 'to': 23}}
@@ -619,7 +775,7 @@ def validate_transition_receipt(receipt, state):
         or receipt['source_plan_sha256'] != gis_plan.get('source_plan_sha256')
         or receipt['source_ci'] != gis_plan.get('source_ci')
         or receipt['target_mode'] != state.get('target', {}).get('mode')
-        or receipt['namespace'] != NS
+        or receipt['namespace'] != _namespace(gis_plan, namespace=None)
         or receipt['namespace_uid'] != gis_plan.get('prerequisite_receipt', {}).get('namespace_uid')
         or receipt['database_prerequisite_sha256'] != digest(gis_plan.get('prerequisite_receipt'))
         or receipt['resource_receipt'] != gis_plan.get('receipt')
@@ -649,7 +805,8 @@ def validate_transition_receipt(receipt, state):
     ready = receipt['ready']
     if (not isinstance(ready, dict) or set(ready) != {'schema', 'namespace', 'service_uid',
         'service_spec_sha256', 'deployment_uid', 'deployment_spec_sha256', 'endpoints'}
-        or ready['schema'] != 'voice-gis-first-install-ready-v1' or ready['namespace'] != NS
+        or ready['schema'] != 'voice-gis-first-install-ready-v1'
+        or ready['namespace'] != _namespace(gis_plan, namespace=None)
         or ready['service_uid'] != receipt['resource_receipt']['objects']['Service/voice-gameintegration']['uid']
         or ready['deployment_uid'] != receipt['resource_receipt']['objects']['Deployment/voice-gameintegration']['uid']
         or not isinstance(ready['endpoints'], list) or not ready['endpoints']):
@@ -664,7 +821,7 @@ def validate_next_operation(receipt, source_state, kube):
         raise Blocked('gis_first_install_transition_source_invalid')
     validate_transition_receipt(receipt, source_state)
     try:
-        namespace = kube.get('namespace', NS)
+        namespace = kube.get('namespace', receipt.get('namespace', NS))
     except Exception:
         raise Blocked('gis_first_install_transition_namespace_unavailable') from None
     if namespace.get('metadata', {}).get('uid') != receipt['namespace_uid']:
@@ -685,7 +842,7 @@ def validate_transition_binding(binding, kube):
     if digest(payload) != binding['receipt_sha256']:
         raise Blocked('gis_first_install_transition_binding_invalid')
     try:
-        namespace = kube.get('namespace', NS)
+        namespace = kube.get('namespace', receipt.get('namespace', NS))
     except Exception:
         raise Blocked('gis_first_install_transition_namespace_unavailable') from None
     if namespace.get('metadata', {}).get('uid') != receipt.get('namespace_uid'):

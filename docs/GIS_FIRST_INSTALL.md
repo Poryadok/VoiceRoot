@@ -65,3 +65,83 @@ fixed verification SQL are defined by the source-owned GIS deployment change.
 The protected rollout root owns Job execution, API evidence collection, and
 receipt custody. Neither layer may publish credential values or treat a
 hand-authored artifact as authority.
+
+## Disposable DEV first install
+
+The same source-pinned database prerequisite and create-only paused pair may be
+used for the fixed `voice-dev` namespace by the DEV installer. It does not
+change the STAGING admission contract above: STAGING still requires its source
+CI attempt, stack lock, preservation custody, and protected rollout checks.
+DEV instead requires a clean committed source SHA and an immutable
+Game Integration image reference bound to a successful first-party GitHub
+Actions master-push image job. The installer queries the run, workflow, job,
+and private job log from GitHub, requires the exact successful
+`Build and push gameintegration image` step, and checks its `Digest` output
+against the published OCI index and linux/amd64 config. It compares the builder commit's exact
+`src/backend` Git tree with the operator checkout. A clean docs/scripts-only
+change can therefore reuse an existing trusted image without fabricating a CI
+receipt or requiring a new build.
+The DEV prerequisite receipt has its own schema and binds that build receipt,
+the namespace and PostgreSQL identities, exact prerequisite ConfigMaps and
+completed Jobs, and the complete migration verifier result. It is not CI or
+STAGING evidence and cannot be replayed into `voice-staging`.
+
+The DEV secret preparation validates the supplied Game Integration JWKS HTTPS
+leaf against `voice-media-ca`'s constrained outbound `jwks-ca.crt` bundle,
+including hostname, server-auth usage, validity, and key match, before
+generating application material or writing a Secret. The inbound `ca.crt` key
+is preserved and is not used for JWKS trust. The installer does not create or
+replace CA material, copy STAGING credentials, or write secret bytes to command
+arguments, receipts, or logs. An invalid or absent leaf blocks before writes.
+After preparation, the protected prerequisite operation
+provisions the restricted database role, applies the ordered migration, and
+checks the verifier before the zero-replica Service/Deployment pair is created.
+The installer keeps the pair paused through migration and verification, then
+starts that exact Deployment under UID/resourceVersion custody and waits for
+readiness. Caller wiring and NATS/music activation are separate operations.
+
+The executable entry point is `scripts/dev/gis_dev_first_install.py`. Run it
+from a clean, committed checkout with GitHub CLI authenticated for read access,
+Docker, and `kubectl` pointed at the disposable cluster, and the existing
+`voice-dev/voice-gameintegration-jwks-tls` and `voice-dev/voice-media-ca`
+Secrets already installed. The default builder evidence is the successful M12
+master-push run and GameIntegration image job recorded in the stage image
+inventory; the run/job IDs are locators and are revalidated against GitHub.
+Use the recorded immutable image digest:
+
+```sh
+python3 scripts/dev/gis_dev_first_install.py \
+  --image-ref 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:482eb267824cffc4cebcae958e4ec7126ffdeaaea632f40c26bb1c6baf71ea96' \
+  --state "$XDG_STATE_HOME/voice/dev-gis-first-install.json" --apply
+```
+
+An operator with GHCR package-write access can instead build and install in one
+process. The fixed Buildx command publishes, pulls, and inspects the exact
+digest, then the installer verifies it against the clean source context before
+continuing. The private operation journal records receipt metadata but no
+credential material. A resumed invocation re-pulls and revalidates that image
+receipt and continues with the same image and operation:
+
+```sh
+python3 scripts/dev/gis_dev_first_install.py \
+  --build-and-publish --image-tag "dev-$(git rev-parse --short=12 HEAD)" \
+  --state "$XDG_STATE_HOME/voice/dev-gis-first-install.json" --apply
+```
+
+For another published image, pass its successful master-push run and
+`staging-images-push (gameintegration)` job IDs using `--builder-run` and
+`--builder-job`. The installer pins Kubernetes requests to `voice-dev`, checks
+the OCI index/child/config against the registry digest and pulled image, and
+verifies the source backend tree at the CI builder commit. It also verifies the
+stable TLS Secret and runs a read-only `pg_database` existence query before any
+Secret write. A missing database, TLS input, changed namespace/PostgreSQL
+identity, source tree, Secret version, or same-operation resource ownership
+blocks the run. Secret bytes stay in process memory and Kubernetes request
+bodies; the private journal stores only source, UID/resourceVersion, job, and
+readiness evidence. The installer applies only the three GIS prerequisite
+Jobs and source-approved GIS Service/Deployment pair. It verifies migration
+version 31, guardedly starts that exact Deployment, and checks a ready
+EndpointSlice. On a later failure it removes only the unchanged pair owned by
+the journaled operation; additive database prerequisites are retained.
+Retrying with the same state path resumes the operation, while changed source
+or image is rejected.
