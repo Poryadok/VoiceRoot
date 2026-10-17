@@ -23,6 +23,12 @@ POD_UID = '44444444-4444-4444-8444-444444444444'
 ARCHIVE_REQUEST = REQUEST | {'phase': 'archive'}
 ARCHIVE_BINDING = {key: BINDING[key] for key in (
     'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name')}
+SESSION_REQUEST = REQUEST | {'phase': 'verification-session'}
+SESSION_BINDING = BINDING | {'session_attempt': '1234abcd',
+    'input_pod_uid': '55555555-5555-4555-8555-555555555555',
+    'input_bundle_sha256': 'e' * 64, 'input_bundle_bytes': 512,
+    'kernel_bundle_sha256': 'f' * 64, 'server_config_sha256': '1' * 64,
+    'archive_sha256': 'd' * 64, 'archive_bytes': 1234}
 
 
 class VerificationJobTests(unittest.TestCase):
@@ -156,7 +162,8 @@ class VerificationJobTests(unittest.TestCase):
 
     def test_census_vectors_are_fixed_target_only_upload_then_same_pod_readback(self):
         vectors = jobs.exec_vectors(REQUEST, POD_UID, BINDING,
-            {'sha256': 'd' * 64, 'bytes': 1234})
+            {'sha256': 'd' * 64, 'bytes': 1234},
+            session_inputs={'attempt': '1234abcd', 'sha256': 'e' * 64, 'bytes': 512})
         upload = vectors['census_receive_archive']
         self.assertEqual(upload[:3], ['/usr/bin/python3', '/voice-nats-runner/phase', '--receive-archive'])
         for pair in (('--source-pvc-uid', BINDING['source_uid']),
@@ -179,44 +186,10 @@ class VerificationJobTests(unittest.TestCase):
         with self.assertRaises(jobs.VerificationJobError):
             jobs.exec_vectors(REQUEST, POD_UID, BINDING)
 
-    def test_promotable_restore_is_target_only_hub_owned_and_attempt_bound(self):
-        request = REQUEST | {'phase': 'restore'}
-        target = {'restore_claim': 'voice-nats-restore-' + request['operation'] + '-1234abcd',
-            'restore_attempt': '1234abcd', 'restore_uid': '66666666-6666-4666-8666-666666666666',
-            'restore_pv_name': 'pv-voice-nats-restore',
-            'restore_pv_uid': '77777777-7777-4777-8777-777777777777',
-            'restore_node_name': 'k3s-worker-1'}
-        row = jobs.document(request, target, IMAGE)
-        pod = row['spec']['template']['spec']
-        container = pod['containers'][0]
-        labels = row['spec']['template']['metadata']['labels']
-        self.assertEqual(row['metadata']['labels'][jobs.LABEL_PHASE], 'restore')
-        self.assertEqual(row['spec']['selector']['matchLabels'], {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
-        self.assertEqual(labels[jobs.LABEL_JOB_SELECTOR], row['metadata']['name'])
-        self.assertEqual(pod['securityContext'], {'runAsNonRoot': True, 'runAsUser': 10000,
-            'runAsGroup': 10000, 'fsGroup': 10000, 'fsGroupChangePolicy': 'OnRootMismatch',
-            'seccompProfile': {'type': 'RuntimeDefault'}})
-        self.assertEqual(container['args'], ['--serve-restore', '--operation', request['operation'],
-            '--nonce', request['nonce'], '--restore-attempt', target['restore_attempt'],
-            '--restore-pvc-uid', target['restore_uid'], '--restore-pv-uid', target['restore_pv_uid']])
-        self.assertEqual(container['volumeMounts'], [
-            {'name': 'target', 'mountPath': '/restore'}, {'name': 'output', 'mountPath': '/out'}])
-        self.assertEqual({volume['name']: volume for volume in pod['volumes']}, {
-            'target': {'name': 'target', 'persistentVolumeClaim': {'claimName': target['restore_claim']}},
-            'output': {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}}})
-        self.assertNotIn('source', {volume['name'] for volume in pod['volumes']})
-        vectors = jobs.exec_vectors(request, POD_UID, target, {'sha256': 'd' * 64, 'bytes': 1234})
-        self.assertEqual(vectors['restore_archive_once'][:3],
-            ['/usr/bin/python3', '/voice-nats-runner/phase', '--restore-archive'])
-        self.assertEqual(vectors['restore_archive_once'][-4:], ['--archive-sha256', 'd' * 64,
-            '--archive-bytes', '1234'])
-        self.assertEqual(vectors['restore_same_pod_readback'][2], '--restore-readback')
-        self.assertNotIn('source-pvc-uid', ' '.join(vectors['restore_archive_once']))
-        for invalid in (target | {'restore_attempt': '1234abcdx'},
-            target | {'restore_claim': 'voice-nats-restore-' + request['operation'] + '-deadbeef'},
-            target | {'restore_uid': '../uid'}, target | {'restore_node_name': '../node'}):
-            with self.subTest(invalid=invalid), self.assertRaises(jobs.VerificationJobError):
-                jobs.document(request, invalid, IMAGE)
+    def test_selected_store_replacement_and_promotable_restore_are_not_supported(self):
+        for phase in ('restore', 'bind-restore'):
+            with self.subTest(phase=phase), self.assertRaises(jobs.VerificationJobError):
+                jobs.validate_request(REQUEST | {'phase': phase})
 
     def test_source_and_verification_claim_identity_must_be_distinct_and_valid(self):
         for mutation in (
@@ -270,20 +243,111 @@ class VerificationJobTests(unittest.TestCase):
         with self.assertRaisesRegex(jobs.VerificationJobError, 'binder_has_no_exec'):
             jobs.exec_vectors(request, POD_UID, target)
 
-    def test_wffc_restore_binder_is_separate_role_and_pins_journaled_attempt_name(self):
-        request = REQUEST | {'phase': 'bind-restore'}
-        target = {'role': 'restore', 'claim_name': 'voice-nats-restore-' + request['operation'] + '-1234abcd',
-            'target_uid': '33333333-3333-4333-8333-333333333333', 'node_name': 'k3s-worker-1'}
-        row = jobs.document(request, target, IMAGE)
+    def test_selected_store_job_has_native_nats_sidecar_and_disjoint_container_mounts(self):
+        row = jobs.document(SESSION_REQUEST, SESSION_BINDING, IMAGE)
         pod = row['spec']['template']['spec']
-        self.assertEqual(pod['containers'][0]['args'][-1], 'restore')
-        self.assertEqual(pod['volumes'][0]['persistentVolumeClaim']['claimName'], target['claim_name'])
-        for invalid in (target | {'role': 'verification'},
-            target | {'claim_name': 'voice-nats-restore-' + request['operation'] + '-1234abcdx'},
-            target | {'node_name': '../worker'},
-            target | {'target_uid': '../uid'}):
+        labels = row['spec']['template']['metadata']['labels']
+        self.assertEqual(row['metadata']['labels'][jobs.LABEL_PHASE], 'verification-session')
+        self.assertEqual(row['spec']['selector']['matchLabels'], {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
+        self.assertEqual(labels[jobs.LABEL_JOB_SELECTOR], row['metadata']['name'])
+        self.assertEqual(row['spec']['backoffLimit'], 0)
+        self.assertEqual(row['spec']['podReplacementPolicy'], 'Never')
+        self.assertEqual(pod['restartPolicy'], 'Never')
+        self.assertEqual(pod['automountServiceAccountToken'], False)
+        self.assertEqual(pod['securityContext']['fsGroup'], 65532)
+        self.assertEqual(pod['securityContext']['fsGroupChangePolicy'], 'OnRootMismatch')
+        self.assertEqual(pod['initContainers'][0]['name'], 'nats')
+        self.assertEqual(pod['initContainers'][0]['restartPolicy'], 'Always')
+        self.assertEqual(pod['initContainers'][0]['image'], IMAGE)
+        self.assertEqual(pod['initContainers'][0]['command'],
+            ['/usr/bin/python3', '/voice-nats-runner/nats-supervisor'])
+        self.assertEqual(pod['initContainers'][0]['args'], [])
+        nats = pod['initContainers'][0]
+        self.assertEqual(nats['securityContext']['runAsUser'], 65532)
+        self.assertEqual(nats['securityContext']['runAsGroup'], 65532)
+        self.assertTrue(nats['securityContext']['readOnlyRootFilesystem'])
+        self.assertEqual(nats['securityContext']['capabilities'], {'drop': ['ALL']})
+        self.assertEqual(nats['volumeMounts'], [
+            {'name': 'scratch', 'mountPath': '/data', 'subPath': 'store'},
+            {'name': 'scratch', 'mountPath': '/server.conf',
+                'subPath': 'inputs/public/server.conf', 'readOnly': True},
+        ])
+        control = pod['containers'][0]
+        self.assertEqual(control['name'], 'control')
+        self.assertEqual(control['image'], IMAGE)
+        self.assertEqual(pod['securityContext']['runAsUser'], 65532)
+        self.assertEqual(pod['securityContext']['runAsGroup'], 65532)
+        self.assertNotIn('runAsUser', control['securityContext'])
+        self.assertNotIn('runAsGroup', control['securityContext'])
+        self.assertEqual(control['args'], ['--serve-selected-session', '--operation', SESSION_REQUEST['operation'],
+            '--nonce', SESSION_REQUEST['nonce'], '--session-attempt', SESSION_BINDING['session_attempt'],
+            '--source-pvc-uid', SESSION_BINDING['source_uid'], '--source-pv-uid', SESSION_BINDING['source_pv_uid'],
+            '--verification-pvc-uid', SESSION_BINDING['verification_uid'],
+            '--verification-pv-uid', SESSION_BINDING['verification_pv_uid'],
+            '--input-pod-uid', SESSION_BINDING['input_pod_uid'],
+            '--input-bundle-sha256', SESSION_BINDING['input_bundle_sha256'],
+            '--input-bundle-bytes', str(SESSION_BINDING['input_bundle_bytes']),
+            '--kernel-bundle-sha256', SESSION_BINDING['kernel_bundle_sha256'],
+            '--server-config-sha256', SESSION_BINDING['server_config_sha256'],
+            '--archive-sha256', SESSION_BINDING['archive_sha256'],
+            '--archive-bytes', str(SESSION_BINDING['archive_bytes'])])
+        self.assertEqual(control['volumeMounts'], [
+            {'name': 'scratch', 'mountPath': '/inputs', 'subPath': 'kernelinputbundle', 'readOnly': True},
+            {'name': 'scratch', 'mountPath': '/state',
+                'subPath': 'state/' + SESSION_REQUEST['operation'] + '/' + SESSION_BINDING['session_attempt']},
+            {'name': 'output', 'mountPath': '/out'},
+        ])
+        volumes = {v['name']: v for v in pod['volumes']}
+        self.assertEqual(volumes['scratch']['persistentVolumeClaim'], {'claimName': BINDING['verification_claim']})
+        self.assertEqual(volumes['output']['emptyDir'], {'sizeLimit': '256Mi'})
+        self.assertEqual(set(volumes), {'scratch', 'output'})
+        self.assertNotIn('nodeName', pod)
+        self.assertNotIn('hostPath', str(pod))
+        self.assertNotIn('secret', str(pod).lower())
+
+    def test_selected_store_vectors_are_closed_and_bind_same_session_identity(self):
+        vectors = jobs.exec_vectors(SESSION_REQUEST, POD_UID, SESSION_BINDING)
+        names = {'bootstrap-realtime', 'bootstrap-notification', 'bootstrap-analytics-chat',
+            'bootstrap-search', 'kernel-census', 'kernel-seed', 'kernel-verify-closed', 'kernel-drain',
+            'broker-ready', 'broker-restart-prepare', 'broker-restart-complete', 'kernel-verify-drained',
+            'session-close'}
+        self.assertEqual(set(vectors['actions']), names)
+        self.assertEqual(set(vectors['readbacks']), names)
+        self.assertNotIn('nats_restart_signal', vectors)
+        self.assertEqual(vectors['nats_health'], ['/bin/busybox', 'wget', '-q', '-O', '-',
+            'http://127.0.0.1:8222/healthz'])
+        self.assertEqual(vectors['session_close'][2:4], ['--session-action', 'session-close'])
+        self.assertEqual(vectors['session_stop'][2:4], ['--session-action', 'session-stop'])
+        for action in names:
+            command = vectors['actions'][action]
+            self.assertEqual(command[:3], ['/usr/bin/python3', '/voice-nats-runner/phase', '--session-action'])
+            self.assertEqual(command[3], action)
+            for flag, value in (('--operation', SESSION_REQUEST['operation']),
+                ('--nonce', SESSION_REQUEST['nonce']), ('--pod-uid', POD_UID),
+                ('--session-attempt', SESSION_BINDING['session_attempt']),
+                ('--input-pod-uid', SESSION_BINDING['input_pod_uid']),
+                ('--input-bundle-sha256', SESSION_BINDING['input_bundle_sha256']),
+                ('--input-bundle-bytes', str(SESSION_BINDING['input_bundle_bytes'])),
+                ('--source-pvc-uid', BINDING['source_uid']), ('--source-pv-uid', BINDING['source_pv_uid']),
+                ('--verification-pvc-uid', BINDING['verification_uid']),
+                ('--verification-pv-uid', BINDING['verification_pv_uid'])):
+                self.assertEqual(command[command.index(flag) + 1], value)
+            self.assertEqual(vectors['readbacks'][action][2], '--session-readback')
+            self.assertEqual(vectors['readbacks'][action][4], action)
+        self.assertEqual(vectors['actions']['kernel-seed'][3], 'kernel-seed')
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'selected_action_invalid'):
+            jobs.exec_vectors(SESSION_REQUEST, POD_UID, SESSION_BINDING, action='../../bin/sh')
+        contracts = jobs.selected_exec_contracts(SESSION_REQUEST, POD_UID, SESSION_BINDING)
+        self.assertEqual(contracts['nats-health'], {'container': 'nats', 'command': vectors['nats_health'],
+            'stdin': False, 'stdout': True, 'stderr': False, 'tty': False})
+        self.assertEqual(contracts['action:kernel-seed']['container'], 'control')
+        self.assertEqual(contracts['action:kernel-seed']['stdin'], False)
+        self.assertEqual(contracts['readback:kernel-seed']['stdout'], True)
+        for invalid in (SESSION_BINDING | {'session_attempt': '1234abcdx'},
+            SESSION_BINDING | {'extra': 'ignored'},
+            SESSION_BINDING | {'source_uid': '../pvc'}):
             with self.subTest(invalid=invalid), self.assertRaises(jobs.VerificationJobError):
-                jobs.document(request, invalid, IMAGE)
+                jobs.document(SESSION_REQUEST, invalid, IMAGE)
 
 
 if __name__ == '__main__':

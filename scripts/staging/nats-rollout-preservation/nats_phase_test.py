@@ -45,7 +45,6 @@ class NatsPhaseTests(unittest.TestCase):
         (self.source / 'jetstream' / 'meta.inf').write_bytes(b'cold-native-data')
         self.output = self.root / 'out'; self.output.mkdir(mode=0o700)
         self.verification = self.root / 'verify'; self.verification.mkdir(mode=0o700)
-        self.restore = self.root / 'restore'; self.restore.mkdir(mode=0o700)
         self.inputs = self.root / 'inputs'; self.inputs.mkdir(mode=0o700)
         self.input_private = self.inputs / 'private'
         self.args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
@@ -54,7 +53,6 @@ class NatsPhaseTests(unittest.TestCase):
         self.patches = [patch.object(phase, 'DATA_ROOT', self.source),
             patch.object(phase, 'OUT_ROOT', self.output),
             patch.object(phase, 'VERIFY_ROOT', self.verification),
-            patch.object(phase, 'RESTORE_ROOT', self.restore),
             patch.object(phase, 'INPUT_ROOT', self.input_private),
             patch.dict(phase.os.environ, {'POD_UID': POD_UID})]
         for item in self.patches: item.start()
@@ -298,14 +296,18 @@ class NatsPhaseTests(unittest.TestCase):
                     verification_pvc_uid='22222222-2222-4222-8222-222222222222')
 
     def _install_verification_inputs(self, args):
+        args.session_attempt = getattr(args, 'session_attempt', '1234abcd')
         config = ('host: 127.0.0.1\nport: 4222\nhttp: 127.0.0.1:8222\n'
             'resolver: MEMORY\njetstream: { store_dir: /data, max_file_store: 64MB, max_memory_store: 16MB }\n')
         bundle = {'schema': 'voice-nats-verification-inputs-v1', 'operation': args.operation,
             'nonce': args.nonce, 'pod_uid': args.pod_uid, 'files': {
                 name: base64.b64encode((config if name == 'server.conf' else 'fixed-private-input\n').encode()).decode()
                 for name in phase.INPUT_FILES}}
+        raw = json.dumps(bundle, sort_keys=True, separators=(',', ':')).encode()
+        args.input_bundle_sha256 = hashlib.sha256(raw).hexdigest()
+        args.input_bundle_bytes = len(raw)
         with patch.object(phase, '_require_verification_identity'):
-            return phase.load_inputs(json.dumps(bundle).encode(), operation=args.operation,
+            return phase.load_inputs(raw, operation=args.operation,
                 nonce=args.nonce, pod_uid=args.pod_uid, binding_args=args)
 
     def test_verification_restores_streamed_archive_to_target_only_scratch_and_runs_fixed_chain(self):
@@ -321,8 +323,16 @@ class NatsPhaseTests(unittest.TestCase):
             source_pv_uid=SOURCE_PV_UID,
             verification_pvc_uid='22222222-2222-4222-8222-222222222222',
             verification_pv_uid=VERIFICATION_PV_UID,
-            archive_sha256=manifest['archive_sha256'], archive_bytes=len(tar_bytes))
-        self._install_verification_inputs(args)
+            archive_sha256=manifest['archive_sha256'], archive_bytes=len(tar_bytes),
+            session_attempt='1234abcd')
+        input_receipt = self._install_verification_inputs(args)
+        self.assertEqual(input_receipt['status'], 'COMPLETE')
+        self.assertEqual(set(path.name for path in (self.verification / 'kernelinputbundle').iterdir()),
+            phase.SESSION_INPUT_FILES)
+        self.assertEqual((self.verification / 'inputs' / 'public' / 'server.conf').read_bytes(),
+            (self.input_private / 'server.conf').read_bytes())
+        with patch.object(phase, '_require_verification_identity'):
+            self.assertEqual(phase.read_input_receipt(args), input_receipt)
         process = Mock()
         process.poll.return_value = None
         process.wait.return_value = 0
@@ -351,11 +361,41 @@ class NatsPhaseTests(unittest.TestCase):
         self.assertEqual((self.verification / '.voice-nats-verification' /
             f'{OPERATION}-{NONCE}.receipt.json').is_file(), True)
 
+    def test_new_session_pod_validates_loader_receipt_and_exact_persistent_bundle_before_start(self):
+        loader = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+            verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256='a' * 64, archive_bytes=123, session_attempt='1234abcd')
+        loaded = self._install_verification_inputs(loader)
+        session_uid = '77777777-7777-4777-8777-777777777777'
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=session_uid,
+            input_pod_uid=POD_UID, session_attempt='1234abcd',
+            input_bundle_sha256=loader.input_bundle_sha256,
+            input_bundle_bytes=loader.input_bundle_bytes,
+            kernel_bundle_sha256=loaded['kernel_bundle_sha256'],
+            server_config_sha256=loaded['server_config_sha256'],
+            archive_sha256='a' * 64, archive_bytes=123,
+            source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+            verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID)
+        with patch.object(phase, 'SESSION_UID', os.geteuid()), \
+             patch.object(phase, 'SESSION_GID', os.getegid()), \
+             patch.object(phase, 'SESSION_INPUT_ROOT', self.verification / 'kernelinputbundle'), \
+             patch.dict(phase.os.environ, {'POD_UID': session_uid}):
+            binding = phase._session_binding(args)
+            root = self.verification / 'state' / OPERATION / '1234abcd'
+            receipt = phase._session_consume_inputs(binding, root)
+            self.assertEqual(receipt['state'], 'COMPLETE')
+            self.assertEqual(receipt['input_pod_uid'], POD_UID)
+            self.assertEqual(receipt['pod_uid'], session_uid)
+            with self.assertRaisesRegex(ValueError, 'session_input_consumption_unknown'):
+                phase._session_consume_inputs(binding, root)
+
     def test_incomplete_or_tampered_upload_is_durable_and_never_replayed(self):
         args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
             source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
             verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
             archive_sha256='a' * 64, archive_bytes=10)
+        args.session_attempt = '1234abcd'
         self._install_verification_inputs(args)
         with patch.object(phase, '_require_verification_identity'):
             with self.assertRaisesRegex(ValueError, 'verification_input_header'):
@@ -402,15 +442,19 @@ class NatsPhaseTests(unittest.TestCase):
         bundle = {'schema': 'voice-nats-verification-inputs-v1', 'operation': OPERATION,
             'nonce': NONCE, 'pod_uid': POD_UID, 'files': {name: 'eA==' for name in phase.INPUT_FILES}}
         bundle['files']['candidate.py'] = 'cGFzcw=='
+        raw = json.dumps(bundle, sort_keys=True, separators=(',', ':')).encode()
         with patch.object(phase, '_require_verification_identity'):
             with self.assertRaisesRegex(ValueError, 'verification_inputs'):
-                phase.load_inputs(json.dumps(bundle).encode(), operation=OPERATION,
+                phase.load_inputs(raw, operation=OPERATION,
                     nonce=NONCE, pod_uid=POD_UID, binding_args=types.SimpleNamespace(
                         operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
                         source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
                         verification_pvc_uid=VERIFICATION_PVC_UID,
                         verification_pv_uid=VERIFICATION_PV_UID,
-                        archive_sha256='a' * 64, archive_bytes=123))
+                        archive_sha256='a' * 64, archive_bytes=123,
+                        session_attempt='1234abcd',
+                        input_bundle_sha256=hashlib.sha256(raw).hexdigest(),
+                        input_bundle_bytes=len(raw)))
         self.assertEqual(list(self.inputs.iterdir()), [])
 
     def test_archive_helper_identity_matches_owner_for_noatime_source_reads(self):
@@ -521,55 +565,91 @@ class NatsPhaseTests(unittest.TestCase):
         self.assertEqual(rows[-1]['kind'], 'complete')
         self.assertEqual(rows[-1]['frames'], sum(row['kind'] == 'data' for row in rows))
 
-    def test_promotable_restore_streams_into_empty_target_root_as_hub_owner(self):
-        archive = self.root / 'restore-source.tar'
-        manifest = native_store.archive_closed_store(self.source, archive)
-        tar_bytes = archive.read_bytes()
-        manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':'),
-            ensure_ascii=False, allow_nan=False).encode('utf-8')
-        envelope = (phase.RESTORE_INPUT_MAGIC + len(manifest_bytes).to_bytes(4, 'big')
-            + manifest_bytes + len(tar_bytes).to_bytes(8, 'big') + tar_bytes)
-        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
-            restore_attempt='c' * 8, restore_pvc_uid='44444444-4444-4444-8444-444444444444',
-            restore_pv_uid='55555555-5555-4555-8555-555555555555',
-            archive_sha256=manifest['archive_sha256'], archive_bytes=len(tar_bytes))
-        with patch.object(phase, '_require_restore_identity'):
-            receipt = phase.restore_archive(args, io.BytesIO(envelope))
-            readback = phase.read_restore_receipt(args)
-        self.assertEqual(receipt, readback)
-        self.assertEqual(receipt['purpose'], 'replacement')
-        self.assertEqual(receipt['restore_attempt'], 'c' * 8)
-        self.assertEqual((self.restore / 'jetstream' / 'meta.inf').read_bytes(), b'cold-native-data')
-        self.assertFalse((self.restore / '.voice-nats-restore-work').exists())
-        self.assertEqual((self.source / 'jetstream' / 'meta.inf').read_bytes(), b'cold-native-data')
-        with patch.object(phase, '_require_restore_identity'):
-            with self.assertRaisesRegex(ValueError, 'restore_target_not_empty'):
-                phase.restore_archive(args, io.BytesIO(envelope))
+    def test_selected_session_receipt_is_durable_and_started_action_is_never_replayed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            root.chmod(0o700)
+            binding = {'schema': 'voice-nats-session-action-v1', 'operation': OPERATION,
+                'nonce': NONCE, 'pod_uid': POD_UID, 'session_attempt': '1234abcd',
+                'source_pvc_uid': SOURCE_PVC_UID, 'source_pv_uid': SOURCE_PV_UID,
+                'verification_pvc_uid': VERIFICATION_PVC_UID,
+                'verification_pv_uid': VERIFICATION_PV_UID}
+            action = 'kernel-seed'
+            payload = b'{"fixture":"fixed"}\\n'
+            output_name = action.replace('-', '_') + '.output'
+            def perform(_action, state):
+                phase._write_exclusive(state / output_name, payload)
+                return {'output_name': output_name, 'output_bytes': len(payload),
+                    'output_sha256': hashlib.sha256(payload).hexdigest()}
+            current_uid, current_gid = os.geteuid(), os.getegid()
+            with patch.object(phase, 'SESSION_UID', current_uid), \
+                 patch.object(phase, 'SESSION_GID', current_gid):
+                receipt = phase._session_receipt(action, binding, root, perform=perform)
+                recovered, output = phase._session_readback(action, binding, root)
+                self.assertEqual(receipt, recovered)
+                self.assertEqual(output.read(), payload)
+                output.close()
+                with self.assertRaisesRegex(ValueError, 'session_receipt_identity'):
+                    phase._session_readback(action, binding | {'nonce': 'a' * 32}, root)
+                self.assertEqual(phase._private_json(root / 'kernel_seed.started.json')['state'], 'STARTED')
+                (root / 'kernel_seed.receipt.json').unlink()
+                with self.assertRaisesRegex(ValueError, 'session_action_unknown'):
+                    phase._session_receipt(action, binding, root,
+                        perform=lambda *_: self.fail('STARTED action must never replay'))
 
-    def test_interrupted_restore_keeps_started_intent_and_never_replays(self):
-        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
-            restore_attempt='d' * 8, restore_pvc_uid='44444444-4444-4444-8444-444444444444',
-            restore_pv_uid='55555555-5555-4555-8555-555555555555',
-            archive_sha256='a' * 64, archive_bytes=64)
-        with patch.object(phase, '_require_restore_identity'):
-            with self.assertRaisesRegex(ValueError, 'verification_input_header'):
-                phase.restore_archive(args, io.BytesIO(b'X' * len(phase.RESTORE_INPUT_MAGIC)))
-            marker = self.output / f'{OPERATION}-{NONCE}.restore.started.json'
-            self.assertEqual(json.loads(marker.read_bytes())['state'], 'STARTED')
-            with self.assertRaisesRegex(ValueError, 'restore_target_not_empty'):
-                phase.restore_archive(args, io.BytesIO(b'any retry is forbidden'))
-            with self.assertRaisesRegex(ValueError, 'manifest-custody|restore_receipt'):
-                phase.read_restore_receipt(args)
+    def test_selected_session_readback_requires_complete_receipt_and_rejects_tampering(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            root.chmod(0o700)
+            binding = {'schema': 'voice-nats-session-action-v1', 'operation': OPERATION,
+                'nonce': NONCE, 'pod_uid': POD_UID, 'session_attempt': '1234abcd',
+                'source_pvc_uid': SOURCE_PVC_UID, 'source_pv_uid': SOURCE_PV_UID,
+                'verification_pvc_uid': VERIFICATION_PVC_UID,
+                'verification_pv_uid': VERIFICATION_PV_UID}
+            current_uid, current_gid = os.geteuid(), os.getegid()
+            with patch.object(phase, 'SESSION_UID', current_uid), \
+                 patch.object(phase, 'SESSION_GID', current_gid):
+                with self.assertRaisesRegex(ValueError, 'session_receipt_missing'):
+                    phase._session_readback('kernel-census', binding, root)
+                receipt = phase._session_receipt('kernel-census', binding, root, perform=lambda *_: None)
+                self.assertEqual(receipt['state'], 'COMPLETE')
+                path = root / 'kernel_census.receipt.json'
+                path.write_text('{"tampered":true}')
+                with self.assertRaisesRegex(ValueError, 'session_receipt_identity'):
+                    phase._session_readback('kernel-census', binding, root)
 
-    def test_restore_profile_is_exactly_hub_uid_and_gid(self):
-        with patch.object(phase.os, 'geteuid', return_value=10000), \
-             patch.object(phase.os, 'getegid', return_value=10000):
-            phase._require_restore_identity()
-        for uid, gid in ((0, 0), (65532, 65532), (10000, 10001)):
-            with patch.object(phase.os, 'geteuid', return_value=uid), \
-                 patch.object(phase.os, 'getegid', return_value=gid):
-                with self.subTest(uid=uid, gid=gid), self.assertRaisesRegex(ValueError, 'restore_identity'):
-                    phase._require_restore_identity()
+    def test_selected_kernel_followup_uses_durable_seed_snapshot(self):
+        for action, expected_phase in (('kernel-verify-closed', 'verify-closed'),
+            ('kernel-drain', 'drain'), ('kernel-verify-drained', 'verify-drained')):
+            with self.subTest(action=action), \
+                 patch.object(phase, '_session_inputs'), \
+                 patch.object(phase, 'KERNEL', Path('/trusted/kernel')), \
+                 patch.object(phase.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0)) as run:
+                self.assertIsNone(phase._perform_session_action(action, Path('/state')))
+                self.assertEqual(run.call_args.args[0], ['/trusted/kernel', '--phase', expected_phase,
+                    '--session-state'])
+
+    def test_session_readback_rejects_unrecognized_receipt_fields(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            root.chmod(0o700)
+            binding = {'schema': 'voice-nats-session-action-v1', 'operation': OPERATION,
+                'nonce': NONCE, 'pod_uid': POD_UID, 'session_attempt': '1234abcd',
+                'source_pvc_uid': SOURCE_PVC_UID, 'source_pv_uid': SOURCE_PV_UID,
+                'verification_pvc_uid': VERIFICATION_PVC_UID,
+                'verification_pv_uid': VERIFICATION_PV_UID}
+            current_uid, current_gid = os.geteuid(), os.getegid()
+            with patch.object(phase, 'SESSION_UID', current_uid), \
+                 patch.object(phase, 'SESSION_GID', current_gid):
+                phase._session_receipt('broker-ready', binding, root, perform=lambda *_: None)
+                path = root / 'broker_ready.receipt.json'
+                receipt = json.loads(path.read_text())
+                receipt['ignored'] = True
+                path.unlink()
+                phase._write_exclusive(path, json.dumps(receipt, sort_keys=True,
+                    separators=(',', ':')).encode())
+                with self.assertRaisesRegex(ValueError, 'session_receipt_identity'):
+                    phase._session_readback('broker-ready', binding, root)
 
 
 if __name__ == '__main__': unittest.main()
