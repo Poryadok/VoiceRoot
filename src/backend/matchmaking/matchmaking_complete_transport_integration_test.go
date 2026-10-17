@@ -65,6 +65,7 @@ type matchSquadGatewayTrace struct {
 	tree     string
 	stages   map[string]bool
 	pending  []byte
+	notify   chan struct{}
 }
 
 func (c *matchSquadGatewayTrace) Write(p []byte) (int, error) {
@@ -88,6 +89,12 @@ func (c *matchSquadGatewayTrace) Write(p []byte) (int, error) {
 				"rest-transcoder-dispatch", "rest-transcoder-unhandled", "matchmaking-namespace-branch", "matchmaking-matches-branch",
 				"matchmaking-matches-empty", "matchmaking-match-id-empty", "matchmaking-matches-unmatched", "matchmaking-complete-post-route":
 				c.stages[fields[3]] = true
+				if c.notify != nil {
+					select {
+					case c.notify <- struct{}{}:
+					default:
+					}
+				}
 			}
 		}
 	}
@@ -98,6 +105,24 @@ func (c *matchSquadGatewayTrace) saw(stage string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.stages[stage]
+}
+
+func (c *matchSquadGatewayTrace) waitFor(stage string, timeout time.Duration) bool {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		if c.saw(stage) {
+			return true
+		}
+		if c.notify == nil {
+			return false
+		}
+		select {
+		case <-c.notify:
+		case <-deadline.C:
+			return c.saw(stage)
+		}
+	}
 }
 
 func (c *matchSquadGatewayTrace) reset() {
@@ -114,6 +139,25 @@ func (c *matchSquadGatewayTrace) snapshot() string {
 		c.stages["matchmaking-client-missing"], c.stages["complete-match-decode"], c.stages["rest-transcoder-dispatch"], c.stages["rest-transcoder-unhandled"],
 		c.stages["matchmaking-namespace-branch"], c.stages["matchmaking-matches-branch"], c.stages["matchmaking-matches-empty"], c.stages["matchmaking-match-id-empty"],
 		c.stages["matchmaking-matches-unmatched"], c.stages["matchmaking-complete-post-route"])
+}
+
+func TestMatchSquadGatewayTraceWaitsForDelayedWriterDelivery(t *testing.T) {
+	trace := &matchSquadGatewayTrace{revision: "revision", tree: "tree", stages: map[string]bool{}, notify: make(chan struct{}, 1)}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		close(started)
+		<-release
+		_, _ = trace.Write([]byte("VOICE_MATCHFOUND_TRACE|revision|tree|complete-match-decode\n"))
+	}()
+	<-started
+	if trace.waitFor("complete-match-decode", 10*time.Millisecond) {
+		t.Fatal("trace became visible before the stderr writer delivered it")
+	}
+	close(release)
+	if !trace.waitFor("complete-match-decode", time.Second) {
+		t.Fatal("bounded wait did not observe the delayed matching trace")
+	}
 }
 
 func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *testing.T) {
@@ -169,7 +213,7 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.NoError(t, err)
 	mmAddress := mmListener.Addr().String()
 	gatewayBinary := buildMatchSquadGateway(t, ctx, fixtureDir)
-	trace := &matchSquadGatewayTrace{revision: gatewayBinary.revision, tree: gatewayBinary.tree, stages: map[string]bool{}}
+	trace := &matchSquadGatewayTrace{revision: gatewayBinary.revision, tree: gatewayBinary.tree, stages: map[string]bool{}, notify: make(chan struct{}, 1)}
 	gatewayCurrentAddress := startMatchSquadGateway(t, ctx, gatewayBinary, trace, reserveMatchSquadTCPPort(t), mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-current")
 	gatewayNextAddress := startMatchSquadGateway(t, ctx, gatewayBinary, trace, reserveMatchSquadTCPPort(t), mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-next")
 	proxy := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -311,7 +355,9 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.Equalf(t, http.StatusBadRequest, badBody.StatusCode,
 		"malformed CompleteMatch response metadata: status=%d content_type=%q body_bytes=%d response_class=%s trace_stages={%s}",
 		badBody.StatusCode, contentType, len(badBodyText), responseClass, trace.snapshot())
-	require.True(t, trace.saw("complete-match-decode"), "the exact clean Gateway build did not report the fixed CompleteMatch decode stage")
+	require.Truef(t, trace.waitFor("complete-match-decode", 2*time.Second),
+		"the exact clean Gateway build did not deliver the fixed CompleteMatch decode stage before the bounded trace deadline: revision=%s tree=%s trace_stages={%s}",
+		gatewayBinary.revision, gatewayBinary.tree, trace.snapshot())
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileA, false)
 
 	// The MM commit succeeds, but its first RPC reply is intentionally lost.
