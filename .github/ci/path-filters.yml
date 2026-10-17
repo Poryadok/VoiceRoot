@@ -73,6 +73,11 @@ frontend:
   - design/**
   - scripts/design/**
 
+# Workflow/publisher contract changes validate and publish the DEV Flutter image.
+dev_web_publish:
+  - .github/workflows/ci.yml
+  - .github/ci/path-filters.yml
+
 # Changes that alter the built Windows desktop target or bundled app-icon resources.
 windows_desktop:
   - src/frontend/windows/**
