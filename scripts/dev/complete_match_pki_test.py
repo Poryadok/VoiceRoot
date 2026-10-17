@@ -205,6 +205,61 @@ class CompleteMatchOperatorTests(unittest.TestCase):
         self.assertEqual(receipts[0]['resources'][SERVER_SECRET]['phase'], 'intent')
         self.assertEqual(journal['resources'][SERVER_SECRET]['phase'], 'intent')
 
+    def test_planned_resource_cannot_adopt_preexisting_exact_object(self):
+        row = copy.deepcopy(self.items[SERVER_SECRET])
+        existing = copy.deepcopy(row)
+        existing['metadata'].update(uid='01234567-89ab-cdef-0123-456789abcdef', resourceVersion='102')
+        persisted = []
+
+        class Kube:
+            def get(self, kind, name):
+                return copy.deepcopy(existing)
+
+        journal_row = {'phase': 'planned'}
+        with self.assertRaisesRegex(ValueError, 'planned_target_already_exists'):
+            pki.create_only(row, journal_row, {'operationId': OPERATION},
+                            lambda _: persisted.append('write'), Kube())
+        self.assertEqual(journal_row['phase'], 'planned')
+        self.assertEqual(persisted, [])
+
+    def test_kubectl_uses_pinned_private_config_with_sanitized_environment(self):
+        with tempfile.TemporaryDirectory(prefix='complete-match-kubeconfig-test-') as temp:
+            directory = Path(temp) / '.kube'
+            directory.mkdir(mode=0o700)
+            config = directory / 'config'
+            config.write_bytes(b'synthetic kubeconfig metadata fixture')
+            os.chmod(config, 0o600)
+            completed = subprocess.CompletedProcess([], 0, stdout=b'{}', stderr=b'')
+            with mock.patch.object(pki, 'KUBECONFIG_PATH', config), \
+                    mock.patch.object(pki.subprocess, 'run', return_value=completed) as run, \
+                    mock.patch.dict(os.environ, {'KUBECONFIG': '/untrusted/ambient/config'}):
+                result = pki.kubectl_result(['get', 'namespace', 'voice-dev'])
+            self.assertEqual(result.stdout, b'{}')
+            args = run.call_args.args[0]
+            self.assertEqual(args[:5], ['kubectl', '--kubeconfig', str(config),
+                                        '--context', 'default'])
+            self.assertEqual(args[5:], ['get', 'namespace', 'voice-dev'])
+            env = run.call_args.kwargs['env']
+            self.assertEqual(env, {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/nonexistent'})
+            self.assertNotIn('KUBECONFIG', env)
+
+    def test_kubeconfig_custody_rejects_permissive_file_and_symlink(self):
+        with tempfile.TemporaryDirectory(prefix='complete-match-kubeconfig-custody-') as temp:
+            directory = Path(temp) / '.kube'
+            directory.mkdir(mode=0o700)
+            config = directory / 'config'
+            config.write_bytes(b'synthetic kubeconfig metadata fixture')
+            os.chmod(config, 0o640)
+            with mock.patch.object(pki, 'KUBECONFIG_PATH', config):
+                with self.assertRaisesRegex(ValueError, 'kubeconfig_custody_invalid'):
+                    pki._pinned_kubeconfig()
+                os.chmod(config, 0o600)
+                symlink = directory / 'link'
+                symlink.symlink_to(config)
+                with mock.patch.object(pki, 'KUBECONFIG_PATH', symlink):
+                    with self.assertRaisesRegex(ValueError, 'kubeconfig_custody_invalid'):
+                        pki._pinned_kubeconfig()
+
     def test_prepare_apply_and_resume_all_require_explicit_confirmation(self):
         common = ['--issuer-image', 'sha256:' + 'b' * 64,
                   '--expected-source-sha', SOURCE_SHA,
@@ -313,7 +368,7 @@ class CompleteMatchOperatorTests(unittest.TestCase):
             def create(self, value):
                 raise ValueError('create result was lost')
 
-        journal = {'operationId': OPERATION, 'resources': {GATEWAY_SECRET: {'phase': 'planned'}}}
+        journal = {'operationId': OPERATION, 'resources': {GATEWAY_SECRET: {'phase': 'intent'}}}
         journal_row = journal['resources'][GATEWAY_SECRET]
         result = pki.create_only(row, journal_row, journal, lambda _: None, Kube())
         self.assertEqual(result, {'uid': 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'resourceVersion': '103'})
@@ -340,7 +395,7 @@ class CompleteMatchOperatorTests(unittest.TestCase):
                          dict(row, metadata={**row['metadata'], 'uid': 'foreign-uid'})):
             with self.subTest(existing=existing.get('metadata', {})):
                 with self.assertRaises(ValueError):
-                    pki.create_only(row, {'phase': 'planned'}, {'operationId': OPERATION},
+                    pki.create_only(row, {'phase': 'intent'}, {'operationId': OPERATION},
                                     lambda _: None, ExistingKube(existing))
 
 

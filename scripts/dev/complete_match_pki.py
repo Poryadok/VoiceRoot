@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import stat
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,8 @@ OLD_CA_UID = 'cbe47dee-c57e-4cb0-bcf0-e6eeb67c00e6'
 OLD_CA_RV = '3381287'
 OLD_CA_FINGERPRINT = 'da6dfa9ffbea4903310e624e6e38e411adf2f1353edd264fbe3b7cdd15b33548'
 STATE_PATH = Path('/home/pmd/.local/share/voice-dev-complete-match-pki')
+KUBECONFIG_PATH = Path('/home/pmd/.kube/config')
+KUBECTL_CONTEXT = 'default'
 NEW_VOLUME = 'voice-dev-complete-match-pki'
 OPERATION_ANNOTATION = 'voice.dev/complete-match-pki-operation'
 SOURCE_ANNOTATION = 'voice.dev/complete-match-pki-source-sha256'
@@ -204,8 +207,15 @@ def create_only(expected, resource, journal, persist, kube):
     if expected.get('metadata', {}).get('annotations', {}).get(OPERATION_ANNOTATION) != operation_id:
         raise Blocked('create_operation_marker_invalid')
     kind = TARGETS[name][0]
+    phase = resource.get('phase')
+    if phase not in ('planned', 'intent', 'created'):
+        raise Blocked('create_phase_invalid')
     existing = kube.get(kind, name)
+    if phase == 'planned' and existing is not None:
+        raise Blocked('planned_target_already_exists')
     if existing is not None:
+        if phase not in ('intent', 'created'):
+            raise Blocked('create_phase_invalid')
         if not _adopt_matches(expected, existing, operation_id):
             raise Blocked('existing_target_conflict')
         identity = {'uid': existing['metadata']['uid'], 'resourceVersion': existing['metadata']['resourceVersion']}
@@ -214,9 +224,9 @@ def create_only(expected, resource, journal, persist, kube):
         resource.update(phase='created', **identity)
         persist(journal)
         return identity
-    if resource.get('phase') not in ('planned', 'intent'):
+    if phase == 'created':
         raise Blocked('create_phase_invalid')
-    if resource.get('phase') == 'planned':
+    if phase == 'planned':
         resource['phase'] = 'intent'
         persist(journal)
     dry_run = kube.server_dry_run(expected)
@@ -288,8 +298,34 @@ def run_result(args, *, input_bytes=None, timeout=60, limit=1 << 20):
     return result
 
 
+def _pinned_kubeconfig():
+    """Select only pmd's documented kubeconfig after a metadata-only custody check."""
+    path = KUBECONFIG_PATH
+    try:
+        parent = path.parent.lstat()
+        info = path.lstat()
+    except OSError as exc:
+        raise Blocked('kubeconfig_unavailable') from exc
+    mode = stat.S_IMODE(info.st_mode)
+    if (stat.S_ISLNK(parent.st_mode) or not stat.S_ISDIR(parent.st_mode) or
+            parent.st_uid != os.geteuid() or parent.st_mode & 0o022 or
+            stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or
+            info.st_uid != os.geteuid() or info.st_nlink != 1 or
+            not 1 <= info.st_size <= (1 << 20) or mode & 0o077 or
+            not mode & 0o400 or mode & 0o100):
+        raise Blocked('kubeconfig_custody_invalid')
+    return str(path)
+
+
+def kubectl_result(args, *, input_bytes=None, timeout=60, limit=1 << 20):
+    """Invoke kubectl with one pinned private config and the sanitized process env."""
+    return run_result(['kubectl', '--kubeconfig', _pinned_kubeconfig(),
+                       '--context', KUBECTL_CONTEXT, *args],
+                      input_bytes=input_bytes, timeout=timeout, limit=limit)
+
+
 def _kubectl_json(args, *, input_bytes=None):
-    result = run_result(['kubectl', *args], input_bytes=input_bytes)
+    result = kubectl_result(args, input_bytes=input_bytes)
     if result.returncode:
         raise Blocked('kubectl_operation_failed')
     try:
@@ -311,8 +347,8 @@ class Kubectl:
         return {'name': NAMESPACE, 'uid': metadata['uid']}
 
     def get(self, kind, name):
-        result = run_result(['kubectl', '--namespace', NAMESPACE, 'get', kind, name,
-                             '--ignore-not-found', '-o', 'json'])
+        result = kubectl_result(['--namespace', NAMESPACE, 'get', kind, name,
+                                 '--ignore-not-found', '-o', 'json'])
         if result.returncode:
             raise Blocked('kubectl_get_failed')
         output = result.stdout.decode('utf-8', errors='strict').strip()
@@ -329,12 +365,12 @@ class Kubectl:
     def server_dry_run(self, value):
         raw = canonical(value)
         return _kubectl_json(['--namespace', NAMESPACE, 'create', '--dry-run=server', '-f', '-', '-o', 'json'],
-                            input_bytes=raw)
+                             input_bytes=raw)
 
     def create(self, value):
-        result = run_result(['kubectl', '--namespace', NAMESPACE, 'create', '-f', '-',
-                             '-o', 'go-template={{.metadata.uid}}|{{.metadata.resourceVersion}}'],
-                            input_bytes=canonical(value))
+        result = kubectl_result(['--namespace', NAMESPACE, 'create', '-f', '-',
+                                 '-o', 'go-template={{.metadata.uid}}|{{.metadata.resourceVersion}}'],
+                                input_bytes=canonical(value))
         if result.returncode:
             raise Blocked('kubectl_create_failed')
         return parse_create_identity(result.stdout.decode('utf-8', errors='strict'))

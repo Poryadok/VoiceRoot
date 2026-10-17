@@ -287,6 +287,10 @@ Provisioning и переключение consumer overlay — разные revie
 отдельного grant на фактический выпуск не запускать `prepare`/`apply`/`resume`
 и не создавать эти объекты вручную. Детали guarded source/operator flow:
 [scripts/dev/README.md](../scripts/dev/README.md#dev-completematch-transport-identities).
+Оператор вызывает `kubectl` только с явно выбранными `/home/pmd/.kube/config` и
+контекстом `default`;
+он проверяет владельца и файловые права без чтения содержимого, не наследует
+ambient `KUBECONFIG` и не исправляет права kubeconfig автоматически.
 
 Пересоздание pod не равно удалению PVC: stateful данные dev находятся на PV;
 `Retain` сохраняет backing data при удалении claim, но не восстанавливает

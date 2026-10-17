@@ -428,6 +428,13 @@ consumer-overlay digest and DEV namespace UID. It is Linux-only. `preflight` is
 read-only; `prepare` requires `--confirm-dev-complete-match-pki-change` and
 stores one same-operation stage in the dedicated private volume;
 `apply`/`resume` use that stage to create only the three absent targets.
+Every Kubernetes call selects `/home/pmd/.kube/config` and context `default`
+explicitly with `kubectl --kubeconfig ... --context default`. Before invocation,
+the helper checks the config and its
+parent using metadata only: current-user ownership, regular non-symlink file,
+single link, bounded size, no group/world permissions, and a non-group/world-
+writable directory. The subprocess environment stays sanitized; ambient
+`KUBECONFIG` is ignored, and the helper never repairs file permissions.
 Creation has a durable intent, server-side dry-run, create-only API call and an
 exact GET comparison before success is recorded. A retry can adopt only the
 same staged content; drift or an uncertain result stops and preserves the
