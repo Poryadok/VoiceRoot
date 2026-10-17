@@ -11,7 +11,7 @@ import time
 
 PORT = 9444
 SERVER = '/usr/local/bin/nats-server'
-CONFIG = '/server.conf'
+CONFIG = '/broker-config/server.conf'
 SCHEMA = 'voice-nats-supervisor-v1'
 MAX_LINE = 256
 

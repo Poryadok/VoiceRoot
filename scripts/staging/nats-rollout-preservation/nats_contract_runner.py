@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import copy
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -25,11 +27,16 @@ from nats_contract_actor import INFO, WRITE, persistent_config
 
 SCHEMA = 'voice-nats-contract-execution-v1'
 RECEIPT_SCHEMA = 'voice-nats-contract-receipt-v1'
+INPUT_SCHEMA = 'voice-nats-contract-inputs-v1'
+INPUT_RECEIPT_SCHEMA = 'voice-nats-contract-input-receipt-v1'
 MAX_PLAN_BYTES = 1 << 20
+MAX_INPUT_BYTES = 2 << 20
+MAX_STATE_BYTES = 2 << 20
+MAX_CREDENTIAL_BYTES = 256 << 10
+MAX_SERVER_CONFIG_BYTES = 256 << 10
 MAX_EVENTS = 64
 STATE_ROOT = Path('/state')
-INPUT_ROOT = Path('/inputs/private')
-CREDS = INPUT_ROOT / 'bootstrap.creds'
+SERVER_CONFIG = Path('/broker-config/server.conf')
 NATS = '/usr/local/bin/nats'
 SUPERVISOR = ('127.0.0.1', 9444)
 OP_RE = re.compile(r'[a-f0-9]{12}')
@@ -151,7 +158,7 @@ def validate_plan(plan: object) -> dict:
 
 
 def validate_envelope(raw: bytes, *, expected: dict) -> dict:
-    if not isinstance(raw, bytes) or not 1 <= len(raw) <= MAX_PLAN_BYTES:
+    if not isinstance(raw, bytes) or not 1 <= len(raw) <= MAX_INPUT_BYTES:
         _fail('input_size')
     def pairs(items):
         result = {}
@@ -165,21 +172,17 @@ def validate_envelope(raw: bytes, *, expected: dict) -> dict:
             parse_constant=lambda _value: _fail('input_constant'))
     except (ValueError, UnicodeError, TypeError):
         _fail('input_json')
-    required = {'schema', 'operation', 'nonce', 'pod_uid', 'contract_attempt',
+    required = {'schema', 'operation', 'nonce', 'contract_attempt',
         'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
-        'input_pod_uid', 'input_attempt', 'input_bundle_sha256', 'input_bundle_bytes',
-        'archive_sha256', 'archive_bytes',
-        'kernel_bundle_sha256', 'server_config_sha256', 'plan_sha256', 'plan'}
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'plan_sha256', 'plan', 'files'}
     if not isinstance(envelope, dict) or set(envelope) != required:
         _fail('input_shape')
-    if envelope['schema'] != SCHEMA:
+    if envelope['schema'] != INPUT_SCHEMA:
         _fail('input_schema')
     for key, pattern in (('operation', OP_RE), ('nonce', NONCE_RE),
-        ('pod_uid', UUID_RE), ('contract_attempt', ATTEMPT_RE), ('input_attempt', ATTEMPT_RE),
+        ('contract_attempt', ATTEMPT_RE),
         ('source_pvc_uid', UUID_RE), ('source_pv_uid', UUID_RE),
         ('verification_pvc_uid', UUID_RE), ('verification_pv_uid', UUID_RE),
-        ('input_pod_uid', UUID_RE), ('input_bundle_sha256', re.compile(r'[a-f0-9]{64}')),
-        ('kernel_bundle_sha256', re.compile(r'[a-f0-9]{64}')),
         ('server_config_sha256', re.compile(r'[a-f0-9]{64}')),
         ('archive_sha256', re.compile(r'[a-f0-9]{64}')),
         ('plan_sha256', re.compile(r'[a-f0-9]{64}'))):
@@ -187,23 +190,44 @@ def validate_envelope(raw: bytes, *, expected: dict) -> dict:
             _fail('input_identity')
     if envelope['source_pvc_uid'] == envelope['verification_pvc_uid']:
         _fail('input_pvc_same')
-    if (type(envelope['input_bundle_bytes']) is not int
-        or not 0 < envelope['input_bundle_bytes'] <= (4 << 20)):
-        _fail('input_bundle_size')
     if type(envelope['archive_bytes']) is not int or not 0 < envelope['archive_bytes'] <= (48 << 30):
         _fail('archive_size')
+    if not isinstance(envelope['files'], dict) or set(envelope['files']) != {'bootstrap.creds', 'server.conf'}:
+        _fail('input_file_set')
+    files = {}
+    for name, digest_key, size_key, limit in (
+        ('bootstrap.creds', 'bootstrap_creds_sha256', 'bootstrap_creds_bytes', MAX_CREDENTIAL_BYTES),
+        ('server.conf', 'server_config_sha256', 'server_config_bytes', MAX_SERVER_CONFIG_BYTES)):
+        encoded = envelope['files'][name]
+        if not isinstance(encoded, str):
+            _fail('input_file_encoding')
+        try:
+            content = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            _fail('input_file_encoding')
+        if base64.b64encode(content).decode('ascii') != encoded:
+            _fail('input_file_encoding')
+        if not 0 < len(content) <= limit:
+            _fail('input_file_size')
+        if (hashlib.sha256(content).hexdigest() != expected[digest_key]
+            or len(content) != expected[size_key]):
+            _fail('input_file_binding')
+        files[name] = content
     context = {key: envelope[key] for key in (
-        'operation', 'nonce', 'pod_uid', 'contract_attempt', 'source_pvc_uid',
-        'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid', 'input_pod_uid',
-        'input_bundle_sha256', 'input_bundle_bytes', 'kernel_bundle_sha256', 'server_config_sha256')}
-    context.update({key: envelope[key] for key in ('input_attempt', 'archive_sha256', 'archive_bytes')})
-    if context != expected:
+        'operation', 'nonce', 'contract_attempt', 'source_pvc_uid', 'source_pv_uid',
+        'verification_pvc_uid', 'verification_pv_uid', 'server_config_sha256',
+        'archive_sha256', 'archive_bytes', 'plan_sha256')}
+    if any(context[key] != expected[key] for key in context):
         _fail('input_binding')
     plan = validate_plan(envelope['plan'])
     if (envelope['plan_sha256'] != nats_contract_plan.digest(plan)
-        or _canonical(envelope) != raw):
+        or expected['plan_sha256'] != envelope['plan_sha256']
+        or _canonical(envelope) != raw
+        or hashlib.sha256(raw).hexdigest() != expected['input_bundle_sha256']
+        or len(raw) != expected['input_bundle_bytes']
+        or len(_canonical(plan)) != expected['plan_bytes']):
         _fail('input_digest_or_canonical')
-    return envelope
+    return {**envelope, '_files': files}
 
 
 def _atomic_private(path: Path, value: dict) -> None:
@@ -224,16 +248,56 @@ def _atomic_private(path: Path, value: dict) -> None:
         raise
 
 
+def _atomic_credential(path: Path, raw: bytes) -> None:
+    """Create the one private client credential without a pathname replay path."""
+    if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_CREDENTIAL_BYTES:
+        _fail('credential_size')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+    try:
+        os.fchmod(fd, 0o400)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    except Exception:
+        try: path.unlink()
+        except FileNotFoundError: pass
+        raise
+
+
+def _atomic_projection(path: Path, raw: bytes) -> None:
+    """Publish the captured public broker config into the fixed shared volume."""
+    if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_SERVER_CONFIG_BYTES:
+        _fail('server_config_size')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o440)
+    try:
+        os.fchmod(fd, 0o440)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    except Exception:
+        try: path.unlink()
+        except FileNotFoundError: pass
+        raise
+
+
 def _private_read(path: Path) -> dict:
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         row = os.fstat(fd)
         if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid()
             or row.st_gid != os.getegid() or row.st_nlink != 1
-            or stat.S_IMODE(row.st_mode) != 0o600 or not 1 <= row.st_size <= MAX_PLAN_BYTES):
+            or stat.S_IMODE(row.st_mode) != 0o600 or not 1 <= row.st_size <= MAX_STATE_BYTES):
             _fail('state_file_untrusted')
         with os.fdopen(fd, 'rb', closefd=False) as stream:
-            value = json.loads(stream.read(MAX_PLAN_BYTES + 1))
+            value = json.loads(stream.read(MAX_STATE_BYTES + 1))
         if not isinstance(value, dict): _fail('state_file_invalid')
         return value
     finally:
@@ -242,9 +306,11 @@ def _private_read(path: Path) -> dict:
 
 class NatsActor:
     """Fixed CLI adapter; NATS API subject is validated before subprocess use."""
-    def __init__(self, *, isolation_check, expected_broker=None, run=subprocess.run, sleep=time.sleep):
+    def __init__(self, *, isolation_check, expected_broker=None, creds_path: Path,
+                 run=subprocess.run, sleep=time.sleep):
         self._isolation_check = isolation_check
         self._expected_broker = expected_broker
+        self._creds_path = creds_path
         self._run = run
         self._sleep = sleep
 
@@ -262,7 +328,7 @@ class NatsActor:
         if api not in INFO.values() and api not in WRITE:
             _fail('api_forbidden')
         self.assert_closed_isolation()
-        command = [NATS, '--server', 'nats://127.0.0.1:4222', '--creds', str(CREDS),
+        command = [NATS, '--server', 'nats://127.0.0.1:4222', '--creds', str(self._creds_path),
             '--inbox-prefix', '_INBOX.voice.bootstrap.reply', '--timeout', '5s',
             'req', '--raw', api, _canonical(payload).decode('utf-8') if payload is not None else '']
         result = self._run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -343,69 +409,80 @@ def _contract_supervisor(action: str) -> dict:
     return value
 
 
-def _ensure_input_profile(expected: dict) -> None:
-    """Fail closed on absent/replaced operation inputs before starting NATS."""
-    bundle = INPUT_ROOT
-    expected_names = {'bootstrap.creds', 'social.creds', 'realtime.creds', 'fixture.json'}
+def _read_bound_file(path: Path, *, digest: str, mode: int, max_bytes: int,
+                     expected_bytes: int | None = None) -> bytes:
+    fd = -1
     try:
-        if {entry.name for entry in bundle.iterdir()} != expected_names:
-            _fail('input_bundle_shape')
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+            or before.st_gid != os.getegid() or stat.S_IMODE(before.st_mode) != mode
+            or before.st_nlink != 1 or not 1 <= before.st_size <= max_bytes
+            or (expected_bytes is not None and before.st_size != expected_bytes)):
+            _fail('input_file_profile')
+        raw = bytearray()
+        while len(raw) <= before.st_size:
+            part = os.read(fd, min(64 << 10, before.st_size + 1 - len(raw)))
+            if not part:
+                break
+            raw.extend(part)
+        after = os.fstat(fd)
+        if (len(raw) != before.st_size or (before.st_dev, before.st_ino, before.st_size,
+            before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino,
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            or hashlib.sha256(raw).hexdigest() != digest):
+            _fail('input_file_changed')
+        return bytes(raw)
     except OSError:
-        _fail('input_bundle_missing')
-    digests = {}
-    for name in sorted(expected_names):
-        path = bundle / name
-        fd = -1
-        try:
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-            before = os.fstat(fd)
-            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
-                or before.st_gid != os.getegid() or stat.S_IMODE(before.st_mode) != 0o440
-                or before.st_nlink != 1 or not 1 <= before.st_size <= (256 << 10)):
-                _fail('input_file_profile')
-            raw = bytearray()
-            while len(raw) <= before.st_size:
-                part = os.read(fd, min(64 << 10, before.st_size + 1 - len(raw)))
-                if not part:
-                    break
-                raw.extend(part)
-            after = os.fstat(fd)
-            if (len(raw) != before.st_size or (before.st_dev, before.st_ino, before.st_size,
-                before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino,
-                after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
-                _fail('input_file_changed')
-        except OSError:
-            _fail('input_file_missing')
-        finally:
-            if fd >= 0:
-                os.close(fd)
-        digests[name] = hashlib.sha256(bytes(raw)).hexdigest()
-    bundle_hash = hashlib.sha256(json.dumps(digests, sort_keys=True,
-        separators=(',', ':')).encode()).hexdigest()
-    if bundle_hash != expected['kernel_bundle_sha256']:
-        _fail('input_bundle_digest')
+        _fail('input_file_missing')
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def _credential_path(expected: dict, *, state_root: Path = STATE_ROOT) -> Path:
+    return _state_dir(state_root, expected['operation'], expected['contract_attempt']) / 'bootstrap.creds'
+
+
+def _ensure_input_profile(expected: dict, *, state_root: Path = STATE_ROOT) -> None:
+    """Check the one private Actor credential and the exact broker config projection."""
+    _read_bound_file(_credential_path(expected, state_root=state_root),
+        digest=expected['bootstrap_creds_sha256'], mode=0o400, max_bytes=MAX_CREDENTIAL_BYTES,
+        expected_bytes=expected['bootstrap_creds_bytes'])
+    _ensure_server_config(expected)
+
+
+def _ensure_server_config(expected: dict) -> None:
+    """Validate the exact host-bound, public broker-config projection."""
+    _read_bound_file(SERVER_CONFIG, digest=expected['server_config_sha256'],
+        mode=0o440, max_bytes=MAX_SERVER_CONFIG_BYTES,
+        expected_bytes=expected['server_config_bytes'])
 
 
 def _verify_input_receipt(expected: dict, *, state_root: Path = STATE_ROOT) -> dict:
-    """Bind consumed projections to the exact COMPLETE loader-Pod receipt."""
-    path = Path(state_root) / expected['input_attempt'] / 'inputs.receipt.json'
+    """Bind the one-shot contract input and plan to this exact helper Pod."""
+    path = _state_dir(state_root, expected['operation'], expected['contract_attempt']) / 'input.receipt.json'
     receipt = _private_read(path)
     required = {
-        'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs', 'purpose': 'verification',
+        'schema': INPUT_RECEIPT_SCHEMA, 'phase': 'contract-inputs', 'purpose': 'nats-contract-migration',
         'operation': expected['operation'], 'nonce': expected['nonce'],
-        'pod_uid': expected['input_pod_uid'], 'source_pvc_uid': expected['source_pvc_uid'],
+        'pod_uid': expected['pod_uid'], 'contract_attempt': expected['contract_attempt'],
+        'source_pvc_uid': expected['source_pvc_uid'],
         'source_pv_uid': expected['source_pv_uid'],
         'verification_pvc_uid': expected['verification_pvc_uid'],
         'verification_pv_uid': expected['verification_pv_uid'],
         'archive_sha256': expected['archive_sha256'], 'archive_bytes': expected['archive_bytes'],
-        'session_attempt': expected['input_attempt'],
         'input_bundle_sha256': expected['input_bundle_sha256'],
         'input_bundle_bytes': expected['input_bundle_bytes'], 'status': 'COMPLETE',
-        'file_count': 5, 'kernel_bundle_sha256': expected['kernel_bundle_sha256'],
+        'plan_sha256': expected['plan_sha256'], 'plan_bytes': expected['plan_bytes'],
         'server_config_sha256': expected['server_config_sha256'],
+        'server_config_bytes': expected['server_config_bytes'],
+        'bootstrap_creds_sha256': expected['bootstrap_creds_sha256'],
+        'bootstrap_creds_bytes': expected['bootstrap_creds_bytes'], 'file_count': 2,
     }
     if set(receipt) != set(required) or receipt != required:
         _fail('input_receipt_binding')
+    _ensure_input_profile(expected, state_root=state_root)
     return receipt
 
 
@@ -428,9 +505,9 @@ def _broker_receipt(state_root: Path, expected: dict, action: str, fn) -> dict:
 def _broker_identity(state_root: Path, binding: dict) -> dict:
     expected = {key: binding[key] for key in ('operation', 'nonce', 'pod_uid',
         'contract_attempt', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
-        'verification_pv_uid', 'input_pod_uid', 'input_attempt', 'input_bundle_sha256',
-        'input_bundle_bytes', 'archive_sha256', 'archive_bytes', 'kernel_bundle_sha256',
-        'server_config_sha256', 'plan_sha256')}
+        'verification_pv_uid', 'input_bundle_sha256', 'input_bundle_bytes',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'plan_sha256',
+        'plan_bytes', 'bootstrap_creds_sha256', 'bootstrap_creds_bytes', 'server_config_bytes')}
     path = _state_dir(state_root, expected['operation'], expected['contract_attempt']) / 'broker-start.receipt.json'
     receipt = _private_read(path)
     broker = receipt.get('broker')
@@ -452,25 +529,33 @@ def _expected_from_args(args, *, pod_uid: str | None = None) -> dict:
         'operation': args.operation, 'nonce': args.nonce, 'pod_uid': actual_pod_uid,
         'contract_attempt': args.contract_attempt, 'source_pvc_uid': args.source_pvc_uid,
         'source_pv_uid': args.source_pv_uid, 'verification_pvc_uid': args.verification_pvc_uid,
-        'verification_pv_uid': args.verification_pv_uid, 'input_pod_uid': args.input_pod_uid,
-        'input_bundle_sha256': args.input_bundle_sha256,
-        'input_bundle_bytes': args.input_bundle_bytes, 'kernel_bundle_sha256': args.kernel_bundle_sha256,
-        'input_attempt': args.input_attempt, 'archive_sha256': args.archive_sha256,
+        'verification_pv_uid': args.verification_pv_uid,
+        'input_bundle_sha256': args.input_bundle_sha256, 'input_bundle_bytes': args.input_bundle_bytes,
+        'bootstrap_creds_sha256': args.bootstrap_creds_sha256,
+        'bootstrap_creds_bytes': args.bootstrap_creds_bytes,
+        'server_config_bytes': args.server_config_bytes, 'plan_bytes': args.plan_bytes,
+        'archive_sha256': args.archive_sha256,
         'archive_bytes': args.archive_bytes, 'server_config_sha256': args.server_config_sha256,
         'plan_sha256': args.plan_sha256,
     }
     # Validate the closed identity tuple before filesystem/process access.
     for key, pattern in (('operation', OP_RE), ('nonce', NONCE_RE), ('pod_uid', UUID_RE),
-        ('contract_attempt', ATTEMPT_RE), ('input_attempt', ATTEMPT_RE),
+        ('contract_attempt', ATTEMPT_RE),
         ('source_pvc_uid', UUID_RE), ('source_pv_uid', UUID_RE),
-        ('verification_pvc_uid', UUID_RE), ('verification_pv_uid', UUID_RE), ('input_pod_uid', UUID_RE)):
+        ('verification_pvc_uid', UUID_RE), ('verification_pv_uid', UUID_RE)):
         if not isinstance(expected[key], str) or not pattern.fullmatch(expected[key]):
             _fail('cli_identity')
-    for key in ('input_bundle_sha256', 'kernel_bundle_sha256', 'server_config_sha256',
+    for key in ('input_bundle_sha256', 'bootstrap_creds_sha256', 'server_config_sha256',
         'archive_sha256', 'plan_sha256'):
         if not isinstance(expected[key], str) or re.fullmatch(r'[a-f0-9]{64}', expected[key]) is None:
             _fail('cli_digest')
-    if type(expected['input_bundle_bytes']) is not int or not 0 < expected['input_bundle_bytes'] <= (4 << 20):
+    if type(expected['input_bundle_bytes']) is not int or not 0 < expected['input_bundle_bytes'] <= MAX_INPUT_BYTES:
+        _fail('cli_size')
+    if (type(expected['bootstrap_creds_bytes']) is not int
+        or not 0 < expected['bootstrap_creds_bytes'] <= MAX_CREDENTIAL_BYTES
+        or type(expected['server_config_bytes']) is not int
+        or not 0 < expected['server_config_bytes'] <= MAX_SERVER_CONFIG_BYTES
+        or type(expected['plan_bytes']) is not int or not 1 <= expected['plan_bytes'] <= MAX_PLAN_BYTES):
         _fail('cli_size')
     if type(expected['archive_bytes']) is not int or not 0 < expected['archive_bytes'] <= (48 << 30):
         _fail('cli_size')
@@ -488,17 +573,18 @@ class _ClosedArgumentParser(argparse.ArgumentParser):
 def _cli_parser():
     parser = _ClosedArgumentParser(add_help=False, allow_abbrev=False)
     modes = parser.add_mutually_exclusive_group(required=True)
-    for mode in ('serve', 'load-plan', 'broker-start', 'broker-stop', 'broker-status',
+    for mode in ('serve', 'load-plan', 'read-plan', 'broker-start', 'broker-stop', 'broker-status',
         'inspect-action', 'execute-action', 'readback-action'):
         modes.add_argument('--' + mode, action='store_true')
     for name in ('operation', 'nonce', 'contract-attempt', 'source-pvc-uid', 'source-pv-uid',
-        'verification-pvc-uid', 'verification-pv-uid', 'input-pod-uid', 'input-bundle-sha256',
-        'kernel-bundle-sha256', 'server-config-sha256', 'plan-sha256', 'input-attempt',
-        'archive-sha256'):
+        'verification-pvc-uid', 'verification-pv-uid', 'input-bundle-sha256',
+        'bootstrap-creds-sha256', 'server-config-sha256', 'plan-sha256', 'archive-sha256'):
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--input-bundle-bytes', required=True, type=int)
-    parser.add_argument('--archive-bytes', required=True, type=int)
+    parser.add_argument('--bootstrap-creds-bytes', required=True, type=int)
+    parser.add_argument('--server-config-bytes', required=True, type=int)
     parser.add_argument('--plan-bytes', required=True, type=int)
+    parser.add_argument('--archive-bytes', required=True, type=int)
     parser.add_argument('--pod-uid')
     parser.add_argument('--action-index', type=int)
     parser.add_argument('--intent-sha256')
@@ -519,32 +605,31 @@ def main(argv=None) -> int:
     """Closed executable interface used by the admitted contract-migration Job."""
     try:
         args = _cli_parser().parse_args(argv)
-        mode = next(name for name in ('serve', 'load_plan', 'broker_start', 'broker_stop',
+        mode = next(name for name in ('serve', 'load_plan', 'read_plan', 'broker_start', 'broker_stop',
             'broker_status', 'inspect_action', 'execute_action', 'readback_action')
             if getattr(args, name))
         # The Pod UID is taken from the downward API inside the container and
         # from the verified Pod object by the host exec caller.
         expected = _expected_from_args(args)
-        _verify_input_receipt(expected)
         if mode == 'serve':
             if os.geteuid() != 65532 or os.getegid() != 65532:
                 _fail('identity')
-            _ensure_input_profile(expected)
             _serve_loop()
             return 0
         binding = {**expected}
         if mode == 'load_plan':
             if os.geteuid() != 65532 or os.getegid() != 65532:
                 _fail('identity')
-            _ensure_input_profile(expected)
-            raw = sys.stdin.buffer.read(MAX_PLAN_BYTES + 1)
-            if len(raw) != args.plan_bytes:
+            raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
+            if len(raw) != args.input_bundle_bytes:
                 _fail('input_size')
-            envelope = validate_envelope(raw, expected=expected)
-            if len(_canonical(envelope)) != args.plan_bytes:
-                _fail('input_size')
-            result = load_plan(envelope, expected=expected, state_root=STATE_ROOT)
+            result = load_plan(raw, expected=expected, state_root=STATE_ROOT)
+        elif mode == 'read_plan':
+            if os.geteuid() != 65532 or os.getegid() != 65532:
+                _fail('identity')
+            result = read_plan(state_root=STATE_ROOT, binding=binding)
         else:
+            _verify_input_receipt(expected)
             plan = load_stored_plan(state_root=STATE_ROOT, binding=binding)
             if mode.startswith('broker_'):
                 if os.geteuid() != 65532 or os.getegid() != 65532:
@@ -578,13 +663,15 @@ def main(argv=None) -> int:
                 if mode == 'inspect_action':
                     result = inspect_action(plan, args.action_index,
                         NatsActor(isolation_check=lambda: _contract_supervisor('status'),
-                            expected_broker=lambda: _broker_identity(STATE_ROOT, binding)))
+                            expected_broker=lambda: _broker_identity(STATE_ROOT, binding),
+                            creds_path=_credential_path(expected)))
                 elif mode == 'execute_action':
                     result = execute_action(plan, args.action_index, binding=binding,
                         before_event_sha256=args.intent_sha256, issued_event_sha256=args.issued_sha256,
                         state_root=STATE_ROOT,
                         actor=NatsActor(isolation_check=lambda: _contract_supervisor('status'),
-                            expected_broker=lambda: _broker_identity(STATE_ROOT, binding)))
+                            expected_broker=lambda: _broker_identity(STATE_ROOT, binding),
+                            creds_path=_credential_path(expected)))
                 else:
                     result = action_readback(state_root=STATE_ROOT, binding=binding, index=args.action_index)
         sys.stdout.buffer.write(_canonical(result) + b'\n')
@@ -607,51 +694,71 @@ def ready(*, timeout=30, sleep=time.sleep, open_url=urlopen):
     _fail('broker_not_ready')
 
 
-def _binding(envelope: dict) -> dict:
-    return {key: envelope[key] for key in ('operation', 'nonce', 'pod_uid',
+def _binding(envelope: dict, expected: dict) -> dict:
+    return {key: expected[key] for key in ('operation', 'nonce', 'pod_uid',
         'contract_attempt', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
-        'verification_pv_uid', 'input_pod_uid', 'input_attempt', 'input_bundle_sha256',
-        'input_bundle_bytes', 'archive_sha256', 'archive_bytes', 'kernel_bundle_sha256',
-        'server_config_sha256', 'plan_sha256')}
+        'verification_pv_uid', 'input_bundle_sha256', 'input_bundle_bytes',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'plan_sha256',
+        'plan_bytes', 'bootstrap_creds_sha256', 'bootstrap_creds_bytes', 'server_config_bytes')}
 
 
 def _state_dir(state_root: Path, operation: str, attempt: str) -> Path:
     if not OP_RE.fullmatch(operation or '') or not ATTEMPT_RE.fullmatch(attempt or ''):
         _fail('state_identity')
-    # The Job mounts only the already-created operation directory from the
-    # verification PVC, keeping other operations' state outside its namespace.
-    return Path(state_root) / attempt
-
-
-def load_plan(envelope: dict, *, expected: dict, state_root: Path) -> dict:
-    """Persist one immutable plan binding; an existing attempt is never replayed."""
-    envelope = validate_envelope(_canonical(envelope), expected=expected)
-    binding = _binding(envelope)
-    directory = _state_dir(state_root, envelope['operation'], envelope['contract_attempt'])
+    # Kubernetes v1.34.3 emptyDir setup creates the fixed volume root at 0777.
+    # Its authority comes from this admitted Pod's volume mount and verified
+    # Pod UID, not from a root-owner check: only the trusted control container
+    # mounts this volume (the NATS sidecar does not), and no fsGroup is applied.
+    # This process creates one exclusive owner-only attempt directory below it.
+    # Never create a missing mountpoint or follow an existing link here.
+    root = Path(state_root)
     try:
-        directory.mkdir(mode=0o700, parents=True, exist_ok=False)
+        root_stat = root.lstat()
+    except OSError:
+        _fail('state_root_missing')
+    if (not stat.S_ISDIR(root_stat.st_mode) or stat.S_ISLNK(root_stat.st_mode)
+        or stat.S_IMODE(root_stat.st_mode) != 0o777):
+        _fail('state_root_profile')
+    return root / attempt
+
+
+def load_plan(raw: bytes, *, expected: dict, state_root: Path) -> dict:
+    """Persist one plan and its sole credential once; STARTED is never replayed."""
+    envelope = validate_envelope(raw, expected=expected)
+    binding = _binding(envelope, expected)
+    directory = _state_dir(state_root, expected['operation'], expected['contract_attempt'])
+    try:
+        directory.mkdir(mode=0o700, parents=False, exist_ok=False)
     except FileExistsError:
         _fail('attempt_already_started')
     row = directory.lstat()
-    if (not os.path.isdir(directory) or row.st_uid != os.geteuid()
-        or row.st_gid != os.getegid() or row.st_mode & 0o077):
+    if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode) or row.st_uid != os.geteuid()
+        or row.st_gid != os.getegid() or stat.S_IMODE(row.st_mode) != 0o700):
         _fail('state_directory_untrusted')
-    started = {'schema': RECEIPT_SCHEMA, **binding, 'status': 'STARTED'}
-    _atomic_private(directory / 'plan.started.json', started)
+    started = {'schema': INPUT_RECEIPT_SCHEMA, 'phase': 'contract-inputs',
+        'purpose': 'nats-contract-migration', **binding, 'status': 'STARTED'}
+    _atomic_private(directory / 'input.started.json', started)
+    credential = envelope['_files']['bootstrap.creds']
+    server_config = envelope['_files']['server.conf']
+    _atomic_credential(directory / 'bootstrap.creds', credential)
+    _atomic_projection(SERVER_CONFIG, server_config)
+    _ensure_input_profile(expected, state_root=state_root)
     _atomic_private(directory / 'plan.json', {'schema': SCHEMA, **binding,
         'plan': envelope['plan']})
-    complete = {'schema': RECEIPT_SCHEMA, **binding, 'status': 'COMPLETE',
-        'action_count': len(envelope['plan']['actions'])}
-    _atomic_private(directory / 'plan.receipt.json', complete)
+    complete = {'schema': INPUT_RECEIPT_SCHEMA, 'phase': 'contract-inputs',
+        'purpose': 'nats-contract-migration', **binding, 'status': 'COMPLETE',
+        'file_count': 2}
+    _atomic_private(directory / 'input.receipt.json', complete)
     return complete
 
 
 def _load_bound_plan(directory: Path, expected: dict) -> dict:
-    receipt = _private_read(directory / 'plan.receipt.json')
-    if receipt.get('status') != 'COMPLETE' or any(receipt.get(k) != v for k, v in expected.items()):
+    receipt = _verify_input_receipt(expected, state_root=directory.parent)
+    if receipt.get('status') != 'COMPLETE':
         _fail('plan_receipt_binding')
     stored = _private_read(directory / 'plan.json')
-    if stored.get('schema') != SCHEMA or any(stored.get(k) != v for k, v in expected.items()):
+    if (stored.get('schema') != SCHEMA or stored.get('plan_sha256') != expected.get('plan_sha256')
+        or any(stored.get(k) != expected.get(k) for k in expected)):
         _fail('plan_binding')
     plan = validate_plan(stored.get('plan'))
     if nats_contract_plan.digest(plan) != expected.get('plan_sha256'):
@@ -662,11 +769,23 @@ def _load_bound_plan(directory: Path, expected: dict) -> dict:
 def load_stored_plan(*, state_root: Path, binding: dict) -> dict:
     expected = {key: binding[key] for key in ('operation', 'nonce', 'pod_uid',
         'contract_attempt', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
-        'verification_pv_uid', 'input_pod_uid', 'input_attempt', 'input_bundle_sha256',
-        'input_bundle_bytes', 'archive_sha256', 'archive_bytes', 'kernel_bundle_sha256',
-        'server_config_sha256', 'plan_sha256')}
+        'verification_pv_uid', 'input_bundle_sha256', 'input_bundle_bytes',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'plan_sha256',
+        'plan_bytes', 'bootstrap_creds_sha256', 'bootstrap_creds_bytes', 'server_config_bytes')}
     return _load_bound_plan(_state_dir(state_root, expected['operation'],
         expected['contract_attempt']), expected)
+
+
+def read_plan(*, state_root: Path, binding: dict) -> dict:
+    """Read only a complete same-Pod plan/input receipt; no repair or replay."""
+    expected = {key: binding[key] for key in ('operation', 'nonce', 'pod_uid',
+        'contract_attempt', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
+        'verification_pv_uid', 'input_bundle_sha256', 'input_bundle_bytes',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'plan_sha256',
+        'plan_bytes', 'bootstrap_creds_sha256', 'bootstrap_creds_bytes', 'server_config_bytes')}
+    receipt = _verify_input_receipt(expected, state_root=state_root)
+    _load_bound_plan(_state_dir(state_root, expected['operation'], expected['contract_attempt']), expected)
+    return receipt
 
 
 def _action(plan: dict, index: int) -> tuple[dict, str]:
@@ -703,9 +822,10 @@ def execute_action(plan: dict, index: int, *, binding: dict, before_event_sha256
             _fail('host_journal_digest')
     expected_binding = {key: binding[key] for key in (
         'operation', 'nonce', 'pod_uid', 'contract_attempt', 'source_pvc_uid',
-        'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid', 'input_pod_uid',
-        'input_attempt', 'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256',
-        'archive_bytes', 'kernel_bundle_sha256', 'server_config_sha256', 'plan_sha256')}
+        'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid', 'input_bundle_sha256',
+        'input_bundle_bytes', 'archive_sha256', 'archive_bytes', 'server_config_sha256',
+        'plan_sha256', 'plan_bytes', 'bootstrap_creds_sha256', 'bootstrap_creds_bytes',
+        'server_config_bytes')}
     directory = _state_dir(state_root, expected_binding['operation'], expected_binding['contract_attempt'])
     stored_plan = _load_bound_plan(directory, expected_binding)
     if stored_plan != plan:
@@ -751,9 +871,9 @@ def action_readback(*, state_root: Path, binding: dict, index: int) -> dict:
     directory = _state_dir(state_root, binding.get('operation'), binding.get('contract_attempt'))
     expected = {key: binding[key] for key in ('operation', 'nonce', 'pod_uid',
         'contract_attempt', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
-        'verification_pv_uid', 'input_pod_uid', 'input_attempt', 'input_bundle_sha256',
-        'input_bundle_bytes', 'archive_sha256', 'archive_bytes', 'kernel_bundle_sha256',
-        'server_config_sha256', 'plan_sha256')}
+        'verification_pv_uid', 'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256',
+        'archive_bytes', 'server_config_sha256', 'plan_sha256', 'plan_bytes',
+        'bootstrap_creds_sha256', 'bootstrap_creds_bytes', 'server_config_bytes')}
     started_path = directory / ('action-%02d.started.json' % index)
     complete_path = directory / ('action-%02d.receipt.json' % index)
     if not started_path.exists():

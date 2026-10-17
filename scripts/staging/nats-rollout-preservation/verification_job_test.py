@@ -33,11 +33,11 @@ SESSION_BINDING = BINDING | {'session_attempt': '1234abcd',
     'archive_sha256': 'd' * 64, 'archive_bytes': 1234}
 CONTRACT_REQUEST = REQUEST | {'phase': 'contract-migration'}
 CONTRACT_BINDING = BINDING | {'contract_attempt': 'a1b2c3d4',
-    'input_pod_uid': '55555555-5555-4555-8555-555555555555',
-    'input_attempt': '1111aaaa', 'archive_sha256': 'a' * 64, 'archive_bytes': 8192,
+    'archive_sha256': 'a' * 64, 'archive_bytes': 8192,
     'input_bundle_sha256': '6' * 64, 'input_bundle_bytes': 2048,
-    'kernel_bundle_sha256': '7' * 64, 'plan_sha256': '8' * 64,
-    'plan_bytes': 16384, 'server_config_sha256': '9' * 64}
+    'plan_sha256': '8' * 64, 'plan_bytes': 16384,
+    'server_config_sha256': '9' * 64, 'server_config_bytes': 4096,
+    'bootstrap_creds_sha256': '7' * 64, 'bootstrap_creds_bytes': 1024}
 
 
 class VerificationJobTests(unittest.TestCase):
@@ -363,7 +363,7 @@ class VerificationJobTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(jobs.VerificationJobError):
                 jobs.document(SESSION_REQUEST, invalid, IMAGE)
 
-    def test_contract_migration_job_separates_source_writer_from_control_and_scratch(self):
+    def test_contract_migration_job_separates_source_writer_from_control_state_and_config(self):
         row = jobs.document(CONTRACT_REQUEST, CONTRACT_BINDING, IMAGE)
         pod = row['spec']['template']['spec']
         self.assertEqual(row['spec']['backoffLimit'], 0)
@@ -383,20 +383,22 @@ class VerificationJobTests(unittest.TestCase):
         self.assertEqual(nats['args'], ['--contract'])
         self.assertEqual(nats['volumeMounts'], [
             {'name': 'source', 'mountPath': '/data'},
-            {'name': 'scratch', 'mountPath': '/server.conf',
-                'subPath': 'inputs/public/server.conf', 'readOnly': True},
+            {'name': 'broker-config', 'mountPath': '/broker-config', 'readOnly': True},
         ])
         control = pod['containers'][0]
         self.assertNotIn('runAsUser', control['securityContext'])
         self.assertNotIn('runAsGroup', control['securityContext'])
         self.assertEqual(control['args'][:2], ['--serve', '--operation'])
         self.assertEqual(control['volumeMounts'], [
-            {'name': 'scratch', 'mountPath': '/inputs/private',
-                'subPath': 'kernelinputbundle', 'readOnly': True},
-            {'name': 'scratch', 'mountPath': '/state',
-                'subPath': 'state/' + CONTRACT_REQUEST['operation']},
+            {'name': 'broker-config', 'mountPath': '/broker-config'},
+            {'name': 'control-state', 'mountPath': '/state'},
         ])
         self.assertNotIn('source', [row['name'] for row in control['volumeMounts']])
+        volumes = {volume['name']: volume for volume in pod['volumes']}
+        self.assertEqual(set(volumes), {'source', 'broker-config', 'control-state'})
+        self.assertEqual(volumes['broker-config']['emptyDir']['sizeLimit'], '1Mi')
+        self.assertEqual(volumes['control-state']['emptyDir']['sizeLimit'], '16Mi')
+        self.assertNotIn('scratch', str(pod))
         self.assertNotIn('hostPath', str(pod))
         self.assertNotIn('secret', str(pod).lower())
 
@@ -404,9 +406,13 @@ class VerificationJobTests(unittest.TestCase):
         vectors = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING)
         self.assertEqual(vectors['load-plan'][:2],
             ['/usr/bin/python3', '/voice-nats-runner/contract_runner.py'])
-        for field in ('--input-attempt', '--archive-sha256', '--archive-bytes',
-            '--server-config-sha256'):
+        for field in ('--contract-attempt', '--archive-sha256', '--archive-bytes',
+            '--server-config-sha256', '--server-config-bytes', '--bootstrap-creds-sha256',
+            '--bootstrap-creds-bytes'):
             self.assertIn(field, vectors['load-plan'])
+        self.assertTrue(vectors['load-plan']['stdin'])
+        self.assertEqual(vectors['read-plan'][:3], ['/usr/bin/python3',
+            '/voice-nats-runner/contract_runner.py', '--read-plan'])
         mutation = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING,
             action='execute-action', action_index=2,
             session_inputs={'intent_sha256': 'a' * 64, 'issued_sha256': 'b' * 64})['action']
