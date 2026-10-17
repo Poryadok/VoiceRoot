@@ -1217,7 +1217,7 @@
   "guestConvertTitle": "Создайте аккаунт",
   "guestConvertSubtitle": "Укажите email и пароль, чтобы сохранить чаты и профиль.",
   "guestConvertSubmit": "Создать аккаунт",
-  "guestConvertVerificationSubtitle": "Введите код, отправленный на {email}. Гостевой доступ сохранится до подтверждения.",
+  "guestConvertVerificationSubtitle": "Введите код подтверждения для {email}. Гостевой доступ сохранится до подтверждения.",
   "@guestConvertVerificationSubtitle": {"placeholders": {"email": {}}},
   "guestConvertCodeLabel": "Код подтверждения",
   "guestConvertVerify": "Подтвердить email",

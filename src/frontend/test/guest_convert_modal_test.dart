@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
@@ -251,6 +253,111 @@ void main() {
     );
     expect(find.byKey(GuestConvertSheet.errorKey), findsOneWidget);
     expect(find.text('validation_failed'), findsNothing);
+  });
+
+  testWidgets('initial OTP send failure keeps resend recovery without claiming sent', (
+    tester,
+  ) async {
+    var conversions = 0;
+    var sends = 0;
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith((ref) {
+            final controller = authenticatedAuthController(ref);
+            controller.state = const AuthState(
+              session: AuthSession(
+                accessToken: 'guest-access',
+                refreshToken: 'guest-refresh',
+                accountId: 'acc-test',
+                activeProfileId: 'prof-test',
+                expiresInSeconds: 900,
+                accountType: 'guest',
+              ),
+              isGuest: true,
+            );
+            return controller;
+          }),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path == '/api/v1/auth/convert-guest') {
+                conversions++;
+                return http.Response(
+                  jsonEncode({
+                    'session': {
+                      'access_token': 'converted-access',
+                      'refresh_token': 'converted-refresh',
+                      'expires_in_seconds': 900,
+                      'account_id': 'acc-test',
+                      'profile_id': 'prof-test',
+                      'account_type': 'guest',
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (request.url.path == '/api/v1/auth/otp/send') {
+                sends++;
+                return sends == 1
+                    ? http.Response('', 503)
+                    : http.Response('', 204);
+              }
+              return http.Response('not found', 404);
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: GuestConvertSheet()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(GuestConvertSheet.emailFieldKey),
+      'guest@example.com',
+    );
+    await tester.enterText(
+      find.byKey(GuestConvertSheet.passwordFieldKey),
+      'validpass',
+    );
+    await tester.tap(find.text('Create account'));
+    await tester.pumpAndSettle();
+
+    expect(conversions, 1);
+    expect(sends, 1);
+    expect(find.byKey(GuestConvertSheet.codeFieldKey), findsOneWidget);
+    expect(find.byKey(GuestConvertSheet.resendButtonKey), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(
+      find.text(
+        'Enter the verification code for guest@example.com. Your guest access stays active until it is verified.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('code sent'), findsNothing);
+
+    await tester.tap(find.byKey(GuestConvertSheet.resendButtonKey));
+    await tester.pumpAndSettle();
+    expect(conversions, 1);
+    expect(sends, 2);
+    expect(find.byKey(GuestConvertSheet.errorKey), findsNothing);
   });
 
   testWidgets('convert sheet hides unknown Auth diagnostics', (tester) async {

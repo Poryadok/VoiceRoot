@@ -501,11 +501,12 @@ class AuthController extends StateNotifier<AuthState> {
           clearError: true,
         );
         await _persist(session);
+        // Conversion creates a pending email identity but does not send OTP.
+        // Keep the returned restricted session so a failed send can be retried
+        // without converting the account again.
+        final sendError = await _sendEmailVerificationOtp(session);
         _convertingGuest = false;
-        // Auth sends the initial verification code under this restricted
-        // session atomically with conversion; a second client send would be a
-        // rate-limited resend.
-        return null;
+        return sendError;
       case AuthSessionFailure(
         :final message,
         :final errorCode,

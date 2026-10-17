@@ -1134,10 +1134,11 @@ void main() {
     expect(container.read(authControllerProvider).errorKey, 'rate_limited');
   });
 
-  test('convertGuest sends user-entered password', () async {
+  test('convertGuest sends user password and one authenticated initial OTP', () async {
     const guestPassword = 'guest-auto-password-1';
     const userPassword = 'user-chosen-password1';
     String? convertBody;
+    final otpRequests = <http.Request>[];
     final guestStorage = InMemoryGuestCredentialsStorage();
     await guestStorage.writePassword(guestPassword);
     final mock = MockClient((req) async {
@@ -1154,6 +1155,7 @@ void main() {
         );
       }
       if (req.url.path == '/api/v1/auth/otp/send') {
+        otpRequests.add(req);
         return http.Response('', 204);
       }
       return http.Response('not found', 404);
@@ -1190,7 +1192,95 @@ void main() {
     expect(convertBody, isNotNull);
     expect(convertBody, contains(userPassword));
     expect(convertBody, isNot(contains(guestPassword)));
+    expect(otpRequests, hasLength(1));
+    expect(otpRequests.single.method, 'POST');
+    expect(
+      otpRequests.single.headers['authorization'],
+      'Bearer access-converted',
+    );
+    expect(jsonDecode(otpRequests.single.body), {'otp_type': 'email_verify'});
   });
+
+  test(
+    'initial guest conversion OTP failure keeps pending session and resend recovery',
+    () async {
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      await guestStorage.writePassword('guest-auto-password-1');
+      final storage = InMemoryAuthSessionStorage();
+      var conversions = 0;
+      var sends = 0;
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/convert-guest') {
+          conversions++;
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'access_token': 'guest-converted-access',
+                'refresh_token': 'guest-converted-refresh',
+                'account_type': 'guest',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/otp/send') {
+          sends++;
+          if (sends == 1) return http.Response('', 503);
+          if (sends == 2) return http.Response('', 429);
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = ProviderContainer(
+        overrides: [
+          gatewayConfigProvider.overrideWithValue(config),
+          httpClientProvider.overrideWithValue(mock),
+          authSessionStorageProvider.overrideWithValue(storage),
+          guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        isGuest: true,
+      );
+
+      final initialSendError = await controller.convertGuest(
+        email: 'guest@example.com',
+        password: 'user-password1',
+      );
+      expect(initialSendError, isNotNull);
+      final pending = container.read(authControllerProvider);
+      expect(pending.isGuest, isTrue);
+      expect(pending.pendingGuestConversionEmail, 'guest@example.com');
+      expect(pending.session?.accessToken, 'guest-converted-access');
+      expect((await storage.read())?.refreshToken, 'guest-converted-refresh');
+      expect(await guestStorage.readPendingConversionEmail(), 'guest@example.com');
+
+      expect(
+        await controller.resendGuestConversionEmailOtp(),
+        'rate_limited',
+      );
+      expect(
+        container.read(authControllerProvider).session?.accessToken,
+        'guest-converted-access',
+      );
+      expect(await controller.resendGuestConversionEmailOtp(), isNull);
+      expect(conversions, 1);
+      expect(sends, 3);
+      expect(container.read(authControllerProvider).session?.accessToken,
+          'guest-converted-access');
+    },
+  );
 
   test(
     'guest conversion persists the verified regular SessionEnvelope and clears guest state',
@@ -1264,6 +1354,11 @@ void main() {
         container.read(authControllerProvider).pendingGuestConversionEmail,
         'guest@example.com',
       );
+      expect(container.read(authControllerProvider).session?.accountId, 'acc-1');
+      expect(
+        container.read(authControllerProvider).session?.activeProfileId,
+        'prof-1',
+      );
       expect(await guestStorage.readPassword(), 'guest-auto-password-1');
 
       expect(await controller.verifyGuestConversionEmail('123456'), isNull);
@@ -1271,6 +1366,8 @@ void main() {
       expect(state.isGuest, isFalse);
       expect(state.pendingGuestConversionEmail, isNull);
       expect(state.isGuestConversionPromotionPending, isFalse);
+      expect(state.session?.accountId, 'acc-1');
+      expect(state.session?.activeProfileId, 'prof-1');
       expect(await guestStorage.readPassword(), isNull);
       expect(await guestStorage.readPendingConversionEmail(), isNull);
       expect(await guestStorage.isGuestConversionPromotionPending(), isFalse);
