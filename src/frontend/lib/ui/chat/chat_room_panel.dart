@@ -743,7 +743,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         (blockChannelMainFeed && replyTarget == null);
     final roomBelongsToViewer =
         activeId != null && room.historyProfileId == activeId;
-    final peerId = isGroup
+    final chatMetadataAvailable = chatMeta != null;
+    final peerId = !chatMetadataAvailable || isGroup
         ? null
         : resolveDmPeerForChatId(
             chatId: widget.chatId,
@@ -784,9 +785,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final shortId = widget.chatId.length <= 8
         ? widget.chatId
         : widget.chatId.substring(0, 8);
-    final title = isGroup
+    final title = !chatMetadataAvailable
+        ? l10n.chatRoomTitle(shortId)
+        : isGroup
         ? (groupName ?? l10n.chatRoomTitle(shortId))
-        : (peerName ?? groupName ?? l10n.socialProfileUnavailable);
+        : (peerName ?? l10n.socialProfileUnavailable);
     final peerIsPremium =
         peerId != null && ref.watch(profilePremiumBadgeProvider(peerId));
     final voice = VoiceColors.of(context);
@@ -860,18 +863,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         },
         icon: Icon(_inChatSearchOpen ? Icons.close : Icons.search),
       ),
-      IconButton(
-        key: ChatRoomPanel.chatInfoKey,
-        tooltip: l10n.chatInfoOpen,
-        onPressed: () => openChatInfoPanel(
-          context,
-          ref,
-          chatId: widget.chatId,
-          groupName: groupName,
-          isGroup: isGroup,
+      if (chatMetadataAvailable)
+        IconButton(
+          key: ChatRoomPanel.chatInfoKey,
+          tooltip: l10n.chatInfoOpen,
+          onPressed: () => openChatInfoPanel(
+            context,
+            ref,
+            chatId: widget.chatId,
+            groupName: groupName,
+            isGroup: isGroup,
+          ),
+          icon: const Icon(Icons.info_outline),
         ),
-        icon: const Icon(Icons.info_outline),
-      ),
       if (pinnedMessages.isNotEmpty && _pinnedBarHidden)
         IconButton(
           key: ChatRoomPanel.pinnedMessagesHeaderKey,
