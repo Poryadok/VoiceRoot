@@ -32,6 +32,7 @@ def evaluate(expression, values):
     expression = expression.strip().removeprefix('${{').removesuffix('}}').strip()
     expression = ' '.join(expression.split())
     expression = expression.replace('always()', 'true')
+    expression = expression.replace('!cancelled()', 'workflow_not_cancelled')
 
     def token(match):
         value = match.group()
@@ -61,7 +62,8 @@ OUTPUTS = set(re.findall(r'needs\.changes\.outputs\.([\w-]+)', WORKFLOW))
 
 def context(event, **flags):
     values = {'github.event_name': event, 'github.ref': 'refs/heads/master',
-              'needs.changes.result': 'success', 'inputs.profile': 'auto'}
+              'needs.changes.result': 'success', 'inputs.profile': 'auto',
+              'workflow_not_cancelled': True}
     values.update({'needs.changes.outputs.' + key: 'false' for key in OUTPUTS})
     values['needs.changes.outputs.integration_go_services'] = '[]'
     values.update({'needs.changes.outputs.' + key: value for key, value in flags.items()})
@@ -91,6 +93,19 @@ def run_gate(values, job=None, result=None):
 
 
 class SelectedAcceptanceGateTests(unittest.TestCase):
+    def test_substantive_jobs_stop_on_cancellation_and_preserve_failure_gating(self):
+        values = context('pull_request', code='true', run_go='true')
+        values['needs.backend-go-pkg.result'] = 'skipped'
+        condition = job_condition('backend-go')
+        self.assertTrue(evaluate(condition, values))
+
+        values['needs.backend-go-pkg.result'] = 'failure'
+        self.assertFalse(evaluate(condition, values))
+
+        values['needs.backend-go-pkg.result'] = 'success'
+        values['workflow_not_cancelled'] = False
+        self.assertFalse(evaluate(condition, values))
+
     def test_changed_t055_path_selects_live_handoff_and_gate(self):
         filters = (ROOT / '.github/ci/path-filters.yml').read_text(encoding='utf-8')
         selected = re.search(r'^a1_t106_live:\n(.*?)(?=^\S)', filters,
