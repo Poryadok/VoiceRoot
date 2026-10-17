@@ -561,7 +561,7 @@ class PvcArchiveRuntime:
         import kube_json_api
         import verification_job
         import native_store
-        if label != 'rollout-before' or not isinstance(manifest, dict):
+        if label not in ('rollout-before','rollout-after') or not isinstance(manifest, dict):
             _fail('census_request_invalid')
         # Revalidate the retained source artifact and canonical manifest before
         # allocating scratch; no archive bytes are read into memory.
@@ -581,21 +581,29 @@ class PvcArchiveRuntime:
         # Freshly resolve the selected source for every mutating phase. The
         # journaled source is an expectation, never an authority.
         self._fresh_source()
-        attempt = hashlib.sha256((self.operation + ':' + self.request['nonce'] + ':census').encode()).hexdigest()[:8]
-        census_nonce = hashlib.sha256((self.request['nonce'] + ':prepare-census').encode()).hexdigest()[:32]
+        # Each independent cut receives a fresh disposable PVC. Persist the
+        # random attempt before any PVC CREATE so a resumed/unknown operation
+        # can only reconcile this exact claim; it cannot silently allocate a
+        # replacement attempt and replay the producer phase.
+        import secrets
+        attempt = secrets.token_hex(4)
+        census_nonce = hashlib.sha256((self.request['nonce'] + ':' + label + '-census').encode()).hexdigest()[:32]
         request = {'operation': self.operation, 'nonce': census_nonce, 'phase': 'census'}
-        name = 'voice-nats-verify-' + self.operation
-        pvc, pvc_uid, pv, pv_uid, node_name, hostname, sc_identity = self._ensure_verification_claim(name)
+        name = 'voice-nats-verify-' + self.operation + '-' + attempt
+        self.persist_intent({'phase':'verification-pvc','state':'PVC_CREATE_INTENT',
+            'operation':self.operation,'nonce':census_nonce,'attempt':attempt,'claim':name,
+            'purpose':'verification','cut':label})
+        pvc, pvc_uid, pv, pv_uid, node_name, hostname, sc_identity = self._ensure_verification_claim(name,attempt,census_nonce)
         binding = {
             'source_claim': self.binding['claim_name'], 'source_uid': self.binding['claim_uid'],
             'source_pv_name': self.binding['pv_name'], 'source_pv_uid': self.binding['pv_uid'],
             'source_node_name': self.binding['node_name'],
             'source_hostname': self.binding['node_hostname'],
-            'verification_claim': name, 'verification_uid': pvc_uid,
+            'verification_claim': name, 'verification_attempt':attempt, 'verification_uid': pvc_uid,
             'verification_pv_name': pv['metadata']['name'], 'verification_pv_uid': pv_uid,
             'verification_node_name': node_name, 'verification_hostname': hostname,
         }
-        binding = verification_job.validate_binding(binding)
+        binding = verification_job.validate_census_binding(request, binding)
         self.persist_intent({'phase':'census','state':'PVC_BOUND','operation':self.operation,
             'nonce':request['nonce'],'session_attempt':attempt,'verification_claim':name,
             'verification_uid':pvc_uid,'verification_pv_name':pv['metadata']['name'],
@@ -738,8 +746,11 @@ class PvcArchiveRuntime:
             finally: os.close(fd)
         return files['bootstrap.creds'],files['server.conf']
 
-    def _ensure_verification_claim(self,name):
+    def _ensure_verification_claim(self,name,attempt,nonce):
         import kube_json_api
+        if (not isinstance(attempt,str) or not re.fullmatch('[a-f0-9]{8}',attempt)
+            or name!='voice-nats-verify-'+self.operation+'-'+attempt):
+            _fail('verification_attempt_invalid')
         if self.verification_pvc_size_bytes is None or self.verification_storage_class is None:
             _fail('verification_storage_config_missing')
         # StorageClass identity is pinned before any CREATE and rechecked before
@@ -753,16 +764,16 @@ class PvcArchiveRuntime:
             _fail('verification_storage_class_invalid')
         sc_identity={'name':sm['name'],'uid':sm['uid'],'resourceVersion':sm['resourceVersion'],
             'provisioner':sc['provisioner'],'volumeBindingMode':mode}
-        nonce=self.request['nonce']
         expected={'apiVersion':'v1','kind':'PersistentVolumeClaim','metadata':{'name':name,
             'namespace':kube_json_api.NAMESPACE,'labels':{'voice.io/nats-operation':self.operation,
-                'voice.io/nats-job-nonce':nonce,'voice.io/nats-pvc-role':'verification'}},
+                'voice.io/nats-job-nonce':nonce,'voice.io/nats-pvc-role':'verification',
+                'voice.io/nats-verification-attempt':attempt}},
             'spec':{'accessModes':['ReadWriteOnce'],'volumeMode':'Filesystem',
                 'storageClassName':self.verification_storage_class,
                 'resources':{'requests':{'storage':str(self.verification_pvc_size_bytes)}}}}
         self._fresh_source()
         self.persist_intent({'phase':'verification-pvc','state':'PVC_CREATE_INTENT','name':name,
-            'operation':self.operation,'nonce':nonce,'storage_class':sc_identity,
+            'operation':self.operation,'nonce':nonce,'attempt':attempt,'storage_class':sc_identity,
             'size_bytes':self.verification_pvc_size_bytes})
         try:
             existing=self.api.get_pvc(kube_json_api.NAMESPACE,name)
@@ -777,7 +788,7 @@ class PvcArchiveRuntime:
             'volumeBindingMode':current_sc.get('volumeBindingMode')}!=sc_identity:
             _fail('verification_storage_class_changed')
         try: existing=self.api.create_verification_pvc(self.operation,nonce,
-            self.verification_pvc_size_bytes,self.verification_storage_class)
+            self.verification_pvc_size_bytes,self.verification_storage_class,attempt=attempt)
         except Exception:
             try: existing=self.api.get_pvc(kube_json_api.NAMESPACE,name)
             except kube_json_api.KubeNotFound: _fail('verification_pvc_create_unknown')
@@ -871,12 +882,13 @@ class PvcArchiveRuntime:
         if self.api.delete_job(kube_json_api.NAMESPACE,job_name,job_uid) is not True:
             _fail('verification_binder_cleanup_unconfirmed')
 
-    def _fresh_verification_storage(self,name,uid,pv_uid,sc_identity,node_name,hostname):
+    def _fresh_verification_storage(self,name,uid,pv_uid,sc_identity,node_name,hostname,attempt=None):
         import kube_json_api
         pvc=self.api.get_pvc(kube_json_api.NAMESPACE,name)
         pspec=pvc.get('spec',{})
         if (pvc.get('metadata',{}).get('uid')!=uid or pvc.get('metadata',{}).get('name')!=name
             or pvc.get('metadata',{}).get('namespace')!=kube_json_api.NAMESPACE
+            or (attempt is not None and pvc.get('metadata',{}).get('labels',{}).get('voice.io/nats-verification-attempt')!=attempt)
             or pvc.get('status',{}).get('phase')!='Bound'
             or pspec.get('accessModes')!=['ReadWriteOnce'] or pspec.get('volumeMode','Filesystem')!='Filesystem'
             or pspec.get('storageClassName')!=self.verification_storage_class
@@ -910,7 +922,8 @@ class PvcArchiveRuntime:
         import verification_job
         self._fresh_source()
         self._fresh_verification_storage(binding['verification_claim'],binding['verification_uid'],
-            binding['verification_pv_uid'],sc_identity,binding['verification_node_name'],binding['verification_hostname'])
+            binding['verification_pv_uid'],sc_identity,binding['verification_node_name'],
+            binding['verification_hostname'],binding['verification_attempt'])
         job=verification_job.verify_job(self.api.get_job('voice-staging',wanted['metadata']['name']),
             wanted,expected_uid=job_uid)
         if job.get('status',{}).get('failed',0)>0:

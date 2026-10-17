@@ -157,13 +157,16 @@ class PrepareAPI(native_runtime_stage_test.FakeAPI):
                 'resourceVersion': '1'}, 'provisioner': 'example.test/csi',
             'volumeBindingMode': 'Immediate'}
 
-    def create_verification_pvc(self, operation, nonce, size_bytes, storage_class):
-        self.calls.append(('create-verification-pvc', operation, nonce))
+    def create_verification_pvc(self, operation, nonce, size_bytes, storage_class, *, attempt):
+        self.calls.append(('create-verification-pvc', operation, nonce, attempt))
+        claim_name = 'voice-nats-verify-' + operation + '-' + attempt
+        self.scratch_pv['spec']['claimRef']['name'] = claim_name
         self.scratch_claim = {'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim',
-            'metadata': {'name': 'voice-nats-verify-' + operation, 'namespace': 'voice-staging',
+            'metadata': {'name': claim_name, 'namespace': 'voice-staging',
                 'uid': SCRATCH_UID, 'resourceVersion': '1', 'labels': {
                     'voice.io/nats-operation': operation, 'voice.io/nats-job-nonce': nonce,
-                    'voice.io/nats-pvc-role': 'verification'}},
+                    'voice.io/nats-pvc-role': 'verification',
+                    'voice.io/nats-verification-attempt':attempt}},
             'spec': {'accessModes': ['ReadWriteOnce'], 'volumeMode': 'Filesystem',
                 'storageClassName': storage_class,
                 'resources': {'requests': {'storage': str(size_bytes)}},

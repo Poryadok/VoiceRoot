@@ -586,23 +586,25 @@ class _KubernetesJSONAPIBase:
         if namespace != NAMESPACE: _fail('namespace_invalid')
         return self._request('POST', '/apis/batch/v1/namespaces/' + self._segment(namespace) + '/jobs', document)
 
-    def create_verification_pvc(self, operation, nonce, size_bytes, storage_class):
-        """Create the one fixed operation target claim from trusted installed config."""
+    def create_verification_pvc(self, operation, nonce, size_bytes, storage_class, *, attempt):
+        """Create one attempt-bound disposable claim from trusted installed config."""
         if (not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation)
             or not isinstance(nonce, str) or not re.fullmatch('[a-f0-9]{32}', nonce)
+            or not isinstance(attempt, str) or not re.fullmatch('[a-f0-9]{8}', attempt)
             or type(size_bytes) is not int or not 0 < size_bytes <= (1 << 63) - 1
             or not isinstance(storage_class, str) or len(storage_class) > 253
             or any(not label or len(label) > 63
                 or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9]*[a-z0-9])?', label)
                 for label in storage_class.split('.'))):
             _fail('verification_pvc_request_invalid')
-        name = 'voice-nats-verify-' + operation
+        name = 'voice-nats-verify-' + operation + '-' + attempt
         document = {
             'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim',
             'metadata': {'name': name, 'namespace': NAMESPACE,
                 'labels': {'voice.io/nats-operation': operation,
                     'voice.io/nats-job-nonce': nonce,
-                    'voice.io/nats-pvc-role': 'verification'}},
+                    'voice.io/nats-pvc-role': 'verification',
+                    'voice.io/nats-verification-attempt': attempt}},
             'spec': {'accessModes': ['ReadWriteOnce'], 'volumeMode': 'Filesystem',
                 'storageClassName': storage_class,
                 'resources': {'requests': {'storage': str(size_bytes)}}},
@@ -749,6 +751,87 @@ class _KubernetesJSONAPIBase:
             + self._segment(pod_name) + '/exec?' + urlencode(query))
         token = self._operation_token()
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
+
+    def exec_pod_contract_input(self, namespace, pod_name, pod_uid, request, binding, bundle_bytes):
+        """Load the one canonical contract plan/credential envelope into its exact Pod."""
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        try:
+            import verification_job
+            import nats_contract_runner
+            row = verification_job.validate_request(request)
+            storage = verification_job.validate_contract_binding(binding)
+            vector = verification_job.exec_vectors(row, pod_uid, storage, action='load-plan')
+        except (ImportError, TypeError, ValueError):
+            _fail('contract_input_request_invalid')
+        if row.get('phase') != 'contract-migration' or set(vector) != {'action', 'stdin'} or vector['stdin'] is not True:
+            _fail('contract_input_action_invalid')
+        if (not isinstance(bundle_bytes, bytes) or not 0 < len(bundle_bytes) <= nats_contract_runner.MAX_INPUT_BYTES
+            or len(bundle_bytes) != storage['input_bundle_bytes']
+            or hashlib.sha256(bundle_bytes).hexdigest() != storage['input_bundle_sha256']):
+            _fail('contract_input_bundle_invalid')
+        expected = dict(storage)
+        expected.update(operation=row['operation'], nonce=row['nonce'])
+        try:
+            nats_contract_runner.validate_envelope(bundle_bytes, expected=expected)
+        except (nats_contract_runner.ContractRunnerError, ValueError, TypeError):
+            _fail('contract_input_bundle_invalid')
+        pod = self.get_pod(namespace, pod_name)
+        metadata = pod.get('metadata', {})
+        if metadata.get('uid') != pod_uid or metadata.get('namespace') != namespace:
+            _fail('contract_exec_pod_changed')
+        command = vector['action']
+        if not isinstance(command, list) or not command:
+            _fail('contract_input_vector_invalid')
+        query = [('container', 'control'), ('stdin', 'true'), ('stdout', 'true'),
+            ('stderr', 'false'), ('tty', 'false')]
+        query.extend(('command', item) for item in command)
+        path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
+            + self._segment(pod_name) + '/exec?' + urlencode(query))
+        token = self._operation_token()
+        if not hasattr(os, 'memfd_create'):
+            _fail('contract_input_memfd_unavailable')
+        fd = os.memfd_create('voice-contract-input', getattr(os, 'MFD_CLOEXEC', 0))
+        try:
+            view = memoryview(bundle_bytes)
+            offset = 0
+            while offset < len(view):
+                offset += os.write(fd, view[offset:])
+            os.lseek(fd, 0, os.SEEK_SET)
+            return _websocket_exec_input(self, path, token, fd, b'', archive_bytes=len(bundle_bytes),
+                archive_sha256=storage['input_bundle_sha256'], raw_stdin=True,
+                stdout_limit=MAX_LOG_RESPONSE)
+        finally:
+            os.close(fd)
+
+    def exec_pod_contract(self, namespace, pod_name, pod_uid, request, binding, action, *,
+                          action_index=None, journal_hashes=None):
+        """Run one fixed contract action/readback vector in the bound control container."""
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        try:
+            import verification_job
+            row = verification_job.validate_request(request)
+            storage = verification_job.validate_contract_binding(binding)
+            vector = verification_job.exec_vectors(row, pod_uid, storage, action=action,
+                action_index=action_index, session_inputs=journal_hashes)
+        except (ImportError, TypeError, ValueError):
+            _fail('contract_exec_request_invalid')
+        if (row.get('phase') != 'contract-migration' or action == 'load-plan'
+            or set(vector) != {'action'} or not isinstance(vector['action'], list) or not vector['action']):
+            _fail('contract_exec_action_invalid')
+        pod = self.get_pod(namespace, pod_name)
+        metadata = pod.get('metadata', {})
+        if metadata.get('uid') != pod_uid or metadata.get('namespace') != namespace:
+            _fail('contract_exec_pod_changed')
+        query = [('container', 'control'), ('stdin', 'false'), ('stdout', 'true'),
+            ('stderr', 'false'), ('tty', 'false')]
+        query.extend(('command', item) for item in vector['action'])
+        path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
+            + self._segment(pod_name) + '/exec?' + urlencode(query))
+        token = self._operation_token()
+        chunks = _websocket_exec(self, path, token, max_bytes=MAX_LOG_RESPONSE)
+        return b''.join(chunks)
 
     def exec_hub_jsz(self, namespace, pod_name, pod_uid, container, *, timeout_seconds=30):
         """Read the captured Hub's fixed loopback JSZ endpoint over pods/exec."""
@@ -909,7 +992,7 @@ class _KubernetesJSONAPIBase:
             import census_stream
             import verification_job
             row = verification_job.validate_request(request)
-            storage = verification_job.validate_binding(binding)
+            storage = verification_job.validate_census_binding(request, binding)
             if row['phase'] != 'census':
                 _fail('verification_census_phase_invalid')
             if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
@@ -933,7 +1016,7 @@ class _KubernetesJSONAPIBase:
         try:
             import verification_job
             row = verification_job.validate_request(request)
-            storage = verification_job.validate_binding(binding)
+            storage = verification_job.validate_census_binding(request, binding)
             if row['phase'] != 'census':
                 _fail('verification_input_phase_invalid')
             if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
@@ -990,7 +1073,7 @@ class _KubernetesJSONAPIBase:
         try:
             import verification_job
             row = verification_job.validate_request(request)
-            storage = verification_job.validate_binding(binding)
+            storage = verification_job.validate_census_binding(request, binding)
             if row['phase'] != 'census':
                 _fail('census_input_receipt_phase_invalid')
             input_pod_uid = pod_uid if input_pod_uid is None else input_pod_uid
@@ -1010,7 +1093,7 @@ class _KubernetesJSONAPIBase:
         try:
             import verification_job
             row = verification_job.validate_request(request)
-            storage = verification_job.validate_binding(binding)
+            storage = verification_job.validate_census_binding(request, binding)
             input_pod_uid = pod_uid if input_pod_uid is None else input_pod_uid
             if not isinstance(input_pod_uid, str) or not _UID.fullmatch(input_pod_uid):
                 _fail('census_input_consumption_uid_invalid')
@@ -1044,7 +1127,7 @@ def _decode_single_receipt_line(raw, code):
 def _validate_census_input_receipt(raw, request, binding, archive, session_inputs, pod_uid):
     import verification_job
     row = verification_job.validate_request(request)
-    storage = verification_job.validate_binding(binding)
+    storage = verification_job.validate_census_binding(request, binding)
     if (row['phase'] != 'census' or not isinstance(archive, dict)
         or set(archive) != {'sha256', 'bytes'}
         or not isinstance(session_inputs, dict)
@@ -1075,7 +1158,7 @@ def _validate_census_consumption_receipt(raw, request, binding, archive, session
                                          input_receipt, pod_uid, input_pod_uid):
     import verification_job
     row = verification_job.validate_request(request)
-    storage = verification_job.validate_binding(binding)
+    storage = verification_job.validate_census_binding(request, binding)
     if (row['phase'] != 'census' or input_receipt.get('pod_uid') != input_pod_uid
         or input_receipt.get('operation') != row['operation'] or input_receipt.get('nonce') != row['nonce']):
         _fail('census_input_consumption_binding_invalid')
