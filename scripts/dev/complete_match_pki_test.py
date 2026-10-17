@@ -2,6 +2,7 @@
 import base64
 import copy
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -130,6 +131,41 @@ class CompleteMatchOperatorTests(unittest.TestCase):
             self.assertIn('tls.key', receipt['resources'][name]['keyNames'])
         self.assertEqual(set(receipt['resources']), TARGETS)
         self.assertEqual(receipt['resources'][CLIENT_CA]['keyNames'], ['ca.crt'])
+
+    def test_retained_ca_requires_exact_legacy_source_template_binding(self):
+        expected_binding = hashlib.sha256(
+            f'{pki.OLD_SOURCE_SHA}:{pki.OLD_TEMPLATE_SHA256}'.encode('ascii')).hexdigest()
+        row = {
+            'metadata': {
+                'uid': pki.OLD_CA_UID,
+                'resourceVersion': pki.OLD_CA_RV,
+                'namespace': pki.NAMESPACE,
+                'labels': copy.deepcopy(pki.MANAGED_LABELS),
+                'annotations': {
+                    'voice.dev/match-squad-pki-operation': pki.OLD_OPERATION,
+                    'voice.dev/match-squad-pki-source-sha256': expected_binding,
+                },
+            },
+            'immutable': True,
+            'data': {'ca.crt': self.ca_cert.read_text(encoding='ascii')},
+        }
+        kube = mock.Mock()
+        kube.get.return_value = row
+        with mock.patch.object(pki, 'certificate_fingerprint', return_value=pki.OLD_CA_FINGERPRINT):
+            self.assertEqual(pki._retained_ca_object(kube)['fingerprint'], pki.OLD_CA_FINGERPRINT)
+            wrong_bindings = (
+                pki.OLD_SOURCE_SHA,
+                hashlib.sha256(f"{'b' * 40}:{pki.OLD_TEMPLATE_SHA256}".encode('ascii')).hexdigest(),
+                hashlib.sha256(f"{pki.OLD_SOURCE_SHA}:{'c' * 64}".encode('ascii')).hexdigest(),
+            )
+            for binding in wrong_bindings:
+                with self.subTest(binding=binding):
+                    candidate = copy.deepcopy(row)
+                    candidate['metadata']['annotations'][
+                        'voice.dev/match-squad-pki-source-sha256'] = binding
+                    kube.get.return_value = candidate
+                    with self.assertRaisesRegex(pki.Blocked, 'retained_public_ca_identity_changed'):
+                        pki._retained_ca_object(kube)
 
     def test_create_only_server_dryrun_precedes_create_and_requires_exact_readback(self):
         events = []

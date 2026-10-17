@@ -508,7 +508,8 @@ def _retained_ca_object(kube):
         raise Blocked('retained_public_ca_missing')
     metadata = row.get('metadata', {})
     expected_annotations = {'voice.dev/match-squad-pki-operation': OLD_OPERATION,
-                            'voice.dev/match-squad-pki-source-sha256': OLD_SOURCE_SHA}
+                            'voice.dev/match-squad-pki-source-sha256': hashlib.sha256(
+                                f'{OLD_SOURCE_SHA}:{OLD_TEMPLATE_SHA256}'.encode('ascii')).hexdigest()}
     if (metadata.get('uid') != OLD_CA_UID or metadata.get('resourceVersion') != OLD_CA_RV or
             metadata.get('namespace') != NAMESPACE or metadata.get('labels') != MANAGED_LABELS or
             metadata.get('annotations') != expected_annotations or row.get('immutable') is not True or
