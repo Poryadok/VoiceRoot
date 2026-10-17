@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-matchmaking
+  namespace: voice-dev
+spec:
+  template:
+    spec:
+      containers:
+        - name: matchmaking
+          ports:
+            - name: principal-jwks
+              containerPort: 8443
+          env:
+            - name: MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR
+              value: voice-chat:9092
+            - name: MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR
+              value: voice-voice:9094
+            - name: MATCHMAKING_MATCH_SQUAD_CHAT_CA_FILE
+              value: /etc/voice/match-squad/ca/ca.crt
+            - name: MATCHMAKING_MATCH_SQUAD_VOICE_CA_FILE
+              value: /etc/voice/match-squad/ca/ca.crt
+            - name: MATCHMAKING_MATCH_SQUAD_CLIENT_CERT_FILE
+              value: /etc/voice/match-squad/client/tls.crt
+            - name: MATCHMAKING_MATCH_SQUAD_CLIENT_KEY_FILE
+              value: /etc/voice/match-squad/client/tls.key
+            - name: MATCHMAKING_MATCH_SQUAD_CHAT_SERVER_NAME
+              value: voice-chat
+            - name: MATCHMAKING_MATCH_SQUAD_VOICE_SERVER_NAME
+              value: voice-voice
+            - name: MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR
+              value: /etc/voice/principal/keys
+            - name: MATCHMAKING_PRINCIPAL_ACTIVE_KID
+              valueFrom:
+                secretKeyRef:
+                  name: voice-matchmaking-principal-signing
+                  key: active-kid
+            - name: MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR
+              value: :8443
+            - name: MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE
+              value: /etc/voice/principal-jwks/tls/tls.crt
+            - name: MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE
+              value: /etc/voice/principal-jwks/tls/tls.key
+            - name: S2S_JWKS_URLS_JSON
+              value: '{"gateway":"https://api-dev.comrade.click/.well-known/voice-principal-jwks.json","space":"https://voice-space:8443/internal/v1/principal/jwks.json"}'
+          volumeMounts:
+            - name: match-squad-client
+              mountPath: /etc/voice/match-squad/client
+              readOnly: true
+            - name: matchmaking-principal-signing
+              mountPath: /etc/voice/principal/keys
+              readOnly: true
+            - name: matchmaking-principal-jwks-tls
+              mountPath: /etc/voice/principal-jwks/tls
+              readOnly: true
+            - name: match-squad-ca
+              mountPath: /etc/voice/match-squad/ca
+              readOnly: true
+      volumes:
+        - name: match-squad-client
+          secret:
+            secretName: voice-matchmaking-client-tls
+            defaultMode: 288
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: matchmaking-principal-signing
+          secret:
+            secretName: voice-matchmaking-principal-signing
+            defaultMode: 288
+            items:
+              - key: current.pem
+                path: current.pem
+              - key: next.pem
+                path: next.pem
+        - name: matchmaking-principal-jwks-tls
+          secret:
+            secretName: voice-matchmaking-principal-jwks-tls
+            defaultMode: 288
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: match-squad-ca
+          configMap:
+            name: voice-match-squad-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

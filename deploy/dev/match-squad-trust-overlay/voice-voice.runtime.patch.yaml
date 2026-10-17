@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-voice
+  namespace: voice-dev
+spec:
+  template:
+    spec:
+      containers:
+        - name: voice
+          ports:
+            - name: match-squad-provider
+              containerPort: 9094
+            - name: match-squad-member
+              containerPort: 9095
+          env:
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN
+              value: :9094
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE
+              value: /etc/voice/match-squad/server/tls.crt
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE
+              value: /etc/voice/match-squad/server/tls.key
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE
+              value: /etc/voice/match-squad/ca/ca.crt
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL
+              value: https://voice-matchmaking.voice-dev.svc:8443/internal/v1/principal/jwks.json
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE
+              value: /etc/voice/principal-jwks/ca/ca.crt
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: REDIS_ADDR
+            - name: VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-match-squad-replay
+                  key: password
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_GRPC_LISTEN
+              value: :9095
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_CERT_FILE
+              value: /etc/voice/match-squad/server/tls.crt
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_KEY_FILE
+              value: /etc/voice/match-squad/server/tls.key
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_CLIENT_CA_FILE
+              value: /etc/voice/media/ca/ca.crt
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_URL
+              value: https://api-dev.comrade.click/.well-known/voice-principal-jwks.json
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_CA_FILE
+              value: /etc/voice/media/ca/jwks-ca.crt
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: REDIS_ADDR
+            - name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-match-squad-member-replay
+                  key: password
+          volumeMounts:
+            - name: match-squad-server
+              mountPath: /etc/voice/match-squad/server
+              readOnly: true
+            - name: matchmaking-principal-jwks-ca
+              mountPath: /etc/voice/principal-jwks/ca
+              readOnly: true
+            - name: match-squad-ca
+              mountPath: /etc/voice/match-squad/ca
+              readOnly: true
+      volumes:
+        - name: match-squad-server
+          secret:
+            secretName: voice-voice-match-squad-server-tls
+            defaultMode: 288
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: matchmaking-principal-jwks-ca
+          secret:
+            secretName: voice-matchmaking-principal-jwks-ca
+            defaultMode: 288
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: match-squad-ca
+          configMap:
+            name: voice-match-squad-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
