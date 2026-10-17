@@ -511,6 +511,37 @@ def _broker_receipt(state_root: Path, expected: dict, action: str, fn) -> dict:
     return complete
 
 
+def read_broker_receipt(*, state_root: Path, expected: dict, action: str) -> dict:
+    """Read one exact durable same-Pod supervisor receipt without contacting NATS."""
+    if action not in ('start', 'stop'):
+        _fail('broker_readback_action')
+    directory = _state_dir(state_root, expected.get('operation'), expected.get('contract_attempt'))
+    row = _private_read(directory / ('broker-' + action + '.receipt.json'))
+    wanted = {'schema': RECEIPT_SCHEMA, **expected, 'status': 'COMPLETE',
+        'action': 'broker-' + action}
+    broker = row.get('broker') if isinstance(row, dict) else None
+    if (not isinstance(row, dict) or set(row) != set(wanted) | {'broker'}
+        or any(row.get(key) != value for key, value in wanted.items())
+        or not isinstance(broker, dict)):
+        _fail('broker_readback_binding')
+    if action == 'start':
+        if (set(broker) != {'schema', 'ok', 'running', 'pid', 'started_at_ns'}
+            or broker.get('schema') != 'voice-nats-supervisor-v1' or broker.get('ok') is not True
+            or broker.get('running') is not True or type(broker.get('pid')) is not int
+            or broker['pid'] <= 0 or type(broker.get('started_at_ns')) is not int
+            or broker['started_at_ns'] <= 0):
+            _fail('broker_readback_process')
+    else:
+        if (set(broker) != {'schema', 'ok', 'running', 'pid', 'started_at_ns', 'finished_at_ns'}
+            or broker.get('schema') != 'voice-nats-supervisor-v1' or broker.get('ok') is not True
+            or broker.get('running') is not False or type(broker.get('pid')) is not int
+            or broker['pid'] <= 0 or type(broker.get('started_at_ns')) is not int
+            or broker['started_at_ns'] <= 0 or type(broker.get('finished_at_ns')) is not int
+            or broker['finished_at_ns'] < broker['started_at_ns']):
+            _fail('broker_readback_process')
+    return row
+
+
 def _broker_identity(state_root: Path, binding: dict) -> dict:
     expected = {key: binding[key] for key in ('operation', 'nonce', 'pod_uid',
         'contract_attempt', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
@@ -583,6 +614,7 @@ def _cli_parser():
     parser = _ClosedArgumentParser(add_help=False, allow_abbrev=False)
     modes = parser.add_mutually_exclusive_group(required=True)
     for mode in ('serve', 'load-plan', 'read-plan', 'broker-start', 'broker-stop', 'broker-status',
+        'read-broker-start', 'read-broker-stop',
         'inspect-action', 'execute-action', 'readback-action'):
         modes.add_argument('--' + mode, action='store_true')
     for name in ('operation', 'nonce', 'contract-attempt', 'source-pvc-uid', 'source-pv-uid',
@@ -615,7 +647,8 @@ def main(argv=None) -> int:
     try:
         args = _cli_parser().parse_args(argv)
         mode = next(name for name in ('serve', 'load_plan', 'read_plan', 'broker_start', 'broker_stop',
-            'broker_status', 'inspect_action', 'execute_action', 'readback_action')
+            'broker_status', 'read_broker_start', 'read_broker_stop',
+            'inspect_action', 'execute_action', 'readback_action')
             if getattr(args, name))
         # The Pod UID is taken from the downward API inside the container and
         # from the verified Pod object by the host exec caller.
@@ -640,7 +673,12 @@ def main(argv=None) -> int:
         else:
             _verify_input_receipt(expected)
             plan = load_stored_plan(state_root=STATE_ROOT, binding=binding)
-            if mode.startswith('broker_'):
+            if mode.startswith('read_broker_'):
+                if os.geteuid() != 65532 or os.getegid() != 65532:
+                    _fail('identity')
+                result = read_broker_receipt(state_root=STATE_ROOT, expected=expected,
+                    action=mode.removeprefix('read_broker_'))
+            elif mode.startswith('broker_'):
                 if os.geteuid() != 65532 or os.getegid() != 65532:
                     _fail('identity')
                 _ensure_input_profile(expected)

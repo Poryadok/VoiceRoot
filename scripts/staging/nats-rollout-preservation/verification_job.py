@@ -40,7 +40,7 @@ SELECTED_ACTIONS = frozenset((
     'kernel-verify-drained', 'broker-ready', 'broker-restart-prepare',
     'broker-restart-complete', 'session-close', 'session-stop'))
 CONTRACT_ACTIONS = frozenset(('load-plan', 'read-plan', 'broker-start', 'broker-stop', 'broker-status',
-    'inspect-action', 'execute-action', 'readback-action'))
+    'read-broker-start', 'read-broker-stop', 'inspect-action', 'execute-action', 'readback-action'))
 KERNEL_PHASES = {
     'kernel-census': 'census', 'kernel-seed': 'seed', 'kernel-verify-closed': 'verify-closed',
     'kernel-drain': 'drain', 'kernel-verify-drained': 'verify-drained'}
@@ -870,7 +870,8 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
         if action is None:
             return {name: contract_binary + [flag] + common for name, flag in (
                 ('load-plan', '--load-plan'), ('read-plan', '--read-plan'), ('broker-start', '--broker-start'),
-                ('broker-stop', '--broker-stop'), ('broker-status', '--broker-status'))}
+                ('broker-stop', '--broker-stop'), ('broker-status', '--broker-status'),
+                ('read-broker-start', '--read-broker-start'), ('read-broker-stop', '--read-broker-stop'))}
         if action not in CONTRACT_ACTIONS:
             _fail('contract_action_invalid')
         if action == 'load-plan':
@@ -879,6 +880,8 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
             return {'action': contract_binary + ['--read-plan'] + common}
         if action in ('broker-start', 'broker-stop', 'broker-status'):
             return {'action': contract_binary + ['--broker-' + action.split('-', 1)[1]] + common}
+        if action in ('read-broker-start', 'read-broker-stop'):
+            return {'action': contract_binary + ['--' + action] + common}
         if action in ('inspect-action', 'execute-action', 'readback-action'):
             if type(action_index) is not int or not 0 <= action_index <= 6:
                 _fail('contract_action_index_invalid')
