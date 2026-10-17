@@ -590,10 +590,18 @@ class ProfileDetailSheet extends ConsumerWidget {
 String profileLastSeenLabel(BuildContext context, DateTime lastSeen, {DateTime? now}) {
   final l10n = AppLocalizations.of(context)!;
   final age = (now ?? DateTime.now()).difference(lastSeen);
-  if (age < const Duration(minutes: 1)) return l10n.socialPresenceLastSeenJustNow;
-  if (age < const Duration(hours: 1)) return l10n.socialPresenceLastSeenMinutes(age.inMinutes);
-  if (age < const Duration(days: 1)) return l10n.socialPresenceLastSeenHours(age.inHours);
-  if (age < const Duration(days: 7)) return l10n.socialPresenceLastSeenDays(age.inDays);
+  if (age < const Duration(minutes: 1)) {
+    return l10n.socialPresenceLastSeenJustNow;
+  }
+  if (age < const Duration(hours: 1)) {
+    return l10n.socialPresenceLastSeenMinutes(age.inMinutes);
+  }
+  if (age < const Duration(days: 1)) {
+    return l10n.socialPresenceLastSeenHours(age.inHours);
+  }
+  if (age < const Duration(days: 7)) {
+    return l10n.socialPresenceLastSeenDays(age.inDays);
+  }
   // The canon leaves day 7 unspecified. Preserve the existing absolute date/time
   // fallback for >=7 days rather than define another product bucket here.
   final local = lastSeen.toLocal();
