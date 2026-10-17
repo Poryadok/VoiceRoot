@@ -356,6 +356,7 @@ nats-leaf-topology-invariants-test:
 	python3 "$(ROOT)/scripts/staging/nats-search-probe-workflow_test.py"
 
 .PHONY: matchmaking-source-authority-test
+matchmaking-source-authority-test: export PYTHONDONTWRITEBYTECODE := 1
 matchmaking-source-authority-test:
 	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_test.py"
 	python3 "$(ROOT)/scripts/dev/matchmaking_source_authority_workflow_test.py"
