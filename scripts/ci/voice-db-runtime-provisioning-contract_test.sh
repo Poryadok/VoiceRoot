@@ -1117,8 +1117,7 @@ f13_migration_alias_reconciles_guarded_path() {
     -n "${guarded_entries[${path}]+present}" && -n "${guarded_entry_commits[${path}]+present}" ]] || return 1
   grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" && return 1
   game_checkpoint_aggregate_binding_valid "${repo}" || return 1
-  [[ "${owners[${path}]}" == "${record_row_owner}" &&
-    "${guarded_entry_commits[${path}]}" == "${owner}" &&
+  [[ "${guarded_entry_commits[${path}]}" == "${owner}" &&
     "${owner_content_bases[${path}]}" == "${content_base}" &&
     "${owner_source_heads[${path}]}" == "${source_head}" &&
     "${owner_source_entries[${path}]}" == "${saved_source_entry}" &&
@@ -1147,7 +1146,8 @@ f13_migration_alias_reconciles_guarded_path() {
     integration integration_first integration_second integration_base destination destination_entry <<<"${row}"
   record_base="${nested_source_base}"
   record_head="${nested_source_head}"
-  [[ "${alias_path}" == "${path}" && "${owner}" == "${nested_owner}" &&
+  [[ "${owners[${path}]}" == "${record_row_owner}" &&
+    "${alias_path}" == "${path}" && "${owner}" == "${nested_owner}" &&
     "${source_head}" == "${nested_source_head}" &&
     "${saved_guarded_entry}" == "${old_entry}" && "${saved_source_entry}" == "${old_entry}" &&
     "${record_row_owner}" == 0590ac862c5027ff9266f8403af1011ef2134f63 &&
@@ -1247,6 +1247,70 @@ f13_migration_alias_reconciles_guarded_path() {
   game_checkpoint_aggregate_path_allowed "${repo}" "${owners[${destination}]:-}" \
     "${destination}" "${owner_source_entries[${destination}]:-}" || return 1
   return 0
+}
+
+# Exercise the guarded-path helper with the exact immutable R2 row while the
+# checkout is a real master-target pull-request merge. This catches shell
+# nounset regressions in the record-to-owner binding before the full collector
+# walks the same row.
+f13_migration_alias_reconciliation_execution_fixture() {
+  local repo="$1" event_base="$2" target="$3" source_head="$4"
+  local delta="${TMP_DIR}/f13-alias-execution-delta" paths="${TMP_DIR}/f13-alias-execution-paths"
+  local aliases="${TMP_DIR}/f13-alias-execution-record.tsv" collisions="${TMP_DIR}/f13-alias-execution-collisions.tsv"
+  local path row fields old_entry row_owner row_first row_source_base row_source_head row_content_base row_candidates
+  local nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry
+  local integration integration_first integration_second integration_base destination destination_entry
+  local destination_parent output old_path
+  local -A owners=() owner_content_bases=() owner_source_heads=() owner_source_entries=()
+  local -A guarded_entries=() guarded_entry_commits=()
+
+  [[ "$(git -C "${repo}" rev-list --parents -n 1 "${target}" | awk '{ print NF }')" == 3 &&
+    "$(git -C "${repo}" rev-parse "${target}^1")" == "${event_base}" &&
+    "$(git -C "${repo}" rev-parse "${target}^2")" == "${source_head}" ]] || return 1
+  git -C "${repo}" diff --name-only --no-renames "${event_base}" "${source_head}" >"${delta}" || return 1
+  game_checkpoint_aggregate_authorized "${repo}" "${event_base}" "${source_head}" \
+    "${target}" "${delta}" "${paths}" || return 1
+  game_checkpoint_aggregate_active=true
+  game_checkpoint_aggregate_base="${event_base}"
+  game_checkpoint_aggregate_head="${source_head}"
+  game_checkpoint_aggregate_target="${target}"
+  game_checkpoint_aggregate_paths="${paths}"
+  game_checkpoint_aggregate_map=''
+  game_checkpoint_aggregate_record="${game_checkpoint_snapshot_record}"
+  f13_migration_alias_record_load "${repo}" "${game_checkpoint_snapshot_record}" \
+    "${aliases}" "${collisions}" || return 1
+
+  for path in \
+    'src/backend/migrations/voice_db/000010_match_squad_operations.up.sql' \
+    'src/backend/migrations/voice_db/000010_match_squad_operations.down.sql'; do
+    row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { print; exit }' "${aliases}")"
+    [[ -n "${row}" ]] || return 1
+    IFS=$'\t' read -r _ old_entry row_owner row_first row_source_base row_source_head row_content_base row_candidates \
+      nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry \
+      integration integration_first integration_second integration_base destination destination_entry <<<"${row}"
+    owners["${path}"]="${row_owner}"
+    owner_content_bases["${path}"]="${row_content_base}"
+    owner_source_heads["${path}"]="${row_source_head}"
+    owner_source_entries["${path}"]="${old_entry}"
+    guarded_entries["${path}"]="${old_entry}"
+    guarded_entry_commits["${path}"]="${nested_owner}"
+    owners["${destination}"]="${row_candidates}"
+    owner_source_entries["${destination}"]="${destination_entry}"
+    destination_parent="$(git -C "${repo}" rev-parse "${row_candidates}^1" 2>/dev/null)" || return 1
+    output="${TMP_DIR}/f13-alias-execution-map"
+    awk -F '\t' -v candidate="${path}" '$1 == candidate { for (i=1; i<=8; i++) printf "%s%s", $i, (i==8 ? ORS : FS) }' \
+      "${aliases}" >"${output}" || return 1
+    printf '%s\ttrue\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${destination}" "${row_candidates}" "${destination_parent}" "${row_candidates}" \
+      "${row_candidates}" "${row_candidates}" "${row_candidates}" >>"${output}" || return 1
+    if ! f13_migration_alias_reconciles_guarded_path "${repo}" "${event_base}" \
+      "${source_head}" "${path}" "${nested_owner}" "${row_content_base}" \
+      "${nested_head}" "${old_entry}" "${old_entry}" "${output}"; then
+      game_checkpoint_aggregate_active=false
+      return 1
+    fi
+  done
+  game_checkpoint_aggregate_active=false
 }
 
 # These exact paths are the reviewed Role private room-grant handler and its
@@ -4604,6 +4668,11 @@ if [[ "${f13_master_release_pr}" == true ]]; then
   fi
   f13_migration_alias_record_negative_fixtures \
     "${TMP_DIR}/f13-active-alias-record.tsv" "${TMP_DIR}/f13-active-collision-record.tsv" || exit 2
+  if ! f13_migration_alias_reconciliation_execution_fixture "${ROOT}" \
+    "${VOICE_R22_BASE_SHA:-}" HEAD "$(git -C "${ROOT}" rev-parse HEAD^2)"; then
+    printf '%s\n' 'F13 oracle bug: exact R2 migration alias helper rejected its complete producer row' >&2
+    exit 2
+  fi
   if f13_extract_versioned_alias_section "${ROOT}" \
     'd97e8acd6824c5dd08d4f70be93fc7f91d6f6fce' \
     '<!-- F13-MIGRATION-ALIASES-V2-BEGIN -->' '<!-- F13-MIGRATION-ALIASES-V2-END -->' \
