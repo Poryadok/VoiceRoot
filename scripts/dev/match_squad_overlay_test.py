@@ -113,6 +113,53 @@ def sanitized_live_api_fixture():
     return objects
 
 
+def matchmaking_secret_mount_snapshot():
+    """Secret-free read-only projection of the current DEV Matchmaking pod template."""
+    deployment = captured_deployment(
+        "voice-matchmaking", "matchmaking",
+        overlay.EXPECTED_OBJECT_UIDS[("Deployment", "voice-matchmaking")], "3392422")
+    pod_spec = deployment["spec"]["template"]["spec"]
+    pod_spec["securityContext"] = {}
+    pod_spec["volumes"] = [
+        {"name": "nats-service-creds", "secret": {
+            "secretName": "voice-nats-service-credentials", "defaultMode": 256,
+            "items": [{"key": "matchmaking.creds", "path": "matchmaking.creds"}]}},
+        {"name": "nats-hub-tls", "secret": {
+            "secretName": "voice-nats-hub-tls", "defaultMode": 420,
+            "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+        {"name": "match-squad-client", "secret": {
+            "secretName": "voice-matchmaking-client-tls", "defaultMode": 288,
+            "items": [{"key": "tls.crt", "path": "tls.crt"},
+                      {"key": "tls.key", "path": "tls.key"}]}},
+        {"name": "matchmaking-principal-signing", "secret": {
+            "secretName": "voice-matchmaking-principal-signing", "defaultMode": 288,
+            "items": [{"key": "current.pem", "path": "current.pem"},
+                      {"key": "next.pem", "path": "next.pem"}]}},
+        {"name": "matchmaking-principal-jwks-tls", "secret": {
+            "secretName": "voice-matchmaking-principal-jwks-tls", "defaultMode": 288,
+            "items": [{"key": "tls.crt", "path": "tls.crt"},
+                      {"key": "tls.key", "path": "tls.key"}]}},
+    ]
+    pod_spec["containers"][0]["volumeMounts"] = [
+        {"name": "match-squad-client", "mountPath": "/etc/voice/match-squad/client",
+         "readOnly": True},
+        {"name": "matchmaking-principal-signing", "mountPath": "/etc/voice/principal/keys",
+         "readOnly": True},
+        {"name": "matchmaking-principal-jwks-tls", "mountPath": "/etc/voice/principal-jwks/tls",
+         "readOnly": True},
+    ]
+    pod_spec["containers"].append({
+        "name": "nats-leaf", "image": "docker.io/library/nats@sha256:" + "c" * 64,
+        "volumeMounts": [
+            {"name": "nats-service-creds", "mountPath": "/var/run/nats/creds/matchmaking.creds",
+             "readOnly": True},
+            {"name": "nats-hub-tls", "mountPath": "/etc/nats/tls/ca.crt",
+             "readOnly": True},
+        ],
+    })
+    return deployment
+
+
 class MatchSquadOverlayApplicatorTests(unittest.TestCase):
     def test_ci_filter_and_required_job_reach_the_focused_contract_suite(self):
         root = Path(__file__).resolve().parents[2]
@@ -285,6 +332,128 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             "/spec/template/spec/volumes/-"])
         self.assertEqual([op["value"]["name"] for op in operations[2:]],
                          ["NEW_ENV", "new-a", "new-b", "new-volume", "new-volume"])
+
+    def test_matchmaking_fs_group_patch_preserves_secret_mode_and_mount_isolation(self):
+        base = matchmaking_secret_mount_snapshot()
+        pod_spec = base["spec"]["template"]["spec"]
+        secret_volumes = {volume["secret"]["secretName"]: volume["secret"]
+                          for volume in pod_spec["volumes"] if "secret" in volume}
+        self.assertEqual(secret_volumes["voice-matchmaking-principal-signing"]["defaultMode"], 288)
+        self.assertEqual(secret_volumes["voice-matchmaking-principal-signing"]["items"], [
+            {"key": "current.pem", "path": "current.pem"},
+            {"key": "next.pem", "path": "next.pem"},
+        ])
+        self.assertEqual(secret_volumes["voice-nats-service-credentials"]["defaultMode"], 256)
+        self.assertEqual(secret_volumes["voice-nats-service-credentials"]["items"], [
+            {"key": "matchmaking.creds", "path": "matchmaking.creds"},
+        ])
+        by_volume_name = {volume["name"]: volume for volume in pod_spec["volumes"]}
+        mounted_secrets = {
+            container["name"]: {
+                by_volume_name[mount["name"]]["secret"]["secretName"]
+                for mount in container.get("volumeMounts", [])
+                if mount["name"] in by_volume_name and "secret" in by_volume_name[mount["name"]]
+            }
+            for container in pod_spec["containers"]
+        }
+        self.assertEqual(mounted_secrets, {
+            "matchmaking": {
+                "voice-matchmaking-client-tls",
+                "voice-matchmaking-principal-signing",
+                "voice-matchmaking-principal-jwks-tls",
+            },
+            "nats-leaf": {"voice-nats-service-credentials", "voice-nats-hub-tls"},
+        })
+
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        operations = overlay.object_patch(base, desired)
+        self.assertEqual(operations[2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup", "value": 65532,
+        }])
+        projected = overlay._apply_overlay_operations(
+            base, operations[2:], overlay._Target("Deployment", "voice-matchmaking", ""))
+        self.assertEqual(projected, desired)
+
+        existing_setting = copy.deepcopy(base)
+        existing_setting["spec"]["template"]["spec"]["securityContext"] = {
+            "runAsNonRoot": True,
+        }
+        desired_existing_setting = copy.deepcopy(existing_setting)
+        desired_existing_setting["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        preserving_operations = overlay.object_patch(existing_setting, desired_existing_setting)
+        self.assertEqual(preserving_operations[2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup", "value": 65532,
+        }])
+        self.assertEqual(overlay._apply_overlay_operations(
+            existing_setting, preserving_operations[2:],
+            overlay._Target("Deployment", "voice-matchmaking", "")), desired_existing_setting)
+        self.assertEqual(
+            [volume["secret"] for volume in projected["spec"]["template"]["spec"]["volumes"]],
+            [volume["secret"] for volume in pod_spec["volumes"]],
+        )
+        target = overlay.TARGETS[3]
+        plan = {"kind": target.kind, "name": target.name, "patchFile": target.patch_file,
+                "uid": base["metadata"]["uid"],
+                "resourceVersion": base["metadata"]["resourceVersion"],
+                "operations": operations,
+                "desiredObservedSha256": overlay.observed_render_hash(target, desired)}
+        client = overlay.KubectlClient()
+        with mock.patch.object(client, "call", return_value=desired) as call:
+            client.server_dry_run(plan)
+        args = call.call_args.args
+        self.assertEqual(args[:3], ("patch", "deployment", "voice-matchmaking"))
+        self.assertIn("--dry-run=server", args)
+        patch_arg = next(arg for arg in args if arg.startswith("--patch="))
+        self.assertEqual(json.loads(patch_arg[len("--patch="):]), operations)
+
+        absent_parent = copy.deepcopy(base)
+        absent_parent["spec"]["template"]["spec"].pop("securityContext")
+        desired_without_parent = copy.deepcopy(absent_parent)
+        desired_without_parent["spec"]["template"]["spec"]["securityContext"] = {"fsGroup": 65532}
+        parent_operations = overlay.object_patch(absent_parent, desired_without_parent)
+        self.assertEqual(parent_operations[2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext",
+            "value": {"fsGroup": 65532},
+        }])
+
+        already_satisfied = copy.deepcopy(desired)
+        self.assertEqual(overlay.object_patch(already_satisfied, copy.deepcopy(already_satisfied)), [
+            {"op": "test", "path": "/metadata/uid", "value": base["metadata"]["uid"]},
+            {"op": "test", "path": "/metadata/resourceVersion",
+             "value": base["metadata"]["resourceVersion"]},
+        ])
+
+    def test_matchmaking_fs_group_patch_rejects_other_security_changes(self):
+        base = matchmaking_secret_mount_snapshot()
+        cases = (
+            ("other fsGroup", {"fsGroup": 1000}),
+            ("extra pod security setting", {"fsGroup": 65532, "runAsNonRoot": True}),
+            ("other deployment", {"fsGroup": 65532}),
+            ("replace existing fsGroup", {"fsGroup": 65532}),
+        )
+        for label, security_context in cases:
+            with self.subTest(case=label):
+                if label == "other deployment":
+                    target = captured_deployment(
+                        "voice-chat", "chat",
+                        overlay.EXPECTED_OBJECT_UIDS[("Deployment", "voice-chat")], "17")
+                    target["spec"]["template"]["spec"]["securityContext"] = {}
+                else:
+                    target = copy.deepcopy(base)
+                if label == "replace existing fsGroup":
+                    target["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 1000
+                desired = copy.deepcopy(target)
+                desired["spec"]["template"]["spec"]["securityContext"] = security_context
+                with self.assertRaises(overlay.OverlayError):
+                    overlay.object_patch(target, desired)
+
+        unrelated = copy.deepcopy(base)
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        desired["spec"]["template"]["spec"]["automountServiceAccountToken"] = False
+        with self.assertRaises(overlay.OverlayError):
+            overlay.object_patch(unrelated, desired)
 
     def test_missing_list_parents_use_single_parent_add_operation(self):
         cases = (
