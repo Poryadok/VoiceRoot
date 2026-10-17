@@ -169,6 +169,15 @@ class KubectlOptionalSecretTests(unittest.TestCase):
                 with self.assertRaises(gis.KubeError):
                     gis.Kubectl(runner=runner).get_secret("optional-identity")
 
+    def test_nonempty_nonobject_success_responses_do_not_become_absence(self):
+        for stdout in ("null", "[]", '"secret"'):
+            def runner(argv, **kwargs):
+                return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+            with self.subTest(stdout=stdout):
+                with self.assertRaises(gis.Blocked):
+                    gis.Kubectl(runner=runner).get_secret("optional-identity")
+
 
 class SourceAuthorityTests(unittest.TestCase):
     def test_build_receipt_binds_clean_source_and_immutable_image(self):

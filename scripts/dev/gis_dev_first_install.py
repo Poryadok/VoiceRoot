@@ -860,6 +860,8 @@ class Kubectl:
         output = self.run(["get", "secret", name, "--ignore-not-found=true", "-o", "json"])
         if output == "":
             return None
+        if not isinstance(output, dict):
+            _blocked("gis_dev_kubectl_response_invalid")
         return output
 
     def get(self, kind, name):
