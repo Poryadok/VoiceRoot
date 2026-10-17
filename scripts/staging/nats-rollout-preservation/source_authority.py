@@ -424,7 +424,6 @@ def _equivalent_master_source(headers, source_sha, master_sha, deadline):
     status = comparison.get('status')
     ahead_by = comparison.get('ahead_by')
     if (comparison.get('base_commit', {}).get('sha') != source_sha
-        or comparison.get('head_commit', {}).get('sha') != master_sha
         or comparison.get('merge_base_commit', {}).get('sha') != source_sha
         or type(ahead_by) is not int or ahead_by < 0
         or source_sha == master_sha and (status != 'identical' or ahead_by != 0)
