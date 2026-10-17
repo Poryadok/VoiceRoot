@@ -99,6 +99,96 @@ class FakeKube:
 
 
 class MatchSquadPKITests(unittest.TestCase):
+    def legacy_journal(self):
+        old_pins = {'sourceSha': '39828e6f69d5567cbfeadabd9536ea6ef2a8f786',
+                    'templateSha256': '5ad1c0250574abfadda4bbcf8baa3cd3b3a1525be811f303ea9ea40161e67e0e'}
+        return {
+            'operationId': 'msq-3291e91f800a569465ad084a6bb1a61b',
+            'namespace': 'voice-dev',
+            'namespaceUid': '15950fc8-0392-4053-9156-e95e78b596f9',
+            **old_pins,
+            'sourceBinding': pki._source_binding(old_pins),
+            'issuerImageId': 'sha256:9dcea06f038bd866c2386955f8422b210f5630c3cd722513b37d5ce13fe9d299',
+            'volume': 'voice-dev-match-squad-pki',
+            'phase': 'stage-intent',
+            'resources': {name: {'phase': 'planned'} for name in sorted(pki.EXPECTED_OBJECTS)},
+        }
+
+    def test_exact_legacy_journal_migrates_once_and_preserves_old_binding(self):
+        journal = self.legacy_journal()
+        old_binding = journal['sourceBinding']
+        new_pins = {'sourceSha': 'd' * 40, 'templateSha256': 'e' * 64}
+        new_image = 'sha256:' + 'f' * 64
+        saved = []
+        with mock.patch.object(pki, '_inventory_absent') as absent, \
+                mock.patch.object(pki, '_verify_volume_owned') as volume, \
+                mock.patch.object(pki, '_issuer_output', return_value=json.dumps(
+                    {'operationId': 'msq-3291e91f800a569465ad084a6bb1a61b', 'state': 'empty-building'})), \
+                mock.patch.object(pki, '_save_journal', side_effect=lambda _directory, value: saved.append(copy.deepcopy(value))):
+            pki._migrate_legacy_journal('private-state', journal, new_pins, new_image,
+                                         {'uid': '15950fc8-0392-4053-9156-e95e78b596f9'},
+                                         '83aaf4a2931ce687c05baa23bc5f6f4ae9580dfa1f518d61583545e19209376c')
+        absent.assert_called_once_with()
+        volume.assert_called_once_with('msq-3291e91f800a569465ad084a6bb1a61b')
+        self.assertEqual(journal['sourceSha'], new_pins['sourceSha'])
+        self.assertEqual(journal['templateSha256'], new_pins['templateSha256'])
+        self.assertEqual(journal['issuerImageId'], new_image)
+        self.assertEqual(journal['sourceBinding'], pki._source_binding(new_pins))
+        self.assertEqual(journal['legacyRecovery']['previousSourceBinding'], old_binding)
+        self.assertEqual(journal['legacyRecovery']['journalSha256'],
+                         '83aaf4a2931ce687c05baa23bc5f6f4ae9580dfa1f518d61583545e19209376c')
+        self.assertEqual(len(saved), 1)
+
+    def test_legacy_migration_refuses_final_or_nonempty_staged_volume(self):
+        for response in (
+                {'operationId': 'msq-3291e91f800a569465ad084a6bb1a61b', 'state': 'final'},
+                {'operationId': 'msq-3291e91f800a569465ad084a6bb1a61b', 'state': 'nonempty-building'}):
+            journal = self.legacy_journal()
+            with self.subTest(state=response['state']), \
+                    mock.patch.object(pki, '_inventory_absent'), \
+                    mock.patch.object(pki, '_verify_volume_owned'), \
+                    mock.patch.object(pki, '_issuer_output', return_value=json.dumps(response)), \
+                    mock.patch.object(pki, '_save_journal') as save, \
+                    self.assertRaises(ValueError):
+                pki._migrate_legacy_journal(
+                    'private-state', journal,
+                    {'sourceSha': 'd' * 40, 'templateSha256': 'e' * 64}, 'sha256:' + 'f' * 64,
+                    {'uid': '15950fc8-0392-4053-9156-e95e78b596f9'},
+                    '83aaf4a2931ce687c05baa23bc5f6f4ae9580dfa1f518d61583545e19209376c')
+            save.assert_not_called()
+
+    def test_legacy_migration_rejects_every_nonexact_or_ambiguous_predecessor(self):
+        new_pins = {'sourceSha': 'd' * 40, 'templateSha256': 'e' * 64}
+        cases = (
+            ('operation', lambda j: j.__setitem__('operationId', OPERATION)),
+            ('source', lambda j: j.__setitem__('sourceSha', '1' * 40)),
+            ('template', lambda j: j.__setitem__('templateSha256', '2' * 64)),
+            ('image', lambda j: j.__setitem__('issuerImageId', 'sha256:' + '3' * 64)),
+            ('namespace', lambda j: j.__setitem__('namespaceUid', 'other-namespace')),
+            ('phase', lambda j: j.__setitem__('phase', 'staged')),
+            ('partial-resource', lambda j: j['resources'][next(iter(j['resources']))].__setitem__('phase', 'created')),
+            ('manifest-receipt', lambda j: j.__setitem__('manifestSha256', '4' * 64)),
+            ('raw-journal', None),
+        )
+        for label, mutate in cases:
+            journal = self.legacy_journal()
+            if mutate:
+                mutate(journal)
+            with self.subTest(label=label), \
+                    mock.patch.object(pki, '_inventory_absent') as absent, \
+                    mock.patch.object(pki, '_verify_volume_owned') as volume, \
+                    mock.patch.object(pki, '_issuer_output') as inspect, \
+                    mock.patch.object(pki, '_save_journal') as save, \
+                    self.assertRaises(ValueError):
+                pki._migrate_legacy_journal('private-state', journal, new_pins, 'sha256:' + 'f' * 64,
+                                             {'uid': '15950fc8-0392-4053-9156-e95e78b596f9'},
+                                             '0' * 64 if label == 'raw-journal' else
+                                             '83aaf4a2931ce687c05baa23bc5f6f4ae9580dfa1f518d61583545e19209376c')
+            absent.assert_not_called()
+            volume.assert_not_called()
+            inspect.assert_not_called()
+            save.assert_not_called()
+
     def test_export_uses_exact_dev_objects_and_top_level_secret_types(self):
         value = pki.validate_export(json.dumps(manifest()), OPERATION, SOURCE_SHA)
         self.assertEqual(set(value), SECRET_NAMES | {CA_OBJECT})
@@ -158,11 +248,14 @@ class MatchSquadPKITests(unittest.TestCase):
 
     def test_issuer_errors_never_echo_secret_stderr(self):
         response = subprocess.CompletedProcess(['docker'], 1, stdout='', stderr='PRIVATE-KEY-DO-NOT-PRINT')
-        with mock.patch.object(pki, 'run_result', return_value=response):
+        with mock.patch.object(pki, 'run_result', return_value=response) as run:
             with self.assertRaises(ValueError) as error:
                 pki._issuer_output('sha256:' + 'a' * 64, 'voice-dev-match-squad-pki',
                                    'export', OPERATION, 'b' * 64)
         self.assertNotIn('PRIVATE-KEY-DO-NOT-PRINT', str(error.exception))
+        args = run.call_args.args[0]
+        self.assertEqual(args[args.index('--tmpfs') + 1],
+                         '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=0700,uid=10002,gid=10002')
 
     def test_create_output_is_parsed_from_real_cli_text(self):
         self.assertEqual(pki.parse_create_identity('uid-1|rv-2'), ('uid-1', 'rv-2'))
@@ -279,7 +372,7 @@ class MatchSquadPKITests(unittest.TestCase):
             'name': 'voice-dev', 'uid': 'ns-123',
             'labels': {'voice.environment': 'dev', 'app.kubernetes.io/managed-by': 'voice-dev'}}}
         responses = [
-            subprocess.CompletedProcess(['docker'], 0, stdout=image, stderr=''),
+            subprocess.CompletedProcess(['docker'], 0, stdout=image + '|' + 'a' * 40, stderr=''),
             subprocess.CompletedProcess(['kubectl'], 0, stdout=json.dumps(namespace), stderr=''),
         ] + [subprocess.CompletedProcess(['kubectl'], 0, stdout='', stderr='') for _ in range(7)]
         with redirect_stdout(io.StringIO()) as output, \
@@ -297,6 +390,18 @@ class MatchSquadPKITests(unittest.TestCase):
                             and 'delete' not in args for args in commands))
         self.assertTrue(all(args[0] != 'kubectl' or 'get' in args for args in commands))
         self.assertEqual(json.loads(output.getvalue())['namespace']['uid'], 'ns-123')
+
+    def test_local_image_must_be_bound_to_the_exact_source_commit(self):
+        image = 'sha256:' + 'c' * 64
+        source = 'a' * 40
+        with mock.patch.object(pki, 'run_result', return_value=subprocess.CompletedProcess(
+                ['docker'], 0, stdout=image + '|' + source, stderr='')) as run:
+            pki._check_local_image(image, source)
+        self.assertIn('voice.source.commit', run.call_args.args[0][3])
+        with mock.patch.object(pki, 'run_result', return_value=subprocess.CompletedProcess(
+                ['docker'], 0, stdout=image + '|' + 'b' * 40, stderr='')):
+            with self.assertRaisesRegex(ValueError, 'bound to different source'):
+                pki._check_local_image(image, source)
 
     @unittest.skipUnless(sys.platform == 'linux', 'operator custody is Linux-only')
     def test_private_journal_is_atomic_owner_only_and_lock_is_exclusive(self):
@@ -327,6 +432,96 @@ class MatchSquadPKITests(unittest.TestCase):
 
 
 class MatchSquadIssuerTests(unittest.TestCase):
+    def test_stage_recovers_only_empty_same_operation_partial_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            root.chmod(0o700)
+            operation = 'msq-1234567890abcdef1234567890abcdef'
+            partial = root / (operation + '.building')
+            partial.mkdir(mode=0o700)
+            partial_inode = partial.stat().st_ino
+
+            first = issuer.stage(temp, operation, SOURCE_SHA)
+            final = root / operation
+            self.assertFalse(partial.exists())
+            self.assertEqual(final.stat().st_ino, partial_inode)
+            self.assertEqual(json.loads(first)['apiVersion'], 'v1')
+            key_before = (final / 'ca.key').stat()
+            stage_before = (final / 'stage.json').stat()
+
+            second = issuer.stage(temp, operation, SOURCE_SHA)
+            self.assertEqual(second, first)
+            self.assertEqual((final / 'ca.key').stat().st_ino, key_before.st_ino)
+            self.assertEqual((final / 'ca.key').stat().st_mtime_ns, key_before.st_mtime_ns)
+            self.assertEqual((final / 'stage.json').stat().st_ino, stage_before.st_ino)
+            self.assertEqual((final / 'stage.json').stat().st_mtime_ns, stage_before.st_mtime_ns)
+
+    def test_stage_refuses_nonempty_or_insecure_partial_without_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            root.chmod(0o700)
+            operation = 'msq-1234567890abcdef1234567890abcdef'
+            partial = root / (operation + '.building')
+            partial.mkdir(mode=0o700)
+            marker = partial / 'sentinel'
+            marker.write_bytes(b'preserve')
+            with self.assertRaises(ValueError):
+                issuer.stage(temp, operation, SOURCE_SHA)
+            self.assertEqual(marker.read_bytes(), b'preserve')
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            root.chmod(0o700)
+            operation = 'msq-1234567890abcdef1234567890abcdef'
+            partial = root / (operation + '.building')
+            partial.mkdir(mode=0o750)
+            with self.assertRaises(ValueError):
+                issuer.stage(temp, operation, SOURCE_SHA)
+            self.assertEqual(partial.stat().st_mode & 0o777, 0o750)
+
+    def test_empty_building_inspection_is_metadata_only_and_final_blocks_migration(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            root.chmod(0o700)
+            operation = 'msq-1234567890abcdef1234567890abcdef'
+            partial = root / (operation + '.building')
+            partial.mkdir(mode=0o700)
+            result = issuer.inspect_empty_building(temp, operation)
+            self.assertEqual(result, {'operationId': operation, 'state': 'empty-building'})
+            partial.joinpath('ca.key').write_bytes(b'do-not-read')
+            with self.assertRaises(ValueError):
+                issuer.inspect_empty_building(temp, operation)
+
+    def test_legacy_recovery_receipt_is_validated_on_later_resume(self):
+        journal = MatchSquadPKITests().legacy_journal()
+        pins = {'sourceSha': 'd' * 40, 'templateSha256': 'e' * 64}
+        image = 'sha256:' + 'f' * 64
+        journal['legacyRecovery'] = {
+            'operationId': 'msq-3291e91f800a569465ad084a6bb1a61b',
+            'journalSha256': '83aaf4a2931ce687c05baa23bc5f6f4ae9580dfa1f518d61583545e19209376c',
+            'previousSourceSha': '39828e6f69d5567cbfeadabd9536ea6ef2a8f786',
+            'previousTemplateSha256': '5ad1c0250574abfadda4bbcf8baa3cd3b3a1525be811f303ea9ea40161e67e0e',
+            'previousSourceBinding': journal['sourceBinding'],
+            'previousIssuerImageId': 'sha256:9dcea06f038bd866c2386955f8422b210f5630c3cd722513b37d5ce13fe9d299',
+            'previousNamespaceUid': '15950fc8-0392-4053-9156-e95e78b596f9',
+        }
+        journal.update(sourceSha=pins['sourceSha'], templateSha256=pins['templateSha256'],
+                       sourceBinding=pki._source_binding(pins), issuerImageId=image)
+        self.assertFalse(pki._migrate_legacy_journal(
+            'private-state', journal, pins, image, {'uid': '15950fc8-0392-4053-9156-e95e78b596f9'}, 'ignored'))
+        journal['legacyRecovery']['journalSha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'legacy recovery binding'):
+            pki._migrate_legacy_journal(
+                'private-state', journal, pins, image, {'uid': '15950fc8-0392-4053-9156-e95e78b596f9'}, 'ignored')
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            root.chmod(0o700)
+            operation = 'msq-1234567890abcdef1234567890abcdef'
+            (root / operation).mkdir(mode=0o700)
+            with self.assertRaises(ValueError):
+                issuer.inspect_empty_building(temp, operation)
+
     def test_issuer_rejects_malformed_operation_identity_before_staging(self):
         malformed = (
             'msq-' + 'g' * 32,
@@ -398,8 +593,8 @@ class MatchSquadIssuerTests(unittest.TestCase):
             operation = 'msq-1234567890abcdef1234567890abcdef'
             source_sha = 'a' * 64
             issuer.stage(temp, operation, source_sha)
-            with self.assertRaises(ValueError):
-                issuer.stage(temp, operation, source_sha)
+            self.assertEqual(issuer.stage(temp, operation, source_sha),
+                             issuer.load_stage(temp, operation, source_sha))
             path = Path(temp) / operation / 'stage.json'
             path.chmod(0o600)
             ca_key_path = Path(temp) / operation / 'ca.key'
@@ -448,6 +643,41 @@ class MatchSquadIssuerTests(unittest.TestCase):
         changed = json.dumps(manifest()).replace(SOURCE_SHA, 'd' * 64)
         with mock.patch.object(pki, '_issuer_output', return_value=changed), self.assertRaises(ValueError):
             pki._read_staged_manifest(journal)
+
+    def test_apply_retries_stage_intent_by_staging_same_operation_before_export(self):
+        pins = {'sourceSha': 'd' * 40, 'templateSha256': 'e' * 64}
+        image = 'sha256:' + 'f' * 64
+        namespace = {'uid': 'ns-123'}
+        journal = {'operationId': OPERATION, 'namespace': 'voice-dev', 'namespaceUid': 'ns-123',
+                   **pins, 'sourceBinding': pki._source_binding(pins), 'issuerImageId': image,
+                   'volume': 'voice-dev-match-squad-pki', 'phase': 'stage-intent',
+                   'resources': {name: {'phase': 'planned'} for name in sorted(pki.EXPECTED_OBJECTS)}}
+        args = type('Args', (), {'expected_source_sha': pins['sourceSha'], 'issuer_image': image,
+                                 'expected_namespace_uid': namespace['uid']})()
+        items = {name: {'kind': 'ConfigMap' if name == pki.CA_OBJECT else 'Secret',
+                        'metadata': {'name': name, 'namespace': 'voice-dev'}}
+                 for name in pki.EXPECTED_OBJECTS}
+
+        def read_staged(value, *, stage_first=False):
+            self.assertIs(value, journal)
+            self.assertTrue(stage_first)
+            value['phase'] = 'staged'
+            return items
+
+        with mock.patch.object(pki, 'validate_source_pins', return_value=pins), \
+                mock.patch.object(pki, '_check_local_image'), \
+                mock.patch.object(pki, '_namespace_identity', return_value=namespace), \
+                mock.patch.object(pki, '_load_journal_snapshot', return_value=(journal, 'a' * 64)), \
+                mock.patch.object(pki, '_migrate_legacy_journal', return_value=False), \
+                mock.patch.object(pki, '_verify_volume_owned') as verify_volume, \
+                mock.patch.object(pki, '_read_staged_manifest', side_effect=read_staged) as read_staged_mock, \
+                mock.patch.object(pki, '_save_journal'), \
+                mock.patch.object(pki, 'KubectlCreateOnly'), \
+                mock.patch.object(pki, 'create_only'), \
+                mock.patch.object(pki, 'public_receipt', return_value={'phase': 'complete'}):
+            self.assertEqual(pki._apply(args, 'private-state'), {'phase': 'complete'})
+        verify_volume.assert_called_once_with(OPERATION)
+        read_staged_mock.assert_called_once()
 
     def test_stage_command_emits_public_receipt_without_private_manifest(self):
         with tempfile.TemporaryDirectory() as temp, redirect_stdout(io.StringIO()) as output:

@@ -14,6 +14,12 @@ import subprocess
 import sys
 
 NAMESPACE = 'voice-dev'
+LEGACY_RECOVERY_OPERATION = 'msq-3291e91f800a569465ad084a6bb1a61b'
+LEGACY_RECOVERY_SOURCE_SHA = '39828e6f69d5567cbfeadabd9536ea6ef2a8f786'
+LEGACY_RECOVERY_TEMPLATE_SHA256 = '5ad1c0250574abfadda4bbcf8baa3cd3b3a1525be811f303ea9ea40161e67e0e'
+LEGACY_RECOVERY_IMAGE_ID = 'sha256:9dcea06f038bd866c2386955f8422b210f5630c3cd722513b37d5ce13fe9d299'
+LEGACY_RECOVERY_NAMESPACE_UID = '15950fc8-0392-4053-9156-e95e78b596f9'
+LEGACY_RECOVERY_JOURNAL_SHA256 = '83aaf4a2931ce687c05baa23bc5f6f4ae9580dfa1f518d61583545e19209376c'
 OPERATION_ANNOTATION = 'voice.dev/match-squad-pki-operation'
 SOURCE_ANNOTATION = 'voice.dev/match-squad-pki-source-sha256'
 MANAGED_LABELS = {'voice.environment': 'dev', 'app.kubernetes.io/managed-by': 'voice-dev'}
@@ -374,12 +380,14 @@ def _inventory_absent():
             raise ValueError('a target DEV resource already exists; create-only preparation refused')
 
 
-def _check_local_image(image_id):
+def _check_local_image(image_id, source_sha):
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id or ''):
         raise ValueError('issuer image must be pinned by immutable local image ID')
-    result = run_result(['docker', 'image', 'inspect', '--format={{.Id}}', image_id])
-    if result.returncode or result.stdout.strip() != image_id:
-        raise ValueError('pinned issuer image is not present locally')
+    result = run_result(['docker', 'image', 'inspect',
+                         '--format={{.Id}}|{{index .Config.Labels "voice.source.commit"}}', image_id])
+    expected = image_id + '|' + source_sha
+    if result.returncode or result.stdout.strip() != expected:
+        raise ValueError('pinned issuer image is unavailable or bound to different source')
 
 
 def _journal_path(directory):
@@ -387,17 +395,22 @@ def _journal_path(directory):
 
 
 def _load_journal(directory):
+    return _load_journal_snapshot(directory)[0]
+
+
+def _load_journal_snapshot(directory):
     path = _journal_path(directory)
     if path.is_symlink() or not path.is_file():
         raise ValueError('private operation journal is unavailable')
     info = path.stat()
     if info.st_uid != os.geteuid() or info.st_mode & 0o077:
         raise ValueError('private operation journal ownership or mode is unsafe')
-    value = json.loads(path.read_text(encoding='utf-8'))
+    raw = path.read_bytes()
+    value = json.loads(raw.decode('utf-8'))
     if (value.get('namespace') != NAMESPACE or value.get('volume') != 'voice-dev-match-squad-pki' or
             not re.fullmatch(r'msq-[0-9a-f]{32}', value.get('operationId', ''))):
         raise ValueError('private operation journal binding is invalid')
-    return value
+    return value, hashlib.sha256(raw).hexdigest()
 
 
 def _save_journal(directory, journal):
@@ -407,7 +420,9 @@ def _save_journal(directory, journal):
 def _issuer_output(image_id, volume, action, operation_id, binding):
     result = run_result(['docker', 'run', '--rm', '--network', 'none', '--read-only',
                          '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-                         '--user', '10002:10002', '--mount', f'type=volume,source={volume},target=/state',
+                         '--user', '10002:10002', '--tmpfs',
+                         '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=0700,uid=10002,gid=10002',
+                         '--mount', f'type=volume,source={volume},target=/state',
                          image_id, action, '--state-dir', '/state', '--operation-id', operation_id,
                          '--source-sha256', binding])
     if result.returncode:
@@ -519,11 +534,79 @@ def _verify_journal_pins(journal, pins, image_id, namespace):
         raise ValueError('resumed operation pins differ from staged operation')
 
 
+def _migrate_legacy_journal(directory, journal, pins, image_id, namespace, journal_sha256):
+    if journal.get('legacyRecovery') is not None:
+        recovery = journal['legacyRecovery']
+        expected_recovery = {
+            'operationId': LEGACY_RECOVERY_OPERATION,
+            'journalSha256': LEGACY_RECOVERY_JOURNAL_SHA256,
+            'previousSourceSha': LEGACY_RECOVERY_SOURCE_SHA,
+            'previousTemplateSha256': LEGACY_RECOVERY_TEMPLATE_SHA256,
+            'previousSourceBinding': _source_binding({'sourceSha': LEGACY_RECOVERY_SOURCE_SHA,
+                                                      'templateSha256': LEGACY_RECOVERY_TEMPLATE_SHA256}),
+            'previousIssuerImageId': LEGACY_RECOVERY_IMAGE_ID,
+            'previousNamespaceUid': LEGACY_RECOVERY_NAMESPACE_UID,
+        }
+        if (recovery != expected_recovery or journal.get('sourceSha') != pins['sourceSha'] or
+                journal.get('templateSha256') != pins['templateSha256'] or
+                journal.get('sourceBinding') != _source_binding(pins) or
+                journal.get('issuerImageId') != image_id or namespace.get('uid') != LEGACY_RECOVERY_NAMESPACE_UID):
+            raise ValueError('saved legacy recovery binding is invalid')
+        return False
+    if (journal.get('sourceSha') == pins['sourceSha'] and
+            journal.get('templateSha256') == pins['templateSha256'] and
+            journal.get('issuerImageId') == image_id):
+        return False
+    resources = journal.get('resources')
+    planned = {name: {'phase': 'planned'} for name in sorted(EXPECTED_OBJECTS)}
+    old_pins = {'sourceSha': LEGACY_RECOVERY_SOURCE_SHA,
+                'templateSha256': LEGACY_RECOVERY_TEMPLATE_SHA256}
+    if (journal_sha256 != LEGACY_RECOVERY_JOURNAL_SHA256 or
+            journal.get('operationId') != LEGACY_RECOVERY_OPERATION or
+            journal.get('namespace') != NAMESPACE or
+            journal.get('namespaceUid') != LEGACY_RECOVERY_NAMESPACE_UID or
+            namespace.get('uid') != LEGACY_RECOVERY_NAMESPACE_UID or
+            journal.get('sourceSha') != LEGACY_RECOVERY_SOURCE_SHA or
+            journal.get('templateSha256') != LEGACY_RECOVERY_TEMPLATE_SHA256 or
+            journal.get('sourceBinding') != _source_binding(old_pins) or
+            journal.get('issuerImageId') != LEGACY_RECOVERY_IMAGE_ID or
+            journal.get('volume') != 'voice-dev-match-squad-pki' or
+            journal.get('phase') != 'stage-intent' or resources != planned or
+            'manifestSha256' in journal or
+            not re.fullmatch(r'[0-9a-f]{40}', pins.get('sourceSha', '')) or
+            not re.fullmatch(r'[0-9a-f]{64}', pins.get('templateSha256', '')) or
+            not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id or '')):
+        raise ValueError('saved operation does not match the sole approved legacy recovery transition')
+    _inventory_absent()
+    _verify_volume_owned(LEGACY_RECOVERY_OPERATION)
+    inspected = _issuer_output(image_id, 'voice-dev-match-squad-pki', 'inspect-empty-building',
+                               LEGACY_RECOVERY_OPERATION, _source_binding(pins))
+    try:
+        state = json.loads(inspected)
+    except json.JSONDecodeError as exc:
+        raise ValueError('same-operation issuer partial state is unverified') from exc
+    if state != {'operationId': LEGACY_RECOVERY_OPERATION, 'state': 'empty-building'}:
+        raise ValueError('same-operation issuer partial state is not safely retryable')
+    journal['legacyRecovery'] = {
+        'operationId': LEGACY_RECOVERY_OPERATION,
+        'journalSha256': LEGACY_RECOVERY_JOURNAL_SHA256,
+        'previousSourceSha': LEGACY_RECOVERY_SOURCE_SHA,
+        'previousTemplateSha256': LEGACY_RECOVERY_TEMPLATE_SHA256,
+        'previousSourceBinding': journal['sourceBinding'],
+        'previousIssuerImageId': LEGACY_RECOVERY_IMAGE_ID,
+        'previousNamespaceUid': LEGACY_RECOVERY_NAMESPACE_UID,
+    }
+    journal.update(sourceSha=pins['sourceSha'], templateSha256=pins['templateSha256'],
+                   sourceBinding=_source_binding(pins), issuerImageId=image_id)
+    _save_journal(directory, journal)
+    return True
+
+
 def _run_preflight(args):
     pins = validate_source_pins(args.expected_source_sha)
     if pins['templateSha256'] != args.expected_template_sha256:
         raise ValueError('staging template hash differs from the approved pin')
-    _check_local_image(args.issuer_image)
+    _check_local_image(args.issuer_image, pins['sourceSha'])
     namespace = _namespace_identity(args.expected_namespace_uid)
     _inventory_absent()
     return {'namespace': namespace, **pins, 'issuerImageId': args.issuer_image,
@@ -534,7 +617,7 @@ def _prepare(args, directory):
     pins = validate_source_pins(args.expected_source_sha)
     if pins['templateSha256'] != args.expected_template_sha256:
         raise ValueError('staging template hash differs from the approved pin')
-    _check_local_image(args.issuer_image)
+    _check_local_image(args.issuer_image, pins['sourceSha'])
     namespace = _namespace_identity(args.expected_namespace_uid)
     _inventory_absent()
     directory = ensure_private_state_directory(directory)
@@ -558,9 +641,10 @@ def _prepare(args, directory):
 
 def _apply(args, directory):
     pins = validate_source_pins(args.expected_source_sha)
-    _check_local_image(args.issuer_image)
+    _check_local_image(args.issuer_image, pins['sourceSha'])
     namespace = _namespace_identity(args.expected_namespace_uid)
-    journal = _load_journal(directory)
+    journal, journal_sha256 = _load_journal_snapshot(directory)
+    _migrate_legacy_journal(directory, journal, pins, args.issuer_image, namespace, journal_sha256)
     _verify_journal_pins(journal, pins, args.issuer_image, namespace)
     if journal.get('phase') not in {'initializing', 'stage-intent', 'staged', 'apply-in-progress', 'complete'}:
         raise ValueError('operation phase is not eligible for create-only application')
@@ -573,7 +657,7 @@ def _apply(args, directory):
         _save_journal(directory, journal)
     else:
         _verify_volume_owned(journal['operationId'])
-        items = _read_staged_manifest(journal)
+        items = _read_staged_manifest(journal, stage_first=journal.get('phase') == 'stage-intent')
         if journal.get('phase') == 'stage-intent':
             _save_journal(directory, journal)
     completed = journal.get('phase') == 'complete'
