@@ -140,6 +140,23 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             with self.assertRaises(kube.KubeAPIError):
                 self.api.list_control_objects('voice-staging')
 
+    def test_hub_pod_list_uses_only_the_fixed_selector_and_rejects_truncation(self):
+        item = {'metadata': {'name': 'voice-nats-hub-0'}}
+        with patch.object(self.api, '_request', return_value={'items': [item]}) as get:
+            self.assertEqual(self.api.list_hub_pods('voice-staging', {'app': 'voice-nats-hub'}), [item])
+        self.assertIn('labelSelector=app%3Dvoice-nats-hub', get.call_args.args[1])
+        self.assertIn('limit=2048', get.call_args.args[1])
+        for args in (('default', {'app': 'voice-nats-hub'}),
+                     ('voice-staging', {'app': 'other'}),
+                     ('voice-staging', {'app': 'voice-nats-hub', 'role': 'hub'})):
+            with self.subTest(args=args), patch.object(self.api, '_request') as request, \
+                 self.assertRaises(kube.KubeAPIError):
+                self.api.list_hub_pods(*args)
+            request.assert_not_called()
+        with patch.object(self.api, '_request', return_value={'items': [], 'metadata': {'continue': 'next'}}):
+            with self.assertRaises(kube.KubeAPIError):
+                self.api.list_hub_pods('voice-staging', {'app': 'voice-nats-hub'})
+
     def test_hub_jsz_uses_exact_pod_uid_fixed_command_and_bounded_stdout(self):
         pod_uid = '44444444-4444-4444-8444-444444444444'
         pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
@@ -217,6 +234,54 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             self.api.cas_rollout_deployment('voice-staging', 'voice-nats-hub', uid, '12', 1, 'f' * 64,
                 new_replicas=0)
         request.assert_not_called()
+
+    def test_rollout_marker_cas_is_closed_and_preserves_claim_identity(self):
+        uid = '44444444-4444-4444-8444-444444444444'
+        operation = '0123456789ab'
+        claim = 'voice-nats-jsdata-d20261017a'
+        marker = {'metadata': {'uid': uid, 'resourceVersion': '12'},
+            'data': {'phase': 'active', 'dataPVC': claim, 'generation': 'r20261017a'}}
+        with patch.object(self.api, 'get_configmap', return_value=marker), \
+             patch.object(self.api, '_request', return_value={'kind': 'ConfigMap'}) as patch_request:
+            self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '12',
+                'active', 'rollout-capturing', expected_claim=claim)
+        method, path, patch_doc = patch_request.call_args.args
+        self.assertEqual((method, path), ('PATCH',
+            '/api/v1/namespaces/voice-staging/configmaps/voice-nats-generation'))
+        self.assertEqual(patch_doc[:4], [
+            {'op': 'test', 'path': '/metadata/uid', 'value': uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '12'},
+            {'op': 'test', 'path': '/data/phase', 'value': 'active'},
+            {'op': 'test', 'path': '/data/dataPVC', 'value': claim}])
+        self.assertEqual(patch_doc[4:], [
+            {'op': 'replace', 'path': '/data/phase', 'value': 'rollout-capturing'},
+            {'op': 'add', 'path': '/data/knownRolloutOperation', 'value': operation}])
+        self.assertEqual(patch_request.call_args.kwargs['content_type'], 'application/json-patch+json')
+
+        owned = {'metadata': {'uid': uid, 'resourceVersion': '13'},
+            'data': {'phase': 'rollout-verified', 'dataPVC': claim,
+                'knownRolloutOperation': operation, 'generation': 'r20261017a'}}
+        with patch.object(self.api, 'get_configmap', return_value=owned), \
+             patch.object(self.api, '_request', return_value={'kind': 'ConfigMap'}) as patch_request:
+            self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '13',
+                'rollout-verified', 'active', expected_claim=claim, release=True)
+        patch_doc = patch_request.call_args.args[2]
+        self.assertEqual(patch_doc[-2:], [
+            {'op': 'replace', 'path': '/data/phase', 'value': 'active'},
+            {'op': 'remove', 'path': '/data/knownRolloutOperation'}])
+
+        for phase, target, release, data in (
+            ('active', 'rollout-prepared', False, marker['data']),
+            ('rollout-prepared', 'rollout-verified', False,
+                {'phase': 'rollout-prepared', 'dataPVC': claim, 'knownRolloutOperation': 'f' * 12}),
+        ):
+            with self.subTest(phase=phase), \
+                 patch.object(self.api, 'get_configmap', return_value={
+                     'metadata': {'uid': uid, 'resourceVersion': '12'}, 'data': data}), \
+                 patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
+                self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '12',
+                    phase, target, expected_claim=claim, release=release)
+            request.assert_not_called()
 
     def test_job_create_read_logs_and_uid_precondition_delete_are_json_contracts(self):
         payload = {'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': 'job'}}
@@ -592,7 +657,7 @@ class SourceAPI:
     def get_pvc(self, namespace, name): self.reads.append('pvc'); return self.claim
     def get_pv(self, name): self.reads.append('pv'); return self.pv
     def list_nodes_by_hostname(self, hostname): self.reads.append('nodes'); return self.nodes
-    def list_hub_pods(self, labels): self.reads.append('pods'); return self.pods
+    def list_hub_pods(self, namespace, labels): self.reads.append('pods'); return self.pods
 
 
 if __name__ == '__main__': unittest.main()

@@ -395,6 +395,64 @@ class _KubernetesJSONAPIBase:
         return self._request('PATCH', '/apis/apps/v1/namespaces/' + self._segment(namespace)
             + '/deployments/' + self._segment(name), patch, content_type='application/json-patch+json')
 
+    def cas_rollout_marker(self, name, operation, expected_uid, expected_rv,
+                           expected_phase, new_phase, *, expected_claim,
+                           new_claim=None, release=False):
+        phases = ('active', 'rollout-capturing', 'rollout-prepared',
+            'rollout-applying', 'rollout-verified')
+        transitions = {
+            'active': 'rollout-capturing',
+            'rollout-capturing': 'rollout-prepared',
+            'rollout-prepared': 'rollout-applying',
+            'rollout-applying': 'rollout-verified',
+            'rollout-verified': 'active',
+        }
+        if (name != 'voice-nats-generation' or not isinstance(operation, str)
+            or not re.fullmatch(r'[a-f0-9]{12}', operation)
+            or not isinstance(expected_uid, str) or not _UID.fullmatch(expected_uid)
+            or not isinstance(expected_rv, str) or not expected_rv.isdigit()
+            or expected_phase not in phases or transitions.get(expected_phase) != new_phase
+            or not isinstance(expected_claim, str)
+                or not (re.fullmatch(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}', expected_claim)
+                    or re.fullmatch(r'voice-nats-restore-' + operation + r'-[a-f0-9]{8}', expected_claim))
+            or new_claim is not None and (not isinstance(new_claim, str)
+                or not re.fullmatch(r'voice-nats-restore-' + operation + r'-[a-f0-9]{8}', new_claim))
+            or type(release) is not bool
+            or release != (expected_phase == 'rollout-verified' and new_phase == 'active')):
+            _fail('marker_cas_request_invalid')
+        current = self.get_configmap(NAMESPACE, name)
+        metadata, data = current.get('metadata', {}), current.get('data', {})
+        if (metadata.get('uid') != expected_uid or metadata.get('resourceVersion') != expected_rv
+            or data.get('phase') != expected_phase or data.get('dataPVC') != expected_claim):
+            _fail('marker_cas_precondition_changed')
+        if expected_phase == 'active':
+            if 'knownRolloutOperation' in data:
+                _fail('marker_rollout_already_owned')
+        elif data.get('knownRolloutOperation') != operation:
+            _fail('marker_rollout_ownership_changed')
+        patch = [
+            {'op': 'test', 'path': '/metadata/uid', 'value': expected_uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': expected_rv},
+            {'op': 'test', 'path': '/data/phase', 'value': expected_phase},
+            {'op': 'test', 'path': '/data/dataPVC', 'value': expected_claim},
+        ]
+        if expected_phase == 'active':
+            patch.extend((
+                {'op': 'replace', 'path': '/data/phase', 'value': new_phase},
+                {'op': 'add', 'path': '/data/knownRolloutOperation', 'value': operation},
+            ))
+        else:
+            patch.extend((
+                {'op': 'test', 'path': '/data/knownRolloutOperation', 'value': operation},
+                {'op': 'replace', 'path': '/data/phase', 'value': new_phase},
+            ))
+        if new_claim is not None:
+            patch.append({'op': 'replace', 'path': '/data/dataPVC', 'value': new_claim})
+        if release:
+            patch.append({'op': 'remove', 'path': '/data/knownRolloutOperation'})
+        return self._request('PATCH', '/api/v1/namespaces/' + self._segment(NAMESPACE)
+            + '/configmaps/' + self._segment(name), patch, content_type='application/json-patch+json')
+
     def list_nodes_by_hostname(self, hostname):
         if (not isinstance(hostname, str) or len(hostname) > 253
             or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', hostname)):
@@ -406,18 +464,16 @@ class _KubernetesJSONAPIBase:
             _fail('node_list_invalid')
         return items
 
-    def list_hub_pods(self, labels):
-        if (not isinstance(labels, dict) or not labels or len(labels) > 32
-            or any(not isinstance(key, str) or not isinstance(value, str) or not key or not value
-                for key, value in labels.items())):
+    def list_hub_pods(self, namespace, labels):
+        if namespace != NAMESPACE or labels != {'app': 'voice-nats-hub'}:
             _fail('pod_selector_invalid')
-        selector = ','.join(quote(key, safe='') + '=' + quote(value, safe='')
-            for key, value in sorted(labels.items()))
-        result = self._request('GET', '/api/v1/namespaces/' + self._segment(NAMESPACE)
-            + '/pods?' + urlencode({'labelSelector': selector}))
+        result = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods?' + urlencode({'labelSelector': 'app=voice-nats-hub', 'limit': '2048'}))
         items = result.get('items')
         if not isinstance(items, list) or len(items) > 2048 or not all(isinstance(item, dict) for item in items):
             _fail('pod_list_invalid')
+        if result.get('metadata', {}).get('continue'):
+            _fail('pod_list_truncated')
         return items
 
     def get_node(self, namespace, name=None):
@@ -1144,7 +1200,9 @@ def resolve_source_binding(api, *, operation, expected=None):
             or sum(1 for row in conditions if row.get('type') == 'Ready' and row.get('status') == 'True') != 1):
             _fail('source_node_not_ready')
         selector = hub['spec']['selector']['matchLabels']
-        pods = api.list_hub_pods(selector)
+        if selector != {'app': 'voice-nats-hub'}:
+            _fail('source_hub_selector_invalid')
+        pods = api.list_hub_pods(NAMESPACE, {'app': 'voice-nats-hub'})
         active_pods = [pod for pod in pods if not pod.get('metadata', {}).get('deletionTimestamp')]
         if ((fenced and active_pods) or (not fenced and not active_pods)
             or any(pod.get('spec', {}).get('nodeName') not in ('', node_name)
