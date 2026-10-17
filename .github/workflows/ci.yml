@@ -49,6 +49,7 @@ jobs:
     outputs:
       global: ${{ steps.filter.outputs.global }}
       ci_global: ${{ steps.filter.outputs.ci_global }}
+      match_squad_overlay: ${{ steps.filter.outputs.match_squad_overlay }}
       dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
       a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}
@@ -261,6 +262,25 @@ jobs:
       - name: NATS non-JetStream leaf routing regression
         working-directory: scripts/staging/nats-leaf-routing-test
         run: go test -count=1 -timeout=90s ./...
+
+  match-squad-overlay:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.match_squad_overlay == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: MatchSquad DEV overlay contracts
+        run: python3 -B -m unittest scripts.dev.match_squad_overlay_test scripts.dev.match_squad_runtime_overlay_test
 
   flutter:
     needs: changes
@@ -1722,6 +1742,7 @@ jobs:
       - protobuf
       - compose-config
       - ci-script-tests
+      - match-squad-overlay
       - flutter
       - flutter-device-driver
       - flutter-windows
@@ -1767,6 +1788,7 @@ jobs:
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
           GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
+          RUN_MATCH_SQUAD_OVERLAY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.changes.outputs.match_squad_overlay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) }}
           RUN_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true') }}
           RUN_FLUTTER_ANDROID_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_FLUTTER_WEB_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
@@ -1804,6 +1826,7 @@ jobs:
           JOB_COMPOSE_E2E: ${{ needs.compose-e2e.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
+          JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
