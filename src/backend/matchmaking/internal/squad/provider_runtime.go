@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -26,7 +27,16 @@ import (
 )
 
 var principalKIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-var projectedSecretTimestampPattern = regexp.MustCompile(`^\.\.\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}\.\d{9}$`)
+var projectedSecretTimestampPattern = regexp.MustCompile(`^\.\.\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}\.(\d{1,10})$`)
+
+func isProjectedSecretTimestamp(name string) bool {
+	match := projectedSecretTimestampPattern.FindStringSubmatch(name)
+	if len(match) != 2 {
+		return false
+	}
+	value, err := strconv.ParseUint(match[1], 10, 32)
+	return err == nil && strconv.FormatUint(value, 10) == match[1]
+}
 
 type providerRuntimeConfig struct {
 	ChatAddr, VoiceAddr                    string
@@ -252,7 +262,7 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 			if err != nil || filepath.IsAbs(rel) || rel != filepath.Base(target) {
 				return nil, errors.New("matchmaking principal projected data link resolves outside its directory")
 			}
-			if !projectedSecretTimestampPattern.MatchString(filepath.Base(target)) {
+				if !isProjectedSecretTimestamp(filepath.Base(target)) {
 				return nil, errors.New("matchmaking principal projected data link target is invalid")
 			}
 			targetInfo, err := os.Stat(target)
@@ -266,7 +276,7 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 			}
 			continue
 		default:
-			if projectedSecretTimestampPattern.MatchString(entry.Name()) {
+				if isProjectedSecretTimestamp(entry.Name()) {
 				if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 					return nil, errors.New("matchmaking principal projected version directory is invalid")
 				}
