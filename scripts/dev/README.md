@@ -329,10 +329,12 @@ continuation of `media_pki.py`: it uses its own named volume
 The completed media PKI volume and journal are outside this flow and must remain
 untouched.
 
-Build the issuer image on the approved private Linux operator host, pin the
-result by its local immutable `sha256:` image ID, then use the exact source
-commit, staging-template SHA-256, and current DEV namespace UID from the
-reviewed activation packet. The CLI is Linux-only. `preflight` is read-only;
+Build the issuer image on the approved private Linux operator host from the
+clean reviewed source commit, label it with that source commit, and pin the
+result by its local immutable `sha256:` image ID. The Dockerfile pins the
+`python:3.13-slim-bookworm` base by digest. Use the exact staging-template
+SHA-256 and current DEV namespace UID from the reviewed activation packet. The
+CLI is Linux-only. `preflight` is read-only;
 `prepare`, `apply`, and `resume` all require `--confirm-dev-match-squad-pki-change`.
 `prepare` persists one staged CA/key set in the dedicated private volume;
 `apply` creates only the six reviewed Secrets plus public `voice-match-squad-ca`
@@ -351,11 +353,19 @@ python3 scripts/dev/match_squad_pki.py resume --issuer-image sha256:<image-id> -
 ```
 
 The issuer image runs offline, read-only, without Linux capabilities, as UID
-10002. Keep issuer stdout captured by the operator; the `export` action carries
+10002, with only a bounded private `/tmp` tmpfs for OpenSSL scratch files. Keep
+issuer stdout captured by the operator; the `export` action carries
 private key/replay material to the in-memory create-only adapter and must never
 be run directly into a terminal or log. The journal is mode 0600 and stores
 operation/resource identity and phase only. Kubernetes creates are preceded by
 durable intent; uncertain results are recovered only by exact operation-marker
-and payload comparison. No overwrite, regeneration, deletion, or rollback path
-exists. The separate DEV trust patches and their activation order are in
+and payload comparison. A retry may reuse only the same operation's verified
+empty `.building` directory, or export an already complete integrity-checked
+stage; nonempty, insecure, ambiguous, or foreign state fails closed. One
+recorded legacy `stage-intent` journal has an exact operation/source/image/
+template/namespace/digest-bound transition to the newly reviewed pins, after
+which retries use those active pins. This does not authorize a new operation or
+a general source/image override. On an unknown result, stop and preserve the
+same journal, volume, and staged material for review. No overwrite, deletion,
+or rollback path exists. The separate DEV trust patches and their activation order are in
 `deploy/dev/match-squad-trust-overlay/README.md`.

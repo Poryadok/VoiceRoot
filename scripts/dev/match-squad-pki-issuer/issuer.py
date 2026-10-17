@@ -118,12 +118,31 @@ def stage(state_dir, operation_id, source_sha):
     info = state_dir.stat()
     if info.st_uid != os.geteuid():
         raise ValueError('issuer state directory owner is unsafe')
-    os.chmod(state_dir, 0o700)
+    if info.st_mode & 0o777 != 0o700:
+        raise ValueError('issuer state directory mode is unsafe')
     final = state_dir / operation_id
     partial = state_dir / (operation_id + '.building')
-    if final.exists() or partial.exists() or list(state_dir.iterdir()):
-        raise ValueError('issuer state already exists; refusing regeneration or replacement')
-    partial.mkdir(mode=0o700)
+    children = list(state_dir.iterdir())
+    if final.is_symlink() or partial.is_symlink():
+        raise ValueError('issuer state contains a symlink')
+    if final.exists():
+        if partial.exists() or children != [final]:
+            raise ValueError('issuer final and partial state are ambiguous')
+        return load_stage(state_dir, operation_id, source_sha)
+    if partial.exists():
+        if children != [partial] or not partial.is_dir():
+            raise ValueError('issuer partial state is ambiguous')
+        partial_info = partial.stat()
+        if (partial_info.st_uid != os.geteuid() or partial_info.st_mode & 0o777 != 0o700 or
+                any(partial.iterdir())):
+            raise ValueError('issuer partial state is not a private empty directory')
+    else:
+        if children:
+            raise ValueError('issuer state already exists; refusing regeneration or replacement')
+        partial.mkdir(mode=0o700)
+        partial_info = partial.stat()
+        if partial_info.st_uid != os.geteuid() or partial_info.st_mode & 0o777 != 0o700:
+            raise ValueError('issuer partial state ownership or mode is unsafe')
     try:
         with tempfile.TemporaryDirectory(prefix='match-squad-pki-') as temp_name:
             work = Path(temp_name)
@@ -142,23 +161,50 @@ def stage(state_dir, operation_id, source_sha):
     return raw
 
 
+def inspect_empty_building(state_dir, operation_id):
+    """Verify the exact retryable directory shape without reading staged payloads."""
+    if not re.fullmatch(r'msq-[a-f0-9]{32}', operation_id):
+        raise ValueError('invalid operation identity')
+    state_dir = Path(state_dir)
+    if state_dir.is_symlink() or not state_dir.is_dir():
+        raise ValueError('issuer state directory is unavailable')
+    info = state_dir.stat()
+    if info.st_uid != os.geteuid() or info.st_mode & 0o777 != 0o700:
+        raise ValueError('issuer state directory ownership or mode is unsafe')
+    final = state_dir / operation_id
+    partial = state_dir / (operation_id + '.building')
+    children = list(state_dir.iterdir())
+    if (final.exists() or final.is_symlink() or partial.is_symlink() or
+            children != [partial] or not partial.is_dir()):
+        raise ValueError('issuer state is not the exact empty same-operation partial')
+    partial_info = partial.stat()
+    if (partial_info.st_uid != os.geteuid() or partial_info.st_mode & 0o777 != 0o700 or
+            any(partial.iterdir())):
+        raise ValueError('issuer partial state is not a private empty directory')
+    return {'operationId': operation_id, 'state': 'empty-building'}
+
+
 def load_stage(state_dir, operation_id, source_sha):
     state_dir = Path(state_dir)
     if state_dir.is_symlink() or not state_dir.is_dir() or state_dir.stat().st_uid != os.geteuid():
         raise ValueError('issuer state directory ownership is unsafe')
+    if state_dir.stat().st_mode & 0o777 != 0o700:
+        raise ValueError('issuer state directory mode is unsafe')
     final = state_dir / operation_id
     if final.is_symlink() or not final.is_dir():
         raise ValueError('exact staged operation is unavailable')
     info = final.stat()
-    if info.st_uid != os.geteuid() or info.st_mode & 0o077:
+    if info.st_uid != os.geteuid() or info.st_mode & 0o777 != 0o700:
         raise ValueError('staged issuer material ownership or mode is unsafe')
+    if {path.name for path in final.iterdir()} != {'stage.json', 'ca.key'}:
+        raise ValueError('staged issuer material directory has unexpected entries')
     stage_file = final / 'stage.json'
     ca_key_file = final / 'ca.key'
     for path in (stage_file, ca_key_file):
         if path.is_symlink() or not path.is_file():
             raise ValueError('staged issuer material file is unavailable')
         file_info = path.stat()
-        if file_info.st_uid != os.geteuid() or file_info.st_mode & 0o077:
+        if file_info.st_uid != os.geteuid() or file_info.st_mode & 0o777 != 0o600:
             raise ValueError('staged issuer material file ownership or mode is unsafe')
     value = json.loads(stage_file.read_text(encoding='utf-8'))
     if value.get('operationId') != operation_id or value.get('sourceSha256') != source_sha:
@@ -192,6 +238,10 @@ def main(argv=None):
     export.add_argument('--state-dir', default='/state')
     export.add_argument('--operation-id', required=True)
     export.add_argument('--source-sha256', required=True)
+    inspect = sub.add_parser('inspect-empty-building')
+    inspect.add_argument('--state-dir', default='/state')
+    inspect.add_argument('--operation-id', required=True)
+    inspect.add_argument('--source-sha256', required=True)
     args = parser.parse_args(argv)
     try:
         if args.action == 'stage':
@@ -201,6 +251,9 @@ def main(argv=None):
                               'manifestSha256': hashlib.sha256(raw).hexdigest(),
                               'resourceNames': sorted(item['metadata']['name'] for item in manifest['items'])},
                              sort_keys=True))
+            return 0
+        elif args.action == 'inspect-empty-building':
+            print(json.dumps(inspect_empty_building(args.state_dir, args.operation_id), sort_keys=True))
             return 0
         else:
             raw = load_stage(args.state_dir, args.operation_id, args.source_sha256)
