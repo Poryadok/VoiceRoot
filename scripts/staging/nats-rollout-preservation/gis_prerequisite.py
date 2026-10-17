@@ -14,6 +14,7 @@ import gis_first_install as gis
 Blocked = gis.Blocked
 
 NS = 'voice-staging'
+ALLOWED_NAMESPACES = (NS, 'voice-dev')
 OP_LABEL = 'voice-rollout-operation'
 UUID = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 SHA = re.compile(r'[a-f0-9]{64}')
@@ -130,6 +131,9 @@ def source_inputs(root, code_capture):
 
 def _documents(root, plan, code_capture):
     root = Path(root)
+    namespace = plan.get('namespace', NS)
+    if namespace not in ALLOWED_NAMESPACES:
+        raise Blocked('gis_prerequisite_namespace_invalid')
     inputs = plan.get('inputs')
     if not isinstance(inputs, dict) or set(inputs) != INPUTS_KEYS or gis.digest(inputs) != plan.get('inputs_sha256'):
         raise Blocked('gis_prerequisite_input_binding_invalid')
@@ -148,12 +152,12 @@ def _documents(root, plan, code_capture):
         raise Blocked('gis_prerequisite_sql_binding_invalid')
     configmaps = {
         'provision': {'apiVersion': 'v1', 'kind': 'ConfigMap', 'immutable': True,
-            'metadata': {'name': inputs['configmaps']['provision'], 'namespace': NS},
+            'metadata': {'name': inputs['configmaps']['provision'], 'namespace': namespace},
             'data': {'provision.sql': provision_sql}},
         'migrate': {'apiVersion': 'v1', 'kind': 'ConfigMap', 'immutable': True,
-            'metadata': {'name': inputs['configmaps']['migrations'], 'namespace': NS},
+            'metadata': {'name': inputs['configmaps']['migrations'], 'namespace': namespace},
             'data': migration_data},
-        'verify': producer.gameintegration_verifier_configmap(root, NS),
+        'verify': producer.gameintegration_verifier_configmap(root, namespace),
     }
     if (_sha(configmaps['verify']['data']['verify.sql'].encode()) != inputs['verifier_sql_sha256']
         or configmaps['verify']['metadata']['name'] != inputs['configmaps']['verify']):
@@ -168,10 +172,10 @@ def _documents(root, plan, code_capture):
         raw = (root / relative).read_text(encoding='utf-8')
         if raw.count('__K_NAMESPACE__') != 1:
             raise Blocked('gis_prerequisite_template_invalid')
-        obj = yaml.safe_load(raw.replace('__K_NAMESPACE__', NS))
+        obj = yaml.safe_load(raw.replace('__K_NAMESPACE__', namespace))
         if (not isinstance(obj, dict) or obj.get('kind') != 'Job'
             or obj.get('metadata', {}).get('name') != inputs['jobs'][role]
-            or obj['metadata'].get('namespace') != NS):
+            or obj['metadata'].get('namespace') != namespace):
             raise Blocked('gis_prerequisite_template_invalid')
         jobs[role] = obj
     # Bind immutable operation ownership labels before calculating the actual
@@ -213,12 +217,14 @@ def _documents(root, plan, code_capture):
     return configmaps, jobs
 
 
-def _endpoint_identity(kube):
-    namespace = kube.get('namespace', NS)
+def _endpoint_identity(kube, namespace_name=NS):
+    if namespace_name not in ALLOWED_NAMESPACES:
+        raise Blocked('gis_prerequisite_namespace_invalid')
+    namespace = kube.get('namespace', namespace_name)
     service = kube.get('service', 'voice-postgres')
     service_spec = service.get('spec', {})
     if (namespace.get('metadata', {}).get('uid') is None or service.get('metadata', {}).get('uid') is None
-        or service.get('metadata', {}).get('namespace') != NS
+        or service.get('metadata', {}).get('namespace') != namespace_name
         or service_spec.get('type', 'ClusterIP') != 'ClusterIP'
         or not any(port.get('port') == 5432 for port in service_spec.get('ports', []))
         or not isinstance(service_spec.get('selector'), dict) or not service_spec['selector']):
@@ -241,7 +247,7 @@ def _endpoint_identity(kube):
                     raise Blocked('gis_prerequisite_database_endpoints_invalid')
                 pod = kube.get('pod', target.get('name'))
                 if (pod.get('metadata', {}).get('uid') != target['uid']
-                    or pod.get('metadata', {}).get('namespace') != NS
+                    or pod.get('metadata', {}).get('namespace') != namespace_name
                     or pod.get('status', {}).get('phase') != 'Running'
                     or any(pod.get('metadata', {}).get('labels', {}).get(key) != value
                            for key, value in service_spec['selector'].items())
@@ -262,7 +268,10 @@ def preflight(kube, plan):
     if (not isinstance(plan, dict) or plan.get('phase') not in ('PLANNED', 'CREATING', 'STARTING')
         or not isinstance(plan.get('inputs_sha256'), str) or not SHA.fullmatch(plan['inputs_sha256'])):
         raise Blocked('gis_prerequisite_plan_invalid')
-    live = _endpoint_identity(kube)
+    namespace = plan.get('namespace', NS)
+    if namespace not in ALLOWED_NAMESPACES:
+        raise Blocked('gis_prerequisite_namespace_invalid')
+    live = _endpoint_identity(kube, namespace)
     if plan.get('database_identity') is not None and plan['database_identity'] != live:
         raise Blocked('gis_prerequisite_database_identity_changed')
     secret = kube.secret_meta('voice-app-secrets')
@@ -505,10 +514,11 @@ def execute(kube, plan, source_root, code_capture, save, *, verify_storage=None)
         raise Blocked('gis_prerequisite_live_inputs_changed')
     if verifier_result != OUTPUT:
         raise Blocked('gis_prerequisite_verifier_failed')
+    dev = plan.get('namespace', gis.NS) == 'voice-dev'
     receipt = {
-        'schema': gis.PREREQUISITE_SCHEMA, 'operation': plan['operation'],
+        'schema': gis.DEV_PREREQUISITE_SCHEMA if dev else gis.PREREQUISITE_SCHEMA,
+        'operation': plan['operation'],
         'source_sha': plan['source_sha'], 'source_plan_sha256': plan['source_plan_sha256'],
-        'source_ci': copy.deepcopy(plan['source_ci']),
         'inputs_sha256': plan['inputs_sha256'], 'inputs': copy.deepcopy(plan['inputs']),
         'namespace_uid': current['namespace_uid'],
         'database': 'game_integration_db', 'database_identity': copy.deepcopy(after),
@@ -524,8 +534,15 @@ def execute(kube, plan, source_root, code_capture, save, *, verify_storage=None)
             'endpoints': copy.deepcopy(after['endpoints']),
             'secret_metadata': {'name': 'voice-app-secrets', **plan['secret_metadata']},
             'config_metadata': copy.deepcopy(plan['config_metadata'])},
-        'custody_binding_sha256': plan['custody_binding_sha256'],
     }
+    if dev:
+        build = copy.deepcopy(plan['source_build_receipt'])
+        receipt['source_build_receipt'] = build
+        receipt['source_build_receipt_sha256'] = gis.digest(build)
+    else:
+        # Preserve the established STAGING evidence contract exactly.
+        receipt['source_ci'] = copy.deepcopy(plan['source_ci'])
+        receipt['custody_binding_sha256'] = plan['custody_binding_sha256']
     gis.validate_prerequisite_receipt(receipt, plan)
     plan['prerequisite_receipt'] = receipt
     plan['prerequisite_phase'] = 'VERIFIED'
