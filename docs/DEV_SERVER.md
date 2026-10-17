@@ -242,6 +242,22 @@ Private bootstrap state расположен в `/home/voice-dev/bootstrap`, iss
 создания окружения и порядок migrations/NATS bootstrap описаны в
 [scripts/dev/README.md](../scripts/dev/README.md).
 
+Recovery issuer для DEV media JWKS — отдельный операторский Docker named volume
+`voice-dev-media-pki`, работающий с выделенным UID 10001. Он не использует
+root-only issuance archive выше и не хранит CA key в Kubernetes. Не удалять
+volume при обычной ротации; потеря volume означает отдельную reviewed выдачу
+нового DEV trust root с additive overlap. Текущая tooling версия не экспортирует
+plaintext backup; encrypted offline backup должен быть организован до
+долгосрочной эксплуатации. Инструкции по выпуску и DEV-only cutover находятся
+в [scripts/dev/README.md](../scripts/dev/README.md).
+
+Issuer ограничен тремя DEV server identities: `voice-voice`,
+`voice-gameintegration` и `voice-matchmaking.voice-dev.svc`. Для Matchmaking он
+создаёт отдельный публичный CA Secret `voice-matchmaking-principal-jwks-ca` и
+TLS Secret `voice-matchmaking-principal-jwks-tls`; Chat/Voice читают только CA
+Secret, а Matchmaking монтирует TLS Secret read-only. Эти имена и сертификат
+не используются для Compose alias или namespace `voice-staging`.
+
 Пересоздание pod не равно удалению PVC: stateful данные dev находятся на PV;
 `Retain` сохраняет backing data при удалении claim, но не восстанавливает
 namespace, привязки и конфигурацию автоматически. Redis/mail fixture и любые
