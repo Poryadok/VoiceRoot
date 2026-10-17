@@ -912,6 +912,63 @@ class _KubernetesJSONAPIBase:
         except (ImportError, TypeError, ValueError):
             _fail('verification_census_invalid')
 
+    def read_verification_input_receipt(self, namespace, pod_name, pod_uid, request, binding,
+                                        archive, session_inputs):
+        """Reconcile the one-shot input load from its exact durable same-Pod receipt."""
+        try:
+            import verification_job
+            row = verification_job.validate_request(request)
+            storage = verification_job.validate_binding(binding)
+            if row['phase'] != 'census':
+                _fail('verification_input_phase_invalid')
+            if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
+                or not isinstance(archive['sha256'], str)
+                or not re.fullmatch('[a-f0-9]{64}', archive['sha256'])
+                or type(archive['bytes']) is not int or not 0 < archive['bytes'] <= MAX_ARCHIVE_STREAM_BYTES):
+                _fail('verification_input_archive_invalid')
+            if (not isinstance(session_inputs, dict) or set(session_inputs) != {'attempt', 'sha256', 'bytes'}
+                or not isinstance(session_inputs['attempt'], str)
+                or not re.fullmatch('[a-f0-9]{8}', session_inputs['attempt'])
+                or not isinstance(session_inputs['sha256'], str)
+                or not re.fullmatch('[a-f0-9]{64}', session_inputs['sha256'])
+                or type(session_inputs['bytes']) is not int
+                or not 0 < session_inputs['bytes'] <= MAX_VERIFICATION_INPUT_BYTES):
+                _fail('verification_input_binding_invalid')
+            chunks = self.exec_pod_verification(namespace, pod_name, pod_uid, row, storage,
+                'census_read_input_receipt', archive=archive, session_inputs=session_inputs)
+            raw = b''.join(chunks)
+            if len(raw) > MAX_LOG_RESPONSE or not raw.endswith(b'\n') or raw.count(b'\n') != 1:
+                _fail('verification_input_receipt_invalid')
+            encoded = raw[:-1]
+            receipt = json.loads(encoded.decode('utf-8'), object_pairs_hook=_unique_json_pairs,
+                parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+            canonical = json.dumps(receipt, sort_keys=True, separators=(',', ':'),
+                ensure_ascii=False, allow_nan=False).encode('utf-8')
+            expected = {
+                'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs',
+                'purpose': 'verification', 'operation': row['operation'], 'nonce': row['nonce'],
+                'pod_uid': pod_uid, 'source_pvc_uid': storage['source_uid'],
+                'source_pv_uid': storage['source_pv_uid'],
+                'verification_pvc_uid': storage['verification_uid'],
+                'verification_pv_uid': storage['verification_pv_uid'],
+                'archive_sha256': archive['sha256'], 'archive_bytes': archive['bytes'],
+                'session_attempt': session_inputs['attempt'],
+                'input_bundle_sha256': session_inputs['sha256'],
+                'input_bundle_bytes': session_inputs['bytes'], 'status': 'COMPLETE',
+                'file_count': len(VERIFICATION_INPUT_FILES),
+            }
+            if (not isinstance(receipt, dict) or set(receipt) != set(expected) | {
+                'kernel_bundle_sha256', 'server_config_sha256'}
+                or any(receipt.get(key) != value for key, value in expected.items())
+                or any(not isinstance(receipt.get(key), str)
+                    or not re.fullmatch('[a-f0-9]{64}', receipt[key])
+                    for key in ('kernel_bundle_sha256', 'server_config_sha256'))
+                or encoded != canonical):
+                _fail('verification_input_receipt_invalid')
+            return copy.deepcopy(receipt)
+        except (ImportError, TypeError, ValueError, UnicodeDecodeError, RecursionError):
+            _fail('verification_input_receipt_invalid')
+
 
 def _websocket_exec(api, path, token, *, max_bytes):
     """Consume Kubernetes channel.k8s.io v5 stdout frames with a strict byte cap."""

@@ -677,6 +677,61 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(execute.call_args.kwargs['max_bytes'], census_stream.MAX_TRANSPORT_BYTES)
         self.assertEqual(consume.call_count, 1)
 
+    def test_read_verification_input_receipt_binds_all_pvc_and_attempt_identity(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
+        binding = {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'pv-voice-nats-source',
+            'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+            'source_node_name': 'k3s-worker-1',
+            'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'verification_uid': '22222222-2222-4222-8222-222222222222',
+            'verification_pv_name': 'pv-voice-nats-verify',
+            'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+            'verification_node_name': 'k3s-worker-1',
+        }
+        pod_uid = '44444444-4444-4444-8444-444444444444'
+        archive = {'sha256': 'a' * 64, 'bytes': 123}
+        session_inputs = {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456}
+        receipt = {
+            'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs', 'purpose': 'verification',
+            'operation': request['operation'], 'nonce': request['nonce'], 'pod_uid': pod_uid,
+            'source_pvc_uid': binding['source_uid'], 'source_pv_uid': binding['source_pv_uid'],
+            'verification_pvc_uid': binding['verification_uid'],
+            'verification_pv_uid': binding['verification_pv_uid'],
+            'archive_sha256': archive['sha256'], 'archive_bytes': archive['bytes'],
+            'session_attempt': session_inputs['attempt'],
+            'input_bundle_sha256': session_inputs['sha256'], 'input_bundle_bytes': session_inputs['bytes'],
+            'status': 'COMPLETE', 'file_count': 5,
+            'kernel_bundle_sha256': 'f' * 64, 'server_config_sha256': '9' * 64,
+        }
+        raw = json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+        with patch.object(self.api, 'exec_pod_verification', return_value=(raw,)) as execute:
+            result = self.api.read_verification_input_receipt('voice-staging', 'pod', pod_uid,
+                request, binding, archive, session_inputs)
+        self.assertEqual(result, receipt)
+        self.assertEqual(execute.call_args.args[5], 'census_read_input_receipt')
+        self.assertEqual(execute.call_args.kwargs, {'archive': archive, 'session_inputs': session_inputs})
+
+    def test_read_verification_input_receipt_rejects_changed_identity_and_extra_lines(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
+        binding = {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'pv-voice-nats-source', 'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+            'source_node_name': 'k3s-worker-1', 'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'verification_uid': '22222222-2222-4222-8222-222222222222',
+            'verification_pv_name': 'pv-voice-nats-verify', 'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+            'verification_node_name': 'k3s-worker-1'}
+        archive = {'sha256': 'a' * 64, 'bytes': 123}
+        session_inputs = {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456}
+        pod_uid = '44444444-4444-4444-8444-444444444444'
+        with patch.object(self.api, 'exec_pod_verification', return_value=(b'{}\n{}\n',)):
+            with self.assertRaisesRegex(kube.KubeAPIError, 'verification_input_receipt_invalid'):
+                self.api.read_verification_input_receipt('voice-staging', 'pod', pod_uid,
+                    request, binding, archive, session_inputs)
+
     def test_read_verification_census_rejects_non_census_phase_before_api(self):
         request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'archive'}
         binding = {
