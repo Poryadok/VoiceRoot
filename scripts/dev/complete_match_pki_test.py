@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+sys.dont_write_bytecode = True
 import complete_match_pki as pki
 
 ISSUER_PATH = Path(__file__).with_name('complete-match-pki-issuer') / 'issuer.py'
@@ -329,7 +330,9 @@ class CompleteMatchOperatorTests(unittest.TestCase):
             issuer_dir = dev / 'complete-match-pki-issuer'
             issuer_dir.mkdir(parents=True)
             helper = dev / 'complete_match_pki.py'
+            test_module = dev / 'complete_match_pki_test.py'
             shutil.copy2(pki.__file__, helper)
+            shutil.copy2(__file__, test_module)
             shutil.copy2(ISSUER_PATH, issuer_dir / 'issuer.py')
             subprocess.run(['git', 'init', '--quiet', str(root)], check=True,
                            capture_output=True)
@@ -340,6 +343,13 @@ class CompleteMatchOperatorTests(unittest.TestCase):
                             '-m', 'baseline'], check=True, capture_output=True)
             env = {'PATH': os.environ.get('PATH', ''), 'HOME': str(root)}
             result = subprocess.run([sys.executable, str(helper), '--help'], cwd=root,
+                                    env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            status = subprocess.run(['git', '-C', str(root), 'status', '--porcelain',
+                                     '--untracked-files=all'], capture_output=True,
+                                    text=True, check=True)
+            self.assertEqual(status.stdout, '')
+            result = subprocess.run([sys.executable, str(test_module), '--help'], cwd=root,
                                     env=env, capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             status = subprocess.run(['git', '-C', str(root), 'status', '--porcelain',
