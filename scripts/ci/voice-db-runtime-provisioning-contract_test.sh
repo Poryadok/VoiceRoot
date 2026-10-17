@@ -431,9 +431,9 @@ accepted_game_checkpoint='5ff441e04422e3ff1a4c0e1e7e81e3d17b8470eb'
 # checkpoint. The record is a descendant of H and does not self-hash. These are
 # source constants, never environment-provided proof; producer checks still
 # validate the actual PR rows before merge and the actual master push afterward.
-game_checkpoint_snapshot_base='e88d6c9b03c6b4a0147a847aadeedd2c1bbc3b87'
-game_checkpoint_snapshot_head='bfadf672528d696abea1e1299c6429bed9d58f17'
-game_checkpoint_snapshot_record='d97e8acd6824c5dd08d4f70be93fc7f91d6f6fce'
+game_checkpoint_snapshot_base='28f1a0a26f3f23bfb9242592aea9c92fd659ee2d'
+game_checkpoint_snapshot_head='7270d22d05475afee9e20fbb1b95377c138ebdf4'
+game_checkpoint_snapshot_record='a3fe5aad4fea5ff9ef18a7786d80916c06776e40'
 game_checkpoint_aggregate_active=false
 game_checkpoint_aggregate_base=''
 game_checkpoint_aggregate_head=''
