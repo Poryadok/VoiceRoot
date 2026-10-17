@@ -22,7 +22,7 @@ LABEL_PHASE = 'voice.io/nats-job-phase'
 PHASES = frozenset(('seed', 'verify-closed', 'drain', 'verify-drained', 'census', 'archive'))
 RECEIPT_SCHEMA = 'voice-nats-tokenless-phase-receipt-v1'
 FIELDS = frozenset(('operation', 'nonce', 'phase'))
-BINDING_FIELDS = frozenset(('claim_name', 'claim_uid', 'pv_name', 'pv_uid', 'node_name'))
+BINDING_FIELDS = frozenset(('claim_name', 'claim_uid', 'pv_name', 'pv_uid', 'node_name', 'node_hostname'))
 
 
 class JobError(ValueError):
@@ -56,6 +56,9 @@ def validate_binding(value: object) -> dict:
     for field in ('pv_name', 'node_name'):
         if not isinstance(value[field], str) or not re.fullmatch('[a-z0-9][a-z0-9.-]{0,252}', value[field]):
             _fail('storage_identity_invalid')
+    if not isinstance(value['node_hostname'], str) or not re.fullmatch(
+        r'[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?', value['node_hostname']):
+        _fail('storage_hostname_invalid')
     return copy.deepcopy(value)
 
 
@@ -274,6 +277,11 @@ def _verify_storage(api, binding: dict) -> None:
     pv_meta = pv.get('metadata', {})
     claim_spec = claim.get('spec', {})
     ref = pv.get('spec', {}).get('claimRef', {})
+    node_affinity = pv.get('spec', {}).get('nodeAffinity', {}).get('required', {}).get('nodeSelectorTerms')
+    if (not isinstance(node_affinity, list) or len(node_affinity) != 1
+        or set(node_affinity[0]) != {'matchExpressions'} or len(node_affinity[0]['matchExpressions']) != 1):
+        _fail('storage_node_affinity_changed')
+    expression = node_affinity[0]['matchExpressions'][0]
     conditions = [row for row in node.get('status', {}).get('conditions', []) if row.get('type') == 'Ready']
     if (claim_meta.get('name') != binding['claim_name'] or claim_meta.get('namespace') != NAMESPACE
         or claim_meta.get('uid') != binding['claim_uid'] or claim.get('status', {}).get('phase') != 'Bound'
@@ -281,6 +289,10 @@ def _verify_storage(api, binding: dict) -> None:
         or pv_meta.get('name') != binding['pv_name'] or pv_meta.get('uid') != binding['pv_uid']
         or ref.get('namespace') != NAMESPACE or ref.get('name') != binding['claim_name']
         or ref.get('uid') != binding['claim_uid'] or node.get('metadata', {}).get('name') != binding['node_name']
+        or node.get('metadata', {}).get('labels', {}).get('kubernetes.io/hostname') != binding['node_hostname']
+        or set(expression) != {'key', 'operator', 'values'}
+        or expression.get('key') != 'kubernetes.io/hostname' or expression.get('operator') != 'In'
+        or expression.get('values') != [binding['node_hostname']]
         or len(conditions) != 1 or conditions[0].get('status') != 'True'):
         _fail('storage_binding_changed')
 
@@ -340,7 +352,7 @@ def run_archive(api, request: dict, binding: dict, runner_image: str, artifact, 
     storage = validate_binding(binding)
     producer_binding = {'source_claim': storage['claim_name'], 'source_uid': storage['claim_uid'],
         'source_pv_name': storage['pv_name'], 'source_pv_uid': storage['pv_uid'],
-        'source_node_name': storage['node_name']}
+        'source_node_name': storage['node_name'], 'source_hostname': storage['node_hostname']}
     image = verification_job.validate_image(runner_image)
     _verify_storage(api, storage)
     wanted = verification_job.document(row, producer_binding, image)
@@ -379,7 +391,7 @@ def reconcile_archive(api, request: dict, binding: dict, runner_image: str,
     storage = validate_binding(binding)
     producer_binding = {'source_claim': storage['claim_name'], 'source_uid': storage['claim_uid'],
         'source_pv_name': storage['pv_name'], 'source_pv_uid': storage['pv_uid'],
-        'source_node_name': storage['node_name']}
+        'source_node_name': storage['node_name'], 'source_hostname': storage['node_hostname']}
     wanted = verification_job.document(row, producer_binding, verification_job.validate_image(runner_image))
     name, uid = wanted['metadata']['name'], journal.get('job_uid')
     pod_name, pod_uid = journal.get('pod_name'), journal.get('pod_uid')
@@ -416,7 +428,7 @@ def _consume_archive(api, row, storage, wanted, job_uid, pod, artifact,
     producer_binding = {
         'source_claim': storage['claim_name'], 'source_uid': storage['claim_uid'],
         'source_pv_name': storage['pv_name'], 'source_pv_uid': storage['pv_uid'],
-        'source_node_name': storage['node_name'],
+        'source_node_name': storage['node_name'], 'source_hostname': storage['node_hostname'],
     }
     action = 'archive_same_pod_readback' if existing else 'archive_create_and_stream'
     result = archive_stream.consume(api.exec_pod_verification(NAMESPACE, pod_meta['name'], pod_meta['uid'],

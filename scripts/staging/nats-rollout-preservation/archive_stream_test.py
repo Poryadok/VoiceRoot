@@ -13,12 +13,13 @@ import native_store
 import preserve
 import tokenless_job
 import verification_job
-from tokenless_job_test import BINDING, FakeAPI, RUNNER_IMAGE
+from tokenless_job_test import BINDING as BASE_BINDING, FakeAPI, RUNNER_IMAGE
 
 
 OP = 'a' * 12
 NONCE = 'b' * 32
 POD_UID = '12345678-1234-1234-1234-123456789abc'
+BINDING = BASE_BINDING | {'node_hostname': 'k3s-worker-1.internal'}
 
 
 def frames(archive, manifest, *, operation=OP, nonce=NONCE, pod_uid=POD_UID,
@@ -79,8 +80,11 @@ class CurrentArchiveAPI:
         self.claim={'metadata':{'name':b['claim_name'],'namespace':tokenless_job.NAMESPACE,'uid':b['claim_uid']},
             'status':{'phase':'Bound','capacity':{'storage':'100Gi'}},'spec':{'volumeName':b['pv_name']}}
         self.pv={'metadata':{'name':b['pv_name'],'uid':b['pv_uid']},
-            'spec':{'claimRef':{'namespace':tokenless_job.NAMESPACE,'name':b['claim_name'],'uid':b['claim_uid']}}}
-        self.node={'metadata':{'name':b['node_name']},'status':{'conditions':[{'type':'Ready','status':'True'}]}}
+            'spec':{'claimRef':{'namespace':tokenless_job.NAMESPACE,'name':b['claim_name'],'uid':b['claim_uid']},
+                'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[
+                    {'key':'kubernetes.io/hostname','operator':'In','values':[b['node_hostname']]}]}]}}}}
+        self.node={'metadata':{'name':b['node_name'],'labels':{'kubernetes.io/hostname':b['node_hostname']}},
+            'status':{'conditions':[{'type':'Ready','status':'True'}]}}
 
     def get_pvc(self,namespace,name):return self.copy.deepcopy(self.claim)
     def get_pv(self,name):return self.copy.deepcopy(self.pv)
@@ -182,7 +186,10 @@ class ArchiveStreamTests(unittest.TestCase):
         wanted = verification_job.document(request, {
             'source_claim':BINDING['claim_name'],'source_uid':BINDING['claim_uid'],
             'source_pv_name':BINDING['pv_name'],'source_pv_uid':BINDING['pv_uid'],
-            'source_node_name':BINDING['node_name']}, RUNNER_IMAGE)
+            'source_node_name':BINDING['node_name'],'source_hostname':BINDING['node_hostname']}, RUNNER_IMAGE)
+        self.assertEqual(wanted['spec']['template']['spec']['affinity']['nodeAffinity']
+            ['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms'][0]
+            ['matchExpressions'][0]['values'],[BINDING['node_hostname']])
 
         def stream(req,pod_uid,action):
             self.assertEqual(req['operation'],OP);self.assertEqual(action,'archive_create_and_stream')
@@ -243,7 +250,7 @@ class ArchiveStreamTests(unittest.TestCase):
         wanted = verification_job.document(request, {
             'source_claim':BINDING['claim_name'],'source_uid':BINDING['claim_uid'],
             'source_pv_name':BINDING['pv_name'],'source_pv_uid':BINDING['pv_uid'],
-            'source_node_name':BINDING['node_name']}, RUNNER_IMAGE)
+            'source_node_name':BINDING['node_name'],'source_hostname':BINDING['node_hostname']}, RUNNER_IMAGE)
 
         count=[0]
         def stream(req,pod_uid,action):

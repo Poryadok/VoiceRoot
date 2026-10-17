@@ -19,6 +19,7 @@ BINDING = {
     'pv_name': 'local-pv-voice-nats',
     'pv_uid': '22222222-2222-4222-8222-222222222222',
     'node_name': 'k3s-worker-1',
+    'node_hostname': 'k3s-worker-1.internal',
 }
 RUNNER_IMAGE = 'ghcr.io/poryadok/voice-nats-rollout-runner@sha256:' + 'a' * 64
 
@@ -57,8 +58,12 @@ class FakeAPI:
         self.claim = {'metadata': {'name': BINDING['claim_name'], 'namespace': jobs.NAMESPACE, 'uid': BINDING['claim_uid']},
             'status': {'phase': 'Bound'}, 'spec': {'volumeName': BINDING['pv_name']}}
         self.pv = {'metadata': {'name': BINDING['pv_name'], 'uid': BINDING['pv_uid']},
-            'spec': {'claimRef': {'namespace': jobs.NAMESPACE, 'name': BINDING['claim_name'], 'uid': BINDING['claim_uid']}}}
-        self.node = {'metadata': {'name': BINDING['node_name']}, 'status': {'conditions': [{'type': 'Ready', 'status': 'True'}]}}
+            'spec': {'claimRef': {'namespace': jobs.NAMESPACE, 'name': BINDING['claim_name'], 'uid': BINDING['claim_uid']},
+                'nodeAffinity': {'required': {'nodeSelectorTerms': [{'matchExpressions': [
+                    {'key': 'kubernetes.io/hostname', 'operator': 'In', 'values': [BINDING['node_hostname']]}]}]}}}}
+        self.node = {'metadata': {'name': BINDING['node_name'],
+            'labels': {'kubernetes.io/hostname': BINDING['node_hostname']}},
+            'status': {'conditions': [{'type': 'Ready', 'status': 'True'}]}}
 
     def get_pvc(self, namespace, name):
         self.calls.append(('get_pvc', namespace, name))
@@ -190,6 +195,8 @@ class TokenlessJobTests(unittest.TestCase):
             lambda api: api.claim['metadata'].update(uid='55555555-5555-4555-8555-555555555555'),
             lambda api: api.pv['spec']['claimRef'].update(uid='55555555-5555-4555-8555-555555555555'),
             lambda api: api.pv['metadata'].update(uid='55555555-5555-4555-8555-555555555555'),
+            lambda api: api.pv['spec']['nodeAffinity']['required']['nodeSelectorTerms'][0]['matchExpressions'][0].update(values=['wrong-host']),
+            lambda api: api.node['metadata']['labels'].update({'kubernetes.io/hostname':'wrong-host'}),
         ):
             api = FakeAPI(jobs.document(REQUEST, BINDING, RUNNER_IMAGE))
             mutate(api)

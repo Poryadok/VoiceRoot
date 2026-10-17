@@ -437,7 +437,8 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             source=native_source['binding']
             legacy_binding={'claim_name':source['source_claim'],'claim_uid':source['source_uid'],
                 'pv_name':source['source_pv_name'],'pv_uid':source['source_pv_uid'],
-                'node_name':source['source_node_name']}
+                'node_name':source['source_node_name'],
+                'node_hostname':native_source['proof']['node_hostname']}
             def persist_native_phase(event):
                 import kube_json_api
                 try:
