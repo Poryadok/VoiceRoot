@@ -231,10 +231,16 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 		return nil, errors.New("matchmaking principal signing directory is unreadable")
 	}
 	keys := make(map[string]*rsa.PrivateKey, 2)
-	var projectedDataTarget string
-	var projectedVersionDirectories []string
+	var projectedDataTarget, projectedDataTempTarget string
+	projectedVersionDirectories := make(map[string]struct{})
+	type keyEntry struct {
+		entry os.DirEntry
+		kid   string
+	}
+	var keyEntries []keyEntry
 	for _, entry := range entries {
-		if entry.Name() == "..data" {
+		switch entry.Name() {
+		case "..data", "..data_tmp":
 			if entry.Type()&os.ModeSymlink == 0 {
 				return nil, errors.New("matchmaking principal projected data link is invalid")
 			}
@@ -243,7 +249,7 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 				return nil, errors.New("matchmaking principal projected data link is unavailable")
 			}
 			rel, err := filepath.Rel(canonicalDir, target)
-			if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if err != nil || filepath.IsAbs(rel) || rel != filepath.Base(target) {
 				return nil, errors.New("matchmaking principal projected data link resolves outside its directory")
 			}
 			if !projectedSecretTimestampPattern.MatchString(filepath.Base(target)) {
@@ -253,32 +259,65 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 			if err != nil || !targetInfo.IsDir() {
 				return nil, errors.New("matchmaking principal projected data link target is invalid")
 			}
-			projectedDataTarget = filepath.Base(target)
-			continue
-		}
-		if projectedSecretTimestampPattern.MatchString(entry.Name()) {
-			if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
-				return nil, errors.New("matchmaking principal projected version directory is invalid")
+			if entry.Name() == "..data" {
+				projectedDataTarget = filepath.Base(target)
+			} else {
+				projectedDataTempTarget = filepath.Base(target)
 			}
-			projectedVersionDirectories = append(projectedVersionDirectories, entry.Name())
 			continue
+		default:
+			if projectedSecretTimestampPattern.MatchString(entry.Name()) {
+				if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+					return nil, errors.New("matchmaking principal projected version directory is invalid")
+				}
+				projectedVersionDirectories[entry.Name()] = struct{}{}
+				continue
+			}
+			if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".pem") {
+				return nil, errors.New("matchmaking principal key directory must contain only PEM rotation keys")
+			}
+			kid := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			if !principalKIDPattern.MatchString(kid) {
+				return nil, errors.New("matchmaking principal key ID is invalid")
+			}
+			keyEntries = append(keyEntries, keyEntry{entry: entry, kid: kid})
 		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".pem") {
-			return nil, errors.New("matchmaking principal key directory must contain only PEM rotation keys")
+	}
+	if projectedDataTarget != "" {
+		if _, ok := projectedVersionDirectories[projectedDataTarget]; !ok {
+			return nil, errors.New("matchmaking principal projected version directory does not match its data link")
 		}
-		kid := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		if !principalKIDPattern.MatchString(kid) {
-			return nil, errors.New("matchmaking principal key ID is invalid")
+		if projectedDataTempTarget != "" {
+			if _, ok := projectedVersionDirectories[projectedDataTempTarget]; !ok {
+				return nil, errors.New("matchmaking principal projected temporary version directory is invalid")
+			}
 		}
-		path, err := filepath.EvalSymlinks(filepath.Join(canonicalDir, entry.Name()))
-		if err != nil {
-			return nil, errors.New("matchmaking principal key file is unavailable")
+	} else if projectedDataTempTarget != "" || len(projectedVersionDirectories) != 0 {
+		return nil, errors.New("matchmaking principal projected version directory has no data link")
+	}
+	for _, candidate := range keyEntries {
+		path := filepath.Join(canonicalDir, candidate.entry.Name())
+		if projectedDataTarget != "" {
+			if candidate.entry.Type()&os.ModeSymlink == 0 {
+				return nil, errors.New("matchmaking principal projected key link is invalid")
+			}
+			linkTarget, err := os.Readlink(path)
+			if err != nil || linkTarget != filepath.Join("..data", candidate.entry.Name()) {
+				return nil, errors.New("matchmaking principal projected key link target is invalid")
+			}
+			path = filepath.Join(canonicalDir, projectedDataTarget, candidate.entry.Name())
+		} else {
+			var err error
+			path, err = filepath.EvalSymlinks(path)
+			if err != nil {
+				return nil, errors.New("matchmaking principal key file is unavailable")
+			}
+			rel, err := filepath.Rel(canonicalDir, path)
+			if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return nil, errors.New("matchmaking principal key resolves outside its directory")
+			}
 		}
-		rel, err := filepath.Rel(canonicalDir, path)
-		if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return nil, errors.New("matchmaking principal key resolves outside its directory")
-		}
-		fileInfo, err := os.Stat(path)
+		fileInfo, err := os.Lstat(path)
 		if err != nil || !fileInfo.Mode().IsRegular() {
 			return nil, errors.New("matchmaking principal key is not a regular file")
 		}
@@ -295,13 +334,7 @@ func loadMatchmakingSigningKeys(directory, activeKID string) (map[string]*rsa.Pr
 		if err != nil || !ok || key.Validate() != nil || key.N.BitLen() < 2048 {
 			return nil, errors.New("matchmaking principal key must be valid RSA of at least 2048 bits")
 		}
-		keys[kid] = key
-	}
-	if projectedDataTarget != "" && (len(projectedVersionDirectories) != 1 || projectedVersionDirectories[0] != projectedDataTarget) {
-		return nil, errors.New("matchmaking principal projected version directory does not match its data link")
-	}
-	if projectedDataTarget == "" && len(projectedVersionDirectories) != 0 {
-		return nil, errors.New("matchmaking principal projected version directory has no data link")
+		keys[candidate.kid] = key
 	}
 	if len(keys) != 2 || keys[activeKID] == nil {
 		return nil, errors.New("matchmaking principal key directory must contain current and next keys")

@@ -131,6 +131,99 @@ func TestLoadPrincipalJWKSListenerAcceptsProjectedSecretKeyDirectory(t *testing.
 	require.Contains(t, response.Body.String(), `"kid":"next"`)
 }
 
+func TestLoadMatchmakingSigningKeysAcceptsAtomicWriterUpdateInProgress(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Kubernetes projected Secret symlink layout is exercised on Linux")
+	}
+	keysDir := t.TempDir()
+	currentVersion := "..2026_10_17_12_34_56.123456789"
+	nextVersion := "..2026_10_17_12_34_57.123456789"
+	for _, version := range []string{currentVersion, nextVersion} {
+		versionDir := filepath.Join(keysDir, version)
+		require.NoError(t, os.Mkdir(versionDir, 0o700))
+		writePrincipalRotationKeys(t, versionDir)
+	}
+	expected, err := loadMatchmakingSigningKeys(filepath.Join(keysDir, currentVersion), "current")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(currentVersion, filepath.Join(keysDir, "..data")))
+	require.NoError(t, os.Symlink(nextVersion, filepath.Join(keysDir, "..data_tmp")))
+	for _, kid := range []string{"current", "next"} {
+		require.NoError(t, os.Symlink(filepath.Join("..data", kid+".pem"), filepath.Join(keysDir, kid+".pem")))
+	}
+
+	keys, err := loadMatchmakingSigningKeys(keysDir, "current")
+	require.NoError(t, err)
+	require.Len(t, keys, 2)
+	require.Equal(t, expected["current"].N, keys["current"].N)
+	require.Equal(t, expected["next"].N, keys["next"].N)
+}
+
+func TestLoadMatchmakingSigningKeysUsesPublishedAtomicWriterVersion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Kubernetes projected Secret symlink layout is exercised on Linux")
+	}
+	keysDir := t.TempDir()
+	oldVersion := "..2026_10_17_12_34_56.123456789"
+	newVersion := "..2026_10_17_12_34_57.123456789"
+	for _, version := range []string{oldVersion, newVersion} {
+		versionDir := filepath.Join(keysDir, version)
+		require.NoError(t, os.Mkdir(versionDir, 0o700))
+		writePrincipalRotationKeys(t, versionDir)
+	}
+	expected, err := loadMatchmakingSigningKeys(filepath.Join(keysDir, newVersion), "current")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(newVersion, filepath.Join(keysDir, "..data")))
+	for _, kid := range []string{"current", "next"} {
+		require.NoError(t, os.Symlink(filepath.Join("..data", kid+".pem"), filepath.Join(keysDir, kid+".pem")))
+	}
+
+	keys, err := loadMatchmakingSigningKeys(keysDir, "current")
+	require.NoError(t, err)
+	require.Equal(t, expected["current"].N, keys["current"].N)
+	require.Equal(t, expected["next"].N, keys["next"].N)
+}
+
+func TestLoadMatchmakingSigningKeysRejectsAtomicWriterTemporaryLinkOutsideDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Kubernetes projected Secret symlink layout is exercised on Linux")
+	}
+	keysDir, outsideDir := t.TempDir(), t.TempDir()
+	currentVersion := "..2026_10_17_12_34_56.123456789"
+	outsideVersion := "..2026_10_17_12_34_57.123456789"
+	currentDir := filepath.Join(keysDir, currentVersion)
+	outsideVersionDir := filepath.Join(outsideDir, outsideVersion)
+	require.NoError(t, os.Mkdir(currentDir, 0o700))
+	require.NoError(t, os.Mkdir(outsideVersionDir, 0o700))
+	writePrincipalRotationKeys(t, currentDir)
+	require.NoError(t, os.Symlink(currentVersion, filepath.Join(keysDir, "..data")))
+	require.NoError(t, os.Symlink(filepath.Join(outsideDir, outsideVersion), filepath.Join(keysDir, "..data_tmp")))
+	for _, kid := range []string{"current", "next"} {
+		require.NoError(t, os.Symlink(filepath.Join("..data", kid+".pem"), filepath.Join(keysDir, kid+".pem")))
+	}
+
+	_, err := loadMatchmakingSigningKeys(keysDir, "current")
+	require.ErrorContains(t, err, "resolves outside")
+}
+
+func TestLoadMatchmakingSigningKeysRejectsUnknownAtomicWriterEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Kubernetes projected Secret symlink layout is exercised on Linux")
+	}
+	keysDir := t.TempDir()
+	version := "..2026_10_17_12_34_56.123456789"
+	versionDir := filepath.Join(keysDir, version)
+	require.NoError(t, os.Mkdir(versionDir, 0o700))
+	writePrincipalRotationKeys(t, versionDir)
+	require.NoError(t, os.Symlink(version, filepath.Join(keysDir, "..data")))
+	for _, kid := range []string{"current", "next"} {
+		require.NoError(t, os.Symlink(filepath.Join("..data", kid+".pem"), filepath.Join(keysDir, kid+".pem")))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(keysDir, "unexpected.txt"), []byte("not a key"), 0o600))
+
+	_, err := loadMatchmakingSigningKeys(keysDir, "current")
+	require.ErrorContains(t, err, "only PEM rotation keys")
+}
+
 func TestLoadPrincipalJWKSListenerRejectsProjectedKeySymlinkOutsideDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink containment is exercised on Linux")
