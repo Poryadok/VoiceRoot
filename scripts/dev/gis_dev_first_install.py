@@ -2201,7 +2201,9 @@ def _partial_v4_to_v5(v4, v4_sha256, v3, v3_sha256, current_v2,
         old_binding, fingerprints, original_state, c14_authorization,
         c14_authorization_raw_sha256, c14_authorization_raw_sha256,
         kube, root, historical_candidate=True)
-    checkpoint = _partial_live_c10_checkpoint(kube, v3["state"], fingerprints,
+    # v4 is the authoritative state at this transition: it includes the
+    # Service adopted by the prior v3→v4 step as well as verified prereq data.
+    checkpoint = _partial_live_c10_checkpoint(kube, v4["state"], fingerprints,
         root, allow_deployment=True)
     deployment = checkpoint.get("deployment", {})
     intended_deployment = next(obj for obj in v4["state"]["plan"]["objects"]
