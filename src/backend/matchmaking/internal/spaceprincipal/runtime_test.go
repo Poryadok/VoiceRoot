@@ -202,6 +202,13 @@ func TestLoadFromEnvIsDisabledOnlyWhenNoPrincipalSettingExists(t *testing.T) {
 	if _, enabled, err := LoadFromEnv(); err == nil || !enabled {
 		t.Fatalf("partial config must fail closed, enabled %v err %v", enabled, err)
 	}
+	if err := os.Unsetenv("MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"gateway":"https://gateway.example.test/.well-known/jwks.json"}`)
+	if _, enabled, err := LoadFromEnv(); err == nil || !enabled {
+		t.Fatalf("shared JWKS configuration alone must leave the optional listener enabled but fail closed, enabled %v err %v", enabled, err)
+	}
 }
 
 func TestLifecycleInterceptorsIsolateProtectedRPCsAndBindRequest(t *testing.T) {
