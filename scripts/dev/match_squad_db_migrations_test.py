@@ -1,7 +1,12 @@
 import unittest
 import copy
 import io
-from contextlib import redirect_stdout
+import json
+import os
+import stat
+import subprocess
+import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 from pathlib import Path
 
@@ -39,13 +44,15 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
                     "name": "voice-postgres", "uid": "pg-sts-uid"}], "labels": {"app": "postgres"}},
                     "spec": {"containers": [{"name": "postgres", "image": runner.POSTGRES_IMAGE}]},
                     "status": {"containerStatuses": [{"name": "postgres", "ready": True,
-                        "imageID": "docker.io/library/postgres@sha256:" + digest}]}}
+                        "imageID": "docker.io/library/postgres@sha256:" + digest}],
+                        "podIP": "10.42.0.3"}}
             raise AssertionError("unexpected fake resource " + kind)
 
         def run(self, args, **kwargs):
             if args[:2] == ["get", "endpointslices"]:
-                return {"items": [{"endpoints": [{"conditions": {"ready": True},
-                    "targetRef": {"kind": "Pod", "name": "voice-postgres-0", "uid": "pg-pod-uid"}}]}]}
+                return {"items": [{"ports": [{"name": None, "port": 5432, "protocol": "TCP"}],
+                    "endpoints": [{"addresses": ["10.42.0.3"], "conditions": {"ready": True},
+                        "targetRef": {"kind": "Pod", "name": "voice-postgres-0", "uid": "pg-pod-uid"}}]}]}
             if args[:3] == ["get", "secret", "voice-app-secrets"]:
                 # Match kubectl's Go-template string result. Only key names are returned.
                 return "voice-app-secrets|voice-dev|db-secret-uid|12|CHAT_DATABASE_URL MATCHMAKING_DATABASE_URL VOICE_DATABASE_URL "
@@ -132,7 +139,8 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
     @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_interrupted_or_failed_job_is_not_replayed_and_uid_readback_is_bound(self):
         item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
-        expected = runner.job_manifest(item)
+        item["postgres_ip"] = "10.42.0.3"
+        expected = runner.job_manifest(item, item["postgres_ip"])
         expected["metadata"].update({"uid": "uid-job", "resourceVersion": "8"})
         expected["spec"]["selector"] = {"matchLabels": {
             "batch.kubernetes.io/controller-uid": "uid-job"}}
@@ -153,7 +161,8 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
     @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_live_job_defaulting_is_allowed_but_source_spec_drift_is_rejected(self):
         item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
-        live = runner.job_manifest(item)
+        item["postgres_ip"] = "10.42.0.3"
+        live = runner.job_manifest(item, item["postgres_ip"])
         live["metadata"].update({"uid": "uid-job", "resourceVersion": "8"})
         live["spec"].update({"parallelism": 1, "completions": 1,
             "completionMode": "NonIndexed", "suspend": False,
@@ -171,6 +180,12 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
             "stdinOnce": False, "tty": False,
         })
         live["spec"]["template"]["spec"]["initContainers"][0].update({
+            "imagePullPolicy": "IfNotPresent",
+            "terminationMessagePath": "/dev/termination-log",
+            "terminationMessagePolicy": "File", "stdin": False,
+            "stdinOnce": False, "tty": False,
+        })
+        live["spec"]["template"]["spec"]["initContainers"][1].update({
             "imagePullPolicy": "IfNotPresent",
             "terminationMessagePath": "/dev/termination-log",
             "terminationMessagePolicy": "File", "stdin": False,
@@ -205,6 +220,9 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         wrong_image = copy.deepcopy(live)
         wrong_image["spec"]["template"]["spec"]["containers"][0]["image"] = "untrusted:latest"
         mutations.append(wrong_image)
+        wrong_database_target = copy.deepcopy(live)
+        wrong_database_target["spec"]["template"]["spec"]["initContainers"][1]["env"][2]["value"] = "10.42.0.99"
+        mutations.append(wrong_database_target)
         for changed in mutations:
             with self.subTest(spec=changed["spec"]["template"]["spec"]), \
                  self.assertRaises(runner.Blocked):
@@ -213,7 +231,7 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
     @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_exact_job_manifest_is_create_only_and_uses_pinned_images(self):
         item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
-        manifest = runner.job_manifest(item)
+        manifest = runner.job_manifest(item, "10.42.0.3")
         pod = manifest["spec"]["template"]["spec"]
         self.assertRegex(runner.MIGRATE_IMAGE, r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(runner.POSTGRES_IMAGE, r"@sha256:[0-9a-f]{64}$")
@@ -221,14 +239,112 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         self.assertEqual(pod["restartPolicy"], "Never")
         self.assertEqual(pod["containers"][0]["image"], runner.MIGRATE_IMAGE)
         self.assertEqual(pod["initContainers"][0]["image"], runner.POSTGRES_IMAGE)
-        self.assertEqual(
-            pod["containers"][0]["env"][0]["valueFrom"]["secretKeyRef"]["key"],
-            "MATCHMAKING_DATABASE_URL",
-        )
+        probe = pod["initContainers"][1]
+        self.assertIn("current_database()", probe["command"][2])
+        self.assertIn("inet_server_addr()", probe["command"][2])
+        self.assertIn("host(inet_server_addr())", probe["command"][2])
+        self.assertEqual(probe["env"][0]["valueFrom"]["secretKeyRef"]["key"],
+            "MATCHMAKING_DATABASE_URL")
+        self.assertEqual(probe["env"][1]["value"], "matchmaking_db")
+        self.assertEqual(probe["env"][2]["value"], "10.42.0.3")
+        self.assertEqual([entry["name"] for entry in probe["env"]],
+            ["DATABASE_URL", "EXPECTED_DATABASE", "EXPECTED_POSTGRES_IP"])
+        self.assertNotIn("env", pod["containers"][0])
+        self.assertNotIn("secretKeyRef", json.dumps(pod["containers"][0]))
+        runtime = next(volume for volume in pod["volumes"] if volume["name"] == "migration-runtime")
+        self.assertEqual(runtime["emptyDir"], {"medium": "Memory", "sizeLimit": "1Mi"})
+        self.assertIn("validated-database-url", pod["containers"][0]["command"][2])
+        self.assertNotIn("DATABASE_URL", pod["containers"][0]["command"][2])
         self.assertFalse(pod["automountServiceAccountToken"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            fake_bin = Path(directory, "bin")
+            fake_bin.mkdir()
+            psql = fake_bin / "psql"
+            psql.write_text("#!/bin/sh\n"
+                "touch \"$PSQL_CALLED\"\n"
+                "while [ $# -gt 0 ]; do if [ \"$1\" = -d ]; then shift; dsn=$1; fi; shift; done\n"
+                "case \"$dsn\" in postgres://voice:secret@10.42.0.3:5432/matchmaking_db?sslmode=disable) ;; *) echo secret >&2; exit 1 ;; esac\n"
+                "printf '%s\\n' \"$PROBE_OUTPUT\"\n", encoding="utf-8")
+            psql.chmod(0o700)
+            probe_script = probe["command"][2].replace("/run/migration", directory)
+            environment = {"PATH": str(fake_bin) + os.pathsep + os.environ["PATH"],
+                "DATABASE_URL": "postgres://voice:secret@voice-postgres:5432/matchmaking_db?sslmode=disable",
+                "EXPECTED_DATABASE": "matchmaking_db", "EXPECTED_POSTGRES_IP": "10.42.0.3",
+                "PSQL_CALLED": str(Path(directory, "psql-called")),
+                "PROBE_OUTPUT": "matchmaking_db|voice|10.42.0.3"}
+            probe_result = subprocess.run(["/bin/sh", "-ec", probe_script], env=environment,
+                capture_output=True, text=True, check=False)
+            self.assertEqual(probe_result.returncode, 0, probe_result.stderr)
+            self.assertTrue(Path(environment["PSQL_CALLED"]).exists())
+            sealed = Path(directory, "validated-database-url")
+            self.assertEqual(stat.S_IMODE(sealed.stat().st_mode), 0o600)
+            self.assertEqual(sealed.read_text(),
+                "postgres://voice:secret@10.42.0.3:5432/matchmaking_db?sslmode=disable")
+
+            bad_urls = (
+                "postgres://other:secret@voice-postgres:5432/matchmaking_db?sslmode=disable",
+                "postgres://voice:secret@other-postgres:5432/matchmaking_db?sslmode=disable",
+                "postgres://voice:secret@voice-postgres:5432/chat_db?sslmode=disable",
+                "postgres://voice:secret@voice-postgres:5432/matchmaking_db?sslmode=require",
+            )
+            for index, bad_url in enumerate(bad_urls):
+                bad_dir = Path(directory, "bad-url-" + str(index))
+                bad_dir.mkdir()
+                bad_script = probe["command"][2].replace("/run/migration", str(bad_dir))
+                bad_env = {**environment, "DATABASE_URL": bad_url,
+                    "PSQL_CALLED": str(bad_dir / "psql-called")}
+                rejected = subprocess.run(["/bin/sh", "-ec", bad_script], env=bad_env,
+                    capture_output=True, text=True, check=False)
+                self.assertEqual(rejected.returncode, 1)
+                self.assertEqual(rejected.stderr.strip(), "migration_target_url_invalid")
+                self.assertFalse(Path(bad_env["PSQL_CALLED"]).exists())
+                self.assertFalse((bad_dir / "validated-database-url").exists())
+
+            for index, wrong_identity in enumerate(("chat_db|voice|10.42.0.3",
+                    "matchmaking_db|other-role|10.42.0.3", "matchmaking_db|voice|10.42.0.99")):
+                bad_dir = Path(directory, "bad-probe-" + str(index))
+                bad_dir.mkdir()
+                bad_script = probe["command"][2].replace("/run/migration", str(bad_dir))
+                bad_env = {**environment, "PROBE_OUTPUT": wrong_identity,
+                    "PSQL_CALLED": str(bad_dir / "psql-called")}
+                rejected = subprocess.run(["/bin/sh", "-ec", bad_script], env=bad_env,
+                    capture_output=True, text=True, check=False)
+                self.assertEqual(rejected.returncode, 1)
+                self.assertEqual(rejected.stderr.strip(), "migration_target_mismatch")
+                self.assertFalse((bad_dir / "validated-database-url").exists())
+
+            # The Secret and Service may change between init and main. Main has no
+            # SecretRef/DNS input and can only launch migrate with the sealed Pod IP.
+            migrate = fake_bin / "migrate"
+            captured = Path(directory, "migrate-args")
+            migrate.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"
+                "echo injected-secret-diagnostic >&2\nexit 1\n", encoding="utf-8")
+            migrate.chmod(0o700)
+            migration_script = pod["containers"][0]["command"][2].replace("/run/migration", directory)
+            environment = {"PATH": str(fake_bin) + os.pathsep + os.environ["PATH"],
+                "CAPTURE_ARGS": str(captured),
+                "DATABASE_URL": "postgres://voice:changed@other-postgres:5432/other_db?sslmode=disable"}
+            migrated = subprocess.run(["/bin/sh", "-ec", migration_script], env=environment,
+                capture_output=True, text=True, check=False)
+            self.assertEqual(migrated.returncode, 1)
+            self.assertEqual(migrated.stderr.strip(), "migration_failed")
+            self.assertNotIn("secret", migrated.stderr)
+            self.assertNotIn("voice-postgres", pod["containers"][0]["command"][2])
+            self.assertIn("postgres://voice:secret@10.42.0.3:5432/matchmaking_db?sslmode=disable",
+                captured.read_text())
+            self.assertNotIn("other-postgres", captured.read_text())
+            self.assertEqual(stat.S_IMODE(Path(directory, "migrate.stderr").stat().st_mode), 0o600)
         with mock.patch.object(runner, "MIGRATE_IMAGE", "migrate/migrate:v4.18.1"):
             with self.assertRaises(runner.Blocked):
                 runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)
+        configmap = runner.configmap_manifest(item)
+        self.assertTrue(configmap["immutable"])
+        configmap["metadata"].update({"uid": "cm-uid", "resourceVersion": "1"})
+        self.assertTrue(runner.validate_bound_object(configmap, item, "configmap"))
+        configmap["immutable"] = False
+        with self.assertRaises(runner.Blocked):
+            runner.validate_bound_object(configmap, item, "configmap")
 
     @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_live_preflight_identity_allows_opaque_resource_version_advancement(self):
@@ -248,6 +364,23 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         target.get = changed_service_uid
         with self.assertRaises(runner.Blocked):
             runner._verify_live_targets(target, prepared)
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_endpoint_slice_address_and_port_must_bind_to_the_ready_pod(self):
+        target = self.ReadOnlyTarget()
+        original_run = target.run
+        for changed in (
+            {"items": [{"ports": [{"port": 5433, "protocol": "TCP"}],
+                "endpoints": [{"addresses": ["10.42.0.3"], "conditions": {"ready": True},
+                    "targetRef": {"kind": "Pod", "name": "voice-postgres-0", "uid": "pg-pod-uid"}}]}]},
+            {"items": [{"ports": [{"port": 5432, "protocol": "TCP"}],
+                "endpoints": [{"addresses": ["10.42.0.99"], "conditions": {"ready": True},
+                    "targetRef": {"kind": "Pod", "name": "voice-postgres-0", "uid": "pg-pod-uid"}}]}]},
+        ):
+            target.run = lambda args, **kwargs: changed if args[:2] == ["get", "endpointslices"] else original_run(args, **kwargs)
+            with self.subTest(changed=changed), self.assertRaises(runner.Blocked):
+                runner._postgres_target_identity(target)
+        target.run = original_run
 
     @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_preflight_requires_exact_source_namespace_and_all_three_clean_baselines(self):
@@ -337,7 +470,7 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
 
         kube = FakeKube(runner.configmap_manifest(item))
         kube.existing["metadata"].update({"uid": "uid-cm", "resourceVersion": "3"})
-        kube.job = runner.job_manifest(item)
+        kube.job = runner.job_manifest(item, "10.42.0.3")
         kube.job["metadata"].update({"uid": "uid-job", "resourceVersion": "8"})
         kube.job["spec"]["selector"] = {"matchLabels": {
             "batch.kubernetes.io/controller-uid": "uid-job"}}
@@ -401,6 +534,25 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
                 return copy.deepcopy(obj)
 
         fake = FakeKube()
+        preflight_output = io.StringIO()
+        with mock.patch.object(runner, "_read_source_identity", return_value=("a" * 40, False)), \
+             mock.patch.object(runner, "Kubectl", return_value=fake), \
+             redirect_stdout(preflight_output):
+            preflight_result = runner.main(["--source-sha", "a" * 40, "--root", str(root), "--preflight-only"])
+        self.assertEqual(preflight_result, 0)
+        summary = json.loads(preflight_output.getvalue())
+        self.assertEqual(summary["mode"], "preflight-only")
+        self.assertEqual(summary["ledgers"], {
+            service: {"database": runner.DATABASES[service],
+                "version": runner.BASELINES[service], "dirty": False}
+            for service in runner.SERVICES
+        })
+        self.assertEqual(fake.writes, [])
+        self.assertNotIn("migration_data", preflight_output.getvalue())
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            runner.main(["--source-sha", "a" * 40, "--root", str(root), "--preflight-only", "--apply"])
+        self.assertEqual(fake.writes, [])
+
         output = io.StringIO()
         with mock.patch.object(runner, "_read_source_identity", return_value=("a" * 40, False)), \
              mock.patch.object(runner, "Kubectl", return_value=fake), \

@@ -71,9 +71,18 @@ namespace UID, and clean baseline ledgers `15/22/10` before creating anything.
 It creates source-bound ConfigMaps and one-shot Jobs with digest-pinned images;
 it never invokes broad `apply_all`, updates Postgres credentials, runs DOWN SQL,
 or deletes/replays an interrupted Job. A failed or ambiguous Job remains for
-inspection and blocks another attempt. Use the runner only for a specifically
-authorized DEV activation after read-only preflight and source review; its
-`--apply` flag is a real Kubernetes write.
+inspection and blocks another attempt. The one-shot Job verifies the exact
+`voice` role, database, captured ready Pod IP, and `sslmode=disable` DSN before
+writing its IP-bound URL into a mode-0600 memory-backed volume. The migrate
+container reads only that sealed URL; it does not re-read the mutable Secret or
+resolve the Postgres Service. Runner failures are generic and command output is
+kept private inside the ephemeral Job. Run
+`python3 scripts/dev/match_squad_db_migrations.py --source-sha
+<40-character-commit> --preflight-only` to perform namespaced read-only target
+checks and print only object metadata, required Secret key names, image pins,
+and the three migration ledger rows. This mode creates no resources. Use
+`--apply` only for a specifically authorized DEV activation after reviewing
+the exact source and preflight; it creates Kubernetes resources.
 
 ## Fresh installation only
 
