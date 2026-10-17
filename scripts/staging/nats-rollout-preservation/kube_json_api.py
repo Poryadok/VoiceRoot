@@ -215,7 +215,7 @@ class _KubernetesJSONAPIBase:
         return self._request('GET', '/api/v1/namespaces/' + self._segment(name))
 
     def get_configmap(self, namespace, name):
-        if namespace != NAMESPACE or name != 'voice-nats-generation':
+        if namespace != NAMESPACE or name not in ('voice-nats-generation', 'voice-app-config'):
             _fail('configmap_invalid')
         return self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
             + '/configmaps/' + self._segment(name))
@@ -407,18 +407,21 @@ class _KubernetesJSONAPIBase:
             'rollout-applying': 'rollout-verified',
             'rollout-verified': 'active',
         }
+        claim_switch = (expected_phase == new_phase and expected_phase in
+            ('rollout-capturing', 'rollout-prepared', 'rollout-applying', 'rollout-verified')
+            and new_claim is not None and new_claim != expected_claim and release is False)
         if (name != 'voice-nats-generation' or not isinstance(operation, str)
             or not re.fullmatch(r'[a-f0-9]{12}', operation)
             or not isinstance(expected_uid, str) or not _UID.fullmatch(expected_uid)
             or not isinstance(expected_rv, str) or not expected_rv.isdigit()
-            or expected_phase not in phases or transitions.get(expected_phase) != new_phase
+            or expected_phase not in phases or (transitions.get(expected_phase) != new_phase and not claim_switch)
             or not isinstance(expected_claim, str)
                 or not (re.fullmatch(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}', expected_claim)
                     or re.fullmatch(r'voice-nats-restore-' + operation + r'-[a-f0-9]{8}', expected_claim))
             or new_claim is not None and (not isinstance(new_claim, str)
                 or not re.fullmatch(r'voice-nats-restore-' + operation + r'-[a-f0-9]{8}', new_claim))
             or type(release) is not bool
-            or release != (expected_phase == 'rollout-verified' and new_phase == 'active')):
+            or release != (expected_phase == 'rollout-verified' and new_phase == 'active') and not claim_switch):
             _fail('marker_cas_request_invalid')
         current = self.get_configmap(NAMESPACE, name)
         metadata, data = current.get('metadata', {}), current.get('data', {})
@@ -452,6 +455,73 @@ class _KubernetesJSONAPIBase:
             patch.append({'op': 'remove', 'path': '/data/knownRolloutOperation'})
         return self._request('PATCH', '/api/v1/namespaces/' + self._segment(NAMESPACE)
             + '/configmaps/' + self._segment(name), patch, content_type='application/json-patch+json')
+
+    def cas_user_bootstrap_template(self, namespace, name, expected_uid, expected_rv,
+                                    expected_replicas, expected_template_sha256, *,
+                                    operation, original_template=None, action):
+        if (namespace != NAMESPACE or name != 'voice-user'
+            or not isinstance(expected_uid, str) or not _UID.fullmatch(expected_uid)
+            or not isinstance(expected_rv, str) or not expected_rv.isdigit()
+            or type(expected_replicas) is not int or expected_replicas < 0
+            or not isinstance(expected_template_sha256, str)
+                or not re.fullmatch(r'[a-f0-9]{64}', expected_template_sha256)
+            or not isinstance(operation, str) or not re.fullmatch(r'[a-f0-9]{12}', operation)
+            or action not in ('install', 'restore')
+            or action == 'install' and original_template is not None
+            or action == 'restore' and not isinstance(original_template, dict)):
+            _fail('user_bootstrap_cas_request_invalid')
+        current = self.get_deployment(namespace, name)
+        metadata, spec = current.get('metadata', {}), current.get('spec', {})
+        template = spec.get('template')
+        if (metadata.get('uid') != expected_uid or metadata.get('resourceVersion') != expected_rv
+            or spec.get('replicas') != expected_replicas or not isinstance(template, dict)
+            or hashlib.sha256(json.dumps(template, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                != expected_template_sha256):
+            _fail('user_bootstrap_cas_precondition_changed')
+        next_template = copy.deepcopy(template)
+        if action == 'install':
+            template_metadata = next_template.get('metadata', {})
+            annotations = template_metadata.get('annotations', {})
+            containers = next_template.get('spec', {}).get('containers', [])
+            users = [row for row in containers if isinstance(row, dict) and row.get('name') == 'user']
+            if (len(users) != 1 or not isinstance(annotations, dict)
+                or 'voice.io/nats-user-space-bootstrap' in annotations):
+                _fail('user_bootstrap_shape_invalid')
+            env = users[0].get('env', [])
+            if not isinstance(env, list) or any(not isinstance(row, dict) or row.get('name') == 'SPACE_GRPC_ADDR'
+                for row in env):
+                _fail('user_bootstrap_env_invalid')
+            users[0]['env'] = env + [{'name': 'SPACE_GRPC_ADDR', 'value': ''}]
+            template_metadata.setdefault('annotations', {})['voice.io/nats-user-space-bootstrap'] = operation
+            next_template['metadata'] = template_metadata
+        else:
+            override = copy.deepcopy(original_template)
+            template_metadata = override.get('metadata', {})
+            annotations = template_metadata.get('annotations', {})
+            containers = override.get('spec', {}).get('containers', [])
+            users = [row for row in containers if isinstance(row, dict) and row.get('name') == 'user']
+            if (len(users) != 1 or not isinstance(annotations, dict)
+                or 'voice.io/nats-user-space-bootstrap' in annotations):
+                _fail('user_bootstrap_original_invalid')
+            env = users[0].get('env', [])
+            if not isinstance(env, list) or any(not isinstance(row, dict) or row.get('name') == 'SPACE_GRPC_ADDR'
+                for row in env):
+                _fail('user_bootstrap_original_invalid')
+            users[0]['env'] = env + [{'name': 'SPACE_GRPC_ADDR', 'value': ''}]
+            template_metadata.setdefault('annotations', {})['voice.io/nats-user-space-bootstrap'] = operation
+            override['metadata'] = template_metadata
+            if template != override:
+                _fail('user_bootstrap_override_changed')
+            next_template = copy.deepcopy(original_template)
+        patch = [
+            {'op': 'test', 'path': '/metadata/uid', 'value': expected_uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': expected_rv},
+            {'op': 'test', 'path': '/spec/replicas', 'value': expected_replicas},
+            {'op': 'test', 'path': '/spec/template', 'value': template},
+            {'op': 'replace', 'path': '/spec/template', 'value': next_template},
+        ]
+        return self._request('PATCH', '/apis/apps/v1/namespaces/' + self._segment(namespace)
+            + '/deployments/' + self._segment(name), patch, content_type='application/json-patch+json')
 
     def list_nodes_by_hostname(self, hostname):
         if (not isinstance(hostname, str) or len(hostname) > 253

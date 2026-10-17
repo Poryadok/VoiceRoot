@@ -283,6 +283,70 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
                     phase, target, expected_claim=claim, release=release)
             request.assert_not_called()
 
+    def test_rollout_marker_allows_only_owned_same_phase_claim_switch(self):
+        uid = '44444444-4444-4444-8444-444444444444'
+        operation = '0123456789ab'
+        attempt = 'abcdef12'
+        source = 'voice-nats-jsdata-d20261017a'
+        target = f'voice-nats-restore-{operation}-{attempt}'
+        marker = {'metadata': {'uid': uid, 'resourceVersion': '12'}, 'data': {
+            'phase': 'rollout-applying', 'dataPVC': source,
+            'knownRolloutOperation': operation, 'generation': 'r20261017a'}}
+        with patch.object(self.api, 'get_configmap', return_value=marker), \
+             patch.object(self.api, '_request', return_value={'kind': 'ConfigMap'}) as patch_request:
+            self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '12',
+                'rollout-applying', 'rollout-applying', expected_claim=source, new_claim=target)
+        self.assertEqual(patch_request.call_args.args[2][-1],
+            {'op': 'replace', 'path': '/data/dataPVC', 'value': target})
+        for bad_target in ('voice-nats-restore-' + 'f' * 12 + '-' + attempt,
+                           'voice-nats-jsdata-d20261017b'):
+            with self.subTest(target=bad_target), \
+                 patch.object(self.api, 'get_configmap', return_value=marker), \
+                 patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
+                self.api.cas_rollout_marker('voice-nats-generation', operation, uid, '12',
+                    'rollout-applying', 'rollout-applying', expected_claim=source, new_claim=bad_target)
+            request.assert_not_called()
+
+    def test_user_bootstrap_template_install_and_restore_are_exact(self):
+        uid = '44444444-4444-4444-8444-444444444444'
+        operation = '0123456789ab'
+        original = {'metadata': {'labels': {'app': 'voice-user'}}, 'spec': {'containers': [
+            {'name': 'user', 'image': 'example.invalid/user@sha256:' + 'a' * 64,
+             'env': [{'name': 'A', 'value': 'B'}]},
+            {'name': 'metrics', 'image': 'example.invalid/metrics@sha256:' + 'b' * 64}]}}
+        digest = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True,
+            separators=(',', ':')).encode()).hexdigest()
+        with patch.object(self.api, 'get_configmap', return_value={'data': {'SPACE_GRPC_ADDR': 'voice-space:9090'}}):
+            self.api.get_configmap('voice-staging', 'voice-app-config')
+        current = {'metadata': {'uid': uid, 'resourceVersion': '12'},
+            'spec': {'replicas': 0, 'template': original}}
+        with patch.object(self.api, 'get_deployment', return_value=current), \
+             patch.object(self.api, '_request', return_value={'kind': 'Deployment'}) as patch_request:
+            self.api.cas_user_bootstrap_template('voice-staging', 'voice-user', uid, '12', 0,
+                digest(original), operation=operation, action='install')
+        installed = patch_request.call_args.args[2][-1]['value']
+        self.assertEqual(installed['metadata']['annotations']['voice.io/nats-user-space-bootstrap'], operation)
+        self.assertEqual(installed['spec']['containers'][0]['env'][-1],
+            {'name': 'SPACE_GRPC_ADDR', 'value': ''})
+
+        current['metadata']['resourceVersion'] = '13'
+        current['spec']['template'] = installed
+        with patch.object(self.api, 'get_deployment', return_value=current), \
+             patch.object(self.api, '_request', return_value={'kind': 'Deployment'}) as patch_request:
+            self.api.cas_user_bootstrap_template('voice-staging', 'voice-user', uid, '13', 0,
+                digest(installed), operation=operation, original_template=original, action='restore')
+        self.assertEqual(patch_request.call_args.args[2][-1]['value'], original)
+
+        altered = copy.deepcopy(installed)
+        altered['spec']['containers'][0]['env'][0]['value'] = 'changed'
+        current['metadata']['resourceVersion'] = '14'
+        current['spec']['template'] = altered
+        with patch.object(self.api, 'get_deployment', return_value=current), \
+             patch.object(self.api, '_request') as request, self.assertRaises(kube.KubeAPIError):
+            self.api.cas_user_bootstrap_template('voice-staging', 'voice-user', uid, '14', 0,
+                digest(altered), operation=operation, original_template=original, action='restore')
+        request.assert_not_called()
+
     def test_job_create_read_logs_and_uid_precondition_delete_are_json_contracts(self):
         payload = {'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': 'job'}}
         with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'):
