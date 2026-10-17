@@ -37,10 +37,12 @@ def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
 
 class Actions:
-    def __init__(self,code,*,owner_uid=0):
+    def __init__(self,code,*,owner_uid=0,native_api=None,native_config=None):
         configure_state_owner(owner_uid)
         self.owner_uid=owner_uid
         self.code=Path(code);self.binding=root_cli.code_binding(self.code,owner_uid=owner_uid)
+        self.native_api=native_api
+        self.native_config=copy.deepcopy(native_config)
 
     def _report(self,name,status):
         observer=getattr(self,'_observer',None)
@@ -305,7 +307,7 @@ class Actions:
             if repair is not None:
                 provisional.link_parent(guard.ROOT/('rollout-'+repair['operation']),repair,operation)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
-        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,**lifecycle_args)
+        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,native_api=self.native_api,native_config=self.native_config,**lifecycle_args)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority
         state['service_actor_services']=names
@@ -415,7 +417,7 @@ class Actions:
             if current['source_files'].get('scripts/staging/'+relative)!=wanted:
                 raise Blocked('preserved_upload_current_helper_source_changed')
         source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
-        stage=transaction.reconstruct(Kube(),state,lambda event:None)
+        stage=transaction.reconstruct(Kube(),state,lambda event:None,native_api=self.native_api)
         stage.owned_marker();stage.verify_final_storage()
         marker=Kube().get('configmap','voice-nats-generation')
         if marker['data'].get('phase')!='rollout-capturing' or marker['metadata']['resourceVersion']!='3073024':
@@ -485,10 +487,10 @@ class Actions:
             # checkpoint byte-for-byte intact, so a failed proof is not custody.
             if upload_record is None:
                 state['custody']=receipt;save(base/'checkpoint.json',state)
-            self._verify_decrypted_restore(base,state,transaction.reconstruct(Kube(),state,lambda event:None))
+            self._verify_decrypted_restore(base,state,transaction.reconstruct(Kube(),state,lambda event:None,native_api=self.native_api))
             import actor_root
             actor_root.revalidate(Kube(),INSTALLED/'sources'/state['operation'],self.code,self.binding,
-                transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
+                transaction.reconstruct(Kube(),state,lambda event:None,native_api=self.native_api),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             if upload_record is not None:

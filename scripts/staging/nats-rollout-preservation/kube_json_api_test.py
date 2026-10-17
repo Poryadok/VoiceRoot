@@ -4,6 +4,7 @@ import base64
 import os
 import ssl
 import hashlib
+import copy
 import socket
 import threading
 import tempfile
@@ -393,6 +394,83 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(kube.KubeAPIError, 'transport_failed'):
             self.api.get_pvc('voice-staging', 'claim')
         self.assertEqual([c[0].get_method() for c in self.calls], ['POST'])
+
+
+class SourceBindingResolutionTests(unittest.TestCase):
+    def setUp(self):
+        self.api = SourceAPI()
+
+    def test_resolves_hostname_to_actual_node_name_and_binds_live_chain(self):
+        result = kube.resolve_source_binding(self.api, operation='a' * 12)
+        self.assertEqual(result['binding'], {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'voice-nats-pv-a',
+            'source_pv_uid': '22222222-2222-4222-8222-222222222222',
+            'source_node_name': 'node-actual-name'})
+        self.assertEqual(result['proof']['node_hostname'], 'node-hostname-label')
+        self.assertEqual(result['proof']['node_uid'], '33333333-3333-4333-8333-333333333333')
+        self.assertEqual(self.api.reads, ['namespace', 'marker', 'hub', 'pvc', 'pv', 'nodes', 'pods'])
+        self.assertEqual(kube.resolve_source_binding(self.api, operation='a' * 12, expected=result), result)
+
+    def test_reconciles_same_binding_after_exact_owned_fence_without_any_hub_pod(self):
+        first = kube.resolve_source_binding(self.api, operation='a' * 12)
+        self.api.marker['data'] = self.api.marker['data'] | {
+            'phase': 'known-baseline-maintenance', 'knownBaselineOperation': 'a' * 12}
+        self.api.pods = []
+        self.assertEqual(kube.resolve_source_binding(self.api, operation='a' * 12, expected=first), first)
+
+    def test_rejects_ambiguous_hostname_node_before_binding(self):
+        self.api.nodes.append(copy.deepcopy(self.api.nodes[0]))
+        with self.assertRaisesRegex(kube.KubeAPIError, 'source_node_ambiguous'):
+            kube.resolve_source_binding(self.api, operation='a' * 12)
+
+    def test_rejects_hub_pod_on_a_different_actual_node(self):
+        self.api.pods[0]['spec']['nodeName'] = 'other-node'
+        with self.assertRaisesRegex(kube.KubeAPIError, 'source_hub_pod_node_changed'):
+            kube.resolve_source_binding(self.api, operation='a' * 12)
+
+    def test_rejects_any_fresh_identity_drift_during_reconciliation(self):
+        first = kube.resolve_source_binding(self.api, operation='a' * 12)
+        self.api.marker['metadata']['uid'] = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        with self.assertRaisesRegex(kube.KubeAPIError, 'source_binding_changed'):
+            kube.resolve_source_binding(self.api, operation='a' * 12, expected=first)
+
+
+class SourceAPI:
+    def __init__(self):
+        self.reads = []
+        self.namespace = {'metadata': {'name': 'voice-staging', 'uid': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}}
+        self.marker = {'metadata': {'name': 'voice-nats-generation', 'namespace': 'voice-staging',
+            'uid': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'},
+            'data': {'phase': 'active', 'generation': '123', 'dataPVC': 'voice-nats-jsdata-d20261017a'}}
+        self.hub = {'metadata': {'name': 'voice-nats-hub', 'namespace': 'voice-staging',
+            'uid': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'},
+            'spec': {'selector': {'matchLabels': {'app': 'voice-nats-hub'}}, 'template': {'spec': {
+                'volumes': [{'name': 'jsdata', 'persistentVolumeClaim': {'claimName': 'voice-nats-jsdata-d20261017a'}}]}}}}
+        self.claim = {'metadata': {'name': 'voice-nats-jsdata-d20261017a', 'namespace': 'voice-staging',
+            'uid': '11111111-1111-4111-8111-111111111111'}, 'spec': {'volumeName': 'voice-nats-pv-a',
+                'accessModes': ['ReadWriteOnce'], 'volumeMode': 'Filesystem'}, 'status': {'phase': 'Bound'}}
+        self.pv = {'metadata': {'name': 'voice-nats-pv-a', 'uid': '22222222-2222-4222-8222-222222222222'},
+            'spec': {'claimRef': {'namespace': 'voice-staging', 'name': 'voice-nats-jsdata-d20261017a',
+                'uid': '11111111-1111-4111-8111-111111111111'}, 'volumeMode': 'Filesystem',
+                'nodeAffinity': {'required': {'nodeSelectorTerms': [{'matchExpressions': [
+                    {'key': 'kubernetes.io/hostname', 'operator': 'In', 'values': ['node-hostname-label']}]}]}}},
+            'status': {'phase': 'Bound'}}
+        self.nodes = [{'metadata': {'name': 'node-actual-name', 'uid': '33333333-3333-4333-8333-333333333333',
+            'labels': {'kubernetes.io/hostname': 'node-hostname-label'}}, 'status': {'conditions': [
+                {'type': 'Ready', 'status': 'True'}]}}]
+        self.pods = [{'metadata': {'name': 'voice-nats-hub-0', 'uid': '44444444-4444-4444-8444-444444444444'},
+            'spec': {'nodeName': 'node-actual-name', 'volumes': [{'name': 'jsdata',
+                'persistentVolumeClaim': {'claimName': 'voice-nats-jsdata-d20261017a'}}]}}]
+
+    def get_namespace(self, name): self.reads.append('namespace'); return self.namespace
+    def get_configmap(self, namespace, name): self.reads.append('marker'); return self.marker
+    def get_deployment(self, namespace, name): self.reads.append('hub'); return self.hub
+    def get_pvc(self, namespace, name): self.reads.append('pvc'); return self.claim
+    def get_pv(self, name): self.reads.append('pv'); return self.pv
+    def list_nodes_by_hostname(self, hostname): self.reads.append('nodes'); return self.nodes
+    def list_hub_pods(self, labels): self.reads.append('pods'); return self.pods
 
 
 if __name__ == '__main__': unittest.main()

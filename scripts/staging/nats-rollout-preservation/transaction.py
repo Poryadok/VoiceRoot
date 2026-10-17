@@ -155,11 +155,18 @@ def require_original_live_census(stage,events):
     return validated
 
 
-def reconstruct(kube,state,journal):
+def reconstruct(kube,state,journal,native_api=None):
     ctx=state['context'];stage=RolloutStage(kube,state['operation'],ctx['expected'],journal)
     for name in ('snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv'):
         setattr(stage,name,copy.deepcopy(ctx[name]))
     stage.final_path=Path(ctx['final_path'])
+    if 'native_source_binding' in state:
+        if native_api is None:
+            raise Blocked('rollout_native_authority_missing')
+        import kube_json_api
+        try:kube_json_api.resolve_source_binding(native_api,operation=state['operation'],expected=state['native_source_binding'])
+        except kube_json_api.KubeAPIError:raise Blocked('rollout_native_source_binding_changed') from None
+        stage.native_api=native_api
     snapshot=ctx.get('original_live_census')
     intent=_shutdown_census_intent(state.get('events',[]))
     if snapshot is not None:
@@ -200,7 +207,7 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,native_api=None,native_config=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -210,6 +217,14 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    native_source=None
+    if native_api is not None:
+        if not isinstance(native_config,dict) or not isinstance(native_config.get('phase_image'),str):
+            raise Blocked('rollout_native_authority_missing')
+        import kube_json_api
+        try:native_source=kube_json_api.resolve_source_binding(native_api,operation=operation)
+        except kube_json_api.KubeAPIError:raise Blocked('rollout_native_source_binding_invalid') from None
+        state['native_source_binding']=copy.deepcopy(native_source)
     if gis_first_install is not None:
         import gis_first_install as gis
         if gis_source_root is None or not isinstance(gis_source_capture,dict):
@@ -280,6 +295,12 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             snapshot_names=existing
         stage=RolloutStage.capture(kube,operation,journal,
             sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []))
+        if native_source is not None:
+            source=native_source['binding']
+            if (stage.expected['source_claim']!=source['source_claim']
+                or stage.expected['source_claim_uid']!=source['source_uid']
+                or stage.expected['source_pv_uid']!=source['source_pv_uid']):
+                raise Blocked('rollout_native_source_binding_mismatch')
         if target['mode']=='images-only':
             manifests,target=image_only_documents(stage,manifests,target,renderer_authority=renderer_authority)
             save(base/'apply-manifests.json',manifests)
@@ -332,6 +353,10 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         if before_fence is not None:before_fence()
         stage.runtime_base=base
         stage.fence();state['context']=context(stage);state['fence_status']='VERIFIED'
+        if native_source is not None:
+            import kube_json_api
+            try:kube_json_api.resolve_source_binding(native_api,operation=operation,expected=native_source)
+            except kube_json_api.KubeAPIError:raise Blocked('rollout_native_source_binding_changed') from None
         save(base/'checkpoint.json',state)
         runtime=DockerRuntime(base,operation)
         state['phase']='COLD_BACKUP';save(base/'checkpoint.json',state)

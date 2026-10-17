@@ -43,6 +43,10 @@ class KubeNotFound(KubeAPIError):
     pass
 
 
+_UID = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
+_SOURCE_CLAIM = re.compile(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}')
+
+
 def _fail(code):
     raise KubeAPIError('kube_api_' + code)
 
@@ -203,6 +207,47 @@ class _KubernetesJSONAPIBase:
 
     def get_pv(self, name):
         return self._request('GET', '/api/v1/persistentvolumes/' + self._segment(name))
+
+    def get_namespace(self, name):
+        if name != NAMESPACE: _fail('namespace_invalid')
+        return self._request('GET', '/api/v1/namespaces/' + self._segment(name))
+
+    def get_configmap(self, namespace, name):
+        if namespace != NAMESPACE or name != 'voice-nats-generation':
+            _fail('configmap_invalid')
+        return self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/configmaps/' + self._segment(name))
+
+    def get_deployment(self, namespace, name):
+        if namespace != NAMESPACE or name != 'voice-nats-hub':
+            _fail('deployment_invalid')
+        return self._request('GET', '/apis/apps/v1/namespaces/' + self._segment(namespace)
+            + '/deployments/' + self._segment(name))
+
+    def list_nodes_by_hostname(self, hostname):
+        if (not isinstance(hostname, str) or len(hostname) > 253
+            or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', hostname)):
+            _fail('node_hostname_invalid')
+        selector = urlencode({'labelSelector': 'kubernetes.io/hostname=' + hostname})
+        result = self._request('GET', '/api/v1/nodes?' + selector)
+        items = result.get('items')
+        if not isinstance(items, list) or len(items) > 2048 or not all(isinstance(item, dict) for item in items):
+            _fail('node_list_invalid')
+        return items
+
+    def list_hub_pods(self, labels):
+        if (not isinstance(labels, dict) or not labels or len(labels) > 32
+            or any(not isinstance(key, str) or not isinstance(value, str) or not key or not value
+                for key, value in labels.items())):
+            _fail('pod_selector_invalid')
+        selector = ','.join(quote(key, safe='') + '=' + quote(value, safe='')
+            for key, value in sorted(labels.items()))
+        result = self._request('GET', '/api/v1/namespaces/' + self._segment(NAMESPACE)
+            + '/pods?' + urlencode({'labelSelector': selector}))
+        items = result.get('items')
+        if not isinstance(items, list) or len(items) > 2048 or not all(isinstance(item, dict) for item in items):
+            _fail('pod_list_invalid')
+        return items
 
     def get_node(self, name):
         return self._request('GET', '/api/v1/nodes/' + self._segment(name))
@@ -798,3 +843,115 @@ class KubernetesJSONAPI(_KubernetesJSONAPIBase):
         except OSError:
             scratch.unlink(missing_ok=True)
             _fail('token_refresh_persist_failed')
+
+
+def resolve_source_binding(api, *, operation, expected=None):
+    """Resolve live selected source and its scheduler node from fresh API reads.
+
+    The returned binding is suitable for a single archive request. Call again
+    before every create, exec, receipt adoption, or recovery and pass the prior
+    value as ``expected``; the prior journal is an expectation, never authority.
+    """
+    if not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation):
+        _fail('source_operation_invalid')
+    try:
+        namespace = api.get_namespace(NAMESPACE)
+        marker = api.get_configmap(NAMESPACE, 'voice-nats-generation')
+        hub = api.get_deployment(NAMESPACE, 'voice-nats-hub')
+        ns_meta, marker_meta, hub_meta = (namespace['metadata'], marker['metadata'], hub['metadata'])
+        data = marker['data']
+        if (ns_meta['name'] != NAMESPACE or not _UID.fullmatch(ns_meta['uid'])
+            or marker_meta['name'] != 'voice-nats-generation' or marker_meta['namespace'] != NAMESPACE
+            or not _UID.fullmatch(marker_meta['uid']) or hub_meta['name'] != 'voice-nats-hub'
+            or hub_meta['namespace'] != NAMESPACE or not _UID.fullmatch(hub_meta['uid'])
+            or not isinstance(data.get('generation'), str) or not data['generation']):
+            _fail('source_marker_invalid')
+        if data.get('phase') == 'active':
+            if any(key in data for key in ('knownBaselineOperation', 'knownRolloutOperation')):
+                _fail('source_marker_invalid')
+            fenced = False
+        elif ((data.get('phase') == 'known-baseline-maintenance'
+                and data.get('knownBaselineOperation') == operation)
+            or (data.get('phase') == 'known-rollout-maintenance'
+                and data.get('knownRolloutOperation') == operation)):
+            fenced = True
+        else:
+            _fail('source_marker_invalid')
+        template_spec = hub['spec']['template']['spec']
+        hub_volumes = template_spec['volumes']
+        jsdata = [row for row in hub_volumes if row.get('name') == 'jsdata']
+        if (len(jsdata) != 1 or set(jsdata[0]) != {'name', 'persistentVolumeClaim'}
+            or not isinstance(jsdata[0]['persistentVolumeClaim'], dict)
+            or set(jsdata[0]['persistentVolumeClaim']) != {'claimName'}):
+            _fail('source_hub_volume_invalid')
+        claim_name = jsdata[0]['persistentVolumeClaim']['claimName']
+        if not isinstance(claim_name, str) or not _SOURCE_CLAIM.fullmatch(claim_name) or data.get('dataPVC') != claim_name:
+            _fail('source_claim_selection_invalid')
+        claim = api.get_pvc(NAMESPACE, claim_name)
+        claim_meta, claim_spec = claim['metadata'], claim['spec']
+        claim_uid = claim_meta['uid']
+        pv_name = claim_spec['volumeName']
+        if (claim_meta['name'] != claim_name or claim_meta['namespace'] != NAMESPACE
+            or not _UID.fullmatch(claim_uid) or claim.get('status', {}).get('phase') != 'Bound'
+            or claim_spec.get('accessModes') != ['ReadWriteOnce'] or claim_spec.get('volumeMode', 'Filesystem') != 'Filesystem'
+            or not isinstance(pv_name, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', pv_name)):
+            _fail('source_claim_identity_invalid')
+        pv = api.get_pv(pv_name)
+        pv_meta, pv_spec = pv['metadata'], pv['spec']
+        pv_uid = pv_meta['uid']
+        claim_ref = pv_spec['claimRef']
+        if (pv_meta['name'] != pv_name or not _UID.fullmatch(pv_uid)
+            or pv.get('status', {}).get('phase') != 'Bound'
+            or claim_ref.get('namespace') != NAMESPACE or claim_ref.get('name') != claim_name
+            or claim_ref.get('uid') != claim_uid or pv_spec.get('volumeMode', 'Filesystem') != 'Filesystem'):
+            _fail('source_pv_identity_invalid')
+        affinity = pv_spec['nodeAffinity']['required']['nodeSelectorTerms']
+        if (not isinstance(affinity, list) or len(affinity) != 1
+            or set(affinity[0]) != {'matchExpressions'} or len(affinity[0]['matchExpressions']) != 1):
+            _fail('source_node_affinity_invalid')
+        expression = affinity[0]['matchExpressions'][0]
+        if (set(expression) != {'key', 'operator', 'values'} or expression.get('key') != 'kubernetes.io/hostname'
+            or expression.get('operator') != 'In' or not isinstance(expression.get('values'), list)
+            or len(expression['values']) != 1):
+            _fail('source_node_affinity_invalid')
+        hostname = expression['values'][0]
+        nodes = api.list_nodes_by_hostname(hostname)
+        matches = [node for node in nodes if node.get('metadata', {}).get('labels', {}).get('kubernetes.io/hostname') == hostname]
+        if len(matches) != 1:
+            _fail('source_node_ambiguous')
+        node = matches[0]
+        node_meta = node['metadata']
+        node_name = node_meta['name']
+        node_uid = node_meta['uid']
+        conditions = node.get('status', {}).get('conditions', [])
+        if (not isinstance(node_name, str) or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?', node_name)
+            or not _UID.fullmatch(node_uid)
+            or node.get('spec', {}).get('unschedulable') is True
+            or sum(1 for row in conditions if row.get('type') == 'Ready' and row.get('status') == 'True') != 1):
+            _fail('source_node_not_ready')
+        selector = hub['spec']['selector']['matchLabels']
+        pods = api.list_hub_pods(selector)
+        active_pods = [pod for pod in pods if not pod.get('metadata', {}).get('deletionTimestamp')]
+        if ((fenced and active_pods) or (not fenced and not active_pods)
+            or any(pod.get('spec', {}).get('nodeName') not in ('', node_name)
+                for pod in active_pods if pod.get('spec', {}).get('nodeName') is not None)):
+            _fail('source_hub_pod_node_changed')
+        for pod in active_pods:
+            if not _UID.fullmatch(pod.get('metadata', {}).get('uid', '')):
+                _fail('source_hub_pod_identity_invalid')
+            pod_claims = [volume.get('persistentVolumeClaim', {}).get('claimName')
+                for volume in pod.get('spec', {}).get('volumes', []) if 'persistentVolumeClaim' in volume]
+            if pod_claims != [claim_name]:
+                _fail('source_hub_pod_claim_changed')
+        binding = {'source_claim': claim_name, 'source_uid': claim_uid,
+            'source_pv_name': pv_name, 'source_pv_uid': pv_uid, 'source_node_name': node_name}
+        proof = {'namespace_uid': ns_meta['uid'], 'marker_uid': marker_meta['uid'],
+            'generation': data['generation'], 'deployment_uid': hub_meta['uid'], 'node_uid': node_uid,
+            'node_hostname': hostname}
+        if expected is not None and (expected.get('binding') != binding or expected.get('proof') != proof):
+            _fail('source_binding_changed')
+        return {'binding': binding, 'proof': proof}
+    except KubeAPIError:
+        raise
+    except (KeyError, TypeError, AttributeError, ValueError):
+        _fail('source_binding_invalid')
