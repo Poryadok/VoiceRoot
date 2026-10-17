@@ -64,7 +64,12 @@ PHASES = {'initializing', 'stage-intent', 'staged', 'apply-in-progress', 'comple
 _ISSUER_PATH = Path(__file__).with_name('complete-match-pki-issuer') / 'issuer.py'
 _ISSUER_SPEC = importlib.util.spec_from_file_location('complete_match_pki_issuer', _ISSUER_PATH)
 _ISSUER = importlib.util.module_from_spec(_ISSUER_SPEC)
-_ISSUER_SPEC.loader.exec_module(_ISSUER)
+_WRITE_BYTECODE = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _ISSUER_SPEC.loader.exec_module(_ISSUER)
+finally:
+    sys.dont_write_bytecode = _WRITE_BYTECODE
 
 
 class Blocked(ValueError):

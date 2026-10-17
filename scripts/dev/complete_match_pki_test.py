@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -18,7 +19,12 @@ import complete_match_pki as pki
 ISSUER_PATH = Path(__file__).with_name('complete-match-pki-issuer') / 'issuer.py'
 ISSUER_SPEC = importlib.util.spec_from_file_location('complete_match_pki_issuer', ISSUER_PATH)
 issuer = importlib.util.module_from_spec(ISSUER_SPEC)
-ISSUER_SPEC.loader.exec_module(issuer)
+_WRITE_BYTECODE = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    ISSUER_SPEC.loader.exec_module(issuer)
+finally:
+    sys.dont_write_bytecode = _WRITE_BYTECODE
 
 OPERATION = 'cmp-1234567890abcdef1234567890abcdef'
 SOURCE_SHA = 'a' * 40
@@ -315,6 +321,31 @@ class CompleteMatchOperatorTests(unittest.TestCase):
         self.assertEqual(receipt['consumerContractSha256'], contract)
         self.assertEqual(receipt['targets'], sorted(TARGETS))
         self.assertNotIn('certificate', receipt)
+
+    def test_cli_startup_does_not_dirty_a_clean_git_checkout(self):
+        with tempfile.TemporaryDirectory(prefix='complete-match-clean-startup-') as temp:
+            root = Path(temp)
+            dev = root / 'scripts' / 'dev'
+            issuer_dir = dev / 'complete-match-pki-issuer'
+            issuer_dir.mkdir(parents=True)
+            helper = dev / 'complete_match_pki.py'
+            shutil.copy2(pki.__file__, helper)
+            shutil.copy2(ISSUER_PATH, issuer_dir / 'issuer.py')
+            subprocess.run(['git', 'init', '--quiet', str(root)], check=True,
+                           capture_output=True)
+            subprocess.run(['git', '-C', str(root), 'add', 'scripts/dev'], check=True,
+                           capture_output=True)
+            subprocess.run(['git', '-C', str(root), '-c', 'user.name=Test',
+                            '-c', 'user.email=test@example.invalid', 'commit', '--quiet',
+                            '-m', 'baseline'], check=True, capture_output=True)
+            env = {'PATH': os.environ.get('PATH', ''), 'HOME': str(root)}
+            result = subprocess.run([sys.executable, str(helper), '--help'], cwd=root,
+                                    env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            status = subprocess.run(['git', '-C', str(root), 'status', '--porcelain',
+                                     '--untracked-files=all'], capture_output=True,
+                                    text=True, check=True)
+            self.assertEqual(status.stdout, '')
 
     def test_journal_loader_rejects_unexpected_resource_fields(self):
         state = self.root / 'operator-state'
