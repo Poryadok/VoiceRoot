@@ -665,11 +665,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     final controllerRoom = ref.watch(chatRoomControllerProvider(widget.chatId));
     final textSendFailed =
-        _textSendFailed &&
-        _pendingTextSendControllerGeneration ==
-            ref
-                .read(chatRoomControllerProvider(widget.chatId).notifier)
-                .immediateSendGeneration;
+        _pendingTextSend?.replyTarget != null &&
+            !_threadsEnabledForCurrentChat() ||
+        (_textSendFailed &&
+            _pendingTextSendControllerGeneration ==
+                ref
+                    .read(chatRoomControllerProvider(widget.chatId).notifier)
+                    .immediateSendGeneration);
     final textSendOwnsRoomError =
         textSendFailed &&
         ref
@@ -2391,6 +2393,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   );
 
   String _textSendFailureMessage(AppLocalizations l10n) {
+    if (_pendingTextSend?.replyTarget != null &&
+        !_threadsEnabledForCurrentChat()) {
+      return l10n.chatThreadRepliesUnavailable;
+    }
     final raw = ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
         .failedMessageError;
@@ -2412,6 +2418,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final controller = ref.read(
       chatRoomControllerProvider(attempt.chatId).notifier,
     );
+    if (attempt.replyTarget != null && !_threadsEnabledForCurrentChat()) {
+      setState(() {
+        _textSendInFlight = false;
+        _textSendFailed = true;
+        _pendingTextSendControllerGeneration =
+            controller.immediateSendGeneration;
+      });
+      return;
+    }
     setState(() {
       _textSendInFlight = true;
       _textSendFailed = false;

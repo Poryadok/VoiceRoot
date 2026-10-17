@@ -203,7 +203,7 @@ void main() {
     testWidgets(
       'immediate text failure in $locale retries the same wire attempt',
       (tester) async {
-        final harness = _ImmediateRetryHarness();
+        final harness = _ImmediateRetryHarness(threadsEnabled: true);
         addTearDown(harness.container.dispose);
         harness.room.state = harness.room.state.copyWith(
           messages: const [_preexistingRetryHistory],
@@ -529,6 +529,58 @@ void main() {
       expect(
         harness.container.read(chatReplyTargetProvider('chat-abc')),
         newerReply,
+      );
+    },
+  );
+
+  testWidgets(
+    'text Retry blocks a retained reply after threads are disabled',
+    (tester) async {
+      final harness = _ImmediateRetryHarness(threadsEnabled: true);
+      addTearDown(harness.container.dispose);
+      harness.container
+              .read(chatReplyTargetProvider('chat-abc').notifier)
+              .state =
+          _retryReply;
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Retained reply body',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(1));
+
+      harness.container.read(chatListControllerProvider.notifier).state =
+          ChatListState(
+            profileId: 'prof-test',
+            items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-abc',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'prof-test',
+                  threadsEnabled: false,
+                ),
+                dmPeerProfileId: 'peer-1',
+              ),
+            ],
+          );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+      await tester.pumpAndSettle();
+
+      expect(harness.bodies, hasLength(1));
+      expect(harness.composer(tester).text, 'Retained reply body');
+      expect(
+        harness.container.read(chatReplyTargetProvider('chat-abc')),
+        _retryReply,
+      );
+      expect(
+        find.text(AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!.chatThreadRepliesUnavailable),
+        findsOneWidget,
       );
     },
   );
