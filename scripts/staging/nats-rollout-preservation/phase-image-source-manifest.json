@@ -13,7 +13,7 @@
   ],
   "inputs": {
     "scripts/staging/nats-rollout-preservation/Dockerfile": "ecacd5406eec28eefdffcaa2ef845e771ad136414691f740c6af368d4d45f729",
-    "scripts/staging/nats-rollout-preservation/nats-phase": "8f04e17bcc509192b6498a03c59836d0bd81900da0a9879c0c2c50dd91d9dc38",
+    "scripts/staging/nats-rollout-preservation/nats-phase": "97e801d370641cd01ddc5f06ff387077d72ebe0dae01c9b2f5f96bbd5353a032",
     "scripts/staging/nats-rollout-preservation/native_store.py": "3f9b177ecbcec7463801ba3ed44724c3068696482804d4d586696a305da813c0",
     "scripts/staging/nats-known-baseline/controller.py": "dd9fee1b93309b38cfb8023787142a2cd5ea3dd925100744fcc2a6b66beb629f",
     "scripts/staging/nats-known-baseline/go.mod": "b1c71d9f1c670cb5826fc03d13c32cd94154b3033a203d628eaba70ef380cd29",
@@ -34,5 +34,5 @@
     "scripts/staging/nats-known-baseline/retained_grants.go": "f44f946525b32ddda97439885c6ad25d732d25d5682828d5a9794e17eb76f22a",
     "scripts/staging/nats-known-baseline/retained_grants_test.go": "95b5871fd9e6d1a8307b90abaf5000bb5ada90304d166d51906b9cd5b83f5959"
   },
-  "qualification": "Source-only checkpoint after helper ABI changes. The prior local image does not bind this closure; image rebuild, publication and independent image/kernel review remain outstanding."
+  "qualification": "Source-only checkpoint: archive is source-PVC-only and every frame binds source PVC/PV UIDs; the former co-mounted census producer fails closed pending a separate target-only archive-ingest protocol. The prior local image does not bind this closure; image rebuild, publication and independent image/kernel review remain outstanding."
 }

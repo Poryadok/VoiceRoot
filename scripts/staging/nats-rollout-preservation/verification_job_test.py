@@ -19,11 +19,14 @@ BINDING = {
 }
 IMAGE = 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'a' * 64
 POD_UID = '44444444-4444-4444-8444-444444444444'
+ARCHIVE_REQUEST = REQUEST | {'phase': 'archive'}
+ARCHIVE_BINDING = {key: BINDING[key] for key in (
+    'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name')}
 
 
 class VerificationJobTests(unittest.TestCase):
-    def test_fixed_job_has_closed_tokenless_nonroot_two_pvc_shape(self):
-        row = jobs.document(REQUEST, BINDING, IMAGE)
+    def test_archive_job_is_source_only_readonly_and_node_affinity_bound(self):
+        row = jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, IMAGE)
         pod = row['spec']['template']['spec']
         container = pod['containers'][0]
         self.assertEqual(row['apiVersion'], 'batch/v1')
@@ -40,15 +43,20 @@ class VerificationJobTests(unittest.TestCase):
             'seccompProfile': {'type': 'RuntimeDefault'}})
         self.assertNotIn('fsGroup', pod['securityContext'])
         self.assertEqual(container['image'], IMAGE)
-        self.assertEqual(container['args'], ['--serve', '--operation', REQUEST['operation'], '--nonce', REQUEST['nonce']])
-        self.assertEqual([mount['mountPath'] for mount in container['volumeMounts']],
-            ['/data', '/verify', '/out', '/inputs'])
+        self.assertEqual(container['args'], ['--serve', '--operation', ARCHIVE_REQUEST['operation'],
+            '--nonce', ARCHIVE_REQUEST['nonce'], '--source-pvc-uid', ARCHIVE_BINDING['source_uid'],
+            '--source-pv-uid', ARCHIVE_BINDING['source_pv_uid']])
+        self.assertEqual([mount['mountPath'] for mount in container['volumeMounts']], ['/data', '/out'])
         source_mount = next(m for m in container['volumeMounts'] if m['name'] == 'source')
         self.assertTrue(source_mount['readOnly'])
         volumes = {volume['name']: volume for volume in pod['volumes']}
         self.assertEqual(volumes['source']['persistentVolumeClaim'], {
-            'claimName': BINDING['source_claim'], 'readOnly': True})
-        self.assertEqual(volumes['verification']['persistentVolumeClaim']['claimName'], BINDING['verification_claim'])
+            'claimName': ARCHIVE_BINDING['source_claim'], 'readOnly': True})
+        self.assertEqual(set(volumes), {'source', 'output'})
+        self.assertNotIn('nodeName', pod)
+        self.assertEqual(pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']
+            ['nodeSelectorTerms'][0]['matchExpressions'], [{'key': 'kubernetes.io/hostname',
+                'operator': 'In', 'values': [ARCHIVE_BINDING['source_node_name']]}])
         self.assertNotIn('hostPath', str(pod))
         self.assertNotIn('secret', str(pod).lower())
 
@@ -63,43 +71,31 @@ class VerificationJobTests(unittest.TestCase):
                 jobs.validate_request(value)
         for image in ('candidate:latest', IMAGE.replace('a' * 64, 'z' * 64)):
             with self.subTest(image=image), self.assertRaises(jobs.VerificationJobError):
-                jobs.document(REQUEST, BINDING, image)
+                jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, image)
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'census_source_split_pending'):
+            jobs.document(REQUEST, BINDING, IMAGE)
 
     def test_source_and_verification_claim_identity_must_be_distinct_and_valid(self):
         for mutation in (
-            {'verification_claim': BINDING['source_claim']},
-            {'verification_claim': 'voice-nats-verify-d20261017a'},
-            {'verification_claim': 'voice-nats-verify-' + 'g' * 12},
-            {'verification_uid': BINDING['source_uid']},
-            {'verification_pv_uid': BINDING['source_pv_uid']},
-            {'verification_node_name': 'k3s-worker-2'},
+            {'source_claim': 'untrusted'},
+            {'source_claim': 'voice-nats-jsdata-d20261017a/extra'},
             {'source_uid': '../admin'},
-            {'verification_claim': 'untrusted'},
+            {'source_pv_uid': '../pv'},
+            {'source_pv_name': '../pv'},
+            {'source_node_name': '../node'},
         ):
-            value = BINDING | mutation
+            value = ARCHIVE_BINDING | mutation
             with self.subTest(mutation=mutation), self.assertRaises(jobs.VerificationJobError):
-                jobs.document(REQUEST, value, IMAGE)
+                jobs.document(ARCHIVE_REQUEST, value, IMAGE)
 
     def test_exec_argv_is_fixed_and_binds_live_pod_and_both_pvc_uids(self):
-        vectors = jobs.exec_vectors(REQUEST, POD_UID, BINDING)
-        self.assertEqual(vectors['load_inputs'], [
-            '/usr/bin/python3', '/voice-nats-runner/phase', '--load-inputs',
-            '--operation', REQUEST['operation'], '--nonce', REQUEST['nonce'], '--pod-uid', POD_UID])
-        self.assertEqual(vectors['census'], [
-            '/usr/bin/python3', '/voice-nats-runner/phase', '--phase', 'census',
-            '--operation', REQUEST['operation'], '--nonce', REQUEST['nonce'], '--pod-uid', POD_UID,
-            '--source-pvc-uid', BINDING['source_uid'],
-            '--verification-pvc-uid', BINDING['verification_uid']])
-        self.assertEqual(vectors['census_receipt_readback'], [
-            '/usr/bin/python3', '/voice-nats-runner/phase', '--read-receipt', '--phase', 'census',
-            '--operation', REQUEST['operation'], '--nonce', REQUEST['nonce'], '--pod-uid', POD_UID,
-            '--source-pvc-uid', BINDING['source_uid'],
-            '--verification-pvc-uid', BINDING['verification_uid']])
-        archive = jobs.exec_vectors(REQUEST | {'phase': 'archive'}, POD_UID, BINDING)
+        archive = jobs.exec_vectors(ARCHIVE_REQUEST, POD_UID, ARCHIVE_BINDING)
         self.assertEqual(archive['archive_create_and_stream'][2], '--create-and-stream')
+        self.assertEqual(archive['archive_create_and_stream'][-4:], [
+            '--source-pvc-uid', ARCHIVE_BINDING['source_uid'], '--source-pv-uid', ARCHIVE_BINDING['source_pv_uid']])
         self.assertEqual(archive['archive_same_pod_readback'][2], '--stream-existing')
         with self.assertRaises(jobs.VerificationJobError):
-            jobs.exec_vectors(REQUEST, 'not-a-pod-uid', BINDING)
+            jobs.exec_vectors(ARCHIVE_REQUEST, 'not-a-pod-uid', ARCHIVE_BINDING)
 
     def test_wffc_verification_binder_is_target_only_readonly_and_node_affinity_bound(self):
         request = REQUEST | {'phase': 'bind-verification'}
