@@ -38,7 +38,7 @@ CONTAINERS = {
 QUALIFIED_IMAGES = {
     "voice-gateway": "ghcr.io/poryadok/voiceroot/gateway@sha256:a6b9a6c6e8f28bc7632c961fec94b6906d6621f5ae45f2f4668a8441d8b82716",
     "voice-chat": "ghcr.io/poryadok/voiceroot/chat@sha256:69f759c98b7407a0b958e3f1c13ae845f1a78cb9a5ed424ebca30c1768a80a27",
-    "voice-matchmaking": "ghcr.io/poryadok/voiceroot/matchmaking@sha256:d7f1fb83954c9f2f450cf49890f4c7fb3e035ca92a5cacbf53541efde4a11029",
+    "voice-matchmaking": "ghcr.io/poryadok/voiceroot/matchmaking@sha256:7f10b25a34ddc6f301219c63a945e1aa8f89b3b3337b568f35a6d42790394a3e",
     "voice-voice": "ghcr.io/poryadok/voiceroot/voice@sha256:bd7eb5d1afa8ece622f02670978a07f022e114075065e09dc56160cd4726dc66",
 }
 EXPECTED_OBJECT_UIDS = {
@@ -50,6 +50,8 @@ EXPECTED_OBJECT_UIDS = {
     ("Deployment", "voice-voice"): "ef11fadf-9857-42e1-a324-31c9a4978138",
     ("Deployment", "voice-gateway"): "56a7f8f9-de86-4bde-9052-8ffdfe9fcd7f",
 }
+MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256 = (
+    "39a62305c3fdb01824b47bce9dce6d7533c5010c91673cbfbfbf876d97995339")
 TARGETS = (
     # Services are published before any new listener is rolled out.
     _Target("Service", "voice-matchmaking", "voice-matchmaking.service.patch.yaml"),
@@ -419,10 +421,43 @@ def _has_reviewed_matchmaking_listener_opt_in(target, base):
     return sum(item.get("name") == "S2S_JWKS_URLS_JSON" for item in env) == 1
 
 
+def _is_exact_matchmaking_listener_removal(target, base, operations):
+    if not _has_reviewed_matchmaking_listener_opt_in(target, base):
+        return False
+    containers = base["spec"]["template"]["spec"]["containers"]
+    container_index = next(index for index, item in enumerate(containers)
+                           if item.get("name") == CONTAINERS[target.name])
+    env = containers[container_index].get("env", [])
+    env_index = next(index for index, item in enumerate(env)
+                     if item.get("name") == "S2S_JWKS_URLS_JSON")
+    return operations[2:] == [{
+        "op": "remove",
+        "path": "/spec/template/spec/containers/{}/env/{}".format(
+            container_index, env_index),
+    }]
+
+
+def _is_exact_matchmaking_fs_group_recovery(target, base, operations):
+    """Allow only the already-deployed Matchmaking template's missing fsGroup."""
+    if target.kind != "Deployment" or target.name != "voice-matchmaking":
+        return False
+    template = base.get("spec", {}).get("template")
+    if not isinstance(template, dict) or sha256_bytes(canonical_bytes(template)) != (
+            MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256):
+        return False
+    if _has_reviewed_matchmaking_listener_opt_in(target, base):
+        return False
+    return operations[2:] == [{
+        "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+        "value": 65532,
+    }]
+
+
 def build_object_plan(client, target, base, patch_path):
     validate_target(target, base)
     if base["metadata"]["uid"] != EXPECTED_OBJECT_UIDS[(target.kind, target.name)]:
         raise OverlayError("target object UID is outside the bound DEV activation")
+    operations = None
     if target.kind == "Deployment":
         status = base.get("status", {})
         replicas = base.get("spec", {}).get("replicas", 1)
@@ -430,19 +465,32 @@ def build_object_plan(client, target, base, patch_path):
         updated = status.get("updatedReplicas", 0) >= replicas
         ready = (status.get("readyReplicas", 0) >= replicas and
                  status.get("availableReplicas", 0) >= replicas)
-        recoverable_matchmaking_opt_in = (
-            replicas > 0 and generation_current and updated and
-            _has_reviewed_matchmaking_listener_opt_in(target, base))
-        if not (generation_current and updated and ready) and not recoverable_matchmaking_opt_in:
-            raise OverlayError("Deployment is not ordinarily ready: " + target.name)
+        if not (generation_current and updated and ready):
+            possible_recovery = (
+                target.name == "voice-matchmaking" and replicas > 0 and
+                generation_current and updated and (
+                    _has_reviewed_matchmaking_listener_opt_in(target, base) or
+                    sha256_bytes(canonical_bytes(base.get("spec", {}).get(
+                        "template", {}))) == MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256))
+            if not possible_recovery:
+                raise OverlayError("Deployment is not ordinarily ready: " + target.name)
+            desired = strategic_render(client, target, base, patch_path)
+            operations = object_patch(base, desired)
+            recoverable_matchmaking_opt_in = _is_exact_matchmaking_listener_removal(
+                target, base, operations)
+            recoverable_matchmaking_fs_group = _is_exact_matchmaking_fs_group_recovery(
+                target, base, operations)
+            if not (recoverable_matchmaking_opt_in or recoverable_matchmaking_fs_group):
+                raise OverlayError("unready Matchmaking recovery projection is not exact")
         containers = base["spec"]["template"]["spec"]["containers"]
         app_container = next(container for container in containers
                              if container.get("name") == CONTAINERS[target.name])
         if app_container.get("image") != QUALIFIED_IMAGES[target.name]:
             raise OverlayError("source-qualified application image not active: " + target.name)
     patch_bytes = patch_path.read_bytes()
-    desired = strategic_render(client, target, base, patch_path)
-    operations = object_patch(base, desired)
+    if operations is None:
+        desired = strategic_render(client, target, base, patch_path)
+        operations = object_patch(base, desired)
     already_satisfied = len(operations) == 2
     return {
         "kind": target.kind, "name": target.name,
