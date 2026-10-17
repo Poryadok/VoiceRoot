@@ -15,10 +15,13 @@ NAMESPACE = 'voice-staging'
 LABEL_OPERATION = 'voice.io/nats-operation'
 LABEL_NONCE = 'voice.io/nats-job-nonce'
 LABEL_PHASE = 'voice.io/nats-job-phase'
-PHASE = 'census'
+LABEL_JOB_SELECTOR = 'voice.io/nats-phase-job'
+PHASES = frozenset(('archive', 'census'))
 FIELDS = frozenset(('operation', 'nonce', 'phase'))
-BINDING_FIELDS = frozenset(('source_claim', 'source_uid', 'verification_claim',
-    'verification_uid', 'pv_name', 'pv_uid', 'node_name'))
+BINDING_FIELDS = frozenset((
+    'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name',
+    'verification_claim', 'verification_uid', 'verification_pv_name', 'verification_pv_uid',
+    'verification_node_name'))
 IMAGE_RE = re.compile(r'[a-z0-9./_-]+@sha256:[a-f0-9]{64}')
 UUID_RE = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 
@@ -33,7 +36,7 @@ def _fail(code: str) -> None:
 
 def validate_request(value: object) -> dict:
     if (not isinstance(value, dict) or set(value) != FIELDS
-        or value.get('phase') != PHASE
+        or value.get('phase') not in PHASES
         or not isinstance(value.get('operation'), str)
         or not re.fullmatch(r'[a-f0-9]{12}', value['operation'])
         or not isinstance(value.get('nonce'), str)
@@ -45,20 +48,29 @@ def validate_request(value: object) -> dict:
 def validate_binding(value: object) -> dict:
     if not isinstance(value, dict) or set(value) != BINDING_FIELDS:
         _fail('binding_invalid')
-    for field in ('source_uid', 'verification_uid', 'pv_uid'):
+    for field in ('source_uid', 'verification_uid', 'source_pv_uid', 'verification_pv_uid'):
         if not isinstance(value[field], str) or not UUID_RE.fullmatch(value[field]):
             _fail('storage_uid_invalid')
-    if value['source_uid'] == value['verification_uid']:
+    if (value['source_uid'] == value['verification_uid']
+        or value['source_pv_uid'] == value['verification_pv_uid']
+        or value['source_pv_name'] == value['verification_pv_name']):
         _fail('source_verification_same')
-    for field in ('source_claim', 'verification_claim'):
-        if (not isinstance(value[field], str)
-            or not re.fullmatch(r'voice-nats-(?:jsdata|verify)-d[0-9]{8}[a-z0-9]{1,8}', value[field])):
-            _fail('claim_name_invalid')
+    if (not isinstance(value['source_claim'], str)
+        or not re.fullmatch(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}', value['source_claim'])):
+        _fail('source_claim_invalid')
+    if (not isinstance(value['verification_claim'], str)
+        or not re.fullmatch(r'voice-nats-verify-[a-f0-9]{12}', value['verification_claim'])):
+        _fail('verification_claim_invalid')
     if value['source_claim'] == value['verification_claim']:
         _fail('claim_name_same')
-    for field in ('pv_name', 'node_name'):
+    for field in ('source_pv_name', 'verification_pv_name'):
         if not isinstance(value[field], str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value[field]):
             _fail('storage_name_invalid')
+    for field in ('source_node_name', 'verification_node_name'):
+        if not isinstance(value[field], str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value[field]):
+            _fail('storage_name_invalid')
+    if value['source_node_name'] != value['verification_node_name']:
+        _fail('storage_node_mismatch')
     return copy.deepcopy(value)
 
 
@@ -70,8 +82,8 @@ def validate_image(value: object) -> str:
 
 def job_name(request: dict) -> str:
     row = validate_request(request)
-    suffix = hashlib.sha256((row['operation'] + ':' + row['nonce']).encode()).hexdigest()[:16]
-    return 'voice-nats-census-' + suffix
+    suffix = hashlib.sha256((row['operation'] + ':' + row['nonce'] + ':' + row['phase']).encode()).hexdigest()[:16]
+    return 'voice-nats-' + row['phase'] + '-' + suffix
 
 
 def document(request: dict, binding: dict, trusted_image: str) -> dict:
@@ -79,7 +91,8 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
     storage = validate_binding(binding)
     image = validate_image(trusted_image)
     name = job_name(row)
-    labels = {LABEL_OPERATION: row['operation'], LABEL_NONCE: row['nonce'], LABEL_PHASE: PHASE}
+    labels = {LABEL_OPERATION: row['operation'], LABEL_NONCE: row['nonce'],
+        LABEL_PHASE: row['phase'], LABEL_JOB_SELECTOR: name}
     return {
         'apiVersion': 'batch/v1',
         'kind': 'Job',
@@ -88,13 +101,13 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
             'backoffLimit': 0,
             'activeDeadlineSeconds': 14400,
             'manualSelector': True,
-            'selector': {'matchLabels': {'voice.io/nats-census-job': name}},
+            'selector': {'matchLabels': {LABEL_JOB_SELECTOR: name}},
             'template': {
                 'metadata': {'labels': labels},
                 'spec': {
                     'automountServiceAccountToken': False,
                     'serviceAccountName': 'default',
-                    'nodeName': storage['node_name'],
+                    'nodeName': storage['source_node_name'],
                     'restartPolicy': 'Never',
                     'securityContext': {
                         'runAsNonRoot': True,
@@ -140,15 +153,22 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
 
 
 def exec_vectors(request: dict, pod_uid: str, binding: dict) -> dict:
-    """Return the only admitted in-band helper argv/query shapes for census."""
+    """Return the only admitted in-band helper argv/query shapes for a fixed phase."""
     row = validate_request(request)
     storage = validate_binding(binding)
     if not isinstance(pod_uid, str) or not UUID_RE.fullmatch(pod_uid):
         _fail('pod_uid_invalid')
     binary = ['/usr/bin/python3', '/voice-nats-runner/phase']
     common = ['--operation', row['operation'], '--nonce', row['nonce'], '--pod-uid', pod_uid]
-    load = binary + ['--load-inputs'] + common
-    census = binary + ['--phase', PHASE] + common + [
-        '--source-pvc-uid', storage['source_uid'],
+    if row['phase'] == 'archive':
+        return {
+            'archive_create_and_stream': binary + ['--create-and-stream'] + common,
+            'archive_same_pod_readback': binary + ['--stream-existing'] + common,
+        }
+    volume_identity = ['--source-pvc-uid', storage['source_uid'],
         '--verification-pvc-uid', storage['verification_uid']]
-    return {'load_inputs': load, 'census': census}
+    return {
+        'load_inputs': binary + ['--load-inputs'] + common,
+        'census': binary + ['--phase', 'census'] + common + volume_identity,
+        'census_receipt_readback': binary + ['--read-receipt', '--phase', 'census'] + common + volume_identity,
+    }

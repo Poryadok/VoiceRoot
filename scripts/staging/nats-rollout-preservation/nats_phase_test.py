@@ -75,6 +75,51 @@ class NatsPhaseTests(unittest.TestCase):
         execute.assert_called_once()
         self.assertEqual(result, receipt)
 
+    def test_census_readback_returns_only_matching_durable_receipt(self):
+        state = self.verification / '.voice-nats-verification'
+        state.mkdir(mode=0o700)
+        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
+            'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
+            'state': 'STARTED'}
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'source_pvc_uid': marker['source_pvc_uid'],
+            'verification_pvc_uid': marker['verification_pvc_uid'],
+            'archive_sha256': 'a' * 64, 'census_sha256': 'b' * 64, 'status': 'COMPLETE'}
+        (state / (OPERATION + '-' + NONCE + '.json')).write_text(json.dumps(marker))
+        (state / (OPERATION + '-' + NONCE + '.receipt.json')).write_text(json.dumps(receipt))
+        for path in state.iterdir():
+            path.chmod(0o600)
+        (self.source / 'jetstream').chmod(0o555)
+        (self.source / 'jetstream' / 'meta.inf').chmod(0o444)
+        self.source.chmod(0o555)
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=marker['source_pvc_uid'], verification_pvc_uid=marker['verification_pvc_uid'])
+        with patch.object(phase, '_require_verification_identity'):
+            self.assertEqual(phase.read_verification_receipt('census', args), receipt)
+
+    def test_census_interruption_without_receipt_is_not_replayed(self):
+        state = self.verification / '.voice-nats-verification'
+        state.mkdir(mode=0o700)
+        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
+            'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
+            'state': 'STARTED'}
+        marker_path = state / (OPERATION + '-' + NONCE + '.json')
+        marker_path.write_text(json.dumps(marker)); marker_path.chmod(0o600)
+        (self.source / 'jetstream').chmod(0o555)
+        (self.source / 'jetstream' / 'meta.inf').chmod(0o444)
+        self.source.chmod(0o555)
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=marker['source_pvc_uid'], verification_pvc_uid=marker['verification_pvc_uid'])
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, 'run_verification', side_effect=AssertionError('must not replay')):
+            with self.assertRaisesRegex(ValueError, 'verification_receipt_incomplete'):
+                phase.read_verification_receipt('census', args)
+
     def test_verification_refuses_missing_distinct_writable_copy_before_restore(self):
         verify = getattr(phase, 'validate_verification_mounts', None)
         self.assertTrue(callable(verify), 'verification PVC boundary is not implemented')
