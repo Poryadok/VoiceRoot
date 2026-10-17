@@ -564,10 +564,14 @@ def _verify_job(kube, role, obj, record, inputs, plan):
     except Exception:
         raise Blocked('gis_prerequisite_job_wait_failed') from None
     conditions = live.get('status', {}).get('conditions', [])
-    if (live.get('metadata', {}).get('uid') != record['uid']
+    waited_metadata = waited.get('metadata', {}) if isinstance(waited, dict) else {}
+    if (not isinstance(waited, dict) or waited.get('kind') != 'Job'
+        or waited_metadata.get('name') != name
+        or waited_metadata.get('namespace') != plan.get('namespace', NS)
+        or waited_metadata.get('uid') != record['uid']
+        or live.get('metadata', {}).get('uid') != record['uid']
         or live.get('metadata', {}).get('labels', {}).get(OP_LABEL) != plan['operation']
         or not _job_live_matches(live, obj, record['uid'])
-        or not isinstance(waited, dict) or waited.get('metadata', {}).get('uid') != record['uid']
         or live.get('status', {}).get('succeeded') != 1
         or live.get('status', {}).get('failed', 0) != 0
         or not any(row.get('type') == 'Complete' and row.get('status') == 'True' for row in conditions)):

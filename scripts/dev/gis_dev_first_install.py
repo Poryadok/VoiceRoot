@@ -858,8 +858,19 @@ class Kubectl:
         self.runner = runner
 
     def run(self, args, body=None, timeout=30):
-        if (not isinstance(args, list) or not args or any(not isinstance(x, str) for x in args)
-            or args[0] not in {"get", "create", "replace", "patch", "delete", "logs", "exec"}):
+        if not isinstance(args, list) or not args or any(not isinstance(x, str) for x in args):
+            _blocked("gis_dev_kubectl_request_invalid")
+        if args[0] == "wait":
+            allowed_jobs = {
+                "job/voice-provision-gameintegration-runtime-role",
+                "job/voice-migrate-gameintegration-db",
+                "job/voice-verify-gameintegration-db",
+            }
+            if (body is not None or type(timeout) is not int or timeout != 610 or len(args) != 6
+                or args[1] != "--for=condition=complete" or args[2] not in allowed_jobs
+                or args[3] != "--timeout=600s" or args[4:] != ["-o", "json"]):
+                _blocked("gis_dev_kubectl_request_invalid")
+        elif args[0] not in {"get", "create", "replace", "patch", "delete", "logs", "exec"}:
             _blocked("gis_dev_kubectl_request_invalid")
         argv = [self.executable, "--namespace", NAMESPACE, *args]
         if body is not None:

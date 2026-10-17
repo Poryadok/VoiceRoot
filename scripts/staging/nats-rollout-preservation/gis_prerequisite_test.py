@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,6 +11,7 @@ import yaml
 
 import gis_prerequisite as prerequisite
 import gis_first_install as gis
+import gis_dev_first_install as dev_gis
 import gis_first_install_test as gis_fi_test
 import controller
 
@@ -812,6 +814,69 @@ class Tests(unittest.TestCase):
         kube.rs['metadata']['ownerReferences'][0]['uid'] = '00000000-0000-0000-0000-000000000999'
         with self.assertRaisesRegex(gis.Blocked, 'endpoint_pod_invalid'):
             gis.verify_ready(kube, current, timeout=1, sleep=lambda _delay: None)
+
+
+class KubectlWaitProducerConsumerContractTests(unittest.TestCase):
+    def test_completed_process_wait_json_flows_through_adapter_to_job_verifier(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'operation': 'a'*12, 'namespace': dev_gis.NAMESPACE,
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        wanted = jobs['provision']
+        uid = '00000000-0000-0000-0000-000000000099'
+        actual = api_default_job(wanted, uid)
+        actual['metadata'].update(uid=uid, resourceVersion='38')
+        actual['status'] = {'succeeded': 1, 'failed': 0,
+            'completionTime': '2026-10-17T10:58:22Z',
+            'conditions': [{'type': 'Complete', 'status': 'True'}]}
+        spec = wanted['spec']['template']['spec']
+        def statuses(group):
+            return [{'name': row['name'], 'imageID': 'docker-pullable://' + row['image'],
+                'state': {'terminated': {'exitCode': 0}}} for row in spec.get(group, [])]
+        pod = {'metadata': {'name': wanted['metadata']['name'] + '-pod',
+            'namespace': dev_gis.NAMESPACE, 'uid': '00000000-0000-0000-0000-000000000098',
+            'ownerReferences': [{'kind': 'Job', 'uid': uid, 'controller': True}]},
+            'status': {'phase': 'Succeeded', 'initContainerStatuses': statuses('initContainers'),
+                'containerStatuses': statuses('containers')}}
+        calls = []
+        wait_response = [actual]
+
+        def runner(argv, **kwargs):
+            calls.append(argv)
+            self.assertEqual(argv[1:3], ['--namespace', dev_gis.NAMESPACE])
+            args = argv[3:]
+            if args[0] == 'wait':
+                self.assertEqual(args, ['wait', '--for=condition=complete',
+                    'job/' + wanted['metadata']['name'], '--timeout=600s', '-o', 'json'])
+                return subprocess.CompletedProcess(argv, 0, json.dumps(wait_response[0]), '')
+            if args[:2] == ['get', 'job']:
+                return subprocess.CompletedProcess(argv, 0, json.dumps(actual), '')
+            if args[:2] == ['get', 'pods']:
+                return subprocess.CompletedProcess(argv, 0, json.dumps({'items': [pod]}), '')
+            raise AssertionError(args)
+
+        adapter = dev_gis.Kubectl(runner=runner)
+        class Kube:
+            def run(self, args, **kwargs):
+                return adapter.run(args, **kwargs)
+            def get(self, kind, name):
+                return self.run(['get', kind, name, '-o', 'json'])
+
+        record = {'uid': uid, 'spec_sha256': prerequisite._spec_digest(wanted)}
+        proof, verifier_output = prerequisite._verify_job(
+            Kube(), 'provision', wanted, record, inputs, plan)
+        self.assertIsNone(verifier_output)
+        self.assertEqual(proof['uid'], uid)
+        self.assertEqual(proof['pod_uid'], pod['metadata']['uid'])
+        self.assertTrue(proof['complete'])
+        self.assertEqual(len(calls), 3)
+        self.assertEqual([call[3] for call in calls], ['wait', 'get', 'get'])
+        wait_response[0] = copy.deepcopy(actual)
+        wait_response[0]['metadata']['name'] = 'voice-verify-gameintegration-db'
+        with self.assertRaisesRegex(prerequisite.Blocked, 'job_not_complete'):
+            prerequisite._verify_job(Kube(), 'provision', wanted, record, inputs, plan)
+        self.assertEqual([call[3] for call in calls], ['wait', 'get', 'get', 'wait', 'get'])
 
 
 class KubectlCreateReceiptContractTests(unittest.TestCase):

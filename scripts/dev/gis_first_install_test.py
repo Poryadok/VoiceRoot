@@ -4,6 +4,7 @@ import copy
 import hashlib
 import io
 import json
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -194,6 +195,63 @@ class KubectlFailureReceiptTests(unittest.TestCase):
         self.assertEqual(caught.exception.returncode, 1)
         self.assertEqual(caught.exception.category, "invalid_output_format")
         self.assertNotIn(sensitive, str(caught.exception))
+
+
+class KubectlWaitAdapterContractTests(unittest.TestCase):
+    def test_exact_prerequisite_wait_decodes_completed_json_object(self):
+        job = {"apiVersion": "batch/v1", "kind": "Job", "metadata": {
+            "name": "voice-provision-gameintegration-runtime-role", "namespace": gis.NAMESPACE,
+            "uid": "00000000-0000-0000-0000-000000000001"},
+            "status": {"succeeded": 1, "conditions": [{"type": "Complete", "status": "True"}]}}
+        calls = []
+        wait_response = [job]
+
+        def runner(argv, **kwargs):
+            calls.append((argv, kwargs))
+            return subprocess.CompletedProcess(argv, 0, json.dumps(wait_response[0]), "")
+
+        result = gis.Kubectl(runner=runner).run([
+            "wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role",
+            "--timeout=600s", "-o", "json"], timeout=610)
+        self.assertEqual(result, job)
+        argv, kwargs = calls[0]
+        self.assertEqual(argv, ["kubectl", "--namespace", gis.NAMESPACE,
+            "wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role",
+            "--timeout=600s", "-o", "json"])
+        self.assertIsNone(kwargs["input"])
+        self.assertEqual(kwargs["timeout"], 610)
+
+    def test_wait_rejects_other_names_and_any_option_or_timeout_drift_before_runner(self):
+        invalid = [
+            ["wait", "--for=condition=complete", "job/other", "--timeout=600s", "-o", "json"],
+            ["wait", "--for=condition=Failed", "job/voice-provision-gameintegration-runtime-role", "--timeout=600s", "-o", "json"],
+            ["wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role", "--timeout=601s", "-o", "json"],
+            ["wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role", "--timeout=600s", "-o", "yaml"],
+            ["wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role", "--timeout=600s", "-o", "json", "--all-namespaces"],
+        ]
+        calls = []
+        client = gis.Kubectl(runner=lambda argv, **kwargs: calls.append(argv))
+        for args in invalid:
+            with self.subTest(args=args), self.assertRaisesRegex(gis.Blocked, "request_invalid"):
+                client.run(args, timeout=610)
+        with self.assertRaisesRegex(gis.Blocked, "request_invalid"):
+            client.run(["wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role",
+                "--timeout=600s", "-o", "json"], timeout=30)
+        with self.assertRaisesRegex(gis.Blocked, "request_invalid"):
+            client.run(["wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role",
+                "--timeout=600s", "-o", "json"], timeout=610.0)
+        with self.assertRaisesRegex(gis.Blocked, "request_invalid"):
+            client.run(["wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role",
+                "--timeout=600s", "-o", "json"], body={"kind": "Job"}, timeout=610)
+        self.assertEqual(calls, [])
+
+    def test_wait_nonzero_and_non_json_results_fail_closed(self):
+        for result, error in ((subprocess.CompletedProcess([], 1, "", "Forbidden"), gis.KubeError),
+                (subprocess.CompletedProcess([], 0, "not-json", ""), gis.Blocked)):
+            with self.subTest(error=error), self.assertRaises(error):
+                gis.Kubectl(runner=lambda *_a, **_k: result).run([
+                    "wait", "--for=condition=complete", "job/voice-provision-gameintegration-runtime-role",
+                    "--timeout=600s", "-o", "json"], timeout=610)
 
 
 class PrerequisiteSecretProbeAdapterTests(unittest.TestCase):
