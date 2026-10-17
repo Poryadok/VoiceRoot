@@ -421,6 +421,22 @@ def _has_reviewed_matchmaking_listener_opt_in(target, base):
     return sum(item.get("name") == "S2S_JWKS_URLS_JSON" for item in env) == 1
 
 
+def _is_exact_matchmaking_listener_removal(target, base, operations):
+    if not _has_reviewed_matchmaking_listener_opt_in(target, base):
+        return False
+    containers = base["spec"]["template"]["spec"]["containers"]
+    container_index = next(index for index, item in enumerate(containers)
+                           if item.get("name") == CONTAINERS[target.name])
+    env = containers[container_index].get("env", [])
+    env_index = next(index for index, item in enumerate(env)
+                     if item.get("name") == "S2S_JWKS_URLS_JSON")
+    return operations[2:] == [{
+        "op": "remove",
+        "path": "/spec/template/spec/containers/{}/env/{}".format(
+            container_index, env_index),
+    }]
+
+
 def _is_exact_matchmaking_fs_group_recovery(target, base, operations):
     """Allow only the already-deployed Matchmaking template's missing fsGroup."""
     if target.kind != "Deployment" or target.name != "voice-matchmaking":
@@ -453,7 +469,7 @@ def build_object_plan(client, target, base, patch_path):
                  status.get("availableReplicas", 0) >= replicas)
         recoverable_matchmaking_opt_in = (
             replicas > 0 and generation_current and updated and
-            _has_reviewed_matchmaking_listener_opt_in(target, base))
+            _is_exact_matchmaking_listener_removal(target, base, operations))
         recoverable_matchmaking_fs_group = (
             replicas > 0 and generation_current and updated and
             _is_exact_matchmaking_fs_group_recovery(target, base, operations))
