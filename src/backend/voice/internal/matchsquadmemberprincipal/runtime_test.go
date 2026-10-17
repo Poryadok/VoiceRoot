@@ -91,7 +91,7 @@ func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	invoke := func(keyIssuer *principal.Issuer, operation string) (bool, error) {
+	invoke := func(runtime *Runtime, keyIssuer *principal.Issuer, operation string) (bool, error) {
 		t.Helper()
 		request := &callsv1.JoinMatchSquadRoomRequest{ProtocolVersion: 1, OperationId: operation}
 		hash, err := principal.RequestHash(request)
@@ -120,7 +120,7 @@ func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *test
 		return called, err
 	}
 
-	called, err := invoke(issuer, uuid.MustParse("00000000-0000-4000-8000-000000000001").String())
+	called, err := invoke(runtime, issuer, uuid.MustParse("00000000-0000-4000-8000-000000000001").String())
 	if status.Code(err) != codes.Unavailable || called {
 		t.Fatalf("cold-cache call code=%v handler called=%v; want unavailable before effects", status.Code(err), called)
 	}
@@ -135,7 +135,7 @@ func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *test
 	if err := runtime.resolver.Refresh(context.Background(), "gateway"); err != nil {
 		t.Fatalf("resolver did not recover after Gateway returned: %v", err)
 	}
-	called, err = invoke(issuer, uuid.MustParse("00000000-0000-4000-8000-000000000002").String())
+	called, err = invoke(runtime, issuer, uuid.MustParse("00000000-0000-4000-8000-000000000002").String())
 	if err != nil || !called {
 		t.Fatalf("valid bound call after JWKS recovery called=%v err=%v", called, err)
 	}
@@ -146,15 +146,44 @@ func TestNewStartsWithColdJWKSAndProtectedCallRecoversWhenGatewayReturns(t *test
 		t.Fatalf("verified call replay/epoch checks SET=%d GET=%d; want one each", redisFixture.sets.Load(), redisFixture.gets.Load())
 	}
 
+	// A new runtime with an available Gateway must fetch lazily from the first
+	// protected request, without relying on a direct resolver.Refresh call.
+	if err := runtime.Close(); err != nil {
+		t.Fatalf("close recovered runtime before cold-start assertions: %v", err)
+	}
+	requestsBeforeColdStart := jwksRequests.Load()
+	coldRuntime, err := New(context.Background(), config)
+	if err != nil {
+		t.Fatalf("member verifier startup with available JWKS failed: %v", err)
+	}
+	defer func() { _ = coldRuntime.Close() }()
+	if got := jwksRequests.Load(); got != requestsBeforeColdStart {
+		t.Fatalf("constructor fetched Gateway JWKS %d times; want empty-cache startup", got-requestsBeforeColdStart)
+	}
+	setsBeforeColdRequest, getsBeforeColdRequest := redisFixture.sets.Load(), redisFixture.gets.Load()
+	called, err = invoke(coldRuntime, issuer, uuid.MustParse("00000000-0000-4000-8000-000000000004").String())
+	if err != nil || !called {
+		t.Fatalf("first protected call with available Gateway called=%v err=%v", called, err)
+	}
+	if got := jwksRequests.Load(); got != requestsBeforeColdStart+1 {
+		t.Fatalf("first protected call fetched Gateway JWKS %d times; want exactly one", got-requestsBeforeColdStart)
+	}
+	if got := redisFixture.sets.Load(); got != setsBeforeColdRequest+1 {
+		t.Fatalf("first protected call replay SETs=%d; want one", got-setsBeforeColdRequest)
+	}
+	if got := redisFixture.gets.Load(); got != getsBeforeColdRequest+1 {
+		t.Fatalf("first protected call epoch GETs=%d; want one", got-getsBeforeColdRequest)
+	}
+
 	unknownKidIssuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "unknown", PrivateKey: key})
 	if err != nil {
 		t.Fatal(err)
 	}
-	called, err = invoke(unknownKidIssuer, uuid.MustParse("00000000-0000-4000-8000-000000000003").String())
+	called, err = invoke(coldRuntime, unknownKidIssuer, uuid.MustParse("00000000-0000-4000-8000-000000000003").String())
 	if status.Code(err) != codes.Unavailable || called {
 		t.Fatalf("unknown kid call code=%v handler called=%v; want denial before handler", status.Code(err), called)
 	}
-	if _, err := runtime.resolveKey(context.Background(), "untrusted", "current"); err == nil {
+	if _, err := coldRuntime.resolveKey(context.Background(), "untrusted", "current"); err == nil {
 		t.Fatal("untrusted issuer resolved")
 	}
 }
