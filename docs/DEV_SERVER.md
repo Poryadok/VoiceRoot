@@ -126,6 +126,11 @@ checkout репозитория, Python3 и kubeconfig нужного класт
 2. Frontend собрать с dev API и WS адресами. Staging frontend не подходит:
    адреса API/RTC запекаются в сборку. Схемные изменения требуют отдельно
    подготовленных dev-миграций из той же версии исходников.
+   Для CI-сборки используйте `dev-web:<git SHA>` и artifact
+   `dev-web-image-<sha>`: receipt связывает source SHA с immutable
+   `dev-web@sha256:...` ref и build args. CI публикует DEV-вариант на master
+   для frontend-изменений и изменений publisher workflow. Staging `web` image
+   имеет другие адреса API/LiveKit и для DEV не подходит.
 3. Предварительно сохранить текущие image pins и выполнить preview:
 
 ```sh
