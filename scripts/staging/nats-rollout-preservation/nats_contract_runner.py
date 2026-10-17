@@ -80,9 +80,9 @@ def validate_plan(plan: object) -> dict:
     if not isinstance(actions, list) or len(actions) > 7:
         _fail('plan_actions')
     allowed_updates = {
-        'chat_events': frozenset(nats_contract_plan.CHAT_ADDITIONS),
+        'chat_events': frozenset(nats_contract_plan.CHAT_SUBJECTS_17),
         'social_events': frozenset(),
-        'role_events': frozenset(nats_contract_plan.ROLE_ADDITIONS),
+        'role_events': frozenset(nats_contract_plan.ROLE_SUBJECTS_10),
     }
     allowed_consumers = {(stream, config['durable_name']): config
         for stream, config in declarations}
@@ -108,15 +108,19 @@ def validate_plan(plan: object) -> dict:
                 expected['duplicate_window'] = 86400000000000
             else:
                 old = before.get('subjects')
-                if (not isinstance(old, list) or len(old) != len(set(old))
-                    or any(not isinstance(x, str) for x in old)):
+                if (not isinstance(old, list) or any(not isinstance(x, str) for x in old)
+                    or len(old) != len(set(old))):
                     _fail('plan_stream_subjects')
                 additions = allowed_updates[name]
                 new_subjects = after.get('subjects')
-                if (not isinstance(new_subjects, list) or len(new_subjects) != len(set(new_subjects))
-                    or new_subjects[:len(old)] != old
-                    or not set(new_subjects[len(old):]).issubset(additions - set(old))
-                    or set(new_subjects) != set(old) | set(new_subjects[len(old):])):
+                if (not isinstance(new_subjects, list)
+                    or any(not isinstance(x, str) for x in new_subjects)
+                    or len(new_subjects) != len(set(new_subjects))):
+                    _fail('plan_stream_subjects')
+                old_set, new_set = set(old), set(new_subjects)
+                inserted = new_set - old_set
+                if (not inserted.issubset(additions) or not old_set.issubset(new_set)
+                    or [value for value in new_subjects if value in old_set] != old):
                     _fail('plan_stream_subjects')
                 expected['subjects'] = new_subjects
             if after != expected:

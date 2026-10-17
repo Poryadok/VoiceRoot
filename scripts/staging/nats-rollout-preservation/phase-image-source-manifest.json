@@ -43,7 +43,7 @@
     "scripts/staging/nats-rollout-preservation/nats-supervisor": "cf89b62b53ac4c89c380dead53a1a03cf64aaef943fa51673e0565adfe44551f",
     "scripts/staging/nats-rollout-preservation/nats_contract_actor.py": "98d1cd844e3eea8dde791b65ac4cee08b85d91b09b2bd0d12f9d6e5d901517d7",
     "scripts/staging/nats-rollout-preservation/nats_contract_plan.py": "f1e7745dffd777c64324b10e45d3d8f1105c71ab2aac454f76131163dee7b291",
-    "scripts/staging/nats-rollout-preservation/nats_contract_runner.py": "3d6381bd7e5ce8ef21ffd6c29f49e665f0306dcf859dd7eadafaff3c8ec34aa5"
+    "scripts/staging/nats-rollout-preservation/nats_contract_runner.py": "0238b28476b5b535192303b06ba6eb7947c8bfebdd435a37b1e8bceca261765d"
   },
-  "qualification": "Source checkpoint: trusted helper package now includes the fixed NATS contract plan executor as data-only input to a later host-journaled per-action protocol. Existing archive and disposable census/session profiles remain unchanged. The contract-migration producer and host transaction consumer are not yet integrated; no registry image is published or digest-qualified, and no live proof is claimed."
-}\n
+  "qualification": "Source checkpoint: trusted helper package includes a fixed canonical NATS contract plan validator and per-action executor. The producer validates plan digest and closed APIs, stores action STARTED before a single NATS mutation, and exposes same-attempt receipt readback. Host orchestration must persist intent and issued events before invoking apply; ambiguous actions are never replayed. Archive and disposable census/session profiles remain unchanged. The contract-migration Kubernetes Job, transaction consumer, registry image and independent final review are not yet qualified; no live proof is claimed."
+}
