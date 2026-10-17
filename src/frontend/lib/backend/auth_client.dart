@@ -619,7 +619,7 @@ class VoiceAuthClient {
     };
   }
 
-  /// Resends the email verification OTP for the session's pending identity.
+  /// Sends an email verification OTP for the session's pending identity.
   Future<AuthApiResult<void>> sendGuestConversionEmailOtp({
     required AuthSession session,
   }) => _sendOtp(session: session, otpType: 'email_verify');
