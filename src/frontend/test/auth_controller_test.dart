@@ -1276,6 +1276,84 @@ void main() {
   );
 
   test(
+    'guest conversion cannot install while conditional logout is in flight',
+    () async {
+      final conversionResponse = Completer<http.Response>();
+      final conversionRequested = Completer<void>();
+      final logoutResponse = Completer<http.Response>();
+      final logoutRequested = Completer<void>();
+      var otpRequests = 0;
+      final storage = InMemoryAuthSessionStorage();
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/convert-guest') {
+          conversionRequested.complete();
+          return conversionResponse.future;
+        }
+        if (req.url.path == '/api/v1/auth/logout') {
+          logoutRequested.complete();
+          return logoutResponse.future;
+        }
+        if (req.url.path == '/api/v1/auth/otp/send') {
+          otpRequests++;
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = ProviderContainer(
+        overrides: [
+          gatewayConfigProvider.overrideWithValue(config),
+          httpClientProvider.overrideWithValue(mock),
+          authSessionStorageProvider.overrideWithValue(storage),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      const guest = AuthSession(
+        accessToken: 'guest-access',
+        refreshToken: 'guest-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      );
+      controller.state = const AuthState(session: guest, isGuest: true);
+      await storage.write(guest);
+
+      final converting = controller.convertGuest(
+        email: 'guest@example.com',
+        password: 'user-password1',
+      );
+      await conversionRequested.future;
+      final loggingOut = controller.logoutIfCurrent(guest);
+      await logoutRequested.future;
+      conversionResponse.complete(
+        http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': 'stale-converted-access',
+              'refresh_token': 'stale-converted-refresh',
+              'account_type': 'guest',
+            },
+          }),
+          200,
+        ),
+      );
+      final conversionError = await converting;
+      final sessionWhileLogoutPending = controller.state.session;
+      final otpCountWhileLogoutPending = otpRequests;
+      logoutResponse.complete(http.Response('', 204));
+
+      expect(conversionError, 'not_authenticated');
+      expect(sessionWhileLogoutPending, guest);
+      expect(otpCountWhileLogoutPending, 0);
+      expect(await loggingOut, isTrue);
+      expect(controller.state.session, isNull);
+      expect(await storage.read(), isNull);
+    },
+  );
+
+  test(
     'late initial OTP failure does not replace a newer installed session',
     () async {
       final otpResponse = Completer<http.Response>();

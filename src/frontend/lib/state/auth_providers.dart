@@ -1053,7 +1053,6 @@ class AuthController extends StateNotifier<AuthState> {
     bool serverAlreadyRevoked = false,
     int? sessionInstallGeneration,
   }) async {
-    final profileGeneration = _profileSwitchGeneration;
     final installGeneration =
         sessionInstallGeneration ?? _sessionInstallGeneration;
     final current = state.session;
@@ -1064,6 +1063,9 @@ class AuthController extends StateNotifier<AuthState> {
         current.activeProfileId != expected.activeProfileId) {
       return false;
     }
+    // Invalidate session-bound work as soon as this logout claims the current
+    // install, before snapshot or network awaits can let a stale response win.
+    final profileGeneration = ++_profileSwitchGeneration;
     bool isStillCurrent() =>
         _isCurrentSessionInstall(current, profileGeneration, installGeneration);
 
