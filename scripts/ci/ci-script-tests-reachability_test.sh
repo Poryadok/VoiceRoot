@@ -86,6 +86,30 @@ echo "${changes_block}" | grep -Fq 'filters: .github/ci/path-filters.yml' \
   || fail "feature-base PRs must use the repository path filter definitions"
 grep -Fq 'ci_only_change: ${{ steps.stagingmatrix.outputs.ci_only_change }}' "${WORKFLOW}" \
   || fail "changes must expose the CI-only no-publication classification"
+grep -Fq 'dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}' "${WORKFLOW}" \
+  || fail "changes must expose the narrow DEV web publisher selector"
+grep -Fq 'dev_web_publish:' "${ROOT}/.github/ci/path-filters.yml" \
+  || fail "DEV web publisher changes must have a dedicated path selector"
+dev_web_filter_block="$(sed -n '/^dev_web_publish:$/,/^[[:alnum:]_-]*:$/p' "${ROOT}/.github/ci/path-filters.yml")"
+echo "${dev_web_filter_block}" | grep -Fq '  - .github/workflows/ci.yml' \
+  || fail "DEV web publisher selector must include its workflow contract"
+echo "${dev_web_filter_block}" | grep -Fq '  - .github/ci/path-filters.yml' \
+  || fail "DEV web publisher selector must include its own filter definition"
+! echo "${dev_web_filter_block}" | grep -Fq '  - **' \
+  || fail "DEV web publisher selector must remain narrow"
+web_block="$(sed -n '/^  web:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+echo "${web_block}" | grep -Fq 'Build and push DEV web image' \
+  || fail "master web job must publish the DEV-configured frontend"
+echo "${web_block}" | grep -Fq 'tags: ${{ steps.image.outputs.base }}/dev-web:${{ github.sha }}' \
+  || fail "DEV web image must use an immutable source-SHA tag"
+echo "${web_block}" | grep -Fq 'VOICE_API_BASE_URL=https://api-dev.comrade.click' \
+  || fail "DEV web image must target the documented DEV API"
+echo "${web_block}" | grep -Fq 'VOICE_LIVEKIT_URL=wss://livekit-dev.comrade.click' \
+  || fail "DEV web image must target the documented DEV LiveKit endpoint"
+echo "${web_block}" | grep -Fq 'dev-web@${{ steps.build-dev-web.outputs.digest }}' \
+  || fail "DEV web receipt must bind the source-SHA tag to Buildx manifest digest"
+echo "${web_block}" | grep -Fq 'tags: ${{ steps.image.outputs.base }}/web:${{ github.sha }}' \
+  || fail "staging web image publication must remain unchanged"
 
 staging_deploy_workflow="${ROOT}/.github/workflows/staging-deploy.yml"
 image_verify_line="$(grep -n '^      - name: Verify every exact staging image before cluster access$' "${staging_deploy_workflow}" | cut -d: -f1)"
