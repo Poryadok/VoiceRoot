@@ -25,7 +25,7 @@ class MediaProjectionTest(unittest.TestCase):
     def test_canonical_media_tuples_are_projected_with_private_readonly_files(self):
         rows = self.rendered()
         compose = yaml.safe_load((SOURCE / 'docker-compose.voice-space-media.yml').read_text())['services']
-        for service in ('auth', 'voice', 'role', 'gateway'):
+        for service in ('auth', 'chat', 'voice', 'role', 'gateway', 'matchmaking'):
             with self.subTest(service=service):
                 pod = next(r for r in rows if r['kind'] == 'Deployment' and r['metadata']['name'] == 'voice-' + service)['spec']['template']['spec']
                 container = next(c for c in pod['containers'] if c['name'] == service)
@@ -57,7 +57,8 @@ class MediaProjectionTest(unittest.TestCase):
                 if service == 'gateway':
                     signing = next(v['secret'] for v in pod['volumes'] if v['secret']['secretName'] == 'voice-gateway-principal-signing')
                     self.assertEqual({i['path'] for i in signing['items']}, {'current.pem', 'next.pem'})
-        for service, ports in {'auth': {9091, 9092}, 'voice': {8443, 9093}, 'role': {9091}}.items():
+        for service, ports in {'auth': {9091, 9092}, 'chat': {9092}, 'voice': {8443, 9093, 9094, 9095},
+                               'role': {9091}, 'matchmaking': {8443}}.items():
             row = next(r for r in rows if r['kind'] == 'Service' and r['metadata']['name'] == 'voice-' + service)
             self.assertLessEqual(ports, {p['port'] for p in row['spec']['ports']})
 
@@ -96,24 +97,34 @@ class MediaProjectionTest(unittest.TestCase):
     def test_private_listener_client_symmetry_and_shared_resolver_secret(self):
         rows = self.rendered()
         envs = {}
-        for service in ('auth', 'voice', 'role', 'gateway', 'space'):
+        for service in ('auth', 'chat', 'voice', 'role', 'gateway', 'space', 'matchmaking'):
             row = next(r for r in rows if r['kind'] == 'Deployment' and r['metadata']['name'] == 'voice-' + service)
             envs[service] = {e['name']: e for c in row['spec']['template']['spec']['containers'] if c['name'] == service for e in c['env']}
         for client, key, server, port in (
             ('voice', 'VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR', 'auth', 9092),
             ('voice', 'VOICE_ROLE_GRPC_ADDR', 'role', 9091),
-            ('gateway', 'GATEWAY_VOICE_USER_GRPC_ADDR', 'voice', 9093)):
+            ('gateway', 'GATEWAY_VOICE_USER_GRPC_ADDR', 'voice', 9093),
+            ('matchmaking', 'MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR', 'chat', 9092),
+            ('matchmaking', 'MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR', 'voice', 9094),
+            ('gateway', 'GATEWAY_MATCH_SQUAD_MEMBER_GRPC_ADDR', 'voice', 9095)):
             self.assertEqual(envs[client][key]['value'], 'voice-' + server + ':' + str(port))
             service = next(r for r in rows if r['kind'] == 'Service' and r['metadata']['name'] == 'voice-' + server)
             self.assertIn(port, {p['port'] for p in service['spec']['ports']})
         self.assertEqual(envs['space']['SPACE_VOICE_S2S_TOKEN']['valueFrom'], envs['voice']['SPACE_VOICE_S2S_TOKEN']['valueFrom'])
-        for service, issuers in (('auth', {'gateway', 'space', 'voice'}), ('role', {'space', 'gameintegration', 'voice'}), ('voice', {'gateway'})):
+        for service, issuers in (('auth', {'gateway', 'space', 'voice'}), ('role', {'space', 'gameintegration', 'voice'}),
+                                 ('voice', {'gateway'}), ('matchmaking', {'gateway', 'space'})):
             urls = json.loads(envs[service]['S2S_JWKS_URLS_JSON']['value'])
             self.assertEqual(set(urls), issuers)
             if 'voice' in urls:
                 self.assertEqual(urls['voice'], 'https://voice-voice:8443/internal/v1/principal/jwks.json')
         # Public roots belong to issuer fetch trust, never the inbound mTLS CA.
         self.assertNotEqual(envs['voice']['S2S_JWKS_CA_FILE']['value'], envs['voice']['VOICE_USER_PRINCIPAL_CLIENT_CA_FILE']['value'])
+        for service in ('chat', 'voice'):
+            prefix = service.upper() + '_MATCH_SQUAD_PRINCIPAL_'
+            self.assertEqual(envs[service][prefix + 'JWKS_URL']['value'],
+                             'https://voice-matchmaking.voice-staging.svc:8443/internal/v1/principal/jwks.json')
+            self.assertNotEqual(envs[service][prefix + 'JWKS_CA_FILE']['value'],
+                                envs[service][prefix + 'CLIENT_CA_FILE']['value'])
 
 
 if __name__ == '__main__':

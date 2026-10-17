@@ -323,6 +323,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/compose-fcm-diagnostic-lib-test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
 	python3 "$(ROOT)/scripts/ci/space_media_admission_diagnostics_test.py"
+	python3 "$(ROOT)/scripts/ci/auth_session_floor_diagnostics_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-live_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-nats-jetstream-check_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-rollout-contract-test.sh"

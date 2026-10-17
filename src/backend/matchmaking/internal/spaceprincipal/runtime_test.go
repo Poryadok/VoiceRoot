@@ -2,13 +2,18 @@ package spaceprincipal
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -72,6 +77,98 @@ func TestConfigRequiresCompleteTLSReplayAndSpaceJWKS(t *testing.T) {
 				t.Fatal("invalid config accepted")
 			}
 		})
+	}
+}
+
+func TestConfigAllowsGatewayOnlyTrustForTheCompleteMatchMethod(t *testing.T) {
+	cfg := Config{
+		ListenAddr: ":9092", TLSCertFile: "server.crt", TLSKeyFile: "server.key", ClientCAFile: "client-ca.crt",
+		GatewayJWKSURL: "https://gateway/.well-known/voice-principal-jwks.json", ReplayAddr: "redis:6379",
+		RefreshAfter: timeSecond, HardExpiry: 2 * timeSecond, UnknownKIDCooldown: timeSecond,
+	}
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("valid Gateway-only CompleteMatch trust rejected: %v", err)
+	}
+}
+
+func TestInitialJWKSRefreshWaitsForSpaceAndStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var attempts atomic.Int32
+	firstAttempt := make(chan time.Time, 1)
+	secondAttempt := make(chan time.Time, 1)
+	done := make(chan error, 1)
+	started := time.Now()
+	go func() {
+		done <- refreshInitialJWKS(ctx, "space", func(attempt context.Context, issuer string) error {
+			if issuer != "space" {
+				return errors.New("unexpected issuer")
+			}
+			if _, ok := attempt.Deadline(); !ok {
+				return errors.New("JWKS attempt has no deadline")
+			}
+			switch attempts.Add(1) {
+			case 1:
+				firstAttempt <- time.Now()
+				return &jwksSourceUnavailableError{cause: errors.New("Space DNS not ready")}
+			default:
+				secondAttempt <- time.Now()
+				return nil
+			}
+		})
+	}()
+	first := <-firstAttempt
+	second := <-secondAttempt
+	if second.Sub(first) < 200*time.Millisecond {
+		t.Fatalf("initial JWKS retry was not backoff-bounded: delay %v", second.Sub(first))
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("initial JWKS refresh after Space became available: %v", err)
+	}
+	if attempts.Load() != 2 || time.Since(started) > 3*time.Second {
+		t.Fatalf("initial JWKS attempts=%d elapsed=%v", attempts.Load(), time.Since(started))
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+	entered := make(chan struct{})
+	result := make(chan error, 1)
+	go func() {
+		result <- refreshInitialJWKS(ctx, "space", func(context.Context, string) error {
+			close(entered)
+			return &jwksSourceUnavailableError{cause: errors.New("Space DNS not ready")}
+		})
+	}()
+	<-entered
+	stop()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled initial JWKS refresh error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("initial JWKS refresh did not stop promptly on cancellation")
+	}
+}
+
+func TestInitialJWKSFetchRetriesOnlyAvailabilityErrors(t *testing.T) {
+	for name, err := range map[string]error{
+		"DNS":          &net.DNSError{Err: "no such host", Name: "space"},
+		"connection":   syscall.ECONNREFUSED,
+		"timeout":      context.DeadlineExceeded,
+		"unknown CA":   x509.UnknownAuthorityError{},
+		"invalid JWKS": errors.New("invalid Space principal JWKS response"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := retryableJWKSFetchError(err); got != (name == "DNS" || name == "connection" || name == "timeout") {
+				t.Fatalf("retryableJWKSFetchError(%v) = %v", err, got)
+			}
+		})
+	}
+	if _, ok := classifyJWKSBodyReadError(syscall.ECONNRESET).(*jwksSourceUnavailableError); !ok {
+		t.Fatal("transient JWKS body reset must retry the initial fetch")
+	}
+	if _, ok := classifyJWKSBodyReadError(errors.New("malformed body")).(*jwksSourceUnavailableError); ok {
+		t.Fatal("malformed JWKS body must remain a fatal response error")
 	}
 }
 
@@ -144,6 +241,53 @@ func TestLifecycleInterceptorsIsolateProtectedRPCsAndBindRequest(t *testing.T) {
 	}
 }
 
+func TestCompleteMatchInterceptorRequiresBoundDelegatedUserAndRejectsRawIdentity(t *testing.T) {
+	const method = matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName
+	operationID := "10000000-0000-4000-8000-000000000001"
+	request := &matchmakingv1.CompleteMatchRequest{MatchId: "10000000-0000-4000-8000-000000000002", OperationId: operationID}
+	hash, err := principal.RequestHash(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := principal.Principal{
+		Kind: "delegated_user", Issuer: "gateway", Subject: "10000000-0000-4000-8000-000000000004", Audience: "matchmaking",
+		RPC: method, RequestID: operationID, RequestHash: hash,
+		AccountID: "10000000-0000-4000-8000-000000000004", ProfileID: "10000000-0000-4000-8000-000000000003", SessionEpoch: 4,
+	}
+	verifier := &recordingUserVerifier{recordingVerifier: &recordingVerifier{principal: actor}}
+	strict := StrictUnaryInterceptor(verifier)
+	ordinary := OrdinaryUnaryInterceptor()
+	called := false
+	handler := func(ctx context.Context, req any) (any, error) {
+		called = true
+		verified, ok := principal.FromContext(ctx)
+		if !ok || verified.ProfileID != actor.ProfileID {
+			t.Fatal("handler did not receive the verified actor")
+		}
+		return "ok", nil
+	}
+	if _, err := ordinary(context.Background(), request, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unavailable || called {
+		t.Fatalf("ordinary listener accepted CompleteMatch: err=%v called=%v", err, called)
+	}
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed", "x-request-id", operationID))
+	response, err := strict(ctx, request, &grpc.UnaryServerInfo{FullMethod: method}, handler)
+	if err != nil || response != "ok" || !called {
+		t.Fatalf("valid CompleteMatch principal: response=%v err=%v called=%v", response, err, called)
+	}
+	if verifier.method != method || verifier.requestID != operationID || verifier.requestHash != hash {
+		t.Fatalf("CompleteMatch verification binding = %q %q %q", verifier.method, verifier.requestID, verifier.requestHash)
+	}
+	called = false
+	foreignIdentity := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed", "x-request-id", operationID, "x-profile-id", actor.ProfileID))
+	if _, err := strict(foreignIdentity, request, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unauthenticated || called {
+		t.Fatalf("raw identity metadata was accepted: err=%v called=%v", err, called)
+	}
+	called = false
+	if _, err := strict(ctx, &matchmakingv1.CompleteMatchRequest{MatchId: request.MatchId, OperationId: "10000000-0000-4000-8000-000000000005"}, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unauthenticated || called {
+		t.Fatalf("request ID detached from operation ID: err=%v called=%v", err, called)
+	}
+}
+
 func TestStrictInterceptorRejectsMalformedAndUntrustedPrincipalsBeforeHandler(t *testing.T) {
 	const method = matchmakingv1.MatchmakingService_PurgeSpace_FullMethodName
 	verifier := &recordingVerifier{err: errors.New("bad signature")}
@@ -182,6 +326,13 @@ type recordingVerifier struct {
 }
 
 func (v *recordingVerifier) Verify(_ context.Context, _, method, requestID, requestHash string) (principal.Principal, error) {
+	v.method, v.requestID, v.requestHash = method, requestID, requestHash
+	return v.principal, v.err
+}
+
+type recordingUserVerifier struct{ *recordingVerifier }
+
+func (v *recordingUserVerifier) VerifyCompleteMatch(_ context.Context, _, method, requestID, requestHash string) (principal.Principal, error) {
 	v.method, v.requestID, v.requestHash = method, requestID, requestHash
 	return v.principal, v.err
 }

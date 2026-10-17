@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 
 import 'support/live_gateway_harness.dart';
 
@@ -113,9 +114,72 @@ Future<void> _complete(
 ) async {
   final resp = await client.post(
     Uri.parse('$base/api/v1/matchmaking/matches/$matchId/complete'),
-    headers: {'Authorization': 'Bearer $token'},
+    headers: {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({'operationId': const Uuid().v4()}),
   );
-  expect(resp.statusCode, 200);
+  expect(resp.statusCode, 200, reason: _completeFailureReason(resp));
+}
+
+String _completeFailureReason(http.Response response) {
+  const errorCodes = {
+    'unavailable',
+    'unauthenticated',
+    'permission_denied',
+    'internal',
+    'failed_precondition',
+    'invalid_argument',
+    'not_found',
+  };
+  const grpcCodes = {
+    'Unavailable',
+    'Unauthenticated',
+    'PermissionDenied',
+    'Internal',
+    'FailedPrecondition',
+    'InvalidArgument',
+    'NotFound',
+  };
+  const safeMessages = {
+    'CompleteMatch protected transport unavailable':
+        'protected_transport_unavailable',
+    'CompleteMatch credential unavailable': 'delegated_credential_unavailable',
+    'delegated-user principal verifier unavailable': 'delegated_verifier_unavailable',
+    'principal verifier unavailable': 'principal_verifier_unavailable',
+    'match unavailable': 'match_store_unavailable',
+    'invalid CompleteMatch operation binding': 'operation_binding_invalid',
+    'invalid principal': 'principal_invalid',
+  };
+
+  var errorCode = 'other';
+  var messageCategory = 'other';
+  if (response.body.length <= 1024) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final candidateCode = decoded['error_code'];
+        if (candidateCode is String && errorCodes.contains(candidateCode)) {
+          errorCode = candidateCode;
+        }
+        final candidateMessage = decoded['message'];
+        if (candidateMessage is String) {
+          messageCategory = safeMessages[candidateMessage] ?? 'other';
+        }
+      }
+    } on FormatException {
+      // Keep diagnostics finite when a gateway or proxy returns non-JSON text.
+    }
+  }
+
+  final candidateGrpcCode = response.headers['x-voice-grpc-code'];
+  final grpcCode =
+      candidateGrpcCode != null && grpcCodes.contains(candidateGrpcCode)
+      ? candidateGrpcCode
+      : 'other';
+  return 'CompleteMatch returned HTTP ${response.statusCode} '
+      '(error_code=$errorCode, grpc_code=$grpcCode, cause=$messageCategory)';
 }
 
 Future<void> _rate(

@@ -42,8 +42,8 @@ func TestGRPCReadinessWaitsUseIndependentTimeoutContexts(t *testing.T) {
 		uses[definition.position]++
 		return true
 	})
-	if readinessWaits != 5 {
-		t.Errorf("expected readiness waits for Chat, Voice, User, Social, and Space; got %d", readinessWaits)
+	if readinessWaits != 3 {
+		t.Errorf("expected independent readiness waits for the direct User, Social, and Space clients; Chat and Voice MatchSquad operations remain durable background retries; got %d", readinessWaits)
 	}
 
 	for _, count := range uses {

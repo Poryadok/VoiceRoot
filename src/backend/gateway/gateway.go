@@ -145,6 +145,7 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/api/v1/"):
 		g.handleREST(rec, r)
 	default:
+		traceMatchFoundTransport("gateway-fallback")
 		http.NotFound(rec, r)
 	}
 	g.observeRequestMetrics(r, rec.status, start)

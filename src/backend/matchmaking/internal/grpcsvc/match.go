@@ -12,6 +12,7 @@ import (
 
 	"voice/backend/matchmaking/internal/authctx"
 	"voice/backend/matchmaking/internal/criteria"
+	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
@@ -20,6 +21,12 @@ import (
 // SquadProvisioner creates voice+chat resources for an active match squad.
 type SquadProvisioner interface {
 	Provision(ctx context.Context, matchID uuid.UUID, profileIDs []uuid.UUID) (voiceRoomID, chatID string, err error)
+}
+
+// ActivatedSquadProvisioner owns the durable receipt-gated activation
+// transaction, so the request handler must not activate the same match again.
+type ActivatedSquadProvisioner interface {
+	ProvisionAndActivate(ctx context.Context, matchID uuid.UUID, profileIDs []uuid.UUID) (store.Match, error)
 }
 
 // SquadCleanup releases temporary squad resources after a match's durable
@@ -35,7 +42,7 @@ func (s *MatchmakingGRPC) GetMatch(ctx context.Context, req *matchmakingv1.GetMa
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	if s.Matches == nil {
+	if s.Matches == nil || s.Sessions == nil {
 		return nil, status.Error(codes.Unavailable, "match unavailable")
 	}
 	matchID, err := uuid.Parse(strings.TrimSpace(req.GetMatchId()))
@@ -52,7 +59,36 @@ func (s *MatchmakingGRPC) GetMatch(ctx context.Context, req *matchmakingv1.GetMa
 	if !matchHasProfile(match, profileID) {
 		return nil, status.Error(codes.PermissionDenied, "not a match participant")
 	}
-	return &matchmakingv1.GetMatchResponse{Match: toProtoMatch(match)}, nil
+	_, _, err = s.Matches.ExpirePendingMatchAtDeadline(ctx, matchID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "expire match deadline: %v", err)
+	}
+	match, err = s.Matches.Get(ctx, matchID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "reload match: %v", err)
+	}
+	proposal, err := s.Matches.GetProposalForProfile(ctx, matchID, profileID)
+	if errors.Is(err, store.ErrProposalNotFound) {
+		return nil, status.Error(codes.PermissionDenied, "not a match participant")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get match response: %v", err)
+	}
+	session, err := s.Sessions.Get(ctx, proposal.SearchSessionID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get caller search session: %v", err)
+	}
+	serverNow, err := s.Matches.DatabaseNow(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "read database clock: %v", err)
+	}
+	return &matchmakingv1.GetMatchResponse{
+		Match:                toProtoMatch(match),
+		AcceptanceDeadlineAt: timestamppb.New(match.CreatedAt.Add(store.MatchAcceptWindow)),
+		ServerNow:            timestamppb.New(serverNow),
+		OwnProposalResponse:  proposal.Response,
+		OwnSearchSession:     toProtoSession(session),
+	}, nil
 }
 
 func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1.RespondToMatchRequest) (*matchmakingv1.RespondToMatchResponse, error) {
@@ -102,36 +138,61 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 	}
 
 	if !req.GetAccept() {
-		return s.handleMatchDecline(ctx, match, proposal)
-	}
-
-	if _, err := s.Matches.SetProposalResponse(ctx, matchID, profileID, store.ProposalResponseAccepted); err != nil {
+		decision, err := s.Matches.RecordDecline(ctx, matchID, profileID)
 		if errors.Is(err, store.ErrProposalNotFound) {
-			// The request can be replayed after a lost response.  It is a
-			// successful retry only when this participant already accepted; a
-			// decline or another terminal state must remain a failed precondition.
-			existing, getErr := s.Matches.GetProposalForProfile(ctx, matchID, profileID)
-			if getErr == nil && existing.Response == store.ProposalResponseAccepted {
-				latestMatch, matchErr := s.Matches.Get(ctx, matchID)
-				latestSession, sessionErr := s.Sessions.Get(ctx, existing.SearchSessionID)
-				if matchErr == nil && sessionErr == nil {
-					return &matchmakingv1.RespondToMatchResponse{
-						Match:         toProtoMatch(latestMatch),
-						SearchSession: toProtoSession(latestSession),
-					}, nil
-				}
-			}
-			return nil, status.Error(codes.FailedPrecondition, "already responded")
+			return nil, status.Error(codes.PermissionDenied, "not a match participant")
 		}
-		return nil, status.Errorf(codes.Internal, "accept match: %v", err)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "record match decline: %v", err)
+		}
+		if decision.Expired {
+			if err := s.projectDeadlineRecovery(ctx, decision.ChangedSessions); err != nil {
+				return nil, err
+			}
+		}
+		sess, err := s.Sessions.Get(ctx, decision.Proposal.SearchSessionID)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "get declined session: %v", err)
+		}
+		return &matchmakingv1.RespondToMatchResponse{
+			Match:         toProtoMatch(decision.Match),
+			SearchSession: toProtoSession(sess),
+		}, nil
 	}
 
-	allAccepted, err := s.Matches.AllProposalsAccepted(ctx, matchID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "check proposals: %v", err)
+	decision, err := s.Matches.RecordAcceptance(ctx, matchID, profileID)
+	if errors.Is(err, store.ErrProposalNotFound) {
+		return nil, status.Error(codes.PermissionDenied, "not a match participant")
 	}
-	if !allAccepted {
-		match, _ = s.Matches.Get(ctx, matchID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "record match acceptance: %v", err)
+	}
+	match, proposal = decision.Match, decision.Proposal
+	if decision.Expired {
+		if err := s.projectDeadlineRecovery(ctx, decision.ChangedSessions); err != nil {
+			return nil, err
+		}
+		if decision.Replayed {
+			sess, sessionErr := s.Sessions.Get(ctx, proposal.SearchSessionID)
+			if sessionErr == nil {
+				return &matchmakingv1.RespondToMatchResponse{Match: toProtoMatch(match), SearchSession: toProtoSession(sess)}, nil
+			}
+		}
+		return nil, status.Error(codes.FailedPrecondition, "match acceptance deadline passed")
+	}
+	if proposal.Response != store.ProposalResponseAccepted {
+		return nil, status.Error(codes.FailedPrecondition, "already responded")
+	}
+	if match.Status != store.MatchStatusPendingAccept {
+		if decision.Replayed && (match.Status == store.MatchStatusActive || match.Status == store.MatchStatusAbandoned) {
+			sess, sessionErr := s.Sessions.Get(ctx, proposal.SearchSessionID)
+			if sessionErr == nil {
+				return &matchmakingv1.RespondToMatchResponse{Match: toProtoMatch(match), SearchSession: toProtoSession(sess)}, nil
+			}
+		}
+		return nil, status.Error(codes.FailedPrecondition, "match not awaiting response")
+	}
+	if !decision.AllAccepted {
 		sess, _ := s.Sessions.Get(ctx, proposal.SearchSessionID)
 		return &matchmakingv1.RespondToMatchResponse{
 			Match:         toProtoMatch(match),
@@ -140,6 +201,23 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 	}
 
 	profileIDs := match.ProfileIDs()
+	if s.Squad == nil {
+		return nil, status.Error(codes.Unavailable, "MatchSquad provisioning is not configured")
+	}
+	if provisioner, ok := s.Squad.(ActivatedSquadProvisioner); ok {
+		match, err = provisioner.ProvisionAndActivate(ctx, matchID, profileIDs)
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "squad provisioning unavailable: %v", err)
+		}
+		sess, err := s.Sessions.Get(ctx, proposal.SearchSessionID)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "get session: %v", err)
+		}
+		return &matchmakingv1.RespondToMatchResponse{
+			Match:         toProtoMatch(match),
+			SearchSession: toProtoSession(sess),
+		}, nil
+	}
 	var voiceRoomID, chatID string
 	if s.Squad != nil {
 		voiceRoomID, chatID, err = s.Squad.Provision(ctx, matchID, profileIDs)
@@ -161,69 +239,32 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 	}, nil
 }
 
-func (s *MatchmakingGRPC) handleMatchDecline(ctx context.Context, match store.Match, proposal store.MatchProposal) (*matchmakingv1.RespondToMatchResponse, error) {
-	if _, err := s.Matches.SetProposalResponse(ctx, match.ID, proposal.ProfileID, store.ProposalResponseDeclined); err != nil {
-		return nil, status.Errorf(codes.Internal, "decline match: %v", err)
+func (s *MatchmakingGRPC) projectDeadlineRecovery(ctx context.Context, _ []store.SearchSession) error {
+	if s.Queue == nil {
+		return nil
 	}
-	_ = s.Matches.AbandonMatch(ctx, match.ID)
-
-	proposals, err := s.Matches.ListProposals(ctx, match.ID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list proposals: %v", err)
-	}
-
-	// Spec (matchmaking.md §флоу): declining party search is cleared; other parties continue.
-	var ownSession store.SearchSession
-	for _, p := range proposals {
-		if sameDeclineParty(proposal, p) {
-			sess, err := s.cancelDeclinedPartySession(ctx, p)
-			if err != nil {
-				continue
-			}
-			if p.ProfileID == proposal.ProfileID {
-				ownSession = sess
-			}
-			continue
-		}
-		sess, err := s.Sessions.ResetToSearching(ctx, p.SearchSessionID)
-		if err != nil {
-			continue
-		}
-		if s.Queue != nil {
+	return s.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(projectionCtx context.Context, sess store.SearchSession, action string) error {
+		if action == "enqueue" {
 			crit, err := criteria.Parse(sess.Criteria)
-			if err == nil {
-				_ = s.Queue.EnqueueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.CreatedAt)
+			if err != nil {
+				return status.Errorf(codes.Internal, "recover session criteria: %v", err)
 			}
+			if err := s.Queue.RecoverSearch(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+				Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
+				return status.Errorf(codes.Unavailable, "recover search queue: %v", err)
+			}
+			return nil
 		}
-	}
-	if ownSession.ID == uuid.Nil {
-		ownSession, _ = s.Sessions.Get(ctx, proposal.SearchSessionID)
-	}
-	match, _ = s.Matches.Get(ctx, match.ID)
-	return &matchmakingv1.RespondToMatchResponse{
-		Match:         toProtoMatch(match),
-		SearchSession: toProtoSession(ownSession),
-	}, nil
-}
-
-// sameDeclineParty reports whether other belongs to the decliner's party.
-// Solo proposals (nil party_id) are their own party keyed by profile.
-func sameDeclineParty(decliner, other store.MatchProposal) bool {
-	if decliner.PartyID != nil && other.PartyID != nil {
-		return *decliner.PartyID == *other.PartyID
-	}
-	return other.ProfileID == decliner.ProfileID
-}
-
-func (s *MatchmakingGRPC) cancelDeclinedPartySession(ctx context.Context, p store.MatchProposal) (store.SearchSession, error) {
-	sess, err := s.Sessions.ExpirePendingAccept(ctx, p.SearchSessionID)
-	if err != nil {
-		return store.SearchSession{}, err
-	}
-	if s.Queue != nil {
-		_ = s.Queue.ReleaseLock(ctx, p.ProfileID, p.SearchSessionID)
-	}
-	return sess, nil
+		crit, err := criteria.Parse(sess.Criteria)
+		if err != nil {
+			return status.Errorf(codes.Internal, "recover session criteria: %v", err)
+		}
+		if err := s.Queue.RecoverRelease(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+			Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
+			return status.Errorf(codes.Unavailable, "release declined party search lock: %v", err)
+		}
+		return nil
+	})
 }
 
 func matchHasProfile(match store.Match, profileID uuid.UUID) bool {

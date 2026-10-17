@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/voice_client.dart';
+import '../../backend/livekit_room.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -39,39 +42,69 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
     final authHeader = ref.read(authorizationHeaderProvider);
     final selfId = ref.read(authControllerProvider).activeProfileId;
     if (session == null || authHeader == null || authHeader.isEmpty) return;
+    final room = ref.read(callControllerProvider.notifier).liveKitRoom;
 
     setState(() => _loading = true);
-    final result = await ref.read(voiceCallsClientProvider).getCallVoiceStates(
-          authorization: authHeader,
-          roomId: session.roomId,
-        );
-    if (!mounted) return;
+    final result = await ref
+        .read(voiceCallsClientProvider)
+        .getCallVoiceStates(authorization: authHeader, roomId: session.roomId);
+    if (!mounted || !_isCurrentBinding(session, authHeader, selfId, room)) {
+      return;
+    }
     setState(() {
       _loading = false;
       if (result is VoiceApiOk<List<VoiceRoomParticipantState>>) {
         _participants = result.data;
-        final self = _participants.cast<VoiceRoomParticipantState?>().firstWhere(
-              (p) => p?.profileId == selfId,
-              orElse: () => null,
-            );
+        final self = _participants
+            .cast<VoiceRoomParticipantState?>()
+            .firstWhere((p) => p?.profileId == selfId, orElse: () => null);
         _handRaised = self?.handRaised ?? false;
         _isCommander = self?.isCommander ?? false;
         _isBroadcasting = self?.isBroadcasting ?? false;
       }
     });
-    await _applyDucking();
+    if (_isCurrentBinding(session, authHeader, selfId, room)) {
+      await _applyDucking(session: session, room: room);
+    }
   }
 
-  Future<void> _applyDucking() async {
-    final room = ref.read(callControllerProvider.notifier).liveKitRoom;
+  bool _isCurrentBinding(
+    VoiceCallSession session,
+    String authorization,
+    String? profileId,
+    VoiceLiveKitRoom? room,
+  ) {
+    final current = ref.read(callControllerProvider).session;
+    return mounted &&
+        identical(
+          ref.read(callControllerProvider.notifier).liveKitRoom,
+          room,
+        ) &&
+        ref.read(authorizationHeaderProvider) == authorization &&
+        ref.read(authControllerProvider).activeProfileId == profileId &&
+        current?.roomId == session.roomId &&
+        current?.matchId == session.matchId &&
+        current?.mediaEpoch == session.mediaEpoch;
+  }
+
+  Future<void> _applyDucking({
+    required VoiceCallSession? session,
+    required VoiceLiveKitRoom? room,
+  }) async {
     if (room == null) return;
-    final broadcaster = _participants.cast<VoiceRoomParticipantState?>().firstWhere(
-          (p) => p?.isBroadcasting == true,
-          orElse: () => null,
-        );
+    final broadcaster = _participants
+        .cast<VoiceRoomParticipantState?>()
+        .firstWhere((p) => p?.isBroadcasting == true, orElse: () => null);
+    final isMatchSquad =
+        session?.matchId != null && session?.mediaEpoch != null;
+    final identity = isMatchSquad && broadcaster != null
+        ? room is MatchSquadVoiceLiveKitRoom
+              ? room.resolveRemoteParticipantIdentity(broadcaster.profileId)
+              : null
+        : broadcaster?.profileId;
     await room.setCommanderDucking(
-      enabled: broadcaster != null,
-      commanderIdentity: broadcaster?.profileId,
+      enabled: broadcaster != null && (!isMatchSquad || identity != null),
+      commanderIdentity: identity,
       duckedVolume: 0.2,
     );
   }
@@ -89,6 +122,14 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(
+      callControllerProvider.select((call) => call.mediaTracksVersion),
+      (_, _) {
+        final session = ref.read(callControllerProvider).session;
+        final room = ref.read(callControllerProvider.notifier).liveKitRoom;
+        unawaited(_applyDucking(session: session, room: room));
+      },
+    );
     final call = ref.watch(callControllerProvider);
     if (!call.isActive || call.session == null) {
       return const SizedBox.shrink();
@@ -117,14 +158,8 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   onSelected: (_) => _run((auth, roomId) {
                     final client = ref.read(voiceCallsClientProvider);
                     return _handRaised
-                        ? client.lowerHand(
-                            authorization: auth,
-                            roomId: roomId,
-                          )
-                        : client.raiseHand(
-                            authorization: auth,
-                            roomId: roomId,
-                          );
+                        ? client.lowerHand(authorization: auth, roomId: roomId)
+                        : client.raiseHand(authorization: auth, roomId: roomId);
                   }),
                 ),
                 FilterChip(
@@ -132,7 +167,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   label: Text(_isCommander ? 'Commander on' : 'Commander'),
                   selected: _isCommander,
                   onSelected: (v) => _run((auth, roomId) {
-                    return ref.read(voiceCallsClientProvider).setCommanderMode(
+                    return ref
+                        .read(voiceCallsClientProvider)
+                        .setCommanderMode(
                           authorization: auth,
                           roomId: roomId,
                           enabled: v,
@@ -147,7 +184,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                     ),
                     selected: _isBroadcasting,
                     onSelected: (v) => _run((auth, roomId) {
-                      return ref.read(voiceCallsClientProvider).setBroadcasting(
+                      return ref
+                          .read(voiceCallsClientProvider)
+                          .setBroadcasting(
                             authorization: auth,
                             roomId: roomId,
                             enabled: v,
@@ -181,7 +220,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   trailing: TextButton(
                     key: Key('voice_organizer_grant_${p.profileId}'),
                     onPressed: () => _run((auth, roomId) {
-                      return ref.read(voiceCallsClientProvider).grantFloor(
+                      return ref
+                          .read(voiceCallsClientProvider)
+                          .grantFloor(
                             authorization: auth,
                             roomId: roomId,
                             profileId: p.profileId,
@@ -193,10 +234,7 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
             ],
             if (withFloor.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(
-                'Has floor',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
+              Text('Has floor', style: Theme.of(context).textTheme.labelLarge),
               for (final p in withFloor)
                 ListTile(
                   dense: true,
@@ -205,7 +243,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   trailing: TextButton(
                     key: Key('voice_organizer_revoke_${p.profileId}'),
                     onPressed: () => _run((auth, roomId) {
-                      return ref.read(voiceCallsClientProvider).revokeFloor(
+                      return ref
+                          .read(voiceCallsClientProvider)
+                          .revokeFloor(
                             authorization: auth,
                             roomId: roomId,
                             profileId: p.profileId,

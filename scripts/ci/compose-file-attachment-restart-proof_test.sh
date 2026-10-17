@@ -90,9 +90,14 @@ EOF
   cat >"$bin/python3" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$1" == */scripts/dev/generate-phase0-fixture.py ]] || exit 99
-mkdir -p "$2"
-printf 'fixture=%s\n' "$2" >>"${FAKE_LOG:?}"
+if [[ "$1" == */scripts/dev/generate-phase0-fixture.py ]]; then
+  mkdir -p "$2"
+  printf 'fixture=%s\n' "$2" >>"${FAKE_LOG:?}"
+elif [[ "$1" == */scripts/dev/restore-phase0-fixture-owner.py ]]; then
+  printf 'restore=%s\n' "$2" >>"${FAKE_LOG:?}"
+else
+  exit 99
+fi
 EOF
   chmod +x "$bin/python3"
 }
@@ -194,6 +199,7 @@ echo '== fixture lifetime follows successful teardown =='
 case_dir="$(new_case cleanup-success)"
 FAKE_UP_RC=37 VOICE_FILE_ATTACHMENT_RESTART_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 37
+grep -Fq 'restore=' "$case_dir/commands.log" || fail 'fixture ownership must be restored before cleanup'
 [[ -z "$(find "$case_dir/tmp" -type d -name phase0-fixture -print -quit)" ]] || fail 'remove fixture after teardown'
 case_dir="$(new_case cleanup-failure)"
 FAKE_UP_RC=37 FAKE_DOWN_RC=73 VOICE_FILE_ATTACHMENT_RESTART_CLEANUP=true run_runner "$case_dir"

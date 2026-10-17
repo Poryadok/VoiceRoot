@@ -69,6 +69,8 @@ jobs:
 
       - name: Generate isolated Phase0 and HTTPS certificates
         shell: bash
+        env:
+          PHASE0_MATCHSQUAD_FIXTURE_UID: "65532"
         run: |
           set -euo pipefail
           mkdir -p tmp/phase0-t31-ci-fixture tmp/t31-session-event-e2e/tls tmp/t31-session-event-e2e/state
@@ -128,6 +130,7 @@ jobs:
               --output tmp/t31-session-event-e2e/startup-diagnostics.json \
               --startup-status "$startup_status" \
               --service voice \
+              --include-matchmaking-startup \
               --compose "${compose[@]}" || true
             exit "$startup_status"
           fi
@@ -288,4 +291,8 @@ jobs:
             -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" down --volumes --remove-orphans || true
+          if [[ -d tmp/phase0-t31-ci-fixture/credentials ]]; then
+            PHASE0_FIXTURE_DIR="$GITHUB_WORKSPACE/tmp/phase0-t31-ci-fixture/credentials" \
+              python3 scripts/dev/restore-phase0-fixture-owner.py tmp/phase0-t31-ci-fixture/credentials
+          fi
           rm -rf tmp/phase0-t31-ci-fixture tmp/t31-session-event-e2e
