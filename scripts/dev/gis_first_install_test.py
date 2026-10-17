@@ -1182,6 +1182,120 @@ class PartialV5DeploymentAdoptionTests(unittest.TestCase):
                         binding, {}, {"namespace_uid": "ns"}, authorization, "f" * 64,
                         "0" * 64, "0" * 64, object(), Path("."))
 
+    def _recover(self, v5, v4, binding, checkpoint, authorization, v4_sha):
+        saved = []
+        def save(plan):
+            saved.append(copy.deepcopy(plan))
+            v5["state"]["plan"] = copy.deepcopy(plan)
+            v5["state"]["plan_phase"] = plan.get("phase")
+        with (patch.object(gis, "_partial_live_c10_checkpoint", return_value=checkpoint),
+              patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]),
+              patch.object(gis, "_partial_state_compatible", return_value=True)):
+            changed = gis._partial_v5_recover_unpatched_start(v5, "3" * 64,
+                v4, v4_sha, binding, {}, {"namespace_uid": "ns"}, authorization,
+                "f" * 64, "0" * 64, "0" * 64, object(), Path("."), save)
+        return changed, saved
+
+    def test_starting_intent_with_exact_paused_deployment_recovers_to_created_once(self):
+        v5, v4, binding, checkpoint, authorization, v4_sha, _ = self.fixture()
+        v5["state"]["plan"]["phase"] = "STARTING"
+        v5["state"]["plan_phase"] = "STARTING"
+        changed, saved = self._recover(v5, v4, binding, checkpoint, authorization, v4_sha)
+        self.assertTrue(changed)
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0]["phase"], "CREATED")
+        self.assertEqual(v5["state"]["plan_phase"], "CREATED")
+
+    def test_starting_intent_with_exactly_started_deployment_is_left_for_reconciliation(self):
+        v5, v4, binding, checkpoint, authorization, v4_sha, _ = self.fixture()
+        v5["state"]["plan"]["phase"] = "STARTING"
+        v5["state"]["plan_phase"] = "STARTING"
+        started = copy.deepcopy(checkpoint)
+        started["deployment"]["replicas"] = 1
+        changed, saved = self._recover(v5, v4, binding, started, authorization, v4_sha)
+        self.assertFalse(changed)
+        self.assertEqual(saved, [])
+        self.assertEqual(v5["state"]["plan"]["phase"], "STARTING")
+
+    def test_starting_paused_deployment_drift_blocks_recovery(self):
+        cases = (("deployment", "resourceVersion", "3383483"),
+            ("deployment", "generation", 2), ("deployment", "raw_spec_sha256", "6" * 64),
+            ("deployment", "metadata_sha256", "7" * 64),
+            ("deployment", "uid", "40000000-0000-4000-8000-000000000004"),
+            ("deployment", "operation", "a" * 12),
+            ("deployment", "image_ref", "other@sha256:" + "8" * 64),
+            ("deployment", "semantic_sha256", "9" * 64),
+            ("checkpoint", "namespace_uid", "foreign-namespace"),
+            ("checkpoint", "operation", "a" * 12),
+            ("checkpoint", "deployment_pods", [{"uid": "foreign-pod"}]))
+        for section, key, value in cases:
+            with self.subTest(section=section, key=key):
+                v5, v4, binding, checkpoint, authorization, v4_sha, _ = self.fixture()
+                v5["state"]["plan"]["phase"] = "STARTING"
+                v5["state"]["plan_phase"] = "STARTING"
+                drifted = copy.deepcopy(checkpoint)
+                target = drifted["deployment"] if section == "deployment" else drifted
+                target[key] = value
+                with self.assertRaises(gis.Blocked):
+                    self._recover(v5, v4, binding, drifted, authorization, v4_sha)
+
+
+class PausedDeploymentStartRetryTests(unittest.TestCase):
+    def test_ambiguous_start_response_reconciles_exact_uid_without_second_patch(self):
+        service = {"apiVersion": "v1", "kind": "Service",
+            "metadata": {"name": "voice-gameintegration", "namespace": "voice-dev",
+                "labels": {"app": "voice-gameintegration"}},
+            "spec": {"selector": {"app": "voice-gameintegration"},
+                "ports": [{"name": "http", "port": 8080, "targetPort": "http"}]}}
+        deployment = {"apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": {"name": "voice-gameintegration", "namespace": "voice-dev",
+                "labels": {"app": "voice-gameintegration"}},
+            "spec": {"replicas": 1, "selector": {"matchLabels": {"app": "voice-gameintegration"}},
+                "template": {"metadata": {"labels": {"app": "voice-gameintegration"}},
+                    "spec": {"containers": [{"name": "gameintegration",
+                        "image": "image@sha256:" + "d" * 64}]}}}}
+        plan = gis_first_install.build_plan(service=service, deployment=deployment,
+            operation="737e63e3aaee", namespace="voice-dev")
+        live = {}
+        for index, identity in enumerate(gis_first_install.IDENTITIES, start=1):
+            intended = next(obj for obj in plan["objects"]
+                if gis_first_install._identity(obj) == identity)
+            row = copy.deepcopy(intended)
+            row["metadata"].update(uid=f"10000000-0000-4000-8000-{index:012d}",
+                resourceVersion="1")
+            live[identity] = row
+            plan["created"][f"{identity[0]}/{identity[1]}"] = {
+                "uid": row["metadata"]["uid"], "resourceVersion": "1",
+                "spec_sha256": gis_first_install.digest(gis_first_install.semantic(row))}
+        plan["phase"] = "CREATED"
+        class Kube:
+            starts = 0
+            def get(self, kind, name):
+                identity = next(row for row in live if row[0].lower() == kind.lower() and row[1] == name)
+                return copy.deepcopy(live[identity])
+            def start(self, current, *, replicas, expected_uid, expected_resource_version):
+                self.starts += 1
+                self.assert_guard = (current["metadata"]["uid"], expected_uid,
+                    current["metadata"]["resourceVersion"], expected_resource_version)
+                live[gis_first_install.DEPLOYMENT]["spec"]["replicas"] = replicas
+                live[gis_first_install.DEPLOYMENT]["metadata"]["resourceVersion"] = "2"
+                raise RuntimeError("response lost after guarded patch")
+        kube = Kube()
+        saved = []
+        with patch.object(gis_first_install, "validate_prerequisite_receipt"):
+            with self.assertRaises(RuntimeError):
+                gis_first_install.start_owned(kube, plan, lambda row: saved.append(copy.deepcopy(row)))
+            self.assertEqual(plan["phase"], "STARTING")
+            self.assertEqual(live[gis_first_install.DEPLOYMENT]["spec"]["replicas"], 1)
+            receipt = gis_first_install.start_owned(kube, plan,
+                lambda row: saved.append(copy.deepcopy(row)))
+        self.assertEqual(kube.starts, 1)
+        self.assertEqual(kube.assert_guard, (plan["created"]["Deployment/voice-gameintegration"]["uid"],
+            plan["created"]["Deployment/voice-gameintegration"]["uid"], "1", "1"))
+        self.assertEqual(plan["phase"], "STARTED")
+        self.assertEqual(receipt["objects"]["Deployment/voice-gameintegration"]["uid"],
+            plan["created"]["Deployment/voice-gameintegration"]["uid"])
+
 
 class SourceAuthorityTests(unittest.TestCase):
     def test_build_receipt_binds_clean_source_and_immutable_image(self):

@@ -2417,6 +2417,30 @@ def _partial_v5_admissible(v5, v5_sha256, v4, v4_sha256, binding,
             owner.get("kind") == "ReplicaSet" and owner.get("controller") is True
             for owner in owners) or pod.get("phase") not in ("Pending", "Running")):
             _blocked("gis_dev_partial_v5_deployment_pod_changed")
+    return current
+
+
+def _partial_v5_recover_unpatched_start(v5, v5_sha256, v4, v4_sha256,
+        binding, fingerprints, original_state, deployment_authorization,
+        c14_authorization_raw_sha256, deployment_authorization_raw_sha256,
+        expected_deployment_authorization_sha256, kube, root, save_plan):
+    """Recover only a durable STARTING intent whose exact paused Deployment remains."""
+    current = _partial_v5_admissible(v5, v5_sha256, v4, v4_sha256, binding,
+        fingerprints, original_state, deployment_authorization,
+        c14_authorization_raw_sha256, deployment_authorization_raw_sha256,
+        expected_deployment_authorization_sha256, kube, root)
+    state = v5.get("state", {})
+    plan = state.get("plan", {})
+    if plan.get("phase") != "STARTING":
+        return False
+    # Admissibility binds UID, RV, generation, raw/projected spec, metadata,
+    # image, operation, namespace and an empty pod inventory to the root receipt
+    # when replicas are zero. Only then can an unissued start be retried.
+    if current.get("deployment", {}).get("replicas") != 0:
+        return False
+    plan["phase"] = "CREATED"
+    state["plan_phase"] = "CREATED"
+    save_plan(plan)
     return True
 
 
@@ -2923,6 +2947,16 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
         if resume_partial:
             workload_kube = GisDevWorkloadProjection(kube, plan,
                 continuation["checkpoint"]["service"])
+            if (continuation.get("schema") == "voice-dev-gis-partial-continuation-v5"
+                and plan.get("phase") == "STARTING"):
+                _partial_v5_recover_unpatched_start(continuation,
+                    continuation_sha256, v4, v4_sha, binding, fingerprints,
+                    original_state, deployment_authorization,
+                    service_transition_authorization_sha256,
+                    deployment_authorization_raw_sha256,
+                    deployment_transition_authorization_sha256, kube, root,
+                    save_plan)
+                plan = state["plan"]
         if plan.get("phase") not in ("CREATED", "STARTING", "STARTED"):
             gis.execute(workload_kube, plan, save_plan, start=False)
         if plan.get("phase") != "STARTED":
