@@ -15,18 +15,54 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// The root controller verifies actual Docker ownership/mounts before starting
-// this unprivileged kernel in the broker's network-none namespace. The kernel
-// independently refuses every interface except loopback and every caller URL.
-func isolatedKernel() bool {
-	if runtime.GOOS != "linux" || os.Geteuid() != 65532 {
+// Kubernetes supplies loopback and one pod Ethernet interface. NATS remains
+// loopback-only; admission and default-deny egress policy provide the separate
+// workload/network boundary. Census also runs as the NATS owner so O_NOATIME
+// source access does not require CAP_FOWNER; other phases remain UID 65532.
+func isolatedPodInterfaces(interfaces []net.Interface) bool {
+	if len(interfaces) != 2 {
+		return false
+	}
+	seenLoopback, seenPodEthernet := false, false
+	for _, iface := range interfaces {
+		switch iface.Name {
+		case "lo":
+			if iface.Flags&net.FlagLoopback == 0 || iface.Flags&net.FlagUp == 0 {
+				return false
+			}
+			seenLoopback = true
+		case "eth0":
+			if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+				return false
+			}
+			seenPodEthernet = true
+		default:
+			return false
+		}
+	}
+	return seenLoopback && seenPodEthernet
+}
+
+func knownKernelPhase(phase string) bool {
+	return phase == "seed" || phase == "verify-closed" || phase == "drain" || phase == "verify-drained" || phase == "census"
+}
+
+func kernelUIDAllowed(phase string, uid int) bool {
+	if !knownKernelPhase(phase) {
+		return false
+	}
+	if uid == 65532 {
+		return true
+	}
+	return phase == "census" && uid == 10000
+}
+
+func isolatedKernelForPhase(phase string) bool {
+	if runtime.GOOS != "linux" || !kernelUIDAllowed(phase, os.Geteuid()) {
 		return false
 	}
 	interfaces, e := net.Interfaces()
-	if e != nil || len(interfaces) != 1 {
-		return false
-	}
-	return interfaces[0].Flags&net.FlagLoopback != 0
+	return e == nil && isolatedPodInterfaces(interfaces)
 }
 
 func privateInput(name string) ([]byte, error) {
@@ -102,11 +138,14 @@ func runKernel(args []string) error {
 	flags := flag.NewFlagSet("known-nats-kernel", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	phase := flags.String("phase", "", "fixed owned isolation phase")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || !isolatedKernel() {
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return fixedError("kernel_isolation_invalid")
 	}
-	if *phase != "seed" && *phase != "verify-closed" && *phase != "drain" && *phase != "verify-drained" && *phase != "census" {
+	if !knownKernelPhase(*phase) {
 		return fixedError("phase_invalid")
+	}
+	if !isolatedKernelForPhase(*phase) {
+		return fixedError("kernel_isolation_invalid")
 	}
 	a, e := connectRole("bootstrap")
 	if e != nil {
