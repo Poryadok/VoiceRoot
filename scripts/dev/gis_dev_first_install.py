@@ -337,7 +337,7 @@ def _verify_github_build(source_root, image_ref, builder_run, builder_job, curre
         or "gameintegration" not in context_list
         or 'if grep -qx "$S" scripts/ci/backend-docker-context.txt' not in workflow_source
         or 'echo "context=./src/backend"' not in workflow_source
-        or "- name: Build and push gameintegration image" not in push_job
+        or "- name: Build and push ${{ matrix.service }} image" not in push_job
         or "docker/build-push-action@v6" not in push_job
         or "context: ${{ steps.dockerctx.outputs.context }}" not in push_job
         or "file: ${{ steps.dockerctx.outputs.file }}" not in push_job

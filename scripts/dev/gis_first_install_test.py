@@ -185,7 +185,7 @@ class SourceAuthorityTests(unittest.TestCase):
             'expired': False, 'size_in_bytes': len(artifact_raw)}]}
         workflow_source = ('if grep -qx "$S" scripts/ci/backend-docker-context.txt\n'
             'echo "context=./src/backend"\n  staging-images-push:\n'
-            '- name: Build and push gameintegration image\n'
+            '- name: Build and push ${{ matrix.service }} image\n'
             'docker/build-push-action@v6\ncontext: ${{ steps.dockerctx.outputs.context }}\n'
             'file: ${{ steps.dockerctx.outputs.file }}\npush: true\n'
             '  staging-images-promote:\n')
@@ -233,6 +233,19 @@ class SourceAuthorityTests(unittest.TestCase):
         self.assertEqual(receipt['builder_output_index_sha256'], image_digest)
         self.assertTrue(gis._valid_sha(receipt['builder_provenance_sha256']))
         self.assertIn('docker', calls[-1][0])
+
+        # The producer workflow template is matrix-expanded by GitHub at run
+        # time. Keep both sides bound: the API step must name gameintegration,
+        # and source must contain the reviewed matrix template.
+        self.assertEqual(api_jobs['jobs'][0]['steps'][1]['name'],
+            'Build and push gameintegration image')
+        workflow_source = workflow_source.replace(
+            '- name: Build and push ${{ matrix.service }} image',
+            '- name: Build and push ${{ matrix.other }} image')
+        with self.assertRaises(gis.Blocked) as blocked:
+            gis.source_build_receipt(Path('.'), image,
+                builder_run=11, builder_job=12, runner=runner)
+        self.assertEqual(str(blocked.exception), 'gis_dev_builder_source_context_mismatch')
 
     def test_buildx_record_rejects_wrong_run_revision_context_and_output_digest(self):
         source = 'a' * 40
