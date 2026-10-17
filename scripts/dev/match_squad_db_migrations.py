@@ -354,8 +354,10 @@ def _read_source_identity(root):
 
 
 def _read_ledger(kube, item, postgres_pod):
-    sql = ("SELECT current_database() || '|' || version::text || '|' || "
-           "CASE WHEN dirty THEN 't' ELSE 'f' END "
+    # Avoid embedding SQL string literals inside the shell's single-quoted -c
+    # argument; the read-only ledger probe must remain one intact command.
+    sql = ("SELECT current_database() || chr(124) || version::text || chr(124) || "
+           "CASE WHEN dirty THEN chr(116) ELSE chr(102) END "
            "FROM schema_migrations;")
     shell = "psql -X -qAt -v ON_ERROR_STOP=1 -U \"$POSTGRES_USER\" -d " + item["database"] + " -c '" + sql + "'"
     result = kube.run(["exec", postgres_pod, "-c", "postgres", "--", "/bin/sh", "-ec", shell], timeout=30)

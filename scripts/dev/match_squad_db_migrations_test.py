@@ -120,6 +120,24 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
             runner.parse_ledger("auth", "auth_db|15|f\n")
 
     @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_ledger_read_query_keeps_sql_literals_out_of_shell_quotes(self):
+        class LedgerKube:
+            def __init__(self):
+                self.args = None
+
+            def run(self, args, **kwargs):
+                self.args = args
+                return "matchmaking_db|15|f\n"
+
+        item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
+        kube = LedgerKube()
+        self.assertEqual(runner._read_ledger(kube, item, "voice-postgres-0"), (15, False))
+        shell = kube.args[-1]
+        self.assertIn("chr(124)", shell)
+        self.assertIn("chr(116)", shell)
+        self.assertNotIn("'|'", shell)
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_foreign_create_only_collision_is_never_replaced_or_deleted(self):
         item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
         obj = {
