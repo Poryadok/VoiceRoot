@@ -2503,6 +2503,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get securitySessionsManage => 'Manage sessions';
 
   @override
+  String get securityLinkedDevicesManage => 'Manage linked devices';
+
+  @override
   String get securitySessionsCurrentDevice => 'This device';
 
   @override

@@ -19,6 +19,7 @@ import '../../state/space_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_layout.dart';
 import '../../theme/voice_metrics.dart';
@@ -123,6 +124,7 @@ class ProfileDetailSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
+    final isPremium = ref.watch(profilePremiumBadgeProvider(profileId));
     final mmProfileAsync = ref.watch(playerProfileProvider(profileId));
     final catalogAsync = ref.watch(gameCatalogProvider);
     final firstGameId = mmProfileAsync.valueOrNull?.entries.firstOrNull?.gameId;
@@ -311,8 +313,11 @@ class ProfileDetailSheet extends ConsumerWidget {
                                 children: [
                                   ChatAuthorLabel(
                                     displayName: profile.displayName,
+                                    isPremium: isPremium,
                                     verificationType: profile.verificationType,
                                     style: Theme.of(context).textTheme.titleLarge,
+                                    premiumBadgeSemanticLabel:
+                                        l10n.premiumBadgeLabel,
                                     verifiedBadgeSemanticLabel:
                                         switch (profile.verificationType) {
                                           'personal' => l10n.verifiedBadgePersonal,
