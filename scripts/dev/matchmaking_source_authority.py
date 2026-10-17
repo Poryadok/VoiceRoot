@@ -29,6 +29,7 @@ MAX_BUILDX_ARTIFACT = 32 << 20
 MAX_JOB_LOG = 16 << 20
 SOURCE_SHA = re.compile(r"[a-f0-9]{40}\Z")
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
+GHCR_BLOB_REDIRECT_HOST = "pkg-containers.githubusercontent.com"
 _CURRENT_PHASE = "preflight"
 ACCEPT = ", ".join((
     "application/vnd.oci.image.index.v1+json",
@@ -85,7 +86,51 @@ def _reject():
     raise ReceiptError("matchmaking_source_authority_rejected", phase=_CURRENT_PHASE)
 
 
-def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY):
+def _read_redirected_blob(url, digest, *, limit):
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        valid_location = (isinstance(url, str) and not any(ord(char) < 0x21 or ord(char) == 0x7f for char in url)
+            and DIGEST.fullmatch(digest) is not None
+            and parsed.scheme == "https"
+            and parsed.hostname == GHCR_BLOB_REDIRECT_HOST
+            and parsed.port in (None, 443)
+            and parsed.username is None and parsed.password is None
+            and parsed.path == "/ghcr1/blobs/" + digest
+            and bool(parsed.query) and not parsed.fragment)
+    except ValueError:
+        valid_location = False
+    if not valid_location:
+        raise ReceiptError(phase=_CURRENT_PHASE, code="http_error",
+            failure_class="HTTPError", http_status=307)
+    request = urllib.request.Request(url, headers={"Accept": "application/octet-stream"})
+    try:
+        with _HTTPS.open(request, timeout=30) as response:
+            if response.status != 200:
+                status = response.status if type(response.status) is int and 100 <= response.status <= 599 else None
+                raise ReceiptError(phase=_CURRENT_PHASE, code="http_status",
+                    failure_class="HTTPResponse", http_status=status)
+            declared = response.headers.get("Content-Length")
+            if declared is not None and (not declared.isdigit() or int(declared) > limit):
+                _reject()
+            body = response.read(limit + 1)
+            if not 0 < len(body) <= limit or response.read(1):
+                _reject()
+            return body, dict(response.headers)
+    except ReceiptError:
+        raise
+    except urllib.error.HTTPError as error:
+        status = error.code if type(error.code) is int and 100 <= error.code <= 599 else None
+        raise ReceiptError(phase=_CURRENT_PHASE, code="http_error",
+            failure_class="HTTPError", http_status=status) from None
+    except urllib.error.URLError:
+        raise ReceiptError(phase=_CURRENT_PHASE, code="network_error",
+            failure_class="URLError") from None
+    except (OSError, ValueError):
+        raise ReceiptError(phase=_CURRENT_PHASE, code="network_error",
+            failure_class="OSError") from None
+
+
+def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY, blob_redirect_digest=None):
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname != "ghcr.io" or parsed.username or parsed.password:
         _reject()
@@ -107,6 +152,10 @@ def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY):
         raise
     except urllib.error.HTTPError as error:
         status = error.code if type(error.code) is int and 100 <= error.code <= 599 else None
+        if status == 307 and blob_redirect_digest is not None:
+            location = error.headers.get("Location") if error.headers is not None else None
+            error.close()
+            return _read_redirected_blob(location or "", blob_redirect_digest, limit=limit)
         raise ReceiptError(phase=_CURRENT_PHASE, code="http_error",
             failure_class="HTTPError", http_status=status) from None
     except urllib.error.URLError:
@@ -152,7 +201,7 @@ def _registry_get(name, reference, token, *, blob=False):
     url = "https://ghcr.io/v2/poryadok/voiceroot/" + name + "/" + endpoint
     headers = {"Authorization": "Bearer " + token,
         "Accept": "application/octet-stream" if blob else ACCEPT}
-    return _read_response(url, headers)
+    return _read_response(url, headers, blob_redirect_digest=reference if blob else None)
 
 
 def _image_identity(name, tag, username, github_token, token_cache):

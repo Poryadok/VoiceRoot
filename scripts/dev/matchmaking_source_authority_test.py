@@ -20,6 +20,114 @@ import matchmaking_source_authority as receipt
 
 
 class RegistryIdentityTests(unittest.TestCase):
+    def test_ghcr_blob_redirect_uses_exact_signed_host_without_registry_credentials(self):
+        source = "a" * 40
+        body = json.dumps({"os": "linux", "architecture": "amd64",
+            "config": {"Labels": {"org.opencontainers.image.revision": source}}},
+            separators=(",", ":")).encode()
+        config_digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        child = json.dumps({"schemaVersion": 2,
+            "config": {"digest": config_digest, "size": len(body)}},
+            separators=(",", ":")).encode()
+        child_digest = "sha256:" + hashlib.sha256(child).hexdigest()
+        index = json.dumps({"schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "manifests": [{"mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": child_digest, "size": len(child),
+                "platform": {"os": "linux", "architecture": "amd64"}}]},
+            separators=(",", ":")).encode()
+        index_digest = "sha256:" + hashlib.sha256(index).hexdigest()
+        location = "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + config_digest + "?sig=private"
+        redirect = urllib.error.HTTPError("https://ghcr.io/blob", 307, "redirect",
+            {"Location": location}, None)
+        calls = []
+
+        class Response:
+            status = 200
+
+            def __init__(self, content, headers):
+                self.content = content
+                self.headers = headers
+                self.stream = io.BytesIO(content)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, size=-1):
+                return self.stream.read(size)
+
+        def open_request(request, timeout):
+            calls.append(request)
+            self.assertEqual(timeout, 30)
+            if len(calls) <= 3:
+                self.assertEqual(request.get_header("Authorization"), "Bearer ephemeral-token")
+                if len(calls) == 1:
+                    return Response(index, {"Docker-Content-Digest": index_digest})
+                if len(calls) == 2:
+                    return Response(child, {"Docker-Content-Digest": child_digest,
+                        "Content-Type": "application/vnd.oci.image.manifest.v1+json"})
+                raise redirect
+            self.assertEqual(request.full_url, location)
+            self.assertIsNone(request.get_header("Authorization"))
+            self.assertEqual(request.get_header("Accept"), "application/octet-stream")
+            return Response(body, {"Content-Length": str(len(body))})
+
+        with patch.object(receipt, "_registry_token", return_value="ephemeral-token"), \
+                patch.object(receipt._HTTPS, "open", side_effect=open_request):
+            result = receipt._image_identity("matchmaking", source, "actor", "secret", {})
+        self.assertEqual(result["index_digest"], index_digest)
+        self.assertEqual(result["platform_manifest_digest"], child_digest)
+        self.assertEqual(result["config_sha256"], config_digest.removeprefix("sha256:"))
+        self.assertEqual(len(calls), 4)
+        self.assertNotIn("sig=private", json.dumps(result))
+
+    def test_ghcr_blob_redirect_rejects_unapproved_locations_without_following(self):
+        digest = "sha256:" + "a" * 64
+        locations = (
+            "http://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
+            "https://evil.example/ghcr1/blobs/" + digest + "?sig=x",
+            "https://pkg-containers.githubusercontent.com/other/" + digest + "?sig=x",
+            "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + "sha256:" + "b" * 64 + "?sig=x",
+            "https://user@pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
+            "https://pkg-containers.githubusercontent.com:444/ghcr1/blobs/" + digest + "?sig=x",
+            "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x#fragment",
+            "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x\r\nAuthorization: Bearer secret",
+        )
+        for location in locations:
+            with self.subTest(location=location), \
+                    patch.object(receipt, "_CURRENT_PHASE", "registry-config"), \
+                    patch.object(receipt._HTTPS, "open", side_effect=urllib.error.HTTPError(
+                        "https://ghcr.io/blob", 307, "redirect", {"Location": location}, None)) as opened:
+                with self.assertRaises(receipt.ReceiptError) as raised:
+                    receipt._read_response("https://ghcr.io/v2/repo/blobs/" + digest,
+                        {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest)
+                self.assertEqual(raised.exception.safe_record()["http_status"], 307)
+                self.assertEqual(opened.call_count, 1)
+                self.assertNotIn(location, json.dumps(raised.exception.safe_record()))
+
+    def test_ghcr_blob_redirect_chain_stops_after_one_hop(self):
+        digest = "sha256:" + "a" * 64
+        first = "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=first"
+        second = "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=second"
+        calls = []
+
+        def open_request(request, timeout):
+            calls.append(request)
+            location = first if len(calls) == 1 else second
+            raise urllib.error.HTTPError(request.full_url, 307, "redirect", {"Location": location}, None)
+
+        with patch.object(receipt, "_CURRENT_PHASE", "registry-config"), \
+                patch.object(receipt._HTTPS, "open", side_effect=open_request):
+            with self.assertRaises(receipt.ReceiptError) as raised:
+                receipt._read_response("https://ghcr.io/v2/repo/blobs/" + digest,
+                    {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest)
+        self.assertEqual(raised.exception.safe_record()["http_status"], 307)
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[1].get_header("Authorization"))
+
     def test_index_child_and_config_are_bound_to_linux_amd64(self):
         config = json.dumps({"os": "linux", "architecture": "amd64",
             "config": {"Labels": {"org.opencontainers.image.revision": "a" * 40,
