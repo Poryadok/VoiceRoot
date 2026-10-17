@@ -151,7 +151,8 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
             self.assertIn(value, gateway)
         self.assertIn("name: voice-match-squad-ca", gateway)
         self.assertNotIn("voice-matchmaking-principal-signing", gateway)
-        self.assertIn("name: voice-gateway-matchmaking-complete-client-tls", gateway)
+        self.assertIn("name: matchmaking-complete-client-tls", gateway)
+        self.assertIn("secretName: voice-gateway-matchmaking-complete-client-tls", gateway)
         self.assertIn("name: voice-matchmaking-complete-client-ca", matchmaking)
 
 
