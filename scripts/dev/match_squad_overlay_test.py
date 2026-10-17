@@ -933,7 +933,10 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             recreated["metadata"]["uid"] = "replacement-object"
             overlay.build_object_plan(Renderer(), target, recreated, patch_file)
         with self.assertRaisesRegex(overlay.OverlayError, "image not active"):
-            overlay.build_object_plan(Renderer(), target, base, patch_file)
+            unqualified = copy.deepcopy(base)
+            unqualified["spec"]["template"]["spec"]["containers"][0]["image"] = (
+                "ghcr.io/poryadok/voiceroot/matchmaking@sha256:" + "0" * 64)
+            overlay.build_object_plan(Renderer(), target, unqualified, patch_file)
 
     def test_plan_binds_source_patch_and_render_hashes(self):
         self.assertEqual(len(overlay.sha256_bytes(b"reviewed")), 64)
