@@ -32,6 +32,7 @@ INPUT_RECEIPT_SCHEMA = 'voice-nats-contract-input-receipt-v1'
 MAX_PLAN_BYTES = 1 << 20
 MAX_INPUT_BYTES = 2 << 20
 MAX_STATE_BYTES = 2 << 20
+MAX_RESPONSE_BYTES = 64 << 10
 MAX_CREDENTIAL_BYTES = 256 << 10
 MAX_SERVER_CONFIG_BYTES = 256 << 10
 MAX_EVENTS = 64
@@ -60,6 +61,14 @@ def _canonical(value: object) -> bytes:
             ensure_ascii=False, allow_nan=False).encode('utf-8')
     except (TypeError, ValueError, UnicodeError):
         _fail('json_invalid')
+
+
+def _response_bytes(value: object) -> bytes:
+    """Serialize one bounded stdout receipt; never stream unbounded live INFO data."""
+    raw = _canonical(value) + b'\n'
+    if len(raw) > MAX_RESPONSE_BYTES:
+        _fail('response_size')
+    return raw
 
 
 def validate_plan(plan: object) -> dict:
@@ -674,7 +683,7 @@ def main(argv=None) -> int:
                             creds_path=_credential_path(expected)))
                 else:
                     result = action_readback(state_root=STATE_ROOT, binding=binding, index=args.action_index)
-        sys.stdout.buffer.write(_canonical(result) + b'\n')
+        sys.stdout.buffer.write(_response_bytes(result))
         return 0
     except (Exception, SystemExit):
         # Never print parser, filesystem, NATS, or credential-bearing errors.

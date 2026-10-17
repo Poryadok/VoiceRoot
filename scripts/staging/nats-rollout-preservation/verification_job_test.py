@@ -403,15 +403,16 @@ class VerificationJobTests(unittest.TestCase):
         self.assertNotIn('secret', str(pod).lower())
 
     def test_contract_action_vectors_are_closed_and_journal_hash_bound(self):
-        vectors = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING)
-        self.assertEqual(vectors['load-plan'][:2],
+        load = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING, action='load-plan')
+        read = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING, action='read-plan')
+        self.assertEqual(load['action'][:2],
             ['/usr/bin/python3', '/voice-nats-runner/contract_runner.py'])
         for field in ('--contract-attempt', '--archive-sha256', '--archive-bytes',
             '--server-config-sha256', '--server-config-bytes', '--bootstrap-creds-sha256',
             '--bootstrap-creds-bytes'):
-            self.assertIn(field, vectors['load-plan'])
-        self.assertTrue(vectors['load-plan']['stdin'])
-        self.assertEqual(vectors['read-plan'][:3], ['/usr/bin/python3',
+            self.assertIn(field, load['action'])
+        self.assertTrue(load['stdin'])
+        self.assertEqual(read['action'][:3], ['/usr/bin/python3',
             '/voice-nats-runner/contract_runner.py', '--read-plan'])
         mutation = jobs.exec_vectors(CONTRACT_REQUEST, POD_UID, CONTRACT_BINDING,
             action='execute-action', action_index=2,
