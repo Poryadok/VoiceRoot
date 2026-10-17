@@ -1,7 +1,10 @@
 """Offline contracts for the fixed voice-dev GIS first-install helpers."""
 import base64
 import copy
+import hashlib
+import io
 import json
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +16,72 @@ import gis_dev_first_install as gis
 
 def encoded(values):
     return {key: base64.b64encode(value).decode('ascii') for key, value in values.items()}
+
+
+def buildx_artifact(source, run_id, attempt, *, revision=None, context='src/backend',
+                    output_digest=None, started='2026-10-17T00:01:33Z',
+                    finished='2026-10-17T00:02:08Z'):
+    """Build a minimal authenticated Buildx history-record artifact."""
+    revision = revision or source
+    config = 'd' * 64
+    child = json.dumps({'config': {'digest': 'sha256:' + config}}, separators=(',', ':')).encode()
+    child_digest = hashlib.sha256(child).hexdigest()
+    image_index = json.dumps({'schemaVersion': 2,
+        'mediaType': 'application/vnd.oci.image.index.v1+json',
+        'manifests': [{'mediaType': 'application/vnd.oci.image.manifest.v1+json',
+            'digest': 'sha256:' + child_digest, 'size': len(child),
+            'platform': {'os': 'linux', 'architecture': 'amd64'}}]},
+        separators=(',', ':')).encode()
+    actual_output_digest = hashlib.sha256(image_index).hexdigest()
+    output_digest = output_digest or actual_output_digest
+    builder = f'https://github.com/Poryadok/VoiceRoot/actions/runs/{run_id}/attempts/{attempt}'
+    provenance = json.dumps({'buildDefinition': {'externalParameters': {
+        'request': {'root': {'configSource': {'path': 'Dockerfile'},
+            'request': {'args': {'vcs:localdir:context': context,
+                'vcs:localdir:dockerfile': 'src/backend/gameintegration',
+                'vcs:revision': revision,
+                'vcs:source': 'https://github.com/Poryadok/VoiceRoot'}}}}}},
+        'runDetails': {'builder': {'id': builder},
+            'metadata': {'startedOn': started, 'finishedOn': finished}}},
+        separators=(',', ':')).encode()
+    blobs = {}
+
+    def blob(value):
+        digest = hashlib.sha256(value).hexdigest()
+        blobs['blobs/sha256/' + digest] = value
+        return {'digest': 'sha256:' + digest, 'size': len(value)}
+
+    config_desc = blob(json.dumps({'FrontendAttrs': {
+        'attest:provenance': 'type=provenance,builder-id=' + builder,
+        'filename': 'Dockerfile', 'vcs:localdir:context': context,
+        'vcs:localdir:dockerfile': 'src/backend/gameintegration',
+        'vcs:revision': revision, 'vcs:source': 'https://github.com/Poryadok/VoiceRoot'},
+        'Exporters': [{'Type': 'image', 'Attrs': {'name': gis.IMAGE + ':' + source,
+            'push': 'true'}}],
+        'Result': {'Results': {'0': {'media_type': 'application/vnd.oci.image.index.v1+json',
+            'digest': 'sha256:' + output_digest, 'size': len(image_index)}}},
+        'DefaultPlatform': 'linux/amd64'}, separators=(',', ':')).encode())
+    layers = [dict(blob(image_index), mediaType='application/json',
+        annotations={'vnd.export-build.descriptor.mediatype': 'application/vnd.oci.image.index.v1+json'}),
+        dict(blob(provenance), mediaType='application/vnd.in-toto+json',
+            annotations={'in-toto.io/predicate-type': 'https://slsa.dev/provenance/v1'})]
+    record_manifest = json.dumps({'schemaVersion': 2,
+        'mediaType': 'application/vnd.oci.image.manifest.v1+json',
+        'config': dict(config_desc, mediaType='application/vnd.buildkit.historyrecord.v0'),
+        'layers': layers}, separators=(',', ':')).encode()
+    record_desc = blob(record_manifest)
+    archive_index = json.dumps({'schemaVersion': 2,
+        'mediaType': 'application/vnd.oci.image.index.v1+json',
+        'manifests': [dict(record_desc, mediaType='application/vnd.oci.image.manifest.v1+json')]},
+        separators=(',', ':')).encode()
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode='w:gz') as tar:
+        for name, value in [('index.json', archive_index), *blobs.items()]:
+            entry = tarfile.TarInfo(name)
+            entry.size = len(value)
+            entry.mode = 0o600
+            tar.addfile(entry, io.BytesIO(value))
+    return output.getvalue(), actual_output_digest, child, config, image_index
 
 
 class FakeKube:
@@ -81,7 +150,9 @@ class SourceAuthorityTests(unittest.TestCase):
             'image_ref': image, 'build_context_sha256': gis.hashlib.sha256(('e' * 40).encode()).hexdigest(), 'image_config_sha256': 'd' * 64,
             'working_tree_clean': True, 'builder_kind': 'github-actions',
             'builder_run': 11, 'builder_job': 12,
-            'builder_sha': source, 'builder_tree': 'e' * 40}
+            'builder_sha': source, 'builder_tree': 'e' * 40,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'f' * 64,
+            'builder_output_index_sha256': 'b' * 64, 'builder_provenance_sha256': '1' * 64}
         self.assertTrue(gis.validate_build_receipt(source, image, receipt, clean=True))
         with self.assertRaises(gis.Blocked):
             gis.validate_build_receipt(source, image, receipt, clean=False)
@@ -98,14 +169,20 @@ class SourceAuthorityTests(unittest.TestCase):
         image_digest = gis.hashlib.sha256(manifest_raw).hexdigest()
         image = gis.IMAGE + '@sha256:' + image_digest
         calls = []
+        artifact_raw, image_digest, child_raw, _, image_index = buildx_artifact(source, 11, 1)
+        image = gis.IMAGE + '@sha256:' + image_digest
+        child_digest = gis.hashlib.sha256(child_raw).hexdigest()
         api_run = {'id': 11, 'status': 'completed', 'conclusion': 'success',
             'event': 'push', 'head_branch': 'master', 'head_sha': source, 'workflow_id': 9,
-            'head_repository': {'full_name': 'Poryadok/VoiceRoot'}}
+            'head_repository': {'full_name': 'Poryadok/VoiceRoot'}, 'run_attempt': 1}
         api_workflow = {'path': '.github/workflows/ci.yml'}
         api_jobs = {'jobs': [{'id': 12, 'status': 'completed', 'conclusion': 'success',
             'name': 'staging-images-push (gameintegration)',
             'steps': [{'name': 'Set up job', 'conclusion': 'success'},
-                {'name': 'Build and push gameintegration image', 'conclusion': 'success'}]}]}
+                {'name': 'Build and push gameintegration image', 'conclusion': 'success',
+                    'started_at': '2026-10-17T00:01:32Z', 'completed_at': '2026-10-17T00:02:22Z'}]}]}
+        api_artifacts = {'total_count': 1, 'artifacts': [{'id': 13, 'name': 'VoiceRoot.dockerbuild',
+            'expired': False, 'size_in_bytes': len(artifact_raw)}]}
         workflow_source = ('if grep -qx "$S" scripts/ci/backend-docker-context.txt\n'
             'echo "context=./src/backend"\n  staging-images-push:\n'
             '- name: Build and push gameintegration image\n'
@@ -124,14 +201,15 @@ class SourceAuthorityTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout=content, stderr='')
             if argv[:2] == ['gh', 'api']:
                 endpoint = argv[2]
-                value = api_run if endpoint.endswith('/runs/11') else api_workflow if endpoint.endswith('/workflows/9') else api_jobs
+                if endpoint.endswith('/artifacts/13/zip'):
+                    return SimpleNamespace(returncode=0, stdout=artifact_raw, stderr=b'')
+                value = (api_run if endpoint.endswith('/runs/11') else
+                    api_workflow if endpoint.endswith('/workflows/9') else
+                    api_artifacts if endpoint.endswith('/artifacts?per_page=100') else api_jobs)
                 return SimpleNamespace(returncode=0, stdout=json.dumps(value), stderr='')
-            if argv[:3] == ['gh', 'run', 'view']:
-                return SimpleNamespace(returncode=0, stdout=(
-                    'staging-images-push (gameintegration)\tBuild and push gameintegration image\t'
-                    'Digest: sha256:' + image_digest), stderr='')
             if argv[:5] == ['docker', 'buildx', 'imagetools', 'inspect', '--raw']:
-                return SimpleNamespace(returncode=0, stdout=manifest_raw, stderr=b'')
+                raw = child_raw if argv[-1].endswith('@sha256:' + child_digest) else image_index
+                return SimpleNamespace(returncode=0, stdout=raw, stderr=b'')
             if argv[:2] == ['docker', 'pull']:
                 return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
             if argv[:3] == ['docker', 'image', 'inspect']:
@@ -150,7 +228,28 @@ class SourceAuthorityTests(unittest.TestCase):
         self.assertEqual(actual_sha, source)
         self.assertEqual(receipt['image_config_sha256'], config)
         self.assertEqual(receipt['builder_tree'], tree)
+        self.assertEqual(receipt['builder_artifact_id'], 13)
+        self.assertEqual(receipt['builder_artifact_sha256'], gis.hashlib.sha256(artifact_raw).hexdigest())
+        self.assertEqual(receipt['builder_output_index_sha256'], image_digest)
+        self.assertTrue(gis._valid_sha(receipt['builder_provenance_sha256']))
         self.assertIn('docker', calls[-1][0])
+
+    def test_buildx_record_rejects_wrong_run_revision_context_and_output_digest(self):
+        source = 'a' * 40
+        image = gis.IMAGE + '@sha256:' + 'b' * 64
+        step = {'started_at': '2026-10-17T00:01:32Z', 'completed_at': '2026-10-17T00:02:22Z'}
+        for run_id, revision, context, digest in [
+            (99, source, 'src/backend', None),
+            (11, 'c' * 40, 'src/backend', None),
+            (11, source, 'untrusted/context', None),
+            (11, source, 'src/backend', 'f' * 64),
+        ]:
+            raw, actual_digest, _child, _config, _image_index = buildx_artifact(source, run_id, 1,
+                revision=revision, context=context, output_digest=digest)
+            target = gis.IMAGE + '@sha256:' + (digest or actual_digest)
+            with self.assertRaises(gis.Blocked):
+                gis._verify_buildx_artifact(raw, 13, len(raw), target, 11, 1,
+                    source, step, None)
 
     def test_dirty_source_blocks_before_image_inspection(self):
         source = 'a' * 40
@@ -342,7 +441,9 @@ class InstallerInvocationTests(unittest.TestCase):
             'image_ref': image, 'build_context_sha256': gis.hashlib.sha256(('e' * 40).encode()).hexdigest(),
             'image_config_sha256': 'd' * 64, 'working_tree_clean': True,
             'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
-            'builder_sha': source, 'builder_tree': 'e' * 40}
+            'builder_sha': source, 'builder_tree': 'e' * 40,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'f' * 64,
+            'builder_output_index_sha256': 'b' * 64, 'builder_provenance_sha256': '1' * 64}
         events = []
         operation = '123456abcdef'
         namespace_uid = '00000000-0000-0000-0000-000000000001'
@@ -489,7 +590,9 @@ class InstallerInvocationTests(unittest.TestCase):
             'image_ref': image, 'build_context_sha256': 'f' * 64,
             'image_config_sha256': 'd' * 64, 'working_tree_clean': True,
             'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
-            'builder_sha': source, 'builder_tree': tree}
+            'builder_sha': source, 'builder_tree': tree,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'f' * 64,
+            'builder_output_index_sha256': 'b' * 64, 'builder_provenance_sha256': '1' * 64}
         calls = []
 
         class Kube:

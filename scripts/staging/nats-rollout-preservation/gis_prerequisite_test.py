@@ -252,7 +252,10 @@ class Tests(unittest.TestCase):
             'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
             'image_config_sha256': '1' * 64, 'working_tree_clean': True,
             'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
-            'builder_sha': source_sha, 'builder_tree': builder_tree}
+            'builder_sha': source_sha, 'builder_tree': builder_tree,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'a' * 64,
+            'builder_output_index_sha256': image.rsplit('@sha256:', 1)[-1],
+            'builder_provenance_sha256': 'b' * 64}
         deployment = {'kind': 'Deployment', 'metadata': {'name': 'voice-gameintegration'}, 'spec': {
             'template': {'spec': {'containers': [{'name': 'gameintegration', 'image': image}]}}}}
         plan = {'namespace': 'voice-dev', 'phase': 'PLANNED', 'operation': '123456789abc',
@@ -634,7 +637,10 @@ class DevReceiptProducerTests(unittest.TestCase):
             'build_context_sha256': hashlib.sha256(builder_tree.encode()).hexdigest(),
             'image_config_sha256': '1' * 64, 'working_tree_clean': True,
             'builder_kind': 'github-actions', 'builder_run': 11, 'builder_job': 12,
-            'builder_sha': source_sha, 'builder_tree': builder_tree}
+            'builder_sha': source_sha, 'builder_tree': builder_tree,
+            'builder_artifact_id': 13, 'builder_artifact_sha256': 'a' * 64,
+            'builder_output_index_sha256': image.rsplit('@sha256:', 1)[-1],
+            'builder_provenance_sha256': 'b' * 64}
         deployment = {'kind': 'Deployment', 'metadata': {'name': 'voice-gameintegration'}, 'spec': {
             'template': {'spec': {'containers': [{'name': 'gameintegration', 'image': image}]}}}}
         plan = {'namespace': 'voice-dev', 'phase': 'PLANNED', 'operation': '123456789abc',

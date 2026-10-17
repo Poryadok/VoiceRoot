@@ -18,6 +18,7 @@ import sys
 import tarfile
 import tempfile
 from pathlib import Path
+from datetime import datetime, timezone
 
 NAMESPACE = "voice-dev"
 BUILD_RECEIPT_SCHEMA = "voice-dev-source-build-v2"
@@ -105,7 +106,9 @@ def _digest(value):
 def validate_build_receipt(source_sha, image_ref, receipt, *, clean):
     """Require immutable image bytes tied to a verified successful GitHub builder."""
     keys = {"schema", "source_sha", "image_ref", "build_context_sha256", "image_config_sha256",
-        "working_tree_clean", "builder_kind", "builder_run", "builder_job", "builder_sha", "builder_tree"}
+        "working_tree_clean", "builder_kind", "builder_run", "builder_job", "builder_sha", "builder_tree",
+        "builder_artifact_id", "builder_artifact_sha256", "builder_output_index_sha256",
+        "builder_provenance_sha256"}
     if (clean is not True or not isinstance(source_sha, str) or not SOURCE.fullmatch(source_sha)
         or not isinstance(image_ref, str) or not image_ref.startswith(IMAGE + "@sha256:")
         or not _valid_sha(image_ref.rsplit("@sha256:", 1)[-1])
@@ -121,11 +124,19 @@ def validate_build_receipt(source_sha, image_ref, receipt, *, clean):
         _blocked("gis_dev_source_build_receipt_invalid")
     if receipt["builder_kind"] == "github-actions":
         if (type(receipt.get("builder_run")) is not int or receipt["builder_run"] <= 0
-            or type(receipt.get("builder_job")) is not int or receipt["builder_job"] <= 0):
+            or type(receipt.get("builder_job")) is not int or receipt["builder_job"] <= 0
+            or type(receipt.get("builder_artifact_id")) is not int or receipt["builder_artifact_id"] <= 0
+            or not _valid_sha(receipt.get("builder_artifact_sha256"))
+            or not _valid_sha(receipt.get("builder_output_index_sha256"))
+            or receipt.get("builder_output_index_sha256") != image_ref.rsplit("@sha256:", 1)[-1]
+            or not _valid_sha(receipt.get("builder_provenance_sha256"))):
             _blocked("gis_dev_source_build_receipt_invalid")
     elif receipt["builder_kind"] == "local-build":
         if receipt.get("builder_run") is not None or receipt.get("builder_job") is not None \
-                or receipt["builder_sha"] != source_sha:
+                or receipt["builder_sha"] != source_sha or receipt.get("builder_artifact_id") is not None \
+                or receipt.get("builder_artifact_sha256") is not None \
+                or receipt.get("builder_output_index_sha256") is not None \
+                or receipt.get("builder_provenance_sha256") is not None:
             _blocked("gis_dev_source_build_receipt_invalid")
     else:
         _blocked("gis_dev_source_build_receipt_invalid")
@@ -144,8 +155,139 @@ def _gh_json(args, runner):
     return value
 
 
+def _record_member(archive, descriptors, media_type, *, annotation=None):
+    matches = [row for row in descriptors if isinstance(row, dict) and row.get("mediaType") == media_type
+        and (annotation is None or row.get("annotations", {}).get(annotation[0]) == annotation[1])]
+    if len(matches) != 1:
+        _blocked("gis_dev_build_record_invalid")
+    descriptor = matches[0]
+    digest = descriptor.get("digest", "")
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest) or type(descriptor.get("size")) is not int:
+        _blocked("gis_dev_build_record_invalid")
+    path = "blobs/sha256/" + digest.removeprefix("sha256:")
+    member = archive.getmember(path)
+    if not member.isfile() or member.size != descriptor["size"] or member.size > 8 << 20:
+        _blocked("gis_dev_build_record_invalid")
+    raw = archive.extractfile(member).read()
+    if hashlib.sha256(raw).hexdigest() != digest.removeprefix("sha256:"):
+        _blocked("gis_dev_build_record_invalid")
+    return raw, digest.removeprefix("sha256:")
+
+
+def _timestamp(value):
+    if not isinstance(value, str):
+        _blocked("gis_dev_build_record_invalid")
+    try:
+        result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        _blocked("gis_dev_build_record_invalid")
+    if result.tzinfo is None:
+        _blocked("gis_dev_build_record_invalid")
+    return result.astimezone(timezone.utc)
+
+
+def _verify_buildx_artifact(raw, artifact_id, expected_size, image_ref, run_id, attempt,
+                            builder_sha, step, runner):
+    """Verify the authenticated Actions artifact's Buildx record, provenance and OCI descriptor."""
+    from pathlib import PurePosixPath
+    if not isinstance(raw, bytes) or not 1 <= len(raw) <= 32 << 20 or len(raw) != expected_size:
+        _blocked("gis_dev_build_record_invalid")
+    artifact_sha = hashlib.sha256(raw).hexdigest()
+    expected_digest = image_ref.rsplit("@sha256:", 1)[-1]
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+            members = archive.getmembers()
+            if len(members) > 128 or any(not m.isfile() and not m.isdir() for m in members):
+                _blocked("gis_dev_build_record_invalid")
+            names = [m.name for m in members]
+            if (len(names) != len(set(names)) or sum(m.size for m in members) > 32 << 20 or any(
+                name.startswith("/") or ".." in PurePosixPath(name).parts or "\\" in name for name in names
+            )):
+                _blocked("gis_dev_build_record_invalid")
+            index_member = archive.getmember("index.json")
+            if not index_member.isfile() or index_member.size > 64 << 10:
+                _blocked("gis_dev_build_record_invalid")
+            index = json.loads(archive.extractfile(index_member).read())
+            if index.get("schemaVersion") != 2 or index.get("mediaType") != "application/vnd.oci.image.index.v1+json":
+                _blocked("gis_dev_build_record_invalid")
+            records = [row for row in index.get("manifests", [])
+                if row.get("mediaType") == "application/vnd.oci.image.manifest.v1+json"]
+            verified = []
+            for record_descriptor in records:
+                manifest_raw, _ = _record_member(archive, [record_descriptor],
+                    "application/vnd.oci.image.manifest.v1+json")
+                record_manifest = json.loads(manifest_raw)
+                config_raw, config_sha = _record_member(archive, [record_manifest.get("config", {})],
+                    "application/vnd.buildkit.historyrecord.v0")
+                record = json.loads(config_raw)
+                attrs = record.get("FrontendAttrs")
+                if not isinstance(attrs, dict):
+                    continue
+                expected_builder = f"https://github.com/Poryadok/VoiceRoot/actions/runs/{run_id}/attempts/{attempt}"
+                if (attrs.get("vcs:source") != "https://github.com/Poryadok/VoiceRoot"
+                    or attrs.get("vcs:revision") != builder_sha
+                    or attrs.get("vcs:localdir:context") != "src/backend"
+                    or attrs.get("vcs:localdir:dockerfile") != "src/backend/gameintegration"
+                    or attrs.get("filename") != "Dockerfile"
+                    or expected_builder not in attrs.get("attest:provenance", "")):
+                    continue
+                exporters = record.get("Exporters")
+                if (not isinstance(exporters, list) or len(exporters) != 1
+                    or exporters[0].get("Type") != "image"
+                    or exporters[0].get("Attrs", {}).get("push") != "true"
+                    or exporters[0].get("Attrs", {}).get("name") != IMAGE + ":" + builder_sha):
+                    continue
+                output_rows = record.get("Result", {}).get("Results", {})
+                output = output_rows.get("0") if isinstance(output_rows, dict) else None
+                if (not isinstance(output, dict) or output.get("media_type") != "application/vnd.oci.image.index.v1+json"
+                    or output.get("digest") != "sha256:" + expected_digest):
+                    continue
+                output_raw, output_sha = _record_member(archive, record_manifest.get("layers", []),
+                    "application/json", annotation=("vnd.export-build.descriptor.mediatype",
+                        "application/vnd.oci.image.index.v1+json"))
+                if output_sha != expected_digest or len(output_raw) != output.get("size"):
+                    continue
+                output_index = json.loads(output_raw)
+                platforms = [row for row in output_index.get("manifests", [])
+                    if row.get("platform", {}).get("os") == "linux"
+                    and row.get("platform", {}).get("architecture") == "amd64"]
+                if len(platforms) != 1:
+                    continue
+                attestation, attestation_sha = _record_member(archive, record_manifest.get("layers", []),
+                    "application/vnd.in-toto+json", annotation=("in-toto.io/predicate-type",
+                        "https://slsa.dev/provenance/v1"))
+                provenance = json.loads(attestation)
+                external = provenance.get("buildDefinition", {}).get("externalParameters", {})
+                request = external.get("request", {})
+                root = request.get("root", {})
+                args = root.get("request", {}).get("args", {})
+                step_start = _timestamp(step.get("started_at"))
+                step_end = _timestamp(step.get("completed_at"))
+                started = _timestamp(provenance.get("runDetails", {}).get("metadata", {}).get("startedOn"))
+                finished = _timestamp(provenance.get("runDetails", {}).get("metadata", {}).get("finishedOn"))
+                if (provenance.get("runDetails", {}).get("builder", {}).get("id") != expected_builder
+                    or args != {"vcs:localdir:context": "src/backend",
+                        "vcs:localdir:dockerfile": "src/backend/gameintegration",
+                        "vcs:revision": builder_sha,
+                        "vcs:source": "https://github.com/Poryadok/VoiceRoot"}
+                    or root.get("configSource", {}).get("path") != "Dockerfile"
+                    or started < step_start or finished > step_end or finished < started):
+                    continue
+                verified.append((config_sha, attestation_sha))
+            if len(verified) != 1:
+                _blocked("gis_dev_build_record_binding_invalid")
+            return {"builder_artifact_id": artifact_id,
+                "builder_artifact_sha256": artifact_sha,
+                "builder_output_index_sha256": expected_digest,
+                "builder_provenance_sha256": verified[0][1]}
+    except Blocked:
+        raise
+    except Exception:
+        _blocked("gis_dev_build_record_invalid")
+
+
 def _verify_github_build(source_root, image_ref, builder_run, builder_job, current_tree, runner):
-    """Bind an OCI digest to the successful fixed master image job via GitHub API/logs."""
+    """Bind an OCI digest to the successful fixed master image job and its Buildx record."""
     if (type(builder_run) is not int or builder_run <= 0
         or type(builder_job) is not int or builder_job <= 0):
         _blocked("gis_dev_builder_identity_invalid")
@@ -155,7 +297,8 @@ def _verify_github_build(source_root, image_ref, builder_run, builder_job, curre
         or run.get("conclusion") != "success" or run.get("event") != "push"
         or run.get("head_branch") != "master"
         or (run.get("head_repository") or {}).get("full_name") != "Poryadok/VoiceRoot"
-        or not SOURCE.fullmatch(str(run.get("head_sha", "")))):
+        or not SOURCE.fullmatch(str(run.get("head_sha", "")))
+        or type(run.get("run_attempt")) is not int or run["run_attempt"] <= 0):
         _blocked("gis_dev_builder_run_not_successful_master_push")
     workflow_id = run.get("workflow_id")
     if type(workflow_id) is not int:
@@ -176,6 +319,7 @@ def _verify_github_build(source_root, image_ref, builder_run, builder_job, curre
         if step.get("name") == "Build and push gameintegration image"]
     if len(producer_steps) != 1 or producer_steps[0].get("conclusion") != "success":
         _blocked("gis_dev_builder_image_step_not_successful")
+    step = producer_steps[0]
     builder_sha = run["head_sha"]
     try:
         builder_tree = runner(["git", "-C", str(root), "rev-parse", builder_sha + ":src/backend"],
@@ -199,24 +343,33 @@ def _verify_github_build(source_root, image_ref, builder_run, builder_job, curre
         or "file: ${{ steps.dockerctx.outputs.file }}" not in push_job
         or "push: true" not in push_job):
         _blocked("gis_dev_builder_source_context_mismatch")
-    # GitHub CLI output is captured and never printed: Actions logs can include
-    # application diagnostics even though this job is not expected to emit secrets.
     try:
-        log = runner(["gh", "run", "view", str(builder_run), "--repo", "Poryadok/VoiceRoot",
-            "--job", str(builder_job), "--log"], check=True, capture_output=True,
-            text=True, timeout=90).stdout
+        artifacts = _gh_json([f"repos/Poryadok/VoiceRoot/actions/runs/{builder_run}/artifacts?per_page=100"], runner)
+        rows = artifacts.get("artifacts")
+        if not isinstance(rows, list) or artifacts.get("total_count") != len(rows):
+            _blocked("gis_dev_builder_artifact_invalid")
     except Exception:
-        _blocked("gis_dev_builder_job_log_unavailable")
-    digest = image_ref.rsplit("@sha256:", 1)[-1]
-    # `gh run view --log` prefixes lines with the exact job and step. Match the
-    # digest output only within the successful Buildx producer step; a digest
-    # mentioned by an unrelated diagnostic cannot authorize an image.
-    prefix = re.compile(r"^staging-images-push \(gameintegration\)\s+Build and push gameintegration image\s+")
-    digest_output = re.compile(r"Digest:\s+sha256:" + re.escape(digest) + r"\s*$")
-    if not any(prefix.search(line) and digest_output.search(line)
-            for line in log.splitlines()):
-        _blocked("gis_dev_builder_digest_not_in_job_log")
-    return builder_sha, builder_tree
+        _blocked("gis_dev_builder_artifact_invalid")
+    candidates = [row for row in rows if isinstance(row, dict)
+        and isinstance(row.get("name"), str) and row["name"].endswith(".dockerbuild")
+        and row.get("expired") is False and type(row.get("id")) is int
+        and row["id"] > 0 and type(row.get("size_in_bytes")) is int
+        and 0 < row["size_in_bytes"] <= 32 << 20]
+    verified = []
+    for artifact in candidates:
+        try:
+            raw = runner(["gh", "api", f"repos/Poryadok/VoiceRoot/actions/artifacts/{artifact['id']}/zip"],
+                check=True, capture_output=True, timeout=90).stdout
+            evidence = _verify_buildx_artifact(raw, artifact["id"], artifact["size_in_bytes"],
+                image_ref, builder_run, run["run_attempt"], builder_sha, step, runner)
+            verified.append(evidence)
+        except Blocked:
+            continue
+        except Exception:
+            continue
+    if len(verified) != 1:
+        _blocked("gis_dev_builder_artifact_binding_invalid")
+    return builder_sha, builder_tree, verified[0]
 
 
 def source_build_receipt(source_root, image_ref, *, builder_run=None, builder_job=None,
@@ -241,8 +394,11 @@ def source_build_receipt(source_root, image_ref, *, builder_run=None, builder_jo
             _blocked("gis_dev_image_reference_invalid")
         if local_build:
             builder_sha, builder_tree = source_sha, context_tree
+            builder_evidence = {"builder_artifact_id": None,
+                "builder_artifact_sha256": None, "builder_output_index_sha256": None,
+                "builder_provenance_sha256": None}
         else:
-            builder_sha, builder_tree = _verify_github_build(root, image_ref, builder_run,
+            builder_sha, builder_tree, builder_evidence = _verify_github_build(root, image_ref, builder_run,
                 builder_job, context_tree, runner)
         raw = runner(["docker", "buildx", "imagetools", "inspect", "--raw", image_ref],
             check=True, capture_output=True, timeout=30).stdout
@@ -288,7 +444,7 @@ def source_build_receipt(source_root, image_ref, *, builder_run=None, builder_jo
             "image_config_sha256": image_config, "working_tree_clean": True,
             "builder_kind": "local-build" if local_build else "github-actions",
             "builder_run": builder_run, "builder_job": builder_job,
-            "builder_sha": builder_sha, "builder_tree": builder_tree}
+            "builder_sha": builder_sha, "builder_tree": builder_tree, **builder_evidence}
     except Blocked:
         raise
     except Exception:
