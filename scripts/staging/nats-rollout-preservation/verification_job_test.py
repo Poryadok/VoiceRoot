@@ -172,7 +172,8 @@ class VerificationJobTests(unittest.TestCase):
     def test_census_vectors_are_fixed_target_only_upload_then_same_pod_readback(self):
         vectors = jobs.exec_vectors(REQUEST, POD_UID, BINDING,
             {'sha256': 'd' * 64, 'bytes': 1234},
-            session_inputs={'attempt': '1234abcd', 'sha256': 'e' * 64, 'bytes': 512})
+            session_inputs={'attempt': '1234abcd', 'sha256': 'e' * 64, 'bytes': 512},
+            input_pod_uid='77777777-7777-4777-8777-777777777777')
         upload = vectors['census_receive_archive']
         self.assertEqual(upload[:3], ['/usr/bin/python3', '/voice-nats-runner/phase', '--receive-archive'])
         for pair in (('--source-pvc-uid', BINDING['source_uid']),
@@ -184,14 +185,17 @@ class VerificationJobTests(unittest.TestCase):
         self.assertEqual(upload[upload.index('--archive-sha256') + 1], 'd' * 64)
         self.assertEqual(upload[upload.index('--archive-bytes') + 1], '1234')
         self.assertEqual(vectors['census_same_pod_readback'][2], '--read-receipt')
-        self.assertEqual(vectors['census_load_inputs'][2], '--load-inputs')
+        self.assertEqual(vectors['census_load_inputs'][2], '--load-census-inputs')
         self.assertEqual(vectors['census_load_inputs'][3:9], ['--operation', REQUEST['operation'],
             '--nonce', REQUEST['nonce'], '--pod-uid', POD_UID])
-        self.assertEqual(vectors['census_read_input_receipt'][2], '--read-input-receipt')
+        self.assertEqual(vectors['census_read_input_receipt'][2], '--read-census-input-receipt')
+        self.assertEqual(vectors['census_consume_inputs'][2], '--consume-census-inputs')
+        self.assertEqual(vectors['census_consume_inputs'][vectors['census_consume_inputs'].index('--input-pod-uid') + 1],
+            '77777777-7777-4777-8777-777777777777')
         self.assertIn('--phase', vectors['census_same_pod_readback'])
         self.assertEqual(vectors['census_same_pod_readback'][-1], 'census')
-        self.assertEqual(set(vectors), {'census_load_inputs', 'census_read_input_receipt', 'census_receive_archive',
-            'census_same_pod_readback'})
+        self.assertEqual(set(vectors), {'census_load_inputs', 'census_read_input_receipt',
+            'census_consume_inputs', 'census_receive_archive', 'census_same_pod_readback'})
         with self.assertRaises(jobs.VerificationJobError):
             jobs.exec_vectors(REQUEST, POD_UID, BINDING)
 

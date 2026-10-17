@@ -83,7 +83,10 @@ class NatsPhaseTests(unittest.TestCase):
             '--source-pv-uid', SOURCE_PV_UID,
             '--verification-pvc-uid', '22222222-2222-4222-8222-222222222222',
             '--verification-pv-uid', VERIFICATION_PV_UID,
-            '--archive-sha256', 'a' * 64, '--archive-bytes', '123'])
+            '--input-pod-uid', POD_UID,
+            '--archive-sha256', 'a' * 64, '--archive-bytes', '123',
+            '--session-attempt', '1234abcd', '--input-bundle-sha256', 'b' * 64,
+            '--input-bundle-bytes', '512'])
         execute.assert_called_once()
         self.assertEqual(execute.call_args.args[0], 'census')
         self.assertEqual(execute.call_args.args[1].archive_bytes, 123)
@@ -126,8 +129,9 @@ class NatsPhaseTests(unittest.TestCase):
             verification_pvc_uid=marker['verification_pvc_uid'],
             verification_pv_uid=marker['verification_pv_uid'], archive_sha256='a' * 64,
             archive_bytes=123)
+        args.input_pod_uid = POD_UID
         with patch.object(phase, '_require_verification_identity'), \
-             patch.object(phase, 'read_input_receipt', return_value={'status': 'COMPLETE'}):
+             patch.object(phase, 'read_census_consumption_receipt', return_value={'status': 'COMPLETE'}):
             self.assertEqual(phase.read_verification_receipt('census', args),
                 {'receipt': receipt, 'census': census})
 
@@ -163,8 +167,9 @@ class NatsPhaseTests(unittest.TestCase):
             source_pvc_uid=source_uid, source_pv_uid=SOURCE_PV_UID,
             verification_pvc_uid=verification_uid, verification_pv_uid=VERIFICATION_PV_UID,
             archive_sha256='a' * 64, archive_bytes=123)
+        args.input_pod_uid = POD_UID
         with patch.object(phase, '_require_verification_identity'), \
-             patch.object(phase, 'read_input_receipt', return_value={'status': 'COMPLETE'}), \
+             patch.object(phase, 'read_census_consumption_receipt', return_value={'status': 'COMPLETE'}), \
              patch.object(phase, 'run_verification', side_effect=AssertionError('must not replay')):
             with self.assertRaisesRegex(ValueError, 'verification_receipt_binding'):
                 phase.read_verification_receipt('census', args)
@@ -279,7 +284,11 @@ class NatsPhaseTests(unittest.TestCase):
             source_pvc_uid=marker['source_pvc_uid'], source_pv_uid=marker['source_pv_uid'],
             verification_pvc_uid=marker['verification_pvc_uid'],
             verification_pv_uid=marker['verification_pv_uid'], archive_sha256='a' * 64,
-            archive_bytes=123)
+            archive_bytes=123, session_attempt='1234abcd', input_pod_uid=POD_UID)
+        self._install_census_inputs(args)
+        with patch.dict(phase.os.environ, {'POD_UID': POD_UID}), \
+             patch.object(phase, '_require_verification_identity'):
+            phase.consume_census_inputs(args)
         with patch.object(phase, '_require_verification_identity'), \
              patch.object(phase, 'read_input_receipt', return_value={'status': 'COMPLETE'}), \
              patch.object(phase, 'run_verification', side_effect=AssertionError('must not replay')):
@@ -310,6 +319,83 @@ class NatsPhaseTests(unittest.TestCase):
             return phase.load_inputs(raw, operation=args.operation,
                 nonce=args.nonce, pod_uid=args.pod_uid, binding_args=args)
 
+    def _install_census_inputs(self, args, *, extra=None):
+        args.session_attempt = getattr(args, 'session_attempt', '1234abcd')
+        config = ('host: 127.0.0.1\nport: 4222\nhttp: 127.0.0.1:8222\n'
+            'resolver: MEMORY\njetstream: { store_dir: /data, max_file_store: 64MB, max_memory_store: 16MB }\n')
+        files = {'bootstrap.creds': base64.b64encode(b'fixed-bootstrap-creds\n').decode(),
+            'server.conf': base64.b64encode(config.encode()).decode()}
+        if extra:
+            files.update({name: base64.b64encode(value).decode() for name, value in extra.items()})
+        bundle = {'schema': 'voice-nats-census-inputs-v1', 'operation': args.operation,
+            'nonce': args.nonce, 'pod_uid': args.pod_uid, 'files': files}
+        raw = json.dumps(bundle, sort_keys=True, separators=(',', ':')).encode()
+        args.input_bundle_sha256 = hashlib.sha256(raw).hexdigest()
+        args.input_bundle_bytes = len(raw)
+        with patch.object(phase, '_require_verification_identity'):
+            return phase.load_census_inputs(raw, operation=args.operation,
+                nonce=args.nonce, pod_uid=args.pod_uid, binding_args=args)
+
+    def _consume_census_inputs(self, args):
+        args.input_pod_uid = args.pod_uid
+        with patch.object(phase, '_require_verification_identity'):
+            return phase.consume_census_inputs(args)
+
+    def test_census_loader_accepts_only_canonical_capture_outputs(self):
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+            verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256='a' * 64, archive_bytes=123, session_attempt='1234abcd')
+        receipt = self._install_census_inputs(args)
+        self.assertEqual(receipt['phase'], 'census-inputs')
+        self.assertEqual(receipt['file_count'], 2)
+        self.assertEqual(set(path.name for path in (self.verification / 'kernelinputbundle').iterdir()),
+            {'bootstrap.creds'})
+        self.assertEqual(set(path.name for path in (self.verification / 'inputs' / 'public').iterdir()),
+            {'server.conf'})
+        args.input_pod_uid = POD_UID
+        with patch.object(phase, '_require_verification_identity'):
+            self.assertEqual(phase.read_census_input_receipt(args), receipt)
+
+    def test_census_consumption_binds_new_pod_without_rewriting_loader_receipt(self):
+        loader = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+            verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256='a' * 64, archive_bytes=123, session_attempt='1234abcd')
+        self._install_census_inputs(loader)
+        load_path = (self.verification / 'state' / OPERATION / '1234abcd' /
+            'census-inputs.receipt.json')
+        load_bytes = load_path.read_bytes()
+        session_uid = '77777777-7777-4777-8777-777777777777'
+        session = types.SimpleNamespace(**{**vars(loader), 'pod_uid': session_uid,
+            'input_pod_uid': POD_UID, 'input_bundle_sha256': loader.input_bundle_sha256,
+            'input_bundle_bytes': loader.input_bundle_bytes})
+        with patch.dict(phase.os.environ, {'POD_UID': session_uid}), \
+             patch.object(phase, '_require_verification_identity'):
+            receipt = phase.consume_census_inputs(session)
+            self.assertEqual(phase.consume_census_inputs(session), receipt)
+        self.assertEqual(receipt['pod_uid'], session_uid)
+        self.assertEqual(receipt['input_pod_uid'], POD_UID)
+        self.assertEqual(load_path.read_bytes(), load_bytes)
+        replacement_uid = '88888888-8888-4888-8888-888888888888'
+        session.pod_uid = replacement_uid
+        with patch.dict(phase.os.environ, {'POD_UID': replacement_uid}), \
+             patch.object(phase, '_require_verification_identity'):
+            with self.assertRaisesRegex(ValueError, 'verification_input_consumption_unknown'):
+                phase.consume_census_inputs(session)
+
+    def test_census_loader_rejects_fixture_and_unneeded_jwt_material_before_projection(self):
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+            verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256='a' * 64, archive_bytes=123, session_attempt='1234abcd')
+        with patch.object(phase, '_require_verification_identity'):
+            with self.assertRaisesRegex(ValueError, 'verification_inputs'):
+                self._install_census_inputs(args, extra={
+                    'fixture.json': b'{}', 'operator.jwt': b'a.b.c',
+                    'account.jwt': b'a.b.c', 'system-account.jwt': b'a.b.c'})
+        self.assertFalse((self.verification / 'kernelinputbundle').exists())
+
     def test_verification_restores_streamed_archive_to_target_only_scratch_and_runs_fixed_chain(self):
         archive = self.root / 'source.tar'
         manifest = native_store.archive_closed_store(self.source, archive)
@@ -325,14 +411,16 @@ class NatsPhaseTests(unittest.TestCase):
             verification_pv_uid=VERIFICATION_PV_UID,
             archive_sha256=manifest['archive_sha256'], archive_bytes=len(tar_bytes),
             session_attempt='1234abcd')
-        input_receipt = self._install_verification_inputs(args)
+        input_receipt = self._install_census_inputs(args)
         self.assertEqual(input_receipt['status'], 'COMPLETE')
         self.assertEqual(set(path.name for path in (self.verification / 'kernelinputbundle').iterdir()),
-            phase.SESSION_INPUT_FILES)
+            {'bootstrap.creds'})
         self.assertEqual((self.verification / 'inputs' / 'public' / 'server.conf').read_bytes(),
             (self.input_private / 'server.conf').read_bytes())
+        self._consume_census_inputs(args)
         with patch.object(phase, '_require_verification_identity'):
-            self.assertEqual(phase.read_input_receipt(args), input_receipt)
+            args.input_pod_uid = POD_UID
+            self.assertEqual(phase.read_census_input_receipt(args), input_receipt)
         process = Mock()
         process.poll.return_value = None
         process.wait.return_value = 0
@@ -360,6 +448,23 @@ class NatsPhaseTests(unittest.TestCase):
         self.assertTrue((self.verification / 'store' / 'jetstream' / 'meta.inf').is_file())
         self.assertEqual((self.verification / '.voice-nats-verification' /
             f'{OPERATION}-{NONCE}.receipt.json').is_file(), True)
+
+    def test_census_phase_requires_consumption_receipt_before_archive_or_broker_start(self):
+        archive = self.root / 'source.tar'
+        manifest = native_store.archive_closed_store(self.source, archive)
+        tar_bytes = archive.read_bytes()
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+            verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256=manifest['archive_sha256'], archive_bytes=len(tar_bytes),
+            session_attempt='1234abcd')
+        self._install_census_inputs(args)
+        args.input_pod_uid = POD_UID
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase.subprocess, 'Popen', side_effect=AssertionError('broker must not start')), \
+             patch.object(phase.native_store, 'restore_closed_store', side_effect=AssertionError('archive must not restore')):
+            with self.assertRaisesRegex(ValueError, 'verification_input_consumption_unknown'):
+                phase.run_verification('census', args, io.BytesIO(b''))
 
     def test_new_session_pod_validates_loader_receipt_and_exact_persistent_bundle_before_start(self):
         loader = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
@@ -396,7 +501,8 @@ class NatsPhaseTests(unittest.TestCase):
             verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
             archive_sha256='a' * 64, archive_bytes=10)
         args.session_attempt = '1234abcd'
-        self._install_verification_inputs(args)
+        self._install_census_inputs(args)
+        self._consume_census_inputs(args)
         with patch.object(phase, '_require_verification_identity'):
             with self.assertRaisesRegex(ValueError, 'verification_input_header'):
                 phase.run_verification('census', args, io.BytesIO(b'X' * len(phase.CENSUS_INPUT_MAGIC)))
