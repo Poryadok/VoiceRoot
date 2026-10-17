@@ -1195,9 +1195,9 @@ f13_migration_alias_reconciles_guarded_path() {
   local destination_down='src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'
   local collision_up='src/backend/migrations/voice_db/000010_space_media_admission.up.sql'
   local collision_down='src/backend/migrations/voice_db/000010_space_media_admission.down.sql'
-  local base_up base_down snapshot_base_up snapshot_base_down h_entry target_entry integration_entry
+  local base_up base_down snapshot_base_up snapshot_base_down h_entry target_entry integration_entry integration_entry_record
   local base_old snapshot_base_old h_old integration_old integration_first_old integration_second_old integration_base_old target_old aggregate_old resolved_content_base
-  local normalized_saved_guarded normalized_saved_source normalized_destination
+  local normalized_saved_guarded normalized_saved_source normalized_integration_record
   [[ "${game_checkpoint_aggregate_active}" == true &&
     "${target}" == "${game_checkpoint_aggregate_head}" &&
     -n "${game_checkpoint_snapshot_record}" &&
@@ -1312,11 +1312,6 @@ f13_migration_alias_reconciles_guarded_path() {
   [[ "${base_up}" == '100644 blob 171033aaf172370f76ede86349b042154bd2ff71' &&
     "${base_down}" == '100644 blob 83953384c9caa2ae2aa8d9485a208bb5ead5e33f' &&
     "${snapshot_base_up}" == "${base_up}" && "${snapshot_base_down}" == "${base_down}" ]] || return 1
-  [[ "$(awk -F'\t' -v candidate="${destination}" '$1 == candidate { n++ } END { print n+0 }' "${output}")" == 1 &&
-    -n "${owners[${destination}]+present}" &&
-    -n "${owner_source_entries[${destination}]+present}" ]] || return 1
-  normalized_destination="$(f13_tree_entry_tuple_for_path "${destination}" "${owner_source_entries[${destination}]}")" || return 1
-  [[ "${normalized_destination}" == "${destination_entry}" ]] || return 1
   row_count="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { n++; row=$0 } END { print n+0 }' "${output}")"
   [[ "${row_count}" == 1 ]] || return 1
   row="$(awk -F'\t' -v candidate="${path}" '$1 == candidate { print; exit }' "${output}")"
@@ -1334,11 +1329,14 @@ f13_migration_alias_reconciles_guarded_path() {
   h_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_snapshot_head}" "${destination}")" || return 1
   target_entry="$(f13_git_tree_entry "${repo}" "${game_checkpoint_aggregate_target}" "${destination}")" || return 1
   integration_entry="$(f13_git_tree_entry "${repo}" "${integration}" "${destination}")" || return 1
+  integration_entry_record="$(f13_git_tree_entry_record "${repo}" "${integration}" "${destination}")" || return 1
+  normalized_integration_record="$(f13_tree_entry_tuple_for_path "${destination}" "${integration_entry_record}")" || return 1
   [[ "${h_entry}" == "100644 blob ${destination_entry##* }" &&
     "${target_entry}" == "${h_entry}" && "${integration_entry}" == "${h_entry}" &&
-    "${destination_entry}" == "${old_entry}" ]] || return 1
-  game_checkpoint_aggregate_path_allowed "${repo}" "${owners[${destination}]:-}" \
-    "${destination}" "${owner_source_entries[${destination}]:-}" || return 1
+    "${destination_entry}" == "${old_entry}" &&
+    "${normalized_integration_record}" == "${destination_entry}" ]] || return 1
+  game_checkpoint_aggregate_path_allowed "${repo}" "${integration}" \
+    "${destination}" "${integration_entry_record}" || return 1
   return 0
 }
 
@@ -1353,8 +1351,8 @@ f13_migration_alias_reconciliation_execution_fixture() {
   local path row fields old_entry row_owner row_first row_source_base row_source_head row_content_base row_candidates
   local nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry
   local integration integration_first integration_second integration_base destination destination_entry
-  local destination_parent output old_path
-  local fixture_old_record fixture_destination_record normalized_guarded normalized_source normalized_destination
+  local output old_path
+  local fixture_old_record
   local -A owners=() owner_content_bases=() owner_source_heads=() owner_source_entries=()
   local -A guarded_entries=() guarded_entry_commits=()
 
@@ -1389,16 +1387,9 @@ f13_migration_alias_reconciliation_execution_fixture() {
     owner_source_entries["${path}"]="${fixture_old_record}"
     guarded_entries["${path}"]="${fixture_old_record}"
     guarded_entry_commits["${path}"]="${nested_owner}"
-    owners["${destination}"]="${row_candidates}"
-    fixture_destination_record="${destination_entry}"$'\t'"${destination}"
-    owner_source_entries["${destination}"]="${fixture_destination_record}"
-    destination_parent="$(git -C "${repo}" rev-parse "${row_candidates}^1" 2>/dev/null)" || return 1
     output="${TMP_DIR}/f13-alias-execution-map"
     awk -F '\t' -v candidate="${path}" '$1 == candidate { for (i=1; i<=8; i++) printf "%s%s", $i, (i==8 ? ORS : FS) }' \
       "${aliases}" >"${output}" || return 1
-    printf '%s\ttrue\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "${destination}" "${row_candidates}" "${destination_parent}" "${row_candidates}" \
-      "${row_candidates}" "${row_candidates}" "${row_candidates}" >>"${output}" || return 1
     if ! f13_migration_alias_reconciles_guarded_path "${repo}" "${event_base}" \
       "${source_head}" "${path}" "${nested_owner}" "${row_content_base}" \
       "${nested_head}" "${fixture_old_record}" "${fixture_old_record}" "${output}"; then
