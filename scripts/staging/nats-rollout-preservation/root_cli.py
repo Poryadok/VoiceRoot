@@ -115,8 +115,14 @@ def target_input(path,wanted):
         if len(raw)!=s.st_size or hashlib.sha256(raw).hexdigest()!=wanted:raise Blocked('rollout_target_input_changed')
         value=json.loads(raw,object_pairs_hook=guard.object_pairs)
     finally:os.close(fd)
-    if set(value)!={'target','manifests','contract','migrations','nonnats'} or not isinstance(value['manifests'],list) or not 1<=len(value['manifests'])<=128:
+    allowed={'target','manifests','contract','migrations','nonnats','gis_first_install'}
+    if not {'target','manifests','contract','migrations','nonnats'}<=set(value) or set(value)-allowed or not isinstance(value['manifests'],list) or not 1<=len(value['manifests'])<=128:
         raise Blocked('rollout_target_input_shape_invalid')
+    if 'gis_first_install' in value:
+        # This legacy root CLI accepts a runner-created file plus its own hash.
+        # GIS creation is admitted only by bridge_root's source/CI/lock-bound
+        # compiler path, never by a caller-supplied target document.
+        raise Blocked('gis_first_install_protected_bridge_required')
     if digest(value['manifests'])!=value['target']['manifest_sha256']:
         raise Blocked('rollout_target_manifest_digest_invalid')
     migrations.validate_plan(value['migrations'],value['target']['mode'])
@@ -126,6 +132,12 @@ def target_input(path,wanted):
         raise Blocked('rollout_target_nonnats_digest_invalid')
     try:nonnats_plan._validate(value['nonnats'],value['target']['mode'])
     except nonnats_plan.PlanError:raise Blocked('rollout_target_nonnats_plan_invalid') from None
+    if 'gis_first_install' in value:
+        import gis_first_install
+        if (value['target']['mode'] not in ('full','app-only')
+            or value['target'].get('gis_first_install_sha256')!=digest(value['gis_first_install'])):
+            raise Blocked('gis_first_install_target_binding_invalid')
+        gis_first_install.validate_source_plan(value['gis_first_install'])
     # Exactly the deployed named INFO contract is supported; never interpret a
     # different/new bootstrap contract as an authorization to reseed the store.
     known=json.loads(public_read(Path(__file__).resolve().parents[1]/'nats-known-baseline'/'deployed-contract.json'))
@@ -198,7 +210,7 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
         base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
@@ -217,7 +229,9 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
         (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,**lifecycle_args)
+        gis_first_install=(None if 'gis_first_install' not in value else
+            __import__('gis_first_install').bind_operation(value['gis_first_install'],op,value['target']))
+        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None else None),gis_transition=gis_transition,**lifecycle_args)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)

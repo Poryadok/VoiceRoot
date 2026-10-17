@@ -43,9 +43,13 @@ def prepare_error(error):
 
 def validate(row):
     optional={'run_attempt','report_run_id','report_source_sha'}
-    if isinstance(row,dict) and row.get('action') in ('prepare','prepare-repair'):optional.add('provisional_staging')
+    if isinstance(row,dict) and row.get('action') in ('prepare','prepare-repair'):
+        optional.update(('provisional_staging','gis_first_install'))
     if not isinstance(row,dict) or row.get('action') not in FIELDS or set(row)-optional!={'action','nonce'}|FIELDS[row['action']]:raise BridgeError('bridge_request_invalid')
     if 'provisional_staging' in row and (type(row['provisional_staging']) is not bool or row['mode']!='images-only'):raise BridgeError('bridge_target_invalid')
+    if 'gis_first_install' in row and (type(row['gis_first_install']) is not bool or row['gis_first_install'] is not True
+        or row['action']!='prepare' or row['mode'] not in ('full','app-only')):
+        raise BridgeError('bridge_gis_first_install_invalid')
     for key in ('run_attempt','report_run_id'):
         if key in row and (type(row[key]) is not int or not 0<row[key]<2**63):raise BridgeError('bridge_identity_invalid')
     if 'report_source_sha' in row and (not isinstance(row['report_source_sha'],str) or not re.fullmatch('[a-f0-9]{40}',row['report_source_sha'])):raise BridgeError('bridge_identity_invalid')

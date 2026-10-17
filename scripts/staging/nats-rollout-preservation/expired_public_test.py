@@ -92,11 +92,12 @@ class PublicRecoveryTests(unittest.TestCase):
     def test_real_bundle_inventory_and_manifest_reader_new_bound_and_custody_veto(self):
         import bundle,root_cli,hashlib
         added={'expired_recovery.py','expired_proof.py','expired_admission.py','expired_transport.py','expired_finish.py',
-            'closed_archive.py','closed_durable.py','hub_bridge_identity.py','hub_bridge_unit.py','operator_retirement.py','operator_reset.py'}
+            'closed_archive.py','closed_durable.py','hub_bridge_identity.py','hub_bridge_unit.py','operator_retirement.py','operator_reset.py',
+            'gis_first_install.py','gis_prerequisite.py'}
         self.assertTrue(added<=set(bundle.ROLLOUT))
         self.assertIn('nats_active_contract.py',bundle.ROLLOUT)
         self.assertIn('deployment_report.py',bundle.ROLLOUT)
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,81)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,83)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)

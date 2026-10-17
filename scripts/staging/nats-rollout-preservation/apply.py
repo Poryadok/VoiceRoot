@@ -15,17 +15,22 @@ def digest(value):
 
 def paused_documents(documents,receipt):
     result=copy.deepcopy(documents)
+    gis_install=bool(receipt.get('target',{}).get('gis_first_install_sha256'))
+    if gis_install and result:
+        raise Blocked('gis_first_install_manifest_forbidden')
     for row in result:
         kind=row.get('kind');meta=row.get('metadata',{});name=meta.get('name','')
         if meta.get('namespace')!=guard.NS or kind not in ('Deployment','ConfigMap','Service','NetworkPolicy','Ingress'):
             raise Blocked('rollout_resource_scope_invalid')
         if kind=='Deployment':
             spec=row['spec'];template=spec['template']
-            if receipt['target'].get('input_template_hashes',receipt['target']['template_hashes']).get(name)!=digest(template):
-                raise Blocked('rollout_target_template_changed')
-            for c in template['spec'].get('initContainers',[])+template['spec']['containers']:
-                if receipt['target']['images'].get(name+'/'+c['name'])!=c['image']:
-                    raise Blocked('rollout_target_image_changed')
+            gis_deployment=gis_install and name=='voice-gameintegration'
+            if not gis_deployment:
+                if receipt['target'].get('input_template_hashes',receipt['target']['template_hashes']).get(name)!=digest(template):
+                    raise Blocked('rollout_target_template_changed')
+                for c in template['spec'].get('initContainers',[])+template['spec']['containers']:
+                    if receipt['target']['images'].get(name+'/'+c['name'])!=c['image']:
+                        raise Blocked('rollout_target_image_changed')
             if name=='voice-nats-pvc-candidate':
                 claims=[v.get('persistentVolumeClaim',{}).get('claimName') for v in template['spec'].get('volumes',[]) if v['name']=='jsdata']
                 if claims!=[receipt['pvc']['name']]:raise Blocked('rollout_rendered_claim_changed')
@@ -52,11 +57,13 @@ def main():
     if len(raw)!=s.st_size or hashlib.sha256(raw).hexdigest()!=receipt['target']['manifest_sha256']:
         raise Blocked('rollout_manifest_changed')
     rows=json.loads(raw,object_pairs_hook=guard.object_pairs)
-    if not isinstance(rows,list) or not 1<=len(rows)<=128:raise Blocked('rollout_manifest_shape_invalid')
+    gis_install=bool(receipt.get('target',{}).get('gis_first_install_sha256'))
+    if not isinstance(rows,list) or len(rows)>(128) or (not rows and not gis_install):raise Blocked('rollout_manifest_shape_invalid')
     paused=paused_documents(rows,receipt)
     guard.anchor(receipt,'rollout-applying',rv)
     guard.recovery_at_use(receipt)
-    guard.kubectl(['apply','-f','/dev/stdin','-o','name'],{'apiVersion':'v1','kind':'List','items':paused})
+    if paused:
+        guard.kubectl(['apply','-f','/dev/stdin','-o','name'],{'apiVersion':'v1','kind':'List','items':paused})
     guard.anchor(receipt,'rollout-applying',rv)
     print('NATS_ROLLOUT_APPLY=PAUSED_COMPLETE')
 

@@ -200,7 +200,7 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -210,6 +210,50 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    if gis_first_install is not None:
+        import gis_first_install as gis
+        if gis_source_root is None or not isinstance(gis_source_capture,dict):
+            raise Blocked('gis_first_install_source_capture_missing')
+        if target.get('gis_first_install_sha256') != gis_first_install.get('source_plan_sha256'):
+            raise Blocked('gis_first_install_target_binding_invalid')
+        state['gis_first_install']=copy.deepcopy(gis_first_install)
+        authority=gis_source_authority
+        if (not isinstance(authority,dict) or authority.get('verified') is not True
+            or authority.get('source_sha')!=gis_first_install.get('source_sha')
+            or type(authority.get('run_id')) is not int or authority['run_id']<=0
+            or type(authority.get('run_attempt')) is not int or authority['run_attempt']<=0
+            or type(authority.get('workflow_id')) is not int
+            or not isinstance(authority.get('tree_sha'),str) or not re.fullmatch(r'[a-f0-9]{40}',authority['tree_sha'])
+            or type(authority.get('lock_artifact_id')) is not int or authority['lock_artifact_id']<=0
+            or not isinstance(authority.get('lock_sha256'),str) or not re.fullmatch(r'[a-f0-9]{64}',authority['lock_sha256'])):
+            raise Blocked('gis_first_install_source_authority_invalid')
+        state['gis_first_install']['source_ci']={key:authority[key] for key in
+            ('run_id','run_attempt','workflow_id','tree_sha','lock_artifact_id','lock_sha256')}
+        import gis_prerequisite
+        inputs=gis_prerequisite.source_inputs(Path(gis_source_root),gis_source_capture)
+        required_capture={path:gis_source_capture[path] for path in (
+            'scripts/dev/migrations.py','docker/postgres/provision-gameintegration-runtime-role.sql',
+            'docker/postgres/verify-gameintegration-runtime-role.sql',
+            'deploy/templates/provision-gameintegration-runtime-role-job.yaml',
+            'deploy/templates/migrate-game-integration-db-job.yaml',
+            'deploy/templates/verify-game-integration-db-job.yaml')}
+        required_capture.update({'src/backend/migrations/game_integration_db/'+row['name']:row['sha256']
+                                 for row in inputs['migrations']})
+        state['gis_first_install']['inputs']=inputs
+        state['gis_first_install']['inputs_sha256']=gis.digest(inputs)
+        state['gis_first_install']['source_root']=str(Path(gis_source_root))
+        state['gis_first_install']['source_capture']=required_capture
+    if gis_transition is not None:
+        if gis_first_install is not None:
+            raise Blocked('gis_first_install_transition_admission_conflict')
+        import gis_first_install as gis
+        gis.validate_transition_binding(gis_transition,kube)
+        state['gis_transition']=copy.deepcopy(gis_transition)
+    if gis_first_install is None and target.get('mode') in ('full','app-only'):
+        try:active_release=private_json(guard.ROOT/'installed'/'active-release.json')
+        except FileNotFoundError:active_release={}
+        if ('gis_first_install_transition' in active_release and gis_transition is None):
+            raise Blocked('gis_first_install_transition_required')
     if lifecycle is not None:
         if set(lifecycle)-{'provisional','repair_parent','source_authority','execution_authority'}:
             raise Blocked('provisional_binding_invalid')
@@ -221,8 +265,21 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         manifests=json.loads((base/'apply-manifests.json').read_bytes())
         if guard.frontend_image_only(target) and (migration_plan or non_nats['actions']):
             raise Blocked('rollout_frontend_auxiliary_action_forbidden')
+        snapshot_names={r['metadata']['name'] for r in manifests if r.get('kind')=='Deployment'}
+        if gis_first_install is not None:
+            # The add-only target contains only the new GIS pair; independently
+            # retain every pre-existing workload in the preservation cut.
+            existing={obj.get('name') for row in non_nats.get('checks',[]) for obj in row.get('objects',[])
+                if obj.get('kind')=='Deployment'}
+            if len(existing)!=22 or 'voice-gameintegration' in existing:
+                raise Blocked('gis_first_install_baseline_workload_count_invalid')
+            # The new GIS Deployment does not exist yet and is managed by its
+            # create-only receipt. The preservation stage snapshots the 22
+            # existing workloads, then verifies those same UIDs/templates
+            # after the GIS-only target has been applied.
+            snapshot_names=existing
         stage=RolloutStage.capture(kube,operation,journal,
-            [r['metadata']['name'] for r in manifests if r.get('kind')=='Deployment']+([renderer_root.HUB] if renderer_authority is not None else []))
+            sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []))
         if target['mode']=='images-only':
             manifests,target=image_only_documents(stage,manifests,target,renderer_authority=renderer_authority)
             save(base/'apply-manifests.json',manifests)
@@ -231,6 +288,11 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         if canonical(migration_plan)!=target['migration_sha256']:raise Blocked('rollout_target_migration_digest_invalid')
         state['migrations']=copy.deepcopy(migration_plan)
         state['migration_secret_metadata']=migrations.preflight(kube,migration_plan,target['mode'])
+        if state.get('gis_first_install') is not None:
+            import gis_first_install as gis
+            gis.preflight(kube,state['gis_first_install'])
+            import gis_prerequisite
+            gis_prerequisite.preflight(kube,state['gis_first_install'])
         state['space_preflight']=space_safeguards.preflight(kube,base,migration_plan)
         if canonical(non_nats)!=target['nonnats_sha256']:raise Blocked('rollout_target_nonnats_digest_invalid')
         state['nonnats']=copy.deepcopy(non_nats)
@@ -297,6 +359,66 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         save(base/'checkpoint.json',state);raise
 
 
+def execute_gis_first_install(kube,base,state,stage,journal):
+    """Collect prerequisites and create only the paused GIS pair before standard apply."""
+    import gis_prerequisite
+    import gis_first_install as gis
+    custody=state.get('custody')
+    if not isinstance(custody,dict) or custody.get('verified') is not True:
+        raise Blocked('gis_first_install_preservation_custody_missing')
+    custody_binding={
+        'operation':state['operation'],
+        'namespace_uid':stage.expected['namespace_uid'],
+        'marker_uid':stage.expected['marker_uid'],
+        'claim_uid':stage.expected['source_claim_uid'],
+        'pv_uid':stage.expected['source_pv_uid'],
+        'target_sha':state['target']['tag'],
+        'archive_sha256':state['cut']['manifest']['archive_sha256'],
+        'manifest_sha256':state['cut']['manifest_sha256'],
+        'census_sha256':state['cut']['census_sha256'],
+        'baseline_workload_count':len(state['context']['snapshots']),
+        'baseline_snapshots_sha256':gis.digest(state['context']['snapshots']),
+        'off_node_verified':True,
+    }
+    if custody_binding['baseline_workload_count'] != 22:
+        raise Blocked('gis_first_install_baseline_workload_count_invalid')
+    state['gis_first_install']['custody']=copy.deepcopy(custody_binding)
+    state['gis_first_install']['custody_binding_sha256']=gis.digest(custody_binding)
+    def save_gis_plan(value):
+        state['gis_first_install']=copy.deepcopy(value)
+        save(Path(base)/'checkpoint.json',state)
+        journal({'kind':'gis_first_install_checkpoint','phase':value.get('phase')})
+    stage.verify_final_storage()
+    state['gis_first_install']['prerequisite_receipt']=gis_prerequisite.execute(
+        kube,state['gis_first_install'],Path(state['gis_first_install']['source_root']),
+        state['gis_first_install']['source_capture'],save_gis_plan,
+        verify_storage=stage.verify_final_storage)
+    save(Path(base)/'checkpoint.json',state)
+    stage.verify_final_storage()
+    state['gis_first_install']['resource_receipt']=gis.execute(
+        kube,state['gis_first_install'],save_gis_plan,start=False)
+    state['gis_first_install_receipt']=copy.deepcopy(state['gis_first_install']['resource_receipt'])
+    save(Path(base)/'checkpoint.json',state)
+    return state['gis_first_install_receipt']
+
+
+def rollback_gis_first_install(kube,base,state,journal):
+    """Remove only journaled GIS objects; retain completed additive DB prerequisites."""
+    plan=state.get('gis_first_install')
+    if not isinstance(plan,dict):return False
+    import gis_first_install as gis
+    def save_plan(value):
+        state['gis_first_install']=copy.deepcopy(value)
+        save(Path(base)/'checkpoint.json',state)
+        journal({'kind':'gis_first_install_rollback_checkpoint','phase':value.get('phase')})
+    gis.rollback(kube,plan,save_plan)
+    state['gis_first_install_rollback']={'schema':'voice-gis-first-install-rollback-v1',
+        'operation':state['operation'],'phase':'ROLLED_BACK',
+        'remaining_database_prerequisite':bool(plan.get('prerequisite_receipt'))}
+    save(Path(base)/'checkpoint.json',state)
+    return True
+
+
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
     def current_deadline():
         if expired_authority is not None:
@@ -336,6 +458,9 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
     stage=reconstruct(kube,state,journal)
+    if state.get('gis_transition') is not None:
+        import gis_first_install as gis
+        gis.validate_transition_binding(state['gis_transition'],kube)
     # An interrupted owned CM CAS is checked by advance's exact UID/hash/
     # operation annotation. Credential provenance remains strict on retries.
     revalidate_inputs(kube,{'scripts':[]} if migration_recovery else contract,state['provenance'])
@@ -406,6 +531,8 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
                 if after!=expected:raise Blocked('rollout_completed_database_authority_changed')
                 state['migration_completed_metadata']=after
                 save(Path(base)/'checkpoint.json',state)
+        if state.get('gis_first_install') is not None:
+            execute_gis_first_install(kube,base,state,stage,journal)
         state['space_postcondition']=space_safeguards.after_migrate(kube,state.get('space_gate'))
         save(Path(base)/'checkpoint.json',state)
         if state.get('renderer_authority') is not None:
@@ -450,6 +577,11 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         try:
             if stage.refence().get('verified') is True:state['fence_status']='VERIFIED'
         except Exception:pass
+        if state.get('gis_first_install') is not None and state['fence_status']=='VERIFIED':
+            try:
+                if rollback_gis_first_install(kube,base,state,journal):
+                    state['status']='ROLLED_BACK';state['phase']='GIS_FIRST_INSTALL_ROLLED_BACK'
+            except Exception:pass
         state['context']=context(stage);save(Path(base)/'checkpoint.json',state);raise
 
 
@@ -486,6 +618,9 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
     # are proved. Original templates remain separately bound for rollback.
     revalidate_inputs(kube,contract,state['provenance'])
     stage.adopt_applied_target(receipt,claim_rv)
+    if state.get('gis_transition') is not None:
+        import gis_first_install as gis
+        gis.validate_transition_binding(state['gis_transition'],kube)
     if 'nonnats' in state:state['nonnats_applied']=nonnats_runtime.verify(kube,state['nonnats'],state['nonnats_binding'],stage,applied=True)
     state['context']=context(stage);state['phase']='POST_APPLY_PROOF';save(Path(base)/'checkpoint.json',state)
     try:
@@ -497,6 +632,30 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
         attach_closed_preservation(base,state,stage,resume_authority)
         state['restart']=stage.restart()
         resume_authority()
+        if state.get('gis_transition') is not None:
+            import gis_first_install as gis
+            gis.validate_transition_binding(state['gis_transition'],kube)
+        if state.get('gis_first_install') is not None:
+            import gis_first_install as gis
+            gis_plan=state['gis_first_install']
+            def persist_gis_plan(value):
+                state['gis_first_install']=copy.deepcopy(value)
+                state['gis_first_install_receipt']=copy.deepcopy(value.get('receipt'))
+                save(Path(base)/'checkpoint.json',state)
+                journal({'kind':'gis_first_install_checkpoint','phase':value.get('phase')})
+            gis.start_owned(kube,gis_plan,persist_gis_plan)
+            state['gis_first_install_receipt']=copy.deepcopy(gis_plan['receipt'])
+            save(Path(base)/'checkpoint.json',state)
+            ready=gis.verify_ready(kube,gis_plan)
+            transition=gis.transition_receipt(gis_plan,ready,
+                source_ci=gis_plan.get('source_ci'),
+                custody=gis_plan.get('custody'),
+                target_mode=state['target']['mode'])
+            gis.validate_transition_receipt(transition,state)
+            state['gis_first_install_ready']=copy.deepcopy(ready)
+            state['gis_first_install_transition_receipt']=copy.deepcopy(transition)
+            save(Path(base)/'checkpoint.json',state)
+            resume_authority()
         state['context']=context(stage)
         if publication is not None:publication(state,authority_guard=resume_authority)
         resume_authority()
@@ -514,6 +673,11 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
             observed=stage.refence()
             if observed.get('verified') is True:state['fence_status']='VERIFIED'
         except Exception:pass
+        if state.get('gis_first_install') is not None and state['fence_status']=='VERIFIED':
+            try:
+                if rollback_gis_first_install(kube,base,state,journal):
+                    state['status']='ROLLED_BACK';state['phase']='GIS_FIRST_INSTALL_ROLLED_BACK'
+            except Exception:pass
         state['context']=context(stage);save(Path(base)/'checkpoint.json',state)
         raise
 

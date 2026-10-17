@@ -72,6 +72,11 @@ on:
         type: boolean
         required: false
         default: false
+      gis_first_install:
+        description: Explicit create-only GIS first-install transition; full/app-only source and CI checks still apply
+        type: boolean
+        required: false
+        default: false
       repair_provisional_operation:
         description: Exact released unaccepted provisional parent for a fresh repair-forward transaction
         type: string
@@ -176,6 +181,7 @@ jobs:
     environment: staging
     env:
       ROLLOUT_PROVISIONAL_STAGING: ${{ inputs.provisional_staging && 'true' || 'false' }}
+      ROLLOUT_GIS_FIRST_INSTALL: ${{ inputs.gis_first_install && 'true' || 'false' }}
       ROLLOUT_REPAIR_PARENT: ${{ inputs.repair_provisional_operation }}
       ROLLOUT_NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
       ROLLOUT_EXPIRED_NATIVE_OPERATION: ${{ inputs.expired_native_operation }}
@@ -434,8 +440,13 @@ jobs:
               changed=set(filter(None,os.environ['CHANGED_SERVICES'].split(',')))
               recoveries=[value for value in (prior,cold,upload,expired_native,expired_finish) if value]
               provisional=os.environ.get('ROLLOUT_PROVISIONAL_STAGING','false')
+              gis_first_install=os.environ.get('ROLLOUT_GIS_FIRST_INSTALL','false')
               repair=os.environ.get('ROLLOUT_REPAIR_PARENT','')
-              if provisional not in ('true','false'):raise SystemExit('NATS_ROLLOUT=PROVISIONAL_INPUT_INVALID')
+              if provisional not in ('true','false') or gis_first_install not in ('true','false'):
+                  raise SystemExit('NATS_ROLLOUT=PROVISIONAL_INPUT_INVALID')
+              if gis_first_install=='true' and (os.environ.get('GITHUB_EVENT_NAME')!='workflow_dispatch'
+                  or mode not in ('full','app-only') or recoveries or provisional=='true' or repair):
+                  raise SystemExit('NATS_ROLLOUT=GIS_FIRST_INSTALL_INPUT_INVALID')
               if provisional=='true' or repair:
                   if (os.environ.get('GITHUB_EVENT_NAME')!='workflow_dispatch' or mode!='images-only'
                       or recoveries or not changed or os.environ.get('ROLLOUT_NEEDS_FULL_ROLLOUT')!='false'
@@ -454,7 +465,7 @@ jobs:
                   ['prepare-rollback',prior,os.environ['GITHUB_RUN_ID']] if prior else
                   ['prepare',mode,os.environ['CHANGED_SERVICES'],os.environ['VOICE_IMAGE_TAG'],os.environ['GITHUB_RUN_ID']])
               if repair:arguments=['prepare-repair',repair,*arguments[1:],provisional]
-              elif provisional=='true':arguments.append(provisional)
+              elif provisional=='true' or gis_first_install=='true':arguments.extend([provisional,gis_first_install])
           elif action=='--bridge-accept-provisional':arguments=['accept-provisional',op,os.environ['GITHUB_RUN_ID']]
           elif action=='--bridge-authorize':
               upload_nonce=os.environ.get('ROLLOUT_UPLOAD_NONCE','')
