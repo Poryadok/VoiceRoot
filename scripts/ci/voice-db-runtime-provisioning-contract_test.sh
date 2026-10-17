@@ -1802,6 +1802,7 @@ f13_diag_stderr="${TMP_DIR}/f13-guarded-diagnostic-stderr"
 f13_diag_stdout="$(f13_emit_guarded_failure_diagnostic guarded_target_mismatch \
   'protos/voice/fixture:(glob)/fixture.proto' '0123456789012345678901234567890123456789' \
   'abcdefabcdefabcdefabcdefabcdefabcdefabcd' 'fedcbafedcbafedcbafedcbafedcbafedcbafedc' \
+  '1111111111111111111111111111111111111111' \
   '100644 blob 0123456789012345678901234567890123456789 path' \
   '100755 blob abcdefabcdefabcdefabcdefabcdefabcdefabcd path' \
   stored_entry_must_equal_final_target 2>"${f13_diag_stderr}")"
@@ -1811,6 +1812,7 @@ f13_diag_stdout="$(f13_emit_guarded_failure_diagnostic guarded_target_mismatch \
 }
 grep -Fq 'stage=f13-collector category=guarded_target_mismatch' "${f13_diag_stderr}" && \
   grep -Fq 'path=protos/voice/fixture' "${f13_diag_stderr}" && \
+  grep -Fq 'source_head=1111111111111111111111111111111111111111' "${f13_diag_stderr}" && \
   grep -Fq 'stored=100644:blob:0123456789012345678901234567890123456789' "${f13_diag_stderr}" && \
   grep -Fq 'target=100755:blob:abcdefabcdefabcdefabcdefabcdefabcdefabcd' "${f13_diag_stderr}" && \
   grep -Fq 'predicate=stored_entry_must_equal_final_target' "${f13_diag_stderr}" || {
