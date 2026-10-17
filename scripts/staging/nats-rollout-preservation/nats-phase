@@ -52,6 +52,19 @@ def _identity(args):
         raise ValueError('identity')
 
 
+def _storage_uid(value, label):
+    if not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', value):
+        raise ValueError(label)
+    return value
+
+
+def _archive_identity(args):
+    return {
+        'source_pvc_uid': _storage_uid(getattr(args, 'source_pvc_uid', None), 'archive_source_pvc_uid'),
+        'source_pv_uid': _storage_uid(getattr(args, 'source_pv_uid', None), 'archive_source_pv_uid'),
+    }
+
+
 def _mode_allows(row, uid, gid, bits):
     shift = 6 if row.st_uid == uid else 3 if row.st_gid == gid else 0
     return ((row.st_mode >> shift) & bits) == bits
@@ -247,7 +260,11 @@ def run_verification(phase_name, args):
     if os.environ.get('POD_UID') != args.pod_uid:
         raise ValueError('verification_pod_identity')
     source_uid = getattr(args, 'source_pvc_uid', '')
+    source_pv_uid = getattr(args, 'source_pv_uid', '')
     verification_uid = getattr(args, 'verification_pvc_uid', '')
+    verification_pv_uid = getattr(args, 'verification_pv_uid', '')
+    _storage_uid(source_pv_uid, 'verification_source_pv_uid')
+    _storage_uid(verification_pv_uid, 'verification_target_pv_uid')
     source, verification, output, inputs = validate_verification_mounts(
         DATA_ROOT, VERIFY_ROOT, OUT_ROOT, INPUT_ROOT,
         source_pvc_uid=source_uid, verification_pvc_uid=verification_uid)
@@ -259,7 +276,8 @@ def run_verification(phase_name, args):
     marker = operation_state / (args.operation + '-' + args.nonce + '.json')
     marker_value = {'schema': RECEIPT_SCHEMA, 'phase': phase_name, 'operation': args.operation,
         'nonce': args.nonce, 'pod_uid': args.pod_uid, 'source_pvc_uid': source_uid,
-        'verification_pvc_uid': verification_uid, 'state': 'STARTED'}
+        'source_pv_uid': source_pv_uid, 'verification_pvc_uid': verification_uid,
+        'verification_pv_uid': verification_pv_uid, 'state': 'STARTED'}
     fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'wb') as stream:
         stream.write(json.dumps(marker_value, sort_keys=True, separators=(',', ':')).encode())
@@ -336,7 +354,8 @@ def run_verification(phase_name, args):
         os.fsync(stream.fileno())
     receipt = {'schema': RECEIPT_SCHEMA, 'phase': phase_name, 'operation': args.operation,
         'nonce': args.nonce, 'pod_uid': args.pod_uid, 'source_pvc_uid': source_uid,
-        'verification_pvc_uid': verification_uid, 'archive_sha256': manifest['archive_sha256'],
+        'source_pv_uid': source_pv_uid, 'verification_pvc_uid': verification_uid,
+        'verification_pv_uid': verification_pv_uid, 'archive_sha256': manifest['archive_sha256'],
         'census_sha256': hashlib.sha256(result_bytes).hexdigest(), 'status': 'COMPLETE'}
     receipt_path = operation_state / (args.operation + '-' + args.nonce + '.receipt.json')
     with receipt_path.open('xb') as stream:
@@ -364,7 +383,9 @@ def read_verification_receipt(phase_name, args):
         or DATA_ROOT.resolve() == VERIFY_ROOT.resolve() or os.access(DATA_ROOT, os.W_OK)
         or os.access(VERIFY_ROOT, os.W_OK) is False
         or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'source_pvc_uid', '') or '')
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'source_pv_uid', '') or '')
         or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'verification_pvc_uid', '') or '')
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'verification_pv_uid', '') or '')
         or args.source_pvc_uid == args.verification_pvc_uid):
         raise ValueError('verification_mounts')
     operation_state = VERIFY_ROOT / '.voice-nats-verification'
@@ -373,13 +394,14 @@ def read_verification_receipt(phase_name, args):
         or directory.st_uid != VERIFICATION_UID or stat.S_IMODE(directory.st_mode) != 0o700):
         raise ValueError('verification_state_invalid')
     expected_marker = {'schema', 'phase', 'operation', 'nonce', 'pod_uid',
-        'source_pvc_uid', 'verification_pvc_uid', 'state'}
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid', 'state'}
     marker = _private_json(operation_state / (args.operation + '-' + args.nonce + '.json'))
     if (not isinstance(marker, dict) or set(marker) != expected_marker
         or marker != {'schema': RECEIPT_SCHEMA, 'phase': phase_name,
             'operation': args.operation, 'nonce': args.nonce, 'pod_uid': args.pod_uid,
-            'source_pvc_uid': args.source_pvc_uid,
-            'verification_pvc_uid': args.verification_pvc_uid, 'state': 'STARTED'}):
+            'source_pvc_uid': args.source_pvc_uid, 'source_pv_uid': args.source_pv_uid,
+            'verification_pvc_uid': args.verification_pvc_uid,
+            'verification_pv_uid': args.verification_pv_uid, 'state': 'STARTED'}):
         raise ValueError('verification_receipt_binding')
     receipt_path = operation_state / (args.operation + '-' + args.nonce + '.receipt.json')
     try:
@@ -393,12 +415,15 @@ def read_verification_receipt(phase_name, args):
     receipt = _private_json(receipt_path)
     if (not isinstance(receipt, dict) or set(receipt) != {
             'schema', 'phase', 'operation', 'nonce', 'pod_uid', 'source_pvc_uid',
-            'verification_pvc_uid', 'archive_sha256', 'census_sha256', 'status'}
+            'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+            'archive_sha256', 'census_sha256', 'status'}
         or receipt.get('schema') != RECEIPT_SCHEMA or receipt.get('phase') != phase_name
         or receipt.get('operation') != args.operation or receipt.get('nonce') != args.nonce
         or receipt.get('pod_uid') != args.pod_uid
         or receipt.get('source_pvc_uid') != args.source_pvc_uid
+        or receipt.get('source_pv_uid') != args.source_pv_uid
         or receipt.get('verification_pvc_uid') != args.verification_pvc_uid
+        or receipt.get('verification_pv_uid') != args.verification_pv_uid
         or not re.fullmatch('[a-f0-9]{64}', receipt.get('archive_sha256', ''))
         or not re.fullmatch('[a-f0-9]{64}', receipt.get('census_sha256', ''))
         or receipt.get('status') != 'COMPLETE'):
@@ -427,6 +452,27 @@ def read_verification_receipt(phase_name, args):
     return {'receipt': receipt, 'census': census}
 
 
+def bind_only(args):
+    """Open a read-only mount of one newly created WFFC target, then exit.
+
+    Kubernetes attachment and typed API readback establish claim/PV identity;
+    this fixed process only causes scheduling and proves the target mount exists.
+    It has no source volume, fsGroup, file writes, or caller-provided path.
+    """
+    if (args.role not in ('verification', 'restore')
+        or os.geteuid() != 65532 or os.getegid() != 65532):
+        raise ValueError('bind_profile')
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('bind_pod_identity')
+    row = VERIFY_ROOT.lstat()
+    if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
+        raise ValueError('bind_target_mount')
+    return {'schema': 'voice-nats-bind-mount-v1', 'operation': args.operation,
+        'nonce': args.nonce, 'pod_uid': args.pod_uid, 'role': args.role,
+        'mounted': True}
+
+
 def _frame(row):
     encoded = json.dumps(row, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
     if len(encoded) + 1 > MAX_READBACK_LINE:
@@ -443,7 +489,8 @@ def stream_census_readback(result):
         or hashlib.sha256(raw).hexdigest() != receipt.get('census_sha256')):
         raise ValueError('verification_receipt_binding')
     identity = {key: receipt[key] for key in
-        ('operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'verification_pvc_uid')}
+        ('operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'source_pv_uid',
+         'verification_pvc_uid', 'verification_pv_uid')}
     count = 0
     for sequence, offset in enumerate(range(0, len(raw), READBACK_CHUNK)):
         chunk = raw[offset:offset + READBACK_CHUNK]
@@ -457,6 +504,7 @@ def stream_census_readback(result):
 
 def _stream(archive, manifest, args):
     _identity(args)
+    identity = _archive_identity(args)
     fd = os.open(archive, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     digest = hashlib.sha256()
     size = 0
@@ -474,6 +522,7 @@ def _stream(archive, manifest, args):
                 raise ValueError('archive-size')
             digest.update(data)
             _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+                **identity,
                 'pod_uid': args.pod_uid, 'kind': 'data', 'sequence': sequence,
                 'data': base64.b64encode(data).decode('ascii')})
             sequence += 1
@@ -490,10 +539,12 @@ def _stream(archive, manifest, args):
     manifest_frames = 0
     for offset in range(0, len(manifest_raw), CHUNK):
         _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+            **identity,
             'pod_uid': args.pod_uid, 'kind': 'manifest', 'sequence': manifest_frames,
             'data': base64.b64encode(manifest_raw[offset:offset+CHUNK]).decode('ascii')})
         manifest_frames += 1
     _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+        **identity,
         'pod_uid': args.pod_uid, 'kind': 'complete', 'frames': sequence,
         'manifest_frames': manifest_frames, 'archive_sha256': digest.hexdigest(),
         'manifest_sha256': manifest_digest})
@@ -506,6 +557,7 @@ def _manifest_path():
 def create_and_stream(args):
     _require_archive_helper_identity()
     _identity(args)
+    identity = _archive_identity(args)
     target = OUT_ROOT / 'archive.tar'
     marker = _manifest_path()
     partial = OUT_ROOT / 'archive.partial.tar'
@@ -522,7 +574,7 @@ def create_and_stream(args):
     partial.unlink()
     manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
     record = {'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
-        'pod_uid': args.pod_uid, 'archive_sha256': manifest['archive_sha256'],
+        'pod_uid': args.pod_uid, **identity, 'archive_sha256': manifest['archive_sha256'],
         'manifest': manifest}
     pending = marker.with_suffix('.pending')
     fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -541,11 +593,15 @@ def create_and_stream(args):
 def stream_existing(args):
     _require_archive_helper_identity()
     _identity(args)
+    identity = _archive_identity(args)
     target = OUT_ROOT / 'archive.tar'
     record = _private_json(_manifest_path())
-    if (set(record) != {'schema', 'operation', 'nonce', 'pod_uid', 'archive_sha256', 'manifest'}
+    if (set(record) != {'schema', 'operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'source_pv_uid',
+            'archive_sha256', 'manifest'}
         or record.get('schema') != SCHEMA or record.get('operation') != args.operation
         or record.get('nonce') != args.nonce or record.get('pod_uid') != args.pod_uid
+        or record.get('source_pvc_uid') != identity['source_pvc_uid']
+        or record.get('source_pv_uid') != identity['source_pv_uid']
         or record.get('archive_sha256') != record.get('manifest', {}).get('archive_sha256')
         or native_store.verify_archive(target, record['manifest']) is not True):
         raise ValueError('archive-readback-binding')
@@ -578,6 +634,7 @@ def _private_json(path):
 def serve(args):
     _require_archive_helper_identity()
     _identity(args)
+    _archive_identity(args)
     while True:
         time.sleep(60)
 
@@ -590,17 +647,29 @@ def main(argv=None):
     mode.add_argument('--stream-existing', action='store_true')
     mode.add_argument('--load-inputs', action='store_true')
     mode.add_argument('--read-receipt', action='store_true')
+    mode.add_argument('--bind-only', action='store_true')
     mode.add_argument('--phase', choices=sorted(VERIFY_PHASES))
     parser.add_argument('--operation', required=True)
     parser.add_argument('--nonce', required=True)
     parser.add_argument('--pod-uid', required=False)
     parser.add_argument('--source-pvc-uid')
+    parser.add_argument('--source-pv-uid')
     parser.add_argument('--verification-pvc-uid')
+    parser.add_argument('--verification-pv-uid')
+    parser.add_argument('--role', choices=('verification', 'restore'))
     args = parser.parse_args(argv)
     if args.serve:
         if args.pod_uid is not None: parser.error('serve-shape')
+        try: _archive_identity(args)
+        except ValueError: parser.error('serve-storage-identity-required')
         args.pod_uid = os.environ.get('POD_UID', '')
         serve(args)
+    if args.bind_only:
+        if (args.role is None or args.phase is not None or args.source_pvc_uid is not None
+            or args.verification_pvc_uid is not None or args.pod_uid is not None):
+            parser.error('bind-only-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        return bind_only(args)
     if args.pod_uid is None: parser.error('pod-uid-required')
     if args.load_inputs:
         if args.source_pvc_uid is not None or args.verification_pvc_uid is not None:
@@ -610,13 +679,15 @@ def main(argv=None):
         _frame(result)
         return result
     if args.read_receipt:
-        if args.phase is None or not args.source_pvc_uid or not args.verification_pvc_uid:
+        if (args.phase is None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid):
             parser.error('verification-volume-identity-required')
         receipt = read_verification_receipt(args.phase, args)
         stream_census_readback(receipt)
         return receipt
     if args.phase:
-        if not args.source_pvc_uid or not args.verification_pvc_uid:
+        if (not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid):
             parser.error('verification-volume-identity-required')
         receipt = run_verification(args.phase, args)
         _frame(receipt)
