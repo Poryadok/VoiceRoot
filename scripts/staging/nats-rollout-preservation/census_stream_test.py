@@ -13,8 +13,11 @@ IDENTITY = {
     'nonce': 'a' * 32,
     'pod_uid': '10000000-0000-0000-0000-000000000001',
     'source_pvc_uid': '20000000-0000-0000-0000-000000000002',
+    'source_pv_uid': '21000000-0000-0000-0000-000000000002',
     'verification_pvc_uid': '30000000-0000-0000-0000-000000000003',
+    'verification_pv_uid': '31000000-0000-0000-0000-000000000003',
 }
+ARCHIVE = {'purpose': 'verification', 'archive_sha256': 'c' * 64, 'archive_bytes': 123}
 
 
 def snapshot():
@@ -42,20 +45,17 @@ def frames(*, row=None, receipt_changes=None, frame_changes=None):
     payload = canonical(value)
     digest = hashlib.sha256(payload).hexdigest()
     receipt = {'schema': module.RECEIPT_SCHEMA, 'phase': 'census',
-        'operation': IDENTITY['operation'], 'nonce': IDENTITY['nonce'],
-        'pod_uid': IDENTITY['pod_uid'], 'source_pvc_uid': IDENTITY['source_pvc_uid'],
-        'verification_pvc_uid': IDENTITY['verification_pvc_uid'],
-        'archive_sha256': 'c' * 64, 'census_sha256': digest, 'status': 'COMPLETE'}
+        **IDENTITY, **ARCHIVE, 'census_sha256': digest, 'status': 'COMPLETE'}
     receipt.update(receipt_changes or {})
     lines = []
     for sequence, start in enumerate(range(0, len(payload), module.CHUNK_BYTES)):
         chunk = payload[start:start + module.CHUNK_BYTES]
-        line = {'schema': module.SCHEMA, **IDENTITY, 'kind': 'data',
+        line = {'schema': module.SCHEMA, **IDENTITY, **ARCHIVE, 'kind': 'data',
                 'sequence': sequence, 'data': base64.b64encode(chunk).decode('ascii')}
         if frame_changes and sequence == 0:
             line.update(frame_changes)
         lines.append(json.dumps(line, separators=(',', ':')).encode() + b'\n')
-    end = {'schema': module.SCHEMA, **IDENTITY, 'kind': 'complete',
+    end = {'schema': module.SCHEMA, **IDENTITY, **ARCHIVE, 'kind': 'complete',
         'frames': len(lines), 'byte_count': len(payload), 'census_sha256': digest,
         'receipt': receipt}
     lines.append(json.dumps(end, separators=(',', ':')).encode() + b'\n')
@@ -79,7 +79,8 @@ def split_arbitrarily(lines):
 
 class CensusStreamTests(unittest.TestCase):
     def consume(self, chunks, **kwargs):
-        return module.consume(chunks, **IDENTITY, **kwargs)
+        return module.consume(chunks, **IDENTITY,
+            archive_sha256=ARCHIVE['archive_sha256'], archive_bytes=ARCHIVE['archive_bytes'], **kwargs)
 
     def test_consumes_arbitrarily_split_framed_result_and_returns_validated_snapshot(self):
         result = self.consume(split_arbitrarily(frames()))
@@ -100,13 +101,13 @@ class CensusStreamTests(unittest.TestCase):
         # A valid but non-canonical JSON object is hashed as sent and must be refused.
         payload = canonical(snapshot())
         changed = payload.replace(b'{', b'{ ', 1)
-        wire = [json.dumps({'schema': module.SCHEMA, **IDENTITY, 'kind': 'data',
+        wire = [json.dumps({'schema': module.SCHEMA, **IDENTITY, **ARCHIVE, 'kind': 'data',
             'sequence': 0, 'data': base64.b64encode(changed).decode('ascii')},
             separators=(',', ':')).encode() + b'\n']
         digest = hashlib.sha256(changed).hexdigest()
-        receipt = {'schema': module.RECEIPT_SCHEMA, 'phase': 'census', **IDENTITY,
-            'archive_sha256': 'c' * 64, 'census_sha256': digest, 'status': 'COMPLETE'}
-        wire.append(json.dumps({'schema': module.SCHEMA, **IDENTITY, 'kind': 'complete',
+        receipt = {'schema': module.RECEIPT_SCHEMA, 'phase': 'census', **IDENTITY, **ARCHIVE,
+            'census_sha256': digest, 'status': 'COMPLETE'}
+        wire.append(json.dumps({'schema': module.SCHEMA, **IDENTITY, **ARCHIVE, 'kind': 'complete',
             'frames': 1, 'byte_count': len(changed), 'census_sha256': digest,
             'receipt': receipt}, separators=(',', ':')).encode() + b'\n')
         with self.assertRaises(module.CensusStreamError):

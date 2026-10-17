@@ -169,11 +169,12 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
         pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
+        archive = {'sha256': 'a' * 64, 'bytes': 123}
         with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
              patch.object(self.api, '_request', return_value=pod), \
              patch.object(kube, '_websocket_exec', return_value=iter((b'receipt',))) as execute:
             result = list(self.api.exec_pod_verification('voice-staging', 'pod', pod_uid,
-                request, binding, 'census_receipt_readback'))
+                request, binding, 'census_same_pod_readback', archive=archive))
         self.assertEqual(result, [b'receipt'])
         path, token = execute.call_args.args[1:]
         self.assertEqual(token, 'opaque-test-token')
@@ -185,7 +186,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(query['stderr'], ['false'])
         self.assertEqual(query['tty'], ['false'])
         self.assertEqual(query['command'], verification_job.exec_vectors(
-            request, pod_uid, binding)['census_receipt_readback'])
+            request, pod_uid, binding, archive=archive)['census_same_pod_readback'])
         self.assertEqual(execute.call_args.kwargs['max_bytes'], census_stream.MAX_TRANSPORT_BYTES)
 
     def test_census_input_duplex_streams_bounded_file_envelope_and_half_closes(self):
@@ -287,6 +288,7 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'verification_node_name': 'k3s-worker-1',
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
+        archive = {'sha256': 'a' * 64, 'bytes': 123}
         with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
              patch.object(self.api, '_request', return_value={'metadata': {
                  'uid': pod_uid, 'namespace': 'voice-staging'}}), \
@@ -294,11 +296,14 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
              patch.object(census_stream, 'consume',
                  side_effect=lambda chunks, **kwargs: (list(chunks), kwargs)) as consume:
             result = self.api.read_verification_census('voice-staging', 'pod', pod_uid,
-                request, binding)
+                request, binding, archive)
         self.assertEqual(result, ([b'framed-output'], {
             'operation': request['operation'], 'nonce': request['nonce'], 'pod_uid': pod_uid,
             'source_pvc_uid': binding['source_uid'],
+            'source_pv_uid': binding['source_pv_uid'],
             'verification_pvc_uid': binding['verification_uid'],
+            'verification_pv_uid': binding['verification_pv_uid'],
+            'archive_sha256': archive['sha256'], 'archive_bytes': archive['bytes'],
         }))
         self.assertEqual(execute.call_args.kwargs['max_bytes'], census_stream.MAX_TRANSPORT_BYTES)
         self.assertEqual(consume.call_count, 1)
@@ -321,7 +326,8 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
              patch.object(kube, '_websocket_exec') as execute, \
              self.assertRaises(kube.KubeAPIError):
             self.api.read_verification_census('voice-staging', 'pod',
-                '44444444-4444-4444-8444-444444444444', request, binding)
+                '44444444-4444-4444-8444-444444444444', request, binding,
+                {'sha256': 'a' * 64, 'bytes': 123})
         read.assert_not_called()
         execute.assert_not_called()
 
@@ -344,7 +350,8 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
              patch.object(kube, '_websocket_exec') as execute:
             with self.assertRaises(kube.KubeAPIError):
                 list(self.api.exec_pod_verification('voice-staging', 'pod',
-                    '44444444-4444-4444-8444-444444444444', request, binding, 'census_receipt_readback'))
+                    '44444444-4444-4444-8444-444444444444', request, binding,
+                    'census_same_pod_readback', archive={'sha256': 'a' * 64, 'bytes': 123}))
         execute.assert_not_called()
 
     def test_rejects_non_https_or_unpinned_server_before_network(self):

@@ -16,12 +16,13 @@ CHUNK_BYTES = 48 << 10
 MAX_FRAME_BYTES = 96 << 10
 MAX_FRAMES = (MAX_CENSUS_BYTES + CHUNK_BYTES - 1) // CHUNK_BYTES
 MAX_TRANSPORT_BYTES = MAX_CENSUS_BYTES * 2 + (MAX_FRAMES * 1024) + (1 << 20)
-IDENTITY_FIELDS = ('operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'verification_pvc_uid')
-DATA_FIELDS = frozenset(('schema', *IDENTITY_FIELDS, 'kind', 'sequence', 'data'))
-COMPLETE_FIELDS = frozenset(('schema', *IDENTITY_FIELDS, 'kind', 'frames', 'byte_count',
-                             'census_sha256', 'receipt'))
-RECEIPT_FIELDS = frozenset(('schema', 'phase', 'operation', 'nonce', 'pod_uid',
-                            'source_pvc_uid', 'verification_pvc_uid', 'archive_sha256',
+IDENTITY_FIELDS = ('operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'source_pv_uid',
+                   'verification_pvc_uid', 'verification_pv_uid')
+BOUND_FIELDS = ('purpose', 'archive_sha256', 'archive_bytes')
+DATA_FIELDS = frozenset(('schema', *IDENTITY_FIELDS, *BOUND_FIELDS, 'kind', 'sequence', 'data'))
+COMPLETE_FIELDS = frozenset(('schema', *IDENTITY_FIELDS, *BOUND_FIELDS, 'kind', 'frames',
+                             'byte_count', 'census_sha256', 'receipt'))
+RECEIPT_FIELDS = frozenset(('schema', 'phase', *BOUND_FIELDS, *IDENTITY_FIELDS,
                             'census_sha256', 'status'))
 UUID_RE = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 
@@ -57,21 +58,22 @@ def _json_line(raw):
 
 def _identity(row, expected):
     return (row.get('schema') == SCHEMA and
-            all(row.get(field) == expected[field] for field in IDENTITY_FIELDS))
+            all(row.get(field) == expected[field] for field in (*IDENTITY_FIELDS, *BOUND_FIELDS)))
 
 
 def _validate_receipt(receipt, expected, digest):
     if (type(receipt) is not dict or set(receipt) != RECEIPT_FIELDS
         or receipt.get('schema') != RECEIPT_SCHEMA or receipt.get('phase') != 'census'
         or receipt.get('status') != 'COMPLETE'
-        or any(receipt.get(field) != expected[field] for field in IDENTITY_FIELDS)
+        or any(receipt.get(field) != expected[field] for field in (*IDENTITY_FIELDS, *BOUND_FIELDS))
         or not isinstance(receipt.get('archive_sha256'), str)
         or not re.fullmatch(r'[a-f0-9]{64}', receipt['archive_sha256'])
         or receipt.get('census_sha256') != digest):
         _fail('receipt_invalid')
 
 
-def consume(chunks, *, operation, nonce, pod_uid, source_pvc_uid, verification_pvc_uid,
+def consume(chunks, *, operation, nonce, pod_uid, source_pvc_uid, source_pv_uid,
+            verification_pvc_uid, verification_pv_uid, archive_sha256, archive_bytes,
             max_bytes=MAX_CENSUS_BYTES):
     """Consume raw stdout chunks, validating framed census bytes and COMPLETE receipt.
 
@@ -79,13 +81,20 @@ def consume(chunks, *, operation, nonce, pod_uid, source_pvc_uid, verification_p
     Kubernetes WebSocket message boundaries do not align with helper frames.
     """
     expected = {'operation': operation, 'nonce': nonce, 'pod_uid': pod_uid,
-                'source_pvc_uid': source_pvc_uid, 'verification_pvc_uid': verification_pvc_uid}
+                'source_pvc_uid': source_pvc_uid, 'source_pv_uid': source_pv_uid,
+                'verification_pvc_uid': verification_pvc_uid, 'verification_pv_uid': verification_pv_uid,
+                'purpose': 'verification', 'archive_sha256': archive_sha256, 'archive_bytes': archive_bytes}
     if (not isinstance(operation, str) or not re.fullmatch(r'[a-f0-9]{12}', operation)
         or not isinstance(nonce, str) or not re.fullmatch(r'[a-f0-9]{32}', nonce)
         or not isinstance(pod_uid, str) or not UUID_RE.fullmatch(pod_uid)
         or not isinstance(source_pvc_uid, str) or not UUID_RE.fullmatch(source_pvc_uid)
+        or not isinstance(source_pv_uid, str) or not UUID_RE.fullmatch(source_pv_uid)
         or not isinstance(verification_pvc_uid, str) or not UUID_RE.fullmatch(verification_pvc_uid)
-        or source_pvc_uid == verification_pvc_uid or type(max_bytes) is not int
+        or not isinstance(verification_pv_uid, str) or not UUID_RE.fullmatch(verification_pv_uid)
+        or not isinstance(archive_sha256, str) or not re.fullmatch(r'[a-f0-9]{64}', archive_sha256)
+        or type(archive_bytes) is not int or not 0 < archive_bytes <= (48 << 30) + (262144 * 1024) + (1 << 20)
+        or source_pvc_uid == verification_pvc_uid or source_pv_uid == verification_pv_uid
+        or type(max_bytes) is not int
         or not 0 < max_bytes <= MAX_CENSUS_BYTES):
         _fail('identity_invalid')
 

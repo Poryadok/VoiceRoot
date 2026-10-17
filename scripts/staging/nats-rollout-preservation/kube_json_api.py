@@ -381,16 +381,16 @@ class _KubernetesJSONAPIBase:
         token = self._operation_token()
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
 
-    def exec_pod_verification(self, namespace, pod_name, pod_uid, request, binding, action):
-        """Run only a producer-declared archive or census vector in the bound Pod."""
+    def exec_pod_verification(self, namespace, pod_name, pod_uid, request, binding, action, *, archive=None):
+        """Run only a producer-declared readback vector in the bound Pod."""
         if namespace != NAMESPACE:
             _fail('namespace_invalid')
         try:
             import verification_job
-            vectors = verification_job.exec_vectors(request, pod_uid, binding)
-        except (ImportError, ValueError):
+            vectors = verification_job.exec_vectors(request, pod_uid, binding, archive=archive)
+        except (ImportError, TypeError, ValueError):
             _fail('verification_exec_request_invalid')
-        if action not in vectors or action == 'load_inputs':
+        if action not in vectors or action in ('census_load_inputs', 'census_receive_archive', 'restore_archive_once'):
             # Input loading needs a separate bounded stdin protocol; it is not
             # silently routed through the output-only WebSocket operation.
             _fail('verification_exec_action_invalid')
@@ -398,9 +398,11 @@ class _KubernetesJSONAPIBase:
         archive_actions = ('archive_create_and_stream', 'archive_same_pod_readback')
         if action in archive_actions:
             max_bytes = MAX_ARCHIVE_STREAM_BYTES
-        elif action == 'census_receipt_readback':
+        elif action == 'census_same_pod_readback':
             import census_stream
             max_bytes = census_stream.MAX_TRANSPORT_BYTES
+        elif action in ('census_read_input_receipt', 'restore_same_pod_readback'):
+            max_bytes = MAX_LOG_RESPONSE
         else:
             max_bytes = MAX_LOG_RESPONSE
         pod = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
@@ -460,7 +462,7 @@ class _KubernetesJSONAPIBase:
         finally:
             os.close(source)
 
-    def read_verification_census(self, namespace, pod_name, pod_uid, request, binding):
+    def read_verification_census(self, namespace, pod_name, pod_uid, request, binding, archive):
         """Return a validated, identity-bound census from its durable same-Pod receipt."""
         try:
             import census_stream
@@ -469,12 +471,19 @@ class _KubernetesJSONAPIBase:
             storage = verification_job.validate_binding(binding)
             if row['phase'] != 'census':
                 _fail('verification_census_phase_invalid')
+            if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
+                or not isinstance(archive['sha256'], str) or not re.fullmatch('[a-f0-9]{64}', archive['sha256'])
+                or type(archive['bytes']) is not int or not 0 < archive['bytes'] <= MAX_ARCHIVE_STREAM_BYTES):
+                _fail('verification_census_archive_invalid')
             chunks = self.exec_pod_verification(namespace, pod_name, pod_uid,
-                row, storage, 'census_receipt_readback')
+                row, storage, 'census_same_pod_readback', archive=archive)
             return census_stream.consume(chunks, operation=row['operation'], nonce=row['nonce'],
                 pod_uid=pod_uid, source_pvc_uid=storage['source_uid'],
-                verification_pvc_uid=storage['verification_uid'])
-        except (ImportError, ValueError):
+                source_pv_uid=storage['source_pv_uid'],
+                verification_pvc_uid=storage['verification_uid'],
+                verification_pv_uid=storage['verification_pv_uid'],
+                archive_sha256=archive['sha256'], archive_bytes=archive['bytes'])
+        except (ImportError, TypeError, ValueError):
             _fail('verification_census_invalid')
 
 
