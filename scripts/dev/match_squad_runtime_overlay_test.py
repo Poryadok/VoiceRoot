@@ -20,23 +20,24 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
 
     def test_service_ports_and_deployment_listeners_are_paired(self):
         expected = {
-            "voice-matchmaking": ("matchmaking", 8443, "principal-jwks"),
-            "voice-chat": ("chat", 9092, "match-squad-principal"),
-            "voice-voice": ("voice", 9094, "match-squad-provider"),
+            "voice-matchmaking": ("matchmaking", [(8443, "principal-jwks")]),
+            "voice-chat": ("chat", [(9092, "match-principal")]),
+            "voice-voice": ("voice", [(9094, "match-provider"),
+                                        (9095, "match-member")]),
         }
-        for service, (container_name, port, port_name) in expected.items():
+        for service, (container_name, ports) in expected.items():
             with self.subTest(service=service):
                 deployment = source(f"{service}.runtime.patch.yaml")
                 self.assertIn(f"name: {container_name}", deployment)
-                self.assertIn(f"name: {port_name}\n              containerPort: {port}", deployment)
                 service_patch = source(f"{service}.service.patch.yaml")
                 self.assertIn(f"name: {service}", service_patch)
-                self.assertIn(f"name: {port_name}\n      port: {port}\n      targetPort: {port_name}", service_patch)
-
-        voice = source("voice-voice.runtime.patch.yaml")
-        self.assertIn("name: match-squad-member\n              containerPort: 9095", voice)
-        voice_service = source("voice-voice.service.patch.yaml")
-        self.assertIn("name: match-squad-member\n      port: 9095\n      targetPort: match-squad-member", voice_service)
+                for port, port_name in ports:
+                    with self.subTest(port=port):
+                        self.assertLessEqual(len(port_name), 15)
+                        self.assertIn(f"name: {port_name}\n              containerPort: {port}", deployment)
+                        self.assertIn(
+                            f"name: {port_name}\n      port: {port}\n      targetPort: {port_name}",
+                            service_patch)
 
     def test_dev_runtime_contract_uses_dedicated_trust_and_existing_credentials(self):
         matchmaking = source("voice-matchmaking.runtime.patch.yaml")
