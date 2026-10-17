@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import guard
 import migrations
@@ -333,7 +334,8 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             account_capture=[]
             state['provenance']=capture_inputs(
                 NativeCaptureReader(native_api,generation,contract),base,contract,generation,
-                bootstrap_enrollment=enrollment,public_account_callback=account_capture.append)
+                bootstrap_enrollment=enrollment,public_account_callback=account_capture.append,
+                native_private=True)
             if len(account_capture)!=1:
                 raise Blocked('rollout_native_account_capture_invalid')
             account_id=account_capture[0]
@@ -384,10 +386,18 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         if native_api is None:
             state['native_capacity']=native_preflight(stage.final_path,base,capacity)
         else:
-            # The native helper consumes an API-bound archive stream; host PV
-            # paths and Docker storage accounting are never valid inputs here.
-            raise Blocked('rollout_native_archive_capacity_adapter_required')
-        state['combined_space_capacity']=space_safeguards.combined_capacity(base,state['native_capacity'],state['space_preflight'])
+            # The native helper reports an authenticated manifest over the
+            # operation-bound archive stream. A PV request is not capacity,
+            # and there is no host PV path to scan for used bytes.
+            if not isinstance(capacity,str):raise Blocked('rollout_native_capacity_readback_invalid')
+            state['native_capacity']={'reported_capacity':capacity,'max_bytes':48<<30,
+                'max_files':262144,'source_pvc_uid':stage.expected['source_claim_uid'],
+                'source_pv_uid':stage.expected['source_pv_uid']}
+            if state['space_preflight'] is not None and state['space_preflight']['requirement']['backup_required']:
+                raise Blocked('rollout_native_space_backup_capacity_adapter_required')
+            state['combined_space_capacity']=None
+        if native_api is None:
+            state['combined_space_capacity']=space_safeguards.combined_capacity(base,state['native_capacity'],state['space_preflight'])
         if state['space_preflight'] is not None:
             state['space_preflight']['source_sha']=target['tag']
             state['space_preflight']['migration_plan_sha256']=target['migration_sha256']
@@ -420,10 +430,30 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             try:kube_json_api.resolve_source_binding(native_api,operation=operation,expected=native_source)
             except kube_json_api.KubeAPIError:raise Blocked('rollout_native_source_binding_changed') from None
         save(base/'checkpoint.json',state)
-        runtime=DockerRuntime(base,operation)
+        if native_api is None:
+            runtime=DockerRuntime(base,operation)
+        else:
+            import tokenless_job
+            source=native_source['binding']
+            legacy_binding={'claim_name':source['source_claim'],'claim_uid':source['source_uid'],
+                'pv_name':source['source_pv_name'],'pv_uid':source['source_pv_uid'],
+                'node_name':source['source_node_name']}
+            def persist_native_phase(event):
+                import kube_json_api
+                try:
+                    kube_json_api.resolve_source_binding(native_api,operation=operation,expected=native_source)
+                    stage.verify_final_storage()
+                except (kube_json_api.KubeAPIError, Exception) as error:
+                    raise Blocked('rollout_native_source_changed_before_phase') from None
+                journal({'phase':'COLD_BACKUP',**event})
+            runtime=tokenless_job.PvcArchiveRuntime(native_api,base,legacy_binding,
+                native_config['phase_image'],operation,secrets.token_hex(32),
+                persist_intent=persist_native_phase,
+                persist_result=persist_native_phase,
+                account_id=account_id)
         state['phase']='COLD_BACKUP';save(base/'checkpoint.json',state)
         live_catalog=require_original_live_census(stage,state['events'])
-        state['cut']=capture_cut(runtime,stage.final_path,stage.verify_final_storage,
+        state['cut']=capture_cut(runtime,None if native_api is not None else stage.final_path,stage.verify_final_storage,
             live_catalog=live_catalog)
         save(base/'rollout-before-manifest.json',state['cut']['manifest'])
         state['cut']['manifest_sha256']=file_sha(base/'rollout-before-manifest.json')

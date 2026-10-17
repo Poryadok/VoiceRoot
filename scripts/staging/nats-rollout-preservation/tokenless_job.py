@@ -334,23 +334,28 @@ def run_archive(api, request: dict, binding: dict, runner_image: str, artifact, 
     point never blindly creates the same archive operation again.
     """
     import archive_stream
-    row = validate_request(request)
+    import verification_job
+    row = verification_job.validate_request(request)
     if row['phase'] != 'archive': _fail('archive_phase_required')
     storage = validate_binding(binding)
-    image = validate_runner_image(runner_image)
+    producer_binding = {'source_claim': storage['claim_name'], 'source_uid': storage['claim_uid'],
+        'source_pv_name': storage['pv_name'], 'source_pv_uid': storage['pv_uid'],
+        'source_node_name': storage['node_name']}
+    image = verification_job.validate_image(runner_image)
     _verify_storage(api, storage)
-    wanted = document(row, storage, image)
+    wanted = verification_job.document(row, producer_binding, image)
     name = wanted['metadata']['name']
     template_sha = hashlib.sha256(json.dumps(wanted['spec'], sort_keys=True,
         separators=(',', ':')).encode()).hexdigest()
     persist_intent({'phase': 'archive', 'nonce': row['nonce'], 'job_name': name,
         'template_sha256': template_sha, 'state': 'JOB_CREATE_INTENT'})
-    created = verify_job(api.create_job(NAMESPACE, copy.deepcopy(wanted)), wanted)
+    created = verification_job.verify_job(api.create_job(NAMESPACE, copy.deepcopy(wanted)), wanted)
     uid = created['metadata']['uid']
     persist_intent({'phase': 'archive', 'nonce': row['nonce'], 'job_name': name,
         'job_uid': uid, 'template_sha256': template_sha, 'state': 'JOB_CREATED'})
     pod = api.wait_job_pod(NAMESPACE, name, uid, timeout=120)
-    _verify_pod(pod, wanted, uid, phase='Running')
+    verification_job.verify_pod(pod, wanted['spec']['template'], uid, 'archive',
+        expected_node_name=storage['node_name'])
     pod_meta = pod['metadata']
     container_id = pod['status']['containerStatuses'][0]['containerID']
     persist_intent({'phase': 'archive', 'nonce': row['nonce'], 'job_name': name,
@@ -367,11 +372,15 @@ def reconcile_archive(api, request: dict, binding: dict, runner_image: str,
                       journal: dict, artifact, *, persist_intent, persist_result,
                       verify_archive):
     """Read back and re-stream only the journaled completed Job/Pod identity."""
-    row = validate_request(request)
+    import verification_job
+    row = verification_job.validate_request(request)
     if row['phase'] != 'archive' or not isinstance(journal, dict) or journal.get('phase') != 'archive':
         _fail('archive_recovery_binding_invalid')
     storage = validate_binding(binding)
-    wanted = document(row, storage, validate_runner_image(runner_image))
+    producer_binding = {'source_claim': storage['claim_name'], 'source_uid': storage['claim_uid'],
+        'source_pv_name': storage['pv_name'], 'source_pv_uid': storage['pv_uid'],
+        'source_node_name': storage['node_name']}
+    wanted = verification_job.document(row, producer_binding, verification_job.validate_image(runner_image))
     name, uid = wanted['metadata']['name'], journal.get('job_uid')
     pod_name, pod_uid = journal.get('pod_name'), journal.get('pod_uid')
     if (journal.get('job_name') != name or journal.get('template_sha256') != hashlib.sha256(
@@ -383,9 +392,10 @@ def reconcile_archive(api, request: dict, binding: dict, runner_image: str,
         or not isinstance(journal.get('container_id'), str)
         or not re.fullmatch('containerd://[a-f0-9]{64}', journal['container_id'])):
         _fail('archive_recovery_binding_invalid')
-    verify_job(api.get_job(NAMESPACE, name), wanted, created_uid=uid)
+    verification_job.verify_job(api.get_job(NAMESPACE, name), wanted, expected_uid=uid)
     pod = api.get_job_pod(NAMESPACE, name)
-    _verify_pod(pod, wanted, uid, phase='Running')
+    verification_job.verify_pod(pod, wanted['spec']['template'], uid, 'archive',
+        expected_node_name=storage['node_name'], expected_uid=pod_uid)
     if pod.get('metadata', {}).get('name') != pod_name or pod.get('metadata', {}).get('uid') != pod_uid:
         _fail('archive_pod_changed')
     if pod['status']['containerStatuses'][0]['containerID'] != journal['container_id']:
@@ -400,10 +410,17 @@ def reconcile_archive(api, request: dict, binding: dict, runner_image: str,
 def _consume_archive(api, row, storage, wanted, job_uid, pod, artifact,
                      persist_intent, persist_result, verify_archive, *, existing=False):
     import archive_stream
+    import verification_job
     pod_meta = pod['metadata']
     _verify_storage(api, storage)
-    result = archive_stream.consume(api.exec_pod_archive(NAMESPACE, pod_meta['name'], pod_meta['uid'],
-        row['operation'], row['nonce'], existing=existing),
+    producer_binding = {
+        'source_claim': storage['claim_name'], 'source_uid': storage['claim_uid'],
+        'source_pv_name': storage['pv_name'], 'source_pv_uid': storage['pv_uid'],
+        'source_node_name': storage['node_name'],
+    }
+    action = 'archive_same_pod_readback' if existing else 'archive_create_and_stream'
+    result = archive_stream.consume(api.exec_pod_verification(NAMESPACE, pod_meta['name'], pod_meta['uid'],
+        row, producer_binding, action),
         artifact, operation=row['operation'], nonce=row['nonce'], pod_uid=pod_meta['uid'],
         source_pvc_uid=storage['claim_uid'], source_pv_uid=storage['pv_uid'],
         allow_existing=existing,
@@ -414,7 +431,8 @@ def _consume_archive(api, row, storage, wanted, job_uid, pod, artifact,
                 separators=(',', ':')).encode()).hexdigest()}),
         persist_result=persist_result, verify_archive=verify_archive)
     current = api.get_job_pod(NAMESPACE, wanted['metadata']['name'])
-    _verify_pod(current, wanted, job_uid, phase='Running')
+    verification_job.verify_pod(current, wanted['spec']['template'], job_uid, 'archive',
+        expected_node_name=storage['node_name'], expected_uid=pod_meta['uid'])
     if (current.get('metadata', {}).get('uid') != pod_meta.get('uid')
         or current['status']['containerStatuses'][0]['containerID'] != pod['status']['containerStatuses'][0]['containerID']):
         _fail('archive_container_changed')
@@ -430,11 +448,15 @@ class PvcArchiveRuntime:
     implemented by this adapter and must not fall back to the host runtime.
     """
     def __init__(self, api, base, binding, runner_image, operation, request_nonce,
-                 *, persist_intent, persist_result):
+                 *, persist_intent, persist_result, account_id=None):
         self.api = api
         self.base = Path(base)
         self.binding = validate_binding(binding)
         self.runner_image = validate_runner_image(runner_image)
+        if account_id is not None and (not isinstance(account_id,str)
+            or not re.fullmatch(r'A[A-Z2-7]{55}',account_id)):
+            _fail('archive_runtime_account_invalid')
+        self._account_id=account_id
         if (not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation)
             or not isinstance(request_nonce, str) or not re.fullmatch('[a-f0-9]{64}', request_nonce)):
             _fail('archive_runtime_identity_invalid')
@@ -450,6 +472,11 @@ class PvcArchiveRuntime:
         self.persist_intent = persist_intent
         self.persist_result = persist_result
 
+    def account_id(self):
+        if self._account_id is None:
+            _fail('archive_runtime_account_unbound')
+        return self._account_id
+
     def no_operation_containers(self, *, running_only=False):
         rows = self.api.list_operation_jobs(NAMESPACE, self.operation)
         if rows:
@@ -463,6 +490,13 @@ class PvcArchiveRuntime:
         result = run_archive(self.api, self.request, self.binding, self.runner_image, target,
             persist_intent=self.persist_intent, persist_result=self.persist_result,
             verify_archive=native_store.verify_archive)
+        capacity=self.api.get_pvc(NAMESPACE,self.binding['claim_name']).get('status',{}).get('capacity',{}).get('storage')
+        match=re.fullmatch(r'([1-9][0-9]*)(Ki|Mi|Gi|Ti)?',capacity) if isinstance(capacity,str) else None
+        if not match:
+            _fail('source_capacity_readback_invalid')
+        capacity_bytes=int(match[1])*{'Ki':1<<10,'Mi':1<<20,'Gi':1<<30,'Ti':1<<40,None:1}[match[2]]
+        if type(result.get('bytes')) is not int or result['bytes']>capacity_bytes:
+            _fail('archive_exceeds_reported_source_capacity')
         return result['manifest']
 
     def capture_census(self, archive, manifest, label, *, validate=None):
