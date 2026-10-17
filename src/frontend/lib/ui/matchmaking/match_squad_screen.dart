@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../backend/matchmaking_client.dart';
+import '../../backend/voice_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
@@ -29,6 +31,9 @@ class MatchSquadScreen extends ConsumerStatefulWidget {
 }
 
 class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
+  static const _uuid = Uuid();
+  String? _completeOperationId;
+
   @override
   void initState() {
     super.initState();
@@ -41,7 +46,7 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     if (!ref.read(gatewayConfigProvider).canPlaceVoiceCalls) return;
     await ref
         .read(callControllerProvider.notifier)
-        .joinGroupVoice(roomId: voiceRoomId);
+        .joinGroupVoice(roomId: voiceRoomId, matchId: widget.match.id);
   }
 
   @override
@@ -115,15 +120,22 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     final token = ref.read(authControllerProvider).session?.accessToken;
     if (token == null || token.isEmpty) return;
 
-    final call = ref.read(callControllerProvider);
-    if (call.isActive && call.session != null) {
-      await ref.read(callControllerProvider.notifier).hangUp();
+    final voiceLeave = await ref
+        .read(callControllerProvider.notifier)
+        .leaveMatchSquad(matchId: widget.match.id);
+    if (voiceLeave case VoiceApiFailure()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
+      return;
     }
 
     final client = ref.read(voiceMatchmakingClientProvider);
     final result = await client.completeMatch(
       authorization: 'Bearer $token',
       matchId: widget.match.id,
+      operationId: _completeOperationId ??= _uuid.v4(),
     );
 
     if (!context.mounted) return;
@@ -136,6 +148,7 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     }
 
     final completed = (result as MatchmakingApiOk<MatchData>).data;
+    _completeOperationId = null;
     ref
         .read(matchmakingRatingControllerProvider.notifier)
         .showRatingForMatch(completed);

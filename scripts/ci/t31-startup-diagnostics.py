@@ -14,12 +14,12 @@ import subprocess
 import time
 
 
-SCHEMA = "voice-t31-startup-diagnostics-v2"
+SCHEMA = "voice-t31-startup-diagnostics-v3"
 SERVICES = (
     "auth", "user", "role", "chat", "space", "messaging", "voice", "bot",
     "notification", "gameintegration", "gateway", "matchmaking", "search",
     "file", "moderation", "social", "subscription", "story", "realtime",
-    "analytics", "t31-session-event-receiver-db",
+    "analytics", "t31-session-event-receiver-db", "phase0-matchmaking-jwks-readiness",
 )
 SERVICE_SET = frozenset(SERVICES)
 STATES = frozenset({"created", "running", "restarting", "paused", "exited", "dead", "removing", "unknown"})
@@ -50,6 +50,21 @@ READ_CHUNK_BYTES = 4096
 _SERVICE_PREFIX = re.compile(r"^\s*([A-Za-z0-9_-]+)\s+\|\s?(.*)$")
 VOICE_STARTUP_PREFIXES = (
     ("voice lifecycle database:", "voice_lifecycle_database"),
+    ("voice MatchSquad principal configuration:", "voice_match_squad_principal_configuration"),
+    ("voice MatchSquad member principal configuration:", "voice_match_squad_member_principal_configuration"),
+    ("Voice MatchSquad provisioning and delegated member listeners must be enabled together",
+     "voice_match_squad_listener_pair_required"),
+    ("Voice MatchSquad requires the Voice lifecycle database and durable Redis projection",
+     "voice_match_squad_dependencies_missing"),
+    ("voice MatchSquad principal runtime:", "voice_match_squad_principal_runtime"),
+    ("voice MatchSquad database schema:", "voice_match_squad_database_schema"),
+    ("voice MatchSquad listener:", "voice_match_squad_listener"),
+    ("Voice MatchSquad member admission requires the MatchSquad provider, lifecycle database, and User profile resolver",
+     "voice_match_squad_member_dependencies_missing"),
+    ("voice MatchSquad account fence schema:", "voice_match_squad_account_fence_schema"),
+    ("voice MatchSquad member principal runtime:", "voice_match_squad_member_principal_runtime"),
+    ("voice MatchSquad member database schema:", "voice_match_squad_member_database_schema"),
+    ("voice MatchSquad member listener:", "voice_match_squad_member_listener"),
     ("voice GIS principal configuration:", "voice_gis_principal_configuration"),
     ("voice principal JWKS configuration:", "voice_principal_jwks_configuration"),
     ("voice Role grant checker configuration:", "voice_role_grant_configuration"),
@@ -92,9 +107,39 @@ VOICE_STARTUP_PREFIXES = (
     ("Space media initial reconciliation:", "space_media_initial_reconciliation"),
     ("Space media invalidation consumer startup:", "space_media_invalidation_consumer_startup"),
 )
+VOICE_STARTUP_DETAILS = (
+    ("voice MatchSquad member TLS identity unavailable", "voice_match_squad_member_tls_identity_unavailable"),
+    ("voice MatchSquad member client CA unavailable", "voice_match_squad_member_client_ca_unavailable"),
+    ("voice MatchSquad member client CA is invalid", "voice_match_squad_member_client_ca_invalid"),
+    ("system CA roots unavailable for delegated user JWKS", "voice_match_squad_member_jwks_system_trust_unavailable"),
+    ("voice MatchSquad member JWKS CA is invalid", "voice_match_squad_member_jwks_ca_invalid"),
+    ("voice MatchSquad member Redis unavailable", "voice_match_squad_member_redis_unavailable"),
+    ("voice delegated user JWKS unavailable", "voice_match_squad_member_jwks_refresh_unavailable"),
+    ("voice MatchSquad TLS certificate/key unavailable", "voice_match_squad_tls_server_identity"),
+    ("voice MatchSquad client CA unavailable", "voice_match_squad_tls_client_ca_unavailable"),
+    ("voice MatchSquad client CA is invalid", "voice_match_squad_tls_client_ca_invalid"),
+    ("system CA roots unavailable for Voice MatchSquad JWKS", "voice_match_squad_jwks_system_trust_unavailable"),
+    ("voice MatchSquad JWKS CA unavailable", "voice_match_squad_jwks_ca_unavailable"),
+    ("voice MatchSquad JWKS CA contains no certificates", "voice_match_squad_jwks_ca_invalid"),
+    ("voice MatchSquad JWKS unavailable", "voice_match_squad_jwks_refresh_unavailable"),
+    ("voice MatchSquad JWKS has no usable key", "voice_match_squad_jwks_document_invalid"),
+    ("voice MatchSquad JWKS key is too small", "voice_match_squad_jwks_key_invalid"),
+    ("voice MatchSquad replay Redis unavailable", "voice_match_squad_replay_dependency_unavailable"),
+)
+READINESS_FAILURE_CATEGORIES = frozenset({
+    "ca_file_unavailable", "jwks_tls_verification_failed", "jwks_endpoint_unavailable",
+    "jwks_http_response_invalid", "jwks_document_invalid", "jwks_response_too_large",
+    "jwks_request_timeout", "jwks_transport_failed",
+})
+READINESS_FAILURE_MARKER = "phase0_matchmaking_jwks_readiness_failed"
+_READINESS_FAILURE = re.compile(
+    r"^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z )?"
+    r"phase0_matchmaking_jwks_readiness_failed category=([a-z0-9_]{1,64})$"
+)
 _ERROR_MARKER = re.compile(
     r"(?:\blevel\s*[=:]\s*error\b|\bERROR\b|\bFATAL\b|\bPANIC\b|\bSQLSTATE\b|\bexception\b|"
     + "|".join(re.escape(prefix) for prefix, _ in VOICE_STARTUP_PREFIXES)
+    + "|" + re.escape(READINESS_FAILURE_MARKER)
     + r")",
     re.IGNORECASE,
 )
@@ -122,7 +167,8 @@ def _base_record(startup_status: int) -> dict:
 def _error_record(result: str = "unknown") -> dict:
     return {
         "result": result, "service": "unknown", "stage": "unknown",
-        "error_code": "unknown", "startup_category": "unknown", "exception_class": "unknown",
+        "error_code": "unknown", "startup_category": "unknown", "startup_detail": "unknown",
+        "exception_class": "unknown",
         "sqlstate": "unknown", "source_basename": "unknown", "source_line": None,
         "selection": "unknown", "causal_order": "not_established",
     }
@@ -310,12 +356,14 @@ def _stage_for(line: str, sqlstate: str | None, exception: str | None) -> str:
     return "startup_error"
 
 
-def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, ...]) -> tuple[dict, dict]:
+def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, ...],
+                  requested_services: tuple[str, ...] | None = None) -> tuple[dict, dict]:
+    requested = requested_services or failed_services or SERVICES
     text, decode_result = _decode_bounded(data)
     if text is None:
         return {
             "result": decode_result, "coverage": "unknown", "bytes_read": len(data),
-            "lines_read": 0, "services_requested": list(failed_services or SERVICES),
+            "lines_read": 0, "services_requested": list(requested),
             "services_seen": [], "truncated": command_result == "byte_limit",
             "window": "first_emitted", "window_bytes_limit": MAX_LOG_BYTES,
             "window_lines_limit": MAX_LOG_LINES, "causal_order": "not_established",
@@ -332,7 +380,6 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
         result = "line_limit"
     else:
         result = "complete"
-    requested = failed_services or SERVICES
     seen = set()
     first_error = None
     for line in lines:
@@ -353,10 +400,23 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             continue
         code_match = _ERROR_CODE.search(message)
         code = code_match.group(1) if code_match and code_match.group(1) in ERROR_CODES else None
-        startup_category = next(
-            (category for prefix, category in VOICE_STARTUP_PREFIXES if prefix in message),
-            "unknown",
-        )
+        readiness_match = _READINESS_FAILURE.fullmatch(message.strip()) if service == "phase0-matchmaking-jwks-readiness" else None
+        if readiness_match:
+            startup_category = "phase0_matchmaking_jwks_readiness"
+            observed_detail = readiness_match.group(1)
+            startup_detail = observed_detail if observed_detail in READINESS_FAILURE_CATEGORIES else "unknown"
+        elif service == "matchmaking" and "Matchmaking Space principal runtime:" in message:
+            startup_category = "matchmaking_space_principal_runtime"
+            startup_detail = "unknown"
+        else:
+            startup_category = next(
+                (category for prefix, category in VOICE_STARTUP_PREFIXES if prefix in message),
+                "unknown",
+            )
+            startup_detail = next(
+                (category for prefix, category in VOICE_STARTUP_DETAILS if prefix in message),
+                "unknown",
+            )
         state_match = _SQLSTATE.search(message)
         sqlstate = state_match.group(1).upper() if state_match and state_match.group(1).upper() in SQLSTATES else None
         exception_match = _EXCEPTION.search(message)
@@ -368,6 +428,7 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             "result": "observed_in_bounded_window", "service": service,
             "stage": _stage_for(message, sqlstate, exception),
             "error_code": code or "unknown", "startup_category": startup_category,
+            "startup_detail": startup_detail,
             "exception_class": exception or "unknown",
             "sqlstate": sqlstate or "unknown", "source_basename": source or "unknown",
             "source_line": source_line, "selection": "first_marker_in_bounded_head",
@@ -413,25 +474,30 @@ def _write_record(path: Path, record: dict) -> bool:
         return False
 
 
-def build_diagnostics(compose: list[str], startup_status: int, service: str | None = None) -> dict:
+def build_diagnostics(compose: list[str], startup_status: int, service: str | None = None,
+                      include_matchmaking_startup: bool = False) -> dict:
     record = _base_record(startup_status)
-    if not compose or compose[0] != "docker" or (service is not None and service not in SERVICE_SET):
+    if (not compose or compose[0] != "docker"
+            or (service is not None and service not in SERVICE_SET)
+            or (include_matchmaking_startup and service != "voice")):
         record["status_collection"]["result"] = "invalid_invocation"
         record["log_collection"]["result"] = "invalid_invocation"
         return record
 
-    service_args = [service] if service is not None else []
+    requested = (("voice", "matchmaking") if include_matchmaking_startup else
+                 ((service,) if service is not None else ()))
+    service_args = list(requested)
     ps_bytes, ps_result, _ = _bounded_command(compose + ["ps", "--all", "--format", "json", *service_args], COMMAND_TIMEOUT_SECONDS, MAX_PS_BYTES)
     status, failed_services = sanitize_status(ps_bytes, ps_result)
     record["status_collection"] = status
 
-    requested = (service,) if service is not None else (failed_services or SERVICES)
+    log_services = requested or failed_services or SERVICES
     log_bytes, log_result, _ = _bounded_command(
-        compose + ["logs", "--no-color", "--timestamps", *requested],
+        compose + ["logs", "--no-color", "--timestamps", *log_services],
         COMMAND_TIMEOUT_SECONDS,
         MAX_LOG_BYTES,
     )
-    log_summary, first_error = sanitize_logs(log_bytes, log_result, failed_services)
+    log_summary, first_error = sanitize_logs(log_bytes, log_result, failed_services, log_services)
     record["log_collection"] = log_summary
     record["first_error"] = first_error
     return record
@@ -442,12 +508,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True)
     parser.add_argument("--startup-status", type=int, required=True)
     parser.add_argument("--service", choices=SERVICES)
+    parser.add_argument("--include-matchmaking-startup", action="store_true")
     parser.add_argument("--compose", nargs=argparse.REMAINDER, required=True)
     args = parser.parse_args(argv)
     compose = args.compose[1:] if args.compose[:1] == ["--"] else args.compose
     output = Path(args.output)
     try:
-        record = build_diagnostics(compose, args.startup_status, args.service)
+        record = build_diagnostics(compose, args.startup_status, args.service,
+                                   args.include_matchmaking_startup)
     except Exception:
         record = _base_record(args.startup_status)
         record["status_collection"]["result"] = "collector_error"

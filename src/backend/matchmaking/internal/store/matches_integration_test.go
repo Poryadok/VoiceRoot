@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -78,4 +79,110 @@ func TestMatchStore_CreateProposalPersistsMatchAndProposals(t *testing.T) {
 	require.Equal(t, SessionStatusPendingAccept, updatedA.Status)
 	require.NotNil(t, updatedA.MatchID)
 	require.Equal(t, result.Match.ID, *updatedA.MatchID)
+}
+
+func TestListPendingDeadlineMatchIDsSkipsFullyAcceptedRowsBeforeLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	games := &GameStore{Pool: pool}
+	page, err := games.List(ctx, ListGamesParams{PageSize: 1, Status: StatusActive})
+	require.NoError(t, err)
+	require.NotEmpty(t, page.Games)
+	sessions := &SessionStore{Pool: pool}
+	matches := &MatchStore{Pool: pool}
+	create := func() CreateProposalResult {
+		profileA, profileB := uuid.New(), uuid.New()
+		a, err := sessions.Create(ctx, CreateSessionParams{ProfileID: profileA, GameID: page.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(time.Hour)})
+		require.NoError(t, err)
+		b, err := sessions.Create(ctx, CreateSessionParams{ProfileID: profileB, GameID: page.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(time.Hour)})
+		require.NoError(t, err)
+		result, err := matches.CreateProposal(ctx, CreateProposalParams{GameID: page.Games[0].ID, Mode: "Duo", Region: "eu", Sessions: []ProposalSession{{SessionID: a.ID, ProfileID: profileA}, {SessionID: b.ID, ProfileID: profileB}}})
+		require.NoError(t, err)
+		return result
+	}
+	accepted := create()
+	for _, profileID := range accepted.Match.ProfileIDs() {
+		_, err := matches.SetProposalResponse(ctx, accepted.Match.ID, profileID, ProposalResponseAccepted)
+		require.NoError(t, err)
+	}
+	pending := create()
+	_, err = pool.Exec(ctx, `UPDATE matches SET created_at=clock_timestamp()-interval '1 minute' WHERE id IN ($1,$2)`, accepted.Match.ID, pending.Match.ID)
+	require.NoError(t, err)
+
+	ids, err := matches.ListPendingDeadlineMatchIDs(ctx, 1)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pending.Match.ID}, ids)
+}
+
+func TestMatchStore_DeclineRecoveryEffectsRemainDurableUntilProjectionSucceeds(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+
+	games := &GameStore{Pool: pool}
+	g, err := games.List(ctx, ListGamesParams{PageSize: 1, Status: StatusActive})
+	require.NoError(t, err)
+	require.NotEmpty(t, g.Games)
+
+	sessions := &SessionStore{Pool: pool}
+	matches := &MatchStore{Pool: pool}
+	profileA, profileB := uuid.New(), uuid.New()
+	criteria := `{"region":"eu","self":{"role":"Carry","rank":"Herald"}}`
+	var sessionA, sessionB SearchSession
+	for i, profileID := range []uuid.UUID{profileA, profileB} {
+		session, err := sessions.Create(ctx, CreateSessionParams{
+			ProfileID: profileID,
+			GameID:    g.Games[0].ID,
+			Mode:      "5v5 Ranked",
+			Criteria:  criteria,
+			TimeoutAt: time.Now().UTC().Add(30 * time.Minute),
+		})
+		require.NoError(t, err)
+		if i == 0 {
+			sessionA = session
+		} else {
+			sessionB = session
+		}
+	}
+	created, err := matches.CreateProposal(ctx, CreateProposalParams{
+		GameID: g.Games[0].ID,
+		Mode:   "5v5 Ranked",
+		Region: "eu",
+		Sessions: []ProposalSession{
+			{SessionID: sessionA.ID, ProfileID: profileA},
+			{SessionID: sessionB.ID, ProfileID: profileB},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = matches.RecordDecline(ctx, created.Match.ID, profileA)
+	require.NoError(t, err)
+	var pending int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_recovery_effects WHERE match_id = $1 AND applied_at IS NULL`, created.Match.ID).Scan(&pending))
+	require.Equal(t, 2, pending)
+
+	projectionFailure := errors.New("temporary queue projection failure")
+	err = matches.ApplyPendingRecoveryEffects(ctx, 10, func(context.Context, SearchSession, string) error {
+		return projectionFailure
+	})
+	require.ErrorIs(t, err, projectionFailure)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_recovery_effects WHERE match_id = $1 AND applied_at IS NULL`, created.Match.ID).Scan(&pending))
+	require.Equal(t, 2, pending, "failed external projection must remain retryable")
+
+	actions := make(map[string]int)
+	err = matches.ApplyPendingRecoveryEffects(ctx, 10, func(_ context.Context, _ SearchSession, action string) error {
+		actions[action]++
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{"enqueue": 1, "release": 1}, actions)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_recovery_effects WHERE match_id = $1 AND applied_at IS NULL`, created.Match.ID).Scan(&pending))
+	require.Zero(t, pending)
 }

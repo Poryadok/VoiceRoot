@@ -100,9 +100,9 @@ func TestGetPlayerRating_GuestViewerDeniedWhenGuestAudienceExcluded(t *testing.T
 	srv.RatingPrivacy = mmRatingPrivacyStub{audience: privacy.FriendsOnly()}
 
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,

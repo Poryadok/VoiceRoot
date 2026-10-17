@@ -601,6 +601,57 @@ but ownership transfer stays unavailable. A configured Space Role integration
 with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
 
+## Matchmaking CompleteMatch principal (opt-in template)
+
+`deploy/templates/matchmaking-complete-principal-patch.yaml` is an operator-
+rendered strategic-merge overlay for the Gateway and Matchmaking Deployments.
+It is deliberately excluded from staging and production apply profiles. The
+Gateway uses its own two-key signing Secret and a distinct client TLS
+certificate; Matchmaking uses a separate server certificate, trusts only the
+Gateway client CA, and fetches only the Gateway public keys over the fixed
+HTTPS JWKS route `/.well-known/voice-principal-jwks.json`. Configure the JWKS
+HTTPS host and CA to match the existing Gateway ingress certificate. Redis
+replay storage uses the existing app Redis address and an operator-provisioned
+password Secret.
+
+Before rendering, replace every `REPLACE_WITH_*` and `REPLACE_WITH_GATEWAY_HTTPS_HOST`
+placeholder with operator-owned references and confirm certificate SANs,
+issuer key overlap, Redis ACL, and ingress routing. Do not put key material in
+the overlay or enable it by adding it to an active base. The overlay enables
+only Gateway-originated Matchmaking CompleteMatch; it does not configure Space
+principals or alter ordinary listeners. This source template is not a
+deployment or runtime acceptance claim.
+
+## MatchSquad principals (staging source contract)
+
+The staging source projects the MatchSquad listeners and their issuer trust;
+it does not create or rotate these credentials. Before an operator applies the
+manifest, provision the following Secrets in `voice-staging` from the
+environment's approved CA and secret-management process:
+
+| Secret | Required keys | Use |
+|---|---|---|
+| `voice-matchmaking-principal-signing` | `current.pem`, `next.pem`, `active-kid` | Matchmaking issuer key pair and active key ID. |
+| `voice-matchmaking-principal-jwks-tls` | `tls.crt`, `tls.key` | Matchmaking HTTPS JWKS server identity; SAN `voice-matchmaking.voice-staging.svc`. |
+| `voice-matchmaking-principal-jwks-ca` | `ca.crt` | Public CA trust for Chat and Voice JWKS clients; this is a separate Secret from the gRPC media CA. |
+| `voice-matchmaking-client-tls` | `tls.crt`, `tls.key` | Matchmaking mTLS client identity for Chat and Voice. |
+| `voice-chat-match-squad-server-tls`, `voice-voice-match-squad-server-tls` | `tls.crt`, `tls.key` | Chat and Voice mTLS server identities. |
+| `voice-match-squad-replay`, `voice-match-squad-member-replay` | `password` | Dedicated Redis replay-store credentials. |
+
+All Secret mounts are read-only. The JWKS URL is
+`https://voice-matchmaking.voice-staging.svc:8443/internal/v1/principal/jwks.json`;
+the certificate and CA must come from the staging trust profile and must not
+reuse DEV certificate or CA bytes. The HTTPS endpoint serves the public
+current/next key set only. gRPC client/server certificates remain separate
+and use the existing media mTLS CA. Matchmaking's publisher is all-or-none:
+the key directory, active ID, listen address, and TLS certificate/key paths
+must all be present and valid, or the service fails closed at startup.
+
+The Compose media profile uses a generated disposable test certificate with
+the `voice-matchmaking` network alias and exercises the same route. These
+source contracts do not claim that staging Secrets have been provisioned or
+that a staging rollout has been accepted.
+
 ## Notification-to-User routing-presence principal
 
 The Notification presence client is a dedicated internal capability, separate

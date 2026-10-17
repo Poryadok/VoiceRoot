@@ -1886,12 +1886,14 @@ jobs:
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
       - name: Generate disposable media principal and TLS fixture
+        env:
+          PHASE0_MATCHSQUAD_FIXTURE_UID: "65532"
         run: |
           echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
           python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
       - name: Start app stack
         run: |
-          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build; then
+          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --build; then
             :
           else
             startup_status=$?
@@ -1899,7 +1901,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status "$startup_status" \
             --service voice \
-            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app || true
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
             cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
             exit "$startup_status"
           fi
@@ -1915,7 +1917,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status 1 \
             --service voice \
-            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app || true
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
           cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
           exit 1
       - uses: actions/setup-go@v5
@@ -1941,6 +1943,28 @@ jobs:
           bash scripts/ci/compose-e2e-smoke.sh
           cd src/backend/gateway
           CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^(TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*|TestRequestComposeJoinToken.*)$' ./...
+      - name: Collect sanitized Auth session-floor diagnostics
+        id: auth_session_floor_diagnostics
+        if: failure() && steps.compose_e2e_smoke.outcome == 'failure'
+        run: |
+          python3 scripts/ci/auth_session_floor_diagnostics.py \
+            --output "$RUNNER_TEMP/voice-auth-session-floor-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json" \
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app
+      - name: Upload sanitized Auth session-floor diagnostics
+        uses: actions/upload-artifact@v6
+        if: always() && steps.auth_session_floor_diagnostics.outcome == 'success'
+        with:
+          name: auth-session-floor-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-auth-session-floor-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Restore and remove disposable Phase0 fixture ownership
+        if: always()
+        run: |
+          if [[ -d "$RUNNER_TEMP/voice-space-media-phase0" ]]; then
+            python scripts/dev/restore-phase0-fixture-owner.py "$RUNNER_TEMP/voice-space-media-phase0"
+            rm -rf -- "$RUNNER_TEMP/voice-space-media-phase0"
+          fi
       - name: Collect sanitized Space media admission diagnostics
         id: space_media_admission_diagnostics
         if: failure() && steps.compose_e2e_smoke.outcome == 'failure'

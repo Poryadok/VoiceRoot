@@ -45,6 +45,7 @@ func TestMatchStore_ListHistoryForProfile_IncludesCompleted(t *testing.T) {
 	matches := &MatchStore{Pool: pool}
 
 	matchID, profileA, profileB := seedActiveDuoMatch(t, ctx, pool)
+	makeLegacyMatchResourceFree(t, ctx, pool, matchID)
 	_, err := matches.CompleteMatchLeave(ctx, matchID, profileA)
 	require.NoError(t, err)
 	_, err = matches.CompleteMatchLeave(ctx, matchID, profileB)

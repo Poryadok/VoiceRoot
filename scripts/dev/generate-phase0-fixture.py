@@ -2,6 +2,8 @@
 """Create short-lived local/CI Phase0 credentials; never provision a live cluster."""
 
 import argparse
+import base64
+import json
 import os
 from pathlib import Path
 import shutil
@@ -31,12 +33,69 @@ def generate(destination):
     try:
         with tempfile.TemporaryDirectory(prefix=".phase0-", dir=destination.parent) as scratch:
             root = Path(scratch)
-            for directory in ("gateway", "space", "gameintegration", "voice", "bot", "tls", "ca"):
+            for directory in ("gateway", "space", "matchmaking", "gameintegration", "voice", "bot", "jwks", "tls", "ca"):
                 (root / directory).mkdir(mode=0o700)
-            for issuer in ("gateway", "space"):
+            for issuer in ("gateway", "matchmaking"):
+                (root / "jwks" / issuer).mkdir(mode=0o700)
+            for issuer in ("gateway", "space", "matchmaking"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
                             "rsa_keygen_bits:2048", "-out", root / issuer / f"{kid}.pem")
+
+            def der_value(data, offset, expected_tag):
+                if offset >= len(data) or data[offset] != expected_tag:
+                    raise ValueError("invalid RSA public key encoding")
+                offset += 1
+                if offset >= len(data):
+                    raise ValueError("truncated RSA public key encoding")
+                length = data[offset]
+                offset += 1
+                if length & 0x80:
+                    count = length & 0x7f
+                    if not count or offset + count > len(data):
+                        raise ValueError("invalid RSA public key length")
+                    length = int.from_bytes(data[offset:offset + count], "big")
+                    offset += count
+                end = offset + length
+                if end > len(data):
+                    raise ValueError("truncated RSA public key value")
+                return data[offset:end], end
+
+            def b64url(value):
+                return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+            for issuer in ("gateway", "matchmaking"):
+                issuer_keys = []
+                for kid in ("current", "next"):
+                    der = subprocess.run(
+                        [binaries["openssl"], "pkey", "-in", str(root / issuer / f"{kid}.pem"),
+                         "-pubout", "-outform", "DER"],
+                        capture_output=True, timeout=60, check=False)
+                    if der.returncode:
+                        raise ValueError(f"{issuer} public key export failed")
+                    spki, end = der_value(der.stdout, 0, 0x30)
+                    if end != len(der.stdout):
+                        raise ValueError("trailing RSA public key data")
+                    _, offset = der_value(spki, 0, 0x30)
+                    bit_string, offset = der_value(spki, offset, 0x03)
+                    if offset != len(spki) or not bit_string or bit_string[0] != 0:
+                        raise ValueError("invalid RSA public key bit string")
+                    rsa_key, end = der_value(bit_string[1:], 0, 0x30)
+                    if end != len(bit_string) - 1:
+                        raise ValueError("trailing RSA key data")
+                    modulus, offset = der_value(rsa_key, 0, 0x02)
+                    exponent, offset = der_value(rsa_key, offset, 0x02)
+                    if offset != len(rsa_key):
+                        raise ValueError("trailing RSA integer data")
+                    modulus = modulus.lstrip(b"\x00")
+                    exponent = exponent.lstrip(b"\x00")
+                    issuer_keys.append({
+                        "kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256",
+                        "n": b64url(modulus), "e": b64url(exponent),
+                    })
+                (root / "jwks" / issuer / "jwks.json").write_text(
+                    json.dumps({"keys": issuer_keys}, separators=(",", ":")) + "\n",
+                    encoding="ascii")
             for issuer in ("gameintegration", "voice", "bot"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
@@ -62,8 +121,12 @@ def generate(destination):
                     "-addext", "keyUsage=critical,keyCertSign,cRLSign")
             for index, (leaf, hostname) in enumerate(
                     (("role", "role"), ("auth", "auth"), ("proxy", "phase0-jwks"),
+                     ("matchmaking-complete-grpc", "matchmaking"),
+                     ("matchmaking-jwks", "voice-matchmaking"),
                      ("gameintegration-jwks", "gameintegration"), ("voice-jwks", "voice"),
                      ("chat-gis-grpc", "chat"), ("voice-game-grpc", "voice"),
+                     ("chat-match-squad-grpc", "chat"), ("voice-match-squad-grpc", "voice"),
+                     ("voice-match-squad-member-grpc", "voice"),
                      ("space-lifecycle", "space"), ("bot-game-event", "bot"),
                      ("notification-lifecycle", "notification"),
                      ("messaging-gameintegration-grpc", "messaging")), 1):
@@ -81,7 +144,7 @@ def generate(destination):
                         "-extfile", extensions, "-out", root / f"tls/{leaf}.crt")
                 csr.unlink()
             extensions.unlink()
-            for serial, service in enumerate(("space", "gameintegration", "voice"), 100):
+            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking"), 100):
                 client_key = root / f"tls/{service}-client.key"
                 client_csr = root / f"tls/{service}-client.csr"
                 client_extensions = root / "client.ext"
@@ -125,6 +188,52 @@ def generate(destination):
                     "-storetype", "PKCS12", "-storepass", "phase0-fixture")
             for path in root.rglob("*"):
                 path.chmod(0o700 if path.is_dir() else 0o600)
+            # This JWKS is public and bind-mounted into nginx, whose worker
+            # drops root privileges. Make only the public document readable
+            # by that worker; keep private fixture keys owner-only.
+            for issuer in ("gateway", "matchmaking"):
+                (root / "jwks" / issuer / "jwks.json").chmod(0o644)
+            fixture_uid = os.environ.get("PHASE0_MATCHSQUAD_FIXTURE_UID")
+            if fixture_uid is not None:
+                if os.name != "posix" or fixture_uid != "65532":
+                    raise ValueError("unsupported MatchSquad fixture owner")
+                owned_paths = [
+                    root / "matchmaking",
+                    root / "tls/chat-match-squad-grpc.crt",
+                    root / "tls/chat-match-squad-grpc.key",
+                    root / "tls/voice-match-squad-grpc.crt",
+                    root / "tls/voice-match-squad-grpc.key",
+                    root / "tls/voice-match-squad-member-grpc.crt",
+                    root / "tls/voice-match-squad-member-grpc.key",
+                    root / "tls/matchmaking-client.crt",
+                    root / "tls/matchmaking-client.key",
+                    root / "tls/matchmaking-complete-grpc.crt",
+                    root / "tls/matchmaking-complete-grpc.key",
+                    root / "tls/matchmaking-jwks.crt",
+                    root / "tls/matchmaking-jwks.key",
+                    root / "ca/ca.crt",
+                ]
+                # Permit path traversal to only the owner-only files below;
+                # execute-only directories do not permit listing or reading
+                # any of the remaining fixture material.
+                for path in (root, root / "tls", root / "ca"):
+                    path.chmod(0o711)
+                if os.geteuid() == 0:
+                    for path in owned_paths:
+                        entries = (path, *path.rglob("*")) if path == root / "matchmaking" else (path,)
+                        for entry in entries:
+                            os.chown(entry, 65532, 65532)
+                else:
+                    for path in owned_paths:
+                        command_args = ["sudo", "-n", "chown"]
+                        if path == root / "matchmaking":
+                            command_args.append("-R")
+                        command_args.extend(("65532:65532", str(path)))
+                        result = subprocess.run(
+                            command_args,
+                            capture_output=True, timeout=30, check=False)
+                        if result.returncode:
+                            raise ValueError("MatchSquad fixture ownership setup failed")
             # No existing output is overwritten; a failed tool leaves only the
             # temporary tree, whose context manager removes all key material.
             root.rename(destination)

@@ -5,8 +5,16 @@ services:
     environment:
       GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
       GATEWAY_PRINCIPAL_ACTIVE_KID: current
+      GATEWAY_MATCHMAKING_COMPLETE_GRPC_ADDR: matchmaking:9092
+      GATEWAY_MATCHMAKING_COMPLETE_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_MATCHMAKING_COMPLETE_TLS_SERVER_NAME: matchmaking
+      GATEWAY_MATCHMAKING_COMPLETE_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_MATCHMAKING_COMPLETE_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/gateway:/run/phase0/gateway:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gateway-client.crt:/run/phase0/gateway-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gateway-client.key:/run/phase0/gateway-client.key:ro
   space:
     user: "0:0"
     environment:
@@ -30,11 +38,19 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.crt:/run/phase0/space-lifecycle-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.key:/run/phase0/space-lifecycle-client.key:ro
   matchmaking:
-    user: "0:0"
     environment:
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","space":"https://space:8443/.well-known/jwks.json"}'
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/matchmaking-complete-grpc.crt
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/matchmaking-complete-grpc.key
+      MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-complete-grpc.crt:/run/phase0/matchmaking-complete-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-complete-grpc.key:/run/phase0/matchmaking-complete-grpc.key:ro
+    depends_on:
+      phase0-jwks:
+        condition: service_started
   gameintegration:
     user: "0:0"
     expose: ["8443"]
@@ -181,7 +197,7 @@ services:
       VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
       VOICE_SPACE_LIFECYCLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
       VOICE_SPACE_LIFECYCLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}'
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
       VOICE_ROLE_GRPC_ADDR: role:9091
       VOICE_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
@@ -285,7 +301,7 @@ services:
       AUTH_PRINCIPAL_GRPC_PORT: "9091"
       AUTH_GRPC_TLS_CERT_FILE: /run/phase0/auth.crt
       AUTH_GRPC_TLS_KEY_FILE: /run/phase0/auth.key
-      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
       JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12
     depends_on:
       phase0-jwks:
@@ -305,3 +321,4 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/space-ca/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/jwks/gateway/jwks.json:/run/phase0/gateway/jwks.json:ro
