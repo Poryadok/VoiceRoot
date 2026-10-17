@@ -432,8 +432,8 @@ accepted_game_checkpoint='5ff441e04422e3ff1a4c0e1e7e81e3d17b8470eb'
 # source constants, never environment-provided proof; producer checks still
 # validate the actual PR rows before merge and the actual master push afterward.
 game_checkpoint_snapshot_base='28f1a0a26f3f23bfb9242592aea9c92fd659ee2d'
-game_checkpoint_snapshot_head='7270d22d05475afee9e20fbb1b95377c138ebdf4'
-game_checkpoint_snapshot_record='a3fe5aad4fea5ff9ef18a7786d80916c06776e40'
+game_checkpoint_snapshot_head='6fe3f778538c0cfff689bb8fc40543010d158944'
+game_checkpoint_snapshot_record='6b2c9a602c920bcbfd785f400f0f3d8560587db9'
 game_checkpoint_aggregate_active=false
 game_checkpoint_aggregate_base=''
 game_checkpoint_aggregate_head=''
@@ -1063,9 +1063,9 @@ f13_extract_versioned_alias_section() {
   [[ -s "${output}" ]]
 }
 
-# The R2 record grants one explicit migration renumber only. Both complete
+# The R3 record grants one explicit migration renumber only. Both complete
 # source rows, their original owner/base/integration lineage, the competing
-# baseline pair, and the destination projection must match the immutable R2
+# baseline pair, and the destination projection must match the immutable R3
 # document and Git trees. This never widens P or treats equal bytes as authority.
 f13_migration_alias_tables_match_expected() {
   local aliases="$1" collisions="$2" expected_aliases="$3" expected_collisions="$4"
@@ -1077,10 +1077,10 @@ f13_migration_alias_record_load() {
   local alias_raw="${TMP_DIR}/f13-migration-alias-raw" collision_raw="${TMP_DIR}/f13-migration-collision-raw"
   local expected_aliases="${TMP_DIR}/f13-migration-alias-expected" expected_collisions="${TMP_DIR}/f13-migration-collision-expected"
   f13_extract_versioned_alias_section "${repo}" "${record}" \
-    '<!-- F13-MIGRATION-ALIASES-V2-BEGIN -->' '<!-- F13-MIGRATION-ALIASES-V2-END -->' \
+    '<!-- F13-MIGRATION-ALIASES-V3-BEGIN -->' '<!-- F13-MIGRATION-ALIASES-V3-END -->' \
     "${alias_raw}" || return 1
   f13_extract_versioned_alias_section "${repo}" "${record}" \
-    '<!-- F13-MIGRATION-COLLISION-V2-BEGIN -->' '<!-- F13-MIGRATION-COLLISION-V2-END -->' \
+    '<!-- F13-MIGRATION-COLLISION-V3-BEGIN -->' '<!-- F13-MIGRATION-COLLISION-V3-END -->' \
     "${collision_raw}" || return 1
   awk -F'|' 'NF != 21 { exit 1 } {
       for (i=1; i<=NF; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i) }
@@ -1515,13 +1515,14 @@ f13_migration_alias_wrapper_result_fixture() {
   done
 }
 
-# Exercise the guarded-path helper with the exact immutable R2 row while the
+# Exercise the guarded-path helper with the exact immutable R3 row while the
 # checkout is a real master-target pull-request merge. This catches shell
 # nounset regressions in the record-to-owner binding before the full collector
 # walks the same row.
 f13_migration_alias_reconciliation_execution_fixture() {
   local repo="$1" event_base="$2" target="$3" source_head="$4"
   local delta="${TMP_DIR}/f13-alias-execution-delta" paths="${TMP_DIR}/f13-alias-execution-paths"
+  local r2_delta="${TMP_DIR}/f13-r2-stale-projection-delta"
   local aliases="${TMP_DIR}/f13-alias-execution-record.tsv" collisions="${TMP_DIR}/f13-alias-execution-collisions.tsv"
   local path row fields old_entry row_owner row_first row_source_base row_source_head row_content_base row_candidates
   local nested_owner nested_first nested_base nested_head nested_content nested_candidates source_base_entry
@@ -1534,6 +1535,15 @@ f13_migration_alias_reconciliation_execution_fixture() {
   [[ "$(git -C "${repo}" rev-list --parents -n 1 "${target}" | awk '{ print NF }')" == 3 &&
     "$(git -C "${repo}" rev-parse "${target}^1")" == "${event_base}" &&
     "$(git -C "${repo}" rev-parse "${target}^2")" == "${source_head}" ]] || return 1
+  git -C "${repo}" diff --name-only --no-renames "${event_base}" "${source_head}" >"${r2_delta}" || return 1
+  if game_checkpoint_projection_authorized_in_delta "${repo}" "${target}" \
+    "${event_base}" "${source_head}" \
+    '28f1a0a26f3f23bfb9242592aea9c92fd659ee2d' \
+    '7270d22d05475afee9e20fbb1b95377c138ebdf4' \
+    'a3fe5aad4fea5ff9ef18a7786d80916c06776e40' "${r2_delta}"; then
+    printf '%s\n' 'F13 oracle bug: stale R2 projection authorized the updated R3 source tree' >&2
+    return 1
+  fi
   git -C "${repo}" diff --name-only --no-renames "${event_base}" "${source_head}" >"${delta}" || return 1
   game_checkpoint_aggregate_authorized "${repo}" "${event_base}" "${source_head}" \
     "${target}" "${delta}" "${paths}" || return 1
@@ -1648,7 +1658,7 @@ f13_migration_alias_reconciliation_execution_fixture() {
   game_checkpoint_aggregate_alias_map="${ledger}"
   f13_tree_entry_normalizer_fixtures || return 1
   game_checkpoint_aggregate_active=false
-  printf '%s\n' 'F13 R2 alias early-helper fixture: PASS'
+  printf '%s\n' 'F13 R3 alias early-helper fixture: PASS'
 }
 
 # These exact paths are the reviewed Role private room-grant handler and its
