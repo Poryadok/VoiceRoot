@@ -1,4 +1,5 @@
 """Tests for the source-owned, tokenless native census Job ABI."""
+import copy
 import unittest
 
 import verification_job as jobs
@@ -25,6 +26,68 @@ ARCHIVE_BINDING = {key: BINDING[key] for key in (
 
 
 class VerificationJobTests(unittest.TestCase):
+    def test_job_readback_allows_only_kubernetes_defaults_and_exact_uid(self):
+        wanted = jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, IMAGE)
+        actual = copy.deepcopy(wanted)
+        uid = '77777777-7777-4777-8777-777777777777'
+        actual['metadata'].update(uid=uid, resourceVersion='19', generation=1,
+            creationTimestamp='2026-10-17T00:00:00Z', managedFields=[])
+        actual['spec'].update(parallelism=1, completions=1, completionMode='NonIndexed',
+            suspend=False, podReplacementPolicy='TerminatingOrFailed')
+        pod_spec = actual['spec']['template']['spec']
+        pod_spec.update(dnsPolicy='ClusterFirst', schedulerName='default-scheduler',
+            terminationGracePeriodSeconds=30, enableServiceLinks=True,
+            preemptionPolicy='PreemptLowerPriority', priority=0)
+        container = pod_spec['containers'][0]
+        container.update(terminationMessagePath='/dev/termination-log', terminationMessagePolicy='File')
+        actual['status'] = {'active': 1}
+        self.assertEqual(jobs.verify_job(actual, wanted, uid), actual)
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'api_job_uid'):
+            jobs.verify_job(actual, wanted, '88888888-8888-4888-8888-888888888888')
+        extra = copy.deepcopy(actual)
+        extra['spec']['template']['spec']['containers'].append({'name': 'injected'})
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'api_object_array'):
+            jobs.verify_job(extra, wanted, uid)
+
+    def test_pod_readback_binds_owner_template_and_affinity_node(self):
+        job = jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, IMAGE)
+        job_uid = '77777777-7777-4777-8777-777777777777'
+        pod_uid = '88888888-8888-4888-8888-888888888888'
+        template = job['spec']['template']
+        name = job['metadata']['name'] + '-abcde'
+        actual = {'apiVersion': 'v1', 'kind': 'Pod',
+            'metadata': copy.deepcopy(template['metadata']), 'spec': copy.deepcopy(template['spec'])}
+        actual['metadata'].update(name=name, namespace=jobs.NAMESPACE, uid=pod_uid,
+            resourceVersion='20', creationTimestamp='2026-10-17T00:00:00Z', managedFields=[],
+            ownerReferences=[{'apiVersion': 'batch/v1', 'kind': 'Job',
+                'name': job['metadata']['name'], 'uid': job_uid, 'controller': True,
+                'blockOwnerDeletion': True}])
+        actual['metadata']['labels'].update({
+            'batch.kubernetes.io/controller-uid': job_uid,
+            'batch.kubernetes.io/job-name': job['metadata']['name']})
+        actual['spec'].update(nodeName=ARCHIVE_BINDING['source_node_name'], dnsPolicy='ClusterFirst',
+            schedulerName='default-scheduler', terminationGracePeriodSeconds=30,
+            enableServiceLinks=True, preemptionPolicy='PreemptLowerPriority', priority=0)
+        actual['spec']['containers'][0].update(terminationMessagePath='/dev/termination-log',
+            terminationMessagePolicy='File')
+        self.assertEqual(jobs.verify_pod(actual, template, job_uid, 'archive',
+            expected_node_name=ARCHIVE_BINDING['source_node_name'], expected_uid=pod_uid), actual)
+        wrong_node = copy.deepcopy(actual)
+        wrong_node['spec']['nodeName'] = 'other-node'
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'api_pod_node'):
+            jobs.verify_pod(wrong_node, template, job_uid, 'archive',
+                expected_node_name=ARCHIVE_BINDING['source_node_name'])
+        injected = copy.deepcopy(actual)
+        injected['metadata']['ownerReferences'][0]['uid'] = pod_uid
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'api_pod_owner'):
+            jobs.verify_pod(injected, template, job_uid, 'archive',
+                expected_node_name=ARCHIVE_BINDING['source_node_name'])
+        injected = copy.deepcopy(actual)
+        injected['spec']['containers'][0]['env'].append({'name': 'EXTRA', 'value': '1'})
+        with self.assertRaises(jobs.VerificationJobError):
+            jobs.verify_pod(injected, template, job_uid, 'archive',
+                expected_node_name=ARCHIVE_BINDING['source_node_name'])
+
     def test_archive_job_is_source_only_readonly_and_node_affinity_bound(self):
         row = jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, IMAGE)
         pod = row['spec']['template']['spec']
@@ -72,8 +135,50 @@ class VerificationJobTests(unittest.TestCase):
         for image in ('candidate:latest', IMAGE.replace('a' * 64, 'z' * 64)):
             with self.subTest(image=image), self.assertRaises(jobs.VerificationJobError):
                 jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, image)
-        with self.assertRaisesRegex(jobs.VerificationJobError, 'census_source_split_pending'):
-            jobs.document(REQUEST, BINDING, IMAGE)
+        census = jobs.document(REQUEST, BINDING, IMAGE)
+        pod = census['spec']['template']['spec']
+        self.assertEqual(census['metadata']['labels'][jobs.LABEL_PHASE], 'census')
+        self.assertEqual(pod['securityContext'], {
+            'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+            'fsGroup': 65532, 'fsGroupChangePolicy': 'OnRootMismatch',
+            'seccompProfile': {'type': 'RuntimeDefault'}})
+        self.assertEqual({m['mountPath']: m for m in pod['containers'][0]['volumeMounts']}, {
+            '/verify': {'name': 'target', 'mountPath': '/verify'},
+            '/out': {'name': 'output', 'mountPath': '/out'},
+            '/inputs': {'name': 'inputs', 'mountPath': '/inputs'}})
+        self.assertEqual({v['name']: v for v in pod['volumes']}, {
+            'target': {'name': 'target', 'persistentVolumeClaim': {
+                'claimName': BINDING['verification_claim']}},
+            'output': {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}},
+            'inputs': {'name': 'inputs', 'emptyDir': {'sizeLimit': '16Mi'}}})
+        self.assertNotIn('source', {volume['name'] for volume in pod['volumes']})
+        self.assertNotIn('source', {mount['name'] for mount in pod['containers'][0]['volumeMounts']})
+        self.assertNotIn('nodeName', pod)
+
+    def test_census_vectors_are_fixed_target_only_upload_then_same_pod_readback(self):
+        vectors = jobs.exec_vectors(REQUEST, POD_UID, BINDING,
+            {'sha256': 'd' * 64, 'bytes': 1234})
+        upload = vectors['census_receive_archive']
+        self.assertEqual(upload[:3], ['/usr/bin/python3', '/voice-nats-runner/phase', '--receive-archive'])
+        for pair in (('--source-pvc-uid', BINDING['source_uid']),
+            ('--source-pv-uid', BINDING['source_pv_uid']),
+            ('--verification-pvc-uid', BINDING['verification_uid']),
+            ('--verification-pv-uid', BINDING['verification_pv_uid'])):
+            index = upload.index(pair[0])
+            self.assertEqual(upload[index + 1], pair[1])
+        self.assertEqual(upload[upload.index('--archive-sha256') + 1], 'd' * 64)
+        self.assertEqual(upload[upload.index('--archive-bytes') + 1], '1234')
+        self.assertEqual(vectors['census_same_pod_readback'][2], '--read-receipt')
+        self.assertEqual(vectors['census_load_inputs'][2], '--load-inputs')
+        self.assertEqual(vectors['census_load_inputs'][3:9], ['--operation', REQUEST['operation'],
+            '--nonce', REQUEST['nonce'], '--pod-uid', POD_UID])
+        self.assertEqual(vectors['census_read_input_receipt'][2], '--read-input-receipt')
+        self.assertIn('--phase', vectors['census_same_pod_readback'])
+        self.assertEqual(vectors['census_same_pod_readback'][-1], 'census')
+        self.assertEqual(set(vectors), {'census_load_inputs', 'census_read_input_receipt', 'census_receive_archive',
+            'census_same_pod_readback'})
+        with self.assertRaises(jobs.VerificationJobError):
+            jobs.exec_vectors(REQUEST, POD_UID, BINDING)
 
     def test_source_and_verification_claim_identity_must_be_distinct_and_valid(self):
         for mutation in (

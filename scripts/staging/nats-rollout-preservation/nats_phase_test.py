@@ -46,13 +46,14 @@ class NatsPhaseTests(unittest.TestCase):
         self.output = self.root / 'out'; self.output.mkdir(mode=0o700)
         self.verification = self.root / 'verify'; self.verification.mkdir(mode=0o700)
         self.inputs = self.root / 'inputs'; self.inputs.mkdir(mode=0o700)
+        self.input_private = self.inputs / 'private'
         self.args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
             source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
             verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID)
         self.patches = [patch.object(phase, 'DATA_ROOT', self.source),
             patch.object(phase, 'OUT_ROOT', self.output),
             patch.object(phase, 'VERIFY_ROOT', self.verification),
-            patch.object(phase, 'INPUT_ROOT', self.inputs),
+            patch.object(phase, 'INPUT_ROOT', self.input_private),
             patch.dict(phase.os.environ, {'POD_UID': POD_UID})]
         for item in self.patches: item.start()
 
@@ -71,42 +72,47 @@ class NatsPhaseTests(unittest.TestCase):
     def test_fixed_census_phase_runs_the_pinned_kernel_without_host_runtime(self):
         run = getattr(phase, 'run_verification', None)
         self.assertTrue(callable(run), 'fixed census phase is not implemented')
-        receipt = {'schema': 'voice-nats-verification-v1', 'phase': 'census',
+        receipt = {'schema': 'voice-nats-verification-v1', 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
-            'result_sha256': 'd' * 64}
+            'archive_sha256': 'a' * 64, 'archive_bytes': 123, 'census_sha256': 'd' * 64,
+            'status': 'COMPLETE'}
         with patch.object(phase, 'run_verification', return_value=receipt) as execute:
-            result = phase.main(['--phase', 'census', '--operation', OPERATION,
+            result = phase.main(['--receive-archive', '--operation', OPERATION,
                 '--nonce', NONCE, '--pod-uid', POD_UID,
                 '--source-pvc-uid', '11111111-1111-4111-8111-111111111111',
             '--source-pv-uid', SOURCE_PV_UID,
             '--verification-pvc-uid', '22222222-2222-4222-8222-222222222222',
-            '--verification-pv-uid', VERIFICATION_PV_UID])
+            '--verification-pv-uid', VERIFICATION_PV_UID,
+            '--archive-sha256', 'a' * 64, '--archive-bytes', '123'])
         execute.assert_called_once()
+        self.assertEqual(execute.call_args.args[0], 'census')
+        self.assertEqual(execute.call_args.args[1].archive_bytes, 123)
         self.assertEqual(result, receipt)
 
     def test_census_readback_returns_only_matching_durable_receipt(self):
         state = self.verification / '.voice-nats-verification'
         state.mkdir(mode=0o700)
-        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
             'source_pv_uid': SOURCE_PV_UID,
             'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
-            'verification_pv_uid': VERIFICATION_PV_UID,
+            'verification_pv_uid': VERIFICATION_PV_UID, 'archive_sha256': 'a' * 64,
+            'archive_bytes': 123,
             'state': 'STARTED'}
         census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
             'streams': [], 'consumers': []}
         census_bytes = json.dumps(census, sort_keys=True, separators=(',', ':'),
             allow_nan=False).encode()
-        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': marker['source_pvc_uid'],
             'source_pv_uid': marker['source_pv_uid'],
             'verification_pvc_uid': marker['verification_pvc_uid'],
             'verification_pv_uid': marker['verification_pv_uid'],
-            'archive_sha256': 'a' * 64,
+            'archive_sha256': 'a' * 64, 'archive_bytes': 123,
             'census_sha256': hashlib.sha256(census_bytes).hexdigest(), 'status': 'COMPLETE'}
-        (state / (OPERATION + '-' + NONCE + '.json')).write_text(json.dumps(marker))
+        (state / (OPERATION + '-' + NONCE + '.census.started.json')).write_text(json.dumps(marker))
         (state / (OPERATION + '-' + NONCE + '.receipt.json')).write_text(json.dumps(receipt))
         census_path = state / (OPERATION + '-' + NONCE + '.census.json')
         census_path.write_bytes(census_bytes)
@@ -118,8 +124,10 @@ class NatsPhaseTests(unittest.TestCase):
         args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
             source_pvc_uid=marker['source_pvc_uid'], source_pv_uid=marker['source_pv_uid'],
             verification_pvc_uid=marker['verification_pvc_uid'],
-            verification_pv_uid=marker['verification_pv_uid'])
-        with patch.object(phase, '_require_verification_identity'):
+            verification_pv_uid=marker['verification_pv_uid'], archive_sha256='a' * 64,
+            archive_bytes=123)
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, 'read_input_receipt', return_value={'status': 'COMPLETE'}):
             self.assertEqual(phase.read_verification_receipt('census', args),
                 {'receipt': receipt, 'census': census})
 
@@ -128,21 +136,23 @@ class NatsPhaseTests(unittest.TestCase):
         state.mkdir(mode=0o700)
         source_uid = '11111111-1111-4111-8111-111111111111'
         verification_uid = '22222222-2222-4222-8222-222222222222'
-        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': source_uid, 'source_pv_uid': SOURCE_PV_UID,
             'verification_pvc_uid': verification_uid, 'verification_pv_uid': VERIFICATION_PV_UID,
+            'archive_sha256': 'a' * 64, 'archive_bytes': 123,
             'state': 'STARTED'}
         census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
             'streams': [], 'consumers': []}
         census_bytes = json.dumps(census, sort_keys=True, separators=(',', ':'),
             allow_nan=False).encode()
-        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': source_uid, 'source_pv_uid': SOURCE_PV_UID,
             'verification_pvc_uid': verification_uid, 'verification_pv_uid': VERIFICATION_PV_UID,
-            'archive_sha256': 'a' * 64, 'census_sha256': 'b' * 64, 'status': 'COMPLETE'}
-        (state / (OPERATION + '-' + NONCE + '.json')).write_text(json.dumps(marker))
+            'archive_sha256': 'a' * 64, 'archive_bytes': 123,
+            'census_sha256': 'b' * 64, 'status': 'COMPLETE'}
+        (state / (OPERATION + '-' + NONCE + '.census.started.json')).write_text(json.dumps(marker))
         (state / (OPERATION + '-' + NONCE + '.receipt.json')).write_text(json.dumps(receipt))
         (state / (OPERATION + '-' + NONCE + '.census.json')).write_bytes(census_bytes)
         for path in state.iterdir(): path.chmod(0o600)
@@ -151,8 +161,10 @@ class NatsPhaseTests(unittest.TestCase):
         self.source.chmod(0o555)
         args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
             source_pvc_uid=source_uid, source_pv_uid=SOURCE_PV_UID,
-            verification_pvc_uid=verification_uid, verification_pv_uid=VERIFICATION_PV_UID)
+            verification_pvc_uid=verification_uid, verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256='a' * 64, archive_bytes=123)
         with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, 'read_input_receipt', return_value={'status': 'COMPLETE'}), \
              patch.object(phase, 'run_verification', side_effect=AssertionError('must not replay')):
             with self.assertRaisesRegex(ValueError, 'verification_receipt_binding'):
                 phase.read_verification_receipt('census', args)
@@ -161,13 +173,14 @@ class NatsPhaseTests(unittest.TestCase):
         census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
             'streams': [], 'consumers': [], 'padding': 'x' * (phase.READBACK_CHUNK + 17)}
         raw = json.dumps(census, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
-        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
             'source_pv_uid': SOURCE_PV_UID,
             'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_uid': VERIFICATION_PV_UID,
-            'archive_sha256': 'a' * 64, 'census_sha256': hashlib.sha256(raw).hexdigest(),
+            'archive_sha256': 'a' * 64, 'archive_bytes': 123,
+            'census_sha256': hashlib.sha256(raw).hexdigest(),
             'status': 'COMPLETE'}
         output = Output()
         with patch.object(phase.sys, 'stdout', output):
@@ -193,13 +206,13 @@ class NatsPhaseTests(unittest.TestCase):
         census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
             'streams': [], 'consumers': []}
         raw = json.dumps(census, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
-        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
             'source_pv_uid': SOURCE_PV_UID,
             'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_uid': VERIFICATION_PV_UID,
-            'archive_sha256': 'a' * 64,
+            'archive_sha256': 'a' * 64, 'archive_bytes': 123,
             'census_sha256': hashlib.sha256(raw).hexdigest(), 'status': 'COMPLETE'}
         output = Output()
         with patch.object(phase.sys, 'stdout', output), \
@@ -249,14 +262,15 @@ class NatsPhaseTests(unittest.TestCase):
     def test_census_interruption_without_receipt_is_not_replayed(self):
         state = self.verification / '.voice-nats-verification'
         state.mkdir(mode=0o700)
-        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census', 'purpose': 'verification',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
             'source_pv_uid': SOURCE_PV_UID,
             'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_uid': VERIFICATION_PV_UID,
+            'archive_sha256': 'a' * 64, 'archive_bytes': 123,
             'state': 'STARTED'}
-        marker_path = state / (OPERATION + '-' + NONCE + '.json')
+        marker_path = state / (OPERATION + '-' + NONCE + '.census.started.json')
         marker_path.write_text(json.dumps(marker)); marker_path.chmod(0o600)
         (self.source / 'jetstream').chmod(0o555)
         (self.source / 'jetstream' / 'meta.inf').chmod(0o444)
@@ -264,8 +278,10 @@ class NatsPhaseTests(unittest.TestCase):
         args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
             source_pvc_uid=marker['source_pvc_uid'], source_pv_uid=marker['source_pv_uid'],
             verification_pvc_uid=marker['verification_pvc_uid'],
-            verification_pv_uid=marker['verification_pv_uid'])
+            verification_pv_uid=marker['verification_pv_uid'], archive_sha256='a' * 64,
+            archive_bytes=123)
         with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, 'read_input_receipt', return_value={'status': 'COMPLETE'}), \
              patch.object(phase, 'run_verification', side_effect=AssertionError('must not replay')):
             with self.assertRaisesRegex(ValueError, 'verification_receipt_incomplete'):
                 phase.read_verification_receipt('census', args)
@@ -274,35 +290,37 @@ class NatsPhaseTests(unittest.TestCase):
         verify = getattr(phase, 'validate_verification_mounts', None)
         self.assertTrue(callable(verify), 'verification PVC boundary is not implemented')
         with patch.object(phase.native_store, 'restore_closed_store',
-                side_effect=AssertionError('restore must not run without a separate PVC')):
+                side_effect=AssertionError('restore must not run when scratch mounts alias')):
             with self.assertRaisesRegex(ValueError, 'verification_mounts'):
-                verify(self.source, self.source, self.output, self.inputs,
-                    source_pvc_uid='11111111-1111-4111-8111-111111111111',
-                    verification_pvc_uid='11111111-1111-4111-8111-111111111111')
+                verify(self.verification, self.verification, self.inputs,
+                    verification_pvc_uid='22222222-2222-4222-8222-222222222222')
 
-    def _install_verification_inputs(self):
+    def _install_verification_inputs(self, args):
         config = ('host: 127.0.0.1\nport: 4222\nhttp: 127.0.0.1:8222\n'
             'resolver: MEMORY\njetstream: { store_dir: /data, max_file_store: 64MB, max_memory_store: 16MB }\n')
-        for name in phase.INPUT_FILES:
-            path = self.inputs / name
-            path.write_text(config if name == 'server.conf' else 'fixed-private-input\n')
-            path.chmod(0o440)
+        bundle = {'schema': 'voice-nats-verification-inputs-v1', 'operation': args.operation,
+            'nonce': args.nonce, 'pod_uid': args.pod_uid, 'files': {
+                name: base64.b64encode((config if name == 'server.conf' else 'fixed-private-input\n').encode()).decode()
+                for name in phase.INPUT_FILES}}
+        with patch.object(phase, '_require_verification_identity'):
+            return phase.load_inputs(json.dumps(bundle).encode(), operation=args.operation,
+                nonce=args.nonce, pod_uid=args.pod_uid, binding_args=args)
 
-    def test_verification_restores_to_distinct_copy_and_runs_fixed_process_chain(self):
-        # A read-only source profile models the selected store's captured
-        # owner/group/mode. These values must remain byte-for-byte unchanged.
-        (self.source / 'jetstream').chmod(0o555)
-        (self.source / 'jetstream' / 'meta.inf').chmod(0o444)
-        self.source.chmod(0o555)
-        before = {str(path.relative_to(self.source)): (path.lstat().st_uid,
-            path.lstat().st_gid, path.lstat().st_mode, path.lstat().st_ino)
-            for path in [self.source, *self.source.rglob('*')]}
-        self._install_verification_inputs()
+    def test_verification_restores_streamed_archive_to_target_only_scratch_and_runs_fixed_chain(self):
+        archive = self.root / 'source.tar'
+        manifest = native_store.archive_closed_store(self.source, archive)
+        tar_bytes = archive.read_bytes()
+        manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+        envelope = (phase.CENSUS_INPUT_MAGIC + len(manifest_bytes).to_bytes(4, 'big')
+            + manifest_bytes + len(tar_bytes).to_bytes(8, 'big') + tar_bytes)
         args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
             source_pvc_uid='11111111-1111-4111-8111-111111111111',
             source_pv_uid=SOURCE_PV_UID,
             verification_pvc_uid='22222222-2222-4222-8222-222222222222',
-            verification_pv_uid=VERIFICATION_PV_UID)
+            verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256=manifest['archive_sha256'], archive_bytes=len(tar_bytes))
+        self._install_verification_inputs(args)
         process = Mock()
         process.poll.return_value = None
         process.wait.return_value = 0
@@ -313,36 +331,40 @@ class NatsPhaseTests(unittest.TestCase):
                 'account': 'A' + 'A' * 55, 'streams': [], 'consumers': []}))
             return types.SimpleNamespace(returncode=0)
         with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, 'DATA_ROOT', self.root / 'source-must-not-be-mounted'), \
              patch.object(phase.subprocess, 'Popen', side_effect=lambda *a, **k: (events.append(('start', a[0])) or process)), \
              patch.object(phase, '_wait_nats', side_effect=lambda *_a, **_k: events.append(('healthy',))), \
              patch.object(phase.subprocess, 'run', side_effect=kernel_run), \
              patch.object(phase, 'KERNEL', Path('/voice-nats-runner/kernel')), \
              patch.object(phase, 'NATS_SERVER', Path('/usr/local/bin/nats-server')):
-            receipt = phase.run_verification('census', args)
+            receipt = phase.run_verification('census', args, io.BytesIO(envelope))
         self.assertEqual([event[0] for event in events], ['start', 'healthy', 'kernel'])
         process.terminate.assert_called_once_with()
         process.wait.assert_called_once_with(timeout=30)
         self.assertEqual(receipt['status'], 'COMPLETE')
+        self.assertEqual(receipt['purpose'], 'verification')
+        self.assertEqual(receipt['archive_sha256'], manifest['archive_sha256'])
+        self.assertEqual(receipt['archive_bytes'], len(tar_bytes))
         self.assertTrue((self.verification / 'store' / 'jetstream' / 'meta.inf').is_file())
-        after = {str(path.relative_to(self.source)): (path.lstat().st_uid,
-            path.lstat().st_gid, path.lstat().st_mode, path.lstat().st_ino)
-            for path in [self.source, *self.source.rglob('*')]}
-        self.assertEqual(after, before)
         self.assertEqual((self.verification / '.voice-nats-verification' /
             f'{OPERATION}-{NONCE}.receipt.json').is_file(), True)
 
-    def test_verification_rejects_unreadable_by_runtime_source_profile_without_changing_it(self):
-        paths = [self.source, self.source / 'jetstream', self.source / 'jetstream' / 'meta.inf']
-        (self.source / 'jetstream' / 'meta.inf').chmod(0o000)
-        before = [(p.lstat().st_uid, p.lstat().st_gid, p.lstat().st_mode) for p in paths]
-        self.assertFalse(phase.source_readable_by_archive_helper(self.source))
-        with self.assertRaisesRegex(ValueError, 'verification_mounts'):
-            phase.validate_verification_mounts(self.source, self.verification,
-                self.output, self.inputs,
-                source_pvc_uid='11111111-1111-4111-8111-111111111111',
-                verification_pvc_uid='22222222-2222-4222-8222-222222222222')
-        after = [(p.lstat().st_uid, p.lstat().st_gid, p.lstat().st_mode) for p in paths]
-        self.assertEqual(after, before)
+    def test_incomplete_or_tampered_upload_is_durable_and_never_replayed(self):
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+            verification_pvc_uid=VERIFICATION_PVC_UID, verification_pv_uid=VERIFICATION_PV_UID,
+            archive_sha256='a' * 64, archive_bytes=10)
+        self._install_verification_inputs(args)
+        with patch.object(phase, '_require_verification_identity'):
+            with self.assertRaisesRegex(ValueError, 'verification_input_header'):
+                phase.run_verification('census', args, io.BytesIO(b'X' * len(phase.CENSUS_INPUT_MAGIC)))
+        marker = self.verification / '.voice-nats-verification' / f'{OPERATION}-{NONCE}.census.started.json'
+        self.assertTrue(marker.is_file())
+        self.assertEqual(json.loads(marker.read_bytes())['state'], 'STARTED')
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase.native_store, 'restore_closed_store', side_effect=AssertionError('must not restore')):
+            with self.assertRaisesRegex(ValueError, 'verification_already_started'):
+                phase.run_verification('census', args, io.BytesIO(b'anything'))
 
     @unittest.skipUnless(os.geteuid() == 10000, 'run this ownership fixture as the canonical hub UID')
     def test_source_reader_rejects_group_readable_store_owned_by_hub_uid(self):
@@ -381,7 +403,12 @@ class NatsPhaseTests(unittest.TestCase):
         with patch.object(phase, '_require_verification_identity'):
             with self.assertRaisesRegex(ValueError, 'verification_inputs'):
                 phase.load_inputs(json.dumps(bundle).encode(), operation=OPERATION,
-                    nonce=NONCE, pod_uid=POD_UID)
+                    nonce=NONCE, pod_uid=POD_UID, binding_args=types.SimpleNamespace(
+                        operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+                        source_pvc_uid=SOURCE_PVC_UID, source_pv_uid=SOURCE_PV_UID,
+                        verification_pvc_uid=VERIFICATION_PVC_UID,
+                        verification_pv_uid=VERIFICATION_PV_UID,
+                        archive_sha256='a' * 64, archive_bytes=123))
         self.assertEqual(list(self.inputs.iterdir()), [])
 
     def test_archive_helper_identity_matches_owner_for_noatime_source_reads(self):
@@ -410,14 +437,15 @@ class NatsPhaseTests(unittest.TestCase):
             path.lstat().st_ino) for path in [self.source, *self.source.rglob('*')]]
         self.assertEqual(after, before)
 
-    def test_verification_helper_requires_the_hub_owner_without_weakening_runner_identity(self):
-        with patch.object(phase.os, 'geteuid', return_value=10000), \
-             patch.object(phase.os, 'getegid', return_value=10000):
-            phase._require_verification_identity()
+    def test_verification_helper_requires_fixed_scratch_uid_not_hub_or_root(self):
         with patch.object(phase.os, 'geteuid', return_value=65532), \
-             patch.object(phase.os, 'getegid', return_value=10000):
-            with self.assertRaisesRegex(ValueError, 'verification_identity'):
-                phase._require_verification_identity()
+             patch.object(phase.os, 'getegid', return_value=65532):
+            phase._require_verification_identity()
+        for uid, gid in ((10000, 10000), (0, 0), (65532, 10000)):
+            with patch.object(phase.os, 'geteuid', return_value=uid), \
+                 patch.object(phase.os, 'getegid', return_value=gid):
+                with self.subTest(uid=uid, gid=gid), self.assertRaisesRegex(ValueError, 'verification_identity'):
+                    phase._require_verification_identity()
 
     def test_create_once_then_existing_readback_is_independent_of_changed_source(self):
         first = self.run_helper(phase.create_and_stream)

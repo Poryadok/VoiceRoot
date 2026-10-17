@@ -27,6 +27,27 @@ ARCHIVE_BINDING_FIELDS = frozenset((
     'source_claim', 'source_uid', 'source_pv_name', 'source_pv_uid', 'source_node_name'))
 IMAGE_RE = re.compile(r'[a-z0-9./_-]+@sha256:[a-f0-9]{64}')
 UUID_RE = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
+_API_METADATA = frozenset(('uid', 'resourceVersion', 'generation', 'creationTimestamp', 'managedFields'))
+_JOB_DEFAULTS = {
+    ('spec', 'parallelism'): 1,
+    ('spec', 'completions'): 1,
+    ('spec', 'completionMode'): 'NonIndexed',
+    ('spec', 'suspend'): False,
+    ('spec', 'podReplacementPolicy'): 'TerminatingOrFailed',
+    ('spec', 'template', 'spec', 'dnsPolicy'): 'ClusterFirst',
+    ('spec', 'template', 'spec', 'schedulerName'): 'default-scheduler',
+    ('spec', 'template', 'spec', 'terminationGracePeriodSeconds'): 30,
+    ('spec', 'template', 'spec', 'enableServiceLinks'): True,
+    ('spec', 'template', 'spec', 'preemptionPolicy'): 'PreemptLowerPriority',
+    ('spec', 'template', 'spec', 'priority'): 0,
+    ('spec', 'template', 'spec', 'containers', 0, 'terminationMessagePath'): '/dev/termination-log',
+    ('spec', 'template', 'spec', 'containers', 0, 'terminationMessagePolicy'): 'File',
+}
+_POD_DEFAULTS = {path[3:]: value
+    for path, value in _JOB_DEFAULTS.items() if path[:2] == ('spec', 'template')}
+_CONTROLLER_LABELS = frozenset((
+    'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name',
+    'controller-uid', 'job-name'))
 
 
 class VerificationJobError(ValueError):
@@ -126,6 +147,167 @@ def job_name(request: dict) -> str:
     return 'voice-nats-' + row['phase'] + '-' + suffix
 
 
+def _compare_api_projection(actual: object, wanted: object, path: tuple = (), defaults=None) -> None:
+    """Require an API object to match its immutable producer template.
+
+    Only documented Kubernetes defaults in the phase allowlist are accepted;
+    admission-injected containers, mounts, env, labels, or security fields fail.
+    """
+    defaults = _JOB_DEFAULTS if defaults is None else defaults
+    if isinstance(wanted, dict):
+        if not isinstance(actual, dict) or not set(wanted).issubset(actual):
+            _fail('api_object_shape')
+        for key, value in wanted.items():
+            _compare_api_projection(actual[key], value, path + (key,), defaults)
+        extras = set(actual) - set(wanted)
+        for key in extras:
+            default = defaults.get(path + (key,), None)
+            if default is None or actual[key] != default:
+                _fail('api_object_extra_field')
+        return
+    if isinstance(wanted, list):
+        if not isinstance(actual, list) or len(actual) != len(wanted):
+            _fail('api_object_array')
+        for index, (actual_row, wanted_row) in enumerate(zip(actual, wanted)):
+            _compare_api_projection(actual_row, wanted_row, path + (index,), defaults)
+        return
+    if actual != wanted or type(actual) is not type(wanted):
+        _fail('api_object_value')
+
+
+def _api_metadata(actual: object, wanted: dict, *, pod=False) -> dict:
+    if not isinstance(actual, dict):
+        _fail('api_metadata_invalid')
+    projection = copy.deepcopy(actual)
+    for key in _API_METADATA:
+        projection.pop(key, None)
+    if pod:
+        projection.pop('ownerReferences', None)
+        namespace = projection.pop('namespace', None)
+        if namespace not in (None, NAMESPACE):
+            _fail('api_pod_namespace')
+        name = projection.get('name', '')
+        expected_name = wanted.get('labels', {}).get(LABEL_JOB_SELECTOR, '')
+        if (not isinstance(name, str) or not expected_name
+            or not re.fullmatch(re.escape(expected_name) + r'-[a-z0-9]{5}', name)):
+            _fail('api_pod_name')
+        projection.pop('name', None)
+        projection.pop('generateName', None)
+        labels = projection.get('labels')
+        if not isinstance(labels, dict):
+            _fail('api_pod_labels')
+        expected_labels = wanted.get('labels', {})
+        controller = {key: value for key, value in labels.items() if key in _CONTROLLER_LABELS}
+        if set(labels) - set(expected_labels) - set(_CONTROLLER_LABELS):
+            _fail('api_pod_label_extra')
+        for key, value in expected_labels.items():
+            if labels.get(key) != value:
+                _fail('api_pod_label_binding')
+        if controller:
+            job = expected_labels.get(LABEL_JOB_SELECTOR)
+            expected_controller = {
+                'batch.kubernetes.io/job-name': job,
+                'job-name': job,
+            }
+            for key, value in controller.items():
+                if key in ('batch.kubernetes.io/controller-uid', 'controller-uid'):
+                    if not isinstance(value, str) or not UUID_RE.fullmatch(value):
+                        _fail('api_pod_controller_label')
+                elif value != expected_controller[key]:
+                    _fail('api_pod_controller_label')
+        projection['labels'] = expected_labels
+    else:
+        for key in _API_METADATA:
+            value = actual.get(key)
+            if value is not None and key == 'uid' and (not isinstance(value, str) or not UUID_RE.fullmatch(value)):
+                _fail('api_job_uid')
+        extra = set(projection) - set(wanted)
+        if extra:
+            _fail('api_metadata_extra_field')
+    _compare_api_projection(projection, wanted, defaults={})
+    return actual
+
+
+def verify_job(actual: object, wanted: dict, expected_uid: str | None = None) -> dict:
+    """Validate a created/read-back Job against its exact producer document."""
+    if not isinstance(wanted, dict):
+        _fail('api_job_template')
+    request = {'operation': wanted.get('metadata', {}).get('labels', {}).get(LABEL_OPERATION),
+        'nonce': wanted.get('metadata', {}).get('labels', {}).get(LABEL_NONCE),
+        'phase': wanted.get('metadata', {}).get('labels', {}).get(LABEL_PHASE)}
+    validate_request(request)
+    if (not isinstance(actual, dict) or actual.get('apiVersion') != 'batch/v1'
+        or actual.get('kind') != 'Job' or not isinstance(actual.get('metadata'), dict)
+        or not isinstance(actual.get('spec'), dict)):
+        _fail('api_job_invalid')
+    uid = actual['metadata'].get('uid')
+    if (not isinstance(uid, str) or not UUID_RE.fullmatch(uid)
+        or (expected_uid is not None and uid != expected_uid)):
+        _fail('api_job_uid')
+    metadata = copy.deepcopy(actual['metadata'])
+    for key in _API_METADATA:
+        metadata.pop(key, None)
+    status = actual.get('status', {})
+    if not isinstance(status, dict) or set(status) - {'active', 'succeeded', 'failed', 'conditions',
+        'ready', 'terminating', 'uncountedTerminatedPods', 'startTime', 'completionTime',
+        'completedIndexes', 'failedIndexes'}:
+        _fail('api_job_status')
+    projection = {'apiVersion': actual['apiVersion'], 'kind': actual['kind'],
+        'metadata': metadata, 'spec': actual['spec']}
+    _compare_api_projection(projection, wanted, defaults=_JOB_DEFAULTS)
+    return copy.deepcopy(actual)
+
+
+def verify_pod(actual: object, wanted_template: dict, job_uid: str, phase: str,
+               expected_node_name: str | None = None, expected_uid: str | None = None) -> dict:
+    """Validate one controller-owned Pod and its scheduled node against the Job template."""
+    if phase not in PHASES or not isinstance(wanted_template, dict):
+        _fail('api_pod_template')
+    if not isinstance(job_uid, str) or not UUID_RE.fullmatch(job_uid):
+        _fail('api_pod_owner')
+    request = {'operation': wanted_template.get('metadata', {}).get('labels', {}).get(LABEL_OPERATION),
+        'nonce': wanted_template.get('metadata', {}).get('labels', {}).get(LABEL_NONCE),
+        'phase': phase}
+    validate_request(request)
+    if (not isinstance(actual, dict) or actual.get('apiVersion') != 'v1'
+        or actual.get('kind') != 'Pod' or not isinstance(actual.get('metadata'), dict)
+        or not isinstance(actual.get('spec'), dict)):
+        _fail('api_pod_invalid')
+    uid = actual['metadata'].get('uid')
+    if (not isinstance(uid, str) or not UUID_RE.fullmatch(uid)
+        or (expected_uid is not None and uid != expected_uid)):
+        _fail('api_pod_uid')
+    wanted_metadata = wanted_template.get('metadata', {})
+    wanted_spec = wanted_template.get('spec', {})
+    metadata = copy.deepcopy(actual['metadata'])
+    owners = metadata.pop('ownerReferences', None)
+    if (not isinstance(owners, list) or len(owners) != 1 or owners[0] != {
+        'apiVersion': 'batch/v1', 'kind': 'Job', 'name': wanted_metadata['labels'][LABEL_JOB_SELECTOR],
+        'uid': job_uid, 'controller': True, 'blockOwnerDeletion': True}):
+        _fail('api_pod_owner')
+    labels = metadata.get('labels')
+    if not isinstance(labels, dict):
+        _fail('api_pod_labels')
+    job_name_value = wanted_metadata['labels'][LABEL_JOB_SELECTOR]
+    for key in ('batch.kubernetes.io/controller-uid', 'controller-uid'):
+        if key in labels and labels[key] != job_uid:
+            _fail('api_pod_controller_label')
+    for key in ('batch.kubernetes.io/job-name', 'job-name'):
+        if key in labels and labels[key] != job_name_value:
+            _fail('api_pod_controller_label')
+    # API server metadata and Job-controller labels are checked separately.
+    _api_metadata(metadata, wanted_metadata, pod=True)
+    pod_spec = copy.deepcopy(actual['spec'])
+    scheduled = pod_spec.pop('nodeName', None)
+    if scheduled is not None:
+        if (not isinstance(expected_node_name, str)
+            or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', expected_node_name)
+            or scheduled != expected_node_name):
+            _fail('api_pod_node')
+    _compare_api_projection(pod_spec, wanted_spec, defaults=_POD_DEFAULTS)
+    return copy.deepcopy(actual)
+
+
 def document(request: dict, binding: dict, trusted_image: str) -> dict:
     row = validate_request(request)
     image = validate_image(trusted_image)
@@ -134,9 +316,9 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
         return _binder_document(row, storage, image)
     if row['phase'] == 'archive':
         return _archive_document(row, validate_archive_binding(binding), image)
-    # Do not resurrect the former source+scratch co-mount. The census upload
-    # contract is a separate target-only producer and remains fail-closed here.
-    _fail('census_source_split_pending')
+    if row['phase'] == 'census':
+        return _census_document(row, validate_binding(binding), image)
+    _fail('phase_unsupported')
 
 
 def _archive_document(request: dict, storage: dict, image: str) -> dict:
@@ -200,6 +382,71 @@ def _archive_document(request: dict, storage: dict, image: str) -> dict:
     }
 
 
+def _census_document(request: dict, storage: dict, image: str) -> dict:
+    """Run a disposable census on its own target PVC; the selected source is metadata only."""
+    name = job_name(request)
+    labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
+        LABEL_PHASE: 'census', LABEL_JOB_SELECTOR: name}
+    return {
+        'apiVersion': 'batch/v1',
+        'kind': 'Job',
+        'metadata': {'name': name, 'namespace': NAMESPACE, 'labels': copy.deepcopy(labels)},
+        'spec': {
+            'backoffLimit': 0,
+            'activeDeadlineSeconds': 14400,
+            'manualSelector': True,
+            'selector': {'matchLabels': {LABEL_JOB_SELECTOR: name}},
+            'template': {
+                'metadata': {'labels': labels},
+                'spec': {
+                    'automountServiceAccountToken': False,
+                    'serviceAccountName': 'default',
+                    'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {
+                        'nodeSelectorTerms': [{'matchExpressions': [{'key': 'kubernetes.io/hostname',
+                            'operator': 'In', 'values': [storage['verification_node_name']]}]}]}}},
+                    'restartPolicy': 'Never',
+                    'securityContext': {
+                        'runAsNonRoot': True,
+                        'runAsUser': 65532,
+                        'runAsGroup': 65532,
+                        'fsGroup': 65532,
+                        'fsGroupChangePolicy': 'OnRootMismatch',
+                        'seccompProfile': {'type': 'RuntimeDefault'},
+                    },
+                    'containers': [{
+                        'name': 'nats-phase',
+                        'image': image,
+                        'imagePullPolicy': 'IfNotPresent',
+                        'command': ['/usr/bin/python3', '/voice-nats-runner/phase'],
+                        'args': ['--serve-census', '--operation', request['operation'], '--nonce', request['nonce']],
+                        'env': [{'name': 'POD_UID', 'valueFrom': {'fieldRef': {'fieldPath': 'metadata.uid'}}}],
+                        'securityContext': {
+                            'allowPrivilegeEscalation': False,
+                            'readOnlyRootFilesystem': True,
+                            'capabilities': {'drop': ['ALL']},
+                        },
+                        'resources': {
+                            'requests': {'cpu': '500m', 'memory': '512Mi', 'ephemeral-storage': '49Gi'},
+                            'limits': {'cpu': '2', 'memory': '2Gi', 'ephemeral-storage': '49Gi'},
+                        },
+                        'volumeMounts': [
+                            {'name': 'target', 'mountPath': '/verify'},
+                            {'name': 'output', 'mountPath': '/out'},
+                            {'name': 'inputs', 'mountPath': '/inputs'},
+                        ],
+                    }],
+                    'volumes': [
+                        {'name': 'target', 'persistentVolumeClaim': {
+                            'claimName': storage['verification_claim']}},
+                        {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}},
+                        {'name': 'inputs', 'emptyDir': {'sizeLimit': '16Mi'}},
+                    ],
+                },
+            },
+        },
+    }
+
+
 def _binder_document(request: dict, binding: dict, image: str) -> dict:
     name = job_name(request)
     labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
@@ -255,7 +502,7 @@ def _binder_document(request: dict, binding: dict, image: str) -> dict:
     }
 
 
-def exec_vectors(request: dict, pod_uid: str, binding: dict) -> dict:
+def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | None = None) -> dict:
     """Return the only admitted in-band helper argv/query shapes for a fixed phase."""
     row = validate_request(request)
     if row['phase'] in ('bind-verification', 'bind-restore'):
@@ -270,5 +517,22 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict) -> dict:
         return {
             'archive_create_and_stream': binary + ['--create-and-stream'] + common,
             'archive_same_pod_readback': binary + ['--stream-existing'] + common,
+        }
+    if row['phase'] == 'census':
+        storage = validate_binding(binding)
+        if (not isinstance(archive, dict) or set(archive) != {'sha256', 'bytes'}
+            or not isinstance(archive['sha256'], str)
+            or not re.fullmatch(r'[a-f0-9]{64}', archive['sha256'])
+            or type(archive['bytes']) is not int or not 0 < archive['bytes'] <= (48 << 30) + (262144 * 1024) + (1 << 20)):
+            _fail('archive_input_invalid')
+        common += ['--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
+            '--verification-pvc-uid', storage['verification_uid'],
+            '--verification-pv-uid', storage['verification_pv_uid'],
+            '--archive-sha256', archive['sha256'], '--archive-bytes', str(archive['bytes'])]
+        return {
+            'census_load_inputs': binary + ['--load-inputs'] + common,
+            'census_read_input_receipt': binary + ['--read-input-receipt'] + common,
+            'census_receive_archive': binary + ['--receive-archive'] + common,
+            'census_same_pod_readback': binary + ['--read-receipt'] + common + ['--phase', 'census'],
         }
     _fail('phase_transport_unsupported')
