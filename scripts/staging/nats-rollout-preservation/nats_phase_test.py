@@ -1,5 +1,6 @@
 """Source tests for the fixed non-root Kubernetes archive helper."""
 import contextlib
+import base64
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -83,13 +84,20 @@ class NatsPhaseTests(unittest.TestCase):
             'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
             'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
             'state': 'STARTED'}
+        census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
+            'streams': [], 'consumers': []}
+        census_bytes = json.dumps(census, sort_keys=True, separators=(',', ':'),
+            allow_nan=False).encode()
         receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
             'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
             'source_pvc_uid': marker['source_pvc_uid'],
             'verification_pvc_uid': marker['verification_pvc_uid'],
-            'archive_sha256': 'a' * 64, 'census_sha256': 'b' * 64, 'status': 'COMPLETE'}
+            'archive_sha256': 'a' * 64,
+            'census_sha256': hashlib.sha256(census_bytes).hexdigest(), 'status': 'COMPLETE'}
         (state / (OPERATION + '-' + NONCE + '.json')).write_text(json.dumps(marker))
         (state / (OPERATION + '-' + NONCE + '.receipt.json')).write_text(json.dumps(receipt))
+        census_path = state / (OPERATION + '-' + NONCE + '.census.json')
+        census_path.write_bytes(census_bytes)
         for path in state.iterdir():
             path.chmod(0o600)
         (self.source / 'jetstream').chmod(0o555)
@@ -98,7 +106,87 @@ class NatsPhaseTests(unittest.TestCase):
         args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
             source_pvc_uid=marker['source_pvc_uid'], verification_pvc_uid=marker['verification_pvc_uid'])
         with patch.object(phase, '_require_verification_identity'):
-            self.assertEqual(phase.read_verification_receipt('census', args), receipt)
+            self.assertEqual(phase.read_verification_receipt('census', args),
+                {'receipt': receipt, 'census': census})
+
+    def test_census_readback_rejects_digest_drift_without_replaying(self):
+        state = self.verification / '.voice-nats-verification'
+        state.mkdir(mode=0o700)
+        source_uid = '11111111-1111-4111-8111-111111111111'
+        verification_uid = '22222222-2222-4222-8222-222222222222'
+        marker = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'source_pvc_uid': source_uid, 'verification_pvc_uid': verification_uid,
+            'state': 'STARTED'}
+        census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
+            'streams': [], 'consumers': []}
+        census_bytes = json.dumps(census, sort_keys=True, separators=(',', ':'),
+            allow_nan=False).encode()
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'source_pvc_uid': source_uid, 'verification_pvc_uid': verification_uid,
+            'archive_sha256': 'a' * 64, 'census_sha256': 'b' * 64, 'status': 'COMPLETE'}
+        (state / (OPERATION + '-' + NONCE + '.json')).write_text(json.dumps(marker))
+        (state / (OPERATION + '-' + NONCE + '.receipt.json')).write_text(json.dumps(receipt))
+        (state / (OPERATION + '-' + NONCE + '.census.json')).write_bytes(census_bytes)
+        for path in state.iterdir(): path.chmod(0o600)
+        (self.source / 'jetstream').chmod(0o555)
+        (self.source / 'jetstream' / 'meta.inf').chmod(0o444)
+        self.source.chmod(0o555)
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            source_pvc_uid=source_uid, verification_pvc_uid=verification_uid)
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, 'run_verification', side_effect=AssertionError('must not replay')):
+            with self.assertRaisesRegex(ValueError, 'verification_receipt_binding'):
+                phase.read_verification_receipt('census', args)
+
+    def test_census_readback_uses_bounded_ordered_frames_and_carries_exact_receipt(self):
+        census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
+            'streams': [], 'consumers': [], 'padding': 'x' * (phase.READBACK_CHUNK + 17)}
+        raw = json.dumps(census, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
+            'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
+            'archive_sha256': 'a' * 64, 'census_sha256': hashlib.sha256(raw).hexdigest(),
+            'status': 'COMPLETE'}
+        output = Output()
+        with patch.object(phase.sys, 'stdout', output):
+            phase.stream_census_readback({'receipt': receipt, 'census': census})
+        lines = output.buffer.getvalue().splitlines()
+        rows = [json.loads(line) for line in lines]
+        self.assertEqual(len(rows), 3)
+        for line in lines:
+            self.assertLessEqual(len(line), phase.MAX_READBACK_LINE - 1)
+        first, second, complete = rows
+        self.assertEqual([first['sequence'], second['sequence']], [0, 1])
+        self.assertEqual(first['kind'], 'data')
+        self.assertEqual(second['kind'], 'data')
+        self.assertEqual(complete['kind'], 'complete')
+        chunks = [base64.b64decode(row['data'], validate=True) for row in rows[:2]]
+        self.assertEqual(b''.join(chunks), raw)
+        self.assertEqual(complete['frames'], 2)
+        self.assertEqual(complete['byte_count'], len(raw))
+        self.assertEqual(complete['census_sha256'], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(complete['receipt'], receipt)
+
+    def test_census_readback_rejects_frame_overflow_without_output(self):
+        census = {'schema': phase.CENSUS_SCHEMA, 'account': 'A' + 'A' * 55,
+            'streams': [], 'consumers': []}
+        raw = json.dumps(census, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+        receipt = {'schema': phase.RECEIPT_SCHEMA, 'phase': 'census',
+            'operation': OPERATION, 'nonce': NONCE, 'pod_uid': POD_UID,
+            'source_pvc_uid': '11111111-1111-4111-8111-111111111111',
+            'verification_pvc_uid': '22222222-2222-4222-8222-222222222222',
+            'archive_sha256': 'a' * 64,
+            'census_sha256': hashlib.sha256(raw).hexdigest(), 'status': 'COMPLETE'}
+        output = Output()
+        with patch.object(phase.sys, 'stdout', output), \
+             patch.object(phase, 'READBACK_CHUNK', 1), \
+             patch.object(phase, 'MAX_READBACK_LINE', 100):
+            with self.assertRaisesRegex(ValueError, 'readback_frame_size'):
+                phase.stream_census_readback({'receipt': receipt, 'census': census})
+        self.assertEqual(output.buffer.getvalue(), b'')
 
     def test_census_interruption_without_receipt_is_not_replayed(self):
         state = self.verification / '.voice-nats-verification'
@@ -157,7 +245,8 @@ class NatsPhaseTests(unittest.TestCase):
         events = []
         def kernel_run(command, **kwargs):
             events.append(('kernel', command))
-            (self.output / 'census.json').write_text('{"schema":"known-nats-census-v1"}')
+            (self.output / 'census.json').write_text(json.dumps({'schema': phase.CENSUS_SCHEMA,
+                'account': 'A' + 'A' * 55, 'streams': [], 'consumers': []}))
             return types.SimpleNamespace(returncode=0)
         with patch.object(phase, '_require_verification_identity'), \
              patch.object(phase.subprocess, 'Popen', side_effect=lambda *a, **k: (events.append(('start', a[0])) or process)), \

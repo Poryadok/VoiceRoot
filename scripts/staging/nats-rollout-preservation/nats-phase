@@ -22,6 +22,9 @@ MAX_BYTES = 48 << 30
 MAX_ENTRIES = 262144
 MAX_TAR_BYTES = MAX_BYTES + (MAX_ENTRIES * 1024) + (1 << 20)
 MAX_MANIFEST_BYTES = 512 << 20
+MAX_CENSUS_BYTES = 64 << 20
+READBACK_CHUNK = 48 << 10
+MAX_READBACK_LINE = 96 << 10
 DATA_ROOT = Path('/data')
 OUT_ROOT = Path('/out')
 VERIFY_ROOT = Path('/verify')
@@ -34,6 +37,8 @@ INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds',
     'system-account.public', 'server.conf'))
 VERIFY_PHASES = frozenset(('census',))
 RECEIPT_SCHEMA = 'voice-nats-verification-v1'
+CENSUS_SCHEMA = 'voice-nats-census-v1'
+CENSUS_READBACK_SCHEMA = 'voice-nats-census-readback-v1'
 ARCHIVE_UID = 10000
 ARCHIVE_GID = 10000
 VERIFICATION_UID = ARCHIVE_UID
@@ -298,12 +303,37 @@ def run_verification(phase_name, args):
     result_path = output / 'census.json'
     result_stat = result_path.lstat()
     if (not stat.S_ISREG(result_stat.st_mode) or result_stat.st_size < 1
-        or result_stat.st_size > 256 << 10):
+        or result_stat.st_size > MAX_CENSUS_BYTES):
         raise ValueError('verification_result')
-    result_bytes = result_path.read_bytes()
-    result = json.loads(result_bytes)
-    if not isinstance(result, dict):
+    raw_result = result_path.read_bytes()
+    if len(raw_result) != result_stat.st_size:
         raise ValueError('verification_result')
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('verification_result')
+            result[key] = value
+        return result
+    try:
+        result = json.loads(raw_result, object_pairs_hook=unique_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError('verification_result')))
+        if (not isinstance(result, dict) or set(result) != {'schema', 'account', 'streams', 'consumers'}
+            or result.get('schema') != CENSUS_SCHEMA or not isinstance(result.get('account'), str)
+            or not isinstance(result.get('streams'), list) or not isinstance(result.get('consumers'), list)):
+            raise ValueError('verification_result')
+        result_bytes = json.dumps(result, sort_keys=True, separators=(',', ':'),
+            allow_nan=False).encode('utf-8')
+    except (UnicodeError, TypeError, ValueError):
+        raise ValueError('verification_result') from None
+    if len(result_bytes) > MAX_CENSUS_BYTES:
+        raise ValueError('verification_result')
+    census_path = operation_state / (args.operation + '-' + args.nonce + '.census.json')
+    fd = os.open(census_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(result_bytes)
+        stream.flush()
+        os.fsync(stream.fileno())
     receipt = {'schema': RECEIPT_SCHEMA, 'phase': phase_name, 'operation': args.operation,
         'nonce': args.nonce, 'pod_uid': args.pod_uid, 'source_pvc_uid': source_uid,
         'verification_pvc_uid': verification_uid, 'archive_sha256': manifest['archive_sha256'],
@@ -373,12 +403,56 @@ def read_verification_receipt(phase_name, args):
         or not re.fullmatch('[a-f0-9]{64}', receipt.get('census_sha256', ''))
         or receipt.get('status') != 'COMPLETE'):
         raise ValueError('verification_receipt_binding')
-    return receipt
+    census_path = operation_state / (args.operation + '-' + args.nonce + '.census.json')
+    try:
+        census_stat = census_path.lstat()
+    except FileNotFoundError:
+        raise ValueError('verification_receipt_incomplete') from None
+    if (not stat.S_ISREG(census_stat.st_mode) or census_stat.st_uid != VERIFICATION_UID
+        or stat.S_IMODE(census_stat.st_mode) != 0o600 or census_stat.st_nlink != 1
+        or not 1 <= census_stat.st_size <= MAX_CENSUS_BYTES):
+        raise ValueError('verification_receipt_incomplete')
+    census_raw = census_path.read_bytes()
+    if len(census_raw) != census_stat.st_size or hashlib.sha256(census_raw).hexdigest() != receipt['census_sha256']:
+        raise ValueError('verification_receipt_binding')
+    try:
+        census = json.loads(census_raw)
+    except (UnicodeError, ValueError):
+        raise ValueError('verification_receipt_binding') from None
+    if (not isinstance(census, dict) or set(census) != {'schema', 'account', 'streams', 'consumers'}
+        or census.get('schema') != CENSUS_SCHEMA or not isinstance(census.get('account'), str)
+        or not isinstance(census.get('streams'), list) or not isinstance(census.get('consumers'), list)
+        or json.dumps(census, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8') != census_raw):
+        raise ValueError('verification_receipt_binding')
+    return {'receipt': receipt, 'census': census}
 
 
 def _frame(row):
-    sys.stdout.buffer.write(json.dumps(row, sort_keys=True, separators=(',', ':')).encode() + b'\n')
+    encoded = json.dumps(row, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
+    if len(encoded) + 1 > MAX_READBACK_LINE:
+        raise ValueError('readback_frame_size')
+    sys.stdout.buffer.write(encoded + b'\n')
     sys.stdout.buffer.flush()
+
+
+def stream_census_readback(result):
+    """Emit the full bounded census as fixed-size records over pods/exec stdout."""
+    receipt, census = result['receipt'], result['census']
+    raw = json.dumps(census, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
+    if (not raw or len(raw) > MAX_CENSUS_BYTES
+        or hashlib.sha256(raw).hexdigest() != receipt.get('census_sha256')):
+        raise ValueError('verification_receipt_binding')
+    identity = {key: receipt[key] for key in
+        ('operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'verification_pvc_uid')}
+    count = 0
+    for sequence, offset in enumerate(range(0, len(raw), READBACK_CHUNK)):
+        chunk = raw[offset:offset + READBACK_CHUNK]
+        _frame({'schema': CENSUS_READBACK_SCHEMA, **identity, 'kind': 'data',
+            'sequence': sequence, 'data': base64.b64encode(chunk).decode('ascii')})
+        count += 1
+    _frame({'schema': CENSUS_READBACK_SCHEMA, **identity, 'kind': 'complete',
+        'frames': count, 'byte_count': len(raw), 'census_sha256': receipt['census_sha256'],
+        'receipt': receipt})
 
 
 def _stream(archive, manifest, args):
@@ -539,7 +613,7 @@ def main(argv=None):
         if args.phase is None or not args.source_pvc_uid or not args.verification_pvc_uid:
             parser.error('verification-volume-identity-required')
         receipt = read_verification_receipt(args.phase, args)
-        _frame(receipt)
+        stream_census_readback(receipt)
         return receipt
     if args.phase:
         if not args.source_pvc_uid or not args.verification_pvc_uid:
