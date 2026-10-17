@@ -1265,7 +1265,6 @@ def _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256, c5_authorization
         or binding.get("candidate_source_sha") != _git_text(root, ["rev-parse", "HEAD"])
         or not isinstance(binding.get("changed_files"), dict)
         or set(binding["changed_files"]) != _PARTIAL_CHANGED_PATHS
-        or binding["changed_files"] != _PARTIAL_C5_CHANGED_FILE_SHA256
         or any(not isinstance(value, str) or not HASH.fullmatch(value)
             for value in binding.get("changed_files", {}).values())):
         _blocked("gis_dev_partial_c5_checkpoint_invalid")
@@ -1275,6 +1274,7 @@ def _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256, c5_authorization
         or previous_binding.get("candidate_source_sha") != _PARTIAL_C5_CANDIDATE_SHA
         or previous_binding.get("old_source_sha") != _PARTIAL_SOURCE_SHA
         or set(previous_binding.get("changed_files", {})) != _PARTIAL_CHANGED_PATHS
+        or previous_binding.get("changed_files") != _PARTIAL_C5_CHANGED_FILE_SHA256
         or not isinstance(current_v2.get("secret_fingerprints_sha256"), str)
         or current_v2.get("secret_fingerprints_sha256") != _digest(fingerprints)):
         _blocked("gis_dev_partial_c5_checkpoint_invalid")

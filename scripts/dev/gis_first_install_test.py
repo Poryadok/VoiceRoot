@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import gis_dev_first_install as gis
 import gis_prerequisite
@@ -412,8 +412,12 @@ class PartialOperationContinuationTests(unittest.TestCase):
             "binding": previous_binding, "authorization_sha256": gis._PARTIAL_C5_AUTH_SHA256,
             "secret_fingerprints_sha256": gis._digest(fingerprints), "state": copy.deepcopy(state)}
         target_binding = copy.deepcopy(previous_binding)
-        target_binding.update(candidate_source_sha="a"*40,
-            changed_files={name: "c"*64 for name in gis._PARTIAL_CHANGED_PATHS})
+        target_binding.update(candidate_source_sha="26e713b31fc6efd7b43920942c8f64becc440986",
+            changed_files={
+                "scripts/dev/gis_dev_first_install.py": "f5625fdd432a53b9e4e3f2c3308fb14b05ac3eb6ad188f47f3ed958024554987",
+                "scripts/dev/gis_first_install_test.py": "13d64f07ebff3a181bf744afc5be2994385b35508ffb462d0e573f736d5b51dd",
+                "scripts/staging/nats-rollout-preservation/gis_prerequisite.py": "1d2bb02a4c97ff4b027099b768b16eddb770570202a9d2c75896bedc7d7d5c70",
+                "scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py": "f56b69be0d32e5bc8e3ab22f52f054f772b082233370ade02989a270d51237da"})
         target_binding["source_capture_sha256"] = gis._digest({})
         checkpoint = {"created_records": copy.deepcopy(plan["created"]),
             "database_identity": copy.deepcopy(state["database_identity"]),
@@ -509,6 +513,84 @@ class PartialOperationContinuationTests(unittest.TestCase):
                 gis._partial_v3_admissible(current, changed_v2,
                     gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
                     binding, fingerprints, state, auth, auth_sha, Path("."))
+
+    def test_c5_to_v3_transition_separates_frozen_c5_hashes_from_c8_target_hashes(self):
+        state, previous_v2, binding, fingerprints, auth, auth_sha, _ = self.c5_checkpoint_fixture()
+        plan = previous_v2["state"]["plan"]
+        import gis_prerequisite
+        configmap = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {
+            "name": "voice-gameintegration-runtime-role-sql"}, "data": {"sql": "metadata-only"}}
+        job = {"apiVersion": "batch/v1", "kind": "Job", "metadata": {
+            "name": "voice-provision-gameintegration-runtime-role"}, "spec": {"template": {}}}
+        expected_records = plan["created"]
+        live_objects = [
+            {**copy.deepcopy(configmap), "metadata": {**configmap["metadata"],
+                "namespace": gis.NAMESPACE, "uid": expected_records[
+                    "configmap/voice-gameintegration-runtime-role-sql"]["uid"],
+                "labels": {gis_prerequisite.OP_LABEL: gis._PARTIAL_OPERATION}}},
+            {**copy.deepcopy(job), "metadata": {**job["metadata"],
+                "namespace": gis.NAMESPACE, "uid": expected_records[
+                    "job/voice-provision-gameintegration-runtime-role"]["uid"],
+                "labels": {gis_prerequisite.OP_LABEL: gis._PARTIAL_OPERATION}}},
+        ]
+        kube = Mock()
+        kube.run.side_effect = [
+            {"items": live_objects}, "", ""]
+        expected_identity = copy.deepcopy(state["database_identity"])
+        proof = {"name": "voice-provision-gameintegration-runtime-role",
+            "uid": expected_records["job/voice-provision-gameintegration-runtime-role"]["uid"],
+            "spec_sha256": expected_records["job/voice-provision-gameintegration-runtime-role"]["spec_sha256"],
+            "pod_uid": "00000000-0000-0000-0000-000000000123",
+            "image_ids": {"provision": "docker-pullable://postgres@sha256:" + "e"*64,
+                "wait-postgres": "docker-pullable://postgres@sha256:" + "e"*64},
+            "complete": True, "succeeded": 1,
+            "completion_time": "2026-10-17T00:00:00Z"}
+        with patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]), \
+             patch.object(gis_prerequisite, "_documents", return_value=({"provision": configmap}, {"provision": job})), \
+             patch.object(gis_prerequisite, "_spec_digest", side_effect=[
+                 expected_records["configmap/voice-gameintegration-runtime-role-sql"]["spec_sha256"],
+                 expected_records["configmap/voice-gameintegration-runtime-role-sql"]["spec_sha256"],
+                 expected_records["job/voice-provision-gameintegration-runtime-role"]["spec_sha256"]]), \
+             patch.object(gis_prerequisite, "_job_live_matches", return_value=True), \
+             patch.object(gis_prerequisite, "_verify_job", return_value=(proof, {})), \
+             patch.object(gis, "_database_exists_readonly", return_value=expected_identity):
+            transitioned = gis._partial_c5_checkpoint_to_v3(previous_v2,
+                gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                binding, fingerprints, state, auth, auth_sha, kube, Path("."), {})
+            self.assertEqual(kube.run.call_count, 3)
+            for old_v2, target, target_auth, target_auth_sha in (
+                (self._mutated(previous_v2, lambda row: row["binding"]["changed_files"].update(
+                    {"scripts/dev/gis_dev_first_install.py": "0" * 64})), binding, auth, auth_sha),
+                (previous_v2, self._mutated(binding, lambda row: row["changed_files"].update(
+                    {"scripts/dev/gis_dev_first_install.py": "0" * 64})), auth, auth_sha),
+                (previous_v2, binding,
+                    {**auth, "target_source_sha": "0" * 40}, None),
+            ):
+                kube.run.reset_mock()
+                if target_auth_sha is None:
+                    target_auth_sha = gis._digest(target_auth)
+                with self.assertRaises(gis.Blocked):
+                    gis._partial_c5_checkpoint_to_v3(old_v2,
+                        gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                        target, fingerprints, state, target_auth, target_auth_sha,
+                        kube, Path("."), {})
+                kube.run.assert_not_called()
+
+        self.assertEqual(transitioned["schema"], "voice-dev-gis-partial-continuation-v3")
+        self.assertEqual(transitioned["binding"], binding)
+        self.assertEqual(transitioned["previous_changed_files"], gis._PARTIAL_C5_CHANGED_FILE_SHA256)
+        self.assertEqual(transitioned["state"]["plan"]["jobs"]["provision"], proof)
+        with patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]):
+            self.assertTrue(gis._partial_v3_admissible(transitioned, previous_v2,
+                gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                binding, fingerprints, previous_v2["state"], auth, auth_sha, Path(".")))
+        self.assertEqual(kube.run.call_count, 0)
+
+    @staticmethod
+    def _mutated(value, mutation):
+        result = copy.deepcopy(value)
+        mutation(result)
+        return result
 
     def test_frozen_c2_sidecar_transitions_to_separate_v2_current_receipt(self):
         state = self.fixture()
