@@ -1023,11 +1023,19 @@ def _save_plan(state_path, state):
 _PARTIAL_OPERATION = "737e63e3aaee"
 _PARTIAL_SOURCE_SHA = "860b995dd883ade2b79996f9fcbe34302b3c7bac"
 _PARTIAL_JOURNAL_SHA256 = "659d0379811afa39c22d056b0b3cf9787a3d50d5dbef2f275bc9524ddd19cac1"
+_PARTIAL_V1_SIDECAR_SHA256 = "46994d2e66cb2376b1ebafb79510ef0b46ddb94ecc376bcc16fc606c4c28720a"
+_PARTIAL_V1_CANDIDATE_SHA = "db8a65b35d38406490e3c8c991866ac22619b021"
 _PARTIAL_CHANGED_PATHS = {
     "scripts/dev/gis_dev_first_install.py",
     "scripts/dev/gis_first_install_test.py",
     "scripts/staging/nats-rollout-preservation/gis_prerequisite.py",
     "scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py",
+}
+_PARTIAL_V1_CHANGED_FILES = {
+    "scripts/dev/gis_dev_first_install.py": "533298f00704d464a6c914d73df828300787204ae4d35c9535a3e818883a727f",
+    "scripts/dev/gis_first_install_test.py": "ddbfe12f578c26c3c19dc74b2e1f3c0cd3e88a3abe88c6a3dff8dada76248aaf",
+    "scripts/staging/nats-rollout-preservation/gis_prerequisite.py": "375f5cd6ea7363193766edccec05bf3a42f4a73eb4fc6f0e8693bc6b1485dc64",
+    "scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py": "e4f7ac510e31135092884fd22b32ed37251c3d05718ad8c4b0aa2e3486599ca2",
 }
 
 
@@ -1067,6 +1075,83 @@ def _partial_source_binding(root, state, original_sha, *, runner=subprocess.run)
         "source_plan_sha256": state.get("plan", {}).get("source_plan_sha256"),
         "source_capture_sha256": _digest(state.get("plan", {}).get("source_capture")),
         "inputs_sha256": state.get("plan", {}).get("inputs_sha256")}
+
+
+def _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, original_state):
+    """Build the only allowed C2-v1 to current same-operation sidecar receipt."""
+    if (legacy_sha256 != _PARTIAL_V1_SIDECAR_SHA256
+        or not isinstance(legacy, dict)
+        or set(legacy) != {"schema", "original_journal_sha256", "binding", "secret_fingerprints", "state"}
+        or legacy.get("schema") != "voice-dev-gis-partial-continuation-v1"
+        or legacy.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or not isinstance(binding, dict)
+        or set(binding) != {"old_source_sha", "candidate_source_sha", "changed_files", "backend_tree",
+            "build_receipt_sha256", "image_ref", "source_plan_sha256", "source_capture_sha256", "inputs_sha256"}
+        or not isinstance(binding.get("changed_files"), dict)
+        or binding.get("candidate_source_sha") == _PARTIAL_V1_CANDIDATE_SHA
+        or not isinstance(binding.get("candidate_source_sha"), str)
+        or not SOURCE.fullmatch(binding["candidate_source_sha"])
+        or set(binding["changed_files"]) != _PARTIAL_CHANGED_PATHS
+        or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+            for value in binding["changed_files"].values())):
+        _blocked("gis_dev_partial_v1_transition_invalid")
+    expected_legacy_binding = copy.deepcopy(binding)
+    expected_legacy_binding["candidate_source_sha"] = _PARTIAL_V1_CANDIDATE_SHA
+    expected_legacy_binding["changed_files"] = copy.deepcopy(_PARTIAL_V1_CHANGED_FILES)
+    if legacy.get("binding") != expected_legacy_binding:
+        _blocked("gis_dev_partial_v1_binding_changed")
+    prior = legacy.get("state")
+    _partial_state_compatible(prior, original_state)
+    prior_plan = prior.get("plan", {})
+    if (prior.get("operation") != _PARTIAL_OPERATION
+        or prior.get("namespace_uid") != original_state.get("namespace_uid")
+        or prior.get("phase") != "SECRETS_APPLIED"
+        or prior.get("plan_phase") != "PLANNED"
+        or prior_plan.get("phase") != "PLANNED"
+        or prior_plan.get("prerequisite_phase") != "CREATING"
+        or prior_plan.get("prerequisite_receipt") is not None
+        or prior_plan.get("created") not in (None, {})
+        or prior_plan.get("jobs") not in (None, {})
+        or "create_failures" in prior_plan
+        or not isinstance(fingerprints, dict)
+        or not isinstance(legacy.get("secret_fingerprints"), dict)
+        or legacy.get("secret_fingerprints") != fingerprints):
+        _blocked("gis_dev_partial_v1_state_changed")
+    transition = {
+        "schema": "voice-dev-gis-source-transition-v1",
+        "from_candidate_source_sha": _PARTIAL_V1_CANDIDATE_SHA,
+        "from_changed_files": copy.deepcopy(_PARTIAL_V1_CHANGED_FILES),
+        "to_candidate_source_sha": binding["candidate_source_sha"],
+        "to_binding_sha256": _digest(binding),
+        "previous_sidecar_sha256": _PARTIAL_V1_SIDECAR_SHA256,
+        "previous_binding_sha256": _digest(legacy["binding"]),
+        "previous_state_sha256": _digest(prior),
+    }
+    return {
+        "schema": "voice-dev-gis-partial-continuation-v2",
+        "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
+        "previous_sidecar_sha256": _PARTIAL_V1_SIDECAR_SHA256,
+        "previous_binding_sha256": _digest(legacy["binding"]),
+        "previous_state_sha256": _digest(prior),
+        "source_transition": transition,
+        "binding": copy.deepcopy(binding),
+        "secret_fingerprints_sha256": _digest(fingerprints),
+        "state": copy.deepcopy(prior),
+    }
+
+
+def _partial_v2_admissible(current, legacy, legacy_sha256, binding, fingerprints, original_state):
+    """Validate the current receipt against both immutable v1 history and source."""
+    expected = _partial_v1_transition(legacy, legacy_sha256, binding, fingerprints, original_state)
+    if (not isinstance(current, dict)
+        or set(current) != set(expected)
+        or any(current.get(key) != value for key, value in expected.items() if key != "state")):
+        _blocked("gis_dev_partial_v2_transition_changed")
+    _partial_state_compatible(current.get("state"), original_state)
+    if (current["state"].get("operation") != _PARTIAL_OPERATION
+        or current["state"].get("namespace_uid") != original_state.get("namespace_uid")):
+        _blocked("gis_dev_partial_v2_state_changed")
+    return True
 
 
 def _partial_state_admissible(state):
@@ -1163,7 +1248,7 @@ def _save_continuation(path, document, expected_sha256=None):
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)
     if path.exists():
-        previous = path.read_bytes()
+        previous = _read_private_continuation(path)
         if expected_sha256 is None or hashlib.sha256(previous).hexdigest() != expected_sha256:
             _blocked("gis_dev_partial_sidecar_changed")
     elif expected_sha256 is not None:
@@ -1269,41 +1354,36 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
         _blocked("gis_dev_namespace_identity_invalid")
 
     prior = None
-    continuation_path = Path(str(state_path) + ".continuation.json")
+    legacy_continuation_path = Path(str(state_path) + ".continuation.json")
+    continuation_path = Path(str(state_path) + ".continuation-current.json")
     continuation = None
     continuation_sha256 = None
     if resume_partial:
         if namespace["uid"] != original_state.get("namespace_uid"):
             _blocked("gis_dev_partial_namespace_changed")
         binding = _partial_source_binding(root, original_state, _PARTIAL_JOURNAL_SHA256)
+        try:
+            legacy_raw = _read_private_continuation(legacy_continuation_path)
+            legacy = json.loads(legacy_raw)
+        except Exception:
+            _blocked("gis_dev_partial_v1_sidecar_invalid")
+        legacy_sha256 = hashlib.sha256(legacy_raw).hexdigest()
+        fingerprints = _partial_secret_fingerprints(kube, original_state)
         if continuation_path.exists():
             try:
-                raw = continuation_path.read_bytes()
+                raw = _read_private_continuation(continuation_path)
                 continuation = json.loads(raw)
             except Exception:
                 _blocked("gis_dev_partial_sidecar_invalid")
             continuation_sha256 = hashlib.sha256(raw).hexdigest()
-            if (not isinstance(continuation, dict)
-                or set(continuation) != {"schema", "original_journal_sha256", "binding", "secret_fingerprints", "state"}
-                or continuation.get("schema") != "voice-dev-gis-partial-continuation-v1"
-                or continuation.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
-                or continuation.get("binding") != binding):
-                _blocked("gis_dev_partial_sidecar_binding_changed")
+            _partial_v2_admissible(continuation, legacy, legacy_sha256,
+                binding, fingerprints, original_state)
             prior = continuation.get("state")
-            _partial_state_compatible(prior, original_state)
-            current_fingerprints = _partial_secret_fingerprints(kube, original_state)
-            if continuation.get("secret_fingerprints") != current_fingerprints:
-                _blocked("gis_dev_partial_secret_binding_changed")
         else:
-            _partial_state_admissible(original_state)
-            validate_secret_write_receipt(kube, original_state["secret_write_receipt"], _PARTIAL_OPERATION)
-            fingerprints = _partial_secret_fingerprints(kube, original_state)
-            continuation = {"schema": "voice-dev-gis-partial-continuation-v1",
-                "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
-                "binding": binding, "secret_fingerprints": fingerprints,
-                "state": copy.deepcopy(original_state)}
+            continuation = _partial_v1_transition(legacy, legacy_sha256,
+                binding, fingerprints, original_state)
             continuation_sha256 = _save_continuation(continuation_path, continuation)
-            prior = original_state
+            prior = continuation["state"]
         if (not isinstance(prior, dict) or prior.get("operation") != _PARTIAL_OPERATION
             or prior.get("namespace_uid") != namespace["uid"]):
             _blocked("gis_dev_partial_sidecar_state_invalid")
@@ -1397,7 +1477,8 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
     else:
         validate_secret_write_receipt(kube, state.get("secret_write_receipt", {}), operation)
         if resume_partial:
-            if continuation.get("secret_fingerprints") != _partial_secret_fingerprints(kube, original_state):
+            if continuation.get("secret_fingerprints_sha256") != _digest(
+                _partial_secret_fingerprints(kube, original_state)):
                 _blocked("gis_dev_partial_secret_binding_changed")
         before = state.get("database_identity")
         if not isinstance(before, dict):
@@ -1440,6 +1521,29 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
                 state["phase"] = "ROLLBACK_REQUIRED"
                 persist_state()
         raise
+
+
+def _read_private_continuation(path):
+    """Read an owner-only regular continuation file without following links."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags)
+    except Exception:
+        _blocked("gis_dev_partial_sidecar_invalid")
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+            or (os.name != "nt" and info.st_mode & 0o077)
+            or (hasattr(os, "geteuid") and info.st_uid != os.geteuid())):
+            _blocked("gis_dev_partial_sidecar_permissions_invalid")
+        with os.fdopen(fd, "rb") as stream:
+            fd = None
+            return stream.read()
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 @contextlib.contextmanager

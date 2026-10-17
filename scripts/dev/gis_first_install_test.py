@@ -296,6 +296,122 @@ class PartialOperationContinuationTests(unittest.TestCase):
         with self.assertRaises(gis.Blocked):
             gis._partial_state_compatible(copy.deepcopy(state), state)
 
+    def test_frozen_c2_sidecar_transitions_to_separate_v2_current_receipt(self):
+        state = self.fixture()
+        state["plan_phase"] = "PLANNED"
+        state["plan"].update(inputs={"configmaps": {"provision": "voice-gameintegration-runtime-role-sql",
+            "migrations": "voice-gameintegration-db-migrations",
+            "verify": "voice-gameintegration-db-verifier-sql"},
+            "jobs": {"provision": "voice-provision-gameintegration-runtime-role",
+                "migrate": "voice-migrate-gameintegration-db", "verify": "voice-verify-gameintegration-db"}},
+            inputs_sha256=gis._digest({"configmaps": {"provision": "voice-gameintegration-runtime-role-sql",
+                "migrations": "voice-gameintegration-db-migrations", "verify": "voice-gameintegration-db-verifier-sql"},
+                "jobs": {"provision": "voice-provision-gameintegration-runtime-role",
+                    "migrate": "voice-migrate-gameintegration-db", "verify": "voice-verify-gameintegration-db"}}),
+            prerequisite_phase="CREATING", created={}, jobs={})
+        c2_binding = {"old_source_sha": gis._PARTIAL_SOURCE_SHA,
+            "candidate_source_sha": "db8a65b35d38406490e3c8c991866ac22619b021",
+            "changed_files": {
+                "scripts/dev/gis_dev_first_install.py": "533298f00704d464a6c914d73df828300787204ae4d35c9535a3e818883a727f",
+                "scripts/dev/gis_first_install_test.py": "ddbfe12f578c26c3c19dc74b2e1f3c0cd3e88a3abe88c6a3dff8dada76248aaf",
+                "scripts/staging/nats-rollout-preservation/gis_prerequisite.py": "375f5cd6ea7363193766edccec05bf3a42f4a73eb4fc6f0e8693bc6b1485dc64",
+                "scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py": "e4f7ac510e31135092884fd22b32ed37251c3d05718ad8c4b0aa2e3486599ca2"},
+            "backend_tree": "e55c42d9c4d4a5d87e6211406a4b8d4cb2454a76",
+            "build_receipt_sha256": "d90b8b89ae894159c4bc60126dad791f34d4a61feab78dd866c7d2d5d17d711d",
+            "image_ref": "ghcr.io/poryadok/voiceroot/gameintegration@sha256:482eb267824cffc4cebcae958e4ec7126ffdeaaea632f40c26bb1c6baf71ea96",
+            "source_plan_sha256": "16180026a6b244940b93523b058b94ab46efcb665c49e6369a57f262ef5f392e",
+            "source_capture_sha256": "f88fab1c0849a42e18399ef1dd87f01983a20bd5536be6885da996618ae14954",
+            "inputs_sha256": "ed223e8ce91e3d44d6ce0e0c860529a76b7977d7f7f4baddb4d80fce318ba64b"}
+        legacy = {"schema": "voice-dev-gis-partial-continuation-v1",
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "binding": c2_binding, "secret_fingerprints": {"app": "a" * 64},
+            "state": copy.deepcopy(state)}
+        current_binding = copy.deepcopy(c2_binding)
+        current_binding.update(candidate_source_sha="f7e02d235b48e8e0b08e91208891e8d788dfeea6",
+            changed_files={name: "b" * 64 for name in gis._PARTIAL_CHANGED_PATHS})
+        fingerprints = copy.deepcopy(legacy["secret_fingerprints"])
+        sidecar_sha = "46994d2e66cb2376b1ebafb79510ef0b46ddb94ecc376bcc16fc606c4c28720a"
+        self.assertEqual(gis._PARTIAL_V1_SIDECAR_SHA256, sidecar_sha)
+
+        current = gis._partial_v1_transition(legacy, sidecar_sha, current_binding,
+            fingerprints, state)
+        self.assertEqual(current["schema"], "voice-dev-gis-partial-continuation-v2")
+        self.assertEqual(current["previous_sidecar_sha256"], sidecar_sha)
+        self.assertEqual(current["binding"], current_binding)
+        self.assertNotIn("secret_fingerprints", current)
+        self.assertEqual(current["secret_fingerprints_sha256"], gis._digest(fingerprints))
+        self.assertEqual(legacy["binding"], c2_binding)
+        self.assertTrue(gis._partial_v2_admissible(current, legacy, sidecar_sha,
+            current_binding, fingerprints, state))
+
+        resumed = copy.deepcopy(current)
+        resumed["state"]["plan"]["phase"] = "CREATING"
+        resumed["state"]["plan_phase"] = "CREATING"
+        self.assertTrue(gis._partial_v2_admissible(resumed, legacy, sidecar_sha,
+            current_binding, fingerprints, state))
+
+        for bad_legacy, bad_hash, bad_binding, bad_fingerprints in (
+            (legacy, "0" * 64, current_binding, fingerprints),
+            ({**legacy, "binding": {**c2_binding, "candidate_source_sha": "1" * 40}}, sidecar_sha, current_binding, fingerprints),
+            ({**legacy, "binding": {**c2_binding, "changed_files": {**c2_binding["changed_files"],
+                "scripts/dev/gis_first_install_test.py": "0" * 64}}}, sidecar_sha, current_binding, fingerprints),
+            (legacy, sidecar_sha, {**current_binding,
+                "candidate_source_sha": "db8a65b35d38406490e3c8c991866ac22619b021"}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "changed_files": {"scripts/unknown.py": "b" * 64}}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "old_source_sha": "3" * 40}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "backend_tree": "4" * 40}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "build_receipt_sha256": "5" * 64}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "image_ref": "image@sha256:" + "3" * 64}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "source_plan_sha256": "6" * 64}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "source_capture_sha256": "7" * 64}, fingerprints),
+            (legacy, sidecar_sha, {**current_binding, "inputs_sha256": "8" * 64}, fingerprints),
+            (legacy, sidecar_sha, current_binding, {"app": "d" * 64}),
+        ):
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v1_transition(bad_legacy, bad_hash, bad_binding,
+                    bad_fingerprints, state)
+
+        for mutate in (
+            lambda row: row.update(operation="other"),
+            lambda row: row.update(namespace_uid="9" * 36),
+            lambda row: row.update(phase="READY"),
+            lambda row: row["plan"].update(prerequisite_receipt={"unexpected": True}),
+            lambda row: row["plan"].update(created={"job/unexpected": {}}),
+        ):
+            invalid_legacy = copy.deepcopy(legacy)
+            mutate(invalid_legacy["state"])
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v1_transition(invalid_legacy, sidecar_sha,
+                    current_binding, fingerprints, state)
+
+        for mutate in (
+            lambda row: row["source_transition"].update(previous_sidecar_sha256="0" * 64),
+            lambda row: row["binding"].update(candidate_source_sha="4" * 40),
+            lambda row: row.update(extra="unexpected"),
+        ):
+            invalid = copy.deepcopy(current)
+            mutate(invalid)
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v2_admissible(invalid, legacy, sidecar_sha,
+                    current_binding, fingerprints, state)
+
+        with tempfile.TemporaryDirectory() as folder:
+            old_path = Path(folder) / "continuation.json"
+            new_path = Path(folder) / "continuation-current.json"
+            legacy_raw = json.dumps(legacy, sort_keys=True, separators=(",", ":")).encode()
+            fixture_sha = gis.hashlib.sha256(legacy_raw).hexdigest()
+            with patch.object(gis, "_PARTIAL_V1_SIDECAR_SHA256", fixture_sha):
+                old_path.write_bytes(legacy_raw)
+                saved = gis._partial_v1_transition(legacy, fixture_sha, current_binding,
+                    fingerprints, state)
+                gis._save_continuation(new_path, saved)
+            self.assertEqual(old_path.read_bytes(), legacy_raw)
+            self.assertTrue(new_path.exists())
+            self.assertEqual(gis._read_private_continuation(new_path),
+                json.dumps(saved, sort_keys=True, separators=(",", ":")).encode())
+            if gis.os.name != "nt":
+                self.assertEqual(gis.stat.S_IMODE(new_path.stat().st_mode), 0o600)
+
     def test_continuation_sidecar_requires_exact_prior_hash_for_atomic_replace(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "continuation.json"
