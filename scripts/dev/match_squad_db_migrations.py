@@ -37,12 +37,20 @@ MIGRATION_FILES = {
     "chat": ("000023_match_squad_operations.up.sql",),
     "voice": ("000011_match_squad_operations.up.sql",),
 }
+BASELINE_DOWN_FILES = {
+    "matchmaking": "000015_reconcile_player_rating_aggregates.down.sql",
+    "chat": "000022_chat_create_requests.down.sql",
+    "voice": "000010_space_media_admission.down.sql",
+}
 MIGRATION_HASHES = {
     "000016_match_deadline_squad_recovery.up.sql": "1ecf553bfd4f93289b18b99215118120cfcac8e6b913d9a29fe7a4e58fbb1e69",
     "000017_match_squad_lifecycle.up.sql": "ff3b8b5bbe215e35bcf4de7ad7af21b0d0049b41661a7ae4281eefc088a857af",
     "000018_match_squad_durable_recovery.up.sql": "fc9234b277dd03f795a3b21a630802a5a25292c5df98a1b79c294f382bc59852",
     "000023_match_squad_operations.up.sql": "c3190cb9cbfe08d7bda4f2cdcf661c3e1555a7f7436cfa6f0f196f8db20b7dd2",
     "000011_match_squad_operations.up.sql": "6fa0574e17c4f38922b2f517eddc34d3a791716b2ebfa55243ec179fa9345301",
+    "000015_reconcile_player_rating_aggregates.down.sql": "ed999e5af22e99f3041aebeb10227c1dd58f788f7365fcf0d020f6faf9513eb0",
+    "000022_chat_create_requests.down.sql": "0fe5e3a0b1f9c01b5fcae62c7a7be98cbee89636a4470682001ed242a9919dc1",
+    "000010_space_media_admission.down.sql": "6384f26a2e5b74ad59011264ed9561a87017917c30337e8d6aa4b995817b1d1b",
 }
 SOURCE_ANNOTATION = "voice.io/match-squad-migration-source"
 NAMESPACE_UID_ANNOTATION = "voice.io/match-squad-namespace-uid"
@@ -110,7 +118,9 @@ def build_plan(root, source_sha):
     plan = []
     for service in SERVICES:
         data = {}
-        for name in MIGRATION_FILES[service]:
+        up_files = MIGRATION_FILES[service]
+        selected_files = (*up_files, BASELINE_DOWN_FILES[service])
+        for name in selected_files:
             path = _migration_dir(root, service) / name
             try:
                 content = path.read_text(encoding="utf-8")
@@ -128,7 +138,8 @@ def build_plan(root, source_sha):
             "database": database_for_service(service),
             "baseline_version": BASELINES[service],
             "expected_version": TARGETS[service],
-            "new_up_migrations": list(data),
+            "new_up_migrations": list(up_files),
+            "baseline_down_migration": BASELINE_DOWN_FILES[service],
             "migration_data": data,
             "input_hash": input_hash,
             "source_sha": source_sha,
@@ -180,6 +191,8 @@ def validate_bound_object(obj, item, kind):
         uid = metadata.get("uid")
         if not _valid_job_selector(selector, item, uid):
             _blocked("existing_job_selector_mismatch")
+        if not _strip_bound_job_template_labels(actual, expected_name, uid):
+            _blocked("existing_job_spec_mismatch")
         if not _matches_kubernetes_defaults(actual, wanted):
             _blocked("existing_job_spec_mismatch")
     if kind not in {"configmap", "job"}:
@@ -252,6 +265,25 @@ def _matches_kubernetes_defaults(actual, expected, path=()):
     return actual == expected
 
 
+def _strip_bound_job_template_labels(actual, job_name, job_uid):
+    """Remove only the four labels the Job controller binds to this exact Job."""
+    try:
+        labels = actual["template"]["metadata"]["labels"]
+    except (KeyError, TypeError):
+        return False
+    bound = {
+        "batch.kubernetes.io/controller-uid": job_uid,
+        "controller-uid": job_uid,
+        "batch.kubernetes.io/job-name": job_name,
+        "job-name": job_name,
+    }
+    if any(labels.get(key) != value for key, value in bound.items()):
+        return False
+    for key in bound:
+        del labels[key]
+    return True
+
+
 def validate_terminal_job(job, item):
     validate_bound_object(job, item, "job")
     status = job.get("status", {})
@@ -315,7 +347,17 @@ unset DATABASE_URL sealed_url userinfo authority_path target password observed""
     migration_command = f"""database_url=$(cat {database_url_file}) || {{ echo migration_source_unavailable >&2; exit 1; }}
 umask 077
 if migrate -path=/migrations -database \"$database_url\" up >/run/migration/migrate.stdout 2>/run/migration/migrate.stderr; then exit 0; fi
-echo migration_failed >&2
+failure_category=unknown
+if grep -Eiq 'connection refused|i/o timeout|no such host|network is unreachable' /run/migration/migrate.stderr; then
+  failure_category=database_unavailable
+elif grep -Eiq 'password authentication failed|authentication failed|role .* does not exist' /run/migration/migrate.stderr; then
+  failure_category=database_authentication
+elif grep -Eiq 'ERROR:|pq:|syntax error|relation .* does not exist|duplicate key' /run/migration/migrate.stderr; then
+  failure_category=migration_sql
+elif grep -Eiq 'no migration|source driver|database driver' /run/migration/migrate.stderr; then
+  failure_category=migration_runner
+fi
+echo migration_failed category=$failure_category exit=1 >&2
 exit 1"""
     return {"apiVersion": "batch/v1", "kind": "Job",
             "metadata": _bound_metadata(name, item),
