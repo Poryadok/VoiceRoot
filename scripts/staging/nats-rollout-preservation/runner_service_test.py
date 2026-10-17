@@ -21,7 +21,8 @@ class RunnerServiceTests(unittest.TestCase):
             'runner_closure_sha256': 'c' * 64, 'api_server': 'https://10.0.0.1:6443',
             'ca_file': service.CA_FILE, 'token_file': service.TOKEN_FILE,
             'state_dir': service.STATE_DIR, 'runner_image': 'ghcr.io/poryadok/voice-nats-rollout-runner@sha256:' + 'd' * 64,
-            'storage_binding': self.binding}
+            'storage_binding': self.binding, 'verification_pvc_size_bytes': 48 << 30,
+            'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}
         self.path = Path(self.temp.name) / 'runner-config.json'
         self.write()
 
@@ -51,7 +52,42 @@ class RunnerServiceTests(unittest.TestCase):
                     'runner_closure_sha256': 'c' * 64, 'api_server': 'https://10.0.0.1:6443',
                     'ca_file': service.CA_FILE, 'token_file': service.TOKEN_FILE, 'state_dir': service.STATE_DIR,
                     'runner_image': 'ghcr.io/poryadok/voice-nats-rollout-runner@sha256:' + 'd' * 64,
-                    'storage_binding': self.binding}
+                    'storage_binding': self.binding, 'verification_pvc_size_bytes': 48 << 30,
+                    'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}
+
+    def test_verification_pvc_size_ceiling_and_storage_class_are_required(self):
+        loaded = service.load_config(self.path, self.root, owner_uid=os.geteuid())
+        self.assertEqual(loaded['verification_pvc_size_bytes'], 48 << 30)
+        self.assertEqual(loaded['verification_pvc_max_bytes'], 50 << 30)
+        self.assertEqual(loaded['verification_storage_class'], 'local-path')
+        for field, value, expected in (
+            ('verification_pvc_size_bytes', 0, 'verification_pvc_ceiling_invalid'),
+            ('verification_pvc_size_bytes', -1, 'verification_pvc_ceiling_invalid'),
+            ('verification_pvc_size_bytes', True, 'verification_pvc_ceiling_invalid'),
+            ('verification_pvc_size_bytes', 1 << 63, 'verification_pvc_ceiling_invalid'),
+            ('verification_pvc_size_bytes', 51 << 30, 'verification_pvc_ceiling_invalid'),
+            ('verification_pvc_max_bytes', 0, 'verification_pvc_ceiling_invalid'),
+            ('verification_pvc_max_bytes', False, 'verification_pvc_ceiling_invalid'),
+            ('verification_pvc_max_bytes', 1 << 63, 'verification_pvc_ceiling_invalid'),
+            ('verification_storage_class', '', 'verification_storage_class_invalid'),
+            ('verification_storage_class', 'Local Path', 'verification_storage_class_invalid'),
+            ('verification_storage_class', 'local-path/', 'verification_storage_class_invalid'),
+        ):
+            with self.subTest(value=value):
+                self.config[field] = value
+                self.write()
+                with self.assertRaisesRegex(service.ServiceError, expected):
+                    service.load_config(self.path, self.root, owner_uid=os.geteuid())
+                self.config[field] = {'verification_pvc_size_bytes': 48 << 30,
+                    'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}[field]
+        for field in ('verification_pvc_size_bytes', 'verification_pvc_max_bytes', 'verification_storage_class'):
+            with self.subTest(missing=field):
+                self.config.pop(field)
+                self.write()
+                with self.assertRaisesRegex(service.ServiceError, 'config_shape_invalid'):
+                    service.load_config(self.path, self.root, owner_uid=os.geteuid())
+                self.config[field] = {'verification_pvc_size_bytes': 48 << 30,
+                    'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}[field]
 
     def test_rejects_mutable_or_symlinked_config(self):
         self.path.chmod(0o644)
