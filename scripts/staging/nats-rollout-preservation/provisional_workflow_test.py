@@ -38,7 +38,7 @@ class Tests(unittest.TestCase):
             return scope['arguments']
 
     def test_provisional_exact_dispatch_and_repair_arguments(self):
-        self.assertEqual(self.select(),['prepare','images-only','voice','a'*40,'123','true'])
+        self.assertEqual(self.select(),['prepare','images-only','voice','a'*40,'123','true','false'])
         self.assertEqual(self.select({'ROLLOUT_REPAIR_PARENT':'1'*12}),
             ['prepare-repair','1'*12,'images-only','voice','a'*40,'123','true'])
 
