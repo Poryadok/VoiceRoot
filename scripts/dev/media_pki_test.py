@@ -56,8 +56,8 @@ class MediaPkiTests(unittest.TestCase):
 
     def test_secret_metadata_uses_selected_fields_without_payload_reads(self):
         snapshots = [
-            (pki.MATCHMAKING_SECRET + '|' + pki.NAMESPACE + '|tls-uid|tls-rv|dev|voice-dev|operation-1').encode(),
-            (pki.MATCHMAKING_SECRET + '|' + pki.NAMESPACE + '|replacement-uid|replacement-rv|other|other|other').encode(),
+            (pki.MATCHMAKING_SECRET + '|' + pki.NAMESPACE + '|tls-uid|tls-rv|kubernetes.io/tls|dev|voice-dev|operation-1').encode(),
+            (pki.MATCHMAKING_SECRET + '|' + pki.NAMESPACE + '|replacement-uid|replacement-rv|Opaque|other|other|other').encode(),
         ]
 
         def select(*args):
@@ -73,6 +73,7 @@ class MediaPkiTests(unittest.TestCase):
             value = pki.metadata('secret', pki.MATCHMAKING_SECRET)
         self.assertEqual(value['uid'], 'tls-uid')
         self.assertEqual(value['resourceVersion'], 'tls-rv')
+        self.assertEqual(value['type'], 'kubernetes.io/tls')
         self.assertEqual(value['labels'], pki.NAMESPACE_LABELS)
         self.assertEqual(value['annotations'], {'voice.io/media-pki-operation': 'operation-1'})
         self.assertEqual(query.call_count, 1)
@@ -91,6 +92,20 @@ class MediaPkiTests(unittest.TestCase):
         self.assertEqual(value['resourceVersion'], 'namespace-rv')
         self.assertEqual(query.call_count, 1)
         self.assertTrue(all('go-template=' in call.args[0][-1] for call in query.call_args_list))
+
+    def test_legacy_resume_pins_opaque_type_only_for_unchanged_live_leaf(self):
+        expected = {'uid': 'voice-uid', 'beforeResourceVersion': 'voice-rv',
+                    'oldLeafSha256': 'old-leaf-fingerprint', 'newLeafSha256': 'new-leaf-fingerprint'}
+        live = {'uid': 'voice-uid', 'resourceVersion': 'voice-rv', 'type': 'Opaque'}
+        self.assertEqual(pki.voice_secret_type_for_resume(expected, live, 'old-leaf-fingerprint'),
+                         ('Opaque', True))
+        self.assertEqual(expected['secretType'], 'Opaque')
+        with self.assertRaisesRegex(ValueError, 'only be pinned before'):
+            pki.voice_secret_type_for_resume(
+                {'uid': 'voice-uid', 'beforeResourceVersion': 'voice-rv',
+                 'oldLeafSha256': 'old-leaf-fingerprint', 'newLeafSha256': 'new-leaf-fingerprint'},
+                {'uid': 'voice-uid', 'resourceVersion': 'changed-rv', 'type': 'Opaque'},
+                'old-leaf-fingerprint')
 
     def test_export_is_exactly_dev_ca_and_three_tls_leaves(self):
         result = pki.safe_secret_list(secret_list())
@@ -218,11 +233,11 @@ class MediaPkiTests(unittest.TestCase):
                                                       'spec': {'containers': [], 'volumes': []}}}}
             metadata_values = {
                 ('secret', pki.CA_SECRET): {'name': pki.CA_SECRET, 'namespace': pki.NAMESPACE,
-                                            'uid': 'ca-uid', 'resourceVersion': 'ca-rv'},
+                                            'uid': 'ca-uid', 'resourceVersion': 'ca-rv', 'type': 'Opaque'},
                 ('deployment', pki.ROLE): {'name': pki.ROLE, 'namespace': pki.NAMESPACE,
                                            'uid': 'role-uid', 'resourceVersion': 'role-rv'},
                 ('secret', pki.VOICE_SECRET): {'name': pki.VOICE_SECRET, 'namespace': pki.NAMESPACE,
-                                               'uid': 'voice-tls-uid', 'resourceVersion': 'voice-tls-rv'},
+                                               'uid': 'voice-tls-uid', 'resourceVersion': 'voice-tls-rv', 'type': 'Opaque'},
                 ('deployment', 'voice-voice'): {'name': 'voice-voice', 'namespace': pki.NAMESPACE,
                                                 'uid': 'voice-deploy-uid', 'resourceVersion': 'voice-deploy-rv'},
             }
@@ -268,8 +283,10 @@ class MediaPkiTests(unittest.TestCase):
             self.assertEqual([kind for kind, _ in replaced], ['secret', 'deployment', 'secret', 'deployment'])
             changed_ca = replaced[0][1]
             changed_role = replaced[1][1]
+            changed_voice_tls = replaced[2][1]
             self.assertEqual(base64.b64decode(changed_ca['data']['jwks-ca.crt']),
                              old_bundle + b'public ca')
+            self.assertEqual(changed_voice_tls['type'], 'Opaque')
             role_env = {item['name']: item['value'] for item in
                         changed_role['spec']['template']['spec']['containers'][0]['env']}
             self.assertEqual(role_env['S2S_JWKS_CA_FILE'], '/etc/voice/media/ca/jwks-ca.crt')
@@ -278,6 +295,7 @@ class MediaPkiTests(unittest.TestCase):
             self.assertTrue(receipt['resources'][pki.MATCHMAKING_CA_SECRET]['uid'])
             self.assertTrue(receipt['resources'][pki.GIS_SECRET]['uid'])
             self.assertTrue(receipt['resources'][pki.MATCHMAKING_SECRET]['uid'])
+            self.assertEqual(receipt['resources'][pki.VOICE_SECRET]['secretType'], 'Opaque')
 
     @unittest.skipUnless(hasattr(os, 'geteuid'), 'operator is Linux-only')
     def test_resume_adopts_gis_create_after_unchanged_voice_and_finishes_matchmaking(self):
@@ -335,7 +353,7 @@ class MediaPkiTests(unittest.TestCase):
                 ('secret', pki.MATCHMAKING_CA_SECRET): {
                     'uid': 'mm-ca-uid', 'resourceVersion': 'mm-ca-rv', 'labels': labels,
                     'annotations': {'voice.io/media-pki-operation': operation_id}},
-                ('secret', pki.VOICE_SECRET): {'uid': 'voice-tls-uid', 'resourceVersion': 'voice-rv'},
+                ('secret', pki.VOICE_SECRET): {'uid': 'voice-tls-uid', 'resourceVersion': 'voice-rv', 'type': 'Opaque'},
                 ('secret', pki.GIS_SECRET): {
                     'uid': 'gis-uid', 'resourceVersion': 'gis-rv', 'labels': labels,
                     'annotations': {'voice.io/media-pki-operation': operation_id}},

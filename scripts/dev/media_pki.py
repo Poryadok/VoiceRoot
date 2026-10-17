@@ -75,27 +75,35 @@ def metadata(kind, name):
     value = resource_metadata(kind, name, namespaced=True)
     if value.get('name') != name or value.get('namespace') != NAMESPACE or not value.get('uid') or not value.get('resourceVersion'):
         raise ValueError('unexpected DEV resource identity')
-    return {key: value[key] for key in ('name', 'namespace', 'uid', 'resourceVersion', 'labels', 'annotations') if key in value}
+    return {key: value[key] for key in ('name', 'namespace', 'uid', 'resourceVersion', 'type', 'labels', 'annotations') if key in value}
 
 
 def resource_metadata(kind, name, *, namespaced):
     """Read only selected metadata fields; never fetch a Secret's data payload."""
     get = kubectl if namespaced else lambda *args: run(['kubectl', *args])
+    secret_type = '{{.type}}|' if kind == 'secret' else ''
     selector = ('go-template={{.metadata.name}}|{{.metadata.namespace}}|{{.metadata.uid}}|'
-                '{{.metadata.resourceVersion}}|'
+                '{{.metadata.resourceVersion}}|' + secret_type +
                 '{{if .metadata.labels}}{{index .metadata.labels "voice.environment"}}{{end}}|'
                 '{{if .metadata.labels}}{{index .metadata.labels "app.kubernetes.io/managed-by"}}{{end}}|'
                 '{{if .metadata.annotations}}{{index .metadata.annotations "voice.io/media-pki-operation"}}{{end}}')
     raw = get('get', kind, name, '-o', selector)
     fields = raw.decode('utf-8').strip().split('|')
-    if len(fields) != 7:
+    expected_fields = 8 if kind == 'secret' else 7
+    if len(fields) != expected_fields:
         raise ValueError('resource metadata query returned an unexpected shape')
     result = dict(zip(('name', 'namespace', 'uid', 'resourceVersion'), fields[:4]))
-    labels = {key: value for key, value in zip(NAMESPACE_LABELS, fields[4:6])
+    offset = 4
+    if kind == 'secret':
+        if not fields[offset] or fields[offset] == '<no value>':
+            raise ValueError('Secret type metadata is required')
+        result['type'] = fields[offset]
+        offset += 1
+    labels = {key: value for key, value in zip(NAMESPACE_LABELS, fields[offset:offset + 2])
               if value and value != '<no value>'}
     if labels:
         result['labels'] = labels
-    operation = fields[6]
+    operation = fields[offset + 2]
     if operation and operation != '<no value>':
         result['annotations'] = {'voice.io/media-pki-operation': operation}
     return result
@@ -237,6 +245,27 @@ def accept_unchanged_voice_leaf(current_fingerprint, current_resource_version, e
     return True
 
 
+def voice_secret_type_for_resume(expected, voice_meta, current_fingerprint):
+    """Pin a legacy receipt's live Secret type only before its recorded leaf changes."""
+    if voice_meta.get('uid') != expected.get('uid'):
+        raise ValueError('Voice TLS Secret identity changed since cutover')
+    recorded = expected.get('secretType')
+    if recorded is None:
+        if (current_fingerprint != expected.get('oldLeafSha256') or
+                voice_meta.get('resourceVersion') != expected.get('beforeResourceVersion')):
+            raise ValueError('legacy receipt type can only be pinned before Voice leaf replacement')
+        recorded = voice_meta.get('type')
+        if not recorded:
+            raise ValueError('Voice TLS Secret type is missing')
+        expected['secretType'] = recorded
+        migrated = True
+    else:
+        migrated = False
+    if voice_meta.get('type') != recorded:
+        raise ValueError('Voice TLS Secret type differs from the pinned operation')
+    return recorded, migrated
+
+
 def require_rollback_allowed(phase):
     if phase in FORWARD_PHASES or phase == 'rolled-back':
         raise ValueError('leaf cutover has begun; resume forward, never restore the prior exposed key')
@@ -343,6 +372,9 @@ def apply(image, state_dir):
         role_obj.setdefault('metadata', {}).update(role_meta)
 
         voice_meta = metadata('secret', VOICE_SECRET)
+        voice_secret_type = voice_meta.get('type')
+        if not voice_secret_type:
+            raise ValueError('Voice TLS Secret type is missing')
         voice_public = kubectl('get', 'secret', VOICE_SECRET,
                                '-o', 'go-template={{index .data "tls.crt"}}')
         old_voice_cert = base64.b64decode(voice_public, validate=True)
@@ -366,6 +398,7 @@ def apply(image, state_dir):
                                                 'afterResourceVersion': role_meta['resourceVersion']},
                                  VOICE_SECRET: {'uid': voice_meta['uid'], 'beforeResourceVersion': voice_meta['resourceVersion'],
                                                 'afterResourceVersion': voice_meta['resourceVersion'],
+                                                 'secretType': voice_secret_type,
                                                 'oldLeafSha256': voice_old_fingerprint,
                                                 'newLeafSha256': new_voice_fingerprint},
                                   MATCHMAKING_CA_SECRET: {'createOnly': True, 'uid': None, 'afterResourceVersion': None,
@@ -431,6 +464,7 @@ def apply(image, state_dir):
             exported_secrets[VOICE_SECRET]['metadata'] = voice_meta
             exported_secrets[VOICE_SECRET]['metadata'].setdefault('annotations', {})[
                 'voice.io/media-pki-operation'] = receipt['operationId']
+            exported_secrets[VOICE_SECRET]['type'] = voice_secret_type
             receipt['resources'][VOICE_SECRET]['afterResourceVersion'] = replace_object('secret', {}, exported_secrets[VOICE_SECRET])
             phase = 'voice-leaf-rotated'
             receipt['phase'] = phase
@@ -608,6 +642,10 @@ def resume(image, state_dir):
         desired_fp = fingerprint_pem(desired_cert)
         if desired_fp != voice_expected['newLeafSha256']:
             raise ValueError('issuer leaf changed since cutover; preserve receipt and review forward reissue')
+        recorded_type, migrated_type = voice_secret_type_for_resume(voice_expected, voice_meta, current_fp)
+        if migrated_type:
+            write_receipt(path, receipt, state_dir / '.last-apply.json.tmp')
+        desired['type'] = recorded_type
         if current_fp == voice_expected['oldLeafSha256'] == voice_expected['newLeafSha256']:
             if not accept_unchanged_voice_leaf(current_fp, voice_meta['resourceVersion'], voice_expected):
                 raise ValueError('unchanged Voice leaf has an unexpected resource version')
