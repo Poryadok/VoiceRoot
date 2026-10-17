@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-matchmaking
+  namespace: voice-dev
+spec:
+  template:
+    spec:
+      containers:
+        - name: matchmaking
+          env:
+            - name: MATCHMAKING_MATCH_SQUAD_CHAT_CA_FILE
+              value: /etc/voice/match-squad/ca/ca.crt
+            - name: MATCHMAKING_MATCH_SQUAD_VOICE_CA_FILE
+              value: /etc/voice/match-squad/ca/ca.crt
+          volumeMounts:
+            - name: match-squad-ca
+              mountPath: /etc/voice/match-squad/ca
+              readOnly: true
+      volumes:
+        - name: match-squad-ca
+          configMap:
+            name: voice-match-squad-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
