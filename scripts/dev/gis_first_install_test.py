@@ -890,7 +890,9 @@ class DevWorkloadProjectionTests(unittest.TestCase):
             gis_first_install.semantic(intended["Service"]))
         self.assertEqual(gis_first_install.semantic(projected_deployment),
             gis_first_install.semantic(intended["Deployment"]))
-        self.assertEqual(projected_service["spec"]["clusterIP"], "10.43.202.38")
+        # The allocated address stays bound in the raw live pin; it is omitted
+        # only from the projected semantic object to compare against authored spec.
+        self.assertNotIn("clusterIP", projected_service["spec"])
 
     def test_service_identity_and_unknown_or_wrong_defaults_fail_closed(self):
         intended, service, deployment, pin = self.fixture()
