@@ -136,8 +136,8 @@ func TestLoadMatchmakingSigningKeysAcceptsAtomicWriterUpdateInProgress(t *testin
 		t.Skip("Kubernetes projected Secret symlink layout is exercised on Linux")
 	}
 	keysDir := t.TempDir()
-	currentVersion := "..2026_10_17_12_34_56.123456789"
-	nextVersion := "..2026_10_17_12_34_57.123456789"
+	currentVersion := "..2026_10_17_12_34_56.7"
+	nextVersion := "..2026_10_17_12_34_57.4294967295"
 	for _, version := range []string{currentVersion, nextVersion} {
 		versionDir := filepath.Join(keysDir, version)
 		require.NoError(t, os.Mkdir(versionDir, 0o700))
