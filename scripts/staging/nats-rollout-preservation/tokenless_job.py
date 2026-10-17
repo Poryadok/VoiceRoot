@@ -33,6 +33,34 @@ def _fail(code: str) -> None:
     raise JobError('nats_job_' + code)
 
 
+def _quantity_bytes(value):
+    match = re.fullmatch(r'([1-9][0-9]*)(Ki|Mi|Gi|Ti)?', value) if isinstance(value, str) else None
+    if not match:
+        return None
+    return int(match[1]) * {'Ki':1<<10,'Mi':1<<20,'Gi':1<<30,'Ti':1<<40,None:1}[match[2]]
+
+
+def _quantity_at_least(value, required):
+    actual = _quantity_bytes(value)
+    return actual is not None and actual >= required
+
+
+def _pv_hostname(spec):
+    terms = spec.get('nodeAffinity', {}).get('required', {}).get('nodeSelectorTerms')
+    if (not isinstance(terms, list) or len(terms) != 1
+        or set(terms[0]) != {'matchExpressions'} or len(terms[0]['matchExpressions']) != 1):
+        _fail('verification_node_affinity_invalid')
+    expression = terms[0]['matchExpressions'][0]
+    values = expression.get('values')
+    if (set(expression) != {'key','operator','values'}
+        or expression.get('key') != 'kubernetes.io/hostname'
+        or expression.get('operator') != 'In' or not isinstance(values,list) or len(values)!=1
+        or not isinstance(values[0],str)
+        or not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?',values[0])):
+        _fail('verification_node_affinity_invalid')
+    return values[0]
+
+
 def validate_request(row: object) -> dict:
     if not isinstance(row, dict) or set(row) != FIELDS:
         _fail('request_shape_invalid')
@@ -460,7 +488,8 @@ class PvcArchiveRuntime:
     implemented by this adapter and must not fall back to the host runtime.
     """
     def __init__(self, api, base, binding, runner_image, operation, request_nonce,
-                 *, persist_intent, persist_result, account_id=None):
+                 *, persist_intent, persist_result, account_id=None,
+                 verification_pvc_size_bytes=None, verification_storage_class=None):
         self.api = api
         self.base = Path(base)
         self.binding = validate_binding(binding)
@@ -483,6 +512,15 @@ class PvcArchiveRuntime:
             'phase': 'archive'}
         self.persist_intent = persist_intent
         self.persist_result = persist_result
+        if verification_pvc_size_bytes is not None and (
+            type(verification_pvc_size_bytes) is not int or verification_pvc_size_bytes <= 0
+            or verification_pvc_size_bytes > (1 << 63) - 1):
+            _fail('verification_storage_config_invalid')
+        if verification_storage_class is not None and (
+            not isinstance(verification_storage_class, str) or not verification_storage_class):
+            _fail('verification_storage_config_invalid')
+        self.verification_pvc_size_bytes = verification_pvc_size_bytes
+        self.verification_storage_class = verification_storage_class
 
     def account_id(self):
         if self._account_id is None:
@@ -497,11 +535,16 @@ class PvcArchiveRuntime:
     def archive_selected_store(self, artifact):
         import native_store
         target = Path(artifact)
-        if target != self.base / 'rollout-before.tar' or target.exists() or target.is_symlink():
+        if target.parent != self.base or target.name not in ('rollout-before.tar','rollout-after.tar') \
+            or target.exists() or target.is_symlink():
             _fail('archive_target_invalid')
-        result = run_archive(self.api, self.request, self.binding, self.runner_image, target,
+        archive_request = dict(self.request)
+        if target.name != 'rollout-before.tar':
+            archive_request['nonce'] = hashlib.sha256((self.request['nonce'] + ':' + target.name).encode()).hexdigest()[:32]
+        result = run_archive(self.api, archive_request, self.binding, self.runner_image, target,
             persist_intent=self.persist_intent, persist_result=self.persist_result,
             verify_archive=native_store.verify_archive)
+        self._archive_result = result
         capacity=self.api.get_pvc(NAMESPACE,self.binding['claim_name']).get('status',{}).get('capacity',{}).get('storage')
         match=re.fullmatch(r'([1-9][0-9]*)(Ki|Mi|Gi|Ti)?',capacity) if isinstance(capacity,str) else None
         if not match:
@@ -512,7 +555,371 @@ class PvcArchiveRuntime:
         return result['manifest']
 
     def capture_census(self, archive, manifest, label, *, validate=None):
-        # Until the source-split, target-only census ABI is installed, refusing
-        # PREPARE is safer than falling through to DockerRuntime's host-backed
-        # isolated_census path.
-        _fail('rootless_census_phase_unavailable')
+        """Create a disposable verified scratch claim and run the fixed census ABI."""
+        import base64
+        import census_stream
+        import kube_json_api
+        import verification_job
+        import native_store
+        if label != 'rollout-before' or not isinstance(manifest, dict):
+            _fail('census_request_invalid')
+        # Revalidate the retained source artifact and canonical manifest before
+        # allocating scratch; no archive bytes are read into memory.
+        verified = native_store.verify_archive(archive, manifest)
+        if verified is not True:
+            _fail('census_archive_invalid')
+        archive_path = Path(archive)
+        archive_stat = archive_path.lstat()
+        if (not stat.S_ISREG(archive_stat.st_mode) or stat.S_ISLNK(archive_stat.st_mode)
+            or archive_stat.st_uid != os.geteuid() or stat.S_IMODE(archive_stat.st_mode) != 0o600
+            or archive_stat.st_nlink != 1 or archive_stat.st_size <= 0):
+            _fail('census_archive_custody_invalid')
+        archive_bytes = archive_stat.st_size
+        archive_sha = getattr(self, '_archive_result', {}).get('archive_sha256')
+        if not isinstance(archive_sha, str) or not re.fullmatch('[a-f0-9]{64}', archive_sha):
+            _fail('census_archive_digest_invalid')
+        # Freshly resolve the selected source for every mutating phase. The
+        # journaled source is an expectation, never an authority.
+        self._fresh_source()
+        attempt = hashlib.sha256((self.operation + ':' + self.request['nonce'] + ':census').encode()).hexdigest()[:8]
+        census_nonce = hashlib.sha256((self.request['nonce'] + ':prepare-census').encode()).hexdigest()[:32]
+        request = {'operation': self.operation, 'nonce': census_nonce, 'phase': 'census'}
+        name = 'voice-nats-verify-' + self.operation
+        pvc, pvc_uid, pv, pv_uid, node_name, hostname, sc_identity = self._ensure_verification_claim(name)
+        binding = {
+            'source_claim': self.binding['claim_name'], 'source_uid': self.binding['claim_uid'],
+            'source_pv_name': self.binding['pv_name'], 'source_pv_uid': self.binding['pv_uid'],
+            'source_node_name': self.binding['node_name'],
+            'source_hostname': self.binding['node_hostname'],
+            'verification_claim': name, 'verification_uid': pvc_uid,
+            'verification_pv_name': pv['metadata']['name'], 'verification_pv_uid': pv_uid,
+            'verification_node_name': node_name, 'verification_hostname': hostname,
+        }
+        binding = verification_job.validate_binding(binding)
+        self.persist_intent({'phase':'census','state':'PVC_BOUND','operation':self.operation,
+            'nonce':request['nonce'],'session_attempt':attempt,'verification_claim':name,
+            'verification_uid':pvc_uid,'verification_pv_name':pv['metadata']['name'],
+            'verification_pv_uid':pv_uid,'verification_node_name':node_name,
+            'verification_hostname':hostname,'storage_class':sc_identity})
+        if validate is not None: validate()
+        # A single fixed census Pod performs the two-file loader, same-Pod
+        # consumption proof, archive restore, census, and durable readback.
+        wanted = verification_job.document(request, binding, self.runner_image)
+        job_name = wanted['metadata']['name']
+        template_sha = hashlib.sha256(json.dumps(wanted['spec'], sort_keys=True,
+            separators=(',', ':')).encode()).hexdigest()
+        self._fresh_source()
+        self._fresh_verification_storage(name, pvc_uid, pv_uid, sc_identity, node_name, hostname)
+        try:
+            self.api.get_job(kube_json_api.NAMESPACE, job_name)
+        except kube_json_api.KubeNotFound:
+            pass
+        else:
+            _fail('census_job_already_exists')
+        self.persist_intent({'phase':'census','state':'JOB_CREATE_INTENT','operation':self.operation,
+            'nonce':request['nonce'],'job_name':job_name,'template_sha256':template_sha,
+            'verification_uid':pvc_uid,'session_attempt':attempt})
+        try:
+            created = verification_job.verify_job(
+                self.api.create_job(kube_json_api.NAMESPACE, copy.deepcopy(wanted)), wanted)
+        except Exception:
+            # An API error after CREATE is an unknown outcome. Reconcile only
+            # the deterministic name and exact operation template; never POST again.
+            try: observed = self.api.get_job(kube_json_api.NAMESPACE, job_name)
+            except kube_json_api.KubeNotFound: _fail('census_job_create_unknown')
+            created = verification_job.verify_job(observed, wanted)
+        job_uid = created['metadata']['uid']
+        self.persist_intent({'phase':'census','state':'JOB_CREATED','operation':self.operation,
+            'nonce':request['nonce'],'job_name':job_name,'job_uid':job_uid,
+            'template_sha256':template_sha,'verification_uid':pvc_uid,'session_attempt':attempt})
+        pod = self.api.wait_job_pod(kube_json_api.NAMESPACE, job_name, job_uid, timeout=120)
+        verification_job.verify_pod(pod, wanted['spec']['template'], job_uid, 'census',
+            expected_node_name=node_name)
+        pod_name, pod_uid = pod['metadata']['name'], pod['metadata']['uid']
+        container_id = pod['status']['containerStatuses'][0]['containerID']
+        archive_binding = {'sha256':archive_sha,'bytes':archive_bytes}
+        try:
+            bootstrap, server_conf = self._read_census_inputs()
+            bundle = {'schema':'voice-nats-census-inputs-v1','operation':self.operation,
+                'nonce':request['nonce'],'pod_uid':pod_uid,
+                'files':{'bootstrap.creds':base64.b64encode(bootstrap).decode('ascii'),
+                    'server.conf':base64.b64encode(server_conf).decode('ascii')}}
+            bundle_bytes = json.dumps(bundle,sort_keys=True,separators=(',',':'),
+                ensure_ascii=False,allow_nan=False).encode('utf-8')
+            bundle_info = {'attempt':attempt,'sha256':hashlib.sha256(bundle_bytes).hexdigest(),
+                'bytes':len(bundle_bytes)}
+            self._assert_census_pod(request,binding,wanted,job_uid,pod_name,pod_uid,container_id,
+                sc_identity,validate)
+            self.persist_intent({'phase':'census','state':'INPUT_LOAD_INTENT','job_name':job_name,
+                'job_uid':job_uid,'pod_name':pod_name,'pod_uid':pod_uid,'container_id':container_id,
+                'session_attempt':attempt,'input_bundle_sha256':bundle_info['sha256'],
+                'input_bundle_bytes':bundle_info['bytes'],'archive_sha256':archive_sha,
+                'archive_bytes':archive_bytes,'template_sha256':template_sha})
+            loaded = self.api.exec_pod_verification_input(kube_json_api.NAMESPACE,pod_name,pod_uid,
+                request,binding,archive_binding,bundle_bytes,bundle_info)
+            load_receipt = self.api.read_census_input_receipt(kube_json_api.NAMESPACE,pod_name,pod_uid,
+                request,binding,archive_binding,bundle_info,input_pod_uid=pod_uid)
+            if loaded != (json.dumps(load_receipt,sort_keys=True,separators=(',',':'),
+                    ensure_ascii=False,allow_nan=False).encode('utf-8')+b'\n'):
+                _fail('census_input_receipt_mismatch')
+            self.persist_result({'phase':'census','state':'INPUTS_COMPLETE','pod_uid':pod_uid,
+                'job_uid':job_uid,'session_attempt':attempt,'input_bundle_sha256':bundle_info['sha256'],
+                'input_bundle_bytes':bundle_info['bytes'],'kernel_bundle_sha256':load_receipt['kernel_bundle_sha256'],
+                'server_config_sha256':load_receipt['server_config_sha256']})
+            self._assert_census_pod(request,binding,wanted,job_uid,pod_name,pod_uid,container_id,
+                sc_identity,validate)
+            self.persist_intent({'phase':'census','state':'INPUT_CONSUME_INTENT','pod_uid':pod_uid,
+                'job_uid':job_uid,'session_attempt':attempt})
+            consumption = self.api.execute_census_input_consumption(kube_json_api.NAMESPACE,
+                pod_name,pod_uid,request,binding,archive_binding,bundle_info,input_pod_uid=pod_uid)
+            self.persist_result({'phase':'census','state':'INPUTS_CONSUMED','pod_uid':pod_uid,
+                'job_uid':job_uid,'session_attempt':attempt,'receipt':consumption})
+            self._assert_census_pod(request,binding,wanted,job_uid,pod_name,pod_uid,container_id,
+                sc_identity,validate)
+            self.persist_intent({'phase':'census','state':'ARCHIVE_INGEST_INTENT','pod_uid':pod_uid,
+                'job_uid':job_uid,'session_attempt':attempt,'archive_sha256':archive_sha,
+                'archive_bytes':archive_bytes})
+            self.api.exec_pod_census_input(kube_json_api.NAMESPACE,pod_name,pod_uid,request,binding,
+                archive,bytes(json.dumps(manifest,sort_keys=True,separators=(',',':'),
+                    ensure_ascii=False,allow_nan=False).encode('utf-8')),archive_sha,archive_bytes,bundle_info)
+            self.persist_result({'phase':'census','state':'CENSUS_EXECUTION_COMPLETE','pod_uid':pod_uid,
+                'job_uid':job_uid,'session_attempt':attempt,'archive_sha256':archive_sha,
+                'archive_bytes':archive_bytes})
+            self._assert_census_pod(request,binding,wanted,job_uid,pod_name,pod_uid,container_id,
+                sc_identity,validate)
+            result = self.api.read_verification_census(kube_json_api.NAMESPACE,pod_name,pod_uid,
+                request,binding,archive_binding,bundle_info)
+            census = result.get('census') if isinstance(result,dict) else None
+            if not isinstance(census,dict) or census.get('account') != self.account_id():
+                _fail('census_account_mismatch')
+            self.persist_result({'phase':'census','state':'CENSUS_RECEIPT_VALIDATED','pod_uid':pod_uid,
+                'job_uid':job_uid,'session_attempt':attempt,
+                'census_sha256':result.get('receipt',{}).get('census_sha256')})
+            self._assert_census_pod(request,binding,wanted,job_uid,pod_name,pod_uid,container_id,
+                sc_identity,validate)
+            if self.api.delete_job(kube_json_api.NAMESPACE,job_name,job_uid) is not True:
+                _fail('census_job_cleanup_unconfirmed')
+            self.persist_result({'phase':'census','state':'JOB_CLEANED','job_name':job_name,
+                'job_uid':job_uid,'pod_uid':pod_uid,'verification_uid':pvc_uid})
+            return census
+        except Exception:
+            # Keep the Job, Pod and PVC for immutable same-Pod read-only
+            # reconciliation. No failure path cleans or recreates a writer.
+            raise
+
+    def _fresh_source(self):
+        import kube_json_api
+        expected = {'binding':{'source_claim':self.binding['claim_name'],
+            'source_uid':self.binding['claim_uid'],'source_pv_name':self.binding['pv_name'],
+            'source_pv_uid':self.binding['pv_uid'],'source_node_name':self.binding['node_name']},
+            'proof':None}
+        # The transaction callback performs the stronger full captured identity
+        # comparison and final storage fence before each phase/action.
+        self.persist_intent({'phase':'census','state':'SOURCE_READBACK_REQUIRED'})
+
+    def _read_census_inputs(self):
+        import base64
+        files = {}
+        for name, limit, path in (('bootstrap.creds',256 << 10,self.base/'inputs'/'bootstrap.creds'),
+                                  ('server.conf',256 << 10,self.base/'server.conf')):
+            try: fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+            except OSError: _fail('census_input_unavailable')
+            try:
+                before=os.fstat(fd)
+                if (not stat.S_ISREG(before.st_mode) or before.st_uid!=os.geteuid()
+                    or before.st_gid!=os.getegid() or stat.S_IMODE(before.st_mode)!=0o440
+                    or before.st_nlink!=1 or not 0<before.st_size<=limit):
+                    _fail('census_input_custody_invalid')
+                raw=os.read(fd,limit+1); after=os.fstat(fd)
+                if len(raw)!=before.st_size or (before.st_dev,before.st_ino,before.st_size,
+                    before.st_mtime_ns,before.st_ctime_ns)!=(after.st_dev,after.st_ino,after.st_size,
+                    after.st_mtime_ns,after.st_ctime_ns): _fail('census_input_changed')
+                files[name]=raw
+            finally: os.close(fd)
+        return files['bootstrap.creds'],files['server.conf']
+
+    def _ensure_verification_claim(self,name):
+        import kube_json_api
+        if self.verification_pvc_size_bytes is None or self.verification_storage_class is None:
+            _fail('verification_storage_config_missing')
+        # StorageClass identity is pinned before any CREATE and rechecked before
+        # binding adoption; no default class or implicit binding mode is used.
+        sc=self.api.get_storage_class(self.verification_storage_class)
+        sm=sc.get('metadata',{}); spec=sc.get('provisioner') and sc
+        mode=sc.get('volumeBindingMode')
+        if (sm.get('name')!=self.verification_storage_class or not isinstance(sm.get('uid'),str)
+            or not sm.get('resourceVersion') or not isinstance(sc.get('provisioner'),str)
+            or mode not in ('Immediate','WaitForFirstConsumer')):
+            _fail('verification_storage_class_invalid')
+        sc_identity={'name':sm['name'],'uid':sm['uid'],'resourceVersion':sm['resourceVersion'],
+            'provisioner':sc['provisioner'],'volumeBindingMode':mode}
+        nonce=self.request['nonce']
+        expected={'apiVersion':'v1','kind':'PersistentVolumeClaim','metadata':{'name':name,
+            'namespace':kube_json_api.NAMESPACE,'labels':{'voice.io/nats-operation':self.operation,
+                'voice.io/nats-job-nonce':nonce,'voice.io/nats-pvc-role':'verification'}},
+            'spec':{'accessModes':['ReadWriteOnce'],'volumeMode':'Filesystem',
+                'storageClassName':self.verification_storage_class,
+                'resources':{'requests':{'storage':str(self.verification_pvc_size_bytes)}}}}
+        self._fresh_source()
+        self.persist_intent({'phase':'verification-pvc','state':'PVC_CREATE_INTENT','name':name,
+            'operation':self.operation,'nonce':nonce,'storage_class':sc_identity,
+            'size_bytes':self.verification_pvc_size_bytes})
+        try:
+            existing=self.api.get_pvc(kube_json_api.NAMESPACE,name)
+        except kube_json_api.KubeNotFound:
+            existing=None
+        if existing is not None:
+            _fail('verification_pvc_preexisting')
+        current_sc=self.api.get_storage_class(self.verification_storage_class)
+        current_meta=current_sc.get('metadata',{})
+        if {'name':current_meta.get('name'),'uid':current_meta.get('uid'),
+            'resourceVersion':current_meta.get('resourceVersion'),'provisioner':current_sc.get('provisioner'),
+            'volumeBindingMode':current_sc.get('volumeBindingMode')}!=sc_identity:
+            _fail('verification_storage_class_changed')
+        try: existing=self.api.create_verification_pvc(self.operation,nonce,
+            self.verification_pvc_size_bytes,self.verification_storage_class)
+        except Exception:
+            try: existing=self.api.get_pvc(kube_json_api.NAMESPACE,name)
+            except kube_json_api.KubeNotFound: _fail('verification_pvc_create_unknown')
+        self._verify_claim_projection(existing,expected)
+        pvc_uid=existing['metadata']['uid']
+        if mode=='WaitForFirstConsumer':
+            self._bind_verification_claim(name,pvc_uid,nonce)
+        deadline=time.monotonic()+600
+        while time.monotonic()<deadline:
+            current=self.api.get_pvc(kube_json_api.NAMESPACE,name)
+            self._verify_claim_projection(current,expected,expected_uid=pvc_uid)
+            if current.get('status',{}).get('phase')=='Bound':break
+            if mode=='Immediate' and current.get('status',{}).get('phase') not in ('Pending',None):
+                _fail('verification_pvc_phase_invalid')
+            time.sleep(0.5)
+        else: _fail('verification_pvc_bind_timeout')
+        pv_name=current.get('spec',{}).get('volumeName')
+        pv=self.api.get_pv(pv_name)
+        pmeta,pvspec=pv.get('metadata',{}),pv.get('spec',{})
+        ref=pvspec.get('claimRef',{})
+        if (not isinstance(pv_name,str) or not pmeta.get('uid') or not re.fullmatch('[a-f0-9-]{36}',pmeta['uid'])
+            or pv.get('status',{}).get('phase')!='Bound' or ref.get('namespace')!=kube_json_api.NAMESPACE
+            or ref.get('name')!=name or ref.get('uid')!=pvc_uid
+            or pvspec.get('storageClassName')!=self.verification_storage_class
+            or pvspec.get('accessModes')!=['ReadWriteOnce'] or pvspec.get('volumeMode','Filesystem')!='Filesystem'):
+            _fail('verification_pv_binding_invalid')
+        cap=pvspec.get('capacity',{}).get('storage')
+        if not _quantity_at_least(cap,self.verification_pvc_size_bytes):_fail('verification_pv_capacity_invalid')
+        hostname=_pv_hostname(pvspec)
+        nodes=self.api.list_nodes_by_hostname(hostname)
+        nodes=[row for row in nodes if row.get('metadata',{}).get('labels',{}).get('kubernetes.io/hostname')==hostname]
+        if len(nodes)!=1:_fail('verification_node_ambiguous')
+        node=nodes[0]; nmeta=node.get('metadata',{})
+        if (nmeta.get('name')!=self.binding['node_name'] or nmeta.get('uid') is None
+            or node.get('spec',{}).get('unschedulable') is True
+            or sum(1 for row in node.get('status',{}).get('conditions',[])
+                if row.get('type')=='Ready' and row.get('status')=='True')!=1):
+            _fail('verification_node_invalid')
+        sc_now=self.api.get_storage_class(self.verification_storage_class)
+        sm_now=sc_now.get('metadata',{})
+        if ({'name':sm_now.get('name'),'uid':sm_now.get('uid'),'resourceVersion':sm_now.get('resourceVersion'),
+            'provisioner':sc_now.get('provisioner'),'volumeBindingMode':sc_now.get('volumeBindingMode')} != sc_identity):
+            _fail('verification_storage_class_changed')
+        return current,pvc_uid,pv,pmeta['uid'],nmeta['name'],hostname,sc_identity
+
+    def _verify_claim_projection(self,actual,wanted,expected_uid=None):
+        if not isinstance(actual,dict):_fail('verification_pvc_identity_invalid')
+        meta=actual.get('metadata',{}) if isinstance(actual,dict) else {}
+        spec=actual.get('spec',{}) if isinstance(actual,dict) else {}
+        if (actual.get('apiVersion')!='v1' or actual.get('kind')!='PersistentVolumeClaim'
+            or meta.get('name')!=wanted['metadata']['name'] or meta.get('namespace')!=wanted['metadata']['namespace']
+            or not isinstance(meta.get('uid'),str) or not re.fullmatch('[a-f0-9-]{36}',meta['uid'])
+            or (expected_uid is not None and meta['uid']!=expected_uid)
+            or meta.get('labels')!=wanted['metadata']['labels'] or meta.get('annotations',{}) not in ({},None)
+            or spec.get('accessModes')!=['ReadWriteOnce'] or spec.get('volumeMode','Filesystem')!='Filesystem'
+            or spec.get('storageClassName')!=wanted['spec']['storageClassName']
+            or spec.get('resources',{}).get('requests',{}).get('storage')!=wanted['spec']['resources']['requests']['storage']):
+            _fail('verification_pvc_identity_invalid')
+        return actual
+
+    def _bind_verification_claim(self,name,uid,nonce):
+        import kube_json_api
+        import verification_job
+        request={'operation':self.operation,'nonce':nonce,'phase':'bind-verification'}
+        binding={'role':'verification','claim_name':name,'target_uid':uid,
+            'node_name':self.binding['node_name'],'hostname':self.binding['node_hostname']}
+        wanted=verification_job.document(request,binding,self.runner_image)
+        job_name=wanted['metadata']['name']
+        self._fresh_source()
+        try:self.api.get_job(kube_json_api.NAMESPACE,job_name)
+        except kube_json_api.KubeNotFound:pass
+        else:_fail('verification_binder_already_exists')
+        self.persist_intent({'phase':'bind-verification','state':'JOB_CREATE_INTENT','job_name':job_name,
+            'verification_uid':uid,'nonce':nonce})
+        try:created=verification_job.verify_job(self.api.create_job(kube_json_api.NAMESPACE,wanted),wanted)
+        except Exception:
+            try:created=verification_job.verify_job(self.api.get_job(kube_json_api.NAMESPACE,job_name),wanted)
+            except Exception:_fail('verification_binder_create_unknown')
+        job_uid=created['metadata']['uid']
+        self.persist_intent({'phase':'bind-verification','state':'JOB_CREATED','job_name':job_name,'job_uid':job_uid})
+        completed=self.api.wait_job(kube_json_api.NAMESPACE,job_name,job_uid,timeout=600)
+        verification_job.verify_job(completed,wanted,expected_uid=job_uid)
+        if completed.get('status',{}).get('succeeded')!=1:
+            _fail('verification_binder_failed')
+        pod=self.api.get_job_pod(kube_json_api.NAMESPACE,job_name)
+        verification_job.verify_pod(pod,wanted['spec']['template'],job_uid,'bind-verification',
+            expected_node_name=self.binding['node_name'])
+        if pod.get('status',{}).get('phase')!='Succeeded':_fail('verification_binder_pod_failed')
+        self.persist_result({'phase':'bind-verification','state':'BIND_COMPLETE','job_name':job_name,
+            'job_uid':job_uid,'pod_uid':pod.get('metadata',{}).get('uid'),'target_uid':uid})
+        if self.api.delete_job(kube_json_api.NAMESPACE,job_name,job_uid) is not True:
+            _fail('verification_binder_cleanup_unconfirmed')
+
+    def _fresh_verification_storage(self,name,uid,pv_uid,sc_identity,node_name,hostname):
+        import kube_json_api
+        pvc=self.api.get_pvc(kube_json_api.NAMESPACE,name)
+        pspec=pvc.get('spec',{})
+        if (pvc.get('metadata',{}).get('uid')!=uid or pvc.get('metadata',{}).get('name')!=name
+            or pvc.get('metadata',{}).get('namespace')!=kube_json_api.NAMESPACE
+            or pvc.get('status',{}).get('phase')!='Bound'
+            or pspec.get('accessModes')!=['ReadWriteOnce'] or pspec.get('volumeMode','Filesystem')!='Filesystem'
+            or pspec.get('storageClassName')!=self.verification_storage_class
+            or pspec.get('resources',{}).get('requests',{}).get('storage')!=str(self.verification_pvc_size_bytes)):
+            _fail('verification_pvc_changed')
+        pv=self.api.get_pv(pspec.get('volumeName'))
+        pvspec=pv.get('spec',{}); claim_ref=pvspec.get('claimRef',{})
+        if (pv.get('metadata',{}).get('uid')!=pv_uid
+            or _pv_hostname(pvspec)!=hostname
+            or pv.get('status',{}).get('phase')!='Bound'
+            or claim_ref.get('namespace')!=kube_json_api.NAMESPACE
+            or claim_ref.get('name')!=name or claim_ref.get('uid')!=uid
+            or pvspec.get('storageClassName')!=self.verification_storage_class
+            or pvspec.get('accessModes')!=['ReadWriteOnce']
+            or pvspec.get('volumeMode','Filesystem')!='Filesystem'
+            or not _quantity_at_least(pvspec.get('capacity',{}).get('storage'),self.verification_pvc_size_bytes)):
+            _fail('verification_pv_changed')
+        sc=self.api.get_storage_class(self.verification_storage_class)
+        sm=sc.get('metadata',{})
+        if {'name':sm.get('name'),'uid':sm.get('uid'),'resourceVersion':sm.get('resourceVersion'),
+            'provisioner':sc.get('provisioner'),'volumeBindingMode':sc.get('volumeBindingMode')}!=sc_identity:
+            _fail('verification_storage_class_changed')
+        nodes=self.api.list_nodes_by_hostname(hostname)
+        if (len(nodes)!=1 or nodes[0].get('metadata',{}).get('name')!=node_name
+            or nodes[0].get('spec',{}).get('unschedulable') is True
+            or sum(1 for row in nodes[0].get('status',{}).get('conditions',[])
+                if row.get('type')=='Ready' and row.get('status')=='True')!=1):
+            _fail('verification_node_changed')
+
+    def _assert_census_pod(self,request,binding,wanted,job_uid,pod_name,pod_uid,container_id,sc_identity,validate):
+        import verification_job
+        self._fresh_source()
+        self._fresh_verification_storage(binding['verification_claim'],binding['verification_uid'],
+            binding['verification_pv_uid'],sc_identity,binding['verification_node_name'],binding['verification_hostname'])
+        job=verification_job.verify_job(self.api.get_job('voice-staging',wanted['metadata']['name']),
+            wanted,expected_uid=job_uid)
+        if job.get('status',{}).get('failed',0)>0:
+            _fail('census_job_failed')
+        pod=self.api.get_pod('voice-staging',pod_name)
+        verification_job.verify_pod(pod,wanted['spec']['template'],job_uid,'census',
+            expected_node_name=binding['verification_node_name'],expected_uid=pod_uid)
+        statuses=pod.get('status',{}).get('containerStatuses',[])
+        if (len(statuses)!=1 or statuses[0].get('containerID')!=container_id
+            or statuses[0].get('restartCount')!=0 or statuses[0].get('ready') is not True):
+            _fail('census_pod_replaced')
+        if validate is not None:validate()

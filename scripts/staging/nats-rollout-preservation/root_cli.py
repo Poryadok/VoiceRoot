@@ -21,30 +21,42 @@ from root_main import operation_lock,private_json as root_private_json,public_re
 from stage_runtime import Kube, HUB
 
 ROOT=guard.ROOT
+NATIVE_INSTALLED_CODE=Path('/var/lib/voice-nats-preservation/installed/code')
 
-def private_json(path,*,owner_uid=0):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20,owner_uid=owner_uid)
-def save(path,row,*,owner_uid=0):root_save(path,row,limit=128<<20,owner_uid=owner_uid)
+def _path_owner(path,owner_uid):
+    if owner_uid is not None:return owner_uid
+    import native_operation_path
+    return native_operation_path.owner_uid_for_path(path)
+
+def private_json(path,*,owner_uid=None):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20,owner_uid=_path_owner(path,owner_uid))
+def save(path,row,*,owner_uid=None):root_save(path,row,limit=128<<20,owner_uid=_path_owner(path,owner_uid))
 
 
 def operation_path(raw,*,owner_uid=0):
     if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('rollout_owner_invalid')
     base=Path(raw)
+    if owner_uid==65532:
+        import native_operation_path
+        match=re.fullmatch(r'rollout-([a-f0-9]{12})',base.name)
+        if match is None:raise Blocked('rollout_path_invalid')
+        return native_operation_path.validate_operation(base,match.group(1))
     if base.parent!=ROOT or not re.fullmatch(r'rollout-[a-f0-9]{12}',base.name):raise Blocked('rollout_path_invalid')
     s=base.lstat()
     if not stat.S_ISDIR(s.st_mode) or s.st_uid!=owner_uid or s.st_mode&0o022:raise Blocked('rollout_directory_untrusted')
     return base
 
 
-def public_code_sha(path,*,owner_uid=0):
+def public_code_sha(path,*,owner_uid=0,source_uid=None,source_gid=None):
     """Hash public captured code as the runner, without root-only O_NOATIME."""
     path=Path(path)
     if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('rollout_code_owner_invalid')
+    if source_uid is None:source_uid=owner_uid
     fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,
         s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
     parent_before=path.parent.lstat()
     parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_NONBLOCK)
     try:
-        if (not stat.S_ISDIR(parent_before.st_mode) or parent_before.st_uid!=owner_uid
+        if (not stat.S_ISDIR(parent_before.st_mode) or parent_before.st_uid!=source_uid
             or parent_before.st_mode&0o022
             or fingerprint(parent_before)!=fingerprint(os.fstat(parent))):
             raise Blocked('rollout_code_custody_invalid')
@@ -52,7 +64,8 @@ def public_code_sha(path,*,owner_uid=0):
         fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
         try:
             opened=os.fstat(fd)
-            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=owner_uid
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=source_uid
+                or source_gid is not None and opened.st_gid!=source_gid
                 or opened.st_mode&0o022 or opened.st_nlink!=1
                 or not 0<=opened.st_size<=16<<20 or fingerprint(before)!=fingerprint(opened)):
                 raise Blocked('rollout_code_custody_invalid')
@@ -71,9 +84,45 @@ def public_code_sha(path,*,owner_uid=0):
     finally:os.close(parent)
 
 
-def code_binding(code,*,owner_uid=0):
+def code_binding(code,*,owner_uid=0,native_source=False):
     if type(owner_uid) is not int or owner_uid!=os.geteuid():raise Blocked('rollout_code_owner_invalid')
-    manifest=json.loads(public_read(code/'capture-manifest.json'))
+    if type(native_source) is not bool:raise Blocked('rollout_code_custody_invalid')
+    if native_source:
+        if owner_uid!=65532 or Path(code)!=NATIVE_INSTALLED_CODE:
+            raise Blocked('rollout_code_custody_invalid')
+        source_uid,source_gid=0,65532
+        for directory in (*Path(code).parents[::-1],Path(code)):
+            try:row=directory.lstat()
+            except OSError:raise Blocked('rollout_code_custody_invalid') from None
+            if (not stat.S_ISDIR(row.st_mode) or row.st_uid!=0 or row.st_mode&0o022
+                or stat.S_ISLNK(row.st_mode)):
+                raise Blocked('rollout_code_custody_invalid')
+            if directory==Path(code) and (row.st_gid!=65532 or row.st_mode&0o050!=0o050):
+                raise Blocked('rollout_code_custody_invalid')
+    else:
+        source_uid,source_gid=owner_uid,None
+    manifest_path=Path(code)/'capture-manifest.json'
+    if native_source:
+        try:fd=os.open(manifest_path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        except OSError:raise Blocked('rollout_code_custody_invalid') from None
+        try:
+            before=os.fstat(fd)
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid!=0 or before.st_gid!=65532
+                or before.st_mode&0o022 or not before.st_mode&0o040 or before.st_nlink!=1
+                or not 1<=before.st_size<=256<<10):
+                raise Blocked('rollout_code_custody_invalid')
+            raw=os.read(fd,before.st_size+1);after=os.fstat(fd)
+            parent_fd=os.open(manifest_path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:current=os.stat(manifest_path.name,dir_fd=parent_fd,follow_symlinks=False)
+            finally:os.close(parent_fd)
+            if (len(raw)!=before.st_size or (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)
+                !=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns)
+                or (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns)
+                !=(current.st_dev,current.st_ino,current.st_size,current.st_mtime_ns,current.st_ctime_ns)):
+                raise Blocked('rollout_captured_code_changed')
+        finally:os.close(fd)
+        manifest=json.loads(raw)
+    else:manifest=json.loads(public_read(manifest_path))
     if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
@@ -81,10 +130,19 @@ def code_binding(code,*,owner_uid=0):
         path=code/p
         for parent in (path,*path.parents):
             try:s=parent.lstat()
-            except FileNotFoundError:raise Blocked('rollout_code_custody_invalid') from None
-            if s.st_uid!=owner_uid or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode):raise Blocked('rollout_code_custody_invalid')
+            except OSError:raise Blocked('rollout_code_custody_invalid') from None
+            if (s.st_uid!=source_uid or source_gid is not None and s.st_gid!=source_gid
+                or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode)
+                or parent==path and not stat.S_ISREG(s.st_mode)
+                or parent!=path and not stat.S_ISDIR(s.st_mode)):
+                raise Blocked('rollout_code_custody_invalid')
+            if native_source and (stat.S_ISDIR(s.st_mode) and s.st_mode&0o050!=0o050
+                or stat.S_ISREG(s.st_mode) and not s.st_mode&0o040):
+                raise Blocked('rollout_code_custody_invalid')
             if parent==code:break
-        if public_code_sha(path,owner_uid=owner_uid)!=wanted:raise Blocked('rollout_captured_code_changed')
+        try:actual=public_code_sha(path,owner_uid=owner_uid,source_uid=source_uid,source_gid=source_gid)
+        except OSError:raise Blocked('rollout_code_custody_invalid') from None
+        if actual!=wanted:raise Blocked('rollout_captured_code_changed')
     return manifest
 
 
@@ -217,19 +275,29 @@ def main_unlocked(args,code):
 def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,native_api=None,native_config=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
-        base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
+        native_private=native_api is not None
+        if native_private:
+            import native_operation_path
+            base=native_operation_path.create_operation(op)
+        else:
+            base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
         # Runner code remains outside the overwritten target checkout. Copy
         # only the manifest's verified code members, never inputs/credentials.
-        runner_code=base/'code';runner_code.mkdir(mode=0o750)
-        gid=grp.getgrnam('pmd').gr_gid;os.chown(runner_code,0,gid)
-        for relative in binding:
-            destination=runner_code/relative;destination.parent.mkdir(parents=True,exist_ok=True,mode=0o750)
-            for parent in (destination.parent,*destination.parents):
-                os.chown(parent,0,gid);parent.chmod(0o750)
-                if parent==runner_code:break
-            shutil.copyfile(code/relative,destination);os.chown(destination,0,gid);destination.chmod(0o440)
-        save(runner_code/'capture-manifest.json',binding)
-        os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
+        if native_private:
+            # The installed native package is already the trusted code source;
+            # do not copy/chown it into a root-owned legacy operation tree.
+            runner_code=Path(code)
+        else:
+            runner_code=base/'code';runner_code.mkdir(mode=0o750)
+            gid=grp.getgrnam('pmd').gr_gid;os.chown(runner_code,0,gid)
+            for relative in binding:
+                destination=runner_code/relative;destination.parent.mkdir(parents=True,exist_ok=True,mode=0o750)
+                for parent in (destination.parent,*destination.parents):
+                    os.chown(parent,0,gid);parent.chmod(0o750)
+                    if parent==runner_code:break
+                shutil.copyfile(code/relative,destination);os.chown(destination,0,gid);destination.chmod(0o440)
+            save(runner_code/'capture-manifest.json',binding)
+            os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
         (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}

@@ -30,8 +30,10 @@ from nats_migration import apply_contract
 import rollout_census
 
 def save(path,row):
-    root_save(path,row,limit=128<<20)
-    if Path(path).name=='checkpoint.json':
+    import native_operation_path
+    owner_uid=native_operation_path.owner_uid_for_path(path)
+    root_save(path,row,limit=128<<20,owner_uid=owner_uid)
+    if Path(path).name=='checkpoint.json' and owner_uid==0:
         import deployment_report
         deployment_report.checkpoint(row)
 
@@ -410,8 +412,13 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             state['nats_contract_binding']=copy.deepcopy(nats_authority['binding'])
             state['nats_target_scripts']=copy.deepcopy(nats_authority['scripts'])
             state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
-        shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
-        state['kernel_sha256']=file_sha(base/'kernel')
+        if native_api is None:
+            shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
+            state['kernel_sha256']=file_sha(base/'kernel')
+        else:
+            # The native helper image pins the kernel; keep only the source
+            # digest in the UID 65532 operation journal.
+            state['kernel_sha256']=file_sha(code/'kernel')
     except Exception as error:
         import deployment_report
         deployment_report.capture_failure(error)
@@ -451,7 +458,9 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
                 native_config['phase_image'],operation,secrets.token_hex(32),
                 persist_intent=persist_native_phase,
                 persist_result=persist_native_phase,
-                account_id=account_id)
+                account_id=account_id,
+                verification_pvc_size_bytes=native_config.get('verification_pvc_size_bytes'),
+                verification_storage_class=native_config.get('verification_storage_class'))
         state['phase']='COLD_BACKUP';save(base/'checkpoint.json',state)
         live_catalog=require_original_live_census(stage,state['events'])
         state['cut']=capture_cut(runtime,None if native_api is not None else stage.final_path,stage.verify_final_storage,

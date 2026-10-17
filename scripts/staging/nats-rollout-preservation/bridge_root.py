@@ -40,9 +40,26 @@ class Actions:
     def __init__(self,code,*,owner_uid=0,native_api=None,native_config=None):
         configure_state_owner(owner_uid)
         self.owner_uid=owner_uid
-        self.code=Path(code);self.binding=root_cli.code_binding(self.code,owner_uid=owner_uid)
         self.native_api=native_api
+        self.code=Path(code)
+        self.binding=root_cli.code_binding(self.code,owner_uid=owner_uid,native_source=native_api is not None)
         self.native_config=copy.deepcopy(native_config)
+
+    def _operation_root(self):
+        if self.native_api is None:return guard.ROOT
+        import native_operation_path
+        return native_operation_path.operation_root()
+
+    def _operation_paths(self):
+        if self.native_api is None:return list(self._operation_root().glob('rollout-*'))
+        import native_operation_path
+        return native_operation_path.list_operations()
+
+    def _operation_path(self,operation):
+        if self.native_api is None:
+            return root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)),owner_uid=self.owner_uid)
+        import native_operation_path
+        return native_operation_path.existing_operation(operation)
 
     def _report(self,name,status):
         observer=getattr(self,'_observer',None)
@@ -55,7 +72,7 @@ class Actions:
         finally:self._observer=None
 
     def state(self,operation):
-        base=root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)),owner_uid=self.owner_uid)
+        base=self._operation_path(operation)
         state=private_json(base/'checkpoint.json')
         if state.get('operation')!=operation:raise Blocked('bridge_operation_custody_invalid')
         if state.get('operator_retirement') is not None:
@@ -106,7 +123,7 @@ class Actions:
             'deploy_mode':state['target']['mode'],'source_sha':state['target']['tag']}
 
     def _idle(self,*,admitted_parent=None):
-        rows=list(guard.ROOT.glob('rollout-*'))
+        rows=self._operation_paths()
         if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
         for base in rows:
             if root_cli.rollout_directory_kind(base,owner_uid=self.owner_uid)=='capture':continue
@@ -159,7 +176,7 @@ class Actions:
             or not re.fullmatch(r'[a-f0-9]{12}',str(reference.get('operation','')))
             or not re.fullmatch(r'[a-f0-9]{64}',str(reference.get('receipt_sha256','')))):
             raise Blocked('gis_first_install_transition_reference_invalid')
-        prior=private_json(guard.ROOT/('rollout-'+reference['operation'])/'checkpoint.json')
+        prior=private_json(self._operation_path(reference['operation'])/'checkpoint.json')
         receipt=prior.get('gis_first_install_transition_receipt')
         if not isinstance(receipt,dict) or receipt.get('receipt_sha256')!=reference['receipt_sha256']:
             raise Blocked('gis_first_install_transition_reference_changed')
@@ -305,10 +322,10 @@ class Actions:
                 # dynamic subject ownership cannot change between plan/fence.
                 if current['plan']!=nats_authority['plan'] or current['binding']!=nats_authority['binding']:raise Blocked('nats_migration_live_contract_changed')
             if repair is not None:
-                provisional.link_parent(guard.ROOT/('rollout-'+repair['operation']),repair,operation)
+                provisional.link_parent(self._operation_path(repair['operation']),repair,operation)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
         state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,native_api=self.native_api,native_config=self.native_config,**lifecycle_args)
-        base=guard.ROOT/('rollout-'+operation)
+        base=self._operation_path(operation)
         state['service_actor_authority']=actor_authority
         state['service_actor_services']=names
         state['source_authority']={key:value for key,value in approved.items() if key!='source_files'}
@@ -374,7 +391,7 @@ class Actions:
             or request['nonce'][:12]==paused_recovery.OPERATION):
             raise Blocked('paused_recovery_execution_identity_invalid')
         base,state=self.state(request['operation'])
-        rows=list(guard.ROOT.glob('rollout-*'))
+        rows=self._operation_paths()
         if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
         for path in rows:
             if root_cli.rollout_directory_kind(path,owner_uid=self.owner_uid)=='capture' or path==base:continue
@@ -403,7 +420,7 @@ class Actions:
         if request['operation']!=preserved_upload.OPERATION:raise Blocked('preserved_upload_operation_invalid')
         base,state=self.state(request['operation'])
         _,continuity=preserved_upload.verify_helper_continuity(base,state,self.binding)
-        rows=list(guard.ROOT.glob('rollout-*'))
+        rows=self._operation_paths()
         if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
         for path in rows:
             if path==base or root_cli.rollout_directory_kind(path,owner_uid=self.owner_uid)=='capture':continue

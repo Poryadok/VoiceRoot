@@ -600,16 +600,26 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'verification_hostname': 'worker-1.internal',
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
-        files = {name: base64.b64encode(b'x').decode() for name in kube.VERIFICATION_INPUT_FILES}
-        bundle = json.dumps({'schema': 'voice-nats-verification-inputs-v1', 'operation': request['operation'],
+        files = {name: base64.b64encode(b'x').decode() for name in ('bootstrap.creds', 'server.conf')}
+        bundle = json.dumps({'schema': 'voice-nats-census-inputs-v1', 'operation': request['operation'],
             'nonce': request['nonce'], 'pod_uid': pod_uid, 'files': files}, sort_keys=True,
             separators=(',', ':'), ensure_ascii=False).encode()
         archive_binding = {'sha256': 'c' * 64, 'bytes': 123}
         input_binding = {'attempt': 'd' * 8, 'sha256': hashlib.sha256(bundle).hexdigest(), 'bytes': len(bundle)}
         pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
+        receipt = {'schema': 'voice-nats-census-input-receipt-v1', 'phase': 'census-inputs',
+            'purpose': 'verification', 'operation': request['operation'], 'nonce': request['nonce'],
+            'pod_uid': pod_uid, 'source_pvc_uid': binding['source_uid'],
+            'source_pv_uid': binding['source_pv_uid'], 'verification_pvc_uid': binding['verification_uid'],
+            'verification_pv_uid': binding['verification_pv_uid'], 'archive_sha256': archive_binding['sha256'],
+            'archive_bytes': archive_binding['bytes'], 'session_attempt': input_binding['attempt'],
+            'input_bundle_sha256': input_binding['sha256'], 'input_bundle_bytes': input_binding['bytes'],
+            'status': 'COMPLETE', 'file_count': 2, 'kernel_bundle_sha256': 'e' * 64,
+            'server_config_sha256': 'f' * 64}
+        receipt_bytes = json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode() + b'\n'
         with patch.object(self.api, '_request', return_value=pod), \
              patch.object(self.api.tokens, 'read', return_value='opaque-token'), \
-             patch.object(kube, '_websocket_exec_input') as execute:
+             patch.object(kube, '_websocket_exec_input', return_value=receipt_bytes) as execute:
             self.api.exec_pod_verification_input('voice-staging', 'pod', pod_uid, request, binding,
                 archive_binding, input_binding, bundle)
         path, token = execute.call_args.args[1:3]
@@ -625,7 +635,8 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(query['command'], verification_job.exec_vectors(request, pod_uid, binding,
             archive=archive_binding, session_inputs=input_binding)['census_load_inputs'])
         self.assertEqual(execute.call_args.kwargs, {'archive_bytes': len(bundle),
-            'archive_sha256': hashlib.sha256(bundle).hexdigest(), 'raw_stdin': True})
+            'archive_sha256': hashlib.sha256(bundle).hexdigest(), 'raw_stdin': True,
+            'stdout_limit': kube.MAX_LOG_RESPONSE})
 
     def test_verification_input_rejects_bad_binding_before_api_io(self):
         request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}

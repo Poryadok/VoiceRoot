@@ -712,14 +712,14 @@ class _KubernetesJSONAPIBase:
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
 
     def exec_pod_verification(self, namespace, pod_name, pod_uid, request, binding, action, *, archive=None,
-                              session_inputs=None):
+                              session_inputs=None, input_pod_uid=None):
         """Run only a producer-declared readback vector in the bound Pod."""
         if namespace != NAMESPACE:
             _fail('namespace_invalid')
         try:
             import verification_job
             vectors = verification_job.exec_vectors(request, pod_uid, binding, archive=archive,
-                session_inputs=session_inputs)
+                session_inputs=session_inputs, input_pod_uid=input_pod_uid)
         except (ImportError, TypeError, ValueError):
             _fail('verification_exec_request_invalid')
         if action not in vectors or action in ('census_load_inputs', 'census_receive_archive', 'restore_archive_once'):
@@ -782,7 +782,7 @@ class _KubernetesJSONAPIBase:
 
     def exec_pod_verification_input(self, namespace, pod_name, pod_uid, request, binding,
                               archive, session_inputs, bundle_bytes):
-        """Send one bounded canonical input bundle to the fixed census loader.
+        """Send one bounded canonical PREPARE census input bundle.
 
         The only accepted action is the producer's first, create-once loader
         vector. The payload is raw canonical JSON on stdin; no shell, path, or
@@ -802,10 +802,10 @@ class _KubernetesJSONAPIBase:
             _fail('verification_input_bundle_invalid')
         if (bundle_bytes!=canonical or not isinstance(request,dict) or not isinstance(row,dict)
             or set(row)!={'schema','operation','nonce','pod_uid','files'}
-            or row.get('schema')!='voice-nats-verification-inputs-v1'
+            or row.get('schema')!='voice-nats-census-inputs-v1'
             or row.get('operation')!=request.get('operation') or row.get('nonce')!=request.get('nonce')
             or row.get('pod_uid')!=pod_uid or not isinstance(row.get('files'),dict)
-            or set(row['files'])!=VERIFICATION_INPUT_FILES):
+            or set(row['files'])!={'bootstrap.creds','server.conf'}):
             _fail('verification_input_bundle_identity_invalid')
         for value in row['files'].values():
             if not isinstance(value,str):_fail('verification_input_bundle_file_invalid')
@@ -815,7 +815,8 @@ class _KubernetesJSONAPIBase:
         try:
             import verification_job
             expected = hashlib.sha256(bundle_bytes).hexdigest()
-            if (not isinstance(session_inputs, dict) or session_inputs.get('sha256') != expected
+            if (not isinstance(session_inputs, dict) or set(session_inputs)!={'attempt','sha256','bytes'}
+                or session_inputs.get('sha256') != expected
                 or session_inputs.get('bytes') != len(bundle_bytes)):
                 _fail('verification_input_bundle_binding_invalid')
             vectors = verification_job.exec_vectors(request, pod_uid, binding,
@@ -848,8 +849,14 @@ class _KubernetesJSONAPIBase:
             path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
                 + self._segment(pod_name) + '/exec?' + urlencode(query))
             token = self._operation_token()
-            _websocket_exec_input(self, path, token, source.fileno(), b'',
-                archive_bytes=len(bundle_bytes), archive_sha256=expected, raw_stdin=True)
+            output = _websocket_exec_input(self, path, token, source.fileno(), b'',
+                archive_bytes=len(bundle_bytes), archive_sha256=expected, raw_stdin=True,
+                stdout_limit=MAX_LOG_RESPONSE)
+        # The helper returns one bounded receipt frame on stdout. Validate its
+        # identity here; the caller still performs durable same-Pod readback
+        # before continuing the transaction.
+        _validate_census_input_receipt(output, request, binding, archive, session_inputs, pod_uid)
+        return output
 
     def exec_pod_census_input(self, namespace, pod_name, pod_uid, request, binding,
                               archive_path, manifest_bytes, archive_sha256, archive_bytes, session_inputs):
@@ -976,6 +983,122 @@ class _KubernetesJSONAPIBase:
             return copy.deepcopy(receipt)
         except (ImportError, TypeError, ValueError, UnicodeDecodeError, RecursionError):
             _fail('verification_input_receipt_invalid')
+
+    def read_census_input_receipt(self, namespace, pod_name, pod_uid, request, binding,
+                                  archive, session_inputs, *, input_pod_uid=None):
+        """Read and validate the immutable census-input receipt for this Pod."""
+        try:
+            import verification_job
+            row = verification_job.validate_request(request)
+            storage = verification_job.validate_binding(binding)
+            if row['phase'] != 'census':
+                _fail('census_input_receipt_phase_invalid')
+            input_pod_uid = pod_uid if input_pod_uid is None else input_pod_uid
+            if not isinstance(input_pod_uid, str) or not _UID.fullmatch(input_pod_uid):
+                _fail('census_input_receipt_uid_invalid')
+            chunks = self.exec_pod_verification(namespace, pod_name, pod_uid, row, storage,
+                'census_read_input_receipt', archive=archive, session_inputs=session_inputs,
+                input_pod_uid=input_pod_uid)
+            return _validate_census_input_receipt(b''.join(chunks), row, storage, archive,
+                session_inputs, input_pod_uid)
+        except (ImportError, TypeError, ValueError):
+            _fail('census_input_receipt_invalid')
+
+    def execute_census_input_consumption(self, namespace, pod_name, pod_uid, request, binding,
+                                         archive, session_inputs, *, input_pod_uid=None):
+        """Create or reconcile the durable same-Pod input-consumption receipt."""
+        try:
+            import verification_job
+            row = verification_job.validate_request(request)
+            storage = verification_job.validate_binding(binding)
+            input_pod_uid = pod_uid if input_pod_uid is None else input_pod_uid
+            if not isinstance(input_pod_uid, str) or not _UID.fullmatch(input_pod_uid):
+                _fail('census_input_consumption_uid_invalid')
+            input_receipt = self.read_census_input_receipt(namespace, pod_name, pod_uid, row,
+                storage, archive, session_inputs, input_pod_uid=input_pod_uid)
+            chunks = self.exec_pod_verification(namespace, pod_name, pod_uid, row, storage,
+                'census_consume_inputs', archive=archive, session_inputs=session_inputs,
+                input_pod_uid=input_pod_uid)
+            return _validate_census_consumption_receipt(b''.join(chunks), row, storage,
+                archive, session_inputs, input_receipt, pod_uid, input_pod_uid)
+        except (ImportError, TypeError, ValueError):
+            _fail('census_input_consumption_invalid')
+
+
+def _decode_single_receipt_line(raw, code):
+    if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_LOG_RESPONSE or not raw.endswith(b'\n') or raw.count(b'\n') != 1:
+        _fail(code)
+    try:
+        encoded = raw[:-1]
+        row = json.loads(encoded.decode('utf-8'), object_pairs_hook=_unique_json_pairs,
+            parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+        canonical = json.dumps(row, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+    except (UnicodeDecodeError, ValueError, TypeError, RecursionError):
+        _fail(code)
+    if encoded != canonical or not isinstance(row, dict):
+        _fail(code)
+    return row
+
+
+def _validate_census_input_receipt(raw, request, binding, archive, session_inputs, pod_uid):
+    import verification_job
+    row = verification_job.validate_request(request)
+    storage = verification_job.validate_binding(binding)
+    if (row['phase'] != 'census' or not isinstance(archive, dict)
+        or set(archive) != {'sha256', 'bytes'}
+        or not isinstance(session_inputs, dict)
+        or set(session_inputs) != {'attempt', 'sha256', 'bytes'}):
+        _fail('census_input_receipt_binding_invalid')
+    expected = {
+        'schema': 'voice-nats-census-input-receipt-v1', 'phase': 'census-inputs',
+        'purpose': 'verification', 'operation': row['operation'], 'nonce': row['nonce'],
+        'pod_uid': pod_uid, 'source_pvc_uid': storage['source_uid'],
+        'source_pv_uid': storage['source_pv_uid'],
+        'verification_pvc_uid': storage['verification_uid'],
+        'verification_pv_uid': storage['verification_pv_uid'],
+        'archive_sha256': archive['sha256'], 'archive_bytes': archive['bytes'],
+        'session_attempt': session_inputs['attempt'],
+        'input_bundle_sha256': session_inputs['sha256'],
+        'input_bundle_bytes': session_inputs['bytes'], 'status': 'COMPLETE', 'file_count': 2,
+    }
+    receipt = _decode_single_receipt_line(raw, 'census_input_receipt_invalid')
+    if (set(receipt) != set(expected) | {'kernel_bundle_sha256', 'server_config_sha256'}
+        or any(receipt.get(key) != value for key, value in expected.items())
+        or any(not isinstance(receipt.get(key), str) or not re.fullmatch('[a-f0-9]{64}', receipt[key])
+            for key in ('kernel_bundle_sha256', 'server_config_sha256'))):
+        _fail('census_input_receipt_invalid')
+    return receipt
+
+
+def _validate_census_consumption_receipt(raw, request, binding, archive, session_inputs,
+                                         input_receipt, pod_uid, input_pod_uid):
+    import verification_job
+    row = verification_job.validate_request(request)
+    storage = verification_job.validate_binding(binding)
+    if (row['phase'] != 'census' or input_receipt.get('pod_uid') != input_pod_uid
+        or input_receipt.get('operation') != row['operation'] or input_receipt.get('nonce') != row['nonce']):
+        _fail('census_input_consumption_binding_invalid')
+    expected = {
+        'schema': 'voice-nats-census-consumption-receipt-v1',
+        'phase': 'census-consumption', 'purpose': 'verification',
+        'operation': row['operation'], 'nonce': row['nonce'], 'pod_uid': pod_uid,
+        'input_pod_uid': input_pod_uid, 'source_pvc_uid': storage['source_uid'],
+        'source_pv_uid': storage['source_pv_uid'],
+        'verification_pvc_uid': storage['verification_uid'],
+        'verification_pv_uid': storage['verification_pv_uid'],
+        'archive_sha256': archive['sha256'], 'archive_bytes': archive['bytes'],
+        'session_attempt': session_inputs['attempt'],
+        'input_bundle_sha256': session_inputs['sha256'],
+        'input_bundle_bytes': session_inputs['bytes'],
+        'kernel_bundle_sha256': input_receipt['kernel_bundle_sha256'],
+        'server_config_sha256': input_receipt['server_config_sha256'],
+        'status': 'COMPLETE',
+    }
+    receipt = _decode_single_receipt_line(raw, 'census_input_consumption_invalid')
+    if set(receipt) != set(expected) or any(receipt.get(key) != value for key, value in expected.items()):
+        _fail('census_input_consumption_invalid')
+    return receipt
 
 
 def _websocket_exec(api, path, token, *, max_bytes):
@@ -1136,7 +1259,7 @@ def _ws_binary(sock, payload):
 
 
 def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archive_bytes, archive_sha256,
-                          raw_stdin=False):
+                          raw_stdin=False, stdout_limit=0):
     """Duplex v5 exec for the one fixed census receive action.
 
     The helper contract emits no stdout while consuming input. We therefore
@@ -1146,8 +1269,11 @@ def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archi
     parsed = urlsplit(api.origin)
     host, port = parsed.hostname, parsed.port or 443
     key = base64.b64encode(os.urandom(16)).decode('ascii')
+    if type(stdout_limit) is not int or not 0 <= stdout_limit <= MAX_LOG_RESPONSE:
+        _fail('exec_input_stdout_limit_invalid')
     sock = None
     response = None
+    stdout = bytearray()
     try:
         raw = socket.create_connection((host, port), timeout=max(api.timeout, 120))
         sock = api.context.wrap_socket(raw, server_hostname=host)
@@ -1227,8 +1353,9 @@ def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archi
                 _fail('exec_frame_invalid')
             channel, data = payload[0], payload[1:]
             if channel == 1:
-                if data:
+                if len(stdout) + len(data) > stdout_limit:
                     _fail('census_input_unexpected_stdout')
+                stdout.extend(data)
             elif channel == 3:
                 if status_seen:
                     _fail('exec_status_duplicate')
@@ -1249,6 +1376,7 @@ def _websocket_exec_input(api, path, token, archive_fd, manifest_bytes, *, archi
         after = os.fstat(archive_fd)
         if not stat.S_ISREG(after.st_mode) or after.st_size != archive_bytes:
             _fail('census_archive_changed_during_exec')
+        return bytes(stdout)
     except KubeAPIError:
         raise
     except (OSError, ssl.SSLError, TimeoutError, ValueError):
