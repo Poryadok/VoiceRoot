@@ -208,6 +208,29 @@ class _KubernetesJSONAPIBase:
         if namespace != NAMESPACE: _fail('namespace_invalid')
         return self._request('POST', '/apis/batch/v1/namespaces/' + self._segment(namespace) + '/jobs', document)
 
+    def create_verification_pvc(self, operation, nonce, size_bytes, storage_class):
+        """Create the one fixed operation target claim from trusted installed config."""
+        if (not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation)
+            or not isinstance(nonce, str) or not re.fullmatch('[a-f0-9]{32}', nonce)
+            or type(size_bytes) is not int or not 0 < size_bytes <= (1 << 63) - 1
+            or not isinstance(storage_class, str) or len(storage_class) > 253
+            or any(not label or len(label) > 63
+                or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9]*[a-z0-9])?', label)
+                for label in storage_class.split('.'))):
+            _fail('verification_pvc_request_invalid')
+        name = 'voice-nats-verify-' + operation
+        document = {
+            'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim',
+            'metadata': {'name': name, 'namespace': NAMESPACE,
+                'labels': {'voice.io/nats-operation': operation,
+                    'voice.io/nats-job-nonce': nonce}},
+            'spec': {'accessModes': ['ReadWriteOnce'], 'volumeMode': 'Filesystem',
+                'storageClassName': storage_class,
+                'resources': {'requests': {'storage': str(size_bytes)}}},
+        }
+        return self._request('POST', '/api/v1/namespaces/' + self._segment(NAMESPACE)
+            + '/persistentvolumeclaims', document)
+
     def list_operation_jobs(self, namespace, operation):
         if namespace != NAMESPACE: _fail('namespace_invalid')
         if not isinstance(operation, str) or not re.fullmatch('[a-f0-9]{12}', operation):
@@ -308,6 +331,58 @@ class _KubernetesJSONAPIBase:
         path = '/api/v1/namespaces/' + self._segment(namespace) + '/pods/' + self._segment(pod_name) + '/exec?' + urlencode(query)
         token = self._operation_token()
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
+
+    def exec_pod_verification(self, namespace, pod_name, pod_uid, request, binding, action):
+        """Run only a producer-declared archive or census vector in the bound Pod."""
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        try:
+            import verification_job
+            vectors = verification_job.exec_vectors(request, pod_uid, binding)
+        except (ImportError, ValueError):
+            _fail('verification_exec_request_invalid')
+        if action not in vectors or action == 'load_inputs':
+            # Input loading needs a separate bounded stdin protocol; it is not
+            # silently routed through the output-only WebSocket operation.
+            _fail('verification_exec_action_invalid')
+        argv = vectors[action]
+        archive_actions = ('archive_create_and_stream', 'archive_same_pod_readback')
+        if action in archive_actions:
+            max_bytes = MAX_ARCHIVE_STREAM_BYTES
+        elif action == 'census_receipt_readback':
+            import census_stream
+            max_bytes = census_stream.MAX_TRANSPORT_BYTES
+        else:
+            max_bytes = MAX_LOG_RESPONSE
+        pod = self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
+            + '/pods/' + self._segment(pod_name))
+        metadata = pod.get('metadata', {})
+        if metadata.get('uid') != pod_uid or metadata.get('namespace') != namespace:
+            _fail('verification_exec_pod_changed')
+        query = [('container', 'nats-phase'), ('stdin', 'false'), ('stdout', 'true'),
+                 ('stderr', 'false'), ('tty', 'false')]
+        query.extend(('command', item) for item in argv)
+        path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
+            + self._segment(pod_name) + '/exec?' + urlencode(query))
+        token = self._operation_token()
+        yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
+
+    def read_verification_census(self, namespace, pod_name, pod_uid, request, binding):
+        """Return a validated, identity-bound census from its durable same-Pod receipt."""
+        try:
+            import census_stream
+            import verification_job
+            row = verification_job.validate_request(request)
+            storage = verification_job.validate_binding(binding)
+            if row['phase'] != 'census':
+                _fail('verification_census_phase_invalid')
+            chunks = self.exec_pod_verification(namespace, pod_name, pod_uid,
+                row, storage, 'census_receipt_readback')
+            return census_stream.consume(chunks, operation=row['operation'], nonce=row['nonce'],
+                pod_uid=pod_uid, source_pvc_uid=storage['source_uid'],
+                verification_pvc_uid=storage['verification_uid'])
+        except (ImportError, ValueError):
+            _fail('verification_census_invalid')
 
 
 def _websocket_exec(api, path, token, *, max_bytes):

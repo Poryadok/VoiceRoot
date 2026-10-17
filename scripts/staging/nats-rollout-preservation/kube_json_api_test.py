@@ -10,6 +10,8 @@ from urllib.error import HTTPError
 from unittest.mock import patch
 
 import kube_json_api as kube
+import census_stream
+import verification_job
 
 
 def jwt(audience, expiry):
@@ -109,6 +111,152 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertEqual(request.get_method(), 'DELETE')
         self.assertEqual(json.loads(request.data), {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'preconditions': {'uid': '33333333-3333-4333-8333-333333333333'}})
         self.assertTrue(request.full_url.endswith('/apis/batch/v1/namespaces/voice-staging/jobs/job'))
+
+    def test_verification_claim_create_has_closed_operation_scoped_rwo_spec(self):
+        with patch.object(self.api, '_request', return_value={'kind': 'PersistentVolumeClaim'}) as post:
+            result = self.api.create_verification_pvc('a' * 12, 'b' * 32,
+                48 << 30, 'local-path')
+        self.assertEqual(result, {'kind': 'PersistentVolumeClaim'})
+        method, path, body = post.call_args.args
+        self.assertEqual(method, 'POST')
+        self.assertEqual(path, '/api/v1/namespaces/voice-staging/persistentvolumeclaims')
+        self.assertEqual(body, {
+            'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim',
+            'metadata': {'name': 'voice-nats-verify-' + 'a' * 12, 'namespace': 'voice-staging',
+                'labels': {'voice.io/nats-operation': 'a' * 12,
+                    'voice.io/nats-job-nonce': 'b' * 32}},
+            'spec': {'accessModes': ['ReadWriteOnce'], 'volumeMode': 'Filesystem',
+                'storageClassName': 'local-path',
+                'resources': {'requests': {'storage': str(48 << 30)}}},
+        })
+        self.assertNotIn('volumeName', body['spec'])
+        self.assertNotIn('selector', body['spec'])
+
+    def test_verification_claim_create_rejects_invalid_or_untrusted_configuration(self):
+        for operation, nonce, size, storage_class in (
+            ('../escape', 'b' * 32, 1, 'local-path'),
+            ('a' * 12, 'short', 1, 'local-path'),
+            ('a' * 12, 'b' * 32, True, 'local-path'),
+            ('a' * 12, 'b' * 32, 0, 'local-path'),
+            ('a' * 12, 'b' * 32, 1 << 63, 'local-path'),
+            ('a' * 12, 'b' * 32, 1, ''),
+            ('a' * 12, 'b' * 32, 1, 'local..path'),
+        ):
+            with self.subTest(storage_class=storage_class, size=size), \
+                 patch.object(self.api, '_request') as post, \
+                 self.assertRaises(kube.KubeAPIError):
+                self.api.create_verification_pvc(operation, nonce, size, storage_class)
+            post.assert_not_called()
+
+    def test_verification_exec_uses_only_producer_vector_and_live_pod_uid(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
+        binding = {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'pv-voice-nats-source',
+            'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+            'source_node_name': 'k3s-worker-1',
+            'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'verification_uid': '22222222-2222-4222-8222-222222222222',
+            'verification_pv_name': 'pv-voice-nats-verify',
+            'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+            'verification_node_name': 'k3s-worker-1',
+        }
+        pod_uid = '44444444-4444-4444-8444-444444444444'
+        pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
+        with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
+             patch.object(self.api, '_request', return_value=pod), \
+             patch.object(kube, '_websocket_exec', return_value=iter((b'receipt',))) as execute:
+            result = list(self.api.exec_pod_verification('voice-staging', 'pod', pod_uid,
+                request, binding, 'census_receipt_readback'))
+        self.assertEqual(result, [b'receipt'])
+        path, token = execute.call_args.args[1:]
+        self.assertEqual(token, 'opaque-test-token')
+        from urllib.parse import parse_qs, urlsplit
+        query = parse_qs(urlsplit(path).query)
+        self.assertEqual(query['container'], ['nats-phase'])
+        self.assertEqual(query['stdin'], ['false'])
+        self.assertEqual(query['stdout'], ['true'])
+        self.assertEqual(query['stderr'], ['false'])
+        self.assertEqual(query['tty'], ['false'])
+        self.assertEqual(query['command'], verification_job.exec_vectors(
+            request, pod_uid, binding)['census_receipt_readback'])
+        self.assertEqual(execute.call_args.kwargs['max_bytes'], census_stream.MAX_TRANSPORT_BYTES)
+
+    def test_read_verification_census_returns_only_validated_same_pod_census(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
+        binding = {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'pv-voice-nats-source',
+            'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+            'source_node_name': 'k3s-worker-1',
+            'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'verification_uid': '22222222-2222-4222-8222-222222222222',
+            'verification_pv_name': 'pv-voice-nats-verify',
+            'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+            'verification_node_name': 'k3s-worker-1',
+        }
+        pod_uid = '44444444-4444-4444-8444-444444444444'
+        with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
+             patch.object(self.api, '_request', return_value={'metadata': {
+                 'uid': pod_uid, 'namespace': 'voice-staging'}}), \
+             patch.object(kube, '_websocket_exec', return_value=iter((b'framed-output',))) as execute, \
+             patch.object(census_stream, 'consume',
+                 side_effect=lambda chunks, **kwargs: (list(chunks), kwargs)) as consume:
+            result = self.api.read_verification_census('voice-staging', 'pod', pod_uid,
+                request, binding)
+        self.assertEqual(result, ([b'framed-output'], {
+            'operation': request['operation'], 'nonce': request['nonce'], 'pod_uid': pod_uid,
+            'source_pvc_uid': binding['source_uid'],
+            'verification_pvc_uid': binding['verification_uid'],
+        }))
+        self.assertEqual(execute.call_args.kwargs['max_bytes'], census_stream.MAX_TRANSPORT_BYTES)
+        self.assertEqual(consume.call_count, 1)
+
+    def test_read_verification_census_rejects_non_census_phase_before_api(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'archive'}
+        binding = {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'pv-voice-nats-source',
+            'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+            'source_node_name': 'k3s-worker-1',
+            'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'verification_uid': '22222222-2222-4222-8222-222222222222',
+            'verification_pv_name': 'pv-voice-nats-verify',
+            'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+            'verification_node_name': 'k3s-worker-1',
+        }
+        with patch.object(self.api, '_request') as read, \
+             patch.object(kube, '_websocket_exec') as execute, \
+             self.assertRaises(kube.KubeAPIError):
+            self.api.read_verification_census('voice-staging', 'pod',
+                '44444444-4444-4444-8444-444444444444', request, binding)
+        read.assert_not_called()
+        execute.assert_not_called()
+
+    def test_verification_exec_rejects_arbitrary_action_and_changed_pod(self):
+        request = {'operation': 'a' * 12, 'nonce': 'b' * 32, 'phase': 'census'}
+        binding = {
+            'source_claim': 'voice-nats-jsdata-d20261017a',
+            'source_uid': '11111111-1111-4111-8111-111111111111',
+            'source_pv_name': 'pv-voice-nats-source', 'source_pv_uid': '55555555-5555-4555-8555-555555555555',
+            'source_node_name': 'k3s-worker-1', 'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'verification_uid': '22222222-2222-4222-8222-222222222222',
+            'verification_pv_name': 'pv-voice-nats-verify', 'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
+            'verification_node_name': 'k3s-worker-1'}
+        with self.assertRaises(kube.KubeAPIError):
+            list(self.api.exec_pod_verification('voice-staging', 'pod',
+                '44444444-4444-4444-8444-444444444444', request, binding, 'arbitrary'))
+        with patch.object(self.api.tokens, 'read', return_value='opaque-test-token'), \
+             patch.object(self.api, '_request', return_value={'metadata': {
+                'uid': '99999999-9999-4999-8999-999999999999', 'namespace': 'voice-staging'}}), \
+             patch.object(kube, '_websocket_exec') as execute:
+            with self.assertRaises(kube.KubeAPIError):
+                list(self.api.exec_pod_verification('voice-staging', 'pod',
+                    '44444444-4444-4444-8444-444444444444', request, binding, 'census_receipt_readback'))
+        execute.assert_not_called()
 
     def test_rejects_non_https_or_unpinned_server_before_network(self):
         with self.assertRaises(kube.KubeAPIError):

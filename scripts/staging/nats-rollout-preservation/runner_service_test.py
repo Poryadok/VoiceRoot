@@ -21,6 +21,7 @@ class RunnerServiceTests(unittest.TestCase):
             'runner_closure_sha256': 'c' * 64, 'api_server': 'https://10.0.0.1:6443',
             'ca_file': service.CA_FILE, 'token_file': service.TOKEN_FILE,
             'state_dir': service.STATE_DIR, 'runner_image': 'ghcr.io/poryadok/voice-nats-rollout-runner@sha256:' + 'd' * 64,
+            'phase_image': 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'e' * 64,
             'storage_binding': self.binding, 'verification_pvc_size_bytes': 48 << 30,
             'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}
         self.path = Path(self.temp.name) / 'runner-config.json'
@@ -41,6 +42,7 @@ class RunnerServiceTests(unittest.TestCase):
 
     def test_candidate_selected_image_api_endpoint_or_storage_is_not_configurable(self):
         for update, error in (({'runner_image': 'latest'}, 'image_invalid'),
+            ({'phase_image': 'latest'}, 'phase_image_invalid'),
             ({'api_server': 'http://10.0.0.1:6443'}, 'server_invalid'),
             ({'storage_binding': self.binding | {'claim_uid': 'not-a-uid'}}, 'binding_invalid'),
             ({'app_release_sha': 'f' * 40}, 'config_shape_invalid')):
@@ -52,6 +54,7 @@ class RunnerServiceTests(unittest.TestCase):
                     'runner_closure_sha256': 'c' * 64, 'api_server': 'https://10.0.0.1:6443',
                     'ca_file': service.CA_FILE, 'token_file': service.TOKEN_FILE, 'state_dir': service.STATE_DIR,
                     'runner_image': 'ghcr.io/poryadok/voice-nats-rollout-runner@sha256:' + 'd' * 64,
+                    'phase_image': 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'e' * 64,
                     'storage_binding': self.binding, 'verification_pvc_size_bytes': 48 << 30,
                     'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}
 
@@ -71,6 +74,7 @@ class RunnerServiceTests(unittest.TestCase):
             ('verification_pvc_max_bytes', 1 << 63, 'verification_pvc_ceiling_invalid'),
             ('verification_storage_class', '', 'verification_storage_class_invalid'),
             ('verification_storage_class', 'Local Path', 'verification_storage_class_invalid'),
+            ('verification_storage_class', 'local..path', 'verification_storage_class_invalid'),
             ('verification_storage_class', 'local-path/', 'verification_storage_class_invalid'),
         ):
             with self.subTest(value=value):
