@@ -5346,41 +5346,232 @@ f13_checkpoint_duplicate_owner_producer_fixture() {
   fi
 }
 
+f13_run_synthetic_provenance_fixture_body() {
+  # Bash locals are dynamically scoped, so the synthetic collectors below see
+  # isolated checkpoint state. No fixture may target the real producer output
+  # or its authorization sidecars.
+  local game_checkpoint_snapshot_base="${game_checkpoint_snapshot_base}"
+  local game_checkpoint_snapshot_head="${game_checkpoint_snapshot_head}"
+  local game_checkpoint_snapshot_record="${game_checkpoint_snapshot_record}"
+  local game_checkpoint_aggregate_active="${game_checkpoint_aggregate_active}"
+  local game_checkpoint_aggregate_base="${game_checkpoint_aggregate_base}"
+  local game_checkpoint_aggregate_head="${game_checkpoint_aggregate_head}"
+  local game_checkpoint_aggregate_target="${game_checkpoint_aggregate_target}"
+  local game_checkpoint_aggregate_paths="${game_checkpoint_aggregate_paths}"
+  local game_checkpoint_aggregate_map="${game_checkpoint_aggregate_map}"
+  local game_checkpoint_aggregate_record="${game_checkpoint_aggregate_record}"
+  local game_checkpoint_aggregate_alias_map="${game_checkpoint_aggregate_alias_map}"
+  local f13_bot_only_delta
+
+  f13_game_checkpoint_projection_fixtures
+  f13_checkpoint_duplicate_owner_producer_fixture || exit 2
+
+  git -C "${f13_fixture_repo}" checkout -qb f13-bot-only-integration "${f13_fixture_base}"
+  git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture unrelated-only merge' f13-bot-source
+  f13_collect_develop_contributions \
+    "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-bot-only-map" || {
+    printf '%s\n' 'F13 oracle bug: unrelated-only contribution fixture was rejected' >&2
+    exit 2
+  }
+  f13_bot_only_delta="$(f13_delta_for_path \
+    "${f13_fixture_repo}" "${TMP_DIR}/f13-bot-only-map" 'protos/voice/bot/v1/bot.proto')" || {
+    printf '%s\n' 'F13 oracle bug: unrelated contribution lost its own delta' >&2
+    exit 2
+  }
+  [[ "$(cat "${f13_bot_only_delta}")" == 'protos/voice/bot/v1/bot.proto' ]] || {
+    printf '%s\n' 'F13 oracle bug: contribution delta included paths from another contribution' >&2
+    exit 2
+  }
+  git -C "${f13_fixture_repo}" checkout -qb f13-direct-contribution "${f13_fixture_base}"
+  mkdir -p "${f13_fixture_repo}/src/backend/voice"
+  printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/direct.go"
+  git -C "${f13_fixture_repo}" add src/backend/voice/direct.go
+  git -C "${f13_fixture_repo}" commit -qm 'F13 fixture direct contribution'
+  f13_collect_develop_contributions \
+    "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-direct-map" || {
+    printf '%s\n' 'F13 oracle bug: direct commit contribution fixture was rejected' >&2
+    exit 2
+  }
+  grep -Fqx $'src/backend/voice/direct.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-direct-map") || {
+    printf '%s\n' 'F13 oracle bug: direct commit delta lost its runtime trigger' >&2
+    exit 2
+  }
+
+}
+
+f13_run_synthetic_provenance_fixtures() {
+  local expected_snapshot_base="${game_checkpoint_snapshot_base}"
+  local expected_snapshot_head="${game_checkpoint_snapshot_head}"
+  local expected_snapshot_record="${game_checkpoint_snapshot_record}"
+  local expected_aggregate_active="${game_checkpoint_aggregate_active}"
+  local expected_aggregate_base="${game_checkpoint_aggregate_base}"
+  local expected_aggregate_head="${game_checkpoint_aggregate_head}"
+  local expected_aggregate_target="${game_checkpoint_aggregate_target}"
+  local expected_aggregate_paths="${game_checkpoint_aggregate_paths}"
+  local expected_aggregate_map="${game_checkpoint_aggregate_map}"
+  local expected_aggregate_record="${game_checkpoint_aggregate_record}"
+  local expected_aggregate_alias_map="${game_checkpoint_aggregate_alias_map}"
+  local expected_paths_hash expected_map_hash expected_row_approvals_hash expected_alias_approvals_hash
+  local expected_paths_present=false expected_map_present=false
+  local expected_row_approvals_present=false expected_alias_approvals_present=false
+  local f13_state_path f13_real_alias_context=false
+
+  if [[ -n "${game_checkpoint_aggregate_paths}" && -f "${game_checkpoint_aggregate_paths}" ]]; then
+    expected_paths_present=true
+    expected_paths_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_paths}")" || return 1
+  fi
+  if [[ -n "${game_checkpoint_aggregate_map}" && -f "${game_checkpoint_aggregate_map}" ]]; then
+    expected_map_present=true
+    expected_map_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}")" || return 1
+  fi
+  if [[ -n "${game_checkpoint_aggregate_map}" && -f "${game_checkpoint_aggregate_map}.game-snapshot-approvals" ]]; then
+    expected_row_approvals_present=true
+    expected_row_approvals_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}.game-snapshot-approvals")" || return 1
+  fi
+  if [[ -n "${game_checkpoint_aggregate_alias_map}" && -f "${game_checkpoint_aggregate_alias_map}" ]]; then
+    expected_alias_approvals_present=true
+    expected_alias_approvals_hash="$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_alias_map}")" || return 1
+  fi
+
+  # The five production-consumer assertions apply only when the current event
+  # actually produced the complete two-row R2 alias ledger for this aggregate.
+  if [[ "${f13_master_release_pr:-false}" == true &&
+    "${game_checkpoint_aggregate_map}" == "${TMP_DIR}/f13-contributions" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${game_checkpoint_aggregate_map}.game-snapshot-alias-approvals" &&
+    -f "${game_checkpoint_aggregate_paths}" && -f "${game_checkpoint_aggregate_map}" &&
+    -f "${game_checkpoint_aggregate_map}.game-snapshot-approvals" &&
+    -f "${game_checkpoint_aggregate_alias_map}" &&
+    "${game_checkpoint_snapshot_base}" == "${game_checkpoint_aggregate_base}" &&
+    "${game_checkpoint_snapshot_record}" == "${game_checkpoint_aggregate_record}" &&
+    "$(awk 'END { print NR+0 }' "${game_checkpoint_aggregate_alias_map}")" == 2 ]] &&
+    grep -Fxq -- 'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' "${game_checkpoint_aggregate_paths}" &&
+    grep -Fxq -- 'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql' "${game_checkpoint_aggregate_paths}" &&
+    awk -F '\t' '
+      $1 == "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql" { up++ }
+      $1 == "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql" { down++ }
+      $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql" &&
+      $1 != "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql" { bad=1 }
+      END { exit !(up == 1 && down == 1 && !bad) }
+    ' "${game_checkpoint_aggregate_alias_map}"; then
+    f13_real_alias_context=true
+    for f13_state_path in \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+      game_checkpoint_alias_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: production alias authorization failed before synthetic fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+    for f13_state_path in \
+      'src/backend/voice/internal/grpcsvc/matchsquad_member.go' \
+      'src/backend/voice/internal/grpcsvc/matchsquad_voice.go' \
+      'src/backend/voice/internal/livekit/token.go'; do
+      game_checkpoint_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: production ordinary Game provenance failed before synthetic fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+  fi
+
+  f13_run_synthetic_provenance_fixture_body
+
+  [[ "${game_checkpoint_snapshot_base}" == "${expected_snapshot_base}" &&
+    "${game_checkpoint_snapshot_head}" == "${expected_snapshot_head}" &&
+    "${game_checkpoint_snapshot_record}" == "${expected_snapshot_record}" &&
+    "${game_checkpoint_aggregate_active}" == "${expected_aggregate_active}" &&
+    "${game_checkpoint_aggregate_base}" == "${expected_aggregate_base}" &&
+    "${game_checkpoint_aggregate_head}" == "${expected_aggregate_head}" &&
+    "${game_checkpoint_aggregate_target}" == "${expected_aggregate_target}" &&
+    "${game_checkpoint_aggregate_paths}" == "${expected_aggregate_paths}" &&
+    "${game_checkpoint_aggregate_map}" == "${expected_aggregate_map}" &&
+    "${game_checkpoint_aggregate_record}" == "${expected_aggregate_record}" &&
+    "${game_checkpoint_aggregate_alias_map}" == "${expected_aggregate_alias_map}" ]] || {
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the active release checkpoint context' >&2
+    return 1
+  }
+  if [[ "${expected_paths_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_paths}" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_paths}")" == "${expected_paths_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production projection path list' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_paths}" && -e "${game_checkpoint_aggregate_paths}" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production projection path list' >&2
+    return 1
+  fi
+  if [[ "${expected_map_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_map}" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}")" == "${expected_map_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production contribution map' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_map}" && -e "${game_checkpoint_aggregate_map}" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production contribution map' >&2
+    return 1
+  fi
+  if [[ "${expected_row_approvals_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_map}.game-snapshot-approvals" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_map}.game-snapshot-approvals")" == "${expected_row_approvals_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production row approval map' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_map}" && -e "${game_checkpoint_aggregate_map}.game-snapshot-approvals" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production row approval map' >&2
+    return 1
+  fi
+  if [[ "${expected_alias_approvals_present}" == true ]]; then
+    [[ -f "${game_checkpoint_aggregate_alias_map}" &&
+      "$(git -C "${ROOT}" hash-object -- "${game_checkpoint_aggregate_alias_map}")" == "${expected_alias_approvals_hash}" ]] || {
+      printf '%s\n' 'F13 oracle bug: synthetic fixtures changed the production alias ledger' >&2
+      return 1
+    }
+  elif [[ -n "${game_checkpoint_aggregate_alias_map}" && -e "${game_checkpoint_aggregate_alias_map}" ]]; then
+    printf '%s\n' 'F13 oracle bug: synthetic fixtures created a production alias ledger' >&2
+    return 1
+  fi
+  if [[ "${f13_real_alias_context}" == true ]]; then
+    [[ "${game_checkpoint_aggregate_map}" == "${TMP_DIR}/f13-contributions" &&
+      "${game_checkpoint_aggregate_alias_map}" == "${game_checkpoint_aggregate_map}.game-snapshot-alias-approvals" &&
+      -f "${game_checkpoint_aggregate_map}" && -f "${game_checkpoint_aggregate_alias_map}" &&
+      "${game_checkpoint_snapshot_base}" == "${game_checkpoint_aggregate_base}" &&
+      "${game_checkpoint_snapshot_record}" == "${game_checkpoint_aggregate_record}" ]] || {
+      printf '%s\n' 'F13 oracle bug: active release output/alias ledger was not preserved after synthetic fixtures' >&2
+      return 1
+    }
+    for f13_state_path in \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.up.sql' \
+      'src/backend/migrations/voice_db/000011_match_squad_operations.down.sql'; do
+      game_checkpoint_alias_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: preserved release alias authorization failed after fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+    for f13_state_path in \
+      'src/backend/voice/internal/grpcsvc/matchsquad_member.go' \
+      'src/backend/voice/internal/grpcsvc/matchsquad_voice.go' \
+      'src/backend/voice/internal/livekit/token.go'; do
+      game_checkpoint_path_allowed_for_provenance \
+        "${ROOT}" "${game_checkpoint_aggregate_map}" "${f13_state_path}" || {
+        printf 'F13 oracle bug: preserved ordinary Game provenance failed after fixtures: %s\n' \
+          "${f13_state_path}" >&2
+        return 1
+      }
+    done
+  fi
+  if [[ "${f13_real_alias_context}" == true ]]; then
+    printf '%s\n' 'F13 producer checkpoint context survives synthetic fixtures: PASS' >&2
+  fi
+}
+
 # The producer-shaped fixtures also call this provenance helper. Invoke them
 # only after every collector and path-authorization function is defined.
-f13_game_checkpoint_projection_fixtures
-f13_checkpoint_duplicate_owner_producer_fixture || exit 2
-
-git -C "${f13_fixture_repo}" checkout -qb f13-bot-only-integration "${f13_fixture_base}"
-git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture unrelated-only merge' f13-bot-source
-f13_collect_develop_contributions \
-  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-bot-only-map" || {
-  printf '%s\n' 'F13 oracle bug: unrelated-only contribution fixture was rejected' >&2
-  exit 2
-}
-f13_bot_only_delta="$(f13_delta_for_path \
-  "${f13_fixture_repo}" "${TMP_DIR}/f13-bot-only-map" 'protos/voice/bot/v1/bot.proto')" || {
-  printf '%s\n' 'F13 oracle bug: unrelated contribution lost its own delta' >&2
-  exit 2
-}
-[[ "$(cat "${f13_bot_only_delta}")" == 'protos/voice/bot/v1/bot.proto' ]] || {
-  printf '%s\n' 'F13 oracle bug: contribution delta included paths from another contribution' >&2
-  exit 2
-}
-git -C "${f13_fixture_repo}" checkout -qb f13-direct-contribution "${f13_fixture_base}"
-mkdir -p "${f13_fixture_repo}/src/backend/voice"
-printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/direct.go"
-git -C "${f13_fixture_repo}" add src/backend/voice/direct.go
-git -C "${f13_fixture_repo}" commit -qm 'F13 fixture direct contribution'
-f13_collect_develop_contributions \
-  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-direct-map" || {
-  printf '%s\n' 'F13 oracle bug: direct commit contribution fixture was rejected' >&2
-  exit 2
-}
-grep -Fqx $'src/backend/voice/direct.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-direct-map") || {
-  printf '%s\n' 'F13 oracle bug: direct commit delta lost its runtime trigger' >&2
-  exit 2
-}
+f13_run_synthetic_provenance_fixtures
 
 while IFS= read -r file; do
   if game_checkpoint_alias_path_allowed_for_provenance \
