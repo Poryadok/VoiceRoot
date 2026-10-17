@@ -1797,6 +1797,7 @@ fi
 # merge. The immutable record binds source base B0, snapshot H, and source A;
 # event base B may equal B0 or add separately governed paths before result T.
 f13_game_checkpoint_projection_fixtures() {
+local game_projection_path game_projection_h_entry game_projection_a_entry game_projection_t_entry
 f13_checkpoint_merge_tree_fixtures || return 1
 f13_diag_stderr="${TMP_DIR}/f13-guarded-diagnostic-stderr"
 f13_diag_stdout="$(f13_emit_guarded_failure_diagnostic guarded_target_mismatch \
@@ -1870,15 +1871,40 @@ game_checkpoint_snapshot_base="${game_projection_base}"
 game_checkpoint_snapshot_head="${game_projection_head}"
 game_checkpoint_snapshot_record="${game_projection_record}"
 
+# The fixture snapshot is an exact projection at H; the post-record source
+# head A and integration target T carry no further Game-path changes. Check
+# the complete entries, including the intentional deletion, before testing
+# the aggregate ancestry predicates below.
+for game_projection_path in \
+  'protos/voice/fixture/v1/fixture.proto' \
+  'src/backend/voice/internal/fixture/runtime.go' \
+  'src/backend/role/internal/fixture/obsolete.go'; do
+  game_projection_h_entry="$(f13_git_tree_entry_record \
+    "${game_projection_repo}" "${game_projection_head}" "${game_projection_path}")" || return 1
+  game_projection_a_entry="$(f13_git_tree_entry_record \
+    "${game_projection_repo}" "${game_projection_actual_head}" "${game_projection_path}")" || return 1
+  game_projection_t_entry="$(f13_git_tree_entry_record \
+    "${game_projection_repo}" "${game_projection_target}" "${game_projection_path}")" || return 1
+  [[ "${game_projection_h_entry}" == "${game_projection_a_entry}" &&
+    "${game_projection_h_entry}" == "${game_projection_t_entry}" ]] || {
+    printf '%s\n' 'F13 oracle bug: valid B0/H/R/A/T fixture changed a full Game path entry' >&2
+    return 1
+  }
+done
+
 # Exercise every boundary of the narrow pre-H duplicate-owner supersession
 # rule independently of the full producer fixture below.
 game_checkpoint_aggregate_active=true
 game_checkpoint_aggregate_base="${game_projection_base}"
-game_checkpoint_aggregate_head="${game_projection_head}"
+game_checkpoint_aggregate_head="${game_projection_actual_head}"
 game_checkpoint_aggregate_target="${game_projection_target}"
 game_checkpoint_aggregate_record="${game_projection_record}"
 game_checkpoint_aggregate_paths="${TMP_DIR}/game-projection-supersession-paths"
 printf '%s\n' 'protos/voice/fixture/v1/fixture.proto' >"${game_checkpoint_aggregate_paths}"
+game_checkpoint_aggregate_binding_valid "${game_projection_repo}" || {
+  printf '%s\n' 'F13 oracle bug: valid B0/H/R/A/T aggregate fixture was rejected' >&2
+  exit 2
+}
 if ! game_checkpoint_duplicate_owner_supersession_allowed \
   "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
   "${game_projection_base}" "${game_projection_base}" \
@@ -1947,7 +1973,12 @@ if game_checkpoint_duplicate_owner_supersession_allowed \
   printf '%s\n' 'F13 oracle bug: source aggregate not descended from H was accepted' >&2
   exit 2
 fi
-game_checkpoint_aggregate_head="${game_projection_head}"
+game_checkpoint_aggregate_head="${game_projection_actual_head}"
+game_checkpoint_aggregate_target="${game_projection_target}"
+game_checkpoint_aggregate_binding_valid "${game_projection_repo}" || {
+  printf '%s\n' 'F13 oracle bug: valid B0/H/R/A/T aggregate fixture was rejected before target-negative case' >&2
+  exit 2
+}
 game_checkpoint_aggregate_target="${game_projection_base}"
 if game_checkpoint_duplicate_owner_supersession_allowed \
   "${game_projection_repo}" 'protos/voice/fixture/v1/fixture.proto' \
