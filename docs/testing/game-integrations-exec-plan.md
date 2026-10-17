@@ -3252,3 +3252,130 @@ The record is only evidence for the source implementation checkpoint. It does
 not satisfy A1, `BE-A3-MATCHSQUAD-SFU-FENCE`, full Game sprint acceptance,
 STAGING, live provider/device acceptance, or human TTenrec closure. The final
 source activation PR still requires every required check green before merge.
+
+## Game implementation checkpoint record R2: MatchSquad migration renumber
+
+This is an append-only second implementation record. The preceding R1 record
+and its source tuple remain unchanged. R2 records one explicit, complete
+MatchSquad voice-database migration renumber; it does not create a general
+non-Game path exception, infer authorization from matching file contents, or
+claim the exact-T producer run has passed.
+
+### Snapshot identities and projection
+
+- Snapshot base `B0`: `28f1a0a26f3f23bfb9242592aea9c92fd659ee2d` (M17).
+- Snapshot source head `H2`: `7270d22d05475afee9e20fbb1b95377c138ebdf4`.
+- Snapshot record `R2`: this docs-only commit, whose sole parent is H2. It is
+  not self-hashed or named in this record.
+- R1 remains the immutable record at `d97e8acd6824c5dd08d4f70be93fc7f91d6f6fce`.
+- `P2` is exactly the 48 Game-family paths changed from B0 to H2 under the
+  existing F13 domain. No path is added by taking a per-path union with R1.
+- The later source head A2, event base B, and synthetic merge target T2 are
+  event-specific. The release producer must validate their actual Git graph,
+  exact path delta, full entries, and row ownership; this record does not
+  fabricate those future event identities or results.
+
+Each row below is `path | mode | type | object ID at H2`. The 48 literal
+entries are the complete P2 projection; compare full entries and explicit
+absence, and reject extra or missing Game-family paths.
+
+```text
+protos/voice/calls/v1/calls.proto | 100644 | blob | 80f78a7e2a91a8c800a06017d83cd605512e46c2
+protos/voice/chat/v1/chat.proto | 100644 | blob | e5a46a96139f578365a5bd1239513d1929ec8fe9
+protos/voice/matchmaking/v1/matchmaking.proto | 100644 | blob | ca6a863a1e0ed636ac06e0f6b57500ea4295b425
+src/backend/chat/pb/voice/chat/v1/chat.pb.go | 100644 | blob | e12f9e678790abe2cae4adc8f791f2e3b2bb8768
+src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go | 100644 | blob | 0c15eb208eee17f50b1375c28d9a36c3bd32d204
+src/backend/messaging/pb/voice/chat/v1/chat.pb.go | 100644 | blob | e12f9e678790abe2cae4adc8f791f2e3b2bb8768
+src/backend/messaging/pb/voice/chat/v1/chat_grpc.pb.go | 100644 | blob | 0c15eb208eee17f50b1375c28d9a36c3bd32d204
+src/backend/migrations/voice_db/000011_match_squad_operations.down.sql | 100644 | blob | 9c506399d95a0f460bbdff8972b14fff9bd645ca
+src/backend/migrations/voice_db/000011_match_squad_operations.up.sql | 100644 | blob | 19bd5687fea0f556260d27fd1ecf5308de835395
+src/backend/user/pb/voice/calls/v1/calls.pb.go | 100644 | blob | badca1d66a8e83292dca02d32cb3c6b2c8bce560
+src/backend/user/pb/voice/calls/v1/calls_grpc.pb.go | 100644 | blob | 08d7ffa5b1dbdde4ac12daf8d043f1172a767190
+src/backend/user/pb/voice/chat/v1/chat.pb.go | 100644 | blob | e12f9e678790abe2cae4adc8f791f2e3b2bb8768
+src/backend/user/pb/voice/chat/v1/chat_grpc.pb.go | 100644 | blob | 0c15eb208eee17f50b1375c28d9a36c3bd32d204
+src/backend/user/pb/voice/matchmaking/v1/matchmaking.pb.go | 100644 | blob | 843f9b45e12c04dc2f8b17ca88dc5d61c66ea1fb
+src/backend/voice/internal/grpcsvc/matchsquad_member.go | 100644 | blob | 210a155f69b0ed8a4dee174b82d65c2bc97efc51
+src/backend/voice/internal/grpcsvc/matchsquad_member_test.go | 100644 | blob | 6b69dcf23c9c3fb0fc60881256d3b620b7c497e7
+src/backend/voice/internal/grpcsvc/matchsquad_voice.go | 100644 | blob | 25eae9f156da9e75bb548b69a163f75c807bfe39
+src/backend/voice/internal/grpcsvc/voice_grpc.go | 100644 | blob | dd499f08ad3ed0536334b9bc954cc44b898a46d7
+src/backend/voice/internal/livekit/token.go | 100644 | blob | ccb2da14d3ed18d940fd250268666a819bfc8b80
+src/backend/voice/internal/livekit/token_test.go | 100644 | blob | e6d9d11b41e49794cae969084a52bed76c90d16f
+src/backend/voice/internal/matchsquad/compaction.go | 100644 | blob | 276ef17a8d3bf768ac0d2dd9f79440ffbab45f49
+src/backend/voice/internal/matchsquad/member.go | 100644 | blob | 54dac2a046c6d411fd276e75a72c32f8e3d6df6a
+src/backend/voice/internal/matchsquad/member_repair.go | 100644 | blob | a52d7a6e26d51fd0a5367c206ef872cb9360384e
+src/backend/voice/internal/matchsquad/member_test.go | 100644 | blob | a9071c48a38090c931275d9fd07fd723e6c56b9d
+src/backend/voice/internal/matchsquad/postgres_integration_test.go | 100644 | blob | cc96e05622a3e6825621359cb22409a2454bcc15
+src/backend/voice/internal/matchsquad/service.go | 100644 | blob | 8731d5982bbc46e6562508f8330681fd315194e2
+src/backend/voice/internal/matchsquad/service_test.go | 100644 | blob | 30611158cdf911c8d60595b3f2ecfff275fc3967
+src/backend/voice/internal/matchsquadmemberprincipal/config.go | 100644 | blob | fe1e3aa15a68157914cafbb3b2df4321301e1023
+src/backend/voice/internal/matchsquadmemberprincipal/config_test.go | 100644 | blob | 42a98bc88b76d148af2589cc4aef271e773199d3
+src/backend/voice/internal/matchsquadmemberprincipal/interceptor.go | 100644 | blob | 27add503c32a4c6f387c9504ef8d673723b26f8f
+src/backend/voice/internal/matchsquadmemberprincipal/interceptor_test.go | 100644 | blob | 925ca8e114ae39a56a8b472525989614272b264d
+src/backend/voice/internal/matchsquadmemberprincipal/runtime.go | 100644 | blob | 4c05054efb749cc64defebd1e0062cf30f72258b
+src/backend/voice/internal/matchsquadmemberprincipal/runtime_test.go | 100644 | blob | 7643b20a53e30d2f8739600913d50d69b765cea3
+src/backend/voice/internal/matchsquadprincipal/config.go | 100644 | blob | 7ed63cb5ab09c23a6451f63e4f47f443495059c9
+src/backend/voice/internal/matchsquadprincipal/config_test.go | 100644 | blob | e805c0f85fd1a7882b5fbce2186e5db42a02dad3
+src/backend/voice/internal/matchsquadprincipal/interceptor.go | 100644 | blob | 4bea2de6c04599dc3a4c45828d4ab50893131e64
+src/backend/voice/internal/matchsquadprincipal/interceptor_test.go | 100644 | blob | b26077b6cf87347acc914813b8b0ceadbae1069e
+src/backend/voice/internal/matchsquadprincipal/runtime.go | 100644 | blob | 2c128cba6eb55bbbe9e7eb424123cd22cb24489b
+src/backend/voice/internal/store/call_store.go | 100644 | blob | 384697d279852e64d6eb7fe619781cf1ce941d22
+src/backend/voice/internal/store/call_store_test.go | 100644 | blob | d87f58c373e6d0fee7a87618522e7c73684ae3ab
+src/backend/voice/internal/store/redis_store.go | 100644 | blob | e83042971ccb4dc7c8501ab7858dd0edef1d531e
+src/backend/voice/internal/store/redis_store_test.go | 100644 | blob | cf2bf69c2882d79f72ed7d1ceae187d52b606401
+src/backend/voice/main.go | 100644 | blob | b5434cfd21b94bd69ff25f912858f12f0aec6813
+src/backend/voice/pb/voice/calls/v1/calls.pb.go | 100644 | blob | badca1d66a8e83292dca02d32cb3c6b2c8bce560
+src/backend/voice/pb/voice/calls/v1/calls_grpc.pb.go | 100644 | blob | 08d7ffa5b1dbdde4ac12daf8d043f1172a767190
+src/backend/voice/pb/voice/chat/v1/chat.pb.go | 100644 | blob | e12f9e678790abe2cae4adc8f791f2e3b2bb8768
+src/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go | 100644 | blob | 0c15eb208eee17f50b1375c28d9a36c3bd32d204
+src/backend/voice/pb/voice/matchmaking/v1/matchmaking.pb.go | 100644 | blob | 843f9b45e12c04dc2f8b17ca88dc5d61c66ea1fb
+```
+
+### Explicit migration rename binding
+
+R2 adds a two-member, one-to-one alias for the old MatchSquad migration pair.
+The old names are absent at B0, H2, the actual PR head/result, and T2. Each
+destination is a P2 member with the exact H2/A2/T2 entry below. The competing
+SpaceMedia `000010` pair already exists at B0 and is pinned separately. These
+rows bind the observed outer output row and nested source row independently;
+the manual 020911 deletion integration is a third identity, not a parent or
+owner of the output row.
+
+The alias row has 21 positional fields, in this order: old path; old full
+entry; outer row owner; outer row first parent; outer row source base; outer
+row source head; outer row content-comparison base; outer row source-base
+candidates; nested owner; nested first parent; nested source base; nested
+source head; nested content-comparison base; nested source-base candidates;
+old-path entry at the nested source base; deletion integration commit; its
+first parent; second parent; unique merge base; destination path; destination
+full entry at H2. Content-comparison bases are row identity metadata, not
+authority ancestry. The integration is independently required to be an
+ancestor of H2, but is not asserted to be an ancestor of the 0590 output row.
+
+<!-- F13-MIGRATION-ALIASES-V2-BEGIN -->
+src/backend/migrations/voice_db/000010_match_squad_operations.up.sql | 100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395 | 0590ac862c5027ff9266f8403af1011ef2134f63 | 5a42388c95377d7d0b718e823b35f317a71bf851 | 53529ea60dec670e64d1ae61724a7b8daff582bc | e33b8a3b09828055f690957b596b843177410ff6 | 5a42388c95377d7d0b718e823b35f317a71bf851 | 07d752a2f0f4daa0fe3aecc36bdbe73812dfd833 | e33b8a3b09828055f690957b596b843177410ff6 | 53529ea60dec670e64d1ae61724a7b8daff582bc | 53529ea60dec670e64d1ae61724a7b8daff582bc | e33b8a3b09828055f690957b596b843177410ff6 | 1909f0ee3a3d038d83c468158fe99f6ef0a120bb | 53529ea60dec670e64d1ae61724a7b8daff582bc | 100644 blob b4442e910cad45e8d4bd31c0d1ff14426199553d | 020911cf4cb70be47bd575dcd8268685b5c6002d | f79dfa4d93c2d5bc7efa5fe1f713dcecde761b97 | ce05d869e133cfec521439386320b714a32ffdb3 | e8f5c812ad1ac1880e0850f5863312ff9502183d | src/backend/migrations/voice_db/000011_match_squad_operations.up.sql | 100644 blob 19bd5687fea0f556260d27fd1ecf5308de835395
+src/backend/migrations/voice_db/000010_match_squad_operations.down.sql | 100644 blob 9c506399d95a0f460bbdff8972b14fff9bd645ca | 0590ac862c5027ff9266f8403af1011ef2134f63 | 5a42388c95377d7d0b718e823b35f317a71bf851 | 53529ea60dec670e64d1ae61724a7b8daff582bc | e33b8a3b09828055f690957b596b843177410ff6 | 5a42388c95377d7d0b718e823b35f317a71bf851 | 07d752a2f0f4daa0fe3aecc36bdbe73812dfd833 | e33b8a3b09828055f690957b596b843177410ff6 | 53529ea60dec670e64d1ae61724a7b8daff582bc | 53529ea60dec670e64d1ae61724a7b8daff582bc | e33b8a3b09828055f690957b596b843177410ff6 | 1909f0ee3a3d038d83c468158fe99f6ef0a120bb | 53529ea60dec670e64d1ae61724a7b8daff582bc | 100644 blob 08e3a0ea2536307c1affc0c6ddfa0376b8083c67 | 020911cf4cb70be47bd575dcd8268685b5c6002d | f79dfa4d93c2d5bc7efa5fe1f713dcecde761b97 | ce05d869e133cfec521439386320b714a32ffdb3 | e8f5c812ad1ac1880e0850f5863312ff9502183d | src/backend/migrations/voice_db/000011_match_squad_operations.down.sql | 100644 blob 9c506399d95a0f460bbdff8972b14fff9bd645ca
+<!-- F13-MIGRATION-ALIASES-V2-END -->
+
+The collision table is a literal two-entry full-tree binding at B0 and H2:
+
+<!-- F13-MIGRATION-COLLISION-V2-BEGIN -->
+src/backend/migrations/voice_db/000010_space_media_admission.up.sql | 100644 blob 171033aaf172370f76ede86349b042154bd2ff71
+src/backend/migrations/voice_db/000010_space_media_admission.down.sql | 100644 blob 83953384c9caa2ae2aa8d9485a208bb5ead5e33f
+<!-- F13-MIGRATION-COLLISION-V2-END -->
+
+The pinned Git 2.39.5 merge computation records that 020911 has the exact
+parents/base above, that both old path entries were present in its first
+parent, absent in its second parent and merge base, and absent in its result.
+That deletion is a manual migration renumber, not a deterministic clean merge.
+The emitted 0590 row is separately bound to its actual 5a423 first parent and
+e33 second parent, while the nested e33 row is bound to 535. Every actual
+producer must revalidate both unique rows, all 21 fields, the full entries,
+the B0 collision pair, destination membership, and the final A2/T2 trees.
+Missing, extra, duplicate, half-pair, wrong-version, wrong-path, wrong-entry,
+wrong-mode/type, post-H2, and untrusted owner rows remain rejected. R1's
+versioned record remains unchanged and cannot authorize this alias.
+
+This R2 record is source bookkeeping only. It does not claim the exact-T2
+producer batch or final A2 checks have passed; it does not complete P3,
+`BE-A3-MATCHSQUAD-SFU-FENCE`, A1, staging, live-provider/device testing, or
+human TTenrec closure. All required final-A2 checks must pass before merge.
