@@ -158,6 +158,75 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                                          "value": "4f99e5d7-15ed-4ce9-bbc4-cd999fa91475"})
         self.assertEqual([op["value"]["port"] for op in operations[2:]], [9094, 9095])
 
+    def test_service_plan_hash_matches_json_patch_append_order(self):
+        target = overlay.TARGETS[0]
+        base = sanitized_live_api_fixture()[(target.kind, target.name)]
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"].insert(0, {
+            "name": "principal-jwks", "port": 8443, "protocol": "TCP",
+            "targetPort": "principal-jwks"})
+        client = mock.Mock()
+        client.render.return_value = desired
+        patch_path = Path(__file__).resolve().parents[2] / "deploy/dev/match-squad-trust-overlay" / target.patch_file
+        plan = overlay.build_object_plan(client, target, base, patch_path)
+        expected = copy.deepcopy(base)
+        expected["spec"]["ports"].append(desired["spec"]["ports"][0])
+        self.assertEqual(plan["desiredObservedSha256"], overlay.observed_render_hash(target, expected))
+
+    def test_existing_service_port_order_cannot_be_rewritten(self):
+        base = captured_service("voice-chat", "service-uid", "17", [
+            {"name": "http", "port": 8080, "targetPort": 8080},
+            {"name": "grpc", "port": 9090, "targetPort": 9090}])
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"] = [desired["spec"]["ports"][1],
+                                     desired["spec"]["ports"][0],
+                                     {"name": "match-squad-principal", "port": 9092,
+                                      "targetPort": "match-squad-principal"}]
+        with self.assertRaisesRegex(overlay.OverlayError, "existing list order"):
+            overlay.object_patch(base, desired)
+
+    def test_deployment_patch_predictions_append_each_list_in_operation_order(self):
+        base = sanitized_live_api_fixture()[("Deployment", "voice-voice")]
+        desired = copy.deepcopy(base)
+        pod_spec = desired["spec"]["template"]["spec"]
+        pod_spec["containers"][0]["env"].append({"name": "NEW_ENV", "value": "x"})
+        pod_spec["containers"][0]["ports"].extend([
+            {"name": "new-a", "containerPort": 9094},
+            {"name": "new-b", "containerPort": 9095}])
+        pod_spec["containers"][0]["volumeMounts"].append(
+            {"name": "new-volume", "mountPath": "/new", "readOnly": True})
+        pod_spec["volumes"].append({"name": "new-volume", "configMap": {"name": "new-config"}})
+        operations = overlay.object_patch(base, desired)
+        self.assertEqual([op["path"] for op in operations[2:]], [
+            "/spec/template/spec/containers/0/env/-",
+            "/spec/template/spec/containers/0/ports/-",
+            "/spec/template/spec/containers/0/ports/-",
+            "/spec/template/spec/containers/0/volumeMounts/-",
+            "/spec/template/spec/volumes/-"])
+        self.assertEqual([op["value"]["name"] for op in operations[2:]],
+                         ["NEW_ENV", "new-a", "new-b", "new-volume", "new-volume"])
+
+    def test_api_postcondition_failure_marks_same_uid_new_rv_as_persisted(self):
+        target = overlay.TARGETS[0]
+        base = captured_service("voice-matchmaking", overlay.EXPECTED_OBJECT_UIDS[
+            ("Service", "voice-matchmaking")], "17", [
+                {"name": "http", "port": 8080, "targetPort": 8080}])
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"].append({"name": "principal-jwks", "port": 8443,
+                                           "targetPort": "principal-jwks"})
+        plan = {"kind": "Service", "name": target.name, "patchFile": target.patch_file,
+                "uid": base["metadata"]["uid"], "resourceVersion": "17",
+                "operations": overlay.object_patch(base, desired),
+                "desiredObservedSha256": "f" * 64}
+        actual = copy.deepcopy(base)
+        actual["metadata"]["resourceVersion"] = "18"
+        actual["spec"]["ports"].append(desired["spec"]["ports"][1])
+        client = overlay.KubectlClient()
+        with mock.patch.object(client, "call", return_value=actual):
+            with self.assertRaisesRegex(overlay.OverlayError, "did not match") as raised:
+                client.apply(plan)
+        self.assertTrue(raised.exception.persisted)
+
     def test_api_patch_request_is_single_guarded_json_patch(self):
         target = overlay.TARGETS[1]
         base = captured_service("voice-chat", "service-uid", "17", [])
