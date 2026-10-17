@@ -1,5 +1,5 @@
 import base64
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 import importlib.util
 import json
 from pathlib import Path
@@ -65,15 +65,18 @@ class MediaPkiTests(unittest.TestCase):
             self.assertIn('-o', args)
             self.assertNotIn('json', args)
             self.assertNotIn('.data', args[-1])
+            self.assertIn('{{.metadata.resourceVersion}}|{{.type}}|', args[-1])
+            self.assertNotIn('{{.metadata.type}}', args[-1])
             self.assertIn('{{if .metadata.labels}}', args[-1])
             self.assertIn('{{if .metadata.annotations}}', args[-1])
             return snapshots.pop(0)
 
         with mock.patch.object(pki, 'kubectl', side_effect=select) as query:
-            value = pki.metadata('secret', pki.MATCHMAKING_SECRET)
+            value, secret_type = pki.metadata_snapshot('secret', pki.MATCHMAKING_SECRET)
         self.assertEqual(value['uid'], 'tls-uid')
         self.assertEqual(value['resourceVersion'], 'tls-rv')
-        self.assertEqual(value['type'], 'kubernetes.io/tls')
+        self.assertNotIn('type', value)
+        self.assertEqual(secret_type, 'kubernetes.io/tls')
         self.assertEqual(value['labels'], pki.NAMESPACE_LABELS)
         self.assertEqual(value['annotations'], {'voice.io/media-pki-operation': 'operation-1'})
         self.assertEqual(query.call_count, 1)
@@ -96,16 +99,17 @@ class MediaPkiTests(unittest.TestCase):
     def test_legacy_resume_pins_opaque_type_only_for_unchanged_live_leaf(self):
         expected = {'uid': 'voice-uid', 'beforeResourceVersion': 'voice-rv',
                     'oldLeafSha256': 'old-leaf-fingerprint', 'newLeafSha256': 'new-leaf-fingerprint'}
-        live = {'uid': 'voice-uid', 'resourceVersion': 'voice-rv', 'type': 'Opaque'}
-        self.assertEqual(pki.voice_secret_type_for_resume(expected, live, 'old-leaf-fingerprint'),
+        live = {'uid': 'voice-uid', 'resourceVersion': 'voice-rv'}
+        self.assertEqual(pki.voice_secret_type_for_resume(
+            expected, live, 'Opaque', 'old-leaf-fingerprint'),
                          ('Opaque', True))
         self.assertEqual(expected['secretType'], 'Opaque')
         with self.assertRaisesRegex(ValueError, 'only be pinned before'):
             pki.voice_secret_type_for_resume(
                 {'uid': 'voice-uid', 'beforeResourceVersion': 'voice-rv',
                  'oldLeafSha256': 'old-leaf-fingerprint', 'newLeafSha256': 'new-leaf-fingerprint'},
-                {'uid': 'voice-uid', 'resourceVersion': 'changed-rv', 'type': 'Opaque'},
-                'old-leaf-fingerprint')
+                {'uid': 'voice-uid', 'resourceVersion': 'changed-rv'},
+                'Opaque', 'old-leaf-fingerprint')
 
     def test_export_is_exactly_dev_ca_and_three_tls_leaves(self):
         result = pki.safe_secret_list(secret_list())
@@ -265,6 +269,11 @@ class MediaPkiTests(unittest.TestCase):
                 return b''
 
             def replace(kind, metadata_value, body):
+                if kind == 'deployment' and body.get('metadata', {}).get('name') == 'voice-voice':
+                    persisted = json.loads((state / 'last-apply.json').read_text(encoding='utf-8'))
+                    deployment_expected = persisted['resources']['voice-voice-deployment']
+                    self.assertEqual(deployment_expected['targetTemplateSha256'],
+                                     pki.deployment_template_sha256(body))
                 replaced.append((kind, json.loads(json.dumps(body))))
                 return 'replacement-rv-' + str(len(replaced))
 
@@ -273,7 +282,9 @@ class MediaPkiTests(unittest.TestCase):
             with mock.patch.object(pki, 'operator_lock', return_value=nullcontext()), \
                     mock.patch.object(pki, 'verify_namespace', return_value={'uid': 'namespace-uid'}), \
                     mock.patch.object(pki, 'issuer', return_value=secret_list()), \
-                    mock.patch.object(pki, 'metadata', side_effect=lambda kind, name: metadata_values[(kind, name)]), \
+                    mock.patch.object(pki, 'metadata_snapshot', side_effect=lambda kind, name: (
+                        {key: value for key, value in metadata_values[(kind, name)].items() if key != 'type'},
+                        metadata_values[(kind, name)].get('type'))), \
                     mock.patch.object(pki, 'kubectl', side_effect=fake_kubectl), \
                     mock.patch.object(pki, 'replace_object', side_effect=replace), \
                     mock.patch.object(pki, 'fingerprint_pem', side_effect=lambda pem: fingerprints[pem]):
@@ -284,14 +295,18 @@ class MediaPkiTests(unittest.TestCase):
             changed_ca = replaced[0][1]
             changed_role = replaced[1][1]
             changed_voice_tls = replaced[2][1]
+            changed_voice_deployment = replaced[3][1]
             self.assertEqual(base64.b64decode(changed_ca['data']['jwks-ca.crt']),
                              old_bundle + b'public ca')
             self.assertEqual(changed_voice_tls['type'], 'Opaque')
+            self.assertNotIn('type', changed_voice_tls['metadata'])
             role_env = {item['name']: item['value'] for item in
                         changed_role['spec']['template']['spec']['containers'][0]['env']}
             self.assertEqual(role_env['S2S_JWKS_CA_FILE'], '/etc/voice/media/ca/jwks-ca.crt')
             receipt = json.loads((state / 'last-apply.json').read_text(encoding='utf-8'))
             self.assertEqual(receipt['phase'], 'leaf-cutover-complete')
+            self.assertEqual(changed_voice_deployment['spec']['template']['metadata']['annotations'][
+                'voice.io/media-pki-operation'], receipt['operationId'])
             self.assertTrue(receipt['resources'][pki.MATCHMAKING_CA_SECRET]['uid'])
             self.assertTrue(receipt['resources'][pki.GIS_SECRET]['uid'])
             self.assertTrue(receipt['resources'][pki.MATCHMAKING_SECRET]['uid'])
@@ -362,6 +377,7 @@ class MediaPkiTests(unittest.TestCase):
             }
             existing = {pki.MATCHMAKING_CA_SECRET, pki.GIS_SECRET}
             created = []
+            mismatch_deployment_snapshot = {'next': False}
 
             def fake_kubectl(*args, input_bytes=None):
                 if args[:4] == ('get', 'secret', pki.CA_SECRET, '-o'):
@@ -371,7 +387,12 @@ class MediaPkiTests(unittest.TestCase):
                 if args[:3] == ('get', 'deployment', pki.ROLE):
                     return json.dumps(role).encode()
                 if args[:3] == ('get', 'deployment', 'voice-voice'):
-                    return json.dumps(voice_deployment).encode()
+                    observed = json.loads(json.dumps(voice_deployment))
+                    if mismatch_deployment_snapshot['next']:
+                        mismatch_deployment_snapshot['next'] = False
+                        observed['metadata']['resourceVersion'] = 'interleaved-rv'
+                        observed['spec']['template']['spec']['restartPolicy'] = 'Never'
+                    return json.dumps(observed).encode()
                 if args[:2] == ('get', 'secret'):
                     name = args[2]
                     if '--ignore-not-found' in args:
@@ -399,9 +420,19 @@ class MediaPkiTests(unittest.TestCase):
             with mock.patch.object(pki, 'operator_lock', return_value=nullcontext()), \
                     mock.patch.object(pki, 'verify_namespace', return_value={'uid': 'namespace-uid'}), \
                     mock.patch.object(pki, 'issuer', return_value=secret_list()), \
-                    mock.patch.object(pki, 'metadata', side_effect=fake_metadata), \
+                    mock.patch.object(pki, 'metadata_snapshot', side_effect=lambda kind, name: (
+                        {key: value for key, value in fake_metadata(kind, name).items() if key != 'type'},
+                        fake_metadata(kind, name).get('type'))), \
                     mock.patch.object(pki, 'kubectl', side_effect=fake_kubectl), \
+                    mock.patch.object(pki, 'replace_object') as replace_object, \
                     mock.patch.object(pki, 'fingerprint_pem', side_effect=lambda pem: fingerprints[pem]):
+                journal = state / 'last-apply.json'
+                original_journal = journal.read_bytes()
+                mismatch_deployment_snapshot['next'] = True
+                with self.assertRaisesRegex(ValueError, 'changed between metadata and full-object reads'):
+                    pki.resume('sha256:' + 'a' * 64, state)
+                self.assertEqual(journal.read_bytes(), original_journal)
+                replace_object.assert_not_called()
                 pki.resume('sha256:' + 'a' * 64, state)
 
             self.assertEqual(created, [pki.MATCHMAKING_SECRET])
@@ -410,6 +441,187 @@ class MediaPkiTests(unittest.TestCase):
             self.assertEqual(result['resources'][pki.GIS_SECRET]['uid'], 'gis-uid')
             self.assertEqual(result['resources'][pki.MATCHMAKING_SECRET]['uid'],
                              'new-' + pki.MATCHMAKING_SECRET + '-uid')
+
+    @unittest.skipUnless(hasattr(os, 'geteuid'), 'operator is Linux-only')
+    def test_resume_migrates_legacy_journal_recovers_lost_deployment_receipt_and_rejects_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            state.chmod(0o700)
+            image = 'sha256:' + 'a' * 64
+            old_bundle = b'previous public bundle\n'
+            new_bundle = pki.append_public_ca(old_bundle, b'public ca')
+            old_voice = b'old public Voice certificate'
+            operation_id = 'operation-legacy-leaf-cutover'
+            receipt = {
+                'namespace': pki.NAMESPACE, 'namespaceUid': 'namespace-uid', 'volume': pki.VOLUME,
+                'operationId': operation_id, 'issuerImage': image,
+                'phase': 'leaf-cutover-started',
+                'resources': {
+                    pki.CA_SECRET: {'uid': 'ca-uid', 'beforeResourceVersion': 'ca-before',
+                                    'afterResourceVersion': 'ca-after', 'oldCaSha256': 'old-ca-fp',
+                                    'newCaSha256': 'new-ca-fp'},
+                    pki.ROLE: {'uid': 'role-uid', 'beforeResourceVersion': 'role-before',
+                               'afterResourceVersion': 'role-after'},
+                    pki.VOICE_SECRET: {'uid': 'voice-tls-uid', 'beforeResourceVersion': 'voice-rv',
+                                       'oldLeafSha256': 'old-leaf-fp', 'newLeafSha256': 'new-leaf-fp'},
+                    pki.MATCHMAKING_CA_SECRET: {'createOnly': True, 'uid': 'mm-ca-uid',
+                                                'afterResourceVersion': 'mm-ca-rv',
+                                                'publicCaSha256': 'new-ca-fp'},
+                    pki.GIS_SECRET: {'createOnly': True, 'uid': None, 'afterResourceVersion': None},
+                    pki.MATCHMAKING_SECRET: {'createOnly': True, 'uid': None, 'afterResourceVersion': None},
+                    'voice-voice-deployment': {'uid': 'voice-deploy-uid',
+                                               'beforeResourceVersion': 'voice-deploy-rv'},
+                },
+                'newGisLeafSha256': 'new-leaf-fp', 'newMatchmakingLeafSha256': 'new-leaf-fp',
+                'rollback': {'oldJwksCaBundleBase64': base64.b64encode(old_bundle).decode()},
+            }
+            journal = state / 'last-apply.json'
+            journal.write_text(json.dumps(receipt), encoding='utf-8')
+            os.chmod(journal, 0o600)
+            ca_object = {'apiVersion': 'v1', 'kind': 'Secret',
+                         'metadata': {'name': pki.CA_SECRET, 'namespace': pki.NAMESPACE,
+                                      'uid': 'ca-uid', 'resourceVersion': 'ca-after'},
+                         'data': {'ca.crt': base64.b64encode(b'old public ca').decode(),
+                                  'jwks-ca.crt': base64.b64encode(new_bundle).decode()}}
+            role = role_deployment()
+            role['metadata'].update({'uid': 'role-uid', 'resourceVersion': 'role-after'})
+            role = pki.role_outbound_bundle(role)
+            voice_deployment = {
+                'apiVersion': 'apps/v1', 'kind': 'Deployment',
+                'metadata': {'name': 'voice-voice', 'namespace': pki.NAMESPACE,
+                             'uid': 'voice-deploy-uid', 'resourceVersion': 'voice-deploy-rv'},
+                'spec': {'template': {'metadata': {'annotations': {
+                            'voice.io/media-jwks-cert-sha256': 'old-leaf-fp'}},
+                      'spec': {'containers': [], 'volumes': []}}}}
+            current_voice = {'certificate': old_voice}
+            metadata_values = {
+                ('secret', pki.CA_SECRET): {'name': pki.CA_SECRET, 'namespace': pki.NAMESPACE,
+                                            'uid': 'ca-uid', 'resourceVersion': 'ca-after', 'type': 'Opaque'},
+                ('deployment', pki.ROLE): {'name': pki.ROLE, 'namespace': pki.NAMESPACE,
+                                           'uid': 'role-uid', 'resourceVersion': 'role-after'},
+                ('secret', pki.VOICE_SECRET): {'name': pki.VOICE_SECRET, 'namespace': pki.NAMESPACE,
+                                               'uid': 'voice-tls-uid', 'resourceVersion': 'voice-rv',
+                                               'type': 'Opaque'},
+                ('deployment', 'voice-voice'): {'name': 'voice-voice', 'namespace': pki.NAMESPACE,
+                                                'uid': 'voice-deploy-uid',
+                                                'resourceVersion': 'voice-deploy-rv'},
+            }
+            replaced = []
+
+            def metadata_snapshot(kind, name):
+                value = metadata_values[(kind, name)]
+                return ({key: item for key, item in value.items() if key != 'type'},
+                        value.get('type'))
+
+            def fake_kubectl(*args, input_bytes=None):
+                if args[:4] == ('get', 'secret', pki.CA_SECRET, '-o'):
+                    return json.dumps(ca_object).encode()
+                if args[:3] == ('get', 'secret', pki.VOICE_SECRET):
+                    return base64.b64encode(current_voice['certificate'])
+                if args[:3] == ('get', 'deployment', pki.ROLE):
+                    return json.dumps(role).encode()
+                if args[:3] == ('get', 'deployment', 'voice-voice'):
+                    return json.dumps(voice_deployment).encode()
+                if args[:2] == ('rollout', 'status'):
+                    return b''
+                raise AssertionError('unexpected Kubernetes call: ' + repr(args[:3]))
+
+            def replace(kind, _metadata_value, body):
+                if kind == 'secret':
+                    persisted = json.loads(journal.read_text(encoding='utf-8'))
+                    self.assertEqual(persisted['resources'][pki.VOICE_SECRET]['secretType'], 'Opaque')
+                    current_voice['certificate'] = base64.b64decode(body['data']['tls.crt'])
+                    metadata_values[('secret', pki.VOICE_SECRET)]['resourceVersion'] = 'replacement-rv-1'
+                else:
+                    voice_deployment.clear()
+                    voice_deployment.update(json.loads(json.dumps(body)))
+                    voice_deployment['metadata']['resourceVersion'] = 'replacement-rv-2'
+                    metadata_values[('deployment', 'voice-voice')]['resourceVersion'] = 'replacement-rv-2'
+                replaced.append((kind, json.loads(json.dumps(body))))
+                return 'replacement-rv-' + str(len(replaced))
+
+            fingerprints = {b'old public ca': 'old-ca-fp', b'public ca': 'new-ca-fp',
+                            old_voice: 'old-leaf-fp', b'public cert': 'new-leaf-fp'}
+            real_write_receipt = pki.write_receipt
+            receipt_write_lost = {'done': False}
+
+            def lose_deployment_receipt_once(path, candidate, temp_path):
+                deployment_expected = candidate['resources']['voice-voice-deployment']
+                if (not receipt_write_lost['done'] and
+                        deployment_expected.get('afterResourceVersion') == 'replacement-rv-2'):
+                    receipt_write_lost['done'] = True
+                    raise OSError('simulated lost receipt write after Deployment replace')
+                return real_write_receipt(path, candidate, temp_path)
+
+            common_patches = [
+                mock.patch.object(pki, 'operator_lock', return_value=nullcontext()),
+                mock.patch.object(pki, 'verify_namespace', return_value={'uid': 'namespace-uid'}),
+                mock.patch.object(pki, 'issuer', return_value=secret_list()),
+                mock.patch.object(pki, 'metadata_snapshot', side_effect=metadata_snapshot),
+                mock.patch.object(pki, 'kubectl', side_effect=fake_kubectl),
+                mock.patch.object(pki, 'replace_object', side_effect=replace),
+                mock.patch.object(pki, 'write_receipt', side_effect=lose_deployment_receipt_once),
+                mock.patch.object(pki, 'reconcile_operation_secret'),
+                mock.patch.object(pki, 'fingerprint_pem', side_effect=lambda pem: fingerprints[pem]),
+            ]
+            with ExitStack() as stack:
+                for patcher in common_patches:
+                    stack.enter_context(patcher)
+                with self.assertRaisesRegex(OSError, 'simulated lost receipt write'):
+                    pki.resume(image, state)
+                interrupted = json.loads(journal.read_text(encoding='utf-8'))
+                self.assertNotIn('afterResourceVersion',
+                                 interrupted['resources']['voice-voice-deployment'])
+                target_template_sha = interrupted['resources']['voice-voice-deployment'][
+                    'targetTemplateSha256']
+                self.assertEqual(target_template_sha,
+                                 pki.deployment_template_sha256(replaced[1][1]))
+                self.assertEqual(interrupted['phase'], 'voice-leaf-rotated')
+
+                # Drift inside the receipt-write window is rejected even when
+                # both operation annotations remain unchanged.
+                voice_deployment['spec']['template']['spec']['restartPolicy'] = 'Never'
+                voice_deployment['metadata']['resourceVersion'] = 'drift-before-replay-rv'
+                metadata_values[('deployment', 'voice-voice')]['resourceVersion'] = 'drift-before-replay-rv'
+                with self.assertRaisesRegex(ValueError, 'template differs from the recorded operation target'):
+                    pki.resume(image, state)
+                refused = json.loads(journal.read_text(encoding='utf-8'))
+                self.assertNotIn('afterResourceVersion',
+                                 refused['resources']['voice-voice-deployment'])
+                self.assertEqual(refused['phase'], 'voice-leaf-rotated')
+
+                # Exact same-operation template replay adopts the returned RV.
+                voice_deployment['spec']['template'] = json.loads(json.dumps(
+                    replaced[1][1]['spec']['template']))
+                voice_deployment['metadata']['resourceVersion'] = 'recovered-rv'
+                metadata_values[('deployment', 'voice-voice')]['resourceVersion'] = 'recovered-rv'
+                pki.resume(image, state)
+                recovered = json.loads(journal.read_text(encoding='utf-8'))
+                self.assertEqual(recovered['resources']['voice-voice-deployment']['afterResourceVersion'],
+                                 'recovered-rv')
+
+                # A later edit preserving the operation annotations still fails CAS.
+                metadata_values[('deployment', 'voice-voice')]['resourceVersion'] = 'drift-rv'
+                voice_deployment['metadata']['resourceVersion'] = 'drift-rv'
+                with self.assertRaisesRegex(ValueError, 'changed after the recorded operation restart'):
+                    pki.resume(image, state)
+                self.assertEqual(json.loads(journal.read_text(encoding='utf-8'))['phase'],
+                                 'leaf-cutover-complete')
+
+            self.assertEqual([kind for kind, _ in replaced], ['secret', 'deployment'])
+            voice_replacement = replaced[0][1]
+            self.assertEqual(voice_replacement['type'], 'Opaque')
+            self.assertNotIn('type', voice_replacement['metadata'])
+            self.assertEqual(voice_replacement['metadata']['annotations'][
+                'voice.io/media-pki-operation'], operation_id)
+            deployment_annotations = replaced[1][1]['spec']['template']['metadata']['annotations']
+            self.assertEqual(deployment_annotations['voice.io/media-jwks-cert-sha256'], 'new-leaf-fp')
+            self.assertEqual(deployment_annotations['voice.io/media-pki-operation'], operation_id)
+            migrated = json.loads(journal.read_text(encoding='utf-8'))
+            self.assertEqual(migrated['resources'][pki.VOICE_SECRET]['secretType'], 'Opaque')
+            self.assertEqual(migrated['resources'][pki.VOICE_SECRET]['afterResourceVersion'],
+                             'replacement-rv-1')
+            self.assertEqual(migrated['phase'], 'leaf-cutover-complete')
 
     def test_resume_accepts_unchanged_voice_leaf_only_at_recorded_resource_version(self):
         expected = {'oldLeafSha256': 'a' * 64, 'newLeafSha256': 'a' * 64,

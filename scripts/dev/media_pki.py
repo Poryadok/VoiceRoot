@@ -72,10 +72,15 @@ def kubectl(*args, input_bytes=None):
 
 
 def metadata(kind, name):
+    return metadata_snapshot(kind, name)[0]
+
+
+def metadata_snapshot(kind, name):
     value = resource_metadata(kind, name, namespaced=True)
     if value.get('name') != name or value.get('namespace') != NAMESPACE or not value.get('uid') or not value.get('resourceVersion'):
         raise ValueError('unexpected DEV resource identity')
-    return {key: value[key] for key in ('name', 'namespace', 'uid', 'resourceVersion', 'type', 'labels', 'annotations') if key in value}
+    metadata_value = {key: value[key] for key in ('name', 'namespace', 'uid', 'resourceVersion', 'labels', 'annotations') if key in value}
+    return metadata_value, value.get('type')
 
 
 def resource_metadata(kind, name, *, namespaced):
@@ -245,7 +250,7 @@ def accept_unchanged_voice_leaf(current_fingerprint, current_resource_version, e
     return True
 
 
-def voice_secret_type_for_resume(expected, voice_meta, current_fingerprint):
+def voice_secret_type_for_resume(expected, voice_meta, current_type, current_fingerprint):
     """Pin a legacy receipt's live Secret type only before its recorded leaf changes."""
     if voice_meta.get('uid') != expected.get('uid'):
         raise ValueError('Voice TLS Secret identity changed since cutover')
@@ -254,14 +259,14 @@ def voice_secret_type_for_resume(expected, voice_meta, current_fingerprint):
         if (current_fingerprint != expected.get('oldLeafSha256') or
                 voice_meta.get('resourceVersion') != expected.get('beforeResourceVersion')):
             raise ValueError('legacy receipt type can only be pinned before Voice leaf replacement')
-        recorded = voice_meta.get('type')
+        recorded = current_type
         if not recorded:
             raise ValueError('Voice TLS Secret type is missing')
         expected['secretType'] = recorded
         migrated = True
     else:
         migrated = False
-    if voice_meta.get('type') != recorded:
+    if current_type != recorded:
         raise ValueError('Voice TLS Secret type differs from the pinned operation')
     return recorded, migrated
 
@@ -303,14 +308,31 @@ def role_outbound_bundle(deployment):
     return value
 
 
-def voice_tls_restart(deployment, cert_fingerprint):
+def voice_tls_restart(deployment, cert_fingerprint, operation_id):
     value = copy.deepcopy(deployment)
     if value.get('kind') != 'Deployment' or value.get('metadata', {}).get('name') != 'voice-voice':
         raise ValueError('unexpected Voice Deployment')
     template = value.get('spec', {}).get('template', {})
     annotations = template.setdefault('metadata', {}).setdefault('annotations', {})
     annotations['voice.io/media-jwks-cert-sha256'] = cert_fingerprint
+    annotations['voice.io/media-pki-operation'] = operation_id
     return value
+
+
+def deployment_template_sha256(deployment):
+    template = deployment.get('spec', {}).get('template')
+    if not isinstance(template, dict):
+        raise ValueError('Voice Deployment pod template is missing')
+    canonical = json.dumps(template, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def require_bound_snapshot(meta, resource, description):
+    """Reject a full-object read that does not match its selected UID/RV snapshot."""
+    observed = resource.get('metadata', {})
+    if (observed.get('uid') != meta.get('uid') or
+            observed.get('resourceVersion') != meta.get('resourceVersion')):
+        raise ValueError(description + ' changed between metadata and full-object reads; retry')
 
 
 def fingerprint_pem(pem):
@@ -371,8 +393,7 @@ def apply(image, state_dir):
         role_obj = role_outbound_bundle(role_original)
         role_obj.setdefault('metadata', {}).update(role_meta)
 
-        voice_meta = metadata('secret', VOICE_SECRET)
-        voice_secret_type = voice_meta.get('type')
+        voice_meta, voice_secret_type = metadata_snapshot('secret', VOICE_SECRET)
         if not voice_secret_type:
             raise ValueError('Voice TLS Secret type is missing')
         voice_public = kubectl('get', 'secret', VOICE_SECRET,
@@ -453,9 +474,14 @@ def apply(image, state_dir):
         if (voice_deploy_original.get('metadata', {}).get('uid') != voice_deploy_meta['uid'] or
                 voice_deploy_original.get('metadata', {}).get('resourceVersion') != voice_deploy_meta['resourceVersion']):
             raise ValueError('Voice Deployment changed during preflight; retry')
-        voice_deploy = voice_tls_restart(voice_deploy_original, new_voice_fingerprint)
+        voice_deploy = voice_tls_restart(voice_deploy_original, new_voice_fingerprint,
+                                         receipt['operationId'])
         receipt['resources']['voice-voice-deployment'] = {
-            'uid': voice_deploy_meta['uid'], 'beforeResourceVersion': voice_deploy_meta['resourceVersion']}
+            'uid': voice_deploy_meta['uid'], 'beforeResourceVersion': voice_deploy_meta['resourceVersion'],
+            'targetTemplateSha256': deployment_template_sha256(voice_deploy),
+            'operationMarkerRequired': True}
+        # Bind the exact intended pod template before any Voice Deployment replace.
+        write_receipt(receipt_path, receipt, tmp)
 
         if new_voice_cert != old_voice_cert:
             phase = 'leaf-cutover-started'
@@ -582,11 +608,22 @@ def resume(image, state_dir):
         if namespace['uid'] != receipt.get('namespaceUid'):
             raise ValueError('DEV namespace identity changed since the recorded operation')
         exported = safe_secret_list(issuer(image, 'export'))
+        # Fail before any receipt migration if the Deployment metadata and full
+        # object reads straddle a concurrent edit. The action-point read below
+        # is independently rebound immediately before adoption or replacement.
+        deployment_expected = receipt['resources']['voice-voice-deployment']
+        deployment_meta = metadata('deployment', 'voice-voice')
+        if deployment_meta['uid'] != deployment_expected['uid']:
+            raise ValueError('Voice Deployment identity changed since cutover')
+        deployment = json.loads(kubectl('get', 'deployment', 'voice-voice', '-o', 'json'))
+        require_bound_snapshot(deployment_meta, deployment, 'Voice Deployment')
+
         ca_expected = receipt['resources'][CA_SECRET]
         ca_meta = metadata('secret', CA_SECRET)
         if ca_meta['uid'] != ca_expected['uid']:
             raise ValueError('media CA identity changed since cutover; refusing resume')
         ca_obj = json.loads(kubectl('get', 'secret', CA_SECRET, '-o', 'json'))
+        require_bound_snapshot(ca_meta, ca_obj, 'media CA Secret')
         if set(ca_obj.get('data', {})) != {'ca.crt', 'jwks-ca.crt'}:
             raise ValueError('media CA Secret shape changed; refusing resume')
         ca_bytes = base64.b64decode(ca_obj['data']['ca.crt'], validate=True)
@@ -614,6 +651,7 @@ def resume(image, state_dir):
         if role_meta['uid'] != role_expected['uid']:
             raise ValueError('Role Deployment identity changed since cutover; refusing resume')
         role_obj = json.loads(kubectl('get', 'deployment', ROLE, '-o', 'json'))
+        require_bound_snapshot(role_meta, role_obj, 'Role Deployment')
         desired_role = role_outbound_bundle(role_obj)
         if desired_role['spec'] != role_obj.get('spec'):
             if (phase not in ('leaf-cutover-started', 'trust-added') or
@@ -630,19 +668,25 @@ def resume(image, state_dir):
                                   path, state_dir / '.last-apply.json.tmp')
 
         voice_expected = receipt['resources'][VOICE_SECRET]
-        voice_meta = metadata('secret', VOICE_SECRET)
+        voice_meta, voice_secret_type = metadata_snapshot('secret', VOICE_SECRET)
         if voice_meta['uid'] != voice_expected['uid']:
             raise ValueError('Voice TLS Secret identity changed since cutover')
         public = kubectl('get', 'secret', VOICE_SECRET,
                          '-o', 'go-template={{index .data "tls.crt"}}')
         current_cert = base64.b64decode(public, validate=True)
+        voice_after_meta, voice_after_type = metadata_snapshot('secret', VOICE_SECRET)
+        if (voice_meta.get('uid') != voice_after_meta.get('uid') or
+                voice_meta.get('resourceVersion') != voice_after_meta.get('resourceVersion') or
+                voice_secret_type != voice_after_type):
+            raise ValueError('Voice TLS Secret changed during public certificate read; retry')
         current_fp = fingerprint_pem(current_cert)
         desired = exported[VOICE_SECRET]
         desired_cert = base64.b64decode(desired['data']['tls.crt'], validate=True)
         desired_fp = fingerprint_pem(desired_cert)
         if desired_fp != voice_expected['newLeafSha256']:
             raise ValueError('issuer leaf changed since cutover; preserve receipt and review forward reissue')
-        recorded_type, migrated_type = voice_secret_type_for_resume(voice_expected, voice_meta, current_fp)
+        recorded_type, migrated_type = voice_secret_type_for_resume(
+            voice_expected, voice_meta, voice_secret_type, current_fp)
         if migrated_type:
             write_receipt(path, receipt, state_dir / '.last-apply.json.tmp')
         desired['type'] = recorded_type
@@ -667,7 +711,9 @@ def resume(image, state_dir):
                     voice_meta.get('annotations', {}).get('voice.io/media-pki-operation') != receipt['operationId']):
                 raise ValueError('Voice leaf matches but its operation identity is not pinned')
             voice_expected['afterResourceVersion'] = voice_meta['resourceVersion']
-            receipt['phase'] = 'voice-leaf-rotated'
+            if phase in ('leaf-cutover-started', 'trust-added', 'role-trust-switched',
+                         'matchmaking-ca-create-intent', 'matchmaking-ca-created'):
+                receipt['phase'] = 'voice-leaf-rotated'
         else:
             raise ValueError('Voice leaf matches neither receipt fingerprint; refusing resume')
         write_receipt(path, receipt, state_dir / '.last-apply.json.tmp')
@@ -677,14 +723,47 @@ def resume(image, state_dir):
         if deployment_meta['uid'] != deployment_expected['uid']:
             raise ValueError('Voice Deployment identity changed since cutover')
         deployment = json.loads(kubectl('get', 'deployment', 'voice-voice', '-o', 'json'))
+        require_bound_snapshot(deployment_meta, deployment, 'Voice Deployment')
         annotations = deployment.get('spec', {}).get('template', {}).get('metadata', {}).get('annotations', {})
-        if annotations.get('voice.io/media-jwks-cert-sha256') != current_fp:
+        target_fingerprint = voice_expected['newLeafSha256']
+        target_deployment = voice_tls_restart(deployment, target_fingerprint, receipt['operationId'])
+        target_template_sha = deployment_template_sha256(target_deployment)
+        recorded_template_sha = deployment_expected.get('targetTemplateSha256')
+        target_is_live = annotations.get('voice.io/media-jwks-cert-sha256') == target_fingerprint
+        operation_is_live = annotations.get('voice.io/media-pki-operation') == receipt['operationId']
+        if recorded_template_sha is None:
+            recorded_resource_version = deployment_expected.get('afterResourceVersion')
+            if target_is_live and recorded_resource_version is not None:
+                if deployment_meta['resourceVersion'] != recorded_resource_version:
+                    raise ValueError('Voice Deployment changed after the recorded operation restart')
+                # Older receipts pinned only UID/RV/fingerprint. Preserve their
+                # exact guarded replay and add a template commitment for later runs.
+                deployment_expected['targetTemplateSha256'] = deployment_template_sha256(deployment)
+                deployment_expected['operationMarkerRequired'] = operation_is_live
+            else:
+                if (target_is_live and operation_is_live and
+                        deployment_meta['resourceVersion'] != deployment_expected['beforeResourceVersion']):
+                    raise ValueError('Voice Deployment has no pre-replace template commitment for recovery')
+                deployment_expected['targetTemplateSha256'] = target_template_sha
+                deployment_expected['operationMarkerRequired'] = True
+            write_receipt(path, receipt, state_dir / '.last-apply.json.tmp')
+            recorded_template_sha = deployment_expected['targetTemplateSha256']
+        operation_marker_required = deployment_expected.get('operationMarkerRequired', True)
+        if operation_marker_required and recorded_template_sha != target_template_sha:
+            raise ValueError('Voice Deployment template differs from the recorded operation target')
+        if target_is_live and (operation_is_live or not operation_marker_required):
+            if deployment_template_sha256(deployment) != recorded_template_sha:
+                raise ValueError('Voice Deployment template differs from the recorded operation target')
+            recorded_resource_version = deployment_expected.get('afterResourceVersion')
+            if (recorded_resource_version is not None and
+                    deployment_meta['resourceVersion'] != recorded_resource_version):
+                raise ValueError('Voice Deployment changed after the recorded operation restart')
+            deployment_expected['afterResourceVersion'] = deployment_meta['resourceVersion']
+        else:
             if deployment_meta['resourceVersion'] != deployment_expected['beforeResourceVersion']:
                 raise ValueError('Voice Deployment changed outside the recorded operation')
-            deployment = voice_tls_restart(deployment, current_fp)
+            deployment = target_deployment
             deployment_expected['afterResourceVersion'] = replace_object('deployment', {}, deployment)
-        else:
-            deployment_expected['afterResourceVersion'] = deployment_meta['resourceVersion']
         write_receipt(path, receipt, state_dir / '.last-apply.json.tmp')
 
         reconcile_operation_secret(GIS_SECRET, exported[GIS_SECRET], 'tls.crt',
