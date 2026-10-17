@@ -19,9 +19,7 @@ class RunnerServiceTests(unittest.TestCase):
             'state_dir': service.STATE_DIR, 'runner_image': 'ghcr.io/poryadok/voice-nats-rollout-runner@sha256:' + 'd' * 64,
             'phase_image': 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'e' * 64,
             'verification_pvc_size_bytes': 48 << 30,
-            'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path',
-            'replacement_pvc_size_bytes': 48 << 30, 'replacement_pvc_max_bytes': 50 << 30,
-            'replacement_storage_class': 'local-path'}
+            'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}
         self.path = Path(self.temp.name) / 'runner-config.json'
         self.write()
 
@@ -61,9 +59,7 @@ class RunnerServiceTests(unittest.TestCase):
                     'runner_image': 'ghcr.io/poryadok/voice-nats-rollout-runner@sha256:' + 'd' * 64,
                     'phase_image': 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'e' * 64,
                     'verification_pvc_size_bytes': 48 << 30,
-                    'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path',
-                    'replacement_pvc_size_bytes': 48 << 30, 'replacement_pvc_max_bytes': 50 << 30,
-                    'replacement_storage_class': 'local-path'}
+                    'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}
 
     def test_verification_pvc_size_ceiling_and_storage_class_are_required(self):
         loaded = service.load_config(self.path, self.root, owner_uid=os.geteuid())
@@ -100,35 +96,19 @@ class RunnerServiceTests(unittest.TestCase):
                 self.config[field] = {'verification_pvc_size_bytes': 48 << 30,
                     'verification_pvc_max_bytes': 50 << 30, 'verification_storage_class': 'local-path'}[field]
 
-    def test_replacement_pvc_capacity_and_class_are_independent_required_inputs(self):
+    def test_obsolete_replacement_pvc_settings_are_not_part_of_trusted_config(self):
         loaded = service.load_config(self.path, self.root, owner_uid=os.geteuid())
-        self.assertEqual(loaded['replacement_pvc_size_bytes'], 48 << 30)
-        self.assertEqual(loaded['replacement_pvc_max_bytes'], 50 << 30)
-        self.assertEqual(loaded['replacement_storage_class'], 'local-path')
-        for field, value, expected in (
-            ('replacement_pvc_size_bytes', True, 'replacement_pvc_ceiling_invalid'),
-            ('replacement_pvc_size_bytes', 0, 'replacement_pvc_ceiling_invalid'),
-            ('replacement_pvc_size_bytes', 51 << 30, 'replacement_pvc_ceiling_invalid'),
-            ('replacement_pvc_max_bytes', 1 << 63, 'replacement_pvc_ceiling_invalid'),
-            ('replacement_storage_class', '', 'replacement_storage_class_invalid'),
-            ('replacement_storage_class', 'local..path', 'replacement_storage_class_invalid'),
-        ):
-            with self.subTest(field=field, value=value):
+        self.assertNotIn('replacement_pvc_size_bytes', loaded)
+        self.assertNotIn('replacement_pvc_max_bytes', loaded)
+        self.assertNotIn('replacement_storage_class', loaded)
+        for field, value in (('replacement_pvc_size_bytes', 48 << 30),
+                             ('replacement_pvc_max_bytes', 50 << 30),
+                             ('replacement_storage_class', 'local-path')):
+            with self.subTest(field=field):
                 self.config[field] = value; self.write()
-                with self.assertRaisesRegex(service.ServiceError, expected):
-                    service.load_config(self.path, self.root, owner_uid=os.geteuid())
-                self.config[field] = {'replacement_pvc_size_bytes': 48 << 30,
-                    'replacement_pvc_max_bytes': 50 << 30,
-                    'replacement_storage_class': 'local-path'}[field]
-        for field in ('replacement_pvc_size_bytes', 'replacement_pvc_max_bytes',
-                      'replacement_storage_class'):
-            with self.subTest(missing=field):
-                self.config.pop(field); self.write()
                 with self.assertRaisesRegex(service.ServiceError, 'config_shape_invalid'):
                     service.load_config(self.path, self.root, owner_uid=os.geteuid())
-                self.config[field] = {'replacement_pvc_size_bytes': 48 << 30,
-                    'replacement_pvc_max_bytes': 50 << 30,
-                    'replacement_storage_class': 'local-path'}[field]
+                del self.config[field]
 
     def test_rejects_mutable_or_symlinked_config(self):
         self.path.chmod(0o644)

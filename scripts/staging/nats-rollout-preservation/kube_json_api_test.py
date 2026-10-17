@@ -103,6 +103,14 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
         self.assertTrue(all(call[0].get_header('Accept') == 'application/json' for call in self.calls))
         self.assertTrue(all(call[1].check_hostname and call[1].verify_mode for call in self.calls))
 
+    def test_storage_class_read_is_cluster_scoped_and_rejects_untrusted_name(self):
+        with patch.object(self.api, '_request', return_value={'kind': 'StorageClass'}) as read:
+            self.assertEqual(self.api.get_storage_class('local-path'), {'kind': 'StorageClass'})
+        read.assert_called_once_with('GET', '/apis/storage.k8s.io/v1/storageclasses/local-path')
+        with patch.object(self.api, '_request') as read, self.assertRaises(kube.KubeAPIError):
+            self.api.get_storage_class('../escape')
+        read.assert_not_called()
+
     def test_native_stage_gets_are_namespaced_and_fixed_kind(self):
         with patch.object(self.api, '_request', return_value={'metadata': {}}) as get:
             self.api.get_service('voice-staging', 'voice-nats')
@@ -408,11 +416,13 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'source_pv_name': 'pv-voice-nats-source',
             'source_pv_uid': '55555555-5555-4555-8555-555555555555',
             'source_node_name': 'k3s-worker-1',
+            'source_hostname': 'worker-1.internal',
             'verification_claim': 'voice-nats-verify-' + 'a' * 12,
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify',
             'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
             'verification_node_name': 'k3s-worker-1',
+            'verification_hostname': 'worker-1.internal',
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
         pod = {'metadata': {'uid': pod_uid, 'namespace': 'voice-staging'}}
@@ -581,11 +591,13 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'source_pv_name': 'pv-voice-nats-source',
             'source_pv_uid': '55555555-5555-4555-8555-555555555555',
             'source_node_name': 'k3s-worker-1',
+            'source_hostname': 'worker-1.internal',
             'verification_claim': 'voice-nats-verify-' + 'a' * 12,
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify',
             'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
             'verification_node_name': 'k3s-worker-1',
+            'verification_hostname': 'worker-1.internal',
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
         files = {name: base64.b64encode(b'x').decode() for name in kube.VERIFICATION_INPUT_FILES}
@@ -649,11 +661,13 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'source_pv_name': 'pv-voice-nats-source',
             'source_pv_uid': '55555555-5555-4555-8555-555555555555',
             'source_node_name': 'k3s-worker-1',
+            'source_hostname': 'worker-1.internal',
             'verification_claim': 'voice-nats-verify-' + 'a' * 12,
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify',
             'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
             'verification_node_name': 'k3s-worker-1',
+            'verification_hostname': 'worker-1.internal',
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
         archive = {'sha256': 'a' * 64, 'bytes': 123}
@@ -685,11 +699,13 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'source_pv_name': 'pv-voice-nats-source',
             'source_pv_uid': '55555555-5555-4555-8555-555555555555',
             'source_node_name': 'k3s-worker-1',
+            'source_hostname': 'worker-1.internal',
             'verification_claim': 'voice-nats-verify-' + 'a' * 12,
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify',
             'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
             'verification_node_name': 'k3s-worker-1',
+            'verification_hostname': 'worker-1.internal',
         }
         pod_uid = '44444444-4444-4444-8444-444444444444'
         archive = {'sha256': 'a' * 64, 'bytes': 123}
@@ -720,10 +736,10 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'source_claim': 'voice-nats-jsdata-d20261017a',
             'source_uid': '11111111-1111-4111-8111-111111111111',
             'source_pv_name': 'pv-voice-nats-source', 'source_pv_uid': '55555555-5555-4555-8555-555555555555',
-            'source_node_name': 'k3s-worker-1', 'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'source_node_name': 'k3s-worker-1', 'source_hostname': 'worker-1.internal', 'verification_claim': 'voice-nats-verify-' + 'a' * 12,
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify', 'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
-            'verification_node_name': 'k3s-worker-1'}
+            'verification_node_name': 'k3s-worker-1', 'verification_hostname': 'worker-1.internal'}
         archive = {'sha256': 'a' * 64, 'bytes': 123}
         session_inputs = {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456}
         pod_uid = '44444444-4444-4444-8444-444444444444'
@@ -740,11 +756,13 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'source_pv_name': 'pv-voice-nats-source',
             'source_pv_uid': '55555555-5555-4555-8555-555555555555',
             'source_node_name': 'k3s-worker-1',
+            'source_hostname': 'worker-1.internal',
             'verification_claim': 'voice-nats-verify-' + 'a' * 12,
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify',
             'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
             'verification_node_name': 'k3s-worker-1',
+            'verification_hostname': 'worker-1.internal',
         }
         with patch.object(self.api, '_request') as read, \
              patch.object(kube, '_websocket_exec') as execute, \
@@ -762,10 +780,10 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             'source_claim': 'voice-nats-jsdata-d20261017a',
             'source_uid': '11111111-1111-4111-8111-111111111111',
             'source_pv_name': 'pv-voice-nats-source', 'source_pv_uid': '55555555-5555-4555-8555-555555555555',
-            'source_node_name': 'k3s-worker-1', 'verification_claim': 'voice-nats-verify-' + 'a' * 12,
+            'source_node_name': 'k3s-worker-1', 'source_hostname': 'worker-1.internal', 'verification_claim': 'voice-nats-verify-' + 'a' * 12,
             'verification_uid': '22222222-2222-4222-8222-222222222222',
             'verification_pv_name': 'pv-voice-nats-verify', 'verification_pv_uid': '33333333-3333-4333-8333-333333333333',
-            'verification_node_name': 'k3s-worker-1'}
+            'verification_node_name': 'k3s-worker-1', 'verification_hostname': 'worker-1.internal'}
         session_inputs = {'attempt': 'd' * 8, 'sha256': 'e' * 64, 'bytes': 456}
         with self.assertRaises(kube.KubeAPIError):
             list(self.api.exec_pod_verification('voice-staging', 'pod',

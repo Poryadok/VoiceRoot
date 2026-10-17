@@ -216,6 +216,14 @@ class _KubernetesJSONAPIBase:
     def get_pv(self, name):
         return self._request('GET', '/api/v1/persistentvolumes/' + self._segment(name))
 
+    def get_storage_class(self, name):
+        if (not isinstance(name, str) or len(name) > 253
+            or any(not label or len(label) > 63
+                or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9]*[a-z0-9])?', label)
+                for label in name.split('.'))):
+            _fail('storage_class_invalid')
+        return self._request('GET', '/apis/storage.k8s.io/v1/storageclasses/' + self._segment(name))
+
     def get_namespace(self, name):
         if name != NAMESPACE: _fail('namespace_invalid')
         return self._request('GET', '/api/v1/namespaces/' + self._segment(name))
