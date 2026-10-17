@@ -208,6 +208,72 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         self.assertEqual([op["value"]["name"] for op in operations[2:]],
                          ["NEW_ENV", "new-a", "new-b", "new-volume", "new-volume"])
 
+    def test_missing_list_parents_use_single_parent_add_operation(self):
+        cases = (
+            ("Service", "voice-chat", "/spec/ports", "servicePorts", "ports"),
+            ("Deployment", "voice-chat", "/spec/template/spec/containers/0/env",
+             "env", "env"),
+            ("Deployment", "voice-chat", "/spec/template/spec/containers/0/ports",
+             "ports", "ports"),
+            ("Deployment", "voice-chat", "/spec/template/spec/containers/0/volumeMounts",
+             "volumeMounts", "volumeMounts"),
+            ("Deployment", "voice-chat", "/spec/template/spec/volumes", "volumes", "volumes"),
+        )
+        for kind, name, path, identity_field, object_field in cases:
+            with self.subTest(path=path):
+                if kind == "Service":
+                    base = captured_service(name, "service-uid", "17", [])
+                    desired = copy.deepcopy(base)
+                    desired["spec"].pop(object_field)
+                    desired["spec"][object_field] = [
+                        {"name": "new", "port": 9092, "targetPort": "new"}]
+                    base["spec"].pop(object_field)
+                else:
+                    base = captured_deployment(name, "chat", "deployment-uid", "17")
+                    desired = copy.deepcopy(base)
+                    if object_field == "volumes":
+                        base_spec = base["spec"]["template"]["spec"]
+                        desired_spec = desired["spec"]["template"]["spec"]
+                    else:
+                        base_spec = base["spec"]["template"]["spec"]["containers"][0]
+                        desired_spec = desired["spec"]["template"]["spec"]["containers"][0]
+                    base_spec.pop(object_field)
+                    desired_spec.pop(object_field)
+                    item = ({"name": "new", "value": "x"} if identity_field == "env" else
+                            {"name": "new", "containerPort": 9092} if identity_field == "ports" else
+                            {"name": "new", "mountPath": "/new"} if identity_field == "volumeMounts" else
+                            {"name": "new", "configMap": {"name": "new-config"}})
+                    desired_spec[object_field] = [item]
+                operations = overlay.object_patch(base, desired)
+                additions = [op for op in operations if op["op"] == "add"]
+                self.assertEqual(additions, [{"op": "add", "path": path,
+                                              "value": desired_spec[object_field]
+                                              if kind == "Deployment" else desired["spec"][object_field]}])
+                self.assertEqual(overlay._apply_append_operations(base, additions), desired)
+
+    def test_present_empty_list_parent_keeps_append_operation(self):
+        base = captured_service("voice-chat", "service-uid", "17", [])
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"].append(
+            {"name": "principal", "port": 9092, "targetPort": "principal"})
+        operations = overlay.object_patch(base, desired)
+        addition = next(op for op in operations if op["op"] == "add")
+        self.assertEqual(addition["path"], "/spec/ports/-")
+
+    def test_invalid_list_parent_shapes_fail_closed(self):
+        base = captured_service("voice-chat", "service-uid", "17", [])
+        base["spec"]["ports"] = {"unexpected": "mapping"}
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"] = [
+            {"name": "principal", "port": 9092, "targetPort": "principal"}]
+        with self.assertRaisesRegex(overlay.OverlayError, "list shape"):
+            overlay.object_patch(base, desired)
+
+        with self.assertRaisesRegex(overlay.OverlayError, "not absent and list-shaped"):
+            overlay._apply_append_operations(
+                {"spec": []}, [{"op": "add", "path": "/spec/ports",
+                                "value": [{"name": "principal", "port": 9092}]}])
+
     def test_api_postcondition_failure_marks_same_uid_new_rv_as_persisted(self):
         target = overlay.TARGETS[0]
         base = captured_service("voice-matchmaking", overlay.EXPECTED_OBJECT_UIDS[
