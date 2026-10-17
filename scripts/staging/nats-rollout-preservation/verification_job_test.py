@@ -1,4 +1,4 @@
-"""Tests for the source-owned, tokenless native census Job ABI."""
+"""Tests for the source-owned, tokenless native phase Job ABI."""
 import copy
 import unittest
 
@@ -125,7 +125,6 @@ class VerificationJobTests(unittest.TestCase):
 
     def test_request_cannot_select_image_command_or_another_phase(self):
         for value in (
-            REQUEST | {'phase': 'restore'},
             REQUEST | {'command': ['/bin/sh', '-c', 'id']},
             REQUEST | {'image': 'attacker.invalid/image:latest'},
             REQUEST | {'extra': 'field'},
@@ -179,6 +178,45 @@ class VerificationJobTests(unittest.TestCase):
             'census_same_pod_readback'})
         with self.assertRaises(jobs.VerificationJobError):
             jobs.exec_vectors(REQUEST, POD_UID, BINDING)
+
+    def test_promotable_restore_is_target_only_hub_owned_and_attempt_bound(self):
+        request = REQUEST | {'phase': 'restore'}
+        target = {'restore_claim': 'voice-nats-restore-' + request['operation'] + '-1234abcd',
+            'restore_attempt': '1234abcd', 'restore_uid': '66666666-6666-4666-8666-666666666666',
+            'restore_pv_name': 'pv-voice-nats-restore',
+            'restore_pv_uid': '77777777-7777-4777-8777-777777777777',
+            'restore_node_name': 'k3s-worker-1'}
+        row = jobs.document(request, target, IMAGE)
+        pod = row['spec']['template']['spec']
+        container = pod['containers'][0]
+        labels = row['spec']['template']['metadata']['labels']
+        self.assertEqual(row['metadata']['labels'][jobs.LABEL_PHASE], 'restore')
+        self.assertEqual(row['spec']['selector']['matchLabels'], {jobs.LABEL_JOB_SELECTOR: row['metadata']['name']})
+        self.assertEqual(labels[jobs.LABEL_JOB_SELECTOR], row['metadata']['name'])
+        self.assertEqual(pod['securityContext'], {'runAsNonRoot': True, 'runAsUser': 10000,
+            'runAsGroup': 10000, 'fsGroup': 10000, 'fsGroupChangePolicy': 'OnRootMismatch',
+            'seccompProfile': {'type': 'RuntimeDefault'}})
+        self.assertEqual(container['args'], ['--serve-restore', '--operation', request['operation'],
+            '--nonce', request['nonce'], '--restore-attempt', target['restore_attempt'],
+            '--restore-pvc-uid', target['restore_uid'], '--restore-pv-uid', target['restore_pv_uid']])
+        self.assertEqual(container['volumeMounts'], [
+            {'name': 'target', 'mountPath': '/restore'}, {'name': 'output', 'mountPath': '/out'}])
+        self.assertEqual({volume['name']: volume for volume in pod['volumes']}, {
+            'target': {'name': 'target', 'persistentVolumeClaim': {'claimName': target['restore_claim']}},
+            'output': {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}}})
+        self.assertNotIn('source', {volume['name'] for volume in pod['volumes']})
+        vectors = jobs.exec_vectors(request, POD_UID, target, {'sha256': 'd' * 64, 'bytes': 1234})
+        self.assertEqual(vectors['restore_archive_once'][:3],
+            ['/usr/bin/python3', '/voice-nats-runner/phase', '--restore-archive'])
+        self.assertEqual(vectors['restore_archive_once'][-4:], ['--archive-sha256', 'd' * 64,
+            '--archive-bytes', '1234'])
+        self.assertEqual(vectors['restore_same_pod_readback'][2], '--restore-readback')
+        self.assertNotIn('source-pvc-uid', ' '.join(vectors['restore_archive_once']))
+        for invalid in (target | {'restore_attempt': '1234abcdx'},
+            target | {'restore_claim': 'voice-nats-restore-' + request['operation'] + '-deadbeef'},
+            target | {'restore_uid': '../uid'}, target | {'restore_node_name': '../node'}):
+            with self.subTest(invalid=invalid), self.assertRaises(jobs.VerificationJobError):
+                jobs.document(request, invalid, IMAGE)
 
     def test_source_and_verification_claim_identity_must_be_distinct_and_valid(self):
         for mutation in (

@@ -45,6 +45,7 @@ class NatsPhaseTests(unittest.TestCase):
         (self.source / 'jetstream' / 'meta.inf').write_bytes(b'cold-native-data')
         self.output = self.root / 'out'; self.output.mkdir(mode=0o700)
         self.verification = self.root / 'verify'; self.verification.mkdir(mode=0o700)
+        self.restore = self.root / 'restore'; self.restore.mkdir(mode=0o700)
         self.inputs = self.root / 'inputs'; self.inputs.mkdir(mode=0o700)
         self.input_private = self.inputs / 'private'
         self.args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
@@ -53,6 +54,7 @@ class NatsPhaseTests(unittest.TestCase):
         self.patches = [patch.object(phase, 'DATA_ROOT', self.source),
             patch.object(phase, 'OUT_ROOT', self.output),
             patch.object(phase, 'VERIFY_ROOT', self.verification),
+            patch.object(phase, 'RESTORE_ROOT', self.restore),
             patch.object(phase, 'INPUT_ROOT', self.input_private),
             patch.dict(phase.os.environ, {'POD_UID': POD_UID})]
         for item in self.patches: item.start()
@@ -518,6 +520,56 @@ class NatsPhaseTests(unittest.TestCase):
             self.assertEqual(row['source_pv_uid'], SOURCE_PV_UID)
         self.assertEqual(rows[-1]['kind'], 'complete')
         self.assertEqual(rows[-1]['frames'], sum(row['kind'] == 'data' for row in rows))
+
+    def test_promotable_restore_streams_into_empty_target_root_as_hub_owner(self):
+        archive = self.root / 'restore-source.tar'
+        manifest = native_store.archive_closed_store(self.source, archive)
+        tar_bytes = archive.read_bytes()
+        manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+        envelope = (phase.RESTORE_INPUT_MAGIC + len(manifest_bytes).to_bytes(4, 'big')
+            + manifest_bytes + len(tar_bytes).to_bytes(8, 'big') + tar_bytes)
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            restore_attempt='c' * 8, restore_pvc_uid='44444444-4444-4444-8444-444444444444',
+            restore_pv_uid='55555555-5555-4555-8555-555555555555',
+            archive_sha256=manifest['archive_sha256'], archive_bytes=len(tar_bytes))
+        with patch.object(phase, '_require_restore_identity'):
+            receipt = phase.restore_archive(args, io.BytesIO(envelope))
+            readback = phase.read_restore_receipt(args)
+        self.assertEqual(receipt, readback)
+        self.assertEqual(receipt['purpose'], 'replacement')
+        self.assertEqual(receipt['restore_attempt'], 'c' * 8)
+        self.assertEqual((self.restore / 'jetstream' / 'meta.inf').read_bytes(), b'cold-native-data')
+        self.assertFalse((self.restore / '.voice-nats-restore-work').exists())
+        self.assertEqual((self.source / 'jetstream' / 'meta.inf').read_bytes(), b'cold-native-data')
+        with patch.object(phase, '_require_restore_identity'):
+            with self.assertRaisesRegex(ValueError, 'restore_target_not_empty'):
+                phase.restore_archive(args, io.BytesIO(envelope))
+
+    def test_interrupted_restore_keeps_started_intent_and_never_replays(self):
+        args = types.SimpleNamespace(operation=OPERATION, nonce=NONCE, pod_uid=POD_UID,
+            restore_attempt='d' * 8, restore_pvc_uid='44444444-4444-4444-8444-444444444444',
+            restore_pv_uid='55555555-5555-4555-8555-555555555555',
+            archive_sha256='a' * 64, archive_bytes=64)
+        with patch.object(phase, '_require_restore_identity'):
+            with self.assertRaisesRegex(ValueError, 'verification_input_header'):
+                phase.restore_archive(args, io.BytesIO(b'X' * len(phase.RESTORE_INPUT_MAGIC)))
+            marker = self.output / f'{OPERATION}-{NONCE}.restore.started.json'
+            self.assertEqual(json.loads(marker.read_bytes())['state'], 'STARTED')
+            with self.assertRaisesRegex(ValueError, 'restore_target_not_empty'):
+                phase.restore_archive(args, io.BytesIO(b'any retry is forbidden'))
+            with self.assertRaisesRegex(ValueError, 'manifest-custody|restore_receipt'):
+                phase.read_restore_receipt(args)
+
+    def test_restore_profile_is_exactly_hub_uid_and_gid(self):
+        with patch.object(phase.os, 'geteuid', return_value=10000), \
+             patch.object(phase.os, 'getegid', return_value=10000):
+            phase._require_restore_identity()
+        for uid, gid in ((0, 0), (65532, 65532), (10000, 10001)):
+            with patch.object(phase.os, 'geteuid', return_value=uid), \
+                 patch.object(phase.os, 'getegid', return_value=gid):
+                with self.subTest(uid=uid, gid=gid), self.assertRaisesRegex(ValueError, 'restore_identity'):
+                    phase._require_restore_identity()
 
 
 if __name__ == '__main__': unittest.main()
