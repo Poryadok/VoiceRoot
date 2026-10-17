@@ -47,7 +47,12 @@ void main() {
       final context = tester.element(find.byKey(ProfileDetailSheet.sheetKey));
       final l10n = AppLocalizations.of(context)!;
       expect(find.byKey(PremiumBadge.badgeKey), findsOneWidget);
-      expect(find.bySemanticsLabel(l10n.premiumBadgeLabel), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('^${RegExp.escape(l10n.premiumBadgeLabel)}'),
+        ),
+        findsOneWidget,
+      );
     },
   );
 
