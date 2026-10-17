@@ -7,9 +7,12 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import urllib.error
 from datetime import datetime, timedelta, timezone
 import zipfile
 from pathlib import Path
+from contextlib import redirect_stderr
+from io import StringIO
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -283,6 +286,97 @@ Artifact successfully finalized (12110880999)
         self.assertEqual(saved["selected_images"]["matchmaking"]["platform_manifest_digest"],
             "sha256:" + child)
         self.assertEqual(saved["selected_images"]["matchmaking"]["config_sha256"], config)
+
+
+class DiagnosticTests(unittest.TestCase):
+    def test_source_phase_is_closed_over_fixed_allowlist(self):
+        error = receipt.authority.SourceError(phase="https://private.example/token?secret=hidden")
+        self.assertEqual(error.phase, "unknown")
+        self.assertNotIn("private.example", json.dumps({"phase": error.phase}))
+
+    def test_fixed_source_rejection_uses_enclosing_phase_after_normalization(self):
+        with self.assertRaises(receipt.authority.SourceError) as raised:
+            receipt.authority._fail()
+        diagnostic = receipt.authority._source_diagnostic(raised.exception, "source-tree")
+        self.assertEqual(diagnostic.phase, "source-tree")
+        hostile = receipt.authority.SourceError(phase="private-response-url")
+        self.assertEqual(receipt.authority._source_diagnostic(hostile, "source-tree").phase, "source-tree")
+
+    def test_registry_http_diagnostic_is_allowlisted_and_does_not_expose_response_data(self):
+        secret = "private-token-and-response-body"
+        error = urllib.error.HTTPError("https://ghcr.io/token?secret=" + secret,
+            403, secret, {"Authorization": secret}, None)
+        with patch.object(receipt, "_CURRENT_PHASE", "registry-token"), \
+                patch.object(receipt._HTTPS, "open", side_effect=error):
+            with self.assertRaises(receipt.ReceiptError) as raised:
+                receipt._read_response("https://ghcr.io/token?service=ghcr.io", {}, limit=100)
+        record = raised.exception.safe_record()
+        self.assertEqual(record, {"status": "REJECTED", "phase": "registry-token",
+            "code": "http_error", "class": "HTTPError", "http_status": 403})
+        self.assertNotIn(secret, json.dumps(record))
+        self.assertNotIn(secret, str(raised.exception))
+
+    def test_cli_rejection_emits_only_safe_diagnostic_fields(self):
+        secret = "private-output-must-never-appear"
+        error = receipt.ReceiptError(secret, phase="registry-token", code="http_error",
+            failure_class="HTTPError", http_status=403)
+        stderr = StringIO()
+        with patch.object(receipt, "capture_receipt", side_effect=error), redirect_stderr(stderr):
+            self.assertEqual(receipt.main(["11", "unused.json"]), 1)
+        self.assertEqual(json.loads(stderr.getvalue()), error.safe_record())
+        self.assertNotIn(secret, stderr.getvalue())
+
+    def test_source_capture_diagnostic_preserves_only_safe_phase_and_class(self):
+        sha = "a" * 40
+        run = {"id": 11, "status": "completed", "conclusion": "success",
+            "event": "push", "head_branch": "master", "path": ".github/workflows/ci.yml",
+            "workflow_id": 263230665, "head_sha": sha, "run_attempt": 1,
+            "repository": {"full_name": "Poryadok/VoiceRoot", "id": 7},
+            "head_repository": {"full_name": "Poryadok/VoiceRoot", "id": 7}}
+        source_error = receipt.authority.SourceError("private API response body",
+            phase="source-archive", code="archive_rejected", failure_class="BadZipFile")
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(receipt.authority, "_headers", return_value={}), \
+                patch.object(receipt.authority, "_get", return_value=run), \
+                patch.object(receipt.authority, "capture_equivalent_master_source", side_effect=source_error):
+            target = Path(directory) / "receipt.json"
+            with self.assertRaises(receipt.ReceiptError) as raised:
+                receipt.capture_receipt(11, "token", "actor", target)
+            self.assertFalse(target.exists())
+        self.assertEqual(raised.exception.safe_record(), {"status": "REJECTED",
+            "phase": "source-archive", "code": "archive_rejected", "class": "BadZipFile"})
+        self.assertNotIn("private API response body", json.dumps(raised.exception.safe_record()))
+
+    def test_registry_status_survives_source_capture_wrapper_without_secret_data(self):
+        sha = "a" * 40
+        run = {"id": 11, "status": "completed", "conclusion": "success",
+            "event": "push", "head_branch": "master", "path": ".github/workflows/ci.yml",
+            "workflow_id": 263230665, "head_sha": sha, "run_attempt": 1,
+            "repository": {"full_name": "Poryadok/VoiceRoot", "id": 7},
+            "head_repository": {"full_name": "Poryadok/VoiceRoot", "id": 7}}
+        secret = "private-registry-response"
+        registry_error = receipt.ReceiptError(secret, phase="registry-token", code="http_error",
+            failure_class="HTTPError", http_status=403)
+
+        def source_capture(*args):
+            try:
+                receipt.authority._resolve_image("matchmaking", sha, 0)
+            except Exception as error:
+                raise receipt.authority._source_diagnostic(error, "registry-image-matchmaking") from None
+
+        with patch.object(receipt.authority, "_headers", return_value={}), \
+                patch.object(receipt.authority, "_get", return_value=run), \
+                patch.object(receipt.authority, "capture_equivalent_master_source", side_effect=source_capture), \
+                patch.object(receipt, "_image_identity", side_effect=registry_error), \
+                tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "receipt.json"
+            with self.assertRaises(receipt.ReceiptError) as raised:
+                receipt.capture_receipt(11, "token", "actor", target)
+            self.assertFalse(target.exists())
+        self.assertEqual(raised.exception.safe_record(), {"status": "REJECTED",
+            "phase": "registry-token", "code": "http_error", "class": "HTTPError",
+            "http_status": 403})
+        self.assertNotIn(secret, json.dumps(raised.exception.safe_record()))
 
     def test_buildx_and_registry_index_mismatch_blocks_before_receipt_write(self):
         sha = "a" * 40
