@@ -168,9 +168,23 @@ def _list_identity(item, field):
     raise OverlayError("unapproved list field")
 
 
-def _append_or_merge(old_list, new_list, path, identity_field):
+def _allowed_list_path(path):
+    if path in ("/spec/ports", "/spec/ports/-", "/spec/template/spec/volumes",
+                "/spec/template/spec/volumes/-"):
+        return True
+    parts = path.split("/")
+    return (len(parts) in (7, 8) and parts[:5] == ["", "spec", "template", "spec", "containers"]
+            and parts[5].isdigit() and parts[6] in ("env", "ports", "volumeMounts")
+            and (len(parts) == 7 or parts[7] == "-"))
+
+
+def _append_or_merge(old_list, new_list, path, identity_field, parent_exists=True):
+    if not _allowed_list_path(path):
+        raise OverlayError("unapproved list path")
     if not isinstance(old_list, list) or not isinstance(new_list, list):
         raise OverlayError("overlay list shape is invalid")
+    if not parent_exists and old_list:
+        raise OverlayError("missing list parent has existing items")
     old_by_id = {}
     for item in old_list:
         identity = _list_identity(item, identity_field)
@@ -195,27 +209,47 @@ def _append_or_merge(old_list, new_list, path, identity_field):
         identity = _list_identity(old_item, identity_field)
         if new_by_id[identity] != old_item:
             raise OverlayError("overlay would modify an existing list item")
+    additions = []
     for new_item in new_list:
         identity = _list_identity(new_item, identity_field)
         if identity not in old_by_id:
+            additions.append(new_item)
+    if additions and not parent_exists:
+        operations.append({"op": "add", "path": path,
+                           "value": copy.deepcopy(new_list)})
+    else:
+        for new_item in additions:
             operations.append({"op": "add", "path": path + "/-", "value": new_item})
     return operations
 
 
 def _apply_append_operations(base, operations):
-    """Predict the API result of the exact append-only JSON Patch we submit."""
+    """Predict the API result of the exact list-add JSON Patch we submit."""
     result = copy.deepcopy(base)
     for operation in operations:
-        if operation.get("op") != "add" or not operation.get("path", "").endswith("/-"):
-            raise OverlayError("generated overlay operation is not an append")
-        parts = [part.replace("~1", "/").replace("~0", "~")
-                 for part in operation["path"].split("/")[1:-1]]
+        path = operation.get("path", "")
+        if operation.get("op") != "add" or not _allowed_list_path(path):
+            raise OverlayError("generated overlay operation is not an approved list add")
+        append = path.endswith("/-")
+        encoded_parts = path.split("/")[1:]
+        if append:
+            encoded_parts = encoded_parts[:-1]
+        parts = [part.replace("~1", "/").replace("~0", "~") for part in encoded_parts]
         parent = result
-        for part in parts:
-            parent = parent[int(part)] if isinstance(parent, list) else parent[part]
-        if not isinstance(parent, list):
-            raise OverlayError("generated append target is not a list")
-        parent.append(copy.deepcopy(operation["value"]))
+        try:
+            for part in parts[:-1] if not append else parts:
+                parent = parent[int(part)] if isinstance(parent, list) else parent[part]
+            if append:
+                if not isinstance(parent, list) or not isinstance(operation.get("value"), dict):
+                    raise OverlayError("generated append target is not a list")
+                parent.append(copy.deepcopy(operation["value"]))
+            else:
+                key = parts[-1]
+                if not isinstance(parent, dict) or key in parent or not isinstance(operation.get("value"), list):
+                    raise OverlayError("generated list parent add is not absent and list-shaped")
+                parent[key] = copy.deepcopy(operation["value"])
+        except (KeyError, IndexError, TypeError, ValueError) as error:
+            raise OverlayError("generated list-add parent is absent or invalid") from error
     return result
 
 
@@ -236,7 +270,8 @@ def object_patch(base, desired):
             raise OverlayError("Service outside fixed target set")
         delta.extend(_append_or_merge(base["spec"].get("ports", []),
                                       desired["spec"].get("ports", []),
-                                      "/spec/ports", "servicePorts"))
+                                      "/spec/ports", "servicePorts",
+                                      parent_exists="ports" in base["spec"]))
     elif base["kind"] == "Deployment":
         name = base["metadata"]["name"]
         if name not in CONTAINERS:
@@ -254,11 +289,13 @@ def object_patch(base, desired):
             new_items = new_container.get(fields, [])
             delta.extend(_append_or_merge(old_items, new_items,
                                           "/spec/template/spec/containers/" + str(main_index) +
-                                          "/" + fields, fields))
+                                          "/" + fields, fields,
+                                          parent_exists=fields in old_container))
         old_volumes = base["spec"]["template"]["spec"].get("volumes", [])
         new_volumes = desired["spec"]["template"]["spec"].get("volumes", [])
         delta.extend(_append_or_merge(old_volumes, new_volumes,
-                                      "/spec/template/spec/volumes", "volumes"))
+                                      "/spec/template/spec/volumes", "volumes",
+                                      parent_exists="volumes" in base["spec"]["template"]["spec"]))
     else:
         raise OverlayError("object kind outside fixed target set")
 
@@ -277,10 +314,8 @@ def object_patch(base, desired):
             desired_spec["volumes"] = projected_spec.get("volumes", [])
     if projected != desired_projection:
         raise OverlayError("overlay changed an unapproved object path")
-    # Every operation is an append or a leaf update under one allowed array.
-    allowed = ("/spec/ports/", "/spec/template/spec/containers/",
-               "/spec/template/spec/volumes/")
-    if any(not any(op["path"].startswith(prefix) for prefix in allowed)
+    # Generated operations add only to the explicitly reviewed list fields.
+    if any(not _allowed_list_path(op["path"])
            for op in delta):
         raise OverlayError("generated patch escapes the allowed field set")
     return ([{"op": "test", "path": "/metadata/uid", "value": base_uid},
@@ -389,6 +424,18 @@ class KubectlClient:
                                result.get("metadata", {}).get("resourceVersion") not in
                                (None, plan["resourceVersion"]))
             raise error
+        return result
+
+    def server_dry_run(self, plan):
+        """Ask the API server to validate the exact guarded patch without writing."""
+        result = self.call("patch", plan["kind"].lower(), plan["name"],
+                           "--type=json", "--patch=" + json.dumps(plan["operations"],
+                                                                      separators=(",", ":")),
+                           "--dry-run=server", "-o", "json")
+        target = _Target(plan["kind"], plan["name"], plan["patchFile"])
+        if (result.get("metadata", {}).get("uid") != plan["uid"] or
+                observed_render_hash(target, result) != plan["desiredObservedSha256"]):
+            raise OverlayError("server dry-run result did not match frozen desired hash")
         return result
 
     def wait_deployment(self, plan):
@@ -505,8 +552,22 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
             raise OverlayError("target drift or overlay source changed: " + target.name)
         fresh_plans.append(fresh)
 
-    # Global preflight is complete before the first write. The request itself
-    # repeats UID/RV tests to close the race on each individual object.
+    # Validate every effective patch against live admission/schema before the
+    # first write. The eventual request repeats UID/RV tests to close races.
+    for target, plan in zip(TARGETS, fresh_plans):
+        if plan["alreadySatisfied"]:
+            continue
+        try:
+            client.server_dry_run(plan)
+        except Exception as exc:
+            print("MATCH_SQUAD_OVERLAY_PREFLIGHT_REJECTED kind=" + target.kind +
+                  " name=" + target.name + " stage=server-dry-run writes=0",
+                  file=sys.stderr)
+            raise OverlayError("server dry-run rejected target: " + target.name) from exc
+        print("MATCH_SQUAD_OVERLAY_PREFLIGHT_OK kind=" + target.kind +
+              " name=" + target.name)
+
+    # The request itself repeats UID/RV tests to close the race on each object.
     completed = 0
     applied = 0
     for target, plan in zip(TARGETS, fresh_plans):
@@ -534,8 +595,8 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
         print("MATCH_SQUAD_OVERLAY_OBJECT_READY kind=" + target.kind + " name=" + target.name)
     for service, ports in (
             ("voice-matchmaking", {"principal-jwks": 8443}),
-            ("voice-chat", {"match-squad-principal": 9092}),
-            ("voice-voice", {"match-squad-provider": 9094, "match-squad-member": 9095})):
+            ("voice-chat", {"match-principal": 9092}),
+            ("voice-voice", {"match-provider": 9094, "match-member": 9095})):
         try:
             client.verify_service_endpoints(service, ports)
         except Exception as exc:

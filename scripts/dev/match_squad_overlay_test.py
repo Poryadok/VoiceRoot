@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import io
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -132,6 +133,28 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         self.assertIn("JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}", workflow)
         self.assertIn('check_if "${RUN_MATCH_SQUAD_OVERLAY:-false}" match-squad-overlay', gate)
 
+    def test_chat_voice_service_and_container_port_names_match_kubernetes_limit(self):
+        root = Path(__file__).resolve().parents[2] / "deploy/dev/match-squad-trust-overlay"
+        expected = {
+            "voice-chat": [("match-principal", 9092)],
+            "voice-voice": [("match-provider", 9094), ("match-member", 9095)],
+        }
+        for service, ports in expected.items():
+            with self.subTest(service=service):
+                service_text = (root / (service + ".service.patch.yaml")).read_text(encoding="utf-8")
+                runtime_text = (root / (service + ".runtime.patch.yaml")).read_text(encoding="utf-8")
+                # Include targetPort in the comparison to catch mismatched names.
+                service_matches = re.findall(
+                    r"- name: ([a-z0-9-]+)\s+port: (\d+)\s+targetPort: ([a-z0-9-]+)",
+                    service_text)
+                self.assertEqual([(name, int(port), target) for name, port, target in service_matches],
+                                 [(name, port, name) for name, port in ports])
+                runtime_matches = [(name, int(number)) for name, number in re.findall(
+                    r"- name: ([a-z0-9-]+)\s+containerPort: (\d+)", runtime_text)]
+                self.assertEqual(runtime_matches, ports)
+                for name, _ in ports:
+                    self.assertLessEqual(len(name), 15)
+
     def test_actual_sanitized_api_fixture_identities_and_unrelated_fields(self):
         captured = sanitized_live_api_fixture()
         self.assertEqual(len(captured), 7)
@@ -150,10 +173,10 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         base = sanitized_live_api_fixture()[("Service", "voice-voice")]
         desired = copy.deepcopy(base)
         desired["spec"]["ports"].extend([
-            {"name": "match-squad-provider", "port": 9094, "protocol": "TCP",
-             "targetPort": "match-squad-provider"},
-            {"name": "match-squad-member", "port": 9095, "protocol": "TCP",
-             "targetPort": "match-squad-member"},
+            {"name": "match-provider", "port": 9094, "protocol": "TCP",
+             "targetPort": "match-provider"},
+            {"name": "match-member", "port": 9095, "protocol": "TCP",
+             "targetPort": "match-member"},
         ])
         operations = overlay.object_patch(base, desired)
         self.assertEqual(operations[0], {"op": "test", "path": "/metadata/uid",
@@ -182,8 +205,8 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         desired = copy.deepcopy(base)
         desired["spec"]["ports"] = [desired["spec"]["ports"][1],
                                      desired["spec"]["ports"][0],
-                                     {"name": "match-squad-principal", "port": 9092,
-                                      "targetPort": "match-squad-principal"}]
+            {"name": "match-principal", "port": 9092,
+             "targetPort": "match-principal"}]
         with self.assertRaisesRegex(overlay.OverlayError, "existing list order"):
             overlay.object_patch(base, desired)
 
@@ -207,6 +230,72 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             "/spec/template/spec/volumes/-"])
         self.assertEqual([op["value"]["name"] for op in operations[2:]],
                          ["NEW_ENV", "new-a", "new-b", "new-volume", "new-volume"])
+
+    def test_missing_list_parents_use_single_parent_add_operation(self):
+        cases = (
+            ("Service", "voice-chat", "/spec/ports", "servicePorts", "ports"),
+            ("Deployment", "voice-chat", "/spec/template/spec/containers/0/env",
+             "env", "env"),
+            ("Deployment", "voice-chat", "/spec/template/spec/containers/0/ports",
+             "ports", "ports"),
+            ("Deployment", "voice-chat", "/spec/template/spec/containers/0/volumeMounts",
+             "volumeMounts", "volumeMounts"),
+            ("Deployment", "voice-chat", "/spec/template/spec/volumes", "volumes", "volumes"),
+        )
+        for kind, name, path, identity_field, object_field in cases:
+            with self.subTest(path=path):
+                if kind == "Service":
+                    base = captured_service(name, "service-uid", "17", [])
+                    desired = copy.deepcopy(base)
+                    desired["spec"].pop(object_field)
+                    desired["spec"][object_field] = [
+                        {"name": "new", "port": 9092, "targetPort": "new"}]
+                    base["spec"].pop(object_field)
+                else:
+                    base = captured_deployment(name, "chat", "deployment-uid", "17")
+                    desired = copy.deepcopy(base)
+                    if object_field == "volumes":
+                        base_spec = base["spec"]["template"]["spec"]
+                        desired_spec = desired["spec"]["template"]["spec"]
+                    else:
+                        base_spec = base["spec"]["template"]["spec"]["containers"][0]
+                        desired_spec = desired["spec"]["template"]["spec"]["containers"][0]
+                    base_spec.pop(object_field)
+                    desired_spec.pop(object_field)
+                    item = ({"name": "new", "value": "x"} if identity_field == "env" else
+                            {"name": "new", "containerPort": 9092} if identity_field == "ports" else
+                            {"name": "new", "mountPath": "/new"} if identity_field == "volumeMounts" else
+                            {"name": "new", "configMap": {"name": "new-config"}})
+                    desired_spec[object_field] = [item]
+                operations = overlay.object_patch(base, desired)
+                additions = [op for op in operations if op["op"] == "add"]
+                self.assertEqual(additions, [{"op": "add", "path": path,
+                                              "value": desired_spec[object_field]
+                                              if kind == "Deployment" else desired["spec"][object_field]}])
+                self.assertEqual(overlay._apply_append_operations(base, additions), desired)
+
+    def test_present_empty_list_parent_keeps_append_operation(self):
+        base = captured_service("voice-chat", "service-uid", "17", [])
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"].append(
+            {"name": "principal", "port": 9092, "targetPort": "principal"})
+        operations = overlay.object_patch(base, desired)
+        addition = next(op for op in operations if op["op"] == "add")
+        self.assertEqual(addition["path"], "/spec/ports/-")
+
+    def test_invalid_list_parent_shapes_fail_closed(self):
+        base = captured_service("voice-chat", "service-uid", "17", [])
+        base["spec"]["ports"] = {"unexpected": "mapping"}
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"] = [
+            {"name": "principal", "port": 9092, "targetPort": "principal"}]
+        with self.assertRaisesRegex(overlay.OverlayError, "list shape"):
+            overlay.object_patch(base, desired)
+
+        with self.assertRaisesRegex(overlay.OverlayError, "not absent and list-shaped"):
+            overlay._apply_append_operations(
+                {"spec": []}, [{"op": "add", "path": "/spec/ports",
+                                "value": [{"name": "principal", "port": 9092}]}])
 
     def test_api_postcondition_failure_marks_same_uid_new_rv_as_persisted(self):
         target = overlay.TARGETS[0]
@@ -233,8 +322,8 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         target = overlay.TARGETS[1]
         base = captured_service("voice-chat", "service-uid", "17", [])
         desired = copy.deepcopy(base)
-        desired["spec"]["ports"].append({"name": "match-squad-principal", "port": 9092,
-                                           "targetPort": "match-squad-principal"})
+        desired["spec"]["ports"].append({"name": "match-principal", "port": 9092,
+                                           "targetPort": "match-principal"})
         operations = overlay.object_patch(base, desired)
         expected = copy.deepcopy(desired)
         expected["metadata"]["resourceVersion"] = "18"
@@ -259,6 +348,34 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             with self.assertRaisesRegex(overlay.OverlayError, "did not match"):
                 client.apply(plan)
 
+    def test_server_dry_run_uses_same_guarded_patch_and_checks_projection(self):
+        target = overlay.TARGETS[1]
+        base = captured_service("voice-chat", "service-uid", "17", [])
+        desired = copy.deepcopy(base)
+        desired["spec"]["ports"].append({"name": "match-principal", "port": 9092,
+                                           "targetPort": "match-principal"})
+        operations = overlay.object_patch(base, desired)
+        api_result = copy.deepcopy(desired)
+        api_result["spec"]["ports"][0]["protocol"] = "TCP"
+        plan = {"kind": "Service", "name": target.name, "patchFile": target.patch_file,
+                "uid": base["metadata"]["uid"], "resourceVersion": "17",
+                "operations": operations,
+                "desiredObservedSha256": overlay.observed_render_hash(target, desired)}
+        client = overlay.KubectlClient()
+        with mock.patch.object(client, "call", return_value=api_result) as call:
+            client.server_dry_run(plan)
+        args = call.call_args.args
+        self.assertEqual(args[:3], ("patch", "service", "voice-chat"))
+        self.assertIn("--type=json", args)
+        self.assertIn("--dry-run=server", args)
+        patch_arg = next(arg for arg in args if arg.startswith("--patch="))
+        self.assertEqual(json.loads(patch_arg[len("--patch="):]), operations)
+
+        api_result["spec"]["ports"][0]["targetPort"] = 9092
+        with mock.patch.object(client, "call", return_value=api_result):
+            with self.assertRaisesRegex(overlay.OverlayError, "server dry-run result"):
+                client.server_dry_run(plan)
+
     def test_actual_voice_deployment_fixture_preserves_media_trust_and_existing_sidecar(self):
         base = sanitized_live_api_fixture()[("Deployment", "voice-voice")]
         desired = copy.deepcopy(base)
@@ -268,7 +385,7 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                                  "value": "/etc/voice/match-squad/ca/ca.crt"})
         container["env"].append({"name": "VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_CLIENT_CA_FILE",
                                  "value": "/etc/voice/media/ca/ca.crt"})
-        container["ports"].append({"name": "match-squad-provider", "containerPort": 9094})
+        container["ports"].append({"name": "match-provider", "containerPort": 9094})
         container["volumeMounts"].append({"name": "match-squad-ca",
                                             "mountPath": "/etc/voice/match-squad/ca",
                                             "readOnly": True})
@@ -302,8 +419,8 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         )
         base = captured_service("voice-chat", "service-uid", "17", [])
         desired = copy.deepcopy(base)
-        desired["spec"]["ports"] = [{"name": "match-squad-principal", "port": 9092,
-                                       "targetPort": "match-squad-principal"}]
+        desired["spec"]["ports"] = [{"name": "match-principal", "port": 9092,
+                                       "targetPort": "match-principal"}]
         operations = overlay.object_patch(base, desired)
         self.assertEqual(operations[:2], [
             {"op": "test", "path": "/metadata/uid", "value": "service-uid"},
@@ -311,8 +428,8 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         ])
         self.assertEqual(operations[2:], [{
             "op": "add", "path": "/spec/ports/-",
-            "value": {"name": "match-squad-principal", "port": 9092,
-                      "targetPort": "match-squad-principal"},
+            "value": {"name": "match-principal", "port": 9092,
+                      "targetPort": "match-principal"},
         }])
 
     def test_deployment_plan_appends_only_reviewed_list_items(self):
@@ -321,7 +438,7 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         container = desired["spec"]["template"]["spec"]["containers"][0]
         container["env"].append({"name": "VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN",
                                  "value": ":9094"})
-        container["ports"].append({"name": "match-squad-provider", "containerPort": 9094})
+        container["ports"].append({"name": "match-provider", "containerPort": 9094})
         container["volumeMounts"].append({"name": "match-squad-ca",
                                             "mountPath": "/etc/voice/match-squad/ca",
                                             "readOnly": True})
@@ -443,8 +560,8 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
     def test_api_readback_hash_normalizes_only_documented_defaults(self):
         target = overlay.TARGETS[1]
         local = captured_service("voice-chat", "service-uid", "17", [
-            {"name": "match-squad-principal", "port": 9092,
-             "targetPort": "match-squad-principal"},
+            {"name": "match-principal", "port": 9092,
+             "targetPort": "match-principal"},
         ])
         api = copy.deepcopy(local)
         api["spec"]["ports"][0]["protocol"] = "TCP"
@@ -474,11 +591,12 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         self.assertNotEqual(overlay.observed_render_hash(deployment_target, local_deployment),
                             overlay.observed_render_hash(deployment_target, api_deployment))
 
-    def fake_client(self, fail_at=None):
+    def fake_client(self, fail_at=None, dry_run_fail_at=None):
         class Client:
-            def __init__(self, fail_at):
+            def __init__(self, fail_at, dry_run_fail_at):
                 self.current = sanitized_live_api_fixture()
                 self.fail_at = fail_at
+                self.dry_run_fail_at = dry_run_fail_at
                 for target in overlay.TARGETS:
                     if target.kind == "Deployment":
                         container = next(c for c in self.current[(target.kind, target.name)]
@@ -488,6 +606,7 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                 self.rendered = {}
                 self.applied = []
                 self.attempts = []
+                self.dry_runs = []
                 self.rollback_calls = 0
                 self.rollouts = []
 
@@ -503,8 +622,8 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                 desired = copy.deepcopy(base)
                 if target.kind == "Service":
                     ports = {"voice-matchmaking": ("principal-jwks", 8443),
-                             "voice-chat": ("match-squad-principal", 9092),
-                             "voice-voice": ("match-squad-provider", 9094)}
+                             "voice-chat": ("match-principal", 9092),
+                             "voice-voice": ("match-provider", 9094)}
                     name, port = ports[target.name]
                     if not any(item.get("name") == name for item in desired["spec"]["ports"]):
                         desired["spec"]["ports"].append({"name": name, "port": port,
@@ -519,6 +638,14 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                         "name": "test-overlay", "configMap": {"name": "test-overlay"}})
                 self.rendered[(target.kind, target.name)] = desired
                 return desired
+
+            def server_dry_run(self, plan):
+                target = (plan["kind"], plan["name"])
+                self.dry_runs.append(target)
+                if target == self.dry_run_fail_at:
+                    raise overlay.OverlayError("synthetic API schema rejection")
+                result = copy.deepcopy(self.rendered[target])
+                return result
 
             def apply(self, plan):
                 target = (plan["kind"], plan["name"])
@@ -537,7 +664,40 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             def verify_service_endpoints(self, name, expected_ports):
                 return None
 
-        return Client(fail_at)
+        return Client(fail_at, dry_run_fail_at)
+
+    def test_server_dry_run_rejection_stops_before_every_write(self):
+        client = self.fake_client(dry_run_fail_at=("Service", "voice-chat"))
+        source_sha = "a" * 40
+        root = Path(__file__).resolve().parents[2]
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory(prefix="overlay-dry-run-reject-") as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            with mock.patch.object(overlay, "_source_identity", return_value=source_sha):
+                overlay.execute(root, source_sha, plan_path, client=client)
+                plan_sha = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                with contextlib.redirect_stderr(stderr), self.assertRaisesRegex(
+                        overlay.OverlayError, "server dry-run rejected target"):
+                    overlay.execute(root, source_sha, plan_path, plan_sha,
+                                    apply=True, client=client)
+        self.assertEqual(client.dry_runs, [("Service", "voice-matchmaking"),
+                                           ("Service", "voice-chat")])
+        self.assertEqual(client.applied, [])
+        self.assertIn("writes=0", stderr.getvalue())
+
+    def test_server_dry_run_preflights_all_effective_targets_before_apply(self):
+        client = self.fake_client()
+        source_sha = "a" * 40
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory(prefix="overlay-dry-run-pass-") as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            with mock.patch.object(overlay, "_source_identity", return_value=source_sha):
+                overlay.execute(root, source_sha, plan_path, client=client)
+                plan_sha = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                overlay.execute(root, source_sha, plan_path, plan_sha,
+                                apply=True, client=client)
+        self.assertEqual(client.dry_runs, [(item.kind, item.name) for item in overlay.TARGETS])
+        self.assertEqual(client.applied, client.dry_runs)
 
     def test_readonly_plan_then_exact_apply_covers_full_order(self):
         client = self.fake_client()
