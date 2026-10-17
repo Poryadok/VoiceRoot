@@ -449,10 +449,10 @@ def _verify_source(expected_source_sha, expected_contract_sha):
     if not re.fullmatch(r'[0-9a-f]{40}', expected_source_sha or ''):
         raise Blocked('source_pin_invalid')
     root = Path(__file__).resolve().parents[2]
-    result = run_result(['git', 'rev-parse', 'HEAD'], timeout=20)
+    result = run_result(['git', '-C', str(root), 'rev-parse', 'HEAD'], timeout=20)
     if result.returncode or result.stdout.decode('ascii', errors='strict').strip() != expected_source_sha:
         raise Blocked('source_commit_changed')
-    status = run_result(['git', 'status', '--porcelain', '--untracked-files=all'], timeout=20)
+    status = run_result(['git', '-C', str(root), 'status', '--porcelain', '--untracked-files=all'], timeout=20)
     if status.returncode or status.stdout.strip():
         raise Blocked('source_worktree_not_clean')
     contract = consumer_contract(root)

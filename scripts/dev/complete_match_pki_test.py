@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -226,6 +227,39 @@ class CompleteMatchOperatorTests(unittest.TestCase):
                 mock.patch.object(pki, 'consumer_contract', return_value='c' * 64):
             with self.assertRaisesRegex(ValueError, 'source_worktree_not_clean'):
                 pki._verify_source(SOURCE_SHA, 'c' * 64)
+
+    @unittest.skipUnless(shutil.which('git'), 'requires a real Git checkout for source-pinned CLI proof')
+    def test_preflight_cli_uses_real_source_and_consumer_pins_with_fake_external_receipts(self):
+        root = Path(__file__).resolve().parents[2]
+        source = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'],
+                                capture_output=True, check=True, text=True).stdout.strip()
+        contract = pki.consumer_contract(root)
+        namespace = {'name': pki.NAMESPACE, 'uid': pki.NAMESPACE_UID}
+        retained_journal = {'operationId': pki.OLD_OPERATION,
+                            'journalSha256': pki.OLD_JOURNAL_SHA256}
+        retained_ca = {'uid': pki.OLD_CA_UID, 'resourceVersion': pki.OLD_CA_RV,
+                       'fingerprint': pki.OLD_CA_FINGERPRINT, 'certificate': b'synthetic-public-only'}
+        stdout = io.StringIO()
+        with (mock.patch.object(pki, '_check_local_image'),
+              mock.patch.object(pki, '_namespace_identity', return_value=namespace),
+              mock.patch.object(pki, '_load_retained_journal', return_value=retained_journal),
+              mock.patch.object(pki, '_verify_retained_volume'),
+              mock.patch.object(pki, '_retained_ca_object', return_value=retained_ca),
+              mock.patch.object(pki, '_targets_absent'),
+              mock.patch.object(pki, '_volume_list', return_value=[]),
+              contextlib.redirect_stdout(stdout)):
+            result = pki.main([
+                'preflight', '--issuer-image', 'sha256:' + 'b' * 64,
+                '--expected-source-sha', source,
+                '--expected-consumer-contract-sha256', contract,
+                '--expected-namespace-uid', pki.NAMESPACE_UID,
+            ])
+        self.assertEqual(result, 0)
+        receipt = json.loads(stdout.getvalue())
+        self.assertEqual(receipt['sourceSha'], source)
+        self.assertEqual(receipt['consumerContractSha256'], contract)
+        self.assertEqual(receipt['targets'], sorted(TARGETS))
+        self.assertNotIn('certificate', receipt)
 
     def test_journal_loader_rejects_unexpected_resource_fields(self):
         state = self.root / 'operator-state'
