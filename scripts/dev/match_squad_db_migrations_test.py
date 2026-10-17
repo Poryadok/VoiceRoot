@@ -138,6 +138,51 @@ class MatchSquadMigrationRunnerContracts(unittest.TestCase):
         self.assertNotIn("'|'", shell)
 
     @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_kubectl_create_uses_source_document_json_stdin_and_safe_failure_context(self):
+        root = Path(__file__).resolve().parents[2]
+        item = runner.build_plan(root, "a" * 40)[0]
+        document = runner.configmap_manifest(item)
+        observed = {}
+
+        def accepted(argv, **kwargs):
+            observed.update({"argv": argv, **kwargs})
+            return subprocess.CompletedProcess(argv, 0, '{"kind":"ConfigMap"}', "")
+
+        kube = runner.Kubectl(runner=accepted)
+        response = kube.run(["create", "-f", "/dev/stdin", "-o", "json"], body=document)
+        self.assertEqual(response, {"kind": "ConfigMap"})
+        self.assertEqual(observed["argv"], ["kubectl", "--namespace", runner.NAMESPACE,
+            "create", "-f", "-", "-o", "json"])
+        self.assertEqual(json.loads(observed["input"]), document)
+        self.assertIs(observed["check"], False)
+        self.assertTrue(observed["capture_output"])
+        self.assertTrue(observed["text"])
+
+        def rejected(argv, **kwargs):
+            return subprocess.CompletedProcess(argv, 1, "",
+                "Error from server (Forbidden): credential=private")
+
+        kube = runner.Kubectl(runner=rejected)
+        with self.assertRaises(runner.KubeError) as caught:
+            kube.run(["create", "-f", "/dev/stdin", "-o", "json"], body=document)
+        self.assertEqual(caught.exception.stage, "create.migration_configmap")
+        self.assertEqual(caught.exception.status, 403)
+        self.assertNotIn("credential", str(caught.exception))
+        self.assertNotIn("private", str(caught.exception))
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
+    def test_cli_reports_only_safe_kubernetes_stage_and_status(self):
+        root = Path(__file__).resolve().parents[2]
+        stderr = io.StringIO()
+        with mock.patch.object(runner, "preflight",
+                side_effect=runner.KubeError(403, "get.namespace")), \
+             redirect_stderr(stderr):
+            result = runner.main(["--source-sha", "a" * 40, "--root", str(root), "--apply"])
+        self.assertEqual(result, 2)
+        self.assertEqual(stderr.getvalue().strip(),
+            "BLOCKED=kubernetes_api_error stage=get.namespace status=403")
+
+    @unittest.skipIf(runner is None, "target-only runner not implemented")
     def test_foreign_create_only_collision_is_never_replaced_or_deleted(self):
         item = runner.build_plan(Path(__file__).resolve().parents[2], "a" * 40)[0]
         obj = {
