@@ -977,7 +977,8 @@ def _source_pair(root, image_ref):
     return {"schema": gis.SOURCE_SCHEMA, "objects": rows}
 
 
-def _database_exists_readonly(kube, expected_identity, *, require_initial_absence=True):
+def _database_exists_readonly(kube, expected_identity, *, require_initial_absence=True,
+        expected_catalog=None, expected_owner=None):
     """Check fixed DB ownership and initial-install catalog state without writes."""
     import gis_prerequisite
     identity = gis_prerequisite._endpoint_identity(kube, NAMESPACE)
@@ -997,6 +998,8 @@ def _database_exists_readonly(kube, expected_identity, *, require_initial_absenc
     owner = config.get("data", {}).get("POSTGRES_USER") if isinstance(config, dict) else None
     if not isinstance(owner, str) or not re.fullmatch(r"[a-z_][a-z0-9_]{0,31}", owner):
         _blocked("gis_dev_database_owner_expectation_invalid")
+    if expected_owner is not None and owner != expected_owner:
+        _blocked("gis_dev_database_checkpoint_changed")
     query = ("SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_catalog.pg_database "
         "WHERE datname = 'game_integration_db';")
     command = ["exec", pods[0], "-c", "postgres", "--", "sh", "-c",
@@ -1017,9 +1020,41 @@ def _database_exists_readonly(kube, expected_identity, *, require_initial_absenc
     ledger_present, runtime_role_present = catalog.split("|")
     if require_initial_absence and (ledger_present == "true" or runtime_role_present == "true"):
         _blocked("gis_dev_database_initial_state_changed")
+    if expected_catalog is not None and catalog != expected_catalog:
+        _blocked("gis_dev_database_checkpoint_changed")
     if gis_prerequisite._endpoint_identity(kube, NAMESPACE) != expected_identity:
         _blocked("gis_dev_database_identity_changed")
     return identity
+
+
+def _expected_prerequisite_catalog(plan):
+    """Derive the only catalog state justified by completed owned Job receipts."""
+    completed = plan.get("jobs", {})
+    created = plan.get("created", {})
+    if completed is None:
+        completed = {}
+    if created is None:
+        created = {}
+    if not isinstance(completed, dict) or not isinstance(created, dict):
+        _blocked("gis_dev_database_job_checkpoint_invalid")
+    roles = ("provision", "migrate", "verify")
+    present = tuple(role for role in roles if role in completed)
+    if present != roles[:len(present)]:
+        _blocked("gis_dev_database_job_checkpoint_invalid")
+    for role in present:
+        job_name = plan.get("inputs", {}).get("jobs", {}).get(role)
+        row = completed[role]
+        record = created.get("job/" + str(job_name))
+        if (not isinstance(record, dict) or not isinstance(row, dict)
+            or row.get("name") != job_name or row.get("uid") != record.get("uid")
+            or row.get("spec_sha256") != record.get("spec_sha256")
+            or row.get("complete") is not True or row.get("succeeded") != 1):
+            _blocked("gis_dev_database_job_checkpoint_invalid")
+    if "migrate" in present:
+        return "true|true"
+    if "provision" in present:
+        return "false|true"
+    return "false|false"
 
 
 def _save_plan(state_path, state):
@@ -1040,6 +1075,14 @@ _PARTIAL_SOURCE_SHA = "860b995dd883ade2b79996f9fcbe34302b3c7bac"
 _PARTIAL_JOURNAL_SHA256 = "659d0379811afa39c22d056b0b3cf9787a3d50d5dbef2f275bc9524ddd19cac1"
 _PARTIAL_V1_SIDECAR_SHA256 = "46994d2e66cb2376b1ebafb79510ef0b46ddb94ecc376bcc16fc606c4c28720a"
 _PARTIAL_V1_CANDIDATE_SHA = "db8a65b35d38406490e3c8c991866ac22619b021"
+_PARTIAL_C5_CANDIDATE_SHA = "b3dd42cbf0fd3772b4c4553a65cc43031df02adb"
+_PARTIAL_C5_V2_SHA256 = "8603b46f06f2a0626ebd4de835c7061a70f4f7ed0aa966c3dcd87b3716a53a48"
+_PARTIAL_C5_AUTH_SHA256 = "36f82462b2adf402126b5996f775e5f6647af7024c6bda59c096b2ca28112ca8"
+_PARTIAL_C5_CHANGED_FILE_SHA256 = {
+    "scripts/dev/gis_dev_first_install.py": "8b253467164561b0e08a9d3fe5def79406a22217f26573cd567a8e4a1daa46d5",
+    "scripts/dev/gis_first_install_test.py": "74e2aec39f2fa2b53b7b957140fb89be7216321eaf6706ae6a89c040adb5ff2f",
+    "scripts/staging/nats-rollout-preservation/gis_prerequisite.py": "f64496c12a62608a1e8b53c9fae2c41e1d3c92dafdbb9a1301627750dbd8acfd",
+    "scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py": "9e1f22b6b267ac3a66cd889622e550c673975c7e86f351e07b8bc183258c710c"}
 _PARTIAL_CHANGED_PATHS = {
     "scripts/dev/gis_dev_first_install.py",
     "scripts/dev/gis_first_install_test.py",
@@ -1189,6 +1232,242 @@ def _partial_v2_admissible(current, legacy, legacy_sha256, binding, fingerprints
     return True
 
 
+def _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256, c5_authorization_sha256,
+        binding, fingerprints, original_state, authorization, expected_authorization_sha256,
+        kube, root, code_capture):
+    """Create the one reviewed C5 checkpoint transition without editing v1/v2."""
+    required = {"schema", "operation", "namespace_uid", "original_journal_sha256",
+        "immutable_v1_sha256", "previous_v2_sha256", "previous_v2_binding_sha256",
+        "previous_v2_state_sha256", "previous_authorization_sha256",
+        "previous_candidate_source_sha", "previous_changed_files",
+        "previous_secret_fingerprints_sha256", "target_source_sha", "target_changed_files",
+        "protected_binding", "partial_checkpoint"}
+    if (current_v2_sha256 != _PARTIAL_C5_V2_SHA256
+        or c5_authorization_sha256 != _PARTIAL_C5_AUTH_SHA256
+        or not isinstance(current_v2, dict)
+        or current_v2.get("schema") != "voice-dev-gis-partial-continuation-v2"
+        or current_v2.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or current_v2.get("previous_sidecar_sha256") != _PARTIAL_V1_SIDECAR_SHA256
+        or current_v2.get("authorization_sha256") != _PARTIAL_C5_AUTH_SHA256
+        or not isinstance(binding, dict)
+        or binding.get("old_source_sha") != _PARTIAL_SOURCE_SHA
+        or binding.get("candidate_source_sha") != _git_text(root, ["rev-parse", "HEAD"])
+        or not isinstance(binding.get("changed_files"), dict)
+        or set(binding["changed_files"]) != _PARTIAL_CHANGED_PATHS
+        or binding["changed_files"] != _PARTIAL_C5_CHANGED_FILE_SHA256
+        or any(not isinstance(value, str) or not HASH.fullmatch(value)
+            for value in binding.get("changed_files", {}).values())):
+        _blocked("gis_dev_partial_c5_checkpoint_invalid")
+    previous_binding = current_v2.get("binding")
+    previous_state = current_v2.get("state")
+    if (not isinstance(previous_binding, dict) or not isinstance(previous_state, dict)
+        or previous_binding.get("candidate_source_sha") != _PARTIAL_C5_CANDIDATE_SHA
+        or previous_binding.get("old_source_sha") != _PARTIAL_SOURCE_SHA
+        or set(previous_binding.get("changed_files", {})) != _PARTIAL_CHANGED_PATHS
+        or not isinstance(current_v2.get("secret_fingerprints_sha256"), str)
+        or current_v2.get("secret_fingerprints_sha256") != _digest(fingerprints)):
+        _blocked("gis_dev_partial_c5_checkpoint_invalid")
+    _partial_state_compatible(previous_state, original_state)
+    previous_plan = previous_state.get("plan", {})
+    expected_record_keys = {"configmap/voice-gameintegration-runtime-role-sql",
+        "job/voice-provision-gameintegration-runtime-role"}
+    records = previous_plan.get("created")
+    if (previous_state.get("operation") != _PARTIAL_OPERATION
+        or previous_state.get("namespace_uid") != original_state.get("namespace_uid")
+        or previous_state.get("phase") != "SECRETS_APPLIED"
+        or previous_plan.get("phase") != "PLANNED"
+        or previous_plan.get("prerequisite_phase") != "CREATING"
+        or previous_plan.get("prerequisite_receipt") is not None
+        or not isinstance(records, dict) or set(records) != expected_record_keys
+        or previous_plan.get("jobs") not in (None, {})
+        or previous_plan.get("create_failures") not in (None, {})):
+        _blocked("gis_dev_partial_c5_checkpoint_state_invalid")
+    protected_keys = ("old_source_sha", "backend_tree", "build_receipt_sha256", "image_ref",
+        "source_plan_sha256", "source_capture_sha256", "inputs_sha256")
+    protected = {key: binding[key] for key in protected_keys}
+    checkpoint = {"created_records": copy.deepcopy(records),
+        "database_identity": copy.deepcopy(previous_state.get("database_identity")),
+        "database_owner": "voice", "database_catalog": "false|true",
+        "operation": _PARTIAL_OPERATION,
+        "secret_fingerprints_sha256": current_v2["secret_fingerprints_sha256"],
+        "namespace_uid": original_state.get("namespace_uid")}
+    if (not isinstance(authorization, dict) or set(authorization) != required
+        or authorization.get("schema") != "voice-dev-gis-recovery-transition-authorization-v1"
+        or not isinstance(expected_authorization_sha256, str) or not HASH.fullmatch(expected_authorization_sha256)
+        or _digest(authorization) != expected_authorization_sha256
+        or authorization.get("operation") != _PARTIAL_OPERATION
+        or authorization.get("namespace_uid") != original_state.get("namespace_uid")
+        or authorization.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or authorization.get("immutable_v1_sha256") != _PARTIAL_V1_SIDECAR_SHA256
+        or authorization.get("previous_v2_sha256") != _PARTIAL_C5_V2_SHA256
+        or authorization.get("previous_v2_binding_sha256") != _digest(previous_binding)
+        or authorization.get("previous_v2_state_sha256") != _digest(previous_state)
+        or authorization.get("previous_authorization_sha256") != _PARTIAL_C5_AUTH_SHA256
+        or authorization.get("previous_candidate_source_sha") != _PARTIAL_C5_CANDIDATE_SHA
+        or authorization.get("previous_changed_files") != previous_binding.get("changed_files")
+        or authorization.get("previous_secret_fingerprints_sha256") != current_v2.get("secret_fingerprints_sha256")
+        or authorization.get("target_source_sha") != binding.get("candidate_source_sha")
+        or authorization.get("target_changed_files") != binding.get("changed_files")
+        or authorization.get("protected_binding") != protected
+        or authorization.get("partial_checkpoint") != checkpoint):
+        _blocked("gis_dev_partial_c5_transition_authorization_invalid")
+    if any(previous_binding.get(key) != binding.get(key) for key in protected_keys):
+        _blocked("gis_dev_partial_c5_protected_binding_changed")
+    if original_state.get("database_identity") != checkpoint["database_identity"]:
+        _blocked("gis_dev_partial_c5_database_binding_changed")
+
+    import gis_prerequisite
+    configmaps, jobs = gis_prerequisite._documents(root, previous_plan, code_capture)
+    expected = {
+        "configmap/voice-gameintegration-runtime-role-sql": configmaps["provision"],
+        "job/voice-provision-gameintegration-runtime-role": jobs["provision"]}
+    inventory = kube.run(["get", "jobs,configmaps", "-l",
+        gis_prerequisite.OP_LABEL + "=" + _PARTIAL_OPERATION, "-o", "json"])
+    items = inventory.get("items") if isinstance(inventory, dict) else None
+    if not isinstance(items, list) or len(items) != 2:
+        _blocked("gis_dev_partial_c5_resource_inventory_changed")
+    seen = set()
+    for obj in items:
+        kind = str(obj.get("kind", "")).lower()
+        name = obj.get("metadata", {}).get("name")
+        key = kind + "/" + str(name)
+        row = records.get(key)
+        wanted = expected.get(key)
+        metadata = obj.get("metadata", {})
+        if (key not in expected or key in seen or not isinstance(row, dict)
+            or set(row) != {"uid", "spec_sha256"}
+            or metadata.get("namespace") != NAMESPACE or metadata.get("uid") != row.get("uid")
+            or metadata.get("labels", {}).get(gis_prerequisite.OP_LABEL) != _PARTIAL_OPERATION
+            or row.get("spec_sha256") != gis_prerequisite._spec_digest(wanted)):
+            _blocked("gis_dev_partial_c5_resource_changed")
+        seen.add(key)
+        if kind == "job" and not gis_prerequisite._job_live_matches(obj, wanted, row["uid"]):
+            _blocked("gis_dev_partial_c5_resource_changed")
+        if kind == "configmap" and gis_prerequisite._spec_digest(obj) != row["spec_sha256"]:
+            _blocked("gis_dev_partial_c5_resource_changed")
+    if seen != expected_record_keys:
+        _blocked("gis_dev_partial_c5_resource_inventory_changed")
+    for kind in ("service", "deployment"):
+        value = kube.run(["get", kind, "voice-gameintegration", "--ignore-not-found=true", "-o", "json"])
+        if value != "":
+            _blocked("gis_dev_partial_c5_workload_unexpected")
+    identity = _database_exists_readonly(kube, checkpoint["database_identity"],
+        require_initial_absence=False, expected_catalog=checkpoint["database_catalog"],
+        expected_owner=checkpoint["database_owner"])
+    if identity != checkpoint["database_identity"]:
+        _blocked("gis_dev_partial_c5_database_binding_changed")
+    provision_record = records["job/voice-provision-gameintegration-runtime-role"]
+    job_proof, _ = gis_prerequisite._verify_job(kube, "provision", jobs["provision"],
+        provision_record, previous_plan["inputs"], previous_plan)
+    state = copy.deepcopy(previous_state)
+    state["plan"].setdefault("jobs", {})["provision"] = job_proof
+    return {"schema": "voice-dev-gis-partial-continuation-v3",
+        "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
+        "immutable_v1_sha256": _PARTIAL_V1_SIDECAR_SHA256,
+        "previous_v2_sha256": _PARTIAL_C5_V2_SHA256,
+        "previous_v2_binding_sha256": _digest(previous_binding),
+        "previous_v2_state_sha256": _digest(previous_state),
+        "previous_authorization_sha256": _PARTIAL_C5_AUTH_SHA256,
+        "previous_candidate_source_sha": _PARTIAL_C5_CANDIDATE_SHA,
+        "previous_changed_files": copy.deepcopy(previous_binding["changed_files"]),
+        "source_transition_authorization_sha256": expected_authorization_sha256,
+        "binding": copy.deepcopy(binding),
+        "secret_fingerprints_sha256": _digest(fingerprints),
+        "state": state}
+
+
+def _partial_v3_admissible(current, current_v2, current_v2_sha256,
+        c5_authorization_sha256, binding, fingerprints, original_state, authorization,
+        expected_authorization_sha256, root):
+    """Validate the C5 checkpoint bridge on every C6 resume without mutating v1/v2."""
+    if (current_v2_sha256 != _PARTIAL_C5_V2_SHA256
+        or c5_authorization_sha256 != _PARTIAL_C5_AUTH_SHA256
+        or not isinstance(current_v2, dict)
+        or current_v2.get("schema") != "voice-dev-gis-partial-continuation-v2"
+        or current_v2.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or current_v2.get("previous_sidecar_sha256") != _PARTIAL_V1_SIDECAR_SHA256
+        or current_v2.get("authorization_sha256") != _PARTIAL_C5_AUTH_SHA256):
+        _blocked("gis_dev_partial_c5_checkpoint_invalid")
+    previous_binding = current_v2.get("binding")
+    previous_state = current_v2.get("state")
+    if (not isinstance(previous_binding, dict) or not isinstance(previous_state, dict)
+        or previous_binding.get("candidate_source_sha") != _PARTIAL_C5_CANDIDATE_SHA
+        or previous_binding.get("old_source_sha") != _PARTIAL_SOURCE_SHA
+        or not isinstance(previous_binding.get("changed_files"), dict)
+        or set(previous_binding["changed_files"]) != _PARTIAL_CHANGED_PATHS
+        or previous_binding["changed_files"] != _PARTIAL_C5_CHANGED_FILE_SHA256):
+        _blocked("gis_dev_partial_c5_checkpoint_invalid")
+    _partial_state_compatible(previous_state, original_state)
+    records = previous_state.get("plan", {}).get("created")
+    checkpoint = {"created_records": copy.deepcopy(records),
+        "database_identity": copy.deepcopy(previous_state.get("database_identity")),
+        "database_owner": "voice", "database_catalog": "false|true",
+        "operation": _PARTIAL_OPERATION,
+        "secret_fingerprints_sha256": current_v2.get("secret_fingerprints_sha256"),
+        "namespace_uid": original_state.get("namespace_uid")}
+    protected = {key: binding.get(key) for key in ("old_source_sha", "backend_tree",
+        "build_receipt_sha256", "image_ref", "source_plan_sha256", "source_capture_sha256", "inputs_sha256")}
+    auth_keys = {"schema", "operation", "namespace_uid", "original_journal_sha256",
+        "immutable_v1_sha256", "previous_v2_sha256", "previous_v2_binding_sha256",
+        "previous_v2_state_sha256", "previous_authorization_sha256",
+        "previous_candidate_source_sha", "previous_changed_files",
+        "previous_secret_fingerprints_sha256", "target_source_sha", "target_changed_files",
+        "protected_binding", "partial_checkpoint"}
+    if (not isinstance(binding, dict)
+        or binding.get("candidate_source_sha") != _git_text(root, ["rev-parse", "HEAD"])
+        or binding.get("old_source_sha") != _PARTIAL_SOURCE_SHA
+        or set(binding.get("changed_files", {})) != _PARTIAL_CHANGED_PATHS
+        or any(not isinstance(value, str) or not HASH.fullmatch(value)
+            for value in binding.get("changed_files", {}).values())
+        or any(previous_binding.get(key) != binding.get(key) for key in protected)
+        or not isinstance(authorization, dict) or set(authorization) != auth_keys
+        or authorization.get("schema") != "voice-dev-gis-recovery-transition-authorization-v1"
+        or not isinstance(expected_authorization_sha256, str) or not HASH.fullmatch(expected_authorization_sha256)
+        or _digest(authorization) != expected_authorization_sha256
+        or authorization.get("operation") != _PARTIAL_OPERATION
+        or authorization.get("namespace_uid") != original_state.get("namespace_uid")
+        or authorization.get("original_journal_sha256") != _PARTIAL_JOURNAL_SHA256
+        or authorization.get("immutable_v1_sha256") != _PARTIAL_V1_SIDECAR_SHA256
+        or authorization.get("previous_v2_sha256") != _PARTIAL_C5_V2_SHA256
+        or authorization.get("previous_v2_binding_sha256") != _digest(previous_binding)
+        or authorization.get("previous_v2_state_sha256") != _digest(previous_state)
+        or authorization.get("previous_authorization_sha256") != _PARTIAL_C5_AUTH_SHA256
+        or authorization.get("previous_candidate_source_sha") != _PARTIAL_C5_CANDIDATE_SHA
+        or authorization.get("previous_changed_files") != previous_binding.get("changed_files")
+        or authorization.get("previous_secret_fingerprints_sha256") != current_v2.get("secret_fingerprints_sha256")
+        or authorization.get("target_source_sha") != binding.get("candidate_source_sha")
+        or authorization.get("target_changed_files") != binding.get("changed_files")
+        or authorization.get("protected_binding") != protected
+        or authorization.get("partial_checkpoint") != checkpoint):
+        _blocked("gis_dev_partial_c5_transition_authorization_invalid")
+    expected = {"schema": "voice-dev-gis-partial-continuation-v3",
+        "original_journal_sha256": _PARTIAL_JOURNAL_SHA256,
+        "immutable_v1_sha256": _PARTIAL_V1_SIDECAR_SHA256,
+        "previous_v2_sha256": _PARTIAL_C5_V2_SHA256,
+        "previous_v2_binding_sha256": _digest(previous_binding),
+        "previous_v2_state_sha256": _digest(previous_state),
+        "previous_authorization_sha256": _PARTIAL_C5_AUTH_SHA256,
+        "previous_candidate_source_sha": _PARTIAL_C5_CANDIDATE_SHA,
+        "previous_changed_files": previous_binding["changed_files"],
+        "source_transition_authorization_sha256": expected_authorization_sha256,
+        "binding": copy.deepcopy(binding),
+        "secret_fingerprints_sha256": _digest(fingerprints)}
+    if (not isinstance(current, dict) or set(current) != set(expected) | {"state"}
+        or any(current.get(key) != value for key, value in expected.items())
+        or current.get("secret_fingerprints_sha256") != current_v2.get("secret_fingerprints_sha256")):
+        _blocked("gis_dev_partial_v3_transition_changed")
+    _partial_state_compatible(current.get("state"), original_state)
+    current_created = current["state"].get("plan", {}).get("created", {})
+    if (not isinstance(current_created, dict)
+        or any(current_created.get(key) != record
+            for key, record in checkpoint["created_records"].items())):
+        _blocked("gis_dev_partial_v3_created_checkpoint_changed")
+    if (current["state"].get("operation") != _PARTIAL_OPERATION
+        or current["state"].get("namespace_uid") != original_state.get("namespace_uid")):
+        _blocked("gis_dev_partial_v3_state_changed")
+    return True
+
+
 def _partial_state_admissible(state):
     plan = state.get("plan") if isinstance(state, dict) else None
     receipt = state.get("secret_write_receipt") if isinstance(state, dict) else None
@@ -1274,6 +1553,39 @@ def _partial_state_compatible(state, original):
             and plan.get("prerequisite_receipt") is None
             and not verified_job_receipts)):
         _blocked("gis_dev_partial_sidecar_plan_invalid")
+    for key, record in plan["created"].items():
+        expected_keys = ({"uid", "resourceVersion", "spec_sha256"}
+            if key in {"Service/voice-gameintegration", "Deployment/voice-gameintegration"}
+            else {"uid", "spec_sha256"})
+        if (not isinstance(record, dict) or set(record) != expected_keys
+            or not isinstance(record.get("uid"), str)
+            or not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", record["uid"])
+            or not isinstance(record.get("spec_sha256"), str) or not HASH.fullmatch(record["spec_sha256"])):
+            _blocked("gis_dev_partial_sidecar_created_record_invalid")
+        if "resourceVersion" in record and (not isinstance(record["resourceVersion"], str)
+            or not re.fullmatch(r"[1-9][0-9]{0,31}", record["resourceVersion"])):
+            _blocked("gis_dev_partial_sidecar_created_record_invalid")
+    role_names = baseline.get("inputs", {}).get("jobs", {})
+    ordered_roles = ("provision", "migrate", "verify")
+    completed_roles = tuple(role for role in ordered_roles if role in plan["jobs"])
+    if completed_roles != ordered_roles[:len(completed_roles)]:
+        _blocked("gis_dev_partial_sidecar_jobs_invalid")
+    for role, row in plan["jobs"].items():
+        job_record = plan["created"].get("job/" + str(role_names.get(role)))
+        expected_image_names = set(baseline.get("inputs", {}).get("job_images", {}).get(role, {}))
+        if (not isinstance(row, dict) or row.get("name") != role_names.get(role)
+            or set(row) != {"name", "uid", "spec_sha256", "pod_uid", "image_ids",
+                "complete", "succeeded", "completion_time"}
+            or not isinstance(job_record, dict) or row.get("uid") != job_record.get("uid")
+            or row.get("spec_sha256") != job_record.get("spec_sha256")
+            or row.get("complete") is not True or row.get("succeeded") != 1
+            or not isinstance(row.get("pod_uid"), str)
+            or not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", row["pod_uid"])
+            or not isinstance(row.get("image_ids"), dict)
+            or set(row["image_ids"]) != expected_image_names
+            or any(not isinstance(value, str) or not value for value in row["image_ids"].values())
+            or not isinstance(row.get("completion_time"), str) or not row["completion_time"]):
+            _blocked("gis_dev_partial_sidecar_jobs_invalid")
     return True
 
 
@@ -1336,7 +1648,8 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
             builder_run=38984047252, builder_job=117252300427,
             local_build=False, local_build_receipt=None, build_receipt_factory=source_build_receipt,
             secret_plan_factory=build_secret_plan, source_verifier=verify_current_source,
-            resume_partial=False, recovery_authorization=None, recovery_authorization_sha256=None):
+            resume_partial=False, recovery_authorization=None, recovery_authorization_sha256=None,
+            source_transition_authorization=None, source_transition_authorization_sha256=None):
     """Run the fixed DEV-only install through source, DB, Secret, and GIS guards."""
     if not apply:
         _blocked("gis_dev_apply_flag_required")
@@ -1391,6 +1704,7 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
     prior = None
     legacy_continuation_path = Path(str(state_path) + ".continuation.json")
     continuation_path = Path(str(state_path) + ".continuation-current.json")
+    continuation_v3_path = Path(str(state_path) + ".continuation-current-v3.json")
     continuation = None
     continuation_sha256 = None
     if resume_partial:
@@ -1407,23 +1721,59 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
             _blocked("gis_dev_partial_authorization_invalid")
         if hashlib.sha256(authorization_raw).hexdigest() != recovery_authorization_sha256:
             _blocked("gis_dev_partial_authorization_invalid")
+        fingerprints = _partial_secret_fingerprints(kube, original_state)
         try:
             legacy_raw = _read_private_continuation(legacy_continuation_path)
-            legacy = json.loads(legacy_raw)
+            legacy = _strict_json_object(legacy_raw)
         except Exception:
             _blocked("gis_dev_partial_v1_sidecar_invalid")
         legacy_sha256 = hashlib.sha256(legacy_raw).hexdigest()
-        fingerprints = _partial_secret_fingerprints(kube, original_state)
+        current_v2 = None
+        current_v2_sha256 = None
+        c5_authorization_sha256 = hashlib.sha256(authorization_raw).hexdigest()
         if continuation_path.exists():
             try:
                 raw = _read_private_continuation(continuation_path)
-                continuation = json.loads(raw)
+                current_v2 = _strict_json_object(raw)
             except Exception:
                 _blocked("gis_dev_partial_sidecar_invalid")
+            current_v2_sha256 = hashlib.sha256(raw).hexdigest()
+        if not source_transition_authorization or not source_transition_authorization_sha256:
+            if current_v2 is not None:
+                _blocked("gis_dev_partial_c5_transition_authorization_required")
+        if source_transition_authorization:
+            try:
+                transition_raw = _read_private_continuation(source_transition_authorization,
+                    maximum_size=16384, exact_mode=0o600)
+                transition_authorization = _strict_json_object(transition_raw)
+            except Exception:
+                _blocked("gis_dev_partial_c5_transition_authorization_invalid")
+            if hashlib.sha256(transition_raw).hexdigest() != source_transition_authorization_sha256:
+                _blocked("gis_dev_partial_c5_transition_authorization_invalid")
+        else:
+            transition_authorization = None
+        if continuation_v3_path.exists():
+            if current_v2 is None:
+                _blocked("gis_dev_partial_c5_checkpoint_invalid")
+            try:
+                raw = _read_private_continuation(continuation_v3_path)
+                continuation = _strict_json_object(raw)
+            except Exception:
+                _blocked("gis_dev_partial_v3_sidecar_invalid")
             continuation_sha256 = hashlib.sha256(raw).hexdigest()
-            _partial_v2_admissible(continuation, legacy, legacy_sha256,
-                binding, fingerprints, original_state, authorization, recovery_authorization_sha256)
+            _partial_v3_admissible(continuation, current_v2, current_v2_sha256,
+                c5_authorization_sha256, binding, fingerprints, original_state,
+                transition_authorization, source_transition_authorization_sha256, root)
+            continuation_path = continuation_v3_path
             prior = continuation.get("state")
+        elif current_v2 is not None:
+            continuation = _partial_c5_checkpoint_to_v3(current_v2, current_v2_sha256,
+                c5_authorization_sha256, binding, fingerprints, original_state,
+                transition_authorization, source_transition_authorization_sha256,
+                kube, root, original_state.get("plan", {}).get("source_capture"))
+            continuation_sha256 = _save_continuation(continuation_v3_path, continuation)
+            continuation_path = continuation_v3_path
+            prior = continuation["state"]
         else:
             continuation = _partial_v1_transition(legacy, legacy_sha256,
                 binding, fingerprints, original_state, authorization, recovery_authorization_sha256)
@@ -1536,10 +1886,10 @@ def _install_unlocked(source_root, image_ref, state_path, *, kube=None, apply=Fa
 
     try:
         if not plan.get("prerequisite_receipt"):
-            owned_jobs = gis_prerequisite.reconcile_existing_jobs(
-                kube, plan, root, code_capture, save_plan)
-            _database_exists_readonly(kube, before,
-                require_initial_absence=not owned_jobs)
+            gis_prerequisite.reconcile_existing_jobs(kube, plan, root, code_capture, save_plan)
+            expected_catalog = _expected_prerequisite_catalog(plan)
+            _database_exists_readonly(kube, before, require_initial_absence=False,
+                expected_catalog=expected_catalog)
             source_verifier(root, operator_source_sha, build_receipt["builder_tree"])
             receipt = gis_prerequisite.execute(kube, plan, root, code_capture, save_plan)
             plan["prerequisite_receipt"] = receipt
@@ -1666,6 +2016,8 @@ def main(argv=None):
         help="continue only the frozen GIS operation 737e63e3aaee through its reviewed sidecar")
     parser.add_argument("--recovery-authorization", help="dispatcher-issued exact-source recovery authorization receipt")
     parser.add_argument("--recovery-authorization-sha256", help="independently granted SHA-256 for that authorization receipt")
+    parser.add_argument("--source-transition-authorization", help="dispatcher-issued C5 checkpoint to reviewed candidate transition receipt")
+    parser.add_argument("--source-transition-authorization-sha256", help="independently granted SHA-256 for the checkpoint transition receipt")
     args = parser.parse_args(argv)
     try:
         if args.build_and_publish:
@@ -1703,7 +2055,9 @@ def main(argv=None):
             builder_run=args.builder_run, builder_job=args.builder_job, local_build=args.local_build,
             resume_partial=args.resume_partial_operation,
             recovery_authorization=args.recovery_authorization,
-            recovery_authorization_sha256=args.recovery_authorization_sha256)
+            recovery_authorization_sha256=args.recovery_authorization_sha256,
+            source_transition_authorization=args.source_transition_authorization,
+            source_transition_authorization_sha256=args.source_transition_authorization_sha256)
         print("GIS_DEV_FIRST_INSTALL=READY " + ready["deployment_uid"])
         return 0
     except Blocked as error:

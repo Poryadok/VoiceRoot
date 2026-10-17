@@ -348,10 +348,17 @@ def _read_named(kube, kind, name):
 
 
 def _job_live_matches(actual, wanted, uid):
-    if _spec_digest(actual) != _spec_digest(wanted):
+    actual_meta = actual.get('metadata', {})
+    wanted_meta = wanted.get('metadata', {})
+    if (actual.get('kind') != 'Job' or wanted.get('kind') != 'Job'
+        or actual_meta.get('name') != wanted_meta.get('name')
+        or actual_meta.get('namespace') != wanted_meta.get('namespace')
+        or actual_meta.get('uid') != uid
+        or actual_meta.get('labels', {}).get(OP_LABEL) != wanted_meta.get('labels', {}).get(OP_LABEL)):
         return False
-    spec = actual.get('spec', {})
-    if spec.get('manualSelector', False) is not False or spec.get('completions', 1) != 1 or spec.get('parallelism', 1) != 1:
+    spec = copy.deepcopy(actual.get('spec'))
+    wanted_spec = copy.deepcopy(wanted.get('spec'))
+    if not isinstance(spec, dict) or not isinstance(wanted_spec, dict):
         return False
     labels = wanted['spec']['template']['metadata'].get('labels', {})
     generated = {'batch.kubernetes.io/controller-uid': uid,
@@ -359,12 +366,64 @@ def _job_live_matches(actual, wanted, uid):
     legacy = {'controller-uid': uid, 'job-name': wanted['metadata']['name']}
     selector = spec.get('selector', {}).get('matchLabels', {})
     expressions = spec.get('selector', {}).get('matchExpressions', [])
-    if expressions or selector not in (generated, {**generated, **legacy}):
+    if expressions or selector != {'batch.kubernetes.io/controller-uid': uid}:
         return False
     actual_labels = spec.get('template', {}).get('metadata', {}).get('labels', {})
     if actual_labels not in ({**labels, **generated}, {**labels, **generated, **legacy}):
         return False
-    return True
+    spec.pop('selector', None)
+    wanted_spec.pop('selector', None)
+    for key, value in {'completionMode': 'NonIndexed', 'completions': 1,
+            'manualSelector': False, 'parallelism': 1,
+            'podReplacementPolicy': 'TerminatingOrFailed', 'suspend': False}.items():
+        if wanted_spec.get(key) is None:
+            if spec.get(key) != value:
+                return False
+            spec.pop(key, None)
+    template = spec.get('template', {})
+    wanted_template = wanted_spec.get('template', {})
+    template_metadata = template.get('metadata', {})
+    wanted_metadata = wanted_template.get('metadata', {})
+    template_metadata['labels'] = copy.deepcopy(labels)
+    wanted_metadata['labels'] = copy.deepcopy(labels)
+    pod = template.get('spec', {})
+    wanted_pod = wanted_template.get('spec', {})
+    for key, value in {'dnsPolicy': 'ClusterFirst', 'schedulerName': 'default-scheduler',
+            'terminationGracePeriodSeconds': 30}.items():
+        if wanted_pod.get(key) is None:
+            if pod.get(key) != value:
+                return False
+            pod.pop(key, None)
+    if wanted_pod.get('securityContext') is None:
+        if pod.get('securityContext') != {}:
+            return False
+        pod.pop('securityContext', None)
+    for group in ('containers', 'initContainers'):
+        actual_rows = pod.get(group, [])
+        wanted_rows = wanted_pod.get(group, [])
+        if not isinstance(actual_rows, list) or len(actual_rows) != len(wanted_rows):
+            return False
+        for actual_row, wanted_row in zip(actual_rows, wanted_rows):
+            defaults = {'imagePullPolicy': 'IfNotPresent',
+                'terminationMessagePath': '/dev/termination-log',
+                'terminationMessagePolicy': 'File'}
+            for key, value in defaults.items():
+                if wanted_row.get(key) is None:
+                    if actual_row.get(key) != value:
+                        return False
+                    actual_row.pop(key, None)
+    actual_volumes = pod.get('volumes', [])
+    wanted_volumes = wanted_pod.get('volumes', [])
+    if not isinstance(actual_volumes, list) or len(actual_volumes) != len(wanted_volumes):
+        return False
+    for actual_volume, wanted_volume in zip(actual_volumes, wanted_volumes):
+        actual_cm = actual_volume.get('configMap')
+        wanted_cm = wanted_volume.get('configMap')
+        if isinstance(actual_cm, dict) and isinstance(wanted_cm, dict) and wanted_cm.get('defaultMode') is None:
+            if actual_cm.get('defaultMode') != 420:
+                return False
+            actual_cm.pop('defaultMode', None)
+    return _canonical(spec) == _canonical(wanted_spec)
 
 
 def _create_once(kube, kind, obj, plan, saved, save):
@@ -486,6 +545,9 @@ def reconcile_existing_jobs(kube, plan, source_root, code_capture, save):
         elif (record.get('uid') != uid
             or record.get('spec_sha256') != _spec_digest(wanted)):
             raise Blocked('gis_prerequisite_resource_changed')
+        proof, _ = _verify_job(kube, role, wanted, record, plan['inputs'], plan)
+        plan.setdefault('jobs', {})[role] = proof
+        save(copy.deepcopy(plan))
     if plan.get('prerequisite_phase') == 'VERIFIED' and not observed_any:
         raise Blocked('gis_prerequisite_recorded_resource_missing')
     return observed_any

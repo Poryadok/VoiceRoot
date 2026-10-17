@@ -33,6 +33,30 @@ def capture(root):
     return {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in paths}
 
 
+def api_default_job(obj, uid):
+    """Model the exact observed Kubernetes v1.34 Job/Pod defaults and labels."""
+    job = copy.deepcopy(obj)
+    spec = job['spec']
+    name = job['metadata']['name']
+    spec.update(completionMode='NonIndexed', completions=1, manualSelector=False,
+        parallelism=1, podReplacementPolicy='TerminatingOrFailed', suspend=False,
+        selector={'matchLabels': {'batch.kubernetes.io/controller-uid': uid}})
+    labels = spec['template']['metadata'].setdefault('labels', {})
+    labels.update({'batch.kubernetes.io/controller-uid': uid,
+        'batch.kubernetes.io/job-name': name, 'controller-uid': uid, 'job-name': name})
+    pod = spec['template']['spec']
+    pod.update(dnsPolicy='ClusterFirst', schedulerName='default-scheduler',
+        securityContext={}, terminationGracePeriodSeconds=30)
+    for group in ('containers', 'initContainers'):
+        for container in pod.get(group, []):
+            container.update(imagePullPolicy='IfNotPresent',
+                terminationMessagePath='/dev/termination-log', terminationMessagePolicy='File')
+    for volume in pod.get('volumes', []):
+        if isinstance(volume.get('configMap'), dict):
+            volume['configMap']['defaultMode'] = 420
+    return job
+
+
 class FakeKube:
     def __init__(self):
         self.objects = {}
@@ -87,7 +111,9 @@ class FakeKube:
             if kind == 'job':
                 generated = {'batch.kubernetes.io/controller-uid': uid,
                     'batch.kubernetes.io/job-name': name}
-                obj['spec']['selector'] = {'matchLabels': generated}
+                obj = api_default_job(obj, uid)
+                obj['spec']['selector'] = {'matchLabels': {
+                    'batch.kubernetes.io/controller-uid': uid}}
                 obj['spec']['manualSelector'] = False
                 obj['spec']['template']['metadata'].setdefault('labels', {}).update(generated)
                 obj['status'] = {'succeeded': 1, 'failed': 0,
@@ -404,6 +430,91 @@ class Tests(unittest.TestCase):
         self.assertEqual(len([event for event in kube.events if event[:1] == ('created-job',)]), 1)
         prerequisite._create_once(kube, 'job', jobs['provision'], plan, plan['created'], saved.append)
         self.assertEqual(len([event for event in kube.events if event[:1] == ('created-job',)]), 1)
+
+    def test_job_live_projection_accepts_only_exact_kubernetes_v134_defaults(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'schema': gis.SCHEMA, 'operation': 'a'*12, 'namespace': 'voice-staging',
+            'source_sha': 'b'*40, 'source_plan_sha256': 'c'*64, 'phase': 'PLANNED',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        wanted = jobs['provision']
+        uid = '00000000-0000-0000-0000-000000000099'
+        actual = api_default_job(wanted, uid)
+        actual['metadata']['uid'] = uid
+        self.assertTrue(prerequisite._job_live_matches(actual, wanted, uid))
+
+        mutations = []
+        for path, value in (
+            ('mode', 384), ('optional', True), ('items', [{'key': 'other', 'path': 'other'}]),
+        ):
+            mutated = copy.deepcopy(actual)
+            cm = mutated['spec']['template']['spec']['volumes'][0]['configMap']
+            if path == 'mode': cm['defaultMode'] = value
+            elif path == 'optional': cm['optional'] = value
+            else: cm['items'] = value
+            mutations.append(mutated)
+        for group, field, value in (
+            ('containers', 'imagePullPolicy', 'Always'),
+            ('containers', 'terminationMessagePath', '/tmp/changed'),
+            ('initContainers', 'terminationMessagePolicy', 'FallbackToLogsOnError'),
+        ):
+            mutated = copy.deepcopy(actual)
+            mutated['spec']['template']['spec'][group][0][field] = value
+            mutations.append(mutated)
+        for field, value in (
+            ('completionMode', 'Indexed'), ('completions', 2), ('manualSelector', True),
+            ('parallelism', 2), ('podReplacementPolicy', 'Failed'), ('suspend', True),
+        ):
+            mutated = copy.deepcopy(actual)
+            mutated['spec'][field] = value
+            mutations.append(mutated)
+        for field, value in (
+            ('dnsPolicy', 'Default'), ('schedulerName', 'foreign-scheduler'),
+            ('terminationGracePeriodSeconds', 31),
+        ):
+            mutated = copy.deepcopy(actual)
+            mutated['spec']['template']['spec'][field] = value
+            mutations.append(mutated)
+        for change in ('security', 'selector', 'label', 'image', 'command', 'args',
+                'env_ref', 'extra_container', 'extra_init', 'volume_source', 'mount'):
+            mutated = copy.deepcopy(actual)
+            pod = mutated['spec']['template']['spec']
+            if change == 'security': pod['securityContext'] = {'runAsUser': 0}
+            elif change == 'selector': mutated['spec']['selector']['matchLabels']['foreign'] = 'x'
+            elif change == 'label': mutated['spec']['template']['metadata']['labels']['foreign'] = 'x'
+            elif change == 'image': pod['containers'][0]['image'] = 'postgres:latest'
+            elif change == 'command': pod['containers'][0]['command'][0] += ' altered'
+            elif change == 'args': pod['containers'][0]['args'] = ['unexpected']
+            elif change == 'env_ref':
+                env = next(row for row in pod['containers'][0]['env'] if row['name'] == 'PGPASSWORD')
+                env['valueFrom']['secretKeyRef']['key'] = 'OTHER'
+            elif change == 'extra_container': pod['containers'].append(copy.deepcopy(pod['containers'][0]))
+            elif change == 'extra_init': pod['initContainers'].append(copy.deepcopy(pod['initContainers'][0]))
+            elif change == 'volume_source': pod['volumes'][0]['configMap']['name'] = 'foreign'
+            elif change == 'mount': pod['containers'][0]['volumeMounts'][0]['mountPath'] = '/tmp/changed'
+            mutations.append(mutated)
+        for mutated in mutations:
+            self.assertFalse(prerequisite._job_live_matches(mutated, wanted, uid))
+
+    def test_successful_created_defaulted_job_is_adopted_without_duplicate_create(self):
+        bound = capture(ROOT)
+        inputs = prerequisite.source_inputs(ROOT, bound)
+        plan = {'operation': 'a'*12, 'namespace': 'voice-staging',
+            'prerequisite_phase': 'CREATING', 'created': {}, 'jobs': {},
+            'inputs': inputs, 'inputs_sha256': gis.digest(inputs), 'source_capture': bound}
+        _, jobs = prerequisite._documents(ROOT, plan, bound)
+        kube = FakeKube()
+        actual = api_default_job(jobs['provision'], '00000000-0000-0000-0000-000000000099')
+        actual['metadata'].update(uid='00000000-0000-0000-0000-000000000099', resourceVersion='8')
+        kube.objects[('job', actual['metadata']['name'])] = actual
+        saved = []
+        got, record = prerequisite._create_once(kube, 'job', jobs['provision'], plan,
+            plan['created'], saved.append)
+        self.assertEqual(got['metadata']['uid'], record['uid'])
+        self.assertEqual(record['spec_sha256'], prerequisite._spec_digest(jobs['provision']))
+        self.assertFalse(any(event[:1] == ('created-job',) for event in kube.events))
 
     def test_authorize_gis_stage_orders_real_producer_jobs_before_only_pair_creates(self):
         import transaction

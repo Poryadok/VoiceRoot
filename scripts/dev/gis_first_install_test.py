@@ -296,6 +296,162 @@ class PartialOperationContinuationTests(unittest.TestCase):
         with self.assertRaises(gis.Blocked):
             gis._partial_state_compatible(copy.deepcopy(state), state)
 
+    def c5_checkpoint_fixture(self):
+        state = self.fixture()
+        state["namespace_uid"] = "15950fc8-0392-4053-9156-e95e78b596f9"
+        state["database_identity"] = {"namespace_uid": state["namespace_uid"],
+            "service_uid": "17d50ed9-8b27-462d-91e9-ba8fbaa785aa",
+            "service_spec_sha256": "783b9fca489787d04e8bd1e04fa0aa518e2d215b40a638784139443e9b1e4c41",
+            "endpoints": [{"uid": "e748b3e9-2e67-4719-8e1f-f59da9b3e558",
+                "pod_uids": ["fd904063-443e-46a7-94cd-8426e16fc040"]}]}
+        state["secret_write_receipt"] = {
+            gis.APP_SECRET: {"uid": "34cfb82d-ffd2-4df4-9826-9d97139687d1", "resourceVersion": "3378571"},
+            gis.SIGNER_SECRET: {"uid": "a3318d27-b784-4bdd-8cb3-409012b5bab8", "resourceVersion": "3378572"},
+            gis.WORKLOAD_SECRET: {"uid": "8964a6cd-b489-4478-8f06-5f54ca0585a6", "resourceVersion": "3378573"}}
+        source_sha = gis._PARTIAL_SOURCE_SHA
+        image = "ghcr.io/poryadok/voiceroot/gameintegration@sha256:482eb267824cffc4cebcae958e4ec7126ffdeaaea632f40c26bb1c6baf71ea96"
+        state["source_build_receipt"] = {"source_sha": source_sha, "image_ref": image,
+            "builder_tree": "e55c42d9c4d4a5d87e6211406a4b8d4cb2454a76"}
+        plan = state["plan"]
+        plan.update({"operation": state["operation"], "namespace_uid": state["namespace_uid"],
+            "source_sha": source_sha, "source_build_receipt": copy.deepcopy(state["source_build_receipt"]),
+            "source_plan_sha256": "16180026a6b244940b93523b058b94ab46efcb665c49e6369a57f262ef5f392e",
+            "source_capture": {}, "inputs": {"configmaps": {
+                "provision": "voice-gameintegration-runtime-role-sql",
+                "migrations": "voice-gameintegration-db-migrations",
+                "verify": "voice-gameintegration-db-verifier-sql"},
+                "jobs": {"provision": "voice-provision-gameintegration-runtime-role",
+                    "migrate": "voice-migrate-gameintegration-db", "verify": "voice-verify-gameintegration-db"},
+                "job_images": {"provision": {"wait-postgres": "postgres", "provision": "postgres"},
+                    "migrate": {"wait-postgres": "postgres", "migrate": "migrate"},
+                    "verify": {"wait-postgres": "postgres", "verify": "postgres"}}},
+            "inputs_sha256": "ed223e8ce91e3d44d6ce0e0c860529a76b7977d7f7f4baddb4d80fce318ba64b",
+            "prerequisite_phase": "CREATING", "created": {
+                "configmap/voice-gameintegration-runtime-role-sql": {
+                    "uid": "0a064b6f-2aff-4189-9aa1-1f0c6d3edc90",
+                    "spec_sha256": "426cea57713d205f295d8bf95cd49d3d5632c35c2d933dbe6d78b1934603a6dd"},
+                "job/voice-provision-gameintegration-runtime-role": {
+                    "uid": "e4d29319-b765-4d19-9e89-05dce1dbc862",
+                    "spec_sha256": "5f95a29493a4eb0b2580899d48c0afc54740a3cd792453897eff876de9ec8ad4"}},
+            "jobs": {}})
+        state["plan_phase"] = "PLANNED"
+        previous_binding = {"old_source_sha": source_sha,
+            "candidate_source_sha": gis._PARTIAL_C5_CANDIDATE_SHA,
+            "changed_files": {
+                "scripts/dev/gis_dev_first_install.py": "8b253467164561b0e08a9d3fe5def79406a22217f26573cd567a8e4a1daa46d5",
+                "scripts/dev/gis_first_install_test.py": "74e2aec39f2fa2b53b7b957140fb89be7216321eaf6706ae6a89c040adb5ff2f",
+                "scripts/staging/nats-rollout-preservation/gis_prerequisite.py": "f64496c12a62608a1e8b53c9fae2c41e1d3c92dafdbb9a1301627750dbd8acfd",
+                "scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py": "9e1f22b6b267ac3a66cd889622e550c673975c7e86f351e07b8bc183258c710c"},
+            "backend_tree": "e55c42d9c4d4a5d87e6211406a4b8d4cb2454a76",
+            "build_receipt_sha256": "d90b8b89ae894159c4bc60126dad791f34d4a61feab78dd866c7d2d5d17d711d",
+            "image_ref": image,
+            "source_plan_sha256": plan["source_plan_sha256"],
+            "source_capture_sha256": gis._digest({}), "inputs_sha256": plan["inputs_sha256"]}
+        fingerprints = {"secret_metadata_fingerprint_map_sha256": "a7c44b1d7cac81ad580fcc37cda2605087c818ab70668f07a3799efdbec43920"}
+        previous_v2 = {"schema": "voice-dev-gis-partial-continuation-v2",
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "previous_sidecar_sha256": gis._PARTIAL_V1_SIDECAR_SHA256,
+            "binding": previous_binding, "authorization_sha256": gis._PARTIAL_C5_AUTH_SHA256,
+            "secret_fingerprints_sha256": gis._digest(fingerprints), "state": copy.deepcopy(state)}
+        target_binding = copy.deepcopy(previous_binding)
+        target_binding.update(candidate_source_sha="a"*40,
+            changed_files={name: "c"*64 for name in gis._PARTIAL_CHANGED_PATHS})
+        target_binding["source_capture_sha256"] = gis._digest({})
+        checkpoint = {"created_records": copy.deepcopy(plan["created"]),
+            "database_identity": copy.deepcopy(state["database_identity"]),
+            "database_owner": "voice", "database_catalog": "false|true",
+            "operation": gis._PARTIAL_OPERATION,
+            "secret_fingerprints_sha256": previous_v2["secret_fingerprints_sha256"],
+            "namespace_uid": state["namespace_uid"]}
+        auth = {"schema": "voice-dev-gis-recovery-transition-authorization-v1",
+            "operation": gis._PARTIAL_OPERATION, "namespace_uid": state["namespace_uid"],
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "immutable_v1_sha256": gis._PARTIAL_V1_SIDECAR_SHA256,
+            "previous_v2_sha256": gis._PARTIAL_C5_V2_SHA256,
+            "previous_v2_binding_sha256": gis._digest(previous_binding),
+            "previous_v2_state_sha256": gis._digest(state),
+            "previous_authorization_sha256": gis._PARTIAL_C5_AUTH_SHA256,
+            "previous_candidate_source_sha": gis._PARTIAL_C5_CANDIDATE_SHA,
+            "previous_changed_files": copy.deepcopy(previous_binding["changed_files"]),
+            "previous_secret_fingerprints_sha256": previous_v2["secret_fingerprints_sha256"],
+            "target_source_sha": target_binding["candidate_source_sha"],
+            "target_changed_files": copy.deepcopy(target_binding["changed_files"]),
+            "protected_binding": {key: target_binding[key] for key in (
+                "old_source_sha", "backend_tree", "build_receipt_sha256", "image_ref",
+                "source_plan_sha256", "source_capture_sha256", "inputs_sha256")},
+            "partial_checkpoint": checkpoint}
+        expected_sha = gis._digest(auth)
+        proof = {"name": "voice-provision-gameintegration-runtime-role",
+            "uid": "e4d29319-b765-4d19-9e89-05dce1dbc862",
+            "spec_sha256": "5f95a29493a4eb0b2580899d48c0afc54740a3cd792453897eff876de9ec8ad4",
+            "pod_uid": "00000000-0000-0000-0000-000000000123",
+            "image_ids": {"provision": "docker-pullable://postgres@sha256:" + "e"*64,
+                "wait-postgres": "docker-pullable://postgres@sha256:" + "e"*64},
+            "complete": True, "succeeded": 1, "completion_time": "2026-10-17T00:00:00Z"}
+        state_v3 = copy.deepcopy(state)
+        state_v3["plan"]["jobs"]["provision"] = proof
+        current = {"schema": "voice-dev-gis-partial-continuation-v3",
+            "original_journal_sha256": gis._PARTIAL_JOURNAL_SHA256,
+            "immutable_v1_sha256": gis._PARTIAL_V1_SIDECAR_SHA256,
+            "previous_v2_sha256": gis._PARTIAL_C5_V2_SHA256,
+            "previous_v2_binding_sha256": gis._digest(previous_binding),
+            "previous_v2_state_sha256": gis._digest(state),
+            "previous_authorization_sha256": gis._PARTIAL_C5_AUTH_SHA256,
+            "previous_candidate_source_sha": gis._PARTIAL_C5_CANDIDATE_SHA,
+            "previous_changed_files": copy.deepcopy(previous_binding["changed_files"]),
+            "source_transition_authorization_sha256": expected_sha,
+            "binding": target_binding,
+            "secret_fingerprints_sha256": previous_v2["secret_fingerprints_sha256"],
+            "state": state_v3}
+        return state, previous_v2, target_binding, fingerprints, auth, expected_sha, current
+
+    def test_c5_checkpoint_transition_requires_exact_dispatcher_pins_and_preserves_job_proof(self):
+        state, previous_v2, binding, fingerprints, auth, auth_sha, current = self.c5_checkpoint_fixture()
+        with patch.object(gis, "_git_text", return_value=binding["candidate_source_sha"]):
+            self.assertTrue(gis._partial_v3_admissible(current, previous_v2,
+                gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                binding, fingerprints, state, auth, auth_sha, Path(".")))
+            resumed = copy.deepcopy(current)
+            resumed["state"]["plan"]["phase"] = "CREATING"
+            resumed["state"]["plan_phase"] = "CREATING"
+            self.assertTrue(gis._partial_v3_admissible(resumed, previous_v2,
+                gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                binding, fingerprints, state, auth, auth_sha, Path(".")))
+            for bad_v2_sha, bad_old_auth, bad_auth, bad_current, bad_binding in (
+                ("0"*64, gis._PARTIAL_C5_AUTH_SHA256, auth, current, binding),
+                (gis._PARTIAL_C5_V2_SHA256, "0"*64, auth, current, binding),
+                (gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                    {**auth, "target_source_sha": "b"*40}, current, binding),
+                (gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256, auth,
+                    {**current, "previous_v2_sha256": "0"*64}, binding),
+                (gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256, auth,
+                    current, {**binding, "candidate_source_sha": "b"*40}),
+            ):
+                with self.assertRaises(gis.Blocked):
+                    gis._partial_v3_admissible(bad_current, previous_v2,
+                        bad_v2_sha, bad_old_auth, bad_binding, fingerprints, state,
+                        bad_auth, auth_sha, Path("."))
+            invalid = copy.deepcopy(current)
+            invalid["state"]["plan"]["jobs"]["provision"]["uid"] = "foreign"
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v3_admissible(invalid, previous_v2,
+                    gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                    binding, fingerprints, state, auth, auth_sha, Path("."))
+            invalid = copy.deepcopy(current)
+            invalid["state"]["plan"]["created"][
+                "configmap/voice-gameintegration-runtime-role-sql"]["uid"] = "foreign"
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v3_admissible(invalid, previous_v2,
+                    gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                    binding, fingerprints, state, auth, auth_sha, Path("."))
+            changed_v2 = copy.deepcopy(previous_v2)
+            changed_v2["binding"]["changed_files"][
+                "scripts/dev/gis_dev_first_install.py"] = "0" * 64
+            with self.assertRaises(gis.Blocked):
+                gis._partial_v3_admissible(current, changed_v2,
+                    gis._PARTIAL_C5_V2_SHA256, gis._PARTIAL_C5_AUTH_SHA256,
+                    binding, fingerprints, state, auth, auth_sha, Path("."))
+
     def test_frozen_c2_sidecar_transitions_to_separate_v2_current_receipt(self):
         state = self.fixture()
         state["plan_phase"] = "PLANNED"
