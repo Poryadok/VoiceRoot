@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,9 +13,9 @@ from unittest.mock import patch
 
 from nats_contract_plan import digest
 from nats_contract_plan_test import Tests as PlanFixtures
-from nats_contract_runner import (SCHEMA, INPUT_SCHEMA, ContractRunnerError, NatsActor,
+from nats_contract_runner import (SCHEMA, INPUT_SCHEMA, MAX_RESPONSE_BYTES, ContractRunnerError, NatsActor,
     _canonical, _ensure_input_profile, _verify_input_receipt, action_readback, execute_action,
-    inspect_action, load_plan, read_plan, main,
+    inspect_action, load_plan, read_plan, main, _response_bytes,
     validate_envelope, validate_plan)
 
 
@@ -164,6 +165,20 @@ class ContractRunnerTests(unittest.TestCase):
         with self.assertRaises(ContractRunnerError):
             _verify_input_receipt(expected_bytes, state_root=self.state_root)
 
+    def test_root_owned_emptydir_mount_accepts_unprivileged_control_process(self):
+        root = Path('/state')
+        if os.geteuid() != 65532 or not root.exists():
+            self.skipTest('requires the private UID 65532 /state emptyDir test mount')
+        row = root.lstat()
+        self.assertTrue(stat.S_ISDIR(row.st_mode))
+        self.assertFalse(stat.S_ISLNK(row.st_mode))
+        self.assertEqual((row.st_uid, row.st_gid, stat.S_IMODE(row.st_mode)), (0, 0, 0o777))
+        receipt = load_plan(self.raw, expected=self.ctx, state_root=root)
+        self.assertEqual(receipt['status'], 'COMPLETE')
+        attempt = root / self.ctx['contract_attempt']
+        self.assertEqual((attempt.stat().st_uid, attempt.stat().st_gid,
+            stat.S_IMODE(attempt.stat().st_mode)), (65532, 65532, 0o700))
+
     def test_new_pod_uid_cannot_read_or_replay_existing_attempt(self):
         load_plan(self.raw, expected=self.ctx, state_root=self.state_root)
         wrong = {**self.ctx, 'pod_uid': '62345678-1234-1234-1234-123456789abc'}
@@ -178,22 +193,22 @@ class ContractRunnerTests(unittest.TestCase):
         actor = FakeActor(isolation_check=lambda: None)
         actor.current[action['object']] = copy.deepcopy(action['before'])
         load_plan(self.raw, expected=self.ctx, state_root=self.state_root)
-            inspection = inspect_action(self.plan, action_index, actor)
-            self.assertEqual(inspection['state'], 'BEFORE')
-            self.assertEqual(inspection['before_sha256'], digest(action['before']))
-            intent = {'kind': 'nats_contract_intent', 'object': action['object'], 'api': action['api'],
-                'before_sha256': digest(action['before']), 'target_sha256': digest(action['after']),
-                'migration_attempt': self.ctx['contract_attempt']}
-            issued = {'kind': 'nats_contract_mutation_issued', 'object': action['object'],
-                'api': action['api'], 'target_sha256': digest(action['after']),
-                'migration_attempt': self.ctx['contract_attempt']}
-            receipt = execute_action(self.plan, action_index, binding={**self.ctx,
-                'plan_sha256': digest(self.plan)}, before_event_sha256=hashlib_sha(intent),
-                issued_event_sha256=hashlib_sha(issued), state_root=self.state_root, actor=actor)
-            self.assertEqual(receipt['status'], 'COMPLETE')
-            self.assertEqual(actor.mutations, [action['api']])
-            self.assertEqual(action_readback(state_root=self.state_root, binding={**self.ctx,
-                'plan_sha256': digest(self.plan)}, index=action_index), receipt)
+        inspection = inspect_action(self.plan, action_index, actor)
+        self.assertEqual(inspection['state'], 'BEFORE')
+        self.assertEqual(inspection['before_sha256'], digest(action['before']))
+        intent = {'kind': 'nats_contract_intent', 'object': action['object'], 'api': action['api'],
+            'before_sha256': digest(action['before']), 'target_sha256': digest(action['after']),
+            'migration_attempt': self.ctx['contract_attempt']}
+        issued = {'kind': 'nats_contract_mutation_issued', 'object': action['object'],
+            'api': action['api'], 'target_sha256': digest(action['after']),
+            'migration_attempt': self.ctx['contract_attempt']}
+        receipt = execute_action(self.plan, action_index, binding={**self.ctx,
+            'plan_sha256': digest(self.plan)}, before_event_sha256=hashlib_sha(intent),
+            issued_event_sha256=hashlib_sha(issued), state_root=self.state_root, actor=actor)
+        self.assertEqual(receipt['status'], 'COMPLETE')
+        self.assertEqual(actor.mutations, [action['api']])
+        self.assertEqual(action_readback(state_root=self.state_root, binding={**self.ctx,
+            'plan_sha256': digest(self.plan)}, index=action_index), receipt)
 
     def test_interrupted_action_is_unknown_and_cannot_be_replayed(self):
         action = self.plan['actions'][0]
@@ -201,24 +216,24 @@ class ContractRunnerTests(unittest.TestCase):
         actor.current[action['object']] = copy.deepcopy(action['before'])
         actor.mutate = lambda *_args: (_ for _ in ()).throw(RuntimeError('interrupted'))
         load_plan(self.raw, expected=self.ctx, state_root=self.state_root)
-            intent = {'kind': 'nats_contract_intent', 'object': action['object'], 'api': action['api'],
-                'before_sha256': digest(action['before']), 'target_sha256': digest(action['after']),
-                'migration_attempt': self.ctx['contract_attempt']}
-            issued = {'kind': 'nats_contract_mutation_issued', 'object': action['object'],
-                'api': action['api'], 'target_sha256': digest(action['after']),
-                'migration_attempt': self.ctx['contract_attempt']}
-            binding = {**self.ctx, 'plan_sha256': digest(self.plan)}
-            with self.assertRaises(RuntimeError):
-                execute_action(self.plan, 0, binding=binding,
-                    before_event_sha256=hashlib_sha(intent), issued_event_sha256=hashlib_sha(issued),
-                    state_root=self.state_root, actor=actor)
-            with self.assertRaises(ContractRunnerError):
-                action_readback(state_root=self.state_root, binding=binding, index=0)
-            with self.assertRaises(ContractRunnerError):
-                execute_action(self.plan, 0, binding=binding,
-                    before_event_sha256=hashlib_sha(intent), issued_event_sha256=hashlib_sha(issued),
-                    state_root=self.state_root, actor=actor)
-            self.assertEqual(actor.mutations, [])
+        intent = {'kind': 'nats_contract_intent', 'object': action['object'], 'api': action['api'],
+            'before_sha256': digest(action['before']), 'target_sha256': digest(action['after']),
+            'migration_attempt': self.ctx['contract_attempt']}
+        issued = {'kind': 'nats_contract_mutation_issued', 'object': action['object'],
+            'api': action['api'], 'target_sha256': digest(action['after']),
+            'migration_attempt': self.ctx['contract_attempt']}
+        binding = {**self.ctx, 'plan_sha256': digest(self.plan)}
+        with self.assertRaises(RuntimeError):
+            execute_action(self.plan, 0, binding=binding,
+                before_event_sha256=hashlib_sha(intent), issued_event_sha256=hashlib_sha(issued),
+                state_root=self.state_root, actor=actor)
+        with self.assertRaises(ContractRunnerError):
+            action_readback(state_root=self.state_root, binding=binding, index=0)
+        with self.assertRaises(ContractRunnerError):
+            execute_action(self.plan, 0, binding=binding,
+                before_event_sha256=hashlib_sha(intent), issued_event_sha256=hashlib_sha(issued),
+                state_root=self.state_root, actor=actor)
+        self.assertEqual(actor.mutations, [])
 
     def test_actor_uses_fixed_cli_without_shell_or_secret_payload(self):
         captured = []
@@ -275,6 +290,11 @@ class ContractRunnerTests(unittest.TestCase):
             result = main(['--load-plan', '--operation', '012345abcdef', '--command', '/bin/sh'])
         self.assertEqual(result, 2)
         self.assertEqual(stderr.getvalue(), 'contract_runner_failed\n')
+
+    def test_stdout_receipt_is_canonical_and_bounded(self):
+        self.assertEqual(_response_bytes({'status': 'COMPLETE'}), b'{"status":"COMPLETE"}\n')
+        with self.assertRaises(ContractRunnerError):
+            _response_bytes({'payload': 'x' * MAX_RESPONSE_BYTES})
 
     def test_cli_binds_request_to_downward_api_pod_uid_before_state_access(self):
         args = ['--readback-action', '--operation', self.ctx['operation'], '--nonce', self.ctx['nonce'],
