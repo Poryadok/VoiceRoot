@@ -45,7 +45,7 @@ func TestSpaceAccessMessageACKFollowsFullReconciliation(t *testing.T) {
 		SessionEpochChecker: currentEpochChecker{},
 		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4},
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]s2s.VoiceRoomGrants{
 			profileID: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
@@ -86,7 +86,7 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 		SessionEpochChecker: currentEpochChecker{},
 		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4},
+			profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]s2s.VoiceRoomGrants{}},
 		Media:  media,

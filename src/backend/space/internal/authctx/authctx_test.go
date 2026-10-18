@@ -88,12 +88,12 @@ func TestSessionEpoch(t *testing.T) {
 	}
 }
 
-func TestVerifiedServiceIdentityUnaryInterceptor_BlankTokenFailsClosed(t *testing.T) {
+func TestOrdinaryCommunicationInterceptorRejectsLegacyBearer(t *testing.T) {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer valid-looking-token"))
-	for _, configuredToken := range []string{"", " \t "} {
+	for _, method := range []string{"/voice.space.v1.SpaceService/ResolveVoiceRoomAccess", "/voice.space.v1.SpaceService/ResolveMemberCommunicationState"} {
 		handlerCalled := false
-		_, err := VerifiedServiceIdentityUnaryInterceptor(configuredToken)(ctx, nil, &grpc.UnaryServerInfo{
-			FullMethod: "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess",
+		_, err := OrdinaryCommunicationUnaryInterceptor()(ctx, nil, &grpc.UnaryServerInfo{
+			FullMethod: method,
 		}, func(context.Context, any) (any, error) {
 			handlerCalled = true
 			return nil, nil

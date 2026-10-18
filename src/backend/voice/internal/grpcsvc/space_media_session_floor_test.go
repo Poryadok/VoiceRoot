@@ -148,7 +148,7 @@ func newSpaceFloorVoiceFixture(client *sessionfloor.Client) *spaceFloorVoiceFixt
 	f.svc = newTestVoiceService(time.Unix(1700000000, 0).UTC(), f.events)
 	f.calls = &spaceFloorCallStore{CallStore: f.svc.Calls}
 	f.admissions = &spaceFloorAdmissionRecorder{readySpaceMediaAdmission: readySpaceMediaAdmission{preparedAdmissions: &f.prepared}}
-	f.access = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: f.spaceID, Active: true, Member: true, AccessEpoch: 11}}
+	f.access = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: f.spaceID, Active: true, Member: true, AccessEpoch: 11, CommunicationStateResolved: true}}
 	f.svc.Calls, f.svc.SpaceMediaAdmissions = f.calls, f.admissions
 	f.svc.SpaceMediaReady = true
 	f.svc.VoiceRoomAccessResolver = f.access

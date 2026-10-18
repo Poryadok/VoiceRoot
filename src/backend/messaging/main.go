@@ -33,6 +33,7 @@ import (
 	"voice/backend/pkg/httpserver"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/spacecommunication"
 
 	authv1 "voice.app/voice/auth/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -41,6 +42,7 @@ import (
 	moderationv1 "voice.app/voice/moderation/v1"
 	rolev1 "voice.app/voice/role/v1"
 	socialv1 "voice.app/voice/social/v1"
+	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -227,6 +229,10 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	communicationConfig, communicationEnabled, err := spacecommunication.LoadClientConfig(os.LookupEnv, "MESSAGING_SPACE_COMMUNICATION_")
+	if err != nil {
+		log.Fatalf("Messaging Space communication client config: %v", err)
+	}
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 	metricsReg := prometheus.NewRegistry()
@@ -240,6 +246,9 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if communicationEnabled && dbURL == "" {
+		log.Fatal("Messaging Space communication requires DATABASE_URL")
+	}
 	var grpcSrv *grpc.Server
 	var gameIntegrationGRPCSrv *grpc.Server
 	var chatLifecycleGRPCSrv *grpc.Server
@@ -346,6 +355,18 @@ func main() {
 		}
 		if managedChatPurge != nil {
 			defer managedChatPurge.Close()
+		}
+		var communicationStates grpcsvc.CommunicationStateResolver
+		if communicationEnabled {
+			if managedChatPurge == nil || managedChatPurge.Issuer == nil {
+				log.Fatal("Messaging Space communication requires the service signing keys and protected JWKS publisher")
+			}
+			conn, err := communicationConfig.Dial()
+			if err != nil {
+				log.Fatalf("Messaging Space communication mTLS: %v", err)
+			}
+			defer func() { _ = conn.Close() }()
+			communicationStates = &s2s.CommunicationStates{Client: spacev1.NewSpaceServiceClient(conn), Issuer: managedChatPurge.Issuer}
 		}
 		var tombstoneProcessor grpcsvc.GameTombstoneProcessor
 		if tombstoneKeys != nil && moderationPrincipal != nil {
@@ -614,6 +635,7 @@ func main() {
 			SharedMedia:           &store.SharedMediaStore{Pool: pool},
 			ChatGuard:             chatGuard,
 			ChatTypeResolver:      chatTypeResolver,
+			CommunicationStates:   communicationStates,
 			Blocks:                blocks,
 			AccountBlocks:         accountBlocks,
 			ProfilePairBlocks:     profilePairBlocks,
@@ -625,10 +647,9 @@ func main() {
 			Files:                 files,
 			MessageEvents:         msgEvents,
 			Moderation: &store.SQLModerationGuard{
-				Pool:      pool,
-				ChatPool:  chatMetaPool,
-				MsgPool:   pool,
-				SpacePool: spaceMetaPool,
+				Pool:     pool,
+				ChatPool: chatMetaPool,
+				MsgPool:  pool,
 			},
 			ChatMentionsMeta: func() *store.SQLChatMentionsMeta {
 				metaPool := pool
@@ -651,8 +672,11 @@ func main() {
 				return managedChatPurge.Coordinator
 			}(),
 		}
+		if gameMessagePermitProcessor != nil {
+			gameMessagePermitProcessor.CommunicationAdmission = messagingService.BeginCommunicationAction
+		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
-		if managedChatPurge != nil {
+		if managedChatPurge != nil && managedChatPurge.Coordinator != nil {
 			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			messagingService.AttachmentReferences = &grpcsvc.AttachmentReferenceCoordinator{Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			retentionCtx, retentionCancel := context.WithCancel(context.Background())

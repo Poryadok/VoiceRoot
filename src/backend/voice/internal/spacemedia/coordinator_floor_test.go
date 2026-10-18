@@ -70,7 +70,7 @@ func floorPassFixture(t *testing.T, participants ...floorParticipant) (*Coordina
 			Issued: store.SpaceMediaGrant{SessionEpoch: participant.epoch, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
 		}, store.MaxVoiceRoomParticipants)
 		require.NoError(t, err)
-		access.byProfile[profileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1}
+		access.byProfile[profileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true}
 		grants.byProfile[profileID] = grpcsvc.CanonicalVoiceRoomGrants{PolicyEpoch: 1, CanJoin: true, CanSubscribe: true}
 		floors.floors[participant.account] = 3
 	}
@@ -121,7 +121,7 @@ func floorSweepFixture(t *testing.T, firstEpoch, secondEpoch uint64) (*Coordinat
 	_, err = calls.AdmitSpaceMediaParticipant(t.Context(), roomID, participant, store.MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	access, grants := c.Access.(fakeAccess), c.Grants.(fakeGrants)
-	access.byProfile[participant.ProfileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1}
+	access.byProfile[participant.ProfileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true}
 	grants.byProfile[participant.ProfileID] = grpcsvc.CanonicalVoiceRoomGrants{PolicyEpoch: 1, CanJoin: true, CanSubscribe: true}
 	for _, admission := range fakeRecoveryForCommittedCall(t, t.Context(), calls, roomID).confirmed {
 		c.Admissions.(*fakeAdmissionRecovery).seedConfirmedProjection(admission)
@@ -177,7 +177,7 @@ func TestReconcileAllWatermarkRestartDiscardsSharedAccountFloor(t *testing.T) {
 	}
 	c.Store = orderedFloorSpacesStore{Store: calls, spaces: []string{first.SpaceID, second.SpaceID, laterSpace}}
 	access := c.Access.(fakeAccess)
-	access.byProfile[later.ProfileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: laterSpace, Member: true, Active: true, AccessEpoch: 1}
+	access.byProfile[later.ProfileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: laterSpace, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true}
 	grants := c.Grants.(fakeGrants)
 	grants.byProfile[later.ProfileID] = grpcsvc.CanonicalVoiceRoomGrants{PolicyEpoch: 1, CanJoin: true, CanSubscribe: true}
 	value := access.byProfile[stale.ProfileID]
@@ -247,7 +247,7 @@ func TestReconcileSpaceSharesAccountFloorAcrossRoomsInSameScan(t *testing.T) {
 	_, err = calls.AdmitSpaceMediaParticipant(t.Context(), secondRoom, participant, store.MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	access, grants := c.Access.(fakeAccess), c.Grants.(fakeGrants)
-	access.byProfile[participant.ProfileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: before.SpaceID, Member: true, Active: true, AccessEpoch: 1}
+	access.byProfile[participant.ProfileID] = grpcsvc.CanonicalVoiceRoomAccess{SpaceID: before.SpaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true}
 	grants.byProfile[participant.ProfileID] = grpcsvc.CanonicalVoiceRoomGrants{PolicyEpoch: 1, CanJoin: true, CanSubscribe: true}
 	for _, admission := range fakeRecoveryForCommittedCall(t, t.Context(), calls, secondRoom).confirmed {
 		c.Admissions.(*fakeAdmissionRecovery).seedConfirmedProjection(admission)

@@ -60,6 +60,13 @@ func main() {
 	if targetEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
 		log.Fatal("Role target listener requires DATABASE_URL")
 	}
+	communicationConfigs, err := loadCommunicationConfigs()
+	if err != nil {
+		log.Fatalf("Space communication authority config: %v", err)
+	}
+	if len(communicationConfigs) != 0 && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space communication authority requires DATABASE_URL")
+	}
 	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_SPACE, ":9097")
 	if err != nil {
 		log.Fatalf("Space authority source config: %v", err)
@@ -279,7 +286,7 @@ func main() {
 			auditprincipal.OrdinaryUnary(),
 			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),
-			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
+			ordinaryCommunicationUnary(),
 			authctx.VerifiedGameIntegrationUnaryInterceptor(os.Getenv("SPACE_GAME_INTEGRATION_S2S_TOKEN")),
 		))
 		grpcSrv = grpc.NewServer(grpcOptions...)
@@ -442,6 +449,11 @@ func main() {
 				}
 			}()
 		}
+		stopCommunication, err := startCommunicationServers(runCtx, communicationConfigs, spaceSvc, sharedOptions)
+		if err != nil {
+			log.Fatalf("Space communication authority startup: %v", err)
+		}
+		defer stopCommunication()
 		if publicEnabled {
 			publicRuntime, err := lifecycleprincipal.New(runCtx, publicConfig)
 			if err != nil {

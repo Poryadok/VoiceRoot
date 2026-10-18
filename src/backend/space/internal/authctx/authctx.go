@@ -18,6 +18,7 @@ type ServiceIdentity string
 
 const (
 	ServiceIdentityVoice           ServiceIdentity = "voice"
+	ServiceIdentityMessaging       ServiceIdentity = "messaging"
 	ServiceIdentityGameIntegration ServiceIdentity = "gameintegration"
 )
 
@@ -52,21 +53,14 @@ func VerifiedServiceIdentity(ctx context.Context) (ServiceIdentity, bool) {
 	return identity, ok && identity != ""
 }
 
-// VerifiedServiceIdentityUnaryInterceptor verifies the resolver's dedicated
-// bearer credential and exposes only a server-side identity to the handler.
-// An empty configured token fails closed.
-func VerifiedServiceIdentityUnaryInterceptor(expectedVoiceToken string) grpc.UnaryServerInterceptor {
+// OrdinaryCommunicationUnaryInterceptor rejects protected decisions on every
+// ordinary listener, including otherwise valid-looking legacy bearers.
+func OrdinaryCommunicationUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod != "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess" {
-			return handler(ctx, req)
+		if info.FullMethod == "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess" || info.FullMethod == "/voice.space.v1.SpaceService/ResolveMemberCommunicationState" {
+			return nil, status.Error(codes.Unauthenticated, "protected communication listener required")
 		}
-		md, _ := metadata.FromIncomingContext(ctx)
-		want := "Bearer " + strings.TrimSpace(expectedVoiceToken)
-		values := md.Get("authorization")
-		if strings.TrimSpace(expectedVoiceToken) == "" || len(values) != 1 || values[0] != want {
-			return nil, status.Error(codes.Unauthenticated, "verified Voice service identity required")
-		}
-		return handler(WithVerifiedServiceIdentity(ctx, ServiceIdentityVoice), req)
+		return handler(ctx, req)
 	}
 }
 

@@ -201,8 +201,8 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	coordinator := &Coordinator{
 		Store: calls, Calls: calls, Admissions: faultingAdmissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			creator.ProfileID.String(): {SpaceID: creator.SpaceID.String(), Active: true, Member: true, AccessEpoch: creator.AccessEpoch},
-			failed.ProfileID.String():  {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch},
+			creator.ProfileID.String(): {SpaceID: creator.SpaceID.String(), Active: true, Member: true, AccessEpoch: creator.AccessEpoch, CommunicationStateResolved: true},
+			failed.ProfileID.String():  {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			creator.ProfileID.String(): {PolicyEpoch: creator.PolicyEpoch, CanJoin: true, CanSubscribe: true},

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,11 +13,14 @@ import (
 // evaluates Role permissions. Active currently means that the voice_rooms row
 // exists; the documented data model has no lifecycle enum.
 type VoiceRoomAccessRow struct {
-	SpaceID      uuid.UUID
-	Member       bool
-	Active       bool
-	Discoverable bool
-	AccessEpoch  uint64
+	SpaceID       uuid.UUID
+	Member        bool
+	Active        bool
+	Discoverable  bool
+	AccessEpoch   uint64
+	ProfileID     uuid.UUID
+	EvaluatedAt   time.Time
+	TimedOutUntil *time.Time
 }
 
 type voiceRoomAccessQuerier interface {
@@ -54,6 +58,7 @@ func (s *SpaceStore) ResolveVoiceRoomAccess(ctx context.Context, expectedSpaceID
 	var out VoiceRoomAccessRow
 	var epoch int64
 	err = tx.QueryRow(ctx, `
+WITH evaluation AS MATERIALIZED (SELECT clock_timestamp() AS evaluated_at)
 SELECT vr.space_id,
        EXISTS (
            SELECT 1 FROM space_members sm
@@ -62,14 +67,17 @@ SELECT vr.space_id,
            SELECT 1 FROM community_roster_members crm JOIN community_owner_authority coa
              ON coa.space_id=crm.space_id AND coa.owner_generation=crm.owner_generation AND coa.status='active'
            WHERE crm.space_id=vr.space_id AND crm.profile_id=$3 AND crm.revoked_at IS NULL
-             AND crm.lease_expires_at>clock_timestamp() AND coa.roster_lease_expires_at>clock_timestamp()
+	             AND crm.lease_expires_at>evaluation.evaluated_at AND coa.roster_lease_expires_at>evaluation.evaluated_at
        ),
-       vae.access_epoch
+       vae.access_epoch, evaluation.evaluated_at,
+       CASE WHEN timeout.timed_out_until > evaluation.evaluated_at THEN timeout.timed_out_until END
 FROM voice_rooms vr
 JOIN spaces sp ON sp.id = vr.space_id
 JOIN space_voice_access_epochs vae ON vae.space_id = vr.space_id
+CROSS JOIN evaluation
+LEFT JOIN space_member_timeouts timeout ON timeout.space_id=vr.space_id AND timeout.profile_id=$3
 WHERE vr.id = $2 AND vr.space_id = $1
-`, expectedSpaceID, voiceRoomID, profileID).Scan(&out.SpaceID, &out.Member, &epoch)
+`, expectedSpaceID, voiceRoomID, profileID).Scan(&out.SpaceID, &out.Member, &epoch, &out.EvaluatedAt, &out.TimedOutUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrVoiceRoomNotFound
 	}
@@ -85,6 +93,7 @@ WHERE vr.id = $2 AND vr.space_id = $1
 	out.Active = true
 	out.Discoverable = true
 	out.AccessEpoch = uint64(epoch)
+	out.ProfileID = profileID
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}

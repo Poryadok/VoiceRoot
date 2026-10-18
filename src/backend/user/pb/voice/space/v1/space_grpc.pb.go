@@ -68,6 +68,7 @@ const (
 	SpaceService_GetSpaceChatCreationOutcome_FullMethodName       = "/voice.space.v1.SpaceService/GetSpaceChatCreationOutcome"
 	SpaceService_AreCoMembers_FullMethodName                      = "/voice.space.v1.SpaceService/AreCoMembers"
 	SpaceService_ResolveVoiceRoomAccess_FullMethodName            = "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
+	SpaceService_ResolveMemberCommunicationState_FullMethodName   = "/voice.space.v1.SpaceService/ResolveMemberCommunicationState"
 	SpaceService_SyncSpaceProSubscription_FullMethodName          = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
 	SpaceService_RestoreSpace_FullMethodName                      = "/voice.space.v1.SpaceService/RestoreSpace"
 	SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName = "/voice.space.v1.SpaceService/GetSpaceDeletionCoordinatorStatus"
@@ -150,7 +151,11 @@ type SpaceServiceClient interface {
 	AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
 	// This endpoint is restricted to the verified Voice service identity.
+	// @voice.security=protected;callers=service:voice
 	ResolveVoiceRoomAccess(ctx context.Context, in *ResolveVoiceRoomAccessRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomAccessResponse, error)
+	// Fresh profile/Space timeout authority; no public or legacy transport.
+	// @voice.security=protected;callers=service:messaging
+	ResolveMemberCommunicationState(ctx context.Context, in *ResolveMemberCommunicationStateRequest, opts ...grpc.CallOption) (*ResolveMemberCommunicationStateResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
@@ -659,6 +664,16 @@ func (c *spaceServiceClient) ResolveVoiceRoomAccess(ctx context.Context, in *Res
 	return out, nil
 }
 
+func (c *spaceServiceClient) ResolveMemberCommunicationState(ctx context.Context, in *ResolveMemberCommunicationStateRequest, opts ...grpc.CallOption) (*ResolveMemberCommunicationStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveMemberCommunicationStateResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ResolveMemberCommunicationState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SyncSpaceProSubscriptionResponse)
@@ -766,7 +781,11 @@ type SpaceServiceServer interface {
 	AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
 	// This endpoint is restricted to the verified Voice service identity.
+	// @voice.security=protected;callers=service:voice
 	ResolveVoiceRoomAccess(context.Context, *ResolveVoiceRoomAccessRequest) (*ResolveVoiceRoomAccessResponse, error)
+	// Fresh profile/Space timeout authority; no public or legacy transport.
+	// @voice.security=protected;callers=service:messaging
+	ResolveMemberCommunicationState(context.Context, *ResolveMemberCommunicationStateRequest) (*ResolveMemberCommunicationStateResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
@@ -931,6 +950,9 @@ func (UnimplementedSpaceServiceServer) AreCoMembers(context.Context, *AreCoMembe
 }
 func (UnimplementedSpaceServiceServer) ResolveVoiceRoomAccess(context.Context, *ResolveVoiceRoomAccessRequest) (*ResolveVoiceRoomAccessResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveVoiceRoomAccess not implemented")
+}
+func (UnimplementedSpaceServiceServer) ResolveMemberCommunicationState(context.Context, *ResolveMemberCommunicationStateRequest) (*ResolveMemberCommunicationStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveMemberCommunicationState not implemented")
 }
 func (UnimplementedSpaceServiceServer) SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncSpaceProSubscription not implemented")
@@ -1844,6 +1866,24 @@ func _SpaceService_ResolveVoiceRoomAccess_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_ResolveMemberCommunicationState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveMemberCommunicationStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ResolveMemberCommunicationState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ResolveMemberCommunicationState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ResolveMemberCommunicationState(ctx, req.(*ResolveMemberCommunicationStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_SyncSpaceProSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SyncSpaceProSubscriptionRequest)
 	if err := dec(in); err != nil {
@@ -2100,6 +2140,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResolveVoiceRoomAccess",
 			Handler:    _SpaceService_ResolveVoiceRoomAccess_Handler,
+		},
+		{
+			MethodName: "ResolveMemberCommunicationState",
+			Handler:    _SpaceService_ResolveMemberCommunicationState_Handler,
 		},
 		{
 			MethodName: "SyncSpaceProSubscription",

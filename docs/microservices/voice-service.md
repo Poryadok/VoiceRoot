@@ -1,5 +1,37 @@
 # Voice Service
 
+## Space communication timeout (BE-044-TIMEOUT-v1)
+
+Accepted target: the [Space timeout matrix](../features/spaces.md#communication-timeout-be-044-timeout-v1-accepted-target)
+denies fresh Space join/token/reissue and self/moderator move into a room for
+the timed-out target. Room access must include fresh versioned communication
+evidence from the same Space snapshot as membership/active/access_epoch. Missing,
+legacy/default/malformed capability is Unavailable, never an implicit CLEAR.
+Covered access uses signed protected service authority without a static-bearer
+fallback. Role/Admin cannot override a timeout; no consumer-local expiry/cache
+may grant admission. Leave/disconnect/cleanup remain allowed under their ACLs.
+
+Extend the enabled access invalidation consumer: reread current whole-Space
+membership, timeout and Role authority, treating event hints only as hints.
+TIMED_OUT ejects the exact current media incarnation, including listen-only;
+unknown authority retains the event unacked and denies new grants. Duplicate or
+reordered events cannot restore an older state. Set/replace/remove use Space's
+existing epoch/outbox trigger, not a second increment. Removal/expiry allows a
+fresh authorized join, never automatic rejoin. Preserve the existing ejection
+target (2s p95/5s max) and honest <=60s stale bearer replay limitation, with
+reconcile/re-eject on stale reconnect. Do not activate R22.3/D2/D3 foundations.
+Mock ejection alone does not prove the required actual two-client media stop.
+
+Voice uses the full `VOICE_SPACE_COMMUNICATION_` client tuple (`GRPC_ADDR`,
+`TLS_CA_FILE`, `CLIENT_CERT_FILE`, `CLIENT_KEY_FILE`) and its existing Voice
+service signer/protected JWKS publisher. The ordinary `SPACE_GRPC_ADDR` remains
+for separately authorized membership/privacy contracts; it never supplies a
+communication grant. Legacy static bearer configuration is not a fallback.
+Absent capability denies covered admission; partial or explicitly empty client
+configuration fails startup. Fresh decision deadlines cover subsequent Role,
+admission transaction and token response work. Existing source-disabled Space
+move paths remain disabled; timeout enforcement does not enable transfers.
+
 ## Обзор
 
 Оркестрация голосовых/видео-звонков и screen share через LiveKit SFU. Сам сервис не обрабатывает медиа-потоки.

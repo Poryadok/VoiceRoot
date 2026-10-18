@@ -78,16 +78,19 @@ type MessagingGRPC struct {
 	// ChatTypeResolver is required before SendMessage, ForwardMessage, and
 	// GetMessages use DM-specific account lifecycle logic. It prevents an
 	// omitted or forged ChatRef.type from bypassing that policy.
-	ChatTypeResolver  AuthoritativeChatTypeResolver
-	Privacy           PrivacyChecker
-	Friends           ProfileFriendChecker
-	SpaceCoMembership SpaceCoMembershipChecker
+	ChatTypeResolver    AuthoritativeChatTypeResolver
+	CommunicationStates CommunicationStateResolver
+	CommunicationScope  ChatCommunicationScope // production defaults to authoritative ChatThreadPolicy
+	Privacy             PrivacyChecker
+	Friends             ProfileFriendChecker
+	SpaceCoMembership   SpaceCoMembershipChecker
 	// Files is optional for text-only messages and required for non-empty attachments_json.
 	Files                FileMetadataLookup
 	AttachmentReferences *AttachmentReferenceCoordinator
 	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
 	MessageEvents messageevents.MessageEventsPublisher
-	// Moderation is optional; enforces space timeouts and chat slow mode before send.
+	// Moderation is optional Chat-owned slow mode. Space communication authority
+	// is resolved independently and never supplied by a downstream SQL guard.
 	Moderation *store.SQLModerationGuard
 	// ChatMentionsMeta loads chat members for mention validation.
 	ChatMentionsMeta *store.SQLChatMentionsMeta
@@ -187,6 +190,37 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := s.threadPolicyDeps().validateSend(ctx, chatID, profileID, threadParent, postedAsChat); err != nil {
 		return nil, err
 	}
+	requestHash, err := sendRequestFingerprint(req, chatID, chatType, threadParent)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "send request cannot be bound")
+	}
+	if raw := strings.TrimSpace(req.GetClientMessageId()); raw != "" {
+		clientID, err := parseUUIDField("client_message_id", raw)
+		if err != nil {
+			return nil, err
+		}
+		saved, err := s.Messages.GetExactSendReceipt(ctx, chatID, profileID, clientID, messagingv1.MessagingService_SendMessage_FullMethodName, requestHash)
+		if err == nil {
+			if saved.DeletedAt != nil {
+				return nil, status.Error(codes.NotFound, "message not found")
+			}
+			if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, saved.CreatedAt); err != nil {
+				return nil, err
+			}
+			return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, store.ErrSendReceiptConflict) {
+				return nil, status.Error(codes.AlreadyExists, "client message key has a different request")
+			}
+			return nil, status.Error(codes.Unavailable, "send receipt authority unavailable")
+		}
+	}
+	ctx, cancelCommunication, err := s.beginCommunicationAction(ctx, chatID, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer cancelCommunication()
 
 	if s.Moderation != nil {
 		if err := s.Moderation.EnsureCanSend(ctx, chatID, profileID); err != nil {
@@ -298,23 +332,25 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	row := store.MessageRow{
-		ID:              msgID,
-		ChatID:          chatID,
-		ChatType:        chatTypeName,
-		SenderProfileID: profileID,
-		PostedAsChat:    postedAsChat,
-		DisplayChatID:   displayChatID,
-		Content:         content,
-		Type:            typeStr,
-		ThreadParentID:  threadParent,
-		AttachmentsJSON: attachments,
-		MusicBinding:    musicBinding,
-		MentionsJSON:    mentionsJSON,
-		ClientMessageID: clientID,
-		GhostOnly:       ghostOnly,
-		IsE2E:           isE2E,
-		ContentType:     contentType,
-		SendSilent:      req.GetSendSilent(),
+		AdmissionRequestHash: requestHash,
+		AdmissionRequestRPC:  messagingv1.MessagingService_SendMessage_FullMethodName,
+		ID:                   msgID,
+		ChatID:               chatID,
+		ChatType:             chatTypeName,
+		SenderProfileID:      profileID,
+		PostedAsChat:         postedAsChat,
+		DisplayChatID:        displayChatID,
+		Content:              content,
+		Type:                 typeStr,
+		ThreadParentID:       threadParent,
+		AttachmentsJSON:      attachments,
+		MusicBinding:         musicBinding,
+		MentionsJSON:         mentionsJSON,
+		ClientMessageID:      clientID,
+		GhostOnly:            ghostOnly,
+		IsE2E:                isE2E,
+		ContentType:          contentType,
+		SendSilent:           req.GetSendSilent(),
 	}
 	var outboxEvents []messageevents.OutboxEvent
 	if !ghostOnly {
@@ -343,6 +379,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 	saved, err := s.insertMessageWithAttachments(ctx, row, outboxEvents)
 	if err != nil {
+		if errors.Is(err, store.ErrSendReceiptConflict) {
+			return nil, status.Error(codes.AlreadyExists, "client message key has a different request")
+		}
 		if status.Code(err) != codes.Unknown {
 			return nil, err
 		}
@@ -733,6 +772,11 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if row.SenderProfileID != profileID {
 		return nil, status.Error(codes.PermissionDenied, "only the message author can edit")
 	}
+	ctx, cancelCommunication, err := s.beginCommunicationAction(ctx, row.ChatID, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer cancelCommunication()
 	if err := s.requireMessageReadEntitlement(ctx, row.ChatID, profileID, row.CreatedAt); err != nil {
 		return nil, err
 	}
@@ -1622,6 +1666,11 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	if err := s.checkSpaceSendPermission(ctx, targetChatID, profileID); err != nil {
 		return nil, err
 	}
+	ctx, cancelCommunication, err := s.beginCommunicationAction(ctx, targetChatID, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer cancelCommunication()
 	if err := s.validateE2ESend(ctx, targetChatID, source.IsE2E); err != nil {
 		return nil, err
 	}
@@ -1683,11 +1732,14 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	}
 
 	commentary := strings.TrimSpace(req.GetCommentary())
+	var commentaryRow *store.MessageRow
+	var commentaryEvents []messageevents.OutboxEvent
 	if commentary != "" {
 		if !messageTextWithinLimit(commentary) {
 			return nil, status.Error(codes.InvalidArgument, "commentary exceeds 4000 characters")
 		}
-		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary, ghostOnly, postedAsChat); err != nil {
+		commentaryRow, commentaryEvents, err = prepareForwardCommentary(targetChatID, profileID, chatType, commentary, ghostOnly, postedAsChat)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -1703,23 +1755,24 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	}
 
 	row := store.MessageRow{
-		ID:              msgID,
-		ChatID:          targetChatID,
-		ChatType:        chatType,
-		SenderProfileID: profileID,
-		PostedAsChat:    postedAsChat,
-		DisplayChatID:   displayChatID,
-		Content:         source.Content,
-		AttachmentsJSON: attachments,
-		MusicBinding:    musicBinding,
-		MentionsJSON:    "[]",
-		GhostOnly:       ghostOnly,
-		IsE2E:           source.IsE2E,
-		ContentType:     contentType,
+		ID:                msgID,
+		ChatID:            targetChatID,
+		ChatType:          chatType,
+		SenderProfileID:   profileID,
+		PostedAsChat:      postedAsChat,
+		DisplayChatID:     displayChatID,
+		Content:           source.Content,
+		ForwardCommentary: commentaryRow,
+		AttachmentsJSON:   attachments,
+		MusicBinding:      musicBinding,
+		MentionsJSON:      "[]",
+		GhostOnly:         ghostOnly,
+		IsE2E:             source.IsE2E,
+		ContentType:       contentType,
 	}
 	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
 	if withoutAttribution {
-		// FW-03: copy as new regular message — no Forwarded-from attribution.
+		// FW-03: copy as new regular message â€” no Forwarded-from attribution.
 		row.Type = "regular"
 		kind = messagingv1.MessageKind_MESSAGE_KIND_REGULAR
 	} else {
@@ -1729,7 +1782,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		row.ForwardFromSender = originSender
 	}
 
-	var outboxEvents []messageevents.OutboxEvent
+	outboxEvents := commentaryEvents
 	if !ghostOnly {
 		sent, eventErr := messageevents.NewMessageSentOutbox(row.ID.String(), row.ChatID.String(), row.SenderProfileID.String(), false, "", row.IsE2E, store.EffectiveContentType(row.ContentType, row.Content, row.AttachmentsJSON), row.SendSilent)
 		if eventErr != nil {
@@ -1754,10 +1807,10 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
 
-func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, profileID uuid.UUID, chatType, content string, ghostOnly, postedAsChat bool) error {
+func prepareForwardCommentary(chatID, profileID uuid.UUID, chatType, content string, ghostOnly, postedAsChat bool) (*store.MessageRow, []messageevents.OutboxEvent, error) {
 	msgID, err := messageid.NewMessageID()
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return nil, nil, status.Error(codes.Internal, err.Error())
 	}
 	row := store.MessageRow{
 		ID:              msgID,
@@ -1779,15 +1832,11 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 	if !ghostOnly {
 		event, eventErr := messageevents.NewMessageSentOutbox(row.ID.String(), row.ChatID.String(), row.SenderProfileID.String(), false, "", false, "text", row.SendSilent)
 		if eventErr != nil {
-			return status.Error(codes.Internal, "message event could not be encoded")
+			return nil, nil, status.Error(codes.Internal, "message event could not be encoded")
 		}
 		events = append(events, event)
 	}
-	_, err = s.insertMessageWithAttachments(ctx, row, events)
-	if err != nil {
-		return status.Error(codes.Internal, err.Error())
-	}
-	return nil
+	return &row, events, nil
 }
 
 func (s *MessagingGRPC) AddReaction(ctx context.Context, req *messagingv1.AddReactionRequest) (*messagingv1.AddReactionResponse, error) {
@@ -1834,6 +1883,14 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 	}
 	if msg.DeletedAt != nil {
 		return uuid.Nil, status.Error(codes.NotFound, "message not found")
+	}
+	if add {
+		var cancelCommunication context.CancelFunc
+		ctx, cancelCommunication, err = s.beginCommunicationAction(ctx, msg.ChatID, profileID)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		defer cancelCommunication()
 	}
 	if s.ChatGuard != nil {
 		if err := s.ChatGuard.EnsureMember(ctx, msg.ChatID, profileID); err != nil {
@@ -1998,6 +2055,11 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 	if err := s.checkCanPinMessage(ctx, chatID, profileID); err != nil {
 		return err
 	}
+	ctx, cancelCommunication, err := s.beginCommunicationAction(ctx, chatID, profileID)
+	if err != nil {
+		return err
+	}
+	defer cancelCommunication()
 	msg, err := s.Messages.GetMessageByID(ctx, messageID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

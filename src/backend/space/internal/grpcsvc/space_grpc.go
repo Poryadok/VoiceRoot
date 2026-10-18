@@ -19,23 +19,24 @@ import (
 // SpaceGRPC implements SpaceService RPCs backed by space_db.
 type SpaceGRPC struct {
 	spacev1.UnimplementedSpaceServiceServer
-	Store                   *store.SpaceStore
-	roleOverrideTargets     roleOverrideTargetStore // test seam; production uses Store
-	voiceRoomAccessResolver voiceRoomAccessResolver // test seam; production uses Store
-	SpaceEvents             spaceevents.Publisher   // optional; CreateSpace publishes space.created
-	Roles                   rolev1.RoleServiceClient
-	OwnershipRoles          rolev1.RoleServiceClient // dedicated authenticated Role lifecycle transport
-	OwnershipAuth           authv1.AuthServiceClient // dedicated authenticated Auth proof transport
-	PrincipalIssuer         *principal.Issuer
-	DeletionLifecycle       DeletionLifecycleCoordinator
-	ProfileAccounts         ProfileAccountLookup // optional; resolves profile_id → account_id for bans
-	Chats                   ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
-	Privacy                 InvitePrivacyChecker
-	Friends                 InviteProfileFriendChecker
-	SpaceCoMembership       InviteSpaceCoMembershipChecker
-	Blocks                  JoinAccountBlockChecker
-	MutationLocker          SpaceMutationLocker
-	AuditCursorKey          []byte // test override; production reads the database-owned key
+	Store                       *store.SpaceStore
+	roleOverrideTargets         roleOverrideTargetStore // test seam; production uses Store
+	voiceRoomAccessResolver     voiceRoomAccessResolver // test seam; production uses Store
+	SpaceEvents                 spaceevents.Publisher   // optional; CreateSpace publishes space.created
+	Roles                       rolev1.RoleServiceClient
+	OwnershipRoles              rolev1.RoleServiceClient // dedicated authenticated Role lifecycle transport
+	OwnershipAuth               authv1.AuthServiceClient // dedicated authenticated Auth proof transport
+	PrincipalIssuer             *principal.Issuer
+	DeletionLifecycle           DeletionLifecycleCoordinator
+	ProfileAccounts             ProfileAccountLookup // optional; resolves profile_id → account_id for bans
+	Chats                       ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
+	Privacy                     InvitePrivacyChecker
+	Friends                     InviteProfileFriendChecker
+	SpaceCoMembership           InviteSpaceCoMembershipChecker
+	Blocks                      JoinAccountBlockChecker
+	MutationLocker              SpaceMutationLocker
+	AuditCursorKey              []byte                      // test override; production reads the database-owned key
+	memberCommunicationResolver memberCommunicationResolver // test seam; production uses Store
 
 	// V1 is a test-only foundation until the durable v2 journal/freeze protocol
 	// lands. This private false-default switch has no production setter or env.
@@ -64,6 +65,10 @@ type DeletionLifecycleCoordinator interface {
 
 type voiceRoomAccessResolver interface {
 	ResolveVoiceRoomAccess(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (*store.VoiceRoomAccessRow, error)
+}
+
+type memberCommunicationResolver interface {
+	ResolveMemberCommunicationState(context.Context, uuid.UUID, uuid.UUID) (*store.MemberCommunicationStateRow, error)
 }
 
 // SpaceMutationLocker coordinates mutations of one space across service

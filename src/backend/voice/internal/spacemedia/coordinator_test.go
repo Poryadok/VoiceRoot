@@ -196,7 +196,7 @@ func TestCoordinatorRetriesCommittedRoomFullAbortThroughRecovery(t *testing.T) {
 	c := &Coordinator{
 		Store: calls, Calls: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID.String(): {SpaceID: spaceID.String(), Active: true, Member: true, AccessEpoch: 4},
+			profileID.String(): {SpaceID: spaceID.String(), Active: true, Member: true, AccessEpoch: 4, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profileID.String(): {PolicyEpoch: 5, CanJoin: true, CanSubscribe: true},
@@ -289,7 +289,7 @@ func TestCoordinatorRebuildsLostCallProjectionFromDurableAdmission(t *testing.T)
 	c := &Coordinator{
 		Store: calls, Calls: calls,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID.String(): {SpaceID: spaceID, Active: true, Member: true, AccessEpoch: 11},
+			profileID.String(): {SpaceID: spaceID, Active: true, Member: true, AccessEpoch: 11, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profileID.String(): {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true},
@@ -324,8 +324,8 @@ func TestObserveIgnoresNarrowHintAndReconcilesEveryParticipant(t *testing.T) {
 	require.NoError(t, err)
 	identityB := initial.SpaceMedia[profileB].Identity
 	access := fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-		profileA: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4},
-		profileB: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4},
+		profileA: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
+		profileB: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
 	}}
 	grants := fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 		profileA: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
@@ -359,7 +359,7 @@ func TestDelayedInvalidationUsesCurrentRestoredRights(t *testing.T) {
 	c := &Coordinator{
 		Store: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 9},
+			profile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 9, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profile: {PolicyEpoch: 12, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
@@ -386,7 +386,7 @@ func TestFailedTargetRemovalLeavesReconciliationIncomplete(t *testing.T) {
 	c := &Coordinator{
 		Store: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profile: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2},
+			profile: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{}},
 		Media:  media, SessionEpochChecker: currentEpochChecker{},
@@ -418,7 +418,7 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	c := &Coordinator{
 		Store: calls, Calls: calls, Admissions: admissions, Media: media,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profileID: {PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
@@ -439,7 +439,7 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	defer resumeAccess()
 	c.Access = fakeAccess{
 		byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true},
 		},
 		beforeResolve: func() {
 			accessOnce.Do(func() {
@@ -464,7 +464,7 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	readiness = nil
 	media.err = errors.New("authority-driven ejection did not complete")
 	c.Access = fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-		profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2},
+		profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2, CommunicationStateResolved: true},
 	}}
 	err := c.ReconcileAll(ctx)
 	require.Error(t, err)
@@ -527,7 +527,7 @@ func TestCommittedDuplicateRoomAdmissionRecoversByAbortingHiddenLoser(t *testing
 	})
 	require.NoError(t, err)
 	access := fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-		pendingProfile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+		pendingProfile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true},
 	}}
 	grants := fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 		pendingProfile: {PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},

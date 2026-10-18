@@ -23,6 +23,11 @@ import (
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
 type MessageRow struct {
+	// ForwardCommentary is a private, text-only companion in the same commit.
+	// Omission preserves historical attachment-intent identity bytes.
+	ForwardCommentary      *MessageRow             `json:",omitempty"`
+	AdmissionRequestHash   string                  `json:"-"`
+	AdmissionRequestRPC    string                  `json:"-"`
 	MusicBinding           *MusicAttachmentBinding `json:"-"`
 	ID                     uuid.UUID
 	ChatID                 uuid.UUID
@@ -61,6 +66,7 @@ type MessagesStore struct {
 }
 
 var ErrGameEventMessageConflict = errors.New("game event message idempotency conflict")
+var ErrSendReceiptConflict = errors.New("send receipt request conflict")
 
 // InsertGameEventMessage commits a game event message only while its expiry is
 // live. A retry with the same key returns the exact existing message; a changed
@@ -90,6 +96,9 @@ func (s *MessagesStore) insertGameEventMessage(ctx context.Context, row MessageR
 FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3 FOR UPDATE`,
 		row.ChatID, row.SenderProfileID, *row.ClientMessageID))
 	if err == nil {
+		if err := checkExactSendReceipt(ctx, tx, row); err != nil {
+			return nil, false, false, err
+		}
 		if err := loadGameCardTx(ctx, tx, saved); err != nil {
 			return nil, false, false, err
 		}
@@ -126,6 +135,9 @@ FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3
 		return nil, false, false, err
 	}
 	if command.RowsAffected() == 0 {
+		if err := checkExactSendReceipt(ctx, tx, row); err != nil {
+			return nil, false, false, err
+		}
 		saved, err = scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+`
 FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3 FOR UPDATE`,
 			row.ChatID, row.SenderProfileID, *row.ClientMessageID))
@@ -160,6 +172,9 @@ FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3
 		if err := insertGameCardTx(ctx, tx, row); err != nil {
 			return nil, false, false, err
 		}
+	}
+	if err := recordExactSendReceipt(ctx, tx, row); err != nil {
+		return nil, false, false, err
 	}
 	if outboxEvent != nil {
 		if outboxEvent.MessageID != saved.ID || outboxEvent.ChatID != saved.ChatID {
@@ -444,6 +459,11 @@ type messageInsertDB interface {
 }
 
 func insertMessageDB(ctx context.Context, db messageInsertDB, row MessageRow) (*MessageRow, error) {
+	if row.ClientMessageID != nil && row.AdmissionRequestHash != "" {
+		if _, ok := db.(pgx.Tx); !ok {
+			return nil, errors.New("exact send receipt requires an atomic message transaction")
+		}
+	}
 	if !json.Valid([]byte(row.AttachmentsJSON)) {
 		return nil, errors.New("attachments_json must be valid JSON")
 	}
@@ -517,13 +537,67 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 		if row.ClientMessageID == nil {
 			return nil, errors.New("messages store: insert produced no row")
 		}
+		if err := checkExactSendReceipt(ctx, db, row); err != nil {
+			return nil, err
+		}
 		return scanMessageRow(db.QueryRow(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND sender_profile_id = $2 AND client_message_id = $3
 LIMIT 1
 `, row.ChatID, row.SenderProfileID, *row.ClientMessageID))
 	}
+	if err := recordExactSendReceipt(ctx, db, row); err != nil {
+		return nil, err
+	}
 	return scanMessageRow(db.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE id=$1`, row.ID))
+}
+
+// GetExactSendReceipt returns a persisted result without producing any effect.
+// A historical key or changed request is not proof of an exact retry.
+func (s *MessagesStore) GetExactSendReceipt(ctx context.Context, chatID, senderID, clientID uuid.UUID, requestRPC, requestHash string) (*MessageRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	var messageID uuid.UUID
+	var savedRPC, savedHash string
+	if err := s.Pool.QueryRow(ctx, `SELECT message_id,request_rpc,request_sha256 FROM message_send_receipts WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3`, chatID, senderID, clientID).Scan(&messageID, &savedRPC, &savedHash); err != nil {
+		return nil, err
+	}
+	if savedRPC != requestRPC || savedHash != requestHash {
+		return nil, ErrSendReceiptConflict
+	}
+	return s.GetMessageByID(ctx, messageID)
+}
+
+func recordExactSendReceipt(ctx context.Context, db messageInsertDB, row MessageRow) error {
+	if row.ClientMessageID == nil || row.AdmissionRequestHash == "" {
+		return nil
+	}
+	if _, ok := db.(pgx.Tx); !ok {
+		return errors.New("exact send receipt requires an atomic message transaction")
+	}
+	_, err := db.Exec(ctx, `INSERT INTO message_send_receipts(chat_id,sender_profile_id,client_message_id,message_id,request_rpc,request_sha256) VALUES($1,$2,$3,$4,$5,$6)`, row.ChatID, row.SenderProfileID, *row.ClientMessageID, row.ID, row.AdmissionRequestRPC, row.AdmissionRequestHash)
+	return err
+}
+
+// Repeat the conflict check under the insert transaction: concurrent first
+// attempts may both miss the handler's read-only receipt lookup.
+func checkExactSendReceipt(ctx context.Context, db messageInsertDB, row MessageRow) error {
+	if row.ClientMessageID == nil || row.AdmissionRequestHash == "" {
+		return nil
+	}
+	var rpc, hash string
+	err := db.QueryRow(ctx, `SELECT request_rpc,request_sha256 FROM message_send_receipts WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3`, row.ChatID, row.SenderProfileID, *row.ClientMessageID).Scan(&rpc, &hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} // historical dedupe is not inferred receipt authority
+	if err != nil {
+		return err
+	}
+	if rpc != row.AdmissionRequestRPC || hash != row.AdmissionRequestHash {
+		return ErrSendReceiptConflict
+	}
+	return nil
 }
 
 const messageSelectSQL = `

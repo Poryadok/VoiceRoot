@@ -25,6 +25,7 @@ import (
 	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/spacecommunication"
 	"voice/backend/voice/internal/federationmedia"
 	"voice/backend/voice/internal/gameprincipal"
 	"voice/backend/voice/internal/gameprovision"
@@ -93,6 +94,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("voice Role grant checker configuration: %v", err)
 	}
+	communicationConfig, communicationEnabled, err := spacecommunication.LoadClientConfig(os.LookupEnv, "VOICE_SPACE_COMMUNICATION_")
+	if err != nil {
+		log.Fatalf("Voice Space communication client configuration: %v", err)
+	}
 	spacePrincipalConfig, spacePrincipalEnabled, err := spaceprincipalruntime.LoadFromEnv()
 	if err != nil {
 		log.Fatalf("voice Space lifecycle principal configuration: %v", err)
@@ -143,11 +148,11 @@ func main() {
 	if gamePrincipalEnabled && !roleGrantEnabled {
 		log.Fatal("Voice managed game-session admission requires both GIS provisioning and Role grant checker configuration")
 	}
-	if (roleGrantEnabled || userPrincipalEnabled) && !principalJWKSEnabled {
+	if (roleGrantEnabled || userPrincipalEnabled || communicationEnabled) && !principalJWKSEnabled {
 		log.Fatal("Voice Role grants and user-principal listener require the Voice service principal signer")
 	}
 	var voiceIssuer *principal.Issuer
-	if roleGrantEnabled || userPrincipalEnabled {
+	if roleGrantEnabled || userPrincipalEnabled || communicationEnabled {
 		voiceIssuer, err = principal.NewIssuer(principal.IssuerConfig{
 			Issuer: "voice", KeyID: principalJWKSConfig.KeyID, PrivateKey: principalJWKSConfig.SigningKey,
 		})
@@ -390,7 +395,14 @@ func main() {
 		spaceCli := spacev1.NewSpaceServiceClient(spconn)
 		callSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
 		spaceMembers = s2s.NewGRPCSpaceMembership(spaceCli)
-		voiceRoomAccessResolver = s2s.NewGRPCVoiceRoomAccessResolver(spaceCli, os.Getenv("SPACE_VOICE_S2S_TOKEN"))
+	}
+	if communicationEnabled {
+		conn, err := communicationConfig.Dial()
+		if err != nil {
+			log.Fatalf("Voice Space communication mTLS: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+		voiceRoomAccessResolver = s2s.NewGRPCVoiceRoomAccessResolver(spacev1.NewSpaceServiceClient(conn), voiceIssuer)
 	}
 	if subAddr := strings.TrimSpace(os.Getenv("SUBSCRIPTION_GRPC_ADDR")); subAddr != "" {
 		subconn, err := grpc.NewClient(grpcclient.DialTarget(subAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))

@@ -16,7 +16,7 @@ import (
 )
 
 // TestMessagingSendMessage_chatOverrideDenySendMessages documents RL-02 / P1.8:
-// TEXT_CHAT_SEND_MESSAGES deny (chat_override path via HasChatPermission) → PermissionDenied.
+// TEXT_CHAT_SEND_MESSAGES deny (chat_override path via HasChatPermission) â†’ PermissionDenied.
 func TestMessagingSendMessage_chatOverrideDenySendMessages(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
@@ -32,7 +32,7 @@ func TestMessagingSendMessage_chatOverrideDenySendMessages(t *testing.T) {
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		RolePermissions: selectiveRolePerms{deny: map[string]bool{
 			permissions.TextChatSendMessages: true,
 		}},
@@ -62,7 +62,7 @@ func TestMessagingSendMessage_chatSendAllowedWhenPermissionGranted(t *testing.T)
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
 			permissions.TextChatSendMessages: true,
 		}},

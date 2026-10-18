@@ -77,6 +77,7 @@ func applyBaseMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpo
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000027_message_event_outbox.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000028_music_metadata.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000029_music_file_snapshot.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000030_send_request_receipts.up.sql")
 }
 
 // applyChatDBForBufconnChat applies chat_db schema needed when wiring real Chat gRPC
@@ -186,6 +187,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 		Logger:              w.Logger,
 		ChatTypeResolver:    w.ChatTypeResolver,
+		CommunicationStates: w.CommunicationStates,
 	}
 	w.wireDeletedAccounts(t, messagingSvc)
 	messagingv1.RegisterMessagingServiceServer(srv, messagingSvc)
@@ -206,19 +208,20 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 }
 
 type messagingWire struct {
-	ChatGuard       ChatGuard
-	Moderation      *store.SQLModerationGuard
-	UserProfiles    ProfileAccountLookup
-	Blocks          AccountPairBlockChecker
-	Privacy         PrivacyChecker
-	Friends         ProfileFriendChecker
-	MessageEvents   messageevents.MessageEventsPublisher
-	Files           FileMetadataLookup
-	RolePermissions mentions.RolePermissionChecker
-	UserPresence    mentions.OnlinePresenceLookup
-	PlatformMod     PlatformModerationChecker
-	Logger          *slog.Logger
-	DeletedAccounts testDeletedAccountChecker
+	CommunicationStates CommunicationStateResolver
+	ChatGuard           ChatGuard
+	Moderation          *store.SQLModerationGuard
+	UserProfiles        ProfileAccountLookup
+	Blocks              AccountPairBlockChecker
+	Privacy             PrivacyChecker
+	Friends             ProfileFriendChecker
+	MessageEvents       messageevents.MessageEventsPublisher
+	Files               FileMetadataLookup
+	RolePermissions     mentions.RolePermissionChecker
+	UserPresence        mentions.OnlinePresenceLookup
+	PlatformMod         PlatformModerationChecker
+	Logger              *slog.Logger
+	DeletedAccounts     testDeletedAccountChecker
 	// RequireDeletedAccountsSeam is true only in P3 gate tests. Legacy fixtures
 	// receive an explicit allow checker while production wiring is introduced.
 	RequireDeletedAccountsSeam bool

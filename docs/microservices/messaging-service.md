@@ -1,5 +1,66 @@
 # Messaging Service
 
+## Space communication timeout (BE-044-TIMEOUT-v1)
+
+Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)
+to enabled SendMessage (including reply/attachment), forward destination,
+EditMessage, AddReaction, PinMessage and UnpinMessage. Derive destination Space
+from authoritative Chat resource data and actor from verified effective identity;
+unknown Chat scope is unavailable, never a standalone shortcut. Enabled service
+ingress acting as a profile follows the same check. Existing membership, Role,
+privacy, author and lifecycle ACLs remain mandatory.
+
+Obtain a fresh signed protected Space decision for each new effect. Explicit
+TIMED_OUT returns PermissionDenied/403; unknown/dependency/malformed capability
+returns Unavailable/503 before message/reaction/pin/File-reference/outbox or
+notification side effects. Carry one two-second monotonic budget from before the
+decision request through the committing transaction; cancel/expiry rolls back.
+A concurrent timeout may follow an admitted snapshot; only that bounded attempt
+may finish. A new attempt must resolve again. Exact persisted no-effect receipt
+replay remains allowed with no repeated side effects; changed payload conflicts.
+
+A single ForwardMessage with commentary is one admitted mutation: commentary,
+forward, all outbox records and attachment intent COMMITTED share the final local
+transaction. The existing durable pre-acquire File intent stays outside it;
+abandoned invisible references retain exact release reconciliation. No database
+transaction spans File RPC. Expired admission cannot complete in a background
+context. Forward has no public idempotency key or new cross-RPC replay guarantee.
+An uncertain COMMIT/response may mean the entire pair committed; a returned error
+does not prove rollback and must not trigger deletion of a committed pair.
+Persistence preserves DeadlineExceeded/Canceled for expired/canceled attempts,
+including wrapped errors after File acquisition or while waiting on a DB lock.
+Attachment intents for keyed sends bind the normalized original request digest
+and RPC before File enrichment; committed-intent replay rechecks the exact receipt
+under its held connection. File-owned metadata refresh cannot erase a changed
+original request or grant a new timeout exemption.
+
+Reads/history/read state, own delete/hide and own reaction removal keep their
+existing ACLs. Forward source is an ordinary read. DM/standalone/other Space or
+profile are outside this timeout. Disabled scheduled handlers stay disabled;
+future scheduling/dispatch must check again, while post-commit retries only
+replay the receipt/outbox. This section is a target, not runtime completion.
+
+SDK `ApplyGameMessage` follows the same resource policy for **create/edit**,
+using the verified Auth execution permit `ProfileID` after resource mapping and
+Chat membership checks. Own SDK delete retains its existing ACL and exemption;
+moderation tombstones are cleanup. Exact SDK receipts remain first, before new
+permits or dependencies. A timeout/unknown decision aborts any newly issued permit
+through bounded control-plane cleanup and preserves PermissionDenied/Unavailable.
+The effective commit deadline is the earliest of the two-second Space attempt,
+Auth permit expiry/margin and the existing 250ms transaction deadline. Currently
+provisioned managed SDK chats remain standalone groups; this contract enables no
+Space-owned provisioning. Bot event publication checks the Bot-owned sender
+profile supplied under its verified service contract, not a player/account owner.
+
+The Messaging consumer uses the complete `MESSAGING_SPACE_COMMUNICATION_` tuple:
+`GRPC_ADDR`, `TLS_CA_FILE`, `CLIENT_CERT_FILE`, `CLIENT_KEY_FILE`. Absent settings
+leave covered Space effects unavailable; any partial or explicitly empty tuple
+fails startup. The shared Messaging service signer/JWKS publisher keeps its
+existing `MESSAGING_PURGE_PRINCIPAL_` key and protected JWKS settings. It may run
+without File/Search purge-owner clients; configuring any purge-owner setting
+still requires the complete owner tuple. No signing key, JWKS publisher or
+protected Space client means no Space communication grant.
+
 ## Обзор
 
 CRUD сообщений для всех типов чатов (DM, текстовые группы и каналы — как в спейсе, так и standalone). Треды, реакции, пины, пересылка, read receipts.
@@ -48,15 +109,27 @@ durable generation fence/participant and Space coordinator integration.
 
 `SendMessage` принимает опциональный **`client_message_id`** (UUID), уникальный в разрезе **`(chat_id, sender_profile_id)`** (в proto — пара `chat` + идентичность отправителя из контекста запроса). Это одна namespace и для immediate `Message`, и для pending `ScheduledMessage`: повтор запроса с тем же ключом не создаёт ни вторую строку в `messages`, ни вторую scheduled row. Повтор **того же нормализованного тела** возвращает gRPC `OK` и тот же вариант `SendMessageResponse` с тем же ID; pending replay возвращает current `ScheduledMessage`, включая связанный `sent_message_id` после dispatch. Тот же ключ с другим payload, `send_silent`, schedule mode/time или immediate-vs-scheduled режимом — `ALREADY_EXISTS`; сервер не меняет уже созданный объект и не публикует новый event. Нормализация игнорирует порядок ключей JSON object, но сохраняет порядок array и включает defaults/derived type в fingerprint. Проверка immediate и scheduled путей атомарна (общий idempotency ledger либо transaction advisory lock), а не две независимые unique indexes. Поэтому запрет `ALREADY_EXISTS` относится только к корректному retry. Без ключа при сетевых ретраях возможны дубликаты.
 
-T51 adds a planned Bot-only S2S publication surface,
-`MessagingService.SendGameEventMessage`; it is not in the current proto or
-runtime. Its canonical request and retry contract live in
+T51 provides the Bot-only S2S publication RPC
+`MessagingService.SendGameEventMessage` in the proto and handler. Its canonical
+request and retry contract live in
 [Game Event v1](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
 Messaging owns the committed message and deduplicates by the same
 `(chat_id, sender_profile_id, client_message_id)` rule. Only a verified Bot
 service principal may supply the Bot-owned sender identity; public game
 credentials and GIS are not message senders. The RPC must retain normal
 membership, Space permission, moderation, block, content and expiry checks.
+
+Migration `messaging_db/000030` adds private `message_send_receipts` for enabled
+immediate SendMessage and Bot event sends. The key is the existing
+`(chat_id, sender_profile_id, client_message_id)` namespace; each receipt binds
+the exact RPC, request SHA-256 and persisted message ID. Ordinary request
+fingerprints include effective defaults/derived content type and canonical JSON
+object order while retaining array order. Receipt insertion commits with the
+message and outbox; the transaction repeats conflict detection for concurrent
+first attempts, including attachment sends. A changed retained request is
+AlreadyExists. Historical dedupe keys are not backfilled with inferred request
+authority and cannot bypass a fresh timeout decision. Receipts expose no new
+public API and are removed by the message's physical-purge cascade.
 
 ## Game SDK message ingress (T15/T16)
 

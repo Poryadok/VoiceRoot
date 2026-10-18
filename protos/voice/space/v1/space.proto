@@ -96,7 +96,12 @@ service SpaceService {
 
   // S2S: canonical owner and exact membership evidence for Voice authorization.
   // This endpoint is restricted to the verified Voice service identity.
+  // @voice.security=protected;callers=service:voice
   rpc ResolveVoiceRoomAccess(ResolveVoiceRoomAccessRequest) returns (ResolveVoiceRoomAccessResponse);
+
+  // Fresh profile/Space timeout authority; no public or legacy transport.
+  // @voice.security=protected;callers=service:messaging
+  rpc ResolveMemberCommunicationState(ResolveMemberCommunicationStateRequest) returns (ResolveMemberCommunicationStateResponse);
 
   // S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
   rpc SyncSpaceProSubscription(SyncSpaceProSubscriptionRequest) returns (SyncSpaceProSubscriptionResponse);
@@ -645,6 +650,37 @@ message ResolveVoiceRoomAccessResponse {
   bool active = 3;
   bool discoverable = 4;
   uint64 access_epoch = 5;
+  uint32 protocol_version = 6;
+  string profile_id = 7;
+  google.protobuf.Timestamp evaluated_at = 8;
+  MemberCommunicationState communication_state = 9;
+  google.protobuf.Timestamp timed_out_until = 10;
+}
+
+// Communication timeout is an additional deny, never membership or Role authority.
+enum MemberCommunicationState {
+  MEMBER_COMMUNICATION_STATE_UNSPECIFIED = 0;
+  MEMBER_COMMUNICATION_STATE_CLEAR = 1;
+  MEMBER_COMMUNICATION_STATE_TIMED_OUT = 2;
+}
+
+// @voice.unknown_fields=reject
+message ResolveMemberCommunicationStateRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string profile_id = 3;
+}
+
+// A missing/expired timeout is CLEAR only for a live eligible current member.
+// TIMED_OUT requires until > evaluated_at; CLEAR omits timed_out_until.
+message ResolveMemberCommunicationStateResponse {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string profile_id = 3;
+  uint64 access_epoch = 4;
+  google.protobuf.Timestamp evaluated_at = 5;
+  MemberCommunicationState communication_state = 6;
+  google.protobuf.Timestamp timed_out_until = 7;
 }
 
 message SyncSpaceProSubscriptionRequest {

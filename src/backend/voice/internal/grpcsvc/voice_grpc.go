@@ -574,6 +574,8 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		if accessErr != nil {
 			return nil, accessErr
 		}
+		ctx, cancelAdmission := context.WithDeadline(ctx, access.DecisionDeadline)
+		defer cancelAdmission()
 		if call.SpaceID != access.SpaceID {
 			return nil, status.Error(codes.PermissionDenied, "stored voice room space does not match canonical owner")
 		}

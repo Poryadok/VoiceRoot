@@ -7562,6 +7562,11 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     $core.bool? active,
     $core.bool? discoverable,
     $fixnum.Int64? accessEpoch,
+    $core.int? protocolVersion,
+    $core.String? profileId,
+    $1.Timestamp? evaluatedAt,
+    MemberCommunicationState? communicationState,
+    $1.Timestamp? timedOutUntil,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -7569,6 +7574,12 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     if (active != null) result.active = active;
     if (discoverable != null) result.discoverable = discoverable;
     if (accessEpoch != null) result.accessEpoch = accessEpoch;
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (profileId != null) result.profileId = profileId;
+    if (evaluatedAt != null) result.evaluatedAt = evaluatedAt;
+    if (communicationState != null)
+      result.communicationState = communicationState;
+    if (timedOutUntil != null) result.timedOutUntil = timedOutUntil;
     return result;
   }
 
@@ -7592,6 +7603,16 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         5, _omitFieldNames ? '' : 'accessEpoch', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aI(6, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(7, _omitFieldNames ? '' : 'profileId')
+    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'evaluatedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aE<MemberCommunicationState>(
+        9, _omitFieldNames ? '' : 'communicationState',
+        enumValues: MemberCommunicationState.values)
+    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'timedOutUntil',
+        subBuilder: $1.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -7660,6 +7681,287 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
   $core.bool hasAccessEpoch() => $_has(4);
   @$pb.TagNumber(5)
   void clearAccessEpoch() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.int get protocolVersion => $_getIZ(5);
+  @$pb.TagNumber(6)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasProtocolVersion() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearProtocolVersion() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get profileId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set profileId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasProfileId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearProfileId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $1.Timestamp get evaluatedAt => $_getN(7);
+  @$pb.TagNumber(8)
+  set evaluatedAt($1.Timestamp value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasEvaluatedAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearEvaluatedAt() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $1.Timestamp ensureEvaluatedAt() => $_ensure(7);
+
+  @$pb.TagNumber(9)
+  MemberCommunicationState get communicationState => $_getN(8);
+  @$pb.TagNumber(9)
+  set communicationState(MemberCommunicationState value) =>
+      $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasCommunicationState() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearCommunicationState() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $1.Timestamp get timedOutUntil => $_getN(9);
+  @$pb.TagNumber(10)
+  set timedOutUntil($1.Timestamp value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasTimedOutUntil() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearTimedOutUntil() => $_clearField(10);
+  @$pb.TagNumber(10)
+  $1.Timestamp ensureTimedOutUntil() => $_ensure(9);
+}
+
+/// @voice.unknown_fields=reject
+class ResolveMemberCommunicationStateRequest extends $pb.GeneratedMessage {
+  factory ResolveMemberCommunicationStateRequest({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  ResolveMemberCommunicationStateRequest._();
+
+  factory ResolveMemberCommunicationStateRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveMemberCommunicationStateRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveMemberCommunicationStateRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateRequest copyWith(
+          void Function(ResolveMemberCommunicationStateRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveMemberCommunicationStateRequest))
+          as ResolveMemberCommunicationStateRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateRequest create() =>
+      ResolveMemberCommunicationStateRequest._();
+  @$core.override
+  ResolveMemberCommunicationStateRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveMemberCommunicationStateRequest>(create);
+  static ResolveMemberCommunicationStateRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+}
+
+/// A missing/expired timeout is CLEAR only for a live eligible current member.
+/// TIMED_OUT requires until > evaluated_at; CLEAR omits timed_out_until.
+class ResolveMemberCommunicationStateResponse extends $pb.GeneratedMessage {
+  factory ResolveMemberCommunicationStateResponse({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+    $fixnum.Int64? accessEpoch,
+    $1.Timestamp? evaluatedAt,
+    MemberCommunicationState? communicationState,
+    $1.Timestamp? timedOutUntil,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (accessEpoch != null) result.accessEpoch = accessEpoch;
+    if (evaluatedAt != null) result.evaluatedAt = evaluatedAt;
+    if (communicationState != null)
+      result.communicationState = communicationState;
+    if (timedOutUntil != null) result.timedOutUntil = timedOutUntil;
+    return result;
+  }
+
+  ResolveMemberCommunicationStateResponse._();
+
+  factory ResolveMemberCommunicationStateResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveMemberCommunicationStateResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveMemberCommunicationStateResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'accessEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'evaluatedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aE<MemberCommunicationState>(
+        6, _omitFieldNames ? '' : 'communicationState',
+        enumValues: MemberCommunicationState.values)
+    ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'timedOutUntil',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateResponse copyWith(
+          void Function(ResolveMemberCommunicationStateResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveMemberCommunicationStateResponse))
+          as ResolveMemberCommunicationStateResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateResponse create() =>
+      ResolveMemberCommunicationStateResponse._();
+  @$core.override
+  ResolveMemberCommunicationStateResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveMemberCommunicationStateResponse>(create);
+  static ResolveMemberCommunicationStateResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get accessEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set accessEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAccessEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAccessEpoch() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $1.Timestamp get evaluatedAt => $_getN(4);
+  @$pb.TagNumber(5)
+  set evaluatedAt($1.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasEvaluatedAt() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearEvaluatedAt() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $1.Timestamp ensureEvaluatedAt() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  MemberCommunicationState get communicationState => $_getN(5);
+  @$pb.TagNumber(6)
+  set communicationState(MemberCommunicationState value) =>
+      $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasCommunicationState() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearCommunicationState() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $1.Timestamp get timedOutUntil => $_getN(6);
+  @$pb.TagNumber(7)
+  set timedOutUntil($1.Timestamp value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasTimedOutUntil() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearTimedOutUntil() => $_clearField(7);
+  @$pb.TagNumber(7)
+  $1.Timestamp ensureTimedOutUntil() => $_ensure(6);
 }
 
 class SyncSpaceProSubscriptionRequest extends $pb.GeneratedMessage {
