@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -100,15 +101,7 @@ func (e *Engine) Snapshot(ctx context.Context, subject Subject) (Snapshot, error
 		if ctx.Err() != nil {
 			return Snapshot{}, ErrUnavailable
 		}
-		if first.Disposition == Absent {
-			return Snapshot{ProtocolVersion: 1, Kind: "SOLO", MemberProfileIDs: []uuid.UUID{subject.ProfileID}}, nil
-		}
-		profiles := make([]uuid.UUID, 0, len(members))
-		for _, member := range members {
-			profiles = append(profiles, member.ProfileID)
-		}
-		sortIDs(profiles)
-		return Snapshot{ProtocolVersion: 1, Kind: "VOICE_ROSTER", RoomID: first.RoomID, RosterVersion: first.RosterVersion, MemberProfileIDs: profiles}, nil
+		return buildSnapshot(subject, second)
 	}
 	return Snapshot{}, ErrUnavailable
 }
@@ -134,6 +127,7 @@ func eligible(c Candidate, subject Subject) ([]Member, error) {
 	}
 	members := make([]Member, 0, len(c.Members))
 	seen := make(map[uuid.UUID]bool, len(c.Members))
+	seenAccounts := make(map[uuid.UUID]bool, len(c.Members))
 	found := false
 	for _, member := range c.Members {
 		switch member.State {
@@ -143,10 +137,11 @@ func eligible(c Candidate, subject Subject) ([]Member, error) {
 		default:
 			return nil, ErrUnavailable
 		}
-		if member.AccountID == uuid.Nil || member.ProfileID == uuid.Nil || member.OperationID == uuid.Nil || member.Generation == "" || member.SessionEpoch <= 0 || seen[member.ProfileID] {
+		if member.AccountID == uuid.Nil || member.ProfileID == uuid.Nil || member.OperationID == uuid.Nil || member.Generation == "" || !utf8.ValidString(member.Generation) || uint64(len(member.Generation)) > uint64(^uint32(0)) || member.SessionEpoch <= 0 || seen[member.ProfileID] || seenAccounts[member.AccountID] {
 			return nil, ErrUnavailable
 		}
 		seen[member.ProfileID] = true
+		seenAccounts[member.AccountID] = true
 		if member.State == Reconnecting {
 			interval := member.ReconnectDeadline.Sub(member.ReconnectStartedAt)
 			if member.ReconnectStartedAt.IsZero() || member.ReconnectDeadline.IsZero() || interval <= 0 || interval > 30*time.Second {

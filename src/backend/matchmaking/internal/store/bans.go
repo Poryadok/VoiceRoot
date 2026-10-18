@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -94,7 +95,15 @@ func (s *BanStore) InsertPlatformMMBan(ctx context.Context, p InsertPlatformMMBa
 	if s == nil || s.Pool == nil {
 		return errors.New("ban store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer rollbackPartySearch(tx)
+	if _, err = acquirePlatformBanAccounts(ctx, tx, []uuid.UUID{p.AccountID}, false); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 		INSERT INTO mm_platform_bans (account_id, reason, banned_by_profile_id, expires_at, revoked_at)
 		VALUES ($1, $2, $3, $4, NULL)
 		ON CONFLICT (account_id) DO UPDATE SET
@@ -102,9 +111,12 @@ func (s *BanStore) InsertPlatformMMBan(ctx context.Context, p InsertPlatformMMBa
 			banned_by_profile_id = EXCLUDED.banned_by_profile_id,
 			expires_at = EXCLUDED.expires_at,
 			revoked_at = NULL,
-			created_at = now()
+			created_at = clock_timestamp()
 	`, p.AccountID, p.Reason, p.BannedByProfileID, p.ExpiresAt)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // RevokePlatformMMBan lifts a platform MM ban.
@@ -112,11 +124,21 @@ func (s *BanStore) RevokePlatformMMBan(ctx context.Context, accountID uuid.UUID)
 	if s == nil || s.Pool == nil {
 		return errors.New("ban store unavailable")
 	}
-	now := time.Now().UTC()
-	_, err := s.Pool.Exec(ctx, `
-		UPDATE mm_platform_bans SET revoked_at = $2 WHERE account_id = $1 AND revoked_at IS NULL
-	`, accountID, now)
-	return err
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer rollbackPartySearch(tx)
+	if _, err = acquirePlatformBanAccounts(ctx, tx, []uuid.UUID{accountID}, false); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE mm_platform_bans SET revoked_at = clock_timestamp() WHERE account_id = $1 AND revoked_at IS NULL
+	`, accountID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // IsPlatformBanned reports whether account has an active platform MM ban.

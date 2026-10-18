@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 	"time"
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/pkg/partyauthority"
 	"voice/backend/pkg/principal"
 )
 
@@ -80,8 +81,30 @@ func (c *GRPCClient) Snapshot(ctx context.Context, s Subject) (Snapshot, error) 
 		}
 		result.MemberProfileIDs = append(result.MemberProfileIDs, id)
 	}
+	if len(resp.SourceAuthoritySha256) != 32 {
+		return Snapshot{}, ErrUnknown
+	}
+	result.MemberAuthorityVersion = resp.MemberAuthorityVersion
+	copy(result.SourceAuthorityHash[:], resp.SourceAuthoritySha256)
+	for _, member := range resp.MemberAuthorities {
+		if member == nil || len(member.ProtoReflect().GetUnknown()) != 0 {
+			return Snapshot{}, ErrUnknown
+		}
+		profile, err := strictID(member.ProfileId)
+		if err != nil {
+			return Snapshot{}, ErrUnknown
+		}
+		account, err := strictID(member.AccountId)
+		if err != nil {
+			return Snapshot{}, ErrUnknown
+		}
+		result.MemberAuthorities = append(result.MemberAuthorities, partyauthority.Member{ProfileID: profile, AccountID: account, SessionEpoch: member.AdmittedSessionEpoch})
+	}
 	if _, err := validateSnapshot(result, s.ProfileID); err != nil {
 		return Snapshot{}, err
+	}
+	if _, err := validateMemberAuthority(result, s); err != nil {
+		return Snapshot{}, ErrUnknown
 	}
 	return result, nil
 }

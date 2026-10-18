@@ -10,11 +10,12 @@ import (
 )
 
 var (
-	testAccount = uuid.MustParse("10000000-0000-4000-8000-000000000001")
-	testProfile = uuid.MustParse("20000000-0000-4000-8000-000000000001")
-	testPeer    = uuid.MustParse("20000000-0000-4000-8000-000000000002")
-	testRoom    = uuid.MustParse("30000000-0000-4000-8000-000000000001")
-	testNow     = time.Date(2026, 10, 18, 20, 0, 0, 0, time.UTC)
+	testAccount     = uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	testPeerAccount = uuid.MustParse("10000000-0000-4000-8000-000000000002")
+	testProfile     = uuid.MustParse("20000000-0000-4000-8000-000000000001")
+	testPeer        = uuid.MustParse("20000000-0000-4000-8000-000000000002")
+	testRoom        = uuid.MustParse("30000000-0000-4000-8000-000000000001")
+	testNow         = time.Date(2026, 10, 18, 20, 0, 0, 0, time.UTC)
 )
 
 type scriptedReader struct {
@@ -57,7 +58,11 @@ func testSubject() Subject {
 }
 
 func testMember(profile uuid.UUID) Member {
-	return Member{AccountID: testAccount, ProfileID: profile, OperationID: uuid.New(), Generation: uuid.NewString(), SessionEpoch: 7, State: Joined}
+	account := testAccount
+	if profile == testPeer {
+		account = testPeerAccount
+	}
+	return Member{AccountID: account, ProfileID: profile, OperationID: uuid.New(), Generation: uuid.NewString(), SessionEpoch: 7, State: Joined}
 }
 
 func testRoster() Candidate {
@@ -86,7 +91,7 @@ func TestSnapshotUsesExactSecondPassAndFreshAccountFloor(t *testing.T) {
 	require.Equal(t, uint64(2), result.RosterVersion)
 	require.Equal(t, []uuid.UUID{testProfile, testPeer}, result.MemberProfileIDs)
 	require.Equal(t, 2, reader.reads)
-	require.Equal(t, []string{testAccount.String()}, floors.accounts, "one shared account floor per attempt, each stored epoch still checked")
+	require.Equal(t, []string{testAccount.String(), testPeerAccount.String()}, floors.accounts, "one fresh floor for each distinct native account per attempt")
 }
 
 func TestSnapshotGenuineAbsenceRequiresTwoConsistentPassesAndAuth(t *testing.T) {
@@ -120,7 +125,7 @@ func TestSnapshotRereadsAuthWhenNativeGenerationChanges(t *testing.T) {
 	_, err := testEngine(reader, floors, &recordedNormalizer{}).Snapshot(context.Background(), testSubject())
 	require.NoError(t, err)
 	require.Equal(t, 4, reader.reads)
-	require.Len(t, floors.accounts, 2, "cannot reuse positive Auth evidence across a retry")
+	require.Len(t, floors.accounts, 4, "cannot reuse either account's positive Auth evidence across a retry")
 }
 
 func TestSnapshotStaleInitiatorNormalizesExactGenerationAndNeverReturnsSolo(t *testing.T) {
@@ -167,6 +172,8 @@ func TestSnapshotRejectsIncompleteOrIneligibleNativeEvidence(t *testing.T) {
 		{"unknown state", func(c *Candidate) { c.Members[0].State = "MISSING" }, ErrUnavailable},
 		{"unknown version", func(c *Candidate) { c.RosterVersion = 0 }, ErrUnavailable},
 		{"duplicate profile", func(c *Candidate) { c.Members = append(c.Members, c.Members[0]) }, ErrUnavailable},
+		{"duplicate account", func(c *Candidate) { c.Members[0].AccountID = c.Members[1].AccountID }, ErrUnavailable},
+		{"invalid generation encoding", func(c *Candidate) { c.Members[0].Generation = string([]byte{0xff}) }, ErrUnavailable},
 		{"wrong account", func(c *Candidate) { c.Members[1].AccountID = uuid.New() }, ErrUnavailable},
 		{"managed Game", func(c *Candidate) { c.Purpose = "GAME" }, ErrIneligible},
 		{"MatchSquad", func(c *Candidate) { c.Purpose = "MATCH_SQUAD" }, ErrIneligible},
@@ -210,7 +217,7 @@ func TestSnapshotDoesNotTrustFingerprintAlone(t *testing.T) {
 	_, err := testEngine(reader, floors, &recordedNormalizer{}).Snapshot(context.Background(), testSubject())
 	require.NoError(t, err)
 	require.Equal(t, 4, reader.reads)
-	require.Len(t, floors.accounts, 2)
+	require.Len(t, floors.accounts, 4)
 }
 
 func TestSnapshotRetryBudgetIsBounded(t *testing.T) {
@@ -220,7 +227,7 @@ func TestSnapshotRetryBudgetIsBounded(t *testing.T) {
 	_, err := testEngine(reader, floors, &recordedNormalizer{}).Snapshot(context.Background(), testSubject())
 	require.ErrorIs(t, err, ErrUnavailable)
 	require.Equal(t, 6, reader.reads)
-	require.Len(t, floors.accounts, 3)
+	require.Len(t, floors.accounts, 6)
 }
 
 func TestSnapshotPeerRevocationRestartsWithFreshAuth(t *testing.T) {
@@ -237,7 +244,7 @@ func TestSnapshotPeerRevocationRestartsWithFreshAuth(t *testing.T) {
 	require.Equal(t, "VOICE_ROSTER", result.Kind)
 	require.Len(t, normalizer.targets, 1)
 	require.Equal(t, first.Members[0].Generation, normalizer.targets[0].Member.Generation)
-	require.Len(t, floors.accounts, 2)
+	require.Len(t, floors.accounts, 3)
 }
 
 func TestSnapshotReconnectAllowsOnlyUnexpiredImmutableInterval(t *testing.T) {
@@ -273,7 +280,7 @@ func TestSnapshotCoverageChangeRequiresFreshAuthEvenWithSameFingerprint(t *testi
 	_, err := testEngine(reader, floors, &recordedNormalizer{}).Snapshot(context.Background(), testSubject())
 	require.NoError(t, err)
 	require.Equal(t, 4, reader.reads)
-	require.Len(t, floors.accounts, 2)
+	require.Len(t, floors.accounts, 4)
 }
 
 func TestSnapshotUnknownPeerFloorCannotPartiallyNormalizeKnownLoss(t *testing.T) {

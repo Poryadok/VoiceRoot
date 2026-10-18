@@ -7391,6 +7391,9 @@ class GetMatchmakingPartySnapshotResponse extends $pb.GeneratedMessage {
     $core.String? roomId,
     $fixnum.Int64? rosterVersion,
     $core.Iterable<$core.String>? memberProfileIds,
+    $core.int? memberAuthorityVersion,
+    $core.Iterable<MatchmakingPartyMemberAuthority>? memberAuthorities,
+    $core.List<$core.int>? sourceAuthoritySha256,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -7399,6 +7402,12 @@ class GetMatchmakingPartySnapshotResponse extends $pb.GeneratedMessage {
     if (rosterVersion != null) result.rosterVersion = rosterVersion;
     if (memberProfileIds != null)
       result.memberProfileIds.addAll(memberProfileIds);
+    if (memberAuthorityVersion != null)
+      result.memberAuthorityVersion = memberAuthorityVersion;
+    if (memberAuthorities != null)
+      result.memberAuthorities.addAll(memberAuthorities);
+    if (sourceAuthoritySha256 != null)
+      result.sourceAuthoritySha256 = sourceAuthoritySha256;
     return result;
   }
 
@@ -7425,6 +7434,13 @@ class GetMatchmakingPartySnapshotResponse extends $pb.GeneratedMessage {
         4, _omitFieldNames ? '' : 'rosterVersion', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..pPS(5, _omitFieldNames ? '' : 'memberProfileIds')
+    ..aI(6, _omitFieldNames ? '' : 'memberAuthorityVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..pPM<MatchmakingPartyMemberAuthority>(
+        7, _omitFieldNames ? '' : 'memberAuthorities',
+        subBuilder: MatchmakingPartyMemberAuthority.create)
+    ..a<$core.List<$core.int>>(
+        8, _omitFieldNames ? '' : 'sourceAuthoritySha256', $pb.PbFieldType.OY)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -7491,6 +7507,115 @@ class GetMatchmakingPartySnapshotResponse extends $pb.GeneratedMessage {
   /// Unique canonical UUIDs sorted by their 16 unsigned bytes.
   @$pb.TagNumber(5)
   $pb.PbList<$core.String> get memberProfileIds => $_getList(4);
+
+  /// Private to the protected service:matchmaking capability. No public/event
+  /// projection may copy these account bindings or admitted session epochs.
+  @$pb.TagNumber(6)
+  $core.int get memberAuthorityVersion => $_getIZ(5);
+  @$pb.TagNumber(6)
+  set memberAuthorityVersion($core.int value) => $_setUnsignedInt32(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasMemberAuthorityVersion() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearMemberAuthorityVersion() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $pb.PbList<MatchmakingPartyMemberAuthority> get memberAuthorities =>
+      $_getList(6);
+
+  /// Opaque same-cut native admission/incarnation/coverage identity digest.
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get sourceAuthoritySha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set sourceAuthoritySha256($core.List<$core.int> value) =>
+      $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasSourceAuthoritySha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearSourceAuthoritySha256() => $_clearField(8);
+}
+
+class MatchmakingPartyMemberAuthority extends $pb.GeneratedMessage {
+  factory MatchmakingPartyMemberAuthority({
+    $core.String? profileId,
+    $core.String? accountId,
+    $fixnum.Int64? admittedSessionEpoch,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (accountId != null) result.accountId = accountId;
+    if (admittedSessionEpoch != null)
+      result.admittedSessionEpoch = admittedSessionEpoch;
+    return result;
+  }
+
+  MatchmakingPartyMemberAuthority._();
+
+  factory MatchmakingPartyMemberAuthority.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MatchmakingPartyMemberAuthority.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MatchmakingPartyMemberAuthority',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aInt64(3, _omitFieldNames ? '' : 'admittedSessionEpoch')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchmakingPartyMemberAuthority clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchmakingPartyMemberAuthority copyWith(
+          void Function(MatchmakingPartyMemberAuthority) updates) =>
+      super.copyWith(
+              (message) => updates(message as MatchmakingPartyMemberAuthority))
+          as MatchmakingPartyMemberAuthority;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MatchmakingPartyMemberAuthority create() =>
+      MatchmakingPartyMemberAuthority._();
+  @$core.override
+  MatchmakingPartyMemberAuthority createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MatchmakingPartyMemberAuthority getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MatchmakingPartyMemberAuthority>(
+          create);
+  static MatchmakingPartyMemberAuthority? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get admittedSessionEpoch => $_getI64(2);
+  @$pb.TagNumber(3)
+  set admittedSessionEpoch($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAdmittedSessionEpoch() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAdmittedSessionEpoch() => $_clearField(3);
 }
 
 const $core.bool _omitFieldNames =

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/partyauthority"
 )
 
 func partyDB(t *testing.T) *pgxpool.Pool {
@@ -60,7 +61,8 @@ func partyParams(t *testing.T, pool *pgxpool.Pool) store.CreateSourcePartyParams
 	var game uuid.UUID
 	require.NoError(t, pool.QueryRow(context.Background(), `SELECT id FROM games ORDER BY id LIMIT 1`).Scan(&game))
 	room := uuid.New()
-	return store.CreateSourcePartyParams{SearchOperationID: uuid.New(), SearchRequestHash: [32]byte{1}, InitiatorAccountID: uuid.New(), InitiatorProfileID: profiles[0], InitiatorSessionEpoch: 7, ProtocolVersion: 1, SourceKind: "VOICE_ROSTER", SourceRoomID: &room, SourceRosterVersion: 2, MemberProfileIDs: profiles, GameID: game, Mode: "5v5 Ranked", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().UTC().Add(30 * time.Minute)}
+	account := uuid.New()
+	return store.CreateSourcePartyParams{SearchOperationID: uuid.New(), SearchRequestHash: [32]byte{1}, InitiatorAccountID: account, InitiatorProfileID: profiles[0], InitiatorSessionEpoch: 7, ProtocolVersion: 1, SourceKind: "VOICE_ROSTER", SourceRoomID: &room, SourceRosterVersion: 2, MemberProfileIDs: profiles, MemberAuthorityVersion: 1, MemberAuthorities: []partyauthority.Member{{ProfileID: profiles[0], AccountID: account, SessionEpoch: 3}, {ProfileID: profiles[1], AccountID: uuid.New(), SessionEpoch: 9}}, SourceAuthorityHash: [32]byte{2}, GameID: game, Mode: "5v5 Ranked", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().UTC().Add(30 * time.Minute)}
 }
 
 func TestSourcePartyCreatesEverySessionAndDurableIntentAtomically(t *testing.T) {
@@ -114,6 +116,8 @@ func TestSourcePartyConcurrentOverlapHasOneCompleteWinner(t *testing.T) {
 	b.MemberProfileIDs = []uuid.UUID{a.MemberProfileIDs[1], uuid.New()}
 	sort.Slice(b.MemberProfileIDs, func(i, j int) bool { return bytes.Compare(b.MemberProfileIDs[i][:], b.MemberProfileIDs[j][:]) < 0 })
 	b.InitiatorProfileID = b.MemberProfileIDs[0]
+	b.MemberAuthorities[0].ProfileID = b.MemberProfileIDs[0]
+	b.MemberAuthorities[1].ProfileID = b.MemberProfileIDs[1]
 	start := make(chan struct{})
 	errors := make(chan error, 2)
 	var wg sync.WaitGroup

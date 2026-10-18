@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"sort"
 	"testing"
 	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/matchmaking/internal/store"
@@ -30,9 +31,18 @@ func TestProvisionCutBindsWholePersistedPartyAndLocalChanges(t *testing.T) {
 	require.NotEqual(t, [32]byte{}, cut.Hash())
 	require.Len(t, cut.Parties(), 1)
 	require.Equal(t, party.Party.SearchOperationID, cut.Parties()[0].SearchOperationID)
+	accounts := []uuid.UUID{p.MemberAuthorities[0].AccountID, p.MemberAuthorities[1].AccountID}
+	sort.Slice(accounts, func(i, j int) bool { return accounts[i].String() < accounts[j].String() })
+	require.Equal(t, accounts, cut.Accounts())
+	copyAccounts := cut.Accounts()
+	copyAccounts[0] = uuid.Nil
+	require.Equal(t, accounts, cut.Accounts())
+	copyParties := cut.Parties()
+	copyParties[0].MemberAuthorities[0].AccountID = uuid.Nil
+	require.Equal(t, p.MemberAuthorities, cut.Parties()[0].MemberAuthorities)
 	validator := &partysource.Revalidator{Snapshots: provisionReaderFunc(func(_ context.Context, s partysource.Subject) (partysource.Snapshot, error) {
 		require.Equal(t, p.InitiatorAccountID, s.AccountID)
-		return partysource.Snapshot{ProtocolVersion: 1, Kind: p.SourceKind, RoomID: p.SourceRoomID, RosterVersion: p.SourceRosterVersion, MemberProfileIDs: p.MemberProfileIDs}, nil
+		return partysource.Snapshot{ProtocolVersion: 1, Kind: p.SourceKind, RoomID: p.SourceRoomID, RosterVersion: p.SourceRosterVersion, MemberProfileIDs: p.MemberProfileIDs, MemberAuthorityVersion: p.MemberAuthorityVersion, MemberAuthorities: p.MemberAuthorities, SourceAuthorityHash: p.SourceAuthorityHash}, nil
 	})}
 	validated, err := validator.ValidateCapturedParties(ctx, cut)
 	require.NoError(t, err)
