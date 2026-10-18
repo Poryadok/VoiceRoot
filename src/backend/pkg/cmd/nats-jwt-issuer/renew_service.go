@@ -16,6 +16,8 @@ var serviceRenewSubjects = map[string][]string{
 	"role":  {"role.voice_policy_invalidated"},
 	"space": {"space.voice_room_access_invalidated"},
 	"voice": {
+		"voice.participant_joined",
+		"voice.participant_left",
 		"$JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat",
 		"$JS.ACK.chat_events.voice_space_media_chat.>",
 		"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role",

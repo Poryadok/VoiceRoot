@@ -18,7 +18,12 @@ watcher, GIS, federation, deployment or acceptance activation.
 - [x] Stable-ID/time encoder and durable publisher wire tests: meaningful RED
   on stub; GREEN22 tests including mismatched/malformed payloads. Scoped lint0
   issues, buf lint/format/breaking against localmaster PASS. No remote proof.
-- [ ] Exact subject/ACL/bootstrap preservation and consumer ACK/no effects.
+- [x] Exact subject/ACL/bootstrap source and consumer ACK/no-effect fixtures.
+  Real local JetStream under source-defined permissions proves populated stream
+  update preserves configuration/messages/consumer identity, both facts receive
+  PubAck and Analytics ACK without append; neighbouring subject denied.
+  Notification no-effect ACK passes. Realtime test binary compiles for Linux;
+  actual Realtime execution remains a Linux/hosted gate.
 - [ ] Integrate encoder through BE106 committed EventEncoder adapter (author1).
 - [ ] Real isolated NATS/bootstrap/ACL and journal integration proof, independent
   review, exact-head checks and ordinary PR delivery when transport recovers.
@@ -43,6 +48,14 @@ semantics; never regenerate committed IDs/time. Current enumerated NATS lists
 change additively; immutable deployed-baseline fixtures remain historical.
 Reuse author1 journal concurrency proof at exact source. Real NATS/PG require a
 faithful environment. Native Windows Realtime execution remains prohibited.
+
+NATS stage checks: issuer/fixture77 tests PASS (four Linux issuance cases skip
+on Windows), Analytics real broker1 and Notification1 PASS, both scoped vet
+PASS. Shell syntax, parsed YAML and Compose/Kubernetes literal parity PASS.
+The actual bootstrap-function preservation fixture skips locally because jq is
+absent; existing Linux contract entrypoint requires it, so this is an open
+execution gate, not a local PASS. Hosted JWT/TLS and BE106 journal integration
+remain open. Source grants do not authorize credentials or runtime rollout.
 
 ## Custody
 

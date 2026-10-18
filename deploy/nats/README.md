@@ -36,7 +36,7 @@ The reviewed policy is [`acl-intent.yaml`](acl-intent.yaml). It enumerates all
 pull and ACK permissions. Service users cannot create, update or delete
 JetStream state. The bootstrap identity has only the scoped stream create/info
 permissions it needs, plus exact in-place update permissions for the
-`chat_events` subject additions and `social_events` duplicate window; it cannot delete streams. Reply inbox subscriptions use scoped service prefixes, never
+`chat_events`/`voice_events` subject additions and `social_events` duplicate window; it cannot delete streams. Reply inbox subscriptions use scoped service prefixes, never
 `_INBOX.>` or `$JS.API.>`. The disposable fixture command above is for proof
 only; its signing seeds are discarded.
 
@@ -104,6 +104,20 @@ independent prerequisites for each affected target service.
 
 ### Bounded Role, Space, Voice and Messaging grant transition
 
+BE-102 adds exactly `voice.participant_joined` and `voice.participant_left` to the
+Voice publish policy and `$JS.API.STREAM.UPDATE.voice_events` to bootstrap.
+Central bootstrap accepts only the complete legacy Voice subject set or the
+complete new set; it adds the two subjects in place while preserving every other
+stream setting, stored message/sequence and consumer identity/ACK state. Drift
+or an update/readback error fails closed; no stream or consumer is recreated.
+The executable preservation fixture is required in the Linux bootstrap contract
+job, and the real disposable JWT/TLS broker proof remains a delivery gate.
+
+These source permissions do not change retained deployed JWTs or authorize
+issuance, Secret replacement or bootstrap replay. Existing-generation rollout
+must first prove the exact new Voice/bootstrap grants under its separately
+authorized renewal/enrollment procedure. Missing grants remain a preflight veto.
+
 `nats-jwt-issuer --renew-existing-service PRIVATE_PIPE_FD` is an explicit
 Linux-root operator mode, separate from fresh issuance and bootstrap renewal.
 Its stdin is one bounded JSON document with schema
@@ -117,7 +131,8 @@ carry private material. Ordinary deployment does not invoke this mode.
 The only permitted additions are `role.voice_policy_invalidated` for Role,
 `space.voice_room_access_invalidated` for Space, the exact INFO and ACK subjects
 for `chat_events/voice_space_media_chat` and
-`role_events/voice_space_media_role` for Voice, and
+`role_events/voice_space_media_role` plus the two BE-102 participant publish
+subjects for Voice, and
 `$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata` plus
 `$JS.ACK.file_events.messaging_music_metadata.>` for Messaging. The target
 publish set must equal the original set plus the service-specific additions,

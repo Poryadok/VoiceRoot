@@ -43,7 +43,7 @@ for stream in \
   'stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
   'stream_with_duplicate_window social_events 86400000000000 social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
   'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed role.voice_policy_invalidated' \
-  'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' \
+  'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left' \
   'stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned'; do
   require "$stream" "$BOOTSTRAP"
 done
@@ -77,14 +77,14 @@ require '  nats-realtime-bootstrap:' "$COMPOSE"
 require '        condition: service_completed_successfully' "$COMPOSE"
 require '      REALTIME_INSTANCE_ID: ${REALTIME_INSTANCE_ID:-realtime-1}' "$COMPOSE"
 require '  - name: voice_events' "$MANIFEST"
-require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
+require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined, voice.participant_joined, voice.participant_left]' "$MANIFEST"
 require_stream_contract analytics_events '[analytics.>]' 168h
 require_stream_contract chat_events '[chat.created, chat.updated, chat.deleted, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted, space.deletion_scheduled, space.restored, space.voice_room_access_invalidated]' 168h
 require_stream_contract role_events '[role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, role.voice_policy_invalidated]' 168h
 require_stream_contract user_profile_projection '[user.search_profile_projection]' 0s
 require "stream analytics_events 'analytics.>'" "$BOOTSTRAP"
 require 'stream_with_max_age user_profile_projection 0 user.search_profile_projection' "$BOOTSTRAP"
-require 'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' "$NOTIFICATION_BOOTSTRAP"
+require 'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left' "$NOTIFICATION_BOOTSTRAP"
 cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_NOTIFICATION_BOOTSTRAP" | sed '/^---$/,$d' | sed 's/^    //') "$NOTIFICATION_BOOTSTRAP" \
   || fail "Kubernetes notification bootstrap script must exactly match the Compose notification bootstrap script"
 grep -Fq '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
@@ -191,3 +191,5 @@ grep -Fq 'puback_error_category=' "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must not use an unacknowledged Core NATS publish"
 
 echo 'NATS Realtime bootstrap contract OK'
+
+REQUIRE_NATS_BOOTSTRAP_TEST=1 python3 "$ROOT/scripts/ci/nats-voice-participant-subjects_test.py"
