@@ -459,3 +459,64 @@ appointment occurred. Current own36 lease d98699dc810d3f2707902abd371fb6c3,
 holder rudeus-121-wave2-integration; no live Chat proof/build handles remain.
 Existing Flutter baseline golden/R22/fullfeature/provider/acceptance gates stay
 open. Historical transport outage records do not negate current SSH/API success.
+
+
+## Reviewed Role foundation integration 2026-10-18 22:44 UTC
+
+Normal conflict-free merge b2cdc3ad251fdc64d1d052c52a8bea2d5d28dabe accepts155
+immutable foundation8682a79f7456439607ae1105df5e82b7a7b20ce5 as the explicitly
+transferred narrow source publication/integration/affectedCI function only.
+Full Space-chat feature task/ongoing handler and qualified authority source
+remain with155. Local persistence/lifecycle review194c16 and codec196c11 bounds
+are retained; remote authority/native membership qualification/target journals,
+workers/client navigation/full feature review and activation remain OPEN.
+Native Role migration20 is unique in this assembled catalog, follows19, and
+has not been deployed. Existing older 'Role20 unimplemented' entries above are
+historical; this is source foundation, not completion of the qualified receiver.
+
+Exact b2 isolated Linux source checks: shared memberadmission plus selected
+Role permissions/memberbinding/store42 top-level +44 subtests PASS,0 FAIL,
+117 explicit integration skips. This is scoped short proof, not full PG PASS.
+Author unchanged foundation6top+4sub realPG0skip64.621s is reused within its
+exact source/review bounds. Selected vet PASS; actual native Role/User/Voice
+go build ./... each PASS, no Windows test executables/listeners. Canonical Role
+Dockerfile actual image PASS26.844s,
+sha256:f4ae555ba1c17d66b16aebfbe254184bad836408612da01a7618331b6db884ee.
+Both additive proto paths buf lint PASS; all9 generated Go files agree across
+three mirrors. Full generated Dart/build/consumer activation remains qualified
+by actual future checks, not inferred from identical Go blobs. Owned runner
+cleanup exit0. Raw hashes/results are foundation-summary.json and
+foundation-check-receipt.json under external wave2.
+
+155c24 coherent SPACE-CHAT-AUTHORITY-v4 preserves v3 and refines Q/A/R/P target
+attempt/publication identity. Owner121 compared the actual refinement to frozen
+Chat2e41 ownDB snapshot: same DTO/callers/native25/lifecycle output, no invitation
+or membership provenance interpretation. Existing SAME four dependency gates
+now pin v4; i4 classified unaffected with evidence. No dependency was deleted
+or weakened; Role/Space consumers must perform their own real adaptation.
+
+Latest user-requested actual GH API22:33:15.519410UTC exit0, remoteef9fc3c3:
+run39172476770 then9SUCCESS/19SKIPPED/20IN_PROGRESS/7QUEUED, not wholeCI PASS.
+Subsequent normalSSH publish b2 succeeded. Next transport observation23:03:15UTC
+unless an actual CI/publication lifecycle read is newer. Previous2a failed-job
+log is now downloaded: same4 CanonicalBootstrapTests at nats_root_plan.py:84,
+72330bytes, no new category. NATSv5 producer197 source is not yet accepted
+ready delivery; full preservation tests/review remain prerequisites.
+
+BE238 corrected clean02571b7/147c23 review received; final exact combined1CPU
+proof/packet pending142, foreignBE137 WIP proof ancestry must not enter source.
+BE265 fa1528a integration/CI continuation explicitly accepted after reading
+task criteria and166c13-c14; actual supported handoff/portable packet plus
+mandatory independent source review still needed before merge. EJECT_ONLY
+still cannot issue full FROZEN/PURGED receipts; provider/stand/full feature
+gates unchanged. BE041178e8 actualhandoff received, mandatory ACLreview pending.
+Auth203 floor offer f04 contains156 publication-only WIP base; not accepted for
+wholesale merge.203 will provide only own clean two-commit delta on actual
+develop and requalify tests/security review; no WIP source laundering.
+
+Normal publisher-only branch checkpoints do not transfer task/CI or authorize
+develop integration:15686e2be0d,14459f70b9c,1586fb3b78b,1451fc23b7a,
+1913536f8fb and1721554ff34. Existing fullfeature work remains with its actual
+authors. No shared stand/deployment/tester appointment, no golden/pin/allowlist
+bypass. Full repository sign-off remains OPEN. Own graph60115 current update
+is pending; do not promote earlier graph successes onto this source.
