@@ -231,6 +231,65 @@ enum MessageContentType {
 
 `attachments_json` в текущем коде — opaque; spec требует typed enum + validated payload (**not yet in proto/code**). **`sticker` / `gif` payloads do not require generic `attachments_json`** — `content_type` + `content_payload` is canonical; legacy clients may mirror `file_id` in `attachments` for transition.
 
+### Space text admission (accepted target; BE-067)
+
+This operation matrix is the accepted implementation contract; it does not claim
+that every listed gate is implemented. Use Chat's authoritative Space/chat scope
+and the authenticated actor. Effective Role decisions own owner/admin semantics;
+Messaging must not add role-name bypasses. Missing Role authority or lookup
+failure fails closed before message, reaction, delete, pin or outbox writes.
+Existing membership, visibility, moderation, File and lifecycle fences still apply.
+DM and standalone chats retain their separate policies.
+
+Every Space send also needs `TEXT_CHAT_SEND_MESSAGES` and the applicable thread
+permissions. Additional permissions follow the actual validated payload:
+
+| Payload | Additional permission |
+|---|---|
+| Text, including a bare URL without embedding metadata | None |
+| Photo, video, voice, video note, GIF, sticker | `TEXT_CHAT_SEND_MEDIA` |
+| Document, music | `TEXT_CHAT_ATTACH_FILES` |
+| Article or an explicitly supported link-preview embedding | `TEXT_CHAT_EMBED_LINKS` |
+| Location coordinates/label and derivative map thumbnail | None |
+
+Mixed payloads require the union of their semantic permissions. A derivative
+thumbnail belongs to its parent payload; a file ID alone does not turn media
+into a document. Validate every attachment and its File metadata rather than
+trusting only top-level `content_type`: text/unspecified plus an image cannot
+bypass media permission. Reject invalid or unsupported payloads through existing
+validation. This contract does not introduce a link-preview wire, contact/poll
+type, Article worker or scheduled feature. Deny unauthorized explicit embedding
+rather than silently stripping it; bare text URLs remain allowed.
+
+Send, forward and copy-as-new share the classifier. Forward checks the forwarding
+actor's destination rights before inserting optional commentary or any event;
+source read/File authority remains required. Any enabled delayed-send dispatcher
+must recheck current rights at dispatch. Text-only author edits retain their
+existing policy; future rich-content edits must use the same matrix.
+
+For `FOR_EVERYONE`, an author retains the existing own-message path; deleting
+another author's Space group/channel message requires
+`TEXT_CHAT_MANAGE_MESSAGES`, including thread replies. Preserve the real actor
+separately from the author through storage authorization and mutation fences.
+`FOR_ME` remains a self-hide. Foreign edits remain forbidden. Pin and unpin require
+`TEXT_CHAT_PIN_MESSAGES` for own and foreign messages; `MANAGE_MESSAGES` and
+`MANAGE_THREADS` neither replace that gate nor add an extra required permission.
+
+`TEXT_CHAT_MANAGE_THREADS` has no defined lifecycle RPC yet and cannot substitute
+for send/create-thread/send-in-thread/delete/pin permissions. Space thread
+admission must fail closed when Role authority is missing. A thread lifecycle
+contract remains open; this matrix does not invent archive, close or cascade delete.
+
+Unicode reactions need `TEXT_CHAT_ADD_REACTIONS` only. Future custom reactions
+need an authoritative catalog-backed identity resolving their origin Space:
+same-Space assets require add permission; external assets also require
+`TEXT_CHAT_USE_EXTERNAL_EMOJIS`. Unknown/deleted assets or unavailable provenance
+must deny custom admission, while members may still remove their own existing
+reaction after revocation. The current opaque emoji string cannot establish
+origin: do not infer it from prefixes, names, URLs, UUID shape or client-supplied
+origin. Catalog/wire ownership and compatibility remain an explicit prerequisite;
+no external-custom-emoji enforcement is claimed here.
+
 ### Scheduled messages (lifecycle)
 
 P-008 ships the additive wire contract and durable table foundation below. Populated schedule arms fail closed until lifecycle handlers and the worker own validation and dispatch.
@@ -707,6 +766,13 @@ see [todo/backend.md](../todo/backend.md). Subject matrix:
 Messaging does **not** own `chats.last_message_at`. Cross-ref — [chat-service.md](chat-service.md) § ListChats ownership table.
 
 ## Зависимости
+
+`AddReaction` in a Space chat requires `TEXT_CHAT_ADD_REACTIONS` for the
+authenticated profile and the message's authoritative Space/chat scope before
+writing either the reaction or its event outbox row. Missing or unavailable Role
+authority returns `UNAVAILABLE`; an explicit deny returns `PERMISSION_DENIED`.
+DM and standalone chats do not use Space permissions. `RemoveReaction` still
+allows a member to remove their own reaction after losing add permission.
 
 - **Chat Service** — валидация членства / доступа для **DM**, **группы**, **канала** (в т.ч. standalone)
 - **Space Service** — если у `chats.space_id` задан спейс: членство в спейсе (для канала и группы в спейсе)

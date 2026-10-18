@@ -289,7 +289,7 @@ permission. Member и Guest не получают его по умолчанию
 | `TEXT_CHAT_USE_EXTERNAL_EMOJIS` | Внешние эмодзи |
 | `TEXT_CHAT_MENTION_ALL_ONLINE` | Упоминание всех онлайн в этом чате (`@here`) |
 | `TEXT_CHAT_MENTION_ALL_IN_CHAT` | Упоминание всех участников чата (`@everyone`) |
-| `TEXT_CHAT_MANAGE_MESSAGES` | Удалять/закреплять чужие сообщения |
+| `TEXT_CHAT_MANAGE_MESSAGES` | Удалять чужие сообщения; закрепление требует отдельного `TEXT_CHAT_PIN_MESSAGES` |
 | `TEXT_CHAT_READ_HISTORY` | Читать историю (если выключено — виден только «с момента входа») |
 | `TEXT_CHAT_PIN_MESSAGES` | Закреплять сообщения |
 | `TEXT_CHAT_CREATE_THREADS` | Создавать треды |

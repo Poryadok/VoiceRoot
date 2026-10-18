@@ -633,7 +633,7 @@ func (s *MessagingGRPC) checkSpaceSendPermission(ctx context.Context, chatID, pr
 	if err != nil {
 		return err
 	}
-	if pol == nil || pol.SpaceID == nil {
+	if pol.SpaceID == nil {
 		return nil
 	}
 	chatType := strings.TrimSpace(pol.ChatType)
@@ -1847,6 +1847,11 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 	policy, err := s.loadMutationChatPolicy(ctx, msg.ChatID)
 	if err != nil {
 		return uuid.Nil, err
+	}
+	if add {
+		if err := s.checkReactionPermission(ctx, policy, msg.ChatID, profileID); err != nil {
+			return uuid.Nil, err
+		}
 	}
 	var spaceID uuid.UUID
 	if policy.SpaceID != nil {
