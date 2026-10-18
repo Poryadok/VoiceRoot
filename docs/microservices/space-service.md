@@ -358,6 +358,74 @@ authorization and transaction, Role completion, Gateway wiring and negative
 concurrency/runtime evidence. No admission capability is enabled by this
 documentation change.
 
+#### Admission Role readiness and ordinary membership generations
+
+Space stores a decided admission candidate outside `space_members`. A permanent
+ordinary-member head allocates monotonically increasing positive generations
+per `(space_id,profile_id)`; failures, removal and rejoin never reuse them.
+Existing published ordinary members backfill explicit generation zero, which
+still requires authoritative Space confirmation. Missing head/unknown source
+is not a legacy-zero fallback. Independent community membership keeps its own
+owner/roster generations and contribution source.
+
+`PREPARING_ROLE` is inert technical continuation after automatic/manual
+authorization. It is not membership, reserves no capacity/invite use, and is
+excluded from every existing ordinary membership reader. A handler-only
+`ready=false` row in `space_members` is forbidden because existing Chat/Space
+SQL readers would expose access. The candidate commits exact original
+operation, account/profile/Space, admission kind/invite, policy/submission
+binding digest and allocated generation before any Role call.
+
+Role's protected `EnsureDefaultMemberRole` receives protocol version 1, Space,
+profile, generation, stable admission operation and binding SHA-256. Role picks
+the allowed current default join role and saves an immutable exact receipt;
+callers cannot select role ID, permissions, Owner or a forged human actor.
+`READY` means only that Role prepared its own generation-qualified projection.
+It remains ineffective without matching published Space membership. Generic
+AssignRole with owner metadata is not an admission protocol.
+
+After verifying the exact READY receipt, Space gathers fresh mutable owner
+decisions before taking any local mutation lock, then re-enters the shared
+Space fence and all current final guards. It CASes the same candidate/head/
+generation and commits published membership, member_count, exact invite use,
+Role receipt, durable outcome and member-joined event together. Only published
+membership is inserted into `space_members`. Final guard failure or removal
+supersession invalidates the candidate and durably queues cleanup without a
+member/count/use/event success. Unknown COMMIT is resolved from durable state.
+
+Role obtains current eligibility through protected
+`GetMemberAdmissionAuthority`, caller `service:role` only, binding exact Space,
+profile and optionally a paired expected generation/admission operation.
+Response echoes identity, explicit ordinary head/state, published generation/
+operation/receipt digest, LIVE/ownership availability and separately typed
+community authority. The endpoint reads Space-owned state and never calls
+Role. Role queries it before its local transaction; this avoids recursive or
+opposite-order locks. PREPARING permits only inert preparation; effective
+ordinary rights require matching published generation/operation/receipt and
+fresh owner eligibility. Unknown/error is unavailable. This remains a bounded
+owner observation under the snapshot limitation above, not distributed ACID.
+
+Leave/kick/ban/purge invalidate pending candidates under the same Space fence,
+advance the permanent ordinary generation and persist typed removal work even
+if no membership row exists. Account ban invalidates all pending profile aliases
+for that account. Role's `RemoveMemberRoles` writes a generation floor even
+without existing grants. Floor `R` defeats Ensure at `g<=R` without deleting
+newer `g>R` or independently sourced community contributions. System baseline
+Member cleanup is a separate typed source operation; Owner is exclusively
+bootstrap/ownership/P3 authority. Physical cleanup may lag, but new effective
+rights cannot rely on an orphaned ordinary contribution after Space removal.
+Rejoin cannot inherit old-generation Admin/custom grants. P3 retirement
+permanently dominates every ordinary generation and late retry.
+
+Role effective role/permission/hierarchy reads and generic user/bot mutations
+must qualify ordinary contributions against this live incarnation; actor and
+target checks apply where required. Raw authority-source exports, policy epochs
+and downstream consumers must not export an inert contribution as an active
+grant. Space's own authority revision/catalog and cleanup include new head,
+candidate, receipt and outbox data. Existing published-only readers, Chat's
+legacy direct readers and community unions must be tested with candidate plus
+published fixtures; do not introduce new cross-database reads.
+
 ### Phase-0 S2S decision callers (target)
 
 `AreCoMembers`, subscription sync и новые internal decision RPC не получают actor

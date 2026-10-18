@@ -303,7 +303,12 @@ service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,
 The verified Space principal may request only these global permission names:
 `SPACE_VIEW_AUDIT_LOG`, `SPACE_MANAGE_BOTS`, `SPACE_MANAGE_INVITES`,
 `MEMBER_KICK`, `MEMBER_BAN`, `MODERATION_TIMEOUT_MEMBERS`,
-`SPACE_MANAGE_SETTINGS`, and `TEXT_CHAT_CREATE_IN_SPACE`. `profile_id` remains
+`SPACE_MANAGE_SETTINGS`, `SPACE_APPROVE_JOIN_REQUESTS`, and
+`TEXT_CHAT_CREATE_IN_SPACE`. This is the accepted target allowlist. The current
+protected runtime's narrow `CheckPermission` routing supports
+`TEXT_CHAT_CREATE_IN_SPACE`; adding an allowlist name here does not expand that
+listener. Admission must explicitly add and test the exact signed decision
+before depending on `SPACE_APPROVE_JOIN_REQUESTS`. `profile_id` remains
 decision data asserted by verified Space; it is never identity authority derived
 from request metadata.
 
