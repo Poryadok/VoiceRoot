@@ -38,6 +38,18 @@ concurrency and migrations. No host test executables/listeners or GitHub probes.
 
 ## Milestones and progress
 
+Exact projection acknowledgement checkpoint: a Linux client regression first
+failed because equal revision without accepted account/subject/state was treated
+as convergence. The client now validates the complete accepted projection; a
+typed remote-ahead result must be compared with CURRENT local authority before
+classifying restore divergence. The same source passed real Linux PostgreSQL 18
+and Java 25 JDBC tests after all 27 Flyway migrations, including stale/equal
+revision handling, deleted lifecycle, imported terminal fence and overdue purge
+(one test, zero skips). The initial test's attempt to change an Auth-owned purge
+deadline was correctly rejected; the fixture now asserts that rejection and uses
+an actual terminal import and independently overdue account. This is scoped
+projection evidence, not P0-P5 runtime or whole-vertical acceptance.
+
 - [x] Confirm actual TT owner156, fresh base and exclusive lease22.
 - [x] Read c9; ordinary policy choices no longer require a user response.
 - [x] Persist exact owning API/schema and policy contracts before production code.

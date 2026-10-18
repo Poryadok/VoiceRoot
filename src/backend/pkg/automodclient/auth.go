@@ -5,7 +5,7 @@ package automodclient
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -23,9 +23,20 @@ type AuthClient struct {
 	Client automodv1.AuthModerationAuthorityServiceClient
 }
 
-// ErrRestrictionDiverged requires recovery of the owning Moderation history.
-// Incrementing a restored local revision cannot overwrite newer Auth authority.
-var ErrRestrictionDiverged = errors.New("Auth moderation revision is ahead of the owning local history")
+// RestrictionAheadError is not an acknowledgement or proof of history loss.
+// The caller must compare Accepted with CURRENT local authority, outside any
+// reciprocal network call's account transaction, before deciding on recovery.
+type RestrictionAheadError struct {
+	Requested, Accepted uint64
+}
+
+func (e *RestrictionAheadError) Error() string {
+	return fmt.Sprintf("Auth accepted moderation revision %d exceeds requested revision %d", e.Accepted, e.Requested)
+}
+
+func (e *RestrictionAheadError) DivergesFrom(current uint64) bool {
+	return e != nil && e.Accepted > current
+}
 
 func NewAuthClient(issuer *principal.Issuer, conn grpc.ClientConnInterface) *AuthClient {
 	return &AuthClient{Issuer: issuer, Client: automodv1.NewAuthModerationAuthorityServiceClient(conn)}
@@ -132,10 +143,13 @@ func (c *AuthClient) Reconcile(ctx context.Context, account, subject uuid.UUID, 
 	if err != nil {
 		return nil, err
 	}
-	if response != nil && response.GetRevision() > revision {
-		return nil, ErrRestrictionDiverged
+	if response == nil || response.GetProtocolVersion() != 1 || response.GetAccountId() != account.String() || response.GetSubjectId() != subject.String() || response.GetRevision() > math.MaxInt64 || (response.GetState() != automodv1.SubjectState_SUBJECT_STATE_LIVE && response.GetState() != automodv1.SubjectState_SUBJECT_STATE_DELETED) {
+		return nil, unavailable()
 	}
-	if response == nil || response.GetRevision() != revision || response.GetRevision() > math.MaxInt64 || (response.GetState() != automodv1.SubjectState_SUBJECT_STATE_LIVE && response.GetState() != automodv1.SubjectState_SUBJECT_STATE_DELETED) {
+	if response.GetRevision() > revision {
+		return nil, &RestrictionAheadError{Requested: revision, Accepted: response.GetRevision()}
+	}
+	if response.GetRevision() != revision || response.GetModerationBanned() != banned {
 		return nil, unavailable()
 	}
 	return response, nil

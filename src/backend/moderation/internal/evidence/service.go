@@ -82,7 +82,7 @@ func (s *Service) ProvisionSubject(ctx context.Context, r *automodv1.ProvisionSu
 	if err != nil {
 		return nil, mapError(err)
 	}
-	return &automodv1.ProvisionSubjectResponse{ThroughSequence: through}, nil
+	return &automodv1.ProvisionSubjectResponse{ThroughSequence: through, SourceEpoch: r.GetSourceEpoch()}, nil
 }
 func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automodv1.IngestCommittedMessageEvidenceRequest) (*automodv1.IngestCommittedMessageEvidenceResponse, error) {
 	if err := s.authorize(ctx, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName, r); err != nil {

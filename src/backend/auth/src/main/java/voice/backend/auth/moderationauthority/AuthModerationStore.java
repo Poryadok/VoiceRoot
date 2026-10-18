@@ -49,10 +49,17 @@ public final class AuthModerationStore {
   }
   public ReconcileModerationRestrictionResponse reconcile(UUID account,UUID subject,long revision,boolean banned) {
     if(revision<=0)throw Status.INVALID_ARGUMENT.withDescription("positive moderation revision required").asRuntimeException();
-    Long accepted=jdbc.queryForObject("SELECT auth_reconcile_moderation(:account,:subject,:revision,:banned)",
-        Map.of("account",account,"subject",subject,"revision",revision,"banned",banned),Long.class);
-    return ReconcileModerationRestrictionResponse.newBuilder().setRevision(Objects.requireNonNull(accepted))
-        .setState(resolve(account,subject).getSubject().getState()).build();
+    return transactions.execute(transaction->{
+      var parameters=Map.of("account",account,"subject",subject,"revision",revision,"banned",banned);
+      Long accepted=jdbc.queryForObject("SELECT auth_reconcile_moderation(:account,:subject,:revision,:banned)",parameters,Long.class);
+      // The SQL function's account lock remains held until this exact accepted
+      // payload and lifecycle have been captured. Never echo the stale request.
+      Boolean acceptedBanned=jdbc.queryForObject("SELECT desired_banned FROM moderation_account_restrictions WHERE account_id=:account AND subject_id=:subject",parameters,Boolean.class);
+      return ReconcileModerationRestrictionResponse.newBuilder().setProtocolVersion(1)
+          .setAccountId(account.toString()).setSubjectId(subject.toString())
+          .setRevision(Objects.requireNonNull(accepted)).setModerationBanned(Objects.requireNonNull(acceptedBanned))
+          .setState(resolve(account,subject).getSubject().getState()).build();
+    });
   }
   /** No ACK or consumer availability can extend the canonical Auth deletion deadline. */
   public void purgeDue() {

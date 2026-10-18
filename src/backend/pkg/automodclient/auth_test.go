@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -69,5 +70,27 @@ func TestAuthClient_FreshExactCredentialAndUntrustedBindingRefusal(t *testing.T)
 	require.Error(t, err, "default/unsigned projection response cannot acknowledge a new revision")
 	client.Client = authFixture{reconciled: &automodv1.ReconcileModerationRestrictionResponse{Revision: 2, State: automodv1.SubjectState_SUBJECT_STATE_LIVE}}
 	_, err = client.Reconcile(ctx, account, subject, 1, true)
-	require.Error(t, err, "a newer remote revision reveals restored local history loss, not successful convergence")
+	require.Error(t, err, "a newer remote revision never acknowledges the old request")
+	client.Client = authFixture{reconciled: &automodv1.ReconcileModerationRestrictionResponse{Revision: 1, State: automodv1.SubjectState_SUBJECT_STATE_LIVE}}
+	_, err = client.Reconcile(ctx, account, subject, 1, true)
+	require.Error(t, err, "revision alone does not acknowledge the account, subject and desired state")
+	ack := &automodv1.ReconcileModerationRestrictionResponse{ProtocolVersion: 1, AccountId: account.String(), SubjectId: subject.String(), Revision: 1, ModerationBanned: true, State: automodv1.SubjectState_SUBJECT_STATE_LIVE}
+	client.Client = authFixture{reconciled: ack}
+	_, err = client.Reconcile(ctx, account, subject, 1, true)
+	require.NoError(t, err)
+	ack.ModerationBanned = false
+	_, err = client.Reconcile(ctx, account, subject, 1, true)
+	require.Error(t, err, "same revision with different accepted payload is not convergence")
+	ack.Revision = 2
+	_, err = client.Reconcile(ctx, account, subject, 1, true)
+	var ahead *RestrictionAheadError
+	require.True(t, errors.As(err, &ahead))
+	require.Equal(t, uint64(1), ahead.Requested)
+	require.Equal(t, uint64(2), ahead.Accepted)
+	require.True(t, ahead.DivergesFrom(1), "Auth ahead of current local authority requires recovery")
+	require.False(t, ahead.DivergesFrom(2), "a concurrent local mutation explains a stale request reply")
+	require.False(t, ahead.DivergesFrom(3), "an even newer local projection must be retried, not overwritten")
+	ack.AccountId = uuid.NewString()
+	_, err = client.Reconcile(ctx, account, subject, 1, true)
+	require.False(t, errors.As(err, &ahead), "unbound remote revision cannot establish authority")
 }

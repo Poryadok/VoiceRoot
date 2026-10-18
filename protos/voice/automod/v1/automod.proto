@@ -78,6 +78,11 @@ message ReconcileModerationRestrictionRequest {
 message ReconcileModerationRestrictionResponse {
   uint64 revision = 1;
   SubjectState state = 2;
+  // Exact accepted projection, not a generic successful/stale revision hint.
+  string account_id = 3;
+  string subject_id = 4;
+  bool moderation_banned = 5;
+  uint32 protocol_version = 6;
 }
 
 message ResolveBotModerationOwnerRequest {
@@ -103,6 +108,8 @@ message ProvisionSubjectRequest {
 }
 message ProvisionSubjectResponse {
   uint64 through_sequence = 1;
+  // Cursor is meaningful only within the acknowledged immutable source epoch.
+  string source_epoch = 2;
 }
 
 enum EvidenceEligibility {
