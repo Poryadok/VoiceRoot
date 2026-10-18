@@ -263,3 +263,13 @@ product/Moderation decision declares that snapshot sufficient for every active
 appeal; no hidden `RETAIN_UNTIL_POLICY` exception or staff evidence archive is
 created in P3.
 
+Startup/restore uses the [P0-P5 barriers](../testing/async-automod-startup-restore.md):
+local issuer/private listeners start before public readiness; a complete sealed
+Auth terminal snapshot is imported as a monotonic union and every terminal purge
+participant finishes before restored evidence, restriction or domain-event
+dispatch. Only private restriction repair runs in the intermediate phase. Normal
+consumer/manual/appeal/expiry/publication paths open after this boot's finite
+reconciliation cut. An old in-flight reply is distinguished from actual local
+history loss by comparing CURRENT local revision; neither acknowledges the old
+request or justifies incrementing a restored stale snapshot.
+

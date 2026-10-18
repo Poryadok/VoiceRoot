@@ -1006,3 +1006,11 @@ The child uses the existing T33 `PurgeManagedChatContent` protocol:
 its service-principal request binding. The P3 adapter verifies that digest;
 it does not replace the saved child evidence with the parent's message-name
 domain. The Space participant request/receipt remains domain-separated P3.
+
+Producer/outbox startup follows the [automod restore barriers](../testing/async-automod-startup-restore.md).
+Local issuer publication is independent of send readiness. Before new sends or
+pending effect delivery, import complete authoritative terminal fences and verify
+source epoch/cursor against Moderation's bound provisioning ACK. A remote cursor
+ahead of local committed state closes admission for recovery; no baseline/epoch
+reset or HMAC key retirement can bypass it. Existing exact committed replay may
+return its saved result during bootstrap without creating new evidence.

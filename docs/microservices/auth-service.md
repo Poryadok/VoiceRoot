@@ -953,3 +953,13 @@ verified `service:space` principal. Issue resolves its actor only from the
 request. Deployments must provide the dedicated `ReceiptErasureKeyring` before
 account erasure can pseudonymize or recover receipts; an absent or missing
 retained key fails closed.
+
+Startup and declared restore follow [P0-P5](../testing/async-automod-startup-restore.md):
+serve local mTLS JWKS/private authority independently of public readiness, prove
+local terminal authority, then reconcile a finite existing-subject cut before
+opening session issuance/refresh. Each later session admission refreshes protected
+Moderation restriction state and rechecks local lifecycle/revision before commit.
+Private reciprocal calls run outside account DB locks. A restored old database
+requires independently recovered erasure/history material; `complete=true` alone
+cannot certify it. Exact projection acknowledgements bind request IDs, revision
+and desired state/hash; a remote-ahead hint is compared to current local authority.

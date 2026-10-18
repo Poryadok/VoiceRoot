@@ -88,6 +88,16 @@ to c2. Preserve the unknown-suspension Auth restriction during migration.
 
 ## Current evidence and continuation
 
+The additional startup/restore risk is resolved by BE-045 c13 in
+[the startup and restore contract](async-automod-startup-restore.md). It preserves
+c2/c9 and adds P0-P5 method/worker gates, readiness-independent private network
+routes, sealed terminal manifests/boot receipts, exact payload-bound projection
+ACKs, finite subject census and an independently recovered erasure/history cut
+for declared restore. A larger remote revision must be compared to CURRENT local
+authority before distinguishing an old in-flight request from lost local history.
+No reciprocal RPC may hold an account DB lock. Implement N1-N14 and R0-R5 there
+before activation; these are required checks, not reported successes.
+
 Contract checkpoint `31d8d23586efa0012552d0aede6115af20510965` was published by
 ant121. It is not a runtime or integration-ready head. Linux PG18 focused tests
 prove ordered buffering, non-overlapping sample use, atomic rollback on an
