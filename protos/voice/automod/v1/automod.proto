@@ -4,12 +4,12 @@ package voice.automod.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "voice.app/voice/automod/v1;automodv1";
+option go_package = "voice/backend/pkg/pb/voice/automod/v1;automodv1";
 option java_multiple_files = true;
 option java_package = "app.voice.automod.v1";
 
 // Private authority only. No public Gateway route or shared event payload.
-service AuthModerationAuthority {
+service AuthModerationAuthorityService {
   // @voice.security=protected;callers=service:messaging,service:moderation
   rpc ResolveModerationSubject(ResolveModerationSubjectRequest) returns (ResolveModerationSubjectResponse);
   // @voice.security=protected;callers=service:messaging,service:moderation
@@ -18,7 +18,7 @@ service AuthModerationAuthority {
   rpc ReconcileModerationRestriction(ReconcileModerationRestrictionRequest) returns (ReconcileModerationRestrictionResponse);
 }
 
-service BotModerationAuthority {
+service BotModerationAuthorityService {
   // @voice.security=protected;callers=service:messaging
   rpc ResolveBotModerationOwner(ResolveBotModerationOwnerRequest) returns (ResolveBotModerationOwnerResponse);
 }
@@ -58,6 +58,9 @@ message ResolveModerationSubjectRequest {
 }
 message ResolveModerationSubjectResponse {
   SubjectBinding subject = 1;
+  // Auth-owned admission state; no content inspection or detector mutation.
+  bool auth_restricted = 2;
+  uint64 session_epoch = 3;
 }
 message ListTerminalModerationSubjectsRequest {}
 message ListTerminalModerationSubjectsResponse {

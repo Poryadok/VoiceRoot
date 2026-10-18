@@ -6,6 +6,9 @@ import java.io.IOException;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import voice.backend.auth.moderationauthority.AuthModerationService;
 import voice.backend.auth.config.AuthProperties;
 import voice.backend.auth.principal.AuthPrincipalServerInterceptor;
 import voice.backend.auth.principal.AuthPrincipalServices;
@@ -19,6 +22,7 @@ public class AuthGrpcServer implements SmartLifecycle {
   private final AuthorizationServerInterceptor authorizationServerInterceptor;
   private final AuthPrincipalServerInterceptor principalInterceptor;
   private final Environment environment;
+  private final AuthModerationService moderationAuthority;
   private Server server;
   private Server principalServer;
   private Server sessionFloorServer;
@@ -31,12 +35,20 @@ public class AuthGrpcServer implements SmartLifecycle {
       AuthorizationServerInterceptor authorizationServerInterceptor,
       AuthPrincipalServerInterceptor principalInterceptor,
       Environment environment) {
+    this(authGrpcService,properties,requestIdServerInterceptor,authorizationServerInterceptor,principalInterceptor,environment,null);
+  }
+
+  @Autowired
+  public AuthGrpcServer(AuthGrpcService authGrpcService,AuthProperties properties,
+      RequestIdServerInterceptor requestIdServerInterceptor,AuthorizationServerInterceptor authorizationServerInterceptor,
+      AuthPrincipalServerInterceptor principalInterceptor,Environment environment,ObjectProvider<AuthModerationService> authority) {
     this.authGrpcService = authGrpcService;
     this.properties = properties;
     this.requestIdServerInterceptor = requestIdServerInterceptor;
     this.authorizationServerInterceptor = authorizationServerInterceptor;
     this.principalInterceptor = principalInterceptor;
     this.environment = environment;
+    this.moderationAuthority = authority==null?null:authority.getIfAvailable();
   }
 
   @Override
@@ -50,8 +62,10 @@ public class AuthGrpcServer implements SmartLifecycle {
       AuthPrincipalTransport.configure(privateBuilder, environment, principalInterceptor.enabled());
       // Construct and validate all surfaces before binding any socket.
       if (principalInterceptor.enabled()) {
-        principalServer = privateBuilder.intercept(requestIdServerInterceptor)
-            .addService(AuthPrincipalServices.proofService(definition, principalInterceptor)).build();
+        privateBuilder.intercept(requestIdServerInterceptor)
+            .addService(AuthPrincipalServices.proofService(definition, principalInterceptor));
+        if (moderationAuthority != null) privateBuilder.addService(io.grpc.ServerInterceptors.intercept(moderationAuthority,principalInterceptor));
+        principalServer = privateBuilder.build();
         int floorPort = AuthPrincipalTransport.sessionFloorPort(environment,
             properties.getGrpc().getPort(), privatePort);
         var floorBuilder = NettyServerBuilder.forPort(floorPort);

@@ -7,10 +7,10 @@ No public REST/WS route or public `message.sent` field is added. Private
 
 | Owner service / method | Allowed caller |
 | --- | --- |
-| AuthModerationAuthority.ResolveModerationSubject | messaging, moderation |
-| AuthModerationAuthority.ListTerminalModerationSubjects | messaging, moderation |
-| AuthModerationAuthority.ReconcileModerationRestriction | moderation |
-| BotModerationAuthority.ResolveBotModerationOwner | messaging |
+| AuthModerationAuthorityService.ResolveModerationSubject | messaging, moderation |
+| AuthModerationAuthorityService.ListTerminalModerationSubjects | messaging, moderation |
+| AuthModerationAuthorityService.ReconcileModerationRestriction | moderation |
+| BotModerationAuthorityService.ResolveBotModerationOwner | messaging |
 | ModerationEvidenceService.ProvisionSubject | messaging |
 | ModerationEvidenceService.IngestCommittedMessageEvidence | messaging |
 | ModerationEvidenceService.GetAccountSendRestriction | messaging |

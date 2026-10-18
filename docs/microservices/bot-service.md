@@ -2,7 +2,7 @@
 
 ## Protected moderation-owner authority (BE-045)
 
-`voice.automod.v1.BotModerationAuthority.ResolveBotModerationOwner` accepts only
+`voice.automod.v1.BotModerationAuthorityService.ResolveBotModerationOwner` accepts only
 fresh request-bound `service:messaging` credentials on its mTLS listener (audience
 `bot`). The request binds bot ID, actual sender profile, installation/scope when
 present, and verified ingress operation. Bot checks its own live bot/installation

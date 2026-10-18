@@ -2,7 +2,7 @@
 
 ## Moderation subject and restriction authority (BE-045)
 
-Private `voice.automod.v1.AuthModerationAuthority` owns
+Private `voice.automod.v1.AuthModerationAuthorityService` owns
 `ResolveModerationSubject`, `ListTerminalModerationSubjects` and
 `ReconcileModerationRestriction`. Messaging and Moderation alone may resolve a
 subject or obtain the complete opaque terminal snapshot. Only Moderation may

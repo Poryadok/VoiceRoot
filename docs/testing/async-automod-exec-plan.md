@@ -40,8 +40,8 @@ concurrency and migrations. No host test executables/listeners or GitHub probes.
 
 - [x] Confirm actual TT owner156, fresh base and exclusive lease22.
 - [x] Read c9; ordinary policy choices no longer require a user response.
-- [ ] Persist exact owning API/schema and policy contracts before production code.
-- [ ] Observe meaningful RED on existing pre-commit CheckMessage behavior.
+- [x] Persist exact owning API/schema and policy contracts before production code.
+- [x] Observe meaningful RED on existing pre-commit CheckMessage behavior.
 - [ ] Implement private evidence/projection and ordered transactional detector.
 - [ ] Implement Auth subject/lifecycle and revision-fenced restriction projection.
 - [ ] Implement Bot owner authority and verified producer admission on every path.
@@ -85,6 +85,35 @@ One author owns tests and implementation. Use exact private APIs, never public
 `message.sent` enrichment or unrestricted content lookup. The complete c9 policy
 is recorded below as an autonomous delegated decision, not attributed retroactively
 to c2. Preserve the unknown-suspension Auth restriction during migration.
+
+## Current evidence and continuation
+
+Contract checkpoint `31d8d23586efa0012552d0aede6115af20510965` was published by
+ant121. It is not a runtime or integration-ready head. Linux PG18 focused tests
+prove ordered buffering, non-overlapping sample use, atomic rollback on an
+injected sanction-event outbox failure, exact replay/conflict handling and HMAC
+alias continuity. The original CheckMessage regression observed one unwanted
+auto_mod_log insert before message commit (meaningful RED); its active-path
+replacement is still required. Pure engine window/boundary/expiry tests pass.
+
+Exact Auth V27/canonical000028 SQL executed on PG18 passes revision dominance,
+equal-revision conflict/idempotence, legacy-suspension preservation, deletion
+precedence and terminal restore fencing. Java compile/private-listener tests
+remain pending. AuthAuthorityReader's exact migration gate advances with the
+new migration; verify both supported migration engines before activation.
+
+Moderation schema allocation is coordinated: report intake000005 (ant144),
+automod000006 (this task), report threshold000010 (ant158). Shared machine issuer
+is `service:moderation/automod`; shadow sanctions require machine_case_id and the
+threshold owner's FK. Fresh Auth binding can provision a common subject before
+the first message, without inventing a Messaging source epoch or cursor.
+
+Activation-critical work still open: complete private verified ingress, atomic
+Messaging evidence on every enabled insert path, Bot owner lookup, real workers,
+all manual/appeal/revoke/expiry revision convergence, terminal snapshot restore
+readiness, retention/deadline purge including minimal sanction snapshots and
+report-owned transaction participants. No partial store/proto checkpoint closes
+these requirements or authorizes rollout.
 
 ## Risks and follow-ups
 
