@@ -2,8 +2,6 @@ package store
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -26,10 +24,6 @@ func compositeStoreFixture(t *testing.T) (*SpaceStore, *spacev1.SpaceChatCreatio
 	st := &SpaceStore{Pool: pool}
 	applyAuditLedgerMigrationForTest(t, ctx, st)
 	applyAuditIngestionMigration(t, st)
-	body, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000031_composite_audit_reservation.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(body))
-	require.NoError(t, err)
 	owner := uuid.New()
 	space, err := st.CreateSpace(ctx, owner, "Composite", "", "private")
 	require.NoError(t, err)

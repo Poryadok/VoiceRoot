@@ -82,9 +82,13 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
   Process-only Docker Desktop Linux npipe endpoint and host override127.0.0.1;
   Ryuk disabled, fixture-owned containers terminate through test cleanup.
   Raw JSON proof: tmp/swarm/be130-ingestion-pg-44f76ed.jsonl in main workspace.
-- [ ] Author18 review136 R1 global composite/audit ID correction uses migration31;
-  its final helper/trigger schema is outside the44f76ed proof. Recheck ingress
-  against that coherent successor and keep migration27 roundtrip isolated.
+- [x] Consume author18 review136 R1 correction2f0d5ea by ordinary merge: common
+  global audit-ID lock and migration31, minimizer last in common cleanup.
+  Fixture-only successor supplies31 once, preserves isolated27 down/up by
+  removing/reapplying31, and tests signed RPC with29+31. Actual missing-function
+  RED on old fixture then all11 selected tests PASS, zero SKIP/FAIL on final31
+  schema. Affected vet PASS; raw proof tmp/swarm/be130-ingestion-pg-final31.jsonl.
+  Product correction review136 remains separate from this fixture-only delta.
 
 ## Decisions
 
@@ -127,3 +131,10 @@ uncertain pushes/probes. P3 must later include compact receipts in its explicit
 authorized minimization/fence protocol. User directive: finish current work only,
 send final immutable source/proof/gaps to121, sole develop writer. No new ordinary
 claims, master intermediate PRs, live environment or acceptance authority.
+
+TT maintenance currently rejects writes, so the new actual PostgreSQL evidence
+and raw JSON attachment have not been published there. Prior timed-out comment
+was read back as absent before a single explicit-maintenance rejection; no blind
+retry. Integration owner121 and queen received both exact proof artifacts and
+limits directly. Publish the pending evidence when an actual maintenance-end
+event permits writes; do not mistake this local record for a TT receipt.
