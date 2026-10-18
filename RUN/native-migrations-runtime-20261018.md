@@ -40,6 +40,7 @@ reads/writes were performed by this slice.
 - Branch: `feature/native-migrations-runtime`
 - Commits: `20ad0af` (implementation/tests), `71de291` (evidence), plus the
   final profile-projection compatibility fix on the same branch.
+- Current source HEAD: `491762f09`.
 - No runtime/shared VAP/transaction/kube API files were changed.
 
 ## Remaining integration
