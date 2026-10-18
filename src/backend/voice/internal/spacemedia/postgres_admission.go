@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/voice/internal/rosteroutbox"
 	"voice/backend/voice/internal/store"
 )
 
@@ -446,8 +447,17 @@ func (s *PostgresAdmissionStore) MarkProjectionApplied(ctx context.Context, oper
 		return ErrRoomHeadPending
 	}
 	var storedGeneration int64
-	if err = tx.QueryRow(ctx, `SELECT room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&storedGeneration); err != nil || storedGeneration != roomGeneration {
+	var participantState, admissionState string
+	var applied bool
+	var roomID, profileID uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT room_generation,participant_state,state,projection_applied_at IS NOT NULL,room_id,profile_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&storedGeneration, &participantState, &admissionState, &applied, &roomID, &profileID); err != nil || storedGeneration != roomGeneration {
 		return ErrAdmissionConflict
+	}
+	if admissionState != "COMMITTED" || (participantState != "PREPARED" && participantState != "ACTIVE") {
+		return ErrAdmissionConflict
+	}
+	if participantState == "ACTIVE" && applied {
+		return tx.Commit(ctx)
 	}
 	tag, err := tx.Exec(ctx, `UPDATE voice_space_media_admissions SET projection_applied_at=COALESCE(projection_applied_at,clock_timestamp()),participant_state='ACTIVE',updated_at=clock_timestamp()
 WHERE operation_id=$1 AND generation=$2 AND state='COMMITTED'`, operationID, generation)
@@ -456,6 +466,13 @@ WHERE operation_id=$1 AND generation=$2 AND state='COMMITTED'`, operationID, gen
 	}
 	if tag.RowsAffected() != 1 {
 		return ErrAdmissionConflict
+	}
+	var rosterVersion int64
+	if err = tx.QueryRow(ctx, `UPDATE voice_space_media_room_heads SET roster_version=roster_version+1 WHERE voice_room_id=$1 AND room_generation=$2 RETURNING roster_version`, voiceRoomID, roomGeneration).Scan(&rosterVersion); err != nil {
+		return err
+	}
+	if err = rosteroutbox.Append(ctx, tx, roomID, profileID, rosterVersion, true); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -580,7 +597,9 @@ func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID
 		return ErrRoomHeadPending
 	}
 	var participantState, admissionState string
-	if err = tx.QueryRow(ctx, `SELECT participant_state,state FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&participantState, &admissionState); err != nil {
+	var applied bool
+	var roomID, profileID uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT participant_state,state,projection_applied_at IS NOT NULL,room_id,profile_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&participantState, &admissionState, &applied, &roomID, &profileID); err != nil {
 		return err
 	}
 	if participantState == "ENDED" {
@@ -588,6 +607,15 @@ func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID
 	}
 	if participantState != "ACTIVE" && participantState != "REVOKING" && (participantState != "PREPARED" || admissionState != "ABORTING") {
 		return ErrAdmissionConflict
+	}
+	if participantState == "ACTIVE" && admissionState == "COMMITTED" && applied && headState == "OPEN" {
+		var rosterVersion int64
+		if err = tx.QueryRow(ctx, `UPDATE voice_space_media_room_heads SET roster_version=roster_version+1 WHERE voice_room_id=$1 AND room_generation=$2 RETURNING roster_version`, voiceRoomID, roomGeneration).Scan(&rosterVersion); err != nil {
+			return err
+		}
+		if err = rosteroutbox.Append(ctx, tx, roomID, profileID, rosterVersion, false); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.Exec(ctx, `UPDATE voice_space_media_admissions SET participant_state='REVOKING',updated_at=clock_timestamp() WHERE operation_id=$1 AND generation=$2`, operationID, generation); err != nil {
 		return err
