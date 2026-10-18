@@ -218,6 +218,67 @@ feature runtime gates remain unchanged; no additional reviewer/task/spawn.
 
 ## Decisions
 
+### Resumed full-colony wave 2
+
+The user resumed autonomous Swarm delivery and explicitly retained121 as the
+only physical develop writer and CI owner. New source intake uses actual TT
+handoffs, immutable heads and existing independent reviews; no author report is
+called an assembled check. Full self-contained current ledger and proof paths:
+`D:/Git/Voice/tmp/swarm/rudeus121-develop/wave2/continuation.md`.
+
+Fourteen reviewed new heads were normally merged throughc08cf1ed, then the
+BE234 missing-row panic correction8493fa547, CI019 and PL-A4-07 throughd4abb829.
+CI025/BE218 adjacent docs were resolved by exact union; author151 independently
+reviewed merge45cf501e, with unchanged Realtime source tree. Main/master and
+user dirties are preserved. Own WT36 lease d98699dc810d3f2707902abd371fb6c3,
+holder rudeus-121-wave2-integration, is the only integration checkout.
+
+Actual combined Linux Realtime full428PASS/zero skips and focused race12PASS,
+vet0 qualify BE218+BE112 together. Actual Portal Node24 build and packaged
+nginx assets/SPA under100m/64Mi PASS, peak17874944/failcnt0, no host ports.
+Fifteen changed production Dockerfiles PASS at exact backendab6aa8e2; unchanged
+prior builds are reused. Missing ffmpeg offline APK dependency failed before
+the later ordinary dependency-network build PASS; both outcomes are preserved.
+
+Actual BE234 scanner(nil,nil) panic was corrected without changing shared
+scanner/SQL/locks/auth or original tests. Independent146c13 CLEAR8493fa547;
+unchanged native Linux tests in owned private DinD yield13PASS/zero skips:
+8top+5sub, including7 PostgreSQL scenarios and1rawactor unit. All nested PG
+fixtures and own runner/engine/network/volume were cleaned. Changed-input Space
+image PASS sha256:1fe4bd722fdf86885e854fb16cfc1a29cf8daeeeeb81512ca8be68831b0fb4af.
+Graph94631 terminal0, AST769/769,102423nodes/213614edges, with the existing
+frontend header warning; later inputs require separate freshness qualification.
+
+Actual user transport recovery20:52:26UTC allowed exact fetch/ancestry
+reconciliation. HTTPS publication was rejected for OAuth workflow scope, not
+worked around. Existing-key normal SSH publishedc08cf1ed and8493fa547; actual
+master remains698. CI run39165804964 was queued at its snapshot, not PASS.
+The156-requested31d8d2358 contract-only BE045 branch was separately published,
+without develop integration or task transfer. Current publication/CI is a real
+executable stage; the earlier transport-blocked notes are historical.
+
+Next ready group: reviewed CI020d11cba677 plus CI021 test-onlycdd7b4f5 union,
+BE008 fixtureeef427a1, BE238 corrected6a1d3b8 (147c9 resolves metric deadline
+P2), BE269 setup0fb2970 (149c5) and BE1699b8b69c (149c6). Preserve all strict
+production preflight and test assertions; qualify combined ops fixtures and
+changed production images. Other pending reviews/actual handoffs are listed in
+the ledger. Reconcile TT reservations before any independent audit.
+
+No shared stand operation occurred. DEV/STAGING requires actual resource
+list/show, atomic claim/current revision, real observation/revalidation and a
+protected rollout/check window; task custody/Markdown is not reservation.
+No Windows test.exe/listeners/firewall changes. Golden/NATS/R22 and all broader
+feature/provider/acceptance gates remain as recorded, never silently converted
+to PASS. BE265 architecture now explicitly limits the current adapter to
+EJECT_ONLY; full receipt needs durable refreshed-credential rejection and
+settled handshake/cleanup proof. No source change came with that clarification.
+
+Before safe closeout create a complete-history current-head bundle, verify and
+actually restore it into fresh bare Git, check accepted-head ancestry, append
+portable TT evidence and exact pending CI/review actions, then guarded-return
+only own lease after fresh process/container evidence. Existing earlier bundles
+remain immutable and do not pretend to cover this resumed wave.
+
 - Preserve existing develop instead of replacing it: user requires history.
 - One physical writer/queue; original task checks/ownership stay with authors.
 - Pending source review and runtime prerequisites remain visible even if the

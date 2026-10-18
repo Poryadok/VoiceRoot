@@ -6,6 +6,115 @@ All original TT task scopes and unresolved runtime gates remain authoritative an
 
 ## Source merge order
 
+### Resumed wave 2: latest qualification
+
+User resumed the full autonomous colony;121 remains sole develop writer and
+integration/CI owner. Older no-new-agent/transport-blocked statements below are
+historical. At source0ffd2cb2de9a1893a80b1def396f26676011a89a, the following
+new frozen sources are preserved by ordinary merge history. TT supported
+handoffs to121 are actual, not inferred from reviewing. Exact review references
+qualify narrow source only; full original task scopes remain open.
+
+| Task | Frozen source | Independent source evidence |
+| --- | --- | --- |
+| AD007 |b06c8c691c27741c126e08b12453452363769a1a|156c4 |
+| AD006 |ffe04fdeee598a0048b5a9a668cc073a7ca61664|143c7 |
+| BE161 |e7806aab72c73a58d7ff5d112ccdfeea947a5962|159c4 |
+| BE050 fixture |84e70c17517a106cc5c98b4e2bf9f515123b7ba5|143c5 |
+| BE197 |98a05bf0bed7ff7aa467ed49a88a9a30dbcf1043|160c7 |
+| CI024 |e16abbd2d38845b08e3aac95b1291e948aa51706|153c4 |
+| CI025 |0c990e5226a28091001b237028be90286b75ed55|145c5 |
+| BE175 |3673f04a18d171d0db30d0857cbdc8ce23dd57ae|152c5 |
+| BE218 |5ce86bdf836f2d8bf08fd1821cb737b0981771b0|154c6; union151c10 |
+| BE112 |1744fd0332f72dda4d6750be70529cfa90f2ac5d|148c8 |
+| CI026 |69bfab63f722f106038e1559cbf3105bbb30931a|159c3 |
+| CI016 |f1556b8080d001b1290a4eb64acbcead403c09cf|153c5 |
+| BE244 |3622cd162ef48e7ce2b31d0ca1e3863f08e2d603|146c5 |
+| BE162 |3336f8f4cfde8ce4ea4e3a2670837c3283ff229f|150c6 |
+| CI019 |0895010931d24eed11120055407cc12262d15a22|121 bounded review receipt |
+| PL-A4-07 |7b12b8602fa7ef1a0f172f49aec7da4800af1e2d|121 bounded ops-doc review |
+| CI020 |d11cba6772c471928a8c08ec470a84731cdb8005|159c7 |
+| CI021 |ab086484bd116d7bc074bb7f92e34fa7eca66830|121 source review |
+| CI021 fixture |cdd7b4f5e768aa9d0cf903cd814d396d7c542edb|121c9 |
+| BE008 fixture |eef427a1cdab267e96bbeb7b219cb6ce2c8e75bc|143c3 |
+| BE238 |6a1d3b8ff7c12ba4c5b0038f5194a0f3ccf6c715|147c9 resolves metric-lock P2 |
+| BE269 setup |0fb2970adf3409b21906524f030027dfebb20729|149c5 |
+| BE169 |9b8b69c9d2b7d67404969ccb7cfacde2ef7675a5|149c6 |
+| BE175 assertions |7255634fd0e87e0bf1f4ba3c0ee4dab66564a40a|175c5 |
+| BE220 |4919af52427cbef13aa669182c77cdc62b615aff|149c6 |
+| CI030 |86359ec0c86d6feaf3562142e0bc53e801fcdf08|177c5 |
+| BE241 |9fbd30748e46f675ceaf6df02c7676eb6d37a531|173c4 |
+
+Exact source26f2d8fe491c9255cb3c3cbbba3e3642b04c2e84 was normally SSH
+published after real remote8493 readback; no force/rebase/master merge.
+Earlier HTTPS push refusal was OAuth workflow scope, preserved without changing
+credentials. Actual hosted8493 run39166868229 completedFAIL: sole failed job
+ci-script-tests117791642107, four canonical root source-hash errors at
+nats_root_plan.py84. Other jobs passed, skipped jobs are not PASS. Historical
+c08 run39165804964 was cancelled. Exact source/deployed-contract transition
+question is durably requested to Astra in SWARM-DEVELOP-20261018c14, not solved
+by rewriting pins or historical deployed-contract.json. Actual API observation
+21:31:35UTC confirms transport; next shared observation22:01:35UTC.
+
+Actual assembled Linux ops at61e1477:11 strict image gate,7 dispatch,9 smoke,
+7 ClickHouse,3 subset cases PASS plus Auth order and GIS contract PASS, no
+registry/cluster mutation. CI020/21 merge5d0d9eee only conflicts Makefile/TODO:
+both test entries plus verifier retained; one smoke and one subset runtime gap
+retained; obsolete absence/duplicate claims removed.159 independent union
+recheck requested, separate from already CLEAR source deltas. Bare git diff
+initially reported existing CRLF as trailing whitespace; explicit process-local
+cr-at-eol diffcheck PASS with normal other checks retained, no source/global
+setting change. The first conflict-resolution shell attempt expanded Makefile
+variables accidentally; immediately corrected before commit, verified exact
+union, no production execution from that attempt.
+
+Actual combined BE218+BE112 Linux full Realtime428PASS/0skip, focused race12PASS,
+vet0 at backendab6aa8e2. Actual Portal Node24 build and full asset/SPA byte
+verification under100m/64Mi PASS peak17874944/failcnt0.15 changed canonical
+backend images PASS atab6aa8e2; unchanged old22 image proofs reused. Later BE234
+Space image rebuilt alone, then26f2d8fe changed Bot/Moderation/User images each
+PASS. Their exact immutable IDs and context hashes are in external wave2 image
+receipts. Local images are usable artifacts, not published images/deployment.
+
+BE234 actual nil membership panic correction8493fa547529d789a88f0a991810ddf87e8922c4
+recognizes the shared scanner(nil,nil) contract without altering scanner/SQL/
+locks/auth/original tests.146c13 independent CLEAR; original3 panic REDs
+retained. Fixed-source private Linux DinD unchanged tests13PASS=8top+5sub,
+seven PG scenarios and one rawactor unit,0skip/fail, vet0. All owned nested
+fixtures/runner/daemon/volume/network removed; no Windows host port/listener.
+TTc15 corrects c14 provisional tally and attaches raw46a8f2d2,
+DinD receiptbfba23d1, Space image receipt1eca17d9. Space image immutable ID
+1fe4bd722fdf86885e854fb16cfc1a29cf8daeeeeb81512ca8be68831b0fb4af.
+
+CI030 assembled parser first archive omitted workflow files: one FileNotFound
+ERROR, not a product regression. Failure/receipt preserved; same source with
+complete workflows archive then seven tests PASS in network-none Python3.12
+with pinnedPyYAML6.0.3. Analytics changed-input image runs after that result.
+No repeat of unchanged broad suites is inferred or required by this ledger.
+
+Actual pending handoff, despite explicit acceptance messages: BE16333a8dfd7
+(146c4CLEAR, owner152), BE0978e1b677c (147c6CLEAR, owner150), BE04034640fde
+(165c8CLEAR, owner153). They are not silently transferred or merged. Accepted
+AD008d2bae69 remains UNMERGED:174c7 P2 stale saved preview after Apply manifest,
+original149 sole correction writer with guarded reload/stale/logout tests.
+Author task custody remains121 while correction context stays149.
+
+Only publisher requests, not ready integration: BE045 branch31d8d23586efa0012552d0aede6115af20510965
+and BE137 branchaca25d5ffe9cef3d0ac3edcf5ddb3f535eaccdf9 were normally SSH
+published at their authors' explicit requests. Full author/task/runtime/review
+custody remains156/144, no develop merge inferred.
+
+Shared DEV/STAGING protocol was fully reread. No shared stand action occurred;
+task custody does not reserve environment, atomic resource claim/observation/
+protected window and external locks remain required. No Windows test.exe,
+host listeners or firewall changes. Golden/NATS/R22 and broader feature/provider/
+acceptance gates remain open. BE265 current adapter EJECT_ONLY cannot yield
+full deletion receipt without operation-bound durable refreshed-credential
+rejection and settled predeny-handshake/cleanup proof. Source collection is
+not release-ready. Exact continuation/proofs live under
+D:/Git/Voice/tmp/swarm/rudeus121-develop/wave2/continuation.md; final complete
+bundle/fresh bare restore and safe own lease closeout follow the frozen carrier.
+
 Each second parent below is preserved by an ordinary merge commit. Earlier source checkpoints covered by descendants are not duplicated.
 
 | Merge | Source head | Subject | TT association |
