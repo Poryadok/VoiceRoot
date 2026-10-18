@@ -102,6 +102,8 @@ func (r *ResourceProofReader) table(name string) string {
 	return pgx.Identifier{r.schema, name}.Sanitize()
 }
 
+// checkReader rejects every reachable callable SECURITY DEFINER, including
+// restricted bridge owners whose callees could acquire issuer authority.
 func (r *ResourceProofReader) checkReader(ctx context.Context, tx pgx.Tx) error {
 	var count int
 	var unsafe bool
@@ -115,8 +117,7 @@ func (r *ResourceProofReader) checkReader(ctx context.Context, tx pgx.Tx) error 
  OR a.rolname IN ('pg_write_server_files','pg_read_server_files','pg_execute_server_program')
  OR pg_has_role(a.oid,c.relowner,'MEMBER') OR has_schema_privilege(a.oid,c.relnamespace,'CREATE')
  OR has_table_privilege(a.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
- OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE')
- AND (pg_has_role(p.proowner,c.relowner,'MEMBER') OR has_table_privilege(p.proowner,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')))))),true)
+ OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE'))))),true)
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname=$1 AND c.relname=ANY($3::text[])`, r.schema, r.ownerOID, []string{"voice_party_resource_components", "voice_party_resource_retirements", "voice_party_resource_component_links"}).Scan(&count, &unsafe)
 	if err != nil || count != 3 || unsafe {

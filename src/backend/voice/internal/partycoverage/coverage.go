@@ -104,6 +104,8 @@ func ReadCoverage(ctx context.Context, tx pgx.Tx, binding RuntimeBinding) (Cover
 // CheckRuntimePrivileges rejects owner/superuser and effective write privileges,
 // including inherited grants and the authenticated backend login's authority.
 // SET ROLE/SESSION AUTHORIZATION cannot hide administrative credentials. The
+// admitted roles must have no callable SECURITY DEFINER functions: even a
+// restricted definer can bridge transitively into another definer's authority.
 // actual runtime factory must call this before
 // admitting any snapshot requests using the installed binding.
 func CheckRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
@@ -124,8 +126,7 @@ func CheckRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
  OR pg_has_role((SELECT usesysid FROM pg_stat_activity WHERE pid=pg_backend_pid()),a.oid,'MEMBER')) AND
  (pg_has_role(a.oid,c.relowner,'MEMBER') OR has_schema_privilege(a.oid,c.relnamespace,'CREATE')
  OR has_table_privilege(a.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
- OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE')
- AND (pg_has_role(p.proowner,c.relowner,'MEMBER') OR has_table_privilege(p.proowner,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))))))`).Scan(&unsafe)
+ OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE')))))`).Scan(&unsafe)
 	if err != nil || unsafe {
 		return ErrUnavailable
 	}
