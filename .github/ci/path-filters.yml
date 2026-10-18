@@ -21,9 +21,6 @@ ci_global:
   - .github/workflows/**
   - .github/ci/**
   - scripts/ci/**
-  - scripts/dev/matchmaking_source_authority.py
-  - scripts/dev/matchmaking_source_authority_test.py
-  - scripts/dev/matchmaking_source_authority_workflow_test.py
 
 # The DEV overlay applicator has its own focused required Linux contract job.
 match_squad_overlay:
