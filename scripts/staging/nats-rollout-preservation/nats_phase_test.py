@@ -152,7 +152,9 @@ class NatsPhaseTests(unittest.TestCase):
                 supervisor_call=supervisor)
             receipts['broker-stop'] = stopped_receipt
             self.assertEqual(stopped_receipt['exit_code'], 0)
-            self.assertEqual(phase._preflight_readback('read-jsz', args)['output_bytes'], len(tree))
+            canonical_tree = json.dumps(json.loads(tree), sort_keys=True, separators=(',', ':'),
+                ensure_ascii=False, allow_nan=False).encode()
+            self.assertEqual(phase._preflight_readback('read-jsz', args)['output_bytes'], len(canonical_tree))
         action_fields = {
             'load-config': {'server_config_sha256', 'server_config_bytes'},
             'receive-archive': {'archive_sha256', 'archive_bytes', 'manifest_sha256'},
@@ -197,7 +199,8 @@ class NatsPhaseTests(unittest.TestCase):
         started = root / 'load_config.started.json'
         started.write_bytes(json.dumps(marker, sort_keys=True, separators=(',', ':')).encode())
         started.chmod(0o600)
-        with patch.object(phase, '_require_verification_identity'):
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, 'PREFLIGHT_ROOT', root):
             with self.assertRaisesRegex(ValueError, 'preflight_action_unknown'):
                 phase._preflight_action_receipt('load-config', args, input_stream=io.BytesIO(b''))
 
