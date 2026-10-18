@@ -276,6 +276,22 @@ Voice 9095 остаётся на `voice-media-ca`; JWKS-корни и сущес
 `deploy/dev/match-squad-trust-overlay/README.md`. Этот отдельный оператор не
 продолжает и не изменяет journal/volume уже завершённого media PKI recovery.
 
+Для DEV CompleteMatch предусмотрен ещё один отдельный issuer: Matchmaking
+server leaf подписывается retained MatchSquad CA, а Gateway client leaf
+получает собственный новый CA. Он создаёт только три фиксированных объекта
+`voice-matchmaking-complete-server-tls`,
+`voice-matchmaking-complete-client-ca` и
+`voice-gateway-matchmaking-complete-client-tls`; principal/JWKS credentials,
+существующий PKI journal и workload trust mounts остаются вне этой операции.
+Provisioning и переключение consumer overlay — разные reviewed шаги. До
+отдельного grant на фактический выпуск не запускать `prepare`/`apply`/`resume`
+и не создавать эти объекты вручную. Детали guarded source/operator flow:
+[scripts/dev/README.md](../scripts/dev/README.md#dev-completematch-transport-identities).
+Оператор вызывает `kubectl` только с явно выбранными `/home/pmd/.kube/config` и
+контекстом `default`;
+он проверяет владельца и файловые права без чтения содержимого, не наследует
+ambient `KUBECONFIG` и не исправляет права kubeconfig автоматически.
+
 Пересоздание pod не равно удалению PVC: stateful данные dev находятся на PV;
 `Retain` сохраняет backing data при удалении claim, но не восстанавливает
 namespace, привязки и конфигурацию автоматически. Redis/mail fixture и любые

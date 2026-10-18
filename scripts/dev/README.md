@@ -408,3 +408,58 @@ a general source/image override. On an unknown result, stop and preserve the
 same journal, volume, and staged material for review. No overwrite, deletion,
 or rollback path exists. The separate DEV trust patches and their activation order are in
 `deploy/dev/match-squad-trust-overlay/README.md`.
+
+## DEV CompleteMatch transport identities
+
+`complete_match_pki.py` and `complete-match-pki-issuer/` are a separate,
+create-only DEV issuer for the Matchmaking → Gateway CompleteMatch transport.
+This is a distinct operation and volume from the completed MatchSquad operator.
+It creates only the Matchmaking server TLS Secret, the dedicated Gateway client
+CA ConfigMap, and the Gateway client TLS Secret. The Matchmaking server leaf is
+signed by the retained MatchSquad CA and is restricted to
+`voice-matchmaking.voice-dev.svc` / `serverAuth`. Gateway receives a new,
+separate client CA and a `voice-gateway.voice-dev.svc` / `clientAuth` leaf.
+The MatchSquad CA is mounted read-only and its signer is never copied to the
+new volume. Matchmaking principal-signing/JWKS keys are unrelated and must not
+be used as TLS material.
+
+The helper requires the exact source commit, immutable issuer image ID,
+consumer-overlay digest and DEV namespace UID. It is Linux-only. `preflight` is
+read-only; `prepare` requires `--confirm-dev-complete-match-pki-change` and
+stores one same-operation stage in the dedicated private volume;
+`apply`/`resume` use that stage to create only the three absent targets.
+Every Kubernetes call selects `/home/pmd/.kube/config` and context `default`
+explicitly with `kubectl --kubeconfig ... --context default`. Before invocation,
+the helper checks the config and its
+parent using metadata only: current-user ownership, regular non-symlink file,
+single link, bounded size, no group/world permissions, and a non-group/world-
+writable directory. The subprocess environment stays sanitized; ambient
+`KUBECONFIG` is ignored, and the helper never repairs file permissions.
+Creation has a durable intent, server-side dry-run, create-only API call and an
+exact GET comparison before success is recorded. A retry can adopt only the
+same staged content; drift or an uncertain result stops and preserves the
+journal, volume and material. There is no overwrite, deletion, rollback or
+new-operation recovery path. Capture the command's public receipt; never run
+the issuer's raw `export` output into a terminal or log. The receipt includes
+resource identities and public certificate fingerprints/profile evidence, not
+key values or key digests.
+
+The guarded CLI shape is:
+
+```sh
+python3 scripts/dev/complete_match_pki.py preflight --issuer-image sha256:<image-id> --expected-source-sha <40hex-commit> --expected-consumer-contract-sha256 <64hex> --expected-namespace-uid <namespace-uid>
+python3 scripts/dev/complete_match_pki.py prepare --issuer-image sha256:<image-id> --expected-source-sha <40hex-commit> --expected-consumer-contract-sha256 <64hex> --expected-namespace-uid <namespace-uid> --confirm-dev-complete-match-pki-change
+python3 scripts/dev/complete_match_pki.py apply --issuer-image sha256:<same-image-id> --expected-source-sha <same-commit> --expected-consumer-contract-sha256 <same-64hex> --expected-namespace-uid <same-namespace-uid> --confirm-dev-complete-match-pki-change
+python3 scripts/dev/complete_match_pki.py resume --issuer-image sha256:<same-image-id> --expected-source-sha <same-commit> --expected-consumer-contract-sha256 <same-64hex> --expected-namespace-uid <same-namespace-uid> --confirm-dev-complete-match-pki-change
+```
+
+Run `make complete-match-pki-test` for its isolated source suite; the target is
+also part of `ci-script-tests`.
+
+This issuer does not change workload mounts, Deployments, Role, Gateway, or
+Staging/production configuration. Consumer trust activation is a separate
+reviewed step. Build and use the issuer only from a clean reviewed source tree
+on the designated private Linux operator host; the image runs offline as UID
+10002 with a read-only root filesystem, no capabilities, and bounded private
+scratch space. Preserve its private state volume for the lifetime of its leaf
+credentials; do not improvise a backup or reset after an uncertain result.
