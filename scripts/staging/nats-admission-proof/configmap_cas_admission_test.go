@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"encoding/hex"
-	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
