@@ -383,6 +383,21 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 - T-055 fixture readiness observes the selected fresh DM's Chat `last_message_at` projection before recording the handoff. Messaging preview visibility alone does not prove that Chat's asynchronous ordering projection has settled. The measured two-page/item/cursor/hello-order assertions remain unchanged.
 - Манифест фич: [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
 - Flutter live helper `registerUser` завершает публичный email verification flow через compose-only Resend fixture: `otp/send` → `GET /emails/latest?to=<unique-email>` → `otp/verify`. Compose публикует fixture только на loopback; изолированный runner передаёт его URL через `VOICE_AUTH_MAIL_STUB_URL`. Staging/production сохраняют стандартный endpoint `https://api.resend.com/emails`.
+
+- BE-107 transport acceptance uses the real `ResendMailSender` over HTTP to the
+  disposable fixture, with a unique recipient per case and the actual injected
+  Auth Clock. Capture is submission evidence only; the client reads OTPs from
+  the delivered-only inbox after explicit settlement. Both OTP types cover
+  delivery, synchronous rejection, accepted-then-bounced non-delivery, ordinary
+  resend recovery, and fresh independent codes just before, at and after the
+  ten-minute expiry boundary. Rejected/expired/bounced flows preserve identity,
+  password and session state; successful reset revokes refresh sessions.
+  Neither NoopMailSender nor the test profile's CapturingMailSender can satisfy
+  this transport suite. Test controls stay local to the disposable fixture;
+  there is no production clock endpoint or Auth bounce callback.
+  Run `node --test docker/verification-stub/server.test.mjs`, then from
+  `src/backend/auth` run `mvn -B -Dtest=MailTransportAcceptanceTest test`
+  with JDK 25 and Node.js 24 on PATH. The ordinary Auth CI job runs both.
 - A1 session-bound verification proof must register/convert once, obtain the
   initial code from the mail fixture, use the restricted bearer for resend/
   verify/status (without an email body field), and assert replacement-session

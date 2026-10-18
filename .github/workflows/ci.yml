@@ -1062,6 +1062,12 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
+      - name: Set up Node for Auth disposable mail transport fixture
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Verify disposable mail delivery states
+        run: node --test docker/verification-stub/server.test.mjs
       - name: Maven test and Testcontainers report gate (auth)
         run: make auth-test-ci
       - uses: docker/setup-buildx-action@v4

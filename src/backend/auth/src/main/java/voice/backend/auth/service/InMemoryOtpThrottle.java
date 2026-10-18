@@ -1,5 +1,6 @@
 package voice.backend.auth.service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Map;
@@ -13,10 +14,19 @@ public class InMemoryOtpThrottle implements OtpThrottle {
 
   private final Map<String, Long> lastSendAt = new ConcurrentHashMap<>();
   private final Map<String, ArrayDeque<Long>> verifyAttempts = new ConcurrentHashMap<>();
+  private final Clock clock;
+
+  public InMemoryOtpThrottle() {
+    this(Clock.systemUTC());
+  }
+
+  public InMemoryOtpThrottle(Clock clock) {
+    this.clock = java.util.Objects.requireNonNull(clock, "clock");
+  }
 
   @Override
   public void reserveSend(String key) {
-    long now = System.currentTimeMillis();
+    long now = clock.millis();
     lastSendAt.compute(
         key,
         (ignored, previous) -> {
@@ -29,7 +39,7 @@ public class InMemoryOtpThrottle implements OtpThrottle {
 
   @Override
   public void admitVerify(String key) {
-    long now = System.currentTimeMillis();
+    long now = clock.millis();
     verifyAttempts.compute(
         key,
         (ignored, attempts) -> {
