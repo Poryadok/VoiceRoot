@@ -649,7 +649,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         : ChatDraftKey(profileId: activeId, chatId: widget.chatId);
     if (_draftKey != draftKey) {
       _draftKey = draftKey;
-      _composer.clear();
+      final restored = draftKey == null
+          ? ''
+          : ref.read(chatDraftProvider(draftKey)).valueOrNull ?? '';
+      _composer.value = TextEditingValue(
+        text: restored,
+        selection: TextSelection.collapsed(offset: restored.length),
+      );
     }
     if (draftKey != null) {
       ref.listen<AsyncValue<String>>(chatDraftProvider(draftKey), (_, next) {
