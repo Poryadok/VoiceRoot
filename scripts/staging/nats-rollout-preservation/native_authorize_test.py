@@ -109,6 +109,7 @@ class NativeAuthorizeTests(unittest.TestCase):
             }
             post = PostRuntime(events)
             (base / "native-contract-inputs.json").write_bytes(b"envelope")
+            (base / "native-contract-inputs.json").chmod(0o600)
             resolved = state["native_source_binding"]
             def contract_job(*args, **kwargs):
                 events.append("contract-job")

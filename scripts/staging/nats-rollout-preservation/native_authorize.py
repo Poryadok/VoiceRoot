@@ -55,10 +55,10 @@ def _validate_supported_target(state):
     if (state.get("nats_contract") is not None
             or state.get("nats_target_scripts") is not None
             or state.get("migrations")):
-        if not isinstance(state.get("nats_target_scripts"), dict):
-            raise Blocked("rollout_native_nats_authority_invalid")
         if state.get("native_contract") is None:
             raise Blocked("rollout_native_contract_authority_missing")
+        if not isinstance(state.get("nats_target_scripts"), dict):
+            raise Blocked("rollout_native_nats_authority_invalid")
 
 
 def _read_contract_envelope(base, descriptor):
