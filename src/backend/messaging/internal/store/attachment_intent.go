@@ -9,6 +9,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -148,6 +150,9 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		// Keep the lookup on the lock owner's connection. Advisory-lock waiters
 		// can occupy every other pool slot, so borrowing again can deadlock.
 		if saved, loadErr := scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE id=$1`, savedID)); loadErr == nil {
+			if err := checkExactSendReceipt(ctx, tx, row); err != nil {
+				return nil, err
+			}
 			single := []MessageRow{*saved}
 			if err = hydrateGameCards(ctx, tx, single); err != nil {
 				return nil, err
@@ -240,10 +245,28 @@ func attachmentIntentIdentity(row MessageRow, space *uuid.UUID) ([]byte, error) 
 		}
 		row.AttachmentsJSON = string(raw)
 	}
+	if row.AdmissionRequestHash != "" {
+		// Match the new receipt's JSON normalization while keeping historical
+		// intents (without a retained request hash) byte-compatible.
+		for _, value := range []*string{&row.AttachmentsJSON, &row.MentionsJSON} {
+			if *value == "" {
+				*value = "[]"
+			}
+			canonical, err := jsoncanonicalizer.Transform([]byte(*value))
+			if err != nil {
+				return nil, err
+			}
+			*value = string(canonical)
+		}
+	}
 	return json.Marshal(struct {
 		Row   MessageRow
 		Space *uuid.UUID
-	}{row, space})
+		// File enrichment may erase caller tags; retain the original normalized
+		// request identity for pending as well as committed keyed sends.
+		RequestRPC  string `json:",omitempty"`
+		RequestHash string `json:",omitempty"`
+	}{row, space, row.AdmissionRequestRPC, row.AdmissionRequestHash})
 }
 
 func (s *MessagesStore) ReconcileAttachmentIntents(ctx context.Context, release func(context.Context, *filev1.ReleaseFileReferencesRequest) error) error {

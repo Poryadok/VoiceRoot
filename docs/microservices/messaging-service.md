@@ -27,6 +27,12 @@ transaction spans File RPC. Expired admission cannot complete in a background
 context. Forward has no public idempotency key or new cross-RPC replay guarantee.
 An uncertain COMMIT/response may mean the entire pair committed; a returned error
 does not prove rollback and must not trigger deletion of a committed pair.
+Persistence preserves DeadlineExceeded/Canceled for expired/canceled attempts,
+including wrapped errors after File acquisition or while waiting on a DB lock.
+Attachment intents for keyed sends bind the normalized original request digest
+and RPC before File enrichment; committed-intent replay rechecks the exact receipt
+under its held connection. File-owned metadata refresh cannot erase a changed
+original request or grant a new timeout exemption.
 
 Reads/history/read state, own delete/hide and own reaction removal keep their
 existing ACLs. Forward source is an ordinary read. DM/standalone/other Space or

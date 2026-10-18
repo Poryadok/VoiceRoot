@@ -17,13 +17,16 @@ func TestSpaceTimeoutAndUnknownCapabilityDenyBeforeRoleRosterAndToken(t *testing
 		name               string
 		resolved, timedOut bool
 		want               codes.Code
-	}{{"timeout", true, true, codes.PermissionDenied}, {"legacy capability", false, false, codes.Unavailable}} {
+	}{{"timeout", true, true, codes.PermissionDenied}, {"legacy capability", false, false, codes.Unavailable}, {"absent capability", false, false, codes.Unavailable}} {
 		t.Run(tc.name, func(t *testing.T) {
 			space, room, profile := uuid.NewString(), uuid.NewString(), uuid.NewString()
 			events := &recordingEvents{}
 			svc := newTestVoiceService(time.Now(), events)
 			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: tc.resolved, TimedOut: tc.timedOut}}
 			configureReadySpaceMediaFixture(svc, resolver)
+			if tc.name == "absent capability" {
+				svc.VoiceRoomAccessResolver = nil
+			}
 			roles := &canonicalRolePermissions{}
 			svc.Roles = roles
 			response, err := joinSpaceVoiceUser(t, svc, profile, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})

@@ -29,7 +29,7 @@ func TestJoinVoiceRoom_CanonicalResolverNotConfiguredFailsClosed(t *testing.T) {
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	})
 	require.Error(t, err)
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 // TestLeaveVoiceRoom_UnjournaledSpaceParticipantFailsClosed documents that a Space roster cannot use legacy leave mutation.

@@ -39,7 +39,7 @@ type SpaceVoiceRoomGrantResolver interface {
 
 func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, expectedSpaceID, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
 	if s == nil || s.VoiceRoomAccessResolver == nil {
-		return CanonicalVoiceRoomAccess{}, status.Error(codes.FailedPrecondition, "canonical voice room resolver not configured")
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "canonical voice room resolver not configured")
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	decisionCtx, cancel := context.WithDeadline(ctx, deadline)

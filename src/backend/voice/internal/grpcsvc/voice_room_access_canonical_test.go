@@ -133,7 +133,7 @@ func TestJoinVoiceRoom_CanonicalResolverFailuresHaveNoSideEffects(t *testing.T) 
 		name     string
 		resolver AuthoritativeVoiceRoomAccessResolver
 		want     codes.Code
-	}{{"missing resolver", nil, codes.FailedPrecondition}, {"nonmember", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Active: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"inactive", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Member: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"malformed", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{Member: true, Active: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"unavailable", &canonicalAccessResolver{err: status.Error(codes.Unavailable, "space")}, codes.Unavailable}} {
+	}{{"missing resolver", nil, codes.Unavailable}, {"nonmember", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Active: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"inactive", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Member: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"malformed", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{Member: true, Active: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"unavailable", &canonicalAccessResolver{err: status.Error(codes.Unavailable, "space")}, codes.Unavailable}} {
 		t.Run(tc.name, func(t *testing.T) {
 			room, profile := uuid.NewString(), uuid.NewString()
 			events := &recordingEvents{}
