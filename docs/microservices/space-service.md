@@ -296,6 +296,95 @@ TOTP or backup codes, session/header/IP, email/phone, invite code, URLs, or mess
 content. A normalized moderation reason is the sole privileged sensitive field
 required by the product audit UX and remains protected by `SPACE_VIEW_AUDIT_LOG`.
 
+### External audit details codec v1
+
+This accepted wire codec applies only to the closed Role/Chat actions above;
+Space-local builders and their stored JSONB are not reinterpreted. Producers and
+ingress share `src/backend/pkg/spaceaudit`. Producer outboxes preserve the built
+bytes; retries never rebuild them with a later codec.
+
+The object has ASCII keys in ascending order, no whitespace/BOM/newline, escapes,
+duplicate members or trailing value. Strings are unescaped ASCII tokens or
+canonical lowercase hyphenated UUIDs. No null, free-form text, nested objects or
+arrays except `changed_fields` are accepted. Integers are unquoted decimal
+`0` or `[1-9][0-9]*`, exactly parsed as uint64; signs, leading zeroes, fractions,
+exponents and overflow are invalid. Ingress emits the action-specific canonical
+form and compares it with the original bytes; it rejects differences rather than
+normalizing the request. JSONB normalization and the 4096-byte database check are
+separate. Invalid details reserve no ID, including when an existing ID is replayed.
+
+| Actions | Exact required details |
+|---|---|
+| `role_created`, `role_deleted`, `default_join_role_set`, `chat_created`, `chat_deleted` | `{}` |
+| `role_updated`, `chat_updated` | `changed_fields` |
+| `role_assigned`, `role_revoked` | `role_id` |
+| `chat_override_set`, `chat_override_removed`, `voice_room_override_set`, `voice_room_override_removed` | `allow_mask`, `deny_mask`, `role_id` |
+| `roles_reordered` | `count` |
+
+No other or optional members are allowed in this external subset. `role_id` has no
+UUID-version restriction. Both masks use the entire uint64 range, including high
+and unknown future bits, zero and overlapping allow/deny bits; ingress records
+facts rather than applying Role policy. Removed overrides record the deleted
+row's prior masks captured in the mutation/outbox transaction. A missing row is a
+no-op and emits no fact.
+
+`changed_fields` is nonempty, unique and ASCII-sorted. Role tokens are `name`,
+`permissions`, `position`; request `permissions_mask` maps to domain token
+`permissions`. Chat tokens are `allow_guests`, `allow_user_main_feed`,
+`avatar_url`, `name`, `slow_mode_seconds`, `threads_enabled`, `topic`. Tokens
+describe actual normalized before/after value differences, not request presence;
+unchanged updates emit no fact. No updated values or URLs are included. Future
+fields need an explicit registry extension. `count` is a positive uint64 counting
+distinct role IDs in the successfully committed reorder batch, including listed
+roles retaining their position. Only an actual order change emits a fact. This
+codec bound introduces no new domain quota.
+
+### Durable external replay codec v1
+
+The signed deterministic-protobuf request hash remains transport authentication.
+Durable replay uses a separate frozen frame after authentication, recursive
+unknown-field rejection and registry/field/details validation, before UUID/string,
+JSONB or SQL timestamp conversion. The frame starts with ASCII domain tag
+`voice.space.audit.append.v1`, then these strings in order: `audit_event_id`,
+`space_id`, `actor_profile_id`, `action`, `target_type`, `target_id`,
+`details_json`. Each string has a uint32 big-endian UTF-8 byte length followed by
+its original validated bytes. Timestamp seconds follow as signed int64 big-endian
+two's-complement, then nanos as uint32 big-endian. Missing Timestamp is invalid;
+present epoch is valid. Valid protobuf dates and nanoseconds are accepted; never
+convert to UnixNano. Full seconds/nanos survive in replay identity even though
+the query projection remains a microsecond PostgreSQL timestamp.
+
+SHA-256 of this frame is fingerprint version 1. The trusted `role`/`chat` origin
+is compared separately. Credential, JTI, request ID and transport metadata are
+excluded; retries use fresh credentials. Accepted alternate outer UUID spellings
+remain different body bytes. New semantic fields require an explicit codec
+version/compatibility decision. Fingerprint equality assumes SHA-256 collision
+resistance; it does not claim indefinite lossless payload retention.
+
+One immutable Space-owned ID registry is keyed globally by `audit_event_id`, not
+by Space or producer. It stores Space ID, `local`/`role`/`chat` origin and external
+fingerprint version/digest without actor/target/details/time payload copies.
+Every local audit INSERT reserves this same namespace. Migration excludes
+concurrent insertion/retention and backfills surviving old IDs as local markers;
+already-deleted historical IDs cannot be reconstructed.
+
+Audit INSERT, same-ID outbox and registry reservation commit in one transaction;
+there is no committed pending receipt. External exact origin/version/fingerprint
+replay succeeds without inserting even after payload retention. A different
+valid body, producer, Space or local-origin collision is `ALREADY_EXISTS` and
+never overwrites evidence. Uniqueness conflicts roll back the attempted
+transaction before reading the committed registry in a fresh transaction.
+Validation/authentication is repeated before replay lookup; invalid changed
+details are `INVALID_ARGUMENT`, not replay success/conflict.
+
+Registry entries have no ordinary TTL or audit/outbox cascade. Delivered-only
+365-day retention removes payload/outbox, preserving receipts so late retries
+cannot resurrect effects. Existing capability-bound compensation may remove its
+pristine local audit/outbox but leaves its non-payload ID fence. BE-245 P3 must
+explicitly include receipts in its authorized atomic minimization and reject late
+delivery before removing them. This does not activate P3 or define post-P3 replay
+success; existing hard-delete guards remain in force.
+
 ### Query, cursor and retention v1
 
 `GetAuditLogRequest` now exposes optional `actor_profile_id` UUID, optional exact

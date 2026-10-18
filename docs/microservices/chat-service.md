@@ -7,6 +7,14 @@
 **Язык**: Go
 **БД**: PostgreSQL `chat_db`
 
+Accepted Space-attached Chat audit facts use the frozen
+[external codec](space-service.md#external-audit-details-codec-v1) and
+[replay identity](space-service.md#durable-external-replay-codec-v1), shared through
+`src/backend/pkg/spaceaudit`. Build actual normalized changes once inside the
+mutation/outbox transaction; retries preserve those bytes. Composite creation
+emits its fact only after the complete Chat/tree result. Producer runtime remains
+BE-131 work; this codec contract does not activate its transport.
+
 ## Ответственность
 
 - Создание и управление DM-чатами
