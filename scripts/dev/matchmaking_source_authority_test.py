@@ -37,7 +37,7 @@ class RegistryIdentityTests(unittest.TestCase):
                 "platform": {"os": "linux", "architecture": "amd64"}}]},
             separators=(",", ":")).encode()
         index_digest = "sha256:" + hashlib.sha256(index).hexdigest()
-        location = "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + config_digest + "?sig=private"
+        location = "https://pkg-containers.githubusercontent.com/objects/cache/config-blob?sig=private%2Bopaque"
         redirect = urllib.error.HTTPError("https://ghcr.io/blob", 307, "redirect",
             {"Location": location}, None)
         calls = []
@@ -84,26 +84,40 @@ class RegistryIdentityTests(unittest.TestCase):
         self.assertEqual(len(calls), 4)
         self.assertNotIn("sig=private", json.dumps(result))
 
-    def test_ghcr_blob_redirect_rejects_unapproved_locations_without_following(self):
+    def test_ghcr_blob_redirect_rejects_unsafe_locations_without_following(self):
         digest = "sha256:" + "a" * 64
         locations = (
-            ("http://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
+            ("http://pkg-containers.githubusercontent.com/objects/blob?sig=x",
                 "redirect_target_scheme_invalid", "known_cdn"),
-            ("https://evil.example/ghcr1/blobs/" + digest + "?sig=x",
+            ("https://evil.example/objects/blob?sig=x",
                 "redirect_target_host_invalid", "other"),
-            ("https://pkg-containers.githubusercontent.com/other/" + digest + "?sig=x",
+            ("https://pkg-containers.githubusercontent.com/objects/../blob?sig=x",
                 "redirect_target_path_invalid", "known_cdn"),
-            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + "sha256:" + "b" * 64 + "?sig=x",
-                "redirect_target_digest_invalid", "known_cdn"),
-            ("https://user@pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
+            ("https://pkg-containers.githubusercontent.com/objects/%2e%2e/blob?sig=x",
+                "redirect_target_path_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/objects/%2f..%5c/blob?sig=x",
+                "redirect_target_path_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/objects/%252e%252e/blob?sig=x",
+                "redirect_target_path_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/objects\\blob?sig=x",
+                "redirect_target_path_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/objects/bad%2?sig=x",
+                "redirect_target_path_invalid", "known_cdn"),
+            ("https://user@pkg-containers.githubusercontent.com/objects/blob?sig=x",
                 "redirect_target_authority_invalid", "known_cdn"),
-            ("https://pkg-containers.githubusercontent.com:444/ghcr1/blobs/" + digest + "?sig=x",
+            ("https://pkg-containers.githubusercontent.com:444/objects/blob?sig=x",
                 "redirect_target_authority_invalid", "known_cdn"),
-            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x#fragment",
+            ("https://pkg-containers.githubusercontent.com/objects/blob?sig=x#fragment",
                 "redirect_target_fragment_invalid", "known_cdn"),
-            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?",
+            ("https://pkg-containers.githubusercontent.com/objects/blob?",
                 "redirect_target_query_invalid", "known_cdn"),
-            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x\r\nAuthorization: Bearer secret",
+            ("https://pkg-containers.githubusercontent.com/objects/blob?sig=bad%2",
+                "redirect_target_query_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/objects/blob?sig=" + "x" * 8193,
+                "redirect_target_query_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/" + "x" * 8193 + "?sig=x",
+                "redirect_target_path_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/objects/blob?sig=x\r\nAuthorization: Bearer secret",
                 "redirect_target_control_invalid", "known_cdn"),
         )
         for location, code, host_class in locations:
@@ -113,7 +127,8 @@ class RegistryIdentityTests(unittest.TestCase):
                         "https://ghcr.io/blob", 307, "redirect", {"Location": location}, None)) as opened:
                 with self.assertRaises(receipt.ReceiptError) as raised:
                     receipt._read_response("https://ghcr.io/v2/repo/blobs/" + digest,
-                        {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest)
+                        {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest,
+                        blob_expected_size=1)
                 record = raised.exception.safe_record()
                 self.assertEqual(record["phase"], "registry-config-redirect-target")
                 self.assertEqual(record["code"], code)
@@ -122,6 +137,44 @@ class RegistryIdentityTests(unittest.TestCase):
                 self.assertEqual(opened.call_count, 1)
                 self.assertNotIn(location, json.dumps(record))
                 self.assertNotIn("sig=x", json.dumps(record))
+
+    def test_ghcr_redirected_blob_reads_at_most_descriptor_size_plus_one(self):
+        digest = "sha256:" + "a" * 64
+        url = "https://pkg-containers.githubusercontent.com/opaque/blob?sig=unchanged"
+
+        class Response:
+            status = 200
+            headers = {}
+
+            def __init__(self, content):
+                self.stream = io.BytesIO(content)
+                self.read_sizes = []
+                self.read_bytes = 0
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, size=-1):
+                self.read_sizes.append(size)
+                chunk = self.stream.read(size)
+                self.read_bytes += len(chunk)
+                return chunk
+
+        for body, should_succeed in ((b"data", True), (b"dat", False),
+                (b"small", False), (b"oversized", False)):
+            response = Response(body)
+            with self.subTest(length=len(body)), patch.object(receipt._HTTPS, "open", return_value=response):
+                if should_succeed:
+                    actual, _ = receipt._read_redirected_blob(url, digest, expected_size=4)
+                    self.assertEqual(actual, body)
+                else:
+                    with self.assertRaises(receipt.ReceiptError):
+                        receipt._read_redirected_blob(url, digest, expected_size=4)
+                self.assertLessEqual(response.read_bytes, 5)
+                self.assertTrue(all(size <= 5 for size in response.read_sizes))
 
     def test_ghcr_blob_redirect_chain_stops_after_one_hop(self):
         digest = "sha256:" + "a" * 64
@@ -138,7 +191,8 @@ class RegistryIdentityTests(unittest.TestCase):
                 patch.object(receipt._HTTPS, "open", side_effect=open_request):
             with self.assertRaises(receipt.ReceiptError) as raised:
                 receipt._read_response("https://ghcr.io/v2/repo/blobs/" + digest,
-                    {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest)
+                    {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest,
+                    blob_expected_size=1)
         self.assertEqual(raised.exception.safe_record(), {"status": "REJECTED",
             "phase": "registry-config-redirect-content", "code": "redirect_chain_rejected",
             "class": "HTTPError", "http_status": 307, "redirect_host_class": "known_cdn"})
