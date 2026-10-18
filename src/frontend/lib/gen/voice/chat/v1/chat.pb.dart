@@ -6157,9 +6157,14 @@ class GetDMResponse extends $pb.GeneratedMessage {
 class CreateChatResponse extends $pb.GeneratedMessage {
   factory CreateChatResponse({
     Chat? chat,
+    $core.String? compositeOperationId,
+    $core.String? compositeNodeId,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
+    if (compositeOperationId != null)
+      result.compositeOperationId = compositeOperationId;
+    if (compositeNodeId != null) result.compositeNodeId = compositeNodeId;
     return result;
   }
 
@@ -6177,6 +6182,8 @@ class CreateChatResponse extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
       createEmptyInstance: create)
     ..aOM<Chat>(1, _omitFieldNames ? '' : 'chat', subBuilder: Chat.create)
+    ..aOS(2, _omitFieldNames ? '' : 'compositeOperationId')
+    ..aOS(3, _omitFieldNames ? '' : 'compositeNodeId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6208,6 +6215,26 @@ class CreateChatResponse extends $pb.GeneratedMessage {
   void clearChat() => $_clearField(1);
   @$pb.TagNumber(1)
   Chat ensureChat() => $_ensure(0);
+
+  /// Set only after a new Space-attached composite is COMPLETE. Empty for
+  /// standalone and successful legacy keyed creates; never a node upsert hint.
+  @$pb.TagNumber(2)
+  $core.String get compositeOperationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set compositeOperationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasCompositeOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCompositeOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get compositeNodeId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set compositeNodeId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCompositeNodeId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCompositeNodeId() => $_clearField(3);
 }
 
 class UpdateChatResponse extends $pb.GeneratedMessage {
