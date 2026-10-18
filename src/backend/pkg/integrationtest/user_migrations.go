@@ -31,6 +31,7 @@ var UserDBMigrationFiles = []string{
 	"000017_account_lifecycle_search_tombstone.up.sql",
 	"000018_sdk_author_authority.up.sql",
 	"000019_authority_source_revision.up.sql",
+	"000020_profile_last_seen.up.sql",
 }
 
 // ApplyUserDBMigrations runs all user_db *.up.sql migrations in order.
