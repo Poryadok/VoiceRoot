@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"voice/backend/voice/internal/spacegatetest"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -198,7 +199,7 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	require.Nil(t, item, "the cap-rejected operation remains unprojected and unclaimable")
 
 	faultingAdmissions := &lostCleanupAckAdmissionStore{PostgresAdmissionStore: admissions, loseNextCleanupAck: true}
-	coordinator := &Coordinator{
+	coordinator := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: calls, Calls: calls, Admissions: faultingAdmissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			creator.ProfileID.String(): {SpaceID: creator.SpaceID.String(), Active: true, Member: true, AccessEpoch: creator.AccessEpoch, CommunicationStateResolved: true},
@@ -470,9 +471,9 @@ func TestPostgresRoomHeadRecoversCrashBetweenClaimAndPrepare(t *testing.T) {
 }
 
 func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	pool := startSpaceMediaAdmissionPostgres(t, context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	creator := admissionFixture()
 	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
@@ -501,7 +502,7 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 		fenceResult <- admissions.Fence(ctx, joiner)
 	}()
 	<-fenceStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state,lifecycle_generation FROM voice_space_media_room_heads")
 	leaveStarted := make(chan struct{})
 	leaveResult := make(chan error, 1)
 	go func() {
@@ -553,9 +554,9 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 }
 
 func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	pool := startSpaceMediaAdmissionPostgres(t, context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	creator := admissionFixture()
 	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
@@ -581,7 +582,7 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads")
 	prepareStarted := make(chan struct{})
 	prepareResult := make(chan error, 1)
 	go func() {
@@ -645,6 +646,7 @@ func prepareAdmission(ctx context.Context, admissions *PostgresAdmissionStore, a
 		return ErrAdmissionConflict
 	}
 	a.RoomGeneration = head.RoomGeneration
+	a.LifecycleGeneration = head.LifecycleGeneration
 	return admissions.Prepare(ctx, *a)
 }
 
@@ -655,7 +657,7 @@ func startSpaceMediaAdmissionPostgres(t *testing.T, ctx context.Context) *pgxpoo
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	migrations := filepath.Join(root, "src", "backend", "migrations", "voice_db")
 	pool := integrationtest.StartPostgres(t, ctx, "voice_space_media_admission", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
-	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000014_space_media_p3"} {
+	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000013_a3_roster_outbox", "000014_space_media_p3"} {
 		body, err := os.ReadFile(filepath.Join(migrations, name+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

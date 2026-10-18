@@ -100,6 +100,10 @@ AND NOT EXISTS(SELECT 1 FROM voice_space_media_admissions a WHERE a.voice_room_i
 			return err
 		}
 	}
+	if _, err := e.pool.Exec(ctx, `UPDATE voice_space_lifecycle_targets t SET cleanup_completed_at=COALESCE(cleanup_completed_at,clock_timestamp()) WHERE t.space_id=$1 AND t.generation=$2 AND t.source_kind='head' AND EXISTS(SELECT 1 FROM voice_space_media_room_heads h WHERE h.voice_room_id::text=t.target->>'voice_room_id' AND h.room_generation::text=t.target->>'room_generation' AND h.state='ENDED')`, req.SpaceId, int64(req.Generation)); err != nil {
+		return err
+	}
+
 	return nil
 }
 

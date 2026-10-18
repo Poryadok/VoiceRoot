@@ -51,7 +51,8 @@ func (s *PostgresAdmissionStore) ReserveSpaceGrant(ctx context.Context, grantID,
 	err = tx.QueryRow(ctx, `SELECT state='COMMITTED' AND participant_state='ACTIVE' AND projection_applied_at IS NOT NULL
 AND account_id::text=$3 AND profile_id::text=$4 AND space_id::text=$5 AND voice_room_id::text=$6
 AND generation=$7 AND session_epoch=$8 AND access_epoch=$9 AND policy_epoch=$10
-AND can_join=$11 AND can_publish_audio=$12 AND can_subscribe=$13 AND livekit_identity=$14,lifecycle_generation
+AND can_join=$11 AND can_publish_audio=$12 AND can_subscribe=$13 AND livekit_identity=$14
+AND EXISTS(SELECT 1 FROM voice_account_voice_fences f WHERE f.account_id=voice_space_media_admissions.account_id AND f.profile_id=voice_space_media_admissions.profile_id AND f.room_id=voice_space_media_admissions.room_id AND f.admission_operation_id=voice_space_media_admissions.operation_id AND f.admission_generation=voice_space_media_admissions.generation),lifecycle_generation
 FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operation, generation,
 		grant.AccountID, grant.ProfileID, grant.SpaceID, grant.VoiceRoomID, grant.MediaGeneration, int64(grant.SessionEpoch), int64(grant.AccessEpoch), int64(grant.PolicyEpoch), grant.CanJoin, grant.CanPublishAudio, grant.CanSubscribe, identity).Scan(&valid, &lifecycle)
 	if err != nil || !valid || grant.LiveKitRoomName != "voice-room-"+room {

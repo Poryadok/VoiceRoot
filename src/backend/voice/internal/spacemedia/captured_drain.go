@@ -5,6 +5,8 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"time"
+	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/voice/internal/spacebarrier"
 	"voice/backend/voice/internal/spacelifecycle"
 	"voice/backend/voice/internal/store"
@@ -16,8 +18,12 @@ func (c *Coordinator) ResumeCapturedDrain(ctx context.Context, t spacelifecycle.
 	if c == nil || c.Calls == nil || c.Admissions == nil {
 		return ErrAdmissionUnavailable
 	}
+	ctx = store.WithSpaceCleanupTarget(ctx, store.SpaceProjectionTicket{SpaceID: t.SpaceID, RoomID: t.RoomID, VoiceRoomID: t.VoiceRoomID, RoomGeneration: t.RoomGeneration, OperationID: t.OperationID, AdmissionGeneration: t.Generation, AccountID: t.AccountID, ProfileID: t.ProfileID, Identity: t.Identity})
 	call, err := c.Calls.GetCall(ctx, t.RoomID)
 	if err == nil {
+		if call.RoomID != t.RoomID || call.SpaceID != t.SpaceID || call.VoiceRoomID != t.VoiceRoomID {
+			return ErrAdmissionConflict
+		}
 		if p, ok := call.SpaceMedia[t.ProfileID]; ok {
 			if p.AdmissionOperationID != t.OperationID || p.Generation != t.Generation || p.Identity != t.Identity || p.RoomGeneration != t.RoomGeneration {
 				return ErrAdmissionConflict
@@ -35,6 +41,16 @@ func (c *Coordinator) ResumeCapturedDrain(ctx context.Context, t spacelifecycle.
 					return err
 				}
 				return ErrAdmissionConflict
+			}
+		} else if call.IsParticipant(t.ProfileID) {
+			// Room IDs are unique across native head incarnations. Remove only this
+			// captured room/profile; the store preserves a newer active-profile owner.
+			if _, err := c.Calls.RemoveParticipant(ctx, t.RoomID, t.ProfileID); err != nil {
+				return err
+			}
+		} else if len(call.States) == 0 && call.Status == callsv1.CallStatus_CALL_STATUS_UNSPECIFIED {
+			if _, err := c.Calls.SetStatus(ctx, t.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, time.Now().UTC()); err != nil {
+				return err
 			}
 		}
 	} else if !errors.Is(err, store.ErrNotFound) {

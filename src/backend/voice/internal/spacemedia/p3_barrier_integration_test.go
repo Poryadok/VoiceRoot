@@ -39,10 +39,10 @@ func TestP3FreezeSerializesBeforeEveryForwardNativeWriter(t *testing.T) {
 			request := &commonv1.SpaceLifecycleFenceRequest{ProtocolVersion: 1, SpaceId: a.SpaceID.String(), DeletionOperationId: uuid.NewString(), Generation: 1, DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, Manifest: &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ManifestSha256: make([]byte, 32)}}
 			freezeResult := make(chan error, 1)
 			go func() {
-				_, err := spacelifecycle.NewPostgresStore(pool).ApplyFence(ctx, request, func(context.Context, *commonv1.SpaceLifecycleFenceRequest) error { return nil })
+				_, err := spacelifecycle.NewPostgresStore(pool, BeginPartyRoomClose).ApplyFence(ctx, request, func(context.Context, *commonv1.SpaceLifecycleFenceRequest) error { return nil })
 				freezeResult <- err
 			}()
-			waitForPostgresLockWait(t, ctx, pool, "UPDATE voice_space_media_room_heads SET state='CLOSING'")
+			waitForPostgresLockWait(t, ctx, pool, "voice_space_media_room_heads")
 			writerResult := make(chan error, 1)
 			go func() {
 				switch stage {

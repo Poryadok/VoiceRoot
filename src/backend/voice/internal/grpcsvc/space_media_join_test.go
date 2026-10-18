@@ -471,3 +471,10 @@ func TestLeaveSpaceVoiceRoomFailsClosedWhenParticipantHasNoAdmission(t *testing.
 	require.NoError(t, err)
 	require.True(t, current.IsParticipant(profileID), "an unjournaled Space projection cannot use legacy leave mutation")
 }
+
+func (r readySpaceMediaAdmission) ReadSpaceLifecycle(context.Context, string) (int64, bool, error) {
+	return 0, true, r.err
+}
+func (r readySpaceMediaAdmission) AuthorizeSpaceProjection(_ context.Context, _ uuid.UUID, _ string, t voicestore.SpaceProjectionTicket) (voicestore.SpaceProjectionTicket, error) {
+	return t, r.err
+}

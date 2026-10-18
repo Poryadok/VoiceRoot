@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"voice/backend/voice/internal/spacegatetest"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -158,13 +159,14 @@ func mediaPtr(v callsv1.CallMediaKind) *callsv1.CallMediaKind {
 
 func newTestVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
 	return &VoiceGRPC{
-		Calls:          voicestore.NewMemoryCallStore(),
-		ChatMembers:    allowAllChatMembers{},
-		SpaceLifecycle: &fixtureSpaceLifecycle{},
-		Tokens:         livekit.NewHS256TokenIssuer("dev-key", "dev-secret", "ws://livekit:7880", time.Hour),
-		Events:         events,
-		Now:            func() time.Time { return now },
-		RingTimeout:    30 * time.Second,
+		SpaceProjectionGates: spacegatetest.New(),
+		Calls:                voicestore.NewMemoryCallStore(),
+		ChatMembers:          allowAllChatMembers{},
+		SpaceLifecycle:       &fixtureSpaceLifecycle{},
+		Tokens:               livekit.NewHS256TokenIssuer("dev-key", "dev-secret", "ws://livekit:7880", time.Hour),
+		Events:               events,
+		Now:                  func() time.Time { return now },
+		RingTimeout:          30 * time.Second,
 	}
 }
 

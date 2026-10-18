@@ -154,7 +154,7 @@ func ordinaryPostgres(t *testing.T) *pgxpool.Pool {
 		"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms",
 		"000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence",
 		"000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission",
-		"000011_match_squad_operations", "000012_ordinary_calls",
+		"000011_match_squad_operations", "000012_ordinary_calls", "000013_a3_roster_outbox",
 	} {
 		body, err := os.ReadFile(filepath.Join(dir, migration+".up.sql"))
 		require.NoError(t, err)

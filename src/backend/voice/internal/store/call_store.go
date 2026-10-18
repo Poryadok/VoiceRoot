@@ -43,6 +43,7 @@ var (
 // participant between two already-authorized Space voice rooms.  The service
 // performs all discovery and permission checks before it reaches the store.
 type VoiceRoomMoveRequest struct {
+	ProjectionTicket     SpaceProjectionTicket `json:"-"`
 	ActorProfileID       string
 	ParticipantProfileID string
 	OperationID          string
@@ -89,17 +90,18 @@ type SpaceMediaGrant struct {
 }
 
 type SpaceMediaParticipant struct {
-	LifecycleGeneration  int64           `json:"lifecycle_generation"`
-	AccountID            string          `json:"account_id,omitempty"`
-	AdmissionOperationID string          `json:"admission_operation_id,omitempty"`
-	RoomGeneration       uint64          `json:"room_generation,omitempty"`
-	CreatedRoom          bool            `json:"created_room,omitempty"`
-	ProfileID            string          `json:"profile_id"`
-	Identity             string          `json:"identity"`
-	Generation           string          `json:"generation"`
-	Issued               SpaceMediaGrant `json:"issued"`
-	Reconciled           SpaceMediaGrant `json:"reconciled"`
-	Revoking             bool            `json:"revoking"`
+	ProjectionTicket     SpaceProjectionTicket `json:"-"`
+	LifecycleGeneration  int64                 `json:"lifecycle_generation,omitempty"`
+	AccountID            string                `json:"account_id,omitempty"`
+	AdmissionOperationID string                `json:"admission_operation_id,omitempty"`
+	RoomGeneration       uint64                `json:"room_generation,omitempty"`
+	CreatedRoom          bool                  `json:"created_room,omitempty"`
+	ProfileID            string                `json:"profile_id"`
+	Identity             string                `json:"identity"`
+	Generation           string                `json:"generation"`
+	Issued               SpaceMediaGrant       `json:"issued"`
+	Reconciled           SpaceMediaGrant       `json:"reconciled"`
+	Revoking             bool                  `json:"revoking"`
 }
 
 type SpaceMediaAdmissionEvent struct {
@@ -168,7 +170,8 @@ type SpaceMediaEpochProgress struct {
 }
 
 type Call struct {
-	SpaceLifecycleGeneration int64 `json:"space_lifecycle_generation"`
+	SpaceProjectionTicket    SpaceProjectionTicket `json:"-"`
+	SpaceLifecycleGeneration int64                 `json:"space_lifecycle_generation,omitempty"`
 	// Ordinary journal provenance is projection metadata, never authorization.
 	OrdinaryOperationID     string            `json:"ordinary_operation_id,omitempty"`
 	OrdinaryVersion         uint64            `json:"ordinary_version,omitempty"`

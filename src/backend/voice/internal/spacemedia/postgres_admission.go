@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/voice/internal/rosteroutbox"
 	"voice/backend/voice/internal/spacebarrier"
 	"voice/backend/voice/internal/store"
 )
@@ -76,6 +77,8 @@ func (s *PostgresAdmissionStore) CheckSchema(ctx context.Context) error {
 	to_regclass('voice_space_media_grants') IS NOT NULL
  AND to_regclass('voice_space_lifecycle_targets') IS NOT NULL
  AND to_regclass('voice_space_media_admissions') IS NOT NULL
+	AND to_regclass('voice_roster_outbox') IS NOT NULL
+	AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='voice_space_media_room_heads' AND column_name='roster_version')
 	AND to_regclass('voice_space_media_admission_outbox') IS NOT NULL
 	AND to_regclass('voice_space_media_room_heads') IS NOT NULL
 	AND EXISTS (SELECT 1 FROM information_schema.columns
@@ -224,26 +227,27 @@ func admissionFingerprint(a Admission) ([32]byte, error) {
 		rows = append(rows, eventFingerprint{event.ID.String(), event.Subject, sha256.Sum256(event.Payload)})
 	}
 	canonical := struct {
-		OperationID     string             `json:"operation_id"`
-		Generation      string             `json:"generation"`
-		RoomGeneration  uint64             `json:"room_generation"`
-		AccountID       string             `json:"account_id"`
-		ProfileID       string             `json:"profile_id"`
-		SpaceID         string             `json:"space_id"`
-		RoomID          string             `json:"room_id"`
-		VoiceRoomID     string             `json:"voice_room_id"`
-		Identity        string             `json:"identity"`
-		CreatedRoom     bool               `json:"created_room"`
-		StartedAt       time.Time          `json:"call_started_at"`
-		MaxParticipants int                `json:"max_participants"`
-		SessionEpoch    uint64             `json:"session_epoch"`
-		AccessEpoch     uint64             `json:"access_epoch"`
-		PolicyEpoch     uint64             `json:"policy_epoch"`
-		CanJoin         bool               `json:"can_join"`
-		CanPublish      bool               `json:"can_publish_audio"`
-		CanSubscribe    bool               `json:"can_subscribe"`
-		Events          []eventFingerprint `json:"events"`
-	}{a.OperationID.String(), a.Generation, a.RoomGeneration, a.AccountID.String(), a.ProfileID.String(), a.SpaceID.String(), a.RoomID, a.VoiceRoomID,
+		OperationID         string             `json:"operation_id"`
+		Generation          string             `json:"generation"`
+		RoomGeneration      uint64             `json:"room_generation"`
+		LifecycleGeneration int64              `json:"lifecycle_generation"`
+		AccountID           string             `json:"account_id"`
+		ProfileID           string             `json:"profile_id"`
+		SpaceID             string             `json:"space_id"`
+		RoomID              string             `json:"room_id"`
+		VoiceRoomID         string             `json:"voice_room_id"`
+		Identity            string             `json:"identity"`
+		CreatedRoom         bool               `json:"created_room"`
+		StartedAt           time.Time          `json:"call_started_at"`
+		MaxParticipants     int                `json:"max_participants"`
+		SessionEpoch        uint64             `json:"session_epoch"`
+		AccessEpoch         uint64             `json:"access_epoch"`
+		PolicyEpoch         uint64             `json:"policy_epoch"`
+		CanJoin             bool               `json:"can_join"`
+		CanPublish          bool               `json:"can_publish_audio"`
+		CanSubscribe        bool               `json:"can_subscribe"`
+		Events              []eventFingerprint `json:"events"`
+	}{a.OperationID.String(), a.Generation, a.RoomGeneration, a.LifecycleGeneration, a.AccountID.String(), a.ProfileID.String(), a.SpaceID.String(), a.RoomID, a.VoiceRoomID,
 		a.Identity, a.CreatedRoom, a.CallStartedAt.UTC(), a.MaxParticipants, a.SessionEpoch, a.AccessEpoch, a.PolicyEpoch, a.CanJoin, a.CanPublishAudio, a.CanSubscribe, rows}
 	encoded, err := json.Marshal(canonical)
 	if err != nil {
@@ -300,13 +304,13 @@ func (s *PostgresAdmissionStore) Prepare(ctx context.Context, a Admission) error
 	if currentLifecycle != a.LifecycleGeneration {
 		return ErrAdmissionConflict
 	}
-	var claimedGeneration int64
+	var claimedGeneration, claimedLifecycle int64
 	var claimedSpace, claimedRoom string
 	var claimedCreator uuid.UUID
 	var claimedState string
-	err = tx.QueryRow(ctx, `SELECT room_generation,space_id,call_room_id,creator_operation_id,state
-FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, a.VoiceRoomID, int64(a.RoomGeneration)).Scan(&claimedGeneration, &claimedSpace, &claimedRoom, &claimedCreator, &claimedState)
-	if err != nil || claimedGeneration != int64(a.RoomGeneration) || claimedSpace != a.SpaceID.String() || claimedRoom != a.RoomID || claimedState != "OPEN" ||
+	err = tx.QueryRow(ctx, `SELECT room_generation,space_id,call_room_id,creator_operation_id,state,lifecycle_generation
+FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, a.VoiceRoomID, int64(a.RoomGeneration)).Scan(&claimedGeneration, &claimedSpace, &claimedRoom, &claimedCreator, &claimedState, &claimedLifecycle)
+	if err != nil || claimedGeneration != int64(a.RoomGeneration) || claimedSpace != a.SpaceID.String() || claimedRoom != a.RoomID || claimedState != "OPEN" || claimedLifecycle != a.LifecycleGeneration ||
 		(a.CreatedRoom && claimedCreator != a.OperationID) || (!a.CreatedRoom && claimedCreator == a.OperationID) {
 		return ErrRoomHeadPending
 	}
@@ -314,7 +318,7 @@ FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 
 (operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,request_sha256,lifecycle_generation)
 SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'PREPARED',$19,$20
 WHERE EXISTS (SELECT 1 FROM voice_space_media_room_heads h WHERE h.voice_room_id=$7 AND h.room_generation=$8
- AND h.space_id=$5 AND h.call_room_id=$6 AND h.state='OPEN'
+ AND h.space_id=$5 AND h.call_room_id=$6 AND h.state='OPEN' AND h.lifecycle_generation=$20
  AND (($10::boolean AND h.creator_operation_id=$1) OR (NOT $10::boolean AND h.creator_operation_id<>$1)))
 ON CONFLICT(operation_id) DO NOTHING`,
 		a.OperationID, a.Generation, a.AccountID, a.ProfileID, a.SpaceID, a.RoomID, a.VoiceRoomID, int64(a.RoomGeneration), a.Identity, a.CreatedRoom, a.CallStartedAt.UTC(), a.MaxParticipants, int64(a.SessionEpoch), int64(a.AccessEpoch), int64(a.PolicyEpoch), a.CanJoin, a.CanPublishAudio, a.CanSubscribe, fingerprint[:], a.LifecycleGeneration)
@@ -363,11 +367,16 @@ func (s *PostgresAdmissionStore) Fence(ctx context.Context, a Admission) error {
 	if currentLifecycle != a.LifecycleGeneration {
 		return ErrAdmissionConflict
 	}
-	var headGeneration int64
+	var headGeneration, headLifecycle int64
 	var headSpace, headRoom, headState string
 	var headCreator uuid.UUID
-	if err = tx.QueryRow(ctx, `SELECT room_generation,space_id,call_room_id,creator_operation_id,state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, a.VoiceRoomID, int64(a.RoomGeneration)).Scan(&headGeneration, &headSpace, &headRoom, &headCreator, &headState); err != nil || headGeneration != int64(a.RoomGeneration) || headSpace != a.SpaceID.String() || headRoom != a.RoomID || headState != "OPEN" || (a.CreatedRoom && headCreator != a.OperationID) || (!a.CreatedRoom && headCreator == a.OperationID) {
+	if err = tx.QueryRow(ctx, `SELECT room_generation,space_id,call_room_id,creator_operation_id,state,lifecycle_generation FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, a.VoiceRoomID, int64(a.RoomGeneration)).Scan(&headGeneration, &headSpace, &headRoom, &headCreator, &headState, &headLifecycle); err != nil || headGeneration != int64(a.RoomGeneration) || headSpace != a.SpaceID.String() || headRoom != a.RoomID || headState != "OPEN" || headLifecycle != a.LifecycleGeneration || (a.CreatedRoom && headCreator != a.OperationID) || (!a.CreatedRoom && headCreator == a.OperationID) {
 		return ErrRoomHeadPending
+	}
+	var savedLifecycle int64
+	var savedSpace string
+	if err := tx.QueryRow(ctx, `SELECT lifecycle_generation,space_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, a.OperationID, a.Generation).Scan(&savedLifecycle, &savedSpace); err != nil || savedLifecycle != currentLifecycle || savedSpace != a.SpaceID.String() {
+		return ErrAdmissionConflict
 	}
 	if err := spacebarrier.LockIdentities(ctx, tx, a.AccountID.String(), a.ProfileID.String()); err != nil {
 		return err
@@ -477,8 +486,17 @@ func (s *PostgresAdmissionStore) MarkProjectionApplied(ctx context.Context, oper
 		return ErrRoomHeadPending
 	}
 	var storedGeneration int64
-	if err = tx.QueryRow(ctx, `SELECT room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&storedGeneration); err != nil || storedGeneration != roomGeneration {
+	var participantState, admissionState string
+	var applied bool
+	var roomID, profileID uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT room_generation,participant_state,state,projection_applied_at IS NOT NULL,room_id,profile_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&storedGeneration, &participantState, &admissionState, &applied, &roomID, &profileID); err != nil || storedGeneration != roomGeneration {
 		return ErrAdmissionConflict
+	}
+	if admissionState != "COMMITTED" || (participantState != "PREPARED" && participantState != "ACTIVE") {
+		return ErrAdmissionConflict
+	}
+	if participantState == "ACTIVE" && applied {
+		return tx.Commit(ctx)
 	}
 	tag, err := tx.Exec(ctx, `UPDATE voice_space_media_admissions SET projection_applied_at=COALESCE(projection_applied_at,clock_timestamp()),participant_state='ACTIVE',updated_at=clock_timestamp()
 WHERE operation_id=$1 AND generation=$2 AND state='COMMITTED'`, operationID, generation)
@@ -487,6 +505,13 @@ WHERE operation_id=$1 AND generation=$2 AND state='COMMITTED'`, operationID, gen
 	}
 	if tag.RowsAffected() != 1 {
 		return ErrAdmissionConflict
+	}
+	var rosterVersion int64
+	if err = tx.QueryRow(ctx, `UPDATE voice_space_media_room_heads SET roster_version=roster_version+1 WHERE voice_room_id=$1 AND room_generation=$2 RETURNING roster_version`, voiceRoomID, roomGeneration).Scan(&rosterVersion); err != nil {
+		return err
+	}
+	if err = rosteroutbox.Append(ctx, tx, roomID, profileID, rosterVersion, true); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -614,6 +639,10 @@ func (s *PostgresAdmissionStore) ReleaseFence(ctx context.Context, a Admission) 
 // BeginRoomLeave serializes a participant drain with admissions and room
 // closure. The Redis identity remains revoking until CompleteRoomLeave.
 func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID uuid.UUID, generation string) error {
+	return s.beginRoomLeave(ctx, operationID, generation, nil)
+}
+
+func (s *PostgresAdmissionStore) beginRoomLeave(ctx context.Context, operationID uuid.UUID, generation string, loss *PartyEligibilityLoss) error {
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}
@@ -623,27 +652,58 @@ func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err := lockAdmissionCleanup(ctx, tx, operationID, generation); err != nil {
+		if loss != nil && errors.Is(err, pgx.ErrNoRows) {
+			return ErrPartySourceChanged
+		}
 		return err
 	}
 	var voiceRoomID string
 	var roomGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&voiceRoomID, &roomGeneration); err != nil {
+		if loss != nil && errors.Is(err, pgx.ErrNoRows) {
+			return ErrPartySourceChanged
+		}
 		return err
 	}
 	var headState string
 	var headGeneration int64
-	if err = tx.QueryRow(ctx, `SELECT state,room_generation FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration); err != nil || headGeneration != roomGeneration || (headState != "OPEN" && headState != "CLOSING") {
+	var incarnation, headRoomID uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration, &incarnation, &headRoomID); err != nil || headGeneration != roomGeneration || (headState != "OPEN" && headState != "CLOSING") {
+		if loss != nil && (err == nil || errors.Is(err, pgx.ErrNoRows)) {
+			return ErrPartySourceChanged
+		}
 		return ErrRoomHeadPending
 	}
 	var participantState, admissionState string
-	if err = tx.QueryRow(ctx, `SELECT participant_state,state FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&participantState, &admissionState); err != nil {
+	var applied bool
+	var roomID, profileID uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT participant_state,state,projection_applied_at IS NOT NULL,room_id,profile_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&participantState, &admissionState, &applied, &roomID, &profileID); err != nil {
 		return err
+	}
+	if loss != nil {
+		var accountID uuid.UUID
+		var epoch int64
+		if err = tx.QueryRow(ctx, `SELECT account_id,session_epoch FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&accountID, &epoch); err != nil {
+			return err
+		}
+		if loss.Incarnation != incarnation || loss.RoomID != headRoomID || loss.RoomID != roomID || loss.ProfileID != profileID || loss.AccountID != accountID || loss.SessionEpoch != epoch || headState != "OPEN" || participantState != "ACTIVE" || admissionState != "COMMITTED" || !applied {
+			return ErrPartySourceChanged
+		}
 	}
 	if participantState == "ENDED" {
 		return tx.Commit(ctx)
 	}
 	if participantState != "ACTIVE" && participantState != "REVOKING" && (participantState != "PREPARED" || admissionState != "ABORTING") {
 		return ErrAdmissionConflict
+	}
+	if participantState == "ACTIVE" && admissionState == "COMMITTED" && applied && headState == "OPEN" {
+		var rosterVersion int64
+		if err = tx.QueryRow(ctx, `UPDATE voice_space_media_room_heads SET roster_version=roster_version+1 WHERE voice_room_id=$1 AND room_generation=$2 RETURNING roster_version`, voiceRoomID, roomGeneration).Scan(&rosterVersion); err != nil {
+			return err
+		}
+		if err = rosteroutbox.Append(ctx, tx, roomID, profileID, rosterVersion, false); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.Exec(ctx, `UPDATE voice_space_media_admissions SET participant_state='REVOKING',updated_at=clock_timestamp() WHERE operation_id=$1 AND generation=$2`, operationID, generation); err != nil {
 		return err

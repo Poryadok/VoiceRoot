@@ -79,7 +79,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	if ctx.Err() != nil {
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space admission decision expired")
 	}
-	if s == nil || s.Calls == nil || s.SpaceMediaAdmissions == nil || s.SpaceVoiceRoomGrants == nil || s.SessionEpochChecker == nil || !s.spaceMediaOperational() {
+	if s == nil || s.Calls == nil || s.SpaceMediaAdmissions == nil || s.SpaceProjectionGates == nil || s.SpaceVoiceRoomGrants == nil || s.SessionEpochChecker == nil || !s.spaceMediaOperational() {
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission is not ready")
 	}
 	if err := s.SpaceMediaAdmissions.CheckSchema(ctx); err != nil {
@@ -301,23 +301,12 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	if err := s.SpaceMediaAdmissions.MarkCommitted(ctx, operationID, generation); err != nil {
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission commit is pending recovery")
 	}
-	if projections, ok := s.Calls.(interface {
-		SetSpaceLifecycle(context.Context, string, int64, bool) error
-	}); ok {
-		authority, ok := s.SpaceMediaAdmissions.(interface {
-			ProjectionGeneration(context.Context, uuid.UUID, string) (int64, error)
-		})
-		if !ok {
-			return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection authority unavailable")
-		}
-		lifecycle, err := authority.ProjectionGeneration(ctx, operationID, generation)
-		if err != nil {
-			return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection fenced")
-		}
-		if err := projections.SetSpaceLifecycle(ctx, current.SpaceID, lifecycle, true); err != nil {
-			return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection fenced")
-		}
+	ticket, err := s.prepareSpaceProjection(ctx, current.SpaceID, operationID, generation)
+	if err != nil {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection fenced")
 	}
+	current.SpaceProjectionTicket = ticket
+
 	current.SpaceLifecycleGeneration = roomHead.LifecycleGeneration
 	if created {
 		current, err = s.Calls.CreateCall(ctx, current)
@@ -327,7 +316,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	}
 	current, err = s.Calls.AdmitSpaceMediaParticipant(ctx, current.RoomID, voicestore.SpaceMediaParticipant{
 		AccountID: accountID, AdmissionOperationID: operationID.String(), ProfileID: profileID,
-		LifecycleGeneration: roomHead.LifecycleGeneration, RoomGeneration: roomHead.RoomGeneration, CreatedRoom: created,
+		ProjectionTicket: ticket, LifecycleGeneration: roomHead.LifecycleGeneration, RoomGeneration: roomHead.RoomGeneration, CreatedRoom: created,
 		Identity: identity, Generation: generation, Issued: issued,
 	}, maxParticipants)
 	if err != nil {
@@ -502,4 +491,25 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
 	}
 	return &callsv1.GetJoinTokenResponse{Jwt: jwt, LivekitUrl: s.SpaceTokens.LivekitURL(), ExpiresAt: timestamppb.New(expiresAt)}, nil
+}
+
+func (s *VoiceGRPC) prepareSpaceProjection(ctx context.Context, space string, operation uuid.UUID, generation string) (voicestore.SpaceProjectionTicket, error) {
+	if s.SpaceProjectionGates == nil {
+		return voicestore.SpaceProjectionTicket{}, voicestore.ErrSpaceMediaStaleGrant
+	}
+	authority, ok := s.SpaceMediaAdmissions.(interface {
+		ReadSpaceLifecycle(context.Context, string) (int64, bool, error)
+		AuthorizeSpaceProjection(context.Context, uuid.UUID, string, voicestore.SpaceProjectionTicket) (voicestore.SpaceProjectionTicket, error)
+	})
+	if !ok {
+		return voicestore.SpaceProjectionTicket{}, voicestore.ErrSpaceMediaStaleGrant
+	}
+	if err := s.SpaceProjectionGates.EnsureSpaceLifecycle(ctx, space, authority.ReadSpaceLifecycle); err != nil {
+		return voicestore.SpaceProjectionTicket{}, err
+	}
+	observed, err := s.SpaceProjectionGates.ReadReadySpaceGate(ctx, space)
+	if err != nil {
+		return voicestore.SpaceProjectionTicket{}, err
+	}
+	return authority.AuthorizeSpaceProjection(ctx, operation, generation, observed)
 }

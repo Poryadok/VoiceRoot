@@ -10,7 +10,8 @@ historically unknown credentials keep FROZEN/PURGED pending without a receipt.
 Other LIVE Spaces continue their ordinary admission behavior.
 
 Accepted decisions: TT BE-265 c3/c4 native barrier/capture/replay, superseded on
-provider expiry by c8-c10 BE265-P3-PROVIDER-COMPLETION-v2. Owning canon:
+provider expiry by c8-c10 BE265-P3-PROVIDER-COMPLETION-v2, and c13/c14
+BE265-REDIS-GATE-INCARNATION-v1. Owning canon:
 docs/microservices/voice-service.md P3 and Space media, and space-service.md P3
 activation. No provider verifier, Cloud migration, public deletion coordinator,
 deployment or acceptance authority is included.
@@ -25,16 +26,16 @@ Resource protocol acknowledged: no DEV/STAGING claim or listener/firewall change
 - [x] Atomically claim BE-265; reconcile accepted provider contradiction.
 - [x] Add regression for successful eject + refreshed credential: no receipt,
   same captured work on retry, no LIVE after pending FROZEN.
-- [ ] Install shared transaction-aware two-int Space advisory barrier, generation
+- [x] Install shared transaction-aware two-int Space advisory barrier, generation
   binding on all forward native writers and fixed durable grant authorization.
-- [ ] Capture immutable native and legacy exact targets under restrictive fence;
+- [x] Capture immutable native and legacy exact targets under restrictive fence;
   drain outside SQL locks, including absent Redis, retain unresolved work.
-- [ ] Fence delayed Redis projections with monotonic lifecycle watermarks;
-  missing watermark rejects projection until PostgreSQL-backed restoration.
-- [ ] Replace effect-success completion with explicit operation-bound provider
+- [x] Fence delayed Redis projections with a per-Space incarnation gate;
+  missing gate installs RESTORING before fresh PostgreSQL-backed restoration.
+- [x] Replace effect-success completion with explicit operation-bound provider
   proof predicate; prevent stale/expired requests and old unproven receipts
   from authorizing LIVE. Expose honest capability to future coordinator.
-- [ ] Real Linux PostgreSQL/Redis composition and barrier races; existing affected
+- [x] Real Linux PostgreSQL/Redis composition and barrier races; existing affected
   package tests/build. Independent concurrency review remains separate.
 - [ ] Update owning canon, collect immutable bundle/proof, accepted handoff121.
 
@@ -57,24 +58,30 @@ issuer/refresh/handshake paths. Current production has no such proof provider.
 ## Risks / continuation
 
 Current developer proof: immutable c08+regression RED (old callback minted receipt)
-then migrated draft GREEN real Linux PostgreSQL. Current-native/empty legacy/
-absent Redis composition and fixed grant replay/freeze checks PASS. Six actual PG
-wait-ordered forward-writer races PASS (claim/prepare/fence/commit/projection/repair).
-Affected store/grpc/livekit short checks PASS. Full native PG run exposed two old
-test wait markers expecting the inner room lock; the second writer now correctly
-waits on the outer Space barrier. Updated markers plus cleanup rollback are under
-targeted rerun; do not call the earlier full run PASS.
+then migrated draft GREEN real Linux PostgreSQL. Final3 immutable overlay35616f6a
+full PG P3 PASS40.919s and native PASS144.335s: JSON73 test/subtest PASS, zero SKIP
+or FAIL. This includes current-native/empty legacy/absent Redis composition,
+transactional ordered LEFTs, fixed grant replay/freeze and six wait-ordered native
+writer races. Voice build and affected vet PASS. Final4 overlayf4ebcc14 adds exact
+generic Add target/owned-room checks; store realRedis short PASS0.309s, grpcsvc
+short PASS, Voice build and store/grpcsvc vet PASS. Earlier full short5packages
+PASS; P3/native source unchanged by the final store-only guard. Historical failed
+marker/domain-error runs and invalid tar are excluded from success evidence.
 
-Named unresolved concurrency risk for Astra166: PG authorization followed by
-SetSpaceLifecycle may bootstrap a missing LIVE0 Redis watermark from a paused
-pre-freeze authorization after Redis loss. Current draft therefore is NOT ready
-for integration. Proposed nonce-before-PG protocol is in TT continuation; no
-strong completion is claimed. Continue independent BE012 dependency integration
-and exact cleanup/tests while bounded review is scheduled by queen.
+The c11 Redis-loss concurrency request is resolved by Astra166 c13/c14. One
+per-Space gate holds random E, RESTORING/READY, generation and LIVE/DENY. Install
+RESTORING(E) before fresh PG read and CAS exactly E to READY. Dispatch reads E
+before fresh native authorization, then checks E/generation/native tuple atomically.
+Generic state writers are metadata-only; cleanup removes only exact owned indexes.
+Real Redis gate race/negative rollback fixtures passed on the earlier overlay.
+Same-E stale snapshot/failover is explicitly outside nonce detection: actual
+recovery must fence writes/old endpoints and rotate gates before exposure. There
+is no infrastructure qualification claim. Independent exact-head review remains.
 
 BE012 native dependency a80f649cb supplies migration013 and transactional
 spacemedia.BeginPartyRoomClose. Replace direct P3 CLOSING/ACTIVE->REVOKING writes
-with its room-first sorted LEFT/counter/outbox helper in the caller transaction.
+with its room-first sorted LEFT/counter/outbox helper in the caller transaction
+(wired in current source; normal merge resolved and awaiting final commit).
 147's exact helper test PASS9.75s; full combined source requires normal merge and
 fresh affected proof, never cherry-pick only the helper. 145 withdrew proposed014
 and uses015; BE265 actual014 is reserved. No deployment/activation follows.
@@ -83,4 +90,11 @@ Migration number and BE106 identity hunks require actual reservation reconciliat
 with actor1 (message sent, no wait dependency). Historical receipts are unproven;
 do not rewrite immutable bytes. Full provider qualification and actual deployment
 remain OPEN even after internal checks. Native Windows tests prohibited; use
-owned Linux Docker, no host listeners. No implementation or runtime PASS yet.
+owned Linux Docker, no host listeners. No full-task/stand/provider acceptance PASS.
+
+Graphify AST update was attempted in WT39. Its own Python45116 (verified command
+and parent21484) ran approximately10minutes with no output; bounded work was
+stopped only for this owned process, wrapper/session terminal1. No graph update
+PASS is claimed and no other Graphify process was stopped. CodeGraph frozen index
+was qualified by actual source; two bounded read-only calls were terminated after
+no response. Final source hashes and runtime tests are the evidence authority.

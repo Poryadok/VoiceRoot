@@ -911,11 +911,24 @@ sorted account/profile identity locks. Forward admission/commit/projection/grant
 authorization checks its saved lifecycle generation; cleanup remains permitted
 for exact captured owners. The restrictive transaction seals typed native/head
 and legacy targets before changing native states. Retries drain saved identities
-even without Redis. Redis projection writers require a monotonic lifecycle
-watermark; missing keys fail closed until PostgreSQL-backed restoration. Existing
+even without Redis. Redis projection writers require one per-Space gate containing
+a random incarnation, RESTORING/READY phase, lifecycle generation and LIVE/DENY.
+Missing gates install RESTORING with a fresh incarnation before a fresh PostgreSQL
+barrier read; publication compares that exact incarnation. Dispatch reads READY
+before fresh native authorization, then atomically checks the same incarnation,
+generation and exact native tuple. A delayed callback cannot acquire a replacement
+incarnation or initialize LIVE. Metadata and cleanup cannot recreate active indexes;
+exact cleanup preserves another incarnation's owned pointers. Existing
 COMMITTED journal intent covers projection dispatch before its applied marker.
 Grant authorization saves exact claims/provider binding and absolute Voice expiry
 before signing; retry never extends that expiry. No expiry bounds SFU refresh.
+
+This gate covers deletion, eviction, partial loss, flush and process retry on one
+authoritative Redis history. Restoring an old snapshot with the same READY
+incarnation, asynchronous failover losing an acknowledged DENY, or a writable old
+endpoint requires infrastructure recovery to fence writes and rotate/rebuild gates
+from PostgreSQL before exposure. The nonce does not itself prove that operational
+prerequisite; current qualification must retain this boundary.
 
 `Service.RetirementCapability` and the self-hosted adapter declare `EJECT_ONLY`
 (missing adapter/config is `UNKNOWN`). There is no production retirement proof

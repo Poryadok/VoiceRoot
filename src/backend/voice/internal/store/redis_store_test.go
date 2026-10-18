@@ -40,7 +40,7 @@ func TestRedisCallStore_PersistsGroupVoiceLifecycle(t *testing.T) {
 	_, err = persisted.GetActiveCall(ctx, "owner")
 	require.NoError(t, err)
 
-	_, err = persisted.AddParticipant(ctx, "room-group", "member", MaxGroupVoiceParticipants)
+	_, err = addLifecycleParticipantForTest(ctx, persisted, "room-group", "member", MaxGroupVoiceParticipants)
 	require.NoError(t, err)
 	muted := true
 	updated, state, err := persisted.UpdateVoiceState(ctx, "room-group", "member", VoiceStatePatch{IsMuted: &muted})
@@ -103,7 +103,7 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 	require.ErrorIs(t, err, ErrNotFound, "provisioning must not reserve a roster profile")
 	_, err = client.Get(ctx, store.activeChatKey(match.ChatID)).Result()
 	require.ErrorIs(t, err, redis.Nil, "a MatchSquad projection must never claim ordinary Chat discovery")
-	match, err = store.AddParticipant(ctx, match.RoomID, "match-member", MaxGroupVoiceParticipants)
+	match, err = addLifecycleParticipantForTest(ctx, store, match.RoomID, "match-member", MaxGroupVoiceParticipants)
 	require.NoError(t, err, "only the owned current-membership adapter adds a participant")
 	left, err := store.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-id", "match-member")
 	require.NoError(t, err)
@@ -342,11 +342,11 @@ func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing
 	_, err = store.RaiseSpaceMediaEpochFloor(ctx, spaceID, RolePolicyEpoch, 7)
 	require.NoError(t, err)
 	stale := testSpaceMediaParticipant(profileID, "identity-1", "generation-1", 3, 7)
-	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, stale, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, roomID, stale, MaxVoiceRoomParticipants)
 	require.ErrorIs(t, err, ErrSpaceMediaStaleGrant)
 
 	first := testSpaceMediaParticipant(profileID, "identity-1", "generation-1", 4, 7)
-	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, first, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, roomID, first, MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	require.Equal(t, "space-call", client.Get(ctx, store.activeKey(profileID)).Val())
 
@@ -362,7 +362,7 @@ func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing
 	require.True(t, changed)
 
 	second := testSpaceMediaParticipant(profileID, "identity-2", "generation-2", 4, 7)
-	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, second, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, roomID, second, MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	call, changed, err = store.BeginSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
 	require.NoError(t, err)
@@ -396,11 +396,11 @@ func TestRedisCallStore_SpaceAdmissionHasOneActiveRoomIncarnation(t *testing.T) 
 	}
 	first := testSpaceMediaParticipant("account-a", "identity-a", "generation-a", 1, 1)
 	first.AccountID, first.AdmissionOperationID = "account-a", "operation-a"
-	_, err := store.AdmitSpaceMediaParticipant(ctx, "pending-first", first, MaxVoiceRoomParticipants)
+	_, err := admitLifecycleParticipantForTest(ctx, store, "pending-first", first, MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	second := testSpaceMediaParticipant("account-b", "identity-b", "generation-b", 1, 1)
 	second.AccountID, second.AdmissionOperationID = "account-b", "operation-b"
-	_, err = store.AdmitSpaceMediaParticipant(ctx, "pending-second", second, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, "pending-second", second, MaxVoiceRoomParticipants)
 	require.ErrorIs(t, err, ErrActiveCall, "WATCH must reject a room index owned by another incarnation")
 	require.Equal(t, "pending-first", client.Get(ctx, store.activeVoiceRoomKey("voice-room-single")).Val())
 	loser, err := store.GetCall(ctx, "pending-second")
@@ -573,7 +573,7 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 			start, outcomes := make(chan struct{}), make(chan outcome, 2)
 			go func() {
 				<-start
-				_, err := store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
+				_, err := moveLifecycleParticipantForTest(ctx, store, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
 				outcomes <- outcome{move: true, err: err}
 			}()
 			go func() {
@@ -583,7 +583,7 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 					outcomes <- outcome{err: err}
 					return
 				}
-				_, err := store.AddParticipant(ctx, source.RoomID, "independent-joiner", MaxVoiceRoomParticipants)
+				_, err := addLifecycleParticipantForTest(ctx, store, source.RoomID, "independent-joiner", MaxVoiceRoomParticipants)
 				outcomes <- outcome{err: err}
 			}()
 			close(start)
@@ -661,7 +661,7 @@ func TestRedisCallStore_CompetingMovesChooseOneDestination(t *testing.T) {
 		i, dest := i, dest
 		go func() {
 			<-start
-			_, err := store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "op-" + string(rune('a'+i)), FromVoiceRoomID: sourceID, ToVoiceRoomID: dest, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call-" + string(rune('a'+i)), Now: time.Unix(1_700_000_000, 0).UTC()})
+			_, err := moveLifecycleParticipantForTest(ctx, store, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "op-" + string(rune('a'+i)), FromVoiceRoomID: sourceID, ToVoiceRoomID: dest, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call-" + string(rune('a'+i)), Now: time.Unix(1_700_000_000, 0).UTC()})
 			errs <- err
 		}()
 	}
@@ -764,7 +764,7 @@ func TestRedisCallStore_MoveRejectsStaleSourceIndexWithoutMutatingRedisProjectio
 			keys := []string{store.callKey("source-call"), store.callKey(request.DestinationRoomID), store.activeVoiceRoomKey(request.FromVoiceRoomID), store.activeVoiceRoomKey(request.ToVoiceRoomID), store.activeKey(request.ParticipantProfileID), store.moveOperationKey(request.ActorProfileID, request.OperationID)}
 			before := redisRawKeySnapshot(t, ctx, client, keys)
 
-			_, err := store.MoveVoiceRoomParticipant(ctx, request)
+			_, err := moveLifecycleParticipantForTest(ctx, store, request)
 			require.ErrorIs(t, err, ErrInvalidState, "a stale source projection is an obsolete move state, never a successful move or discoverability response")
 			require.Equal(t, before, redisRawKeySnapshot(t, ctx, client, keys), "stale source rejection must preserve source/destination documents, both room indices, active session and ledger bytes")
 		})
@@ -797,10 +797,10 @@ func TestRedisCallStore_MovePersistsAtomicSnapshotAndReplayAcrossFreshInstance(t
 	}
 	_, err := createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: request.FromVoiceRoomID, SpaceID: request.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: request.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
-	_, err = store.AddParticipant(ctx, "source-call", "anchor", MaxVoiceRoomParticipants)
+	_, err = addLifecycleParticipantForTest(ctx, store, "source-call", "anchor", MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 
-	first, err := store.MoveVoiceRoomParticipant(ctx, request)
+	first, err := moveLifecycleParticipantForTest(ctx, store, request)
 	require.NoError(t, err)
 	require.False(t, first.Replayed)
 	snapshot := redisMoveSnapshot(t, ctx, client, store, request)
@@ -870,9 +870,9 @@ func TestRedisCallStore_MoveAndPublicJoinUseDeterministicLegalOrders(t *testing.
 		ctx := t.Context()
 		store, client, request := newFixture(t, "voice-move-before-public-join:")
 
-		_, err := store.MoveVoiceRoomParticipant(ctx, request)
+		_, err := moveLifecycleParticipantForTest(ctx, store, request)
 		require.NoError(t, err)
-		_, err = store.AddParticipant(ctx, sourceCall, joiner, MaxVoiceRoomParticipants)
+		_, err = addLifecycleParticipantForTest(ctx, store, sourceCall, joiner, MaxVoiceRoomParticipants)
 		require.ErrorIs(t, err, ErrInvalidState)
 
 		source, err := store.GetCall(ctx, sourceCall)
@@ -911,10 +911,10 @@ func TestRedisCallStore_MoveAndPublicJoinUseDeterministicLegalOrders(t *testing.
 			if attempt != 0 {
 				return nil
 			}
-			_, err := secondStore.AddParticipant(ctx, sourceCall, joiner, MaxVoiceRoomParticipants)
+			_, err := addLifecycleParticipantForTest(ctx, secondStore, sourceCall, joiner, MaxVoiceRoomParticipants)
 			return err
 		}
-		_, err := store.MoveVoiceRoomParticipant(ctx, request)
+		_, err := moveLifecycleParticipantForTest(ctx, store, request)
 		require.NoError(t, err)
 		require.Equal(t, 2, attempts, "the committed add must invalidate the first WATCH and force a move retry")
 
@@ -963,7 +963,7 @@ func TestRedisCallStore_MoveWatchInvalidationRetriesThenExhaustsWithoutPartialSt
 		}
 		return second.Set(ctx, store.callKey("source-call"), bytes, 24*time.Hour).Err()
 	}
-	_, err = store.MoveVoiceRoomParticipant(ctx, request)
+	_, err = moveLifecycleParticipantForTest(ctx, store, request)
 	require.NoError(t, err)
 	require.Equal(t, 2, invalidations, "the first real WATCH invalidation must retry before committing")
 
@@ -984,7 +984,7 @@ func TestRedisCallStore_MoveWatchInvalidationRetriesThenExhaustsWithoutPartialSt
 		}
 		return second.Set(ctx, store.callKey("source-call"), bytes, 24*time.Hour).Err()
 	}
-	_, err = store.MoveVoiceRoomParticipant(ctx, request)
+	_, err = moveLifecycleParticipantForTest(ctx, store, request)
 	require.ErrorIs(t, err, ErrMoveContention)
 	require.Equal(t, before, redisRawKeySnapshot(t, ctx, client, keys))
 }

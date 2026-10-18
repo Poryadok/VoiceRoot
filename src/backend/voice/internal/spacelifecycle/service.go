@@ -3,8 +3,10 @@ package spacelifecycle
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/voice/internal/spacebarrier"
 
 	commonv1 "voice.app/voice/common/v1"
 )
@@ -56,7 +58,10 @@ func (s *Service) ResumePending(ctx context.Context) error {
 			failures = append(failures, err)
 			continue
 		}
-		if err := s.Effects.ResumeFrozen(ctx, wrapper.GetFence()); err != nil {
+		_, err := s.Store.ApplyFence(ctx, wrapper.GetFence(), func(ctx context.Context, req *commonv1.SpaceLifecycleFenceRequest) error {
+			return s.Effects.ResumeFrozen(ctx, req)
+		})
+		if err != nil && !errors.Is(err, ErrRetirementUnsupported) {
 			failures = append(failures, err)
 		}
 	}
@@ -78,8 +83,15 @@ func (s *Service) ApplySpaceLifecycleFence(ctx context.Context, req *commonv1.Sp
 		switch frozen.GetDesiredState() {
 		case commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN:
 			return s.Effects.ResumeFrozen(ctx, frozen)
-		case commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_LIVE,
-			commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_PURGE_DECIDED:
+		case commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_LIVE:
+			gates, ok := s.Effects.ProjectionFence.(interface {
+				ReinitializeSpaceLifecycle(context.Context, string, func(context.Context, string) (int64, bool, error)) error
+			})
+			if !ok {
+				return ErrUnavailable
+			}
+			return gates.ReinitializeSpaceLifecycle(ctx, frozen.SpaceId, s.Store.readGateState)
+		case commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_PURGE_DECIDED:
 			return nil
 		default:
 			return ErrInvalidRequest
@@ -94,4 +106,29 @@ func (s *Service) PurgeSpace(ctx context.Context, req *commonv1.SpacePurgeReques
 	return s.Store.PurgeSpace(ctx, req, func(ctx context.Context, purge *commonv1.SpacePurgeRequest) error {
 		return s.Effects.PurgeSpace(ctx, purge.GetSpaceId())
 	})
+}
+
+func (s *PostgresStore) readGateState(ctx context.Context, space string) (int64, bool, error) {
+	if err := s.CheckSchema(ctx); err != nil {
+		return 0, false, err
+	}
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := spacebarrier.Lock(ctx, tx, space); err != nil {
+		return 0, false, err
+	}
+	var generation int64
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT generation,state FROM voice_space_lifecycle_fence_heads WHERE space_id=$1`, space).Scan(&generation, &state); err != nil {
+		return 0, false, err
+	}
+	if state == "LIVE" {
+		if _, err := spacebarrier.Live(ctx, tx, space); err != nil {
+			return 0, false, err
+		}
+	}
+	return generation, state == "LIVE", tx.Commit(ctx)
 }

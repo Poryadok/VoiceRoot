@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	ErrInvalidRequest = errors.New("invalid Space lifecycle request")
-	ErrConflict       = errors.New("space lifecycle request conflicts with durable state")
-	ErrUnavailable    = errors.New("space lifecycle store unavailable")
-	ErrSpaceFrozen    = errors.New("space voice admission is fenced")
+	ErrInvalidRequest        = errors.New("invalid Space lifecycle request")
+	ErrConflict              = errors.New("space lifecycle request conflicts with durable state")
+	ErrUnavailable           = errors.New("space lifecycle store unavailable")
+	ErrSpaceFrozen           = errors.New("space voice admission is fenced")
+	ErrRetirementUnsupported = errors.Join(ErrUnavailable, errors.New("self-hosted provider is EJECT_ONLY; credential retirement remains unproven"))
 )
 
 func validateFenceRequest(req *commonv1.SpaceLifecycleFenceRequest) error {

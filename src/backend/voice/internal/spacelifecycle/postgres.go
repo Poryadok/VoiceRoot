@@ -17,9 +17,18 @@ import (
 	"voice/backend/voice/internal/spacebarrier"
 )
 
-type PostgresStore struct{ pool *pgxpool.Pool }
+type PostgresStore struct {
+	pool            *pgxpool.Pool
+	CloseNativeRoom func(context.Context, pgx.Tx, string, uint64) error
+}
 
-func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore { return &PostgresStore{pool: pool} }
+func NewPostgresStore(pool *pgxpool.Pool, closeRoom ...func(context.Context, pgx.Tx, string, uint64) error) *PostgresStore {
+	s := &PostgresStore{pool: pool}
+	if len(closeRoom) > 0 {
+		s.CloseNativeRoom = closeRoom[0]
+	}
+	return s
+}
 
 type FenceEffect func(context.Context, *commonv1.SpaceLifecycleFenceRequest) error
 type PurgeEffect func(context.Context, *commonv1.SpacePurgeRequest) error
@@ -108,7 +117,6 @@ func (s *PostgresStore) ApplyFence(ctx context.Context, req *commonv1.SpaceLifec
 		appliedState := state
 		if stale {
 			return nil, ErrConflict
-			appliedState = currentState
 		} else {
 			if currentState == "FROZEN" {
 				var proven bool
@@ -137,15 +145,15 @@ VALUES($1,$2,$3,$4,$5,$6,$7)`, spaceID, int64(req.GetGeneration()), operationID,
 		}
 		oldReceiptID = receiptID
 		if state == "FROZEN" {
-			if err := capture(ctx, tx, req, requestHash); err != nil {
+			if err := capture(ctx, tx, req, requestHash, s.CloseNativeRoom); err != nil {
 				return nil, err
 			}
 		}
-		if stale {
-			if err := tx.Commit(ctx); err != nil {
-				return nil, err
-			}
-			return s.completeFence(ctx, req, requestHash, oldReceiptID, appliedState)
+	}
+	if state == "FROZEN" {
+		var sealed bool
+		if err := tx.QueryRow(ctx, `SELECT coverage_sealed FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2`, spaceID, int64(req.Generation)).Scan(&sealed); err != nil || !sealed {
+			return nil, ErrUnavailable
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -160,15 +168,39 @@ VALUES($1,$2,$3,$4,$5,$6,$7)`, spaceID, int64(req.GetGeneration()), operationID,
 	// Local effect success is not a provider retirement proof. The configured
 	// self-hosted adapter cannot reject refreshed credentials. Keep intent pending.
 	if state == "FROZEN" {
-		return nil, ErrUnavailable
+		return nil, ErrRetirementUnsupported
 	}
 	return s.completeFence(ctx, req, requestHash, oldReceiptID, state)
 }
 
 func (s *PostgresStore) completeFence(ctx context.Context, req *commonv1.SpaceLifecycleFenceRequest, requestHash []byte, receiptID uuid.UUID, state string) (*commonv1.SpaceLifecycleFenceReceipt, error) {
 	spaceID, _ := uuid.Parse(req.GetSpaceId())
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := spacebarrier.Lock(ctx, tx, req.SpaceId); err != nil {
+		return nil, err
+	}
+	var bound bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_space_lifecycle_fence_heads h JOIN voice_space_lifecycle_fence_receipts r ON r.space_id=h.space_id AND r.generation=h.generation WHERE h.space_id=$1 AND h.generation=$2 AND h.deletion_operation_id=$3 AND h.state=$4 AND h.manifest_id=$5 AND h.manifest_sha256=$6 AND h.manifest_item_count=$7 AND r.receipt_id=$8 AND r.request_sha256=$9)`, spaceID, int64(req.Generation), req.DeletionOperationId, state, req.Manifest.ManifestId, req.Manifest.ManifestSha256, req.Manifest.ItemCount, receiptID, requestHash).Scan(&bound); err != nil || !bound {
+		return nil, ErrUnavailable
+	}
+	if state == "FROZEN" {
+		var proven bool
+		if err := tx.QueryRow(ctx, `SELECT coverage_sealed AND retirement_proven AND NOT EXISTS(SELECT 1 FROM voice_space_lifecycle_targets t WHERE t.space_id=r.space_id AND t.generation=r.generation AND t.cleanup_completed_at IS NULL) FROM voice_space_lifecycle_fence_receipts r WHERE space_id=$1 AND generation=$2`, spaceID, int64(req.Generation)).Scan(&proven); err != nil || !proven {
+			return nil, ErrUnavailable
+		}
+	} else {
+		var proven bool
+		if err := tx.QueryRow(ctx, `SELECT coverage_sealed AND retirement_proven AND receipt_bytes IS NOT NULL FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2 AND applied_state='FROZEN'`, spaceID, int64(req.Generation)-1).Scan(&proven); err != nil || !proven {
+			return nil, ErrUnavailable
+		}
+	}
+
 	var appliedAt time.Time
-	if err := s.pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&appliedAt); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&appliedAt); err != nil {
 		return nil, err
 	}
 	receipt := &commonv1.SpaceLifecycleFenceReceipt{
@@ -182,17 +214,17 @@ func (s *PostgresStore) completeFence(ctx context.Context, req *commonv1.SpaceLi
 		return nil, err
 	}
 	receiptHash := domainHash("voice.space-lifecycle.receipt.v1\x00", receiptBytes)
-	tag, err := s.pool.Exec(ctx, `UPDATE voice_space_lifecycle_fence_receipts SET receipt_bytes=$4,receipt_sha256=$5,applied_at=$6
+	tag, err := tx.Exec(ctx, `UPDATE voice_space_lifecycle_fence_receipts SET receipt_bytes=$4,receipt_sha256=$5,applied_at=$6,coverage_sealed=TRUE,retirement_proven=TRUE
 WHERE space_id=$1 AND generation=$2 AND receipt_id=$3 AND receipt_bytes IS NULL`, spaceID, int64(req.GetGeneration()), receiptID, receiptBytes, receiptHash, appliedAt.UTC())
 	if err != nil {
 		return nil, err
 	}
 	if tag.RowsAffected() == 1 {
-		return receipt, nil
+		return receipt, tx.Commit(ctx)
 	}
 	var saved []byte
 	var savedHash []byte
-	if err := s.pool.QueryRow(ctx, `SELECT receipt_bytes,receipt_sha256 FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2 AND receipt_id=$3`, spaceID, int64(req.GetGeneration()), receiptID).Scan(&saved, &savedHash); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT receipt_bytes,receipt_sha256 FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2 AND receipt_id=$3`, spaceID, int64(req.GetGeneration()), receiptID).Scan(&saved, &savedHash); err != nil {
 		return nil, err
 	}
 	if !validReceiptDigest(saved, savedHash, "voice.space-lifecycle.receipt.v1\x00") {
@@ -202,7 +234,7 @@ WHERE space_id=$1 AND generation=$2 AND receipt_id=$3 AND receipt_bytes IS NULL`
 	if err := proto.Unmarshal(saved, &stored); err != nil {
 		return nil, ErrUnavailable
 	}
-	return &stored, nil
+	return &stored, tx.Commit(ctx)
 }
 
 // PurgeSpace requires the irreversible durable PURGE_DECIDED fence. It stores
@@ -297,8 +329,20 @@ VALUES($1,$2,$3,$4,$5,$6)`, spaceID, generation, operationID, requestBytes, requ
 }
 
 func (s *PostgresStore) completePurge(ctx context.Context, req *commonv1.SpacePurgeRequest, requestHash []byte, receiptID uuid.UUID) (*commonv1.SpacePurgeReceipt, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := spacebarrier.Lock(ctx, tx, req.SpaceId); err != nil {
+		return nil, err
+	}
+	var proven bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_space_lifecycle_fence_heads h JOIN voice_space_lifecycle_fence_receipts r ON r.space_id=h.space_id AND r.generation=h.generation-1 WHERE h.space_id=$1 AND h.generation=$2 AND h.state='PURGE_DECIDED' AND h.deletion_operation_id=$3 AND h.manifest_id=$4 AND h.manifest_sha256=$5 AND h.manifest_item_count=$6 AND r.applied_state='FROZEN' AND r.coverage_sealed AND r.retirement_proven AND r.receipt_bytes IS NOT NULL AND NOT EXISTS(SELECT 1 FROM voice_space_lifecycle_targets t WHERE t.space_id=r.space_id AND t.generation=r.generation AND t.cleanup_completed_at IS NULL))`, req.SpaceId, int64(req.Generation), req.DeletionOperationId, req.Manifest.ManifestId, req.Manifest.ManifestSha256, req.Manifest.ItemCount).Scan(&proven); err != nil || !proven {
+		return nil, ErrUnavailable
+	}
 	var completedAt time.Time
-	if err := s.pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&completedAt); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&completedAt); err != nil {
 		return nil, err
 	}
 	completedAt = completedAt.UTC()
@@ -314,17 +358,17 @@ func (s *PostgresStore) completePurge(ctx context.Context, req *commonv1.SpacePu
 		return nil, err
 	}
 	receiptHash := domainHash("voice.space-purge.receipt.v1\x00", receiptBytes)
-	tag, err := s.pool.Exec(ctx, `UPDATE voice_space_lifecycle_purge_receipts SET receipt_bytes=$4,receipt_sha256=$5,completed_at=$6
+	tag, err := tx.Exec(ctx, `UPDATE voice_space_lifecycle_purge_receipts SET receipt_bytes=$4,receipt_sha256=$5,completed_at=$6
 WHERE space_id=$1 AND generation=$2 AND receipt_id=$3 AND receipt_bytes IS NULL`, uuid.MustParse(req.GetSpaceId()), int64(req.GetGeneration()), receiptID, receiptBytes, receiptHash, completedAt)
 	if err != nil {
 		return nil, err
 	}
 	if tag.RowsAffected() == 1 {
-		return receipt, nil
+		return receipt, tx.Commit(ctx)
 	}
 	var saved []byte
 	var savedHash []byte
-	if err := s.pool.QueryRow(ctx, `SELECT receipt_bytes,receipt_sha256 FROM voice_space_lifecycle_purge_receipts WHERE space_id=$1 AND generation=$2 AND receipt_id=$3`, uuid.MustParse(req.GetSpaceId()), int64(req.GetGeneration()), receiptID).Scan(&saved, &savedHash); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT receipt_bytes,receipt_sha256 FROM voice_space_lifecycle_purge_receipts WHERE space_id=$1 AND generation=$2 AND receipt_id=$3`, uuid.MustParse(req.GetSpaceId()), int64(req.GetGeneration()), receiptID).Scan(&saved, &savedHash); err != nil {
 		return nil, err
 	}
 	if !validReceiptDigest(saved, savedHash, "voice.space-purge.receipt.v1\x00") {
@@ -334,7 +378,7 @@ WHERE space_id=$1 AND generation=$2 AND receipt_id=$3 AND receipt_bytes IS NULL`
 	if err := proto.Unmarshal(saved, &stored); err != nil {
 		return nil, ErrUnavailable
 	}
-	return &stored, nil
+	return &stored, tx.Commit(ctx)
 }
 
 // ExpireReceipts removes full request/receipt evidence after its 30-day replay

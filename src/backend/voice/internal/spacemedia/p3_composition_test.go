@@ -7,6 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"os"
 	"testing"
 	"time"
 	commonv1 "voice.app/voice/common/v1"
@@ -35,16 +36,15 @@ func TestP3CurrentNativeCompositionWithoutLegacyOrRedis(t *testing.T) {
 	require.NoError(t, admissions.Fence(ctx, a))
 	require.NoError(t, admissions.MarkCommitted(ctx, a.OperationID, a.Generation))
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, a.OperationID, a.Generation))
-	server := miniredis.RunT(t)
-	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
-	calls := store.NewRedisCallStore(client, "p3:")
+	calls, client := newP3Redis(t)
+	_ = client
+
 	media := &p3Media{}
-	coordinator := &Coordinator{Calls: calls, Store: calls, Admissions: admissions, Media: media}
+	coordinator := &Coordinator{ProjectionGates: calls, Calls: calls, Store: calls, Admissions: admissions, Media: media}
 	effects := spacelifecycle.NewEffects(pool, media)
 	effects.NativeDrain = coordinator
 	effects.ProjectionFence = calls
-	svc := &spacelifecycle.Service{Store: spacelifecycle.NewPostgresStore(pool), Effects: effects}
+	svc := &spacelifecycle.Service{Store: spacelifecycle.NewPostgresStore(pool, BeginPartyRoomClose), Effects: effects}
 	frozen := &commonv1.SpaceLifecycleFenceRequest{ProtocolVersion: 1, SpaceId: a.SpaceID.String(), DeletionOperationId: uuid.NewString(), Generation: 1, DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, Manifest: &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ManifestSha256: make([]byte, 32)}}
 	receipt, err := svc.ApplySpaceLifecycleFence(ctx, frozen)
 	require.ErrorIs(t, err, spacelifecycle.ErrUnavailable)
@@ -56,12 +56,21 @@ func TestP3CurrentNativeCompositionWithoutLegacyOrRedis(t *testing.T) {
 	var state string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT participant_state FROM voice_space_media_admissions WHERE operation_id=$1`, a.OperationID).Scan(&state))
 	require.Equal(t, "ENDED", state)
+	var rosterVersion int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT roster_version FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, a.VoiceRoomID, int64(a.RoomGeneration)).Scan(&rosterVersion))
+	require.Equal(t, int64(2), rosterVersion, "P3 capture consumes the native A3 LEFT/counter hook")
+	var departures int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_roster_outbox WHERE room_id=$1 AND change='LEFT'`, a.RoomID).Scan(&departures))
+	require.Equal(t, 1, departures)
 	require.Error(t, admissions.MarkCommitted(ctx, a.OperationID, a.Generation))
 	require.Error(t, admissions.MarkProjectionApplied(ctx, a.OperationID, a.Generation))
 	_, err = admissions.ProjectionGeneration(ctx, a.OperationID, a.Generation)
 	require.Error(t, err)
 	require.NoError(t, svc.ResumePending(ctx))
 	require.Len(t, media.removed, 2, "restart resumes same saved target without discovering a newer participant")
+	var replayDepartures int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_roster_outbox WHERE room_id=$1 AND change='LEFT'`, a.RoomID).Scan(&replayDepartures))
+	require.Equal(t, departures, replayDepartures, "pending retry does not emit another native LEFT")
 	var remaining int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_space_lifecycle_targets WHERE space_id=$1`, a.SpaceID).Scan(&remaining))
 	require.Equal(t, targets, remaining)
@@ -100,11 +109,22 @@ func TestSpaceGrantReservationFixedExpiryAndFreezeBarrier(t *testing.T) {
 	require.True(t, issued.Equal(reissued))
 	require.True(t, expires.Equal(reexpires))
 	frozen := &commonv1.SpaceLifecycleFenceRequest{ProtocolVersion: 1, SpaceId: a.SpaceID.String(), DeletionOperationId: uuid.NewString(), Generation: 1, DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, Manifest: &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ManifestSha256: make([]byte, 32)}}
-	_, err = spacelifecycle.NewPostgresStore(pool).ApplyFence(ctx, frozen, func(context.Context, *commonv1.SpaceLifecycleFenceRequest) error { return nil })
+	_, err = spacelifecycle.NewPostgresStore(pool, BeginPartyRoomClose).ApplyFence(ctx, frozen, func(context.Context, *commonv1.SpaceLifecycleFenceRequest) error { return nil })
 	require.Error(t, err)
 	_, _, err = s.ReserveSpaceGrant(ctx, uuid.New(), a.OperationID, a.Generation, grant)
 	require.Error(t, err)
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_space_media_grants WHERE operation_id=$1`, a.OperationID).Scan(&count))
 	require.Equal(t, 1, count, "no new grant authorized after freeze")
+}
+
+func newP3Redis(t *testing.T) (*store.RedisCallStore, *redis.Client) {
+	addr := os.Getenv("VOICE_GATE_TEST_REDIS_ADDR")
+	if addr == "" {
+		addr = miniredis.RunT(t).Addr()
+	}
+	client := redis.NewClient(&redis.Options{Addr: addr})
+	t.Cleanup(func() { _ = client.Close() })
+	require.NoError(t, client.FlushDB(t.Context()).Err())
+	return store.NewRedisCallStore(client, "p3:"), client
 }

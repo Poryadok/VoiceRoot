@@ -36,6 +36,12 @@ func Live(ctx context.Context, tx pgx.Tx, space string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if state == "LIVE" {
+		var proven bool
+		if err := tx.QueryRow(ctx, `SELECT coverage_sealed AND retirement_proven AND receipt_bytes IS NOT NULL FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2 AND applied_state='FROZEN'`, space, generation-1).Scan(&proven); err != nil || !proven {
+			return 0, ErrRestricted
+		}
+	}
 	if state != "LIVE" {
 		return 0, ErrRestricted
 	}
