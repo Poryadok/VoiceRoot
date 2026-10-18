@@ -98,7 +98,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 ### Runtime config (magic numbers)
 
-- [ ] **BOT_WEBHOOK_* retry/backoff** — hardcoded retry/backoff webhook delivery → env.
+- [ ] **BOT_WEBHOOK_* retry/backoff** — HTTP interaction/autocomplete delivery already reads `BOT_WEBHOOK_DELIVERY_ATTEMPTS` and `BOT_WEBHOOK_RETRY_BACKOFF_MS`; retain exact-version configuration regression proof and integration review before closing. Durable outbox lease budgets are separate.
 - [ ] **NATS_* connect/reconnect** — Realtime: connect/reconnect timeouts в конфиг.
 - [ ] **pgxpool max conns** — лимиты пула Postgres → env/ConfigMap.
 - [ ] **BOT_RATE_LIMIT_* / Gateway rate-limit JSON** — staging defaults в ConfigMap (сейчас только dev bypass).
