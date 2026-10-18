@@ -160,6 +160,246 @@ def matchmaking_secret_mount_snapshot():
     return deployment
 
 
+def chat_post_prefix_snapshot():
+    """Secret-free API shape captured after the reviewed Chat overlay prefix."""
+    deployment = captured_deployment(
+        "voice-chat", "chat",
+        overlay.EXPECTED_OBJECT_UIDS[("Deployment", "voice-chat")], "3405744")
+    pod_spec = deployment["spec"]["template"]["spec"]
+    pod_spec["securityContext"] = {}
+    pod_spec["containers"][0]["image"] = overlay.QUALIFIED_IMAGES["voice-chat"]
+    pod_spec["containers"][0]["env"] = [
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN", "value": ":9092"},
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE",
+         "value": "/etc/voice/match-squad/server/tls.crt"},
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE",
+         "value": "/etc/voice/match-squad/server/tls.key"},
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE",
+         "value": "/etc/voice/match-squad/ca/ca.crt"},
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL",
+         "value": "https://voice-matchmaking.voice-dev.svc:8443/internal/v1/principal/jwks.json"},
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE",
+         "value": "/etc/voice/principal-jwks/ca/ca.crt"},
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR",
+         "valueFrom": {"configMapKeyRef": {"name": "voice-app-config", "key": "REDIS_ADDR"}}},
+        {"name": "CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD",
+         "valueFrom": {"secretKeyRef": {"name": "voice-match-squad-replay", "key": "password"}}},
+    ]
+    pod_spec["containers"][0]["ports"] = [
+        {"name": "match-principal", "containerPort": 9092}]
+    pod_spec["containers"][0]["volumeMounts"] = [
+        {"name": "match-squad-server", "mountPath": "/etc/voice/match-squad/server",
+         "readOnly": True},
+        {"name": "matchmaking-principal-jwks-ca", "mountPath": "/etc/voice/principal-jwks/ca",
+         "readOnly": True},
+        {"name": "chat-match-squad-replay", "mountPath": "/etc/voice/match-squad/replay",
+         "readOnly": True},
+        {"name": "match-squad-ca", "mountPath": "/etc/voice/match-squad/ca",
+         "readOnly": True},
+    ]
+    nats = {"name": "nats-leaf-config", "mountPath": "/etc/nats/leaf.conf",
+            "readOnly": True, "subPath": "leaf.conf"}
+    pod_spec["containers"].append({
+        "name": "nats-leaf", "image": "docker.io/library/nats@sha256:" + "c" * 64,
+        "args": ["-c", "/etc/nats/leaf.conf"],
+        "volumeMounts": [nats,
+                         {"name": "nats-service-creds",
+                          "mountPath": "/var/run/nats/creds/chat.creds", "readOnly": True},
+                         {"name": "nats-hub-tls", "mountPath": "/etc/nats/tls/ca.crt",
+                          "readOnly": True}],
+    })
+    pod_spec["volumes"] = [
+        {"name": "nats-leaf-config", "configMap": {"name": "voice-nats-leaf-config"}},
+        {"name": "nats-service-creds", "secret": {
+            "secretName": "voice-nats-service-credentials", "defaultMode": 256,
+            "items": [{"key": "chat.creds", "path": "chat.creds"}]}},
+        {"name": "nats-hub-tls", "secret": {
+            "secretName": "voice-nats-hub-tls", "defaultMode": 420,
+            "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+        {"name": "match-squad-server", "secret": {
+            "secretName": "voice-chat-match-squad-server-tls", "defaultMode": 288,
+            "items": [{"key": "tls.crt", "path": "tls.crt"},
+                      {"key": "tls.key", "path": "tls.key"}]}},
+        {"name": "matchmaking-principal-jwks-ca", "secret": {
+            "secretName": "voice-matchmaking-principal-jwks-ca", "defaultMode": 288,
+            "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+        {"name": "chat-match-squad-replay", "secret": {
+            "secretName": "voice-match-squad-replay", "defaultMode": 288,
+            "items": [{"key": "password", "path": "password"}]}},
+        {"name": "match-squad-ca", "configMap": {
+            "name": "voice-match-squad-ca", "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+    ]
+    deployment["metadata"]["generation"] = 3
+    deployment["status"] = {"observedGeneration": 3, "replicas": 1,
+                            "updatedReplicas": 1, "readyReplicas": 0,
+                            "availableReplicas": 0}
+    return deployment
+
+
+class ChatFilePermissionRecoveryTests(unittest.TestCase):
+    def test_chat_post_prefix_fsgroup_is_the_only_safe_change(self):
+        base = chat_post_prefix_snapshot()
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        target = overlay._Target("Deployment", "voice-chat", "voice-chat.runtime.patch.yaml")
+
+        operations = overlay.object_patch(base, desired)
+
+        self.assertEqual(operations[2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+            "value": 65532,
+        }])
+        projected = overlay._apply_overlay_operations(base, operations[2:], target)
+        self.assertEqual(projected, desired)
+        pod_spec = projected["spec"]["template"]["spec"]
+        secret_volumes = {row["name"]: row["secret"] for row in pod_spec["volumes"]
+                          if "secret" in row}
+        self.assertEqual(secret_volumes["match-squad-server"]["defaultMode"], 288)
+        self.assertEqual(secret_volumes["match-squad-server"]["items"], [
+            {"key": "tls.crt", "path": "tls.crt"},
+            {"key": "tls.key", "path": "tls.key"},
+        ])
+        self.assertEqual(secret_volumes["nats-service-creds"]["defaultMode"], 256)
+        self.assertEqual(secret_volumes["nats-hub-tls"]["defaultMode"], 420)
+        by_volume = {row["name"]: row for row in pod_spec["volumes"]}
+        mounted = {
+            container["name"]: {
+                mount["name"]: mount.get("mountPath")
+                for mount in container.get("volumeMounts", [])
+                if mount["name"] in by_volume
+            }
+            for container in pod_spec["containers"]
+        }
+        self.assertEqual(mounted, {
+            "chat": {"match-squad-server": "/etc/voice/match-squad/server",
+                     "matchmaking-principal-jwks-ca": "/etc/voice/principal-jwks/ca",
+                     "chat-match-squad-replay": "/etc/voice/match-squad/replay",
+                     "match-squad-ca": "/etc/voice/match-squad/ca"},
+            "nats-leaf": {"nats-leaf-config": "/etc/nats/leaf.conf",
+                          "nats-service-creds": "/var/run/nats/creds/chat.creds",
+                          "nats-hub-tls": "/etc/nats/tls/ca.crt"},
+        })
+        self.assertTrue(all(mount["readOnly"] for container in pod_spec["containers"]
+                            for mount in container.get("volumeMounts", [])))
+
+    def test_chat_fsgroup_rejects_new_or_cross_container_secret_mounts(self):
+        for mutation in ("extra-secret-volume", "nats-secret-mounted-in-chat",
+                         "chat-server-key-mounted-in-nats", "wrong-mount-path",
+                         "secret-subpath", "extra-secret-volume-policy",
+                         "duplicate-secret-mount", "projected-secret-volume",
+                         "unknown-volume-source", "extra-nonsecret-mount"):
+            with self.subTest(mutation=mutation):
+                base = chat_post_prefix_snapshot()
+                pod_spec = base["spec"]["template"]["spec"]
+                if mutation == "extra-secret-volume":
+                    pod_spec["volumes"].append({"name": "unexpected", "secret": {
+                        "secretName": "unexpected-secret", "defaultMode": 288,
+                        "items": [{"key": "key", "path": "key"}]}})
+                elif mutation == "nats-secret-mounted-in-chat":
+                    pod_spec["containers"][0]["volumeMounts"].append({
+                        "name": "nats-service-creds", "mountPath": "/unexpected", "readOnly": True})
+                else:
+                    if mutation == "chat-server-key-mounted-in-nats":
+                        pod_spec["containers"][1]["volumeMounts"].append({
+                            "name": "match-squad-server", "mountPath": "/unexpected", "readOnly": True})
+                    elif mutation == "wrong-mount-path":
+                        pod_spec["containers"][0]["volumeMounts"][0]["mountPath"] = "/unexpected"
+                    elif mutation == "secret-subpath":
+                        pod_spec["containers"][0]["volumeMounts"][0]["subPath"] = "tls.key"
+                    elif mutation == "extra-secret-volume-policy":
+                        pod_spec["volumes"][1]["secret"]["optional"] = True
+                    elif mutation == "projected-secret-volume":
+                        pod_spec["volumes"].append({"name": "injected-projected", "projected": {
+                            "sources": [{"secret": {"name": "unexpected-secret",
+                                                        "items": [{"key": "tls.key",
+                                                                   "path": "tls.key"}]}}]}})
+                        pod_spec["containers"][0]["volumeMounts"].append({
+                            "name": "injected-projected", "mountPath": "/unexpected",
+                            "readOnly": True})
+                    elif mutation == "unknown-volume-source":
+                        pod_spec["volumes"].append({"name": "unexpected", "emptyDir": {}})
+                    elif mutation == "extra-nonsecret-mount":
+                        pod_spec["containers"][0]["volumeMounts"].append({
+                            "name": "nats-leaf-config", "mountPath": "/unexpected",
+                            "readOnly": True, "subPath": "leaf.conf"})
+                    else:
+                        pod_spec["containers"][0]["volumeMounts"].append(
+                            copy.deepcopy(pod_spec["containers"][0]["volumeMounts"][0]))
+                        with self.assertRaisesRegex(
+                                overlay.OverlayError, "Chat Secret volume boundary"):
+                            overlay._validate_chat_fsgroup_secret_mount_boundary(base)
+                        continue
+                desired = copy.deepcopy(base)
+                desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+                with self.assertRaisesRegex(overlay.OverlayError, "Chat Secret volume boundary"):
+                    overlay.object_patch(base, desired)
+
+    def test_chat_recovery_plan_uses_real_runtime_patch_and_is_single_target(self):
+        base = chat_post_prefix_snapshot()
+        target = overlay.CHAT_RECOVERY_TARGET
+        overlay_dir = Path(__file__).resolve().parents[2] / "deploy/dev/match-squad-trust-overlay"
+        recovery_path = overlay_dir / target.patch_file
+        runtime_path = overlay_dir / "voice-chat.runtime.patch.yaml"
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+
+        client = overlay.KubectlClient()
+        plan = overlay.build_object_plan(client, target, base, recovery_path)
+
+        actual_recovery_render = overlay.strategic_render(client, target, base, recovery_path)
+        actual_runtime_render = overlay.strategic_render(
+            client, overlay.TARGETS[4], base, runtime_path)
+        self.assertEqual(actual_recovery_render, actual_runtime_render)
+        self.assertEqual(actual_recovery_render, desired)
+        self.assertEqual(plan["operations"][2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+            "value": 65532,
+        }])
+        self.assertEqual(overlay._selected_targets(False, chat_recovery=True), (target,))
+        with self.assertRaisesRegex(overlay.OverlayError, "mutually exclusive"):
+            overlay._selected_targets(recovery_only=True, chat_recovery=True)
+        self.assertIn("fsGroup: 65532", recovery_path.read_text(encoding="utf-8"))
+        self.assertIn("fsGroup: 65532", runtime_path.read_text(encoding="utf-8"))
+
+    def test_chat_recovery_rejects_unobserved_generation_and_mount_shape_drift(self):
+        target = overlay.CHAT_RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        client = overlay.KubectlClient()
+        base = chat_post_prefix_snapshot()
+        base["status"]["observedGeneration"] = 2
+        with self.assertRaisesRegex(overlay.OverlayError, "current generation"):
+            overlay.build_object_plan(client, target, base, patch_path)
+
+        for mutation in ("wrong-mount-path", "subpath-secret", "writable-secret"):
+            with self.subTest(mutation=mutation):
+                drifted = chat_post_prefix_snapshot()
+                mounts = drifted["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+                server = next(item for item in mounts if item["name"] == "match-squad-server")
+                if mutation == "wrong-mount-path":
+                    server["mountPath"] = "/unexpected"
+                elif mutation == "subpath-secret":
+                    server["subPath"] = "tls.key"
+                else:
+                    server["readOnly"] = False
+                with self.assertRaisesRegex(overlay.OverlayError, "Chat Secret volume boundary"):
+                    overlay.build_object_plan(client, target, drifted, patch_path)
+
+    def test_chat_recovery_requires_its_fixed_target_and_only_fsgroup_patch(self):
+        base = chat_post_prefix_snapshot()
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        target = overlay.CHAT_RECOVERY_TARGET
+        operations = overlay.object_patch(base, desired)
+        self.assertTrue(overlay._is_exact_chat_fs_group_recovery(target, base, operations))
+        self.assertFalse(overlay._is_exact_chat_fs_group_recovery(
+            overlay.RECOVERY_TARGET, base, operations))
+        extra = copy.deepcopy(desired)
+        extra["spec"]["template"]["spec"]["securityContext"]["runAsNonRoot"] = True
+        with self.assertRaisesRegex(overlay.OverlayError, "outside fsGroup 65532"):
+            overlay.object_patch(base, extra)
+
+
 class MatchSquadOverlayApplicatorTests(unittest.TestCase):
     def test_ci_filter_and_required_job_reach_the_focused_contract_suite(self):
         root = Path(__file__).resolve().parents[2]
