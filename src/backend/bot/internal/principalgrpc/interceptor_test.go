@@ -87,7 +87,7 @@ func TestSpaceLifecycleUnaryInterceptorMapsVerifierUnavailable(t *testing.T) {
 }
 
 func TestOrdinaryUnaryInterceptorHidesProtectedServiceMethods(t *testing.T) {
-	for _, method := range []string{botv1.BotService_PublishGameEvent_FullMethodName, botv1.BotService_ApplySpaceLifecycleFence_FullMethodName, botv1.BotService_PurgeSpace_FullMethodName} {
+	for _, method := range []string{botv1.BotService_PublishGameEvent_FullMethodName, botv1.BotService_ApplySpaceLifecycleFence_FullMethodName, botv1.BotService_PurgeSpace_FullMethodName, botv1.BotService_CheckBotInstallationScope_FullMethodName} {
 		called := false
 		_, err := OrdinaryUnaryInterceptor()(context.Background(), &botv1.PurgeSpaceRequest{}, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) {
 			called = true
@@ -96,5 +96,28 @@ func TestOrdinaryUnaryInterceptorHidesProtectedServiceMethods(t *testing.T) {
 		if called || status.Code(err) != codes.Unavailable {
 			t.Fatalf("lifecycle method %s reached ordinary listener: called=%v err=%v", method, called, err)
 		}
+	}
+}
+
+func TestInstallationDecision_ProtectedSpaceOnlyAndBodyBound(t *testing.T) {
+	method := botv1.BotService_CheckBotInstallationScope_FullMethodName
+	req := &botv1.CheckBotInstallationScopeRequest{BotId: "bound-bot", InstallationId: "bound-installation"}
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer space-token", "x-request-id", "decision-1"))
+	verifier := &lifecycleVerifier{}
+	called := false
+	handler := func(ctx context.Context, request any) (any, error) { called = true; return nil, nil }
+	if _, err := SpaceLifecycleUnaryInterceptor(verifier)(ctx, req, &grpc.UnaryServerInfo{FullMethod: method}, handler); err != nil || !called {
+		t.Fatalf("Space decision rejected: %v", err)
+	}
+	hash, _ := principal.RequestHash(req)
+	if verifier.gotHash != hash || verifier.gotMethod != method || verifier.gotRequestID != "decision-1" {
+		t.Fatal("decision body was not bound")
+	}
+	called = false
+	if _, err := GameEventUnaryInterceptor(verifier)(ctx, req, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unimplemented || called {
+		t.Fatalf("GIS listener exposed decision: %v", err)
+	}
+	if _, err := SpaceLifecycleUnaryInterceptor(verifier)(context.Background(), req, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unauthenticated || called {
+		t.Fatalf("raw decision reached handler: %v", err)
 	}
 }

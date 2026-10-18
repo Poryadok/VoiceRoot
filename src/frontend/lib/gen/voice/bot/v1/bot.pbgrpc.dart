@@ -236,6 +236,17 @@ class BotServiceClient extends $grpc.Client {
     return $createUnaryCall(_$setBotChatEnabled, request, options: options);
   }
 
+  /// Current exact installation/scope decision for composite Space creation.
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.CheckBotInstallationScopeResponse>
+      checkBotInstallationScope(
+    $0.CheckBotInstallationScopeRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$checkBotInstallationScope, request,
+        options: options);
+  }
+
   /// Client slash interactions.
   $grpc.ResponseFuture<$0.ExecuteSlashInteractionResponse>
       executeSlashInteraction(
@@ -491,6 +502,12 @@ class BotServiceClient extends $grpc.Client {
       '/voice.bot.v1.BotService/SetBotChatEnabled',
       ($0.SetBotChatEnabledRequest value) => value.writeToBuffer(),
       $0.SetBotChatEnabledResponse.fromBuffer);
+  static final _$checkBotInstallationScope = $grpc.ClientMethod<
+          $0.CheckBotInstallationScopeRequest,
+          $0.CheckBotInstallationScopeResponse>(
+      '/voice.bot.v1.BotService/CheckBotInstallationScope',
+      ($0.CheckBotInstallationScopeRequest value) => value.writeToBuffer(),
+      $0.CheckBotInstallationScopeResponse.fromBuffer);
   static final _$executeSlashInteraction = $grpc.ClientMethod<
           $0.ExecuteSlashInteractionRequest,
           $0.ExecuteSlashInteractionResponse>(
@@ -814,6 +831,15 @@ abstract class BotServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.SetBotChatEnabledRequest.fromBuffer(value),
         ($0.SetBotChatEnabledResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CheckBotInstallationScopeRequest,
+            $0.CheckBotInstallationScopeResponse>(
+        'CheckBotInstallationScope',
+        checkBotInstallationScope_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CheckBotInstallationScopeRequest.fromBuffer(value),
+        ($0.CheckBotInstallationScopeResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ExecuteSlashInteractionRequest,
             $0.ExecuteSlashInteractionResponse>(
         'ExecuteSlashInteraction',
@@ -1183,6 +1209,15 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Future<$0.SetBotChatEnabledResponse> setBotChatEnabled(
       $grpc.ServiceCall call, $0.SetBotChatEnabledRequest request);
+
+  $async.Future<$0.CheckBotInstallationScopeResponse>
+      checkBotInstallationScope_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.CheckBotInstallationScopeRequest> $request) async {
+    return checkBotInstallationScope($call, await $request);
+  }
+
+  $async.Future<$0.CheckBotInstallationScopeResponse> checkBotInstallationScope(
+      $grpc.ServiceCall call, $0.CheckBotInstallationScopeRequest request);
 
   $async.Future<$0.ExecuteSlashInteractionResponse> executeSlashInteraction_Pre(
       $grpc.ServiceCall $call,

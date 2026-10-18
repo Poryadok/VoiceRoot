@@ -1995,13 +1995,22 @@ const CreateChatResponse$json = {
       '6': '.voice.chat.v1.Chat',
       '10': 'chat'
     },
+    {
+      '1': 'composite_operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'compositeOperationId'
+    },
+    {'1': 'composite_node_id', '3': 3, '4': 1, '5': 9, '10': 'compositeNodeId'},
   ],
 };
 
 /// Descriptor for `CreateChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List createChatResponseDescriptor = $convert.base64Decode(
     'ChJDcmVhdGVDaGF0UmVzcG9uc2USJwoEY2hhdBgBIAEoCzITLnZvaWNlLmNoYXQudjEuQ2hhdF'
-    'IEY2hhdA==');
+    'IEY2hhdBI0ChZjb21wb3NpdGVfb3BlcmF0aW9uX2lkGAIgASgJUhRjb21wb3NpdGVPcGVyYXRp'
+    'b25JZBIqChFjb21wb3NpdGVfbm9kZV9pZBgDIAEoCVIPY29tcG9zaXRlTm9kZUlk');
 
 @$core.Deprecated('Use updateChatResponseDescriptor instead')
 const UpdateChatResponse$json = {

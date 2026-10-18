@@ -31,17 +31,18 @@ import (
 // BotGRPC implements voice.bot.v1.BotService.
 type BotGRPC struct {
 	botv1.UnimplementedBotServiceServer
-	Store           *store.BotStore
-	LifecycleStore  BotLifecycleStore
-	Hub             *dispatch.Hub
-	HTTPClient      *http.Client
-	Chat            chatv1.ChatServiceClient
-	Messaging       messagingv1.MessagingServiceClient
-	Role            rolev1.RoleServiceClient
-	User            userv1.UserServiceClient
-	Space           spacev1.SpaceServiceClient
-	Events          BotEventPublisher
-	PrincipalIssuer *principal.Issuer
+	Store                   *store.BotStore
+	LifecycleStore          BotLifecycleStore
+	Hub                     *dispatch.Hub
+	HTTPClient              *http.Client
+	Chat                    chatv1.ChatServiceClient
+	Messaging               messagingv1.MessagingServiceClient
+	Role                    rolev1.RoleServiceClient
+	User                    userv1.UserServiceClient
+	Space                   spacev1.SpaceServiceClient
+	Events                  BotEventPublisher
+	PrincipalIssuer         *principal.Issuer
+	InstallationScopeReader BotInstallationScopeReader
 }
 
 // BotEventPublisher publishes bot lifecycle events (optional NATS).
@@ -54,9 +55,10 @@ type BotEventPublisher interface {
 
 func NewBotGRPC(st *store.BotStore, hub *dispatch.Hub) *BotGRPC {
 	return &BotGRPC{
-		Store:          st,
-		LifecycleStore: st,
-		Hub:            hub,
+		Store:                   st,
+		LifecycleStore:          st,
+		InstallationScopeReader: st,
+		Hub:                     hub,
 		HTTPClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},

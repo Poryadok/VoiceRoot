@@ -32,6 +32,47 @@ final $typed_data.Uint8List botLifecycleStatusDescriptor = $convert.base64Decode
     'QQABIeChpCT1RfTElGRUNZQ0xFX1NUQVRVU19EUkFGVBABEh0KGUJPVF9MSUZFQ1lDTEVfU1RB'
     'VFVTX0xJVkUQAhIhCh1CT1RfTElGRUNZQ0xFX1NUQVRVU19ESVNBQkxFRBAD');
 
+@$core.Deprecated('Use checkBotInstallationScopeRequestDescriptor instead')
+const CheckBotInstallationScopeRequest$json = {
+  '1': 'CheckBotInstallationScopeRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'actor_profile_id', '3': 3, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'installation_id', '3': 4, '4': 1, '5': 9, '10': 'installationId'},
+    {'1': 'bot_scope', '3': 5, '4': 1, '5': 9, '10': 'botScope'},
+  ],
+};
+
+/// Descriptor for `CheckBotInstallationScopeRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkBotInstallationScopeRequestDescriptor =
+    $convert.base64Decode(
+        'CiBDaGVja0JvdEluc3RhbGxhdGlvblNjb3BlUmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdE'
+        'lkEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEigKEGFjdG9yX3Byb2ZpbGVfaWQYAyABKAlS'
+        'DmFjdG9yUHJvZmlsZUlkEicKD2luc3RhbGxhdGlvbl9pZBgEIAEoCVIOaW5zdGFsbGF0aW9uSW'
+        'QSGwoJYm90X3Njb3BlGAUgASgJUghib3RTY29wZQ==');
+
+@$core.Deprecated('Use checkBotInstallationScopeResponseDescriptor instead')
+const CheckBotInstallationScopeResponse$json = {
+  '1': 'CheckBotInstallationScopeResponse',
+  '2': [
+    {'1': 'allowed', '3': 1, '4': 1, '5': 8, '10': 'allowed'},
+    {'1': 'bot_id', '3': 2, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'actor_profile_id', '3': 4, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'installation_id', '3': 5, '4': 1, '5': 9, '10': 'installationId'},
+    {'1': 'bot_scope', '3': 6, '4': 1, '5': 9, '10': 'botScope'},
+  ],
+};
+
+/// Descriptor for `CheckBotInstallationScopeResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkBotInstallationScopeResponseDescriptor = $convert.base64Decode(
+    'CiFDaGVja0JvdEluc3RhbGxhdGlvblNjb3BlUmVzcG9uc2USGAoHYWxsb3dlZBgBIAEoCFIHYW'
+    'xsb3dlZBIVCgZib3RfaWQYAiABKAlSBWJvdElkEhkKCHNwYWNlX2lkGAMgASgJUgdzcGFjZUlk'
+    'EigKEGFjdG9yX3Byb2ZpbGVfaWQYBCABKAlSDmFjdG9yUHJvZmlsZUlkEicKD2luc3RhbGxhdG'
+    'lvbl9pZBgFIAEoCVIOaW5zdGFsbGF0aW9uSWQSGwoJYm90X3Njb3BlGAYgASgJUghib3RTY29w'
+    'ZQ==');
+
 @$core.Deprecated('Use publishGameEventRequestDescriptor instead')
 const PublishGameEventRequest$json = {
   '1': 'PublishGameEventRequest',
