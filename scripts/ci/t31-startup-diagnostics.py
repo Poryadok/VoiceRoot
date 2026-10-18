@@ -49,6 +49,11 @@ READ_CHUNK_BYTES = 4096
 
 _SERVICE_PREFIX = re.compile(r"^\s*([A-Za-z0-9_-]+)\s+\|\s?(.*)$")
 VOICE_STARTUP_PREFIXES = (
+    ("Voice Space communication client configuration:", "voice_space_communication_configuration"),
+    ("Voice Space communication mTLS:", "voice_space_communication_mtls"),
+    ("ordinary Voice startup:", "voice_ordinary_startup"),
+    ("ordinary Voice authority dependencies unavailable", "voice_ordinary_authority_unavailable"),
+    ("ordinary Voice durable publisher unavailable", "voice_ordinary_publisher_unavailable"),
     ("voice lifecycle database:", "voice_lifecycle_database"),
     ("voice MatchSquad principal configuration:", "voice_match_squad_principal_configuration"),
     ("voice MatchSquad member principal configuration:", "voice_match_squad_member_principal_configuration"),
