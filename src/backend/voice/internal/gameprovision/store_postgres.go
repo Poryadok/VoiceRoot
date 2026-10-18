@@ -42,7 +42,14 @@ type ManagedGameSessionRosterMediaFencer interface {
 	FenceManagedGameSessionMembers(context.Context, string, string, []string) error
 }
 
-type PostgresStore struct{ pool *pgxpool.Pool }
+type PostgresStore struct {
+	pool                *pgxpool.Pool
+	ordinaryConversions bool
+}
+
+// EnableOrdinaryConversions is startup wiring, before any listener serves.
+// It requires the migrated native ordinary journal and controlled legacy cutover.
+func (s *PostgresStore) EnableOrdinaryConversions() { s.ordinaryConversions = true }
 
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore { return &PostgresStore{pool: pool} }
 

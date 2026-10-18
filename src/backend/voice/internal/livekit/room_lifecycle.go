@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	protocol "github.com/livekit/protocol/livekit"
@@ -87,6 +88,43 @@ func (a *RoomLifecycle) RemoveParticipant(ctx context.Context, roomName, identit
 		return fmt.Errorf("livekit remove participant %q from %q: %w", identity, roomName, err)
 	}
 	return nil
+}
+
+// ListParticipantIdentities observes current SFU identities only. It does not
+// establish authenticated reconnect/session state or change logical membership.
+func (a *RoomLifecycle) ListParticipantIdentities(ctx context.Context, roomName string) ([]string, error) {
+	if err := a.validate(roomName); err != nil {
+		return nil, err
+	}
+	lister, ok := a.sdk.(interface {
+		ListParticipants(context.Context, *protocol.ListParticipantsRequest) (*protocol.ListParticipantsResponse, error)
+	})
+	if !ok {
+		return nil, ErrRoomServiceNotConfigured
+	}
+	response, err := lister.ListParticipants(ctx, &protocol.ListParticipantsRequest{Room: roomName})
+	if isTwirpCode(err, twirp.NotFound) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("livekit list participants %q: %w", roomName, err)
+	}
+	if response == nil {
+		return nil, errors.New("livekit participant response missing")
+	}
+	identities := make(map[string]bool, len(response.Participants))
+	for _, participant := range response.Participants {
+		if participant == nil || strings.TrimSpace(participant.Identity) == "" {
+			return nil, errors.New("livekit participant identity missing")
+		}
+		identities[participant.Identity] = true
+	}
+	result := make([]string, 0, len(identities))
+	for identity := range identities {
+		result = append(result, identity)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 func (a *RoomLifecycle) validate(roomName string) error {

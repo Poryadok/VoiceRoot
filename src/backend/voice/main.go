@@ -34,6 +34,7 @@ import (
 	"voice/backend/voice/internal/matchsquad"
 	"voice/backend/voice/internal/matchsquadmemberprincipal"
 	"voice/backend/voice/internal/matchsquadprincipal"
+	"voice/backend/voice/internal/ordinarycall"
 	"voice/backend/voice/internal/principalgrpc"
 	"voice/backend/voice/internal/principaljwks"
 	"voice/backend/voice/internal/rolegrant"
@@ -191,6 +192,24 @@ func main() {
 		callStore = voicestore.NewMemoryCallStore()
 		logger.Warn("VOICE_REDIS_ADDR not set; using in-memory call store")
 	}
+	ordinaryCalls, err := openOrdinaryRuntime(runCtx, callStore)
+	if err != nil {
+		log.Fatalf("ordinary Voice startup: %v", err)
+	}
+	if ordinaryCalls != nil {
+		defer ordinaryCalls.pool.Close()
+	}
+	if ordinaryCalls != nil {
+		priorReadiness := lifecycleReadiness
+		lifecycleReadiness = func(ctx context.Context) error {
+			if priorReadiness != nil {
+				if err := priorReadiness(ctx); err != nil {
+					return err
+				}
+			}
+			return ordinaryCalls.Store.CheckSchema(ctx)
+		}
+	}
 	matchSquadConfig, matchSquadEnabled, err := matchsquadprincipal.LoadFromEnv(os.LookupEnv)
 	if err != nil {
 		log.Fatalf("voice MatchSquad principal configuration: %v", err)
@@ -275,6 +294,9 @@ func main() {
 		}
 		defer pool.Close()
 		gameStore := gameprovision.NewPostgresStore(pool)
+		if ordinaryCalls != nil {
+			gameStore.EnableOrdinaryConversions()
+		}
 		if err := gameStore.CheckSchema(runCtx); err != nil {
 			log.Fatalf("voice GIS database schema: %v", err)
 		}
@@ -292,10 +314,14 @@ func main() {
 			log.Fatalf("voice GIS listener: %v", err)
 		}
 		gameProvisionServer = grpc.NewServer(gamePrincipalRuntime.ServerOptions()...)
-		callsv1.RegisterGameSessionProvisioningServiceServer(gameProvisionServer, &grpcsvc.GameSessionProvisioningGRPC{
+		provisionService := &grpcsvc.GameSessionProvisioningGRPC{
 			Store: gameStore, Roster: gameStore, Closer: gameStore, Fencer: mediaFencer,
 			Conversion: gameStore, Calls: callStore, CallCloser: roomCloser, Now: time.Now,
-		})
+		}
+		if ordinaryCalls != nil {
+			provisionService.OrdinaryCalls = ordinaryCalls.Coordinator
+		}
+		callsv1.RegisterGameSessionProvisioningServiceServer(gameProvisionServer, provisionService)
 		go func() {
 			logger.Info("GIS room provisioning listener started", slog.String("addr", gamePrincipalConfig.ListenAddr))
 			if serveErr := gameProvisionServer.Serve(gameProvisionListener); serveErr != nil {
@@ -324,6 +350,9 @@ func main() {
 			logger.Warn("managed game session lookup unavailable", slog.String("error", poolErr.Error()))
 		} else {
 			gameStore := gameprovision.NewPostgresStore(pool)
+			if ordinaryCalls != nil {
+				gameStore.EnableOrdinaryConversions()
+			}
 			if schemaErr := gameStore.CheckSchema(runCtx); schemaErr != nil {
 				pool.Close()
 				logger.Warn("managed game session lookup schema unavailable", slog.String("error", schemaErr.Error()))
@@ -520,6 +549,29 @@ func main() {
 		RingTimeout:         30 * time.Second,
 		Logger:              logger,
 		SessionEpochChecker: sessionEpochChecker,
+	}
+	if ordinaryCalls != nil {
+		if conversionAdmission == nil || accountVoiceProfiles == nil || chatMembers == nil {
+			log.Fatal("ordinary Voice authority dependencies unavailable")
+		}
+		voiceSvc.OrdinaryCalls = ordinaryCalls.Coordinator
+		publisher, ok := events.(ordinarycall.OutboxPublisher)
+		if !ok {
+			log.Fatal("ordinary Voice durable publisher unavailable")
+		}
+		relay := &ordinarycall.OutboxRelay{Store: ordinaryCalls.Store, Publisher: publisher, OnError: func(err error) {
+			logger.Warn("ordinary Voice outbox delivery failed", slog.String("error", err.Error()))
+		}}
+		go func() {
+			if err := relay.Run(runCtx); err != nil && runCtx.Err() == nil {
+				logger.Error("ordinary Voice outbox stopped", slog.String("error", err.Error()))
+			}
+		}()
+		go func() {
+			if err := ordinaryCalls.Coordinator.RunRecovery(runCtx, ordinaryCalls.Store, func(err error) { logger.Warn("ordinary Voice recovery failed", slog.String("error", err.Error())) }); err != nil && runCtx.Err() == nil {
+				logger.Error("ordinary Voice recovery stopped", slog.String("error", err.Error()))
+			}
+		}()
 	}
 	if federatedMedia != nil {
 		voiceSvc.FederatedMedia = federatedMedia
