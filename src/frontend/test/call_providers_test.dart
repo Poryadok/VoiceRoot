@@ -30,6 +30,7 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   bool endDisconnectCalled = false;
   bool throwOnSetSpeakerMuted = false;
   bool throwOnSetMuted = false;
+  Future<void>? disconnectWait;
 
   @override
   void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
@@ -56,6 +57,7 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   @override
   Future<void> disconnect() async {
     endDisconnectCalled = true;
+    await disconnectWait;
   }
 
   bool? lastSetMuted;
@@ -254,6 +256,122 @@ Future<void> drainMicrotasks({int rounds = 30}) async {
 }
 
 void main() {
+  test(
+    'departed Space fences a pending room join before it can connect media',
+    () async {
+      final joined = Completer<http.Response>();
+      var tokenRequests = 0;
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/join')) return joined.future;
+        tokenRequests++;
+        fail('Pending departed join must not fetch a token');
+      });
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final room = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: client,
+        realtime: realtime,
+        fakeRoom: room,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      final controller = container.read(callControllerProvider.notifier);
+      final join = controller.joinVoiceRoom(
+        voiceRoomId: 'vr-1',
+        spaceId: 'space-1',
+      );
+      await controller.disconnectDepartedSpace(
+        'space-1',
+        profileId: 'prof-test',
+      );
+      joined.complete(
+        utf8JsonResponse(
+          jsonEncode({
+            'voice_session': {
+              'room_id': 'room-1',
+              'voice_room_id': 'vr-1',
+              'livekit_room_name': 'voice-1',
+            },
+          }),
+        ),
+      );
+      await join;
+      expect(tokenRequests, 0);
+      expect(room.connectCalls, 0);
+      expect(container.read(callControllerProvider).phase, CallPhase.idle);
+      expect(container.read(callControllerProvider).session, isNull);
+    },
+  );
+
+  test(
+    'departed Space detaches only matching media and preserves a newer call during disconnect',
+    () async {
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/join')) {
+          return utf8JsonResponse(
+            jsonEncode({
+              'voice_session': {
+                'room_id': 'room-1',
+                'voice_room_id': 'vr-1',
+                'livekit_room_name': 'voice-1',
+              },
+            }),
+          );
+        }
+        if (request.url.path.endsWith('/token')) {
+          return utf8JsonResponse(
+            jsonEncode({'jwt': 'token', 'livekit_url': 'ws://127.0.0.1:7880'}),
+          );
+        }
+        fail('Unexpected request: ${request.method} ${request.url.path}');
+      });
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final room = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: client,
+        realtime: realtime,
+        fakeRoom: room,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      final controller = container.read(callControllerProvider.notifier);
+      await controller.joinVoiceRoom(voiceRoomId: 'vr-1', spaceId: 'space-1');
+      await controller.disconnectDepartedSpace(
+        'space-2',
+        profileId: 'prof-test',
+      );
+      expect(room.endDisconnectCalled, isFalse);
+      expect(container.read(callControllerProvider).phase, CallPhase.active);
+      final pending = Completer<void>();
+      room.disconnectWait = pending.future;
+      await controller.disconnectDepartedSpace(
+        'space-1',
+        profileId: 'other-profile',
+      );
+      expect(room.endDisconnectCalled, isFalse);
+      final cleanup = controller.disconnectDepartedSpace(
+        'space-1',
+        profileId: 'prof-test',
+      );
+      expect(room.endDisconnectCalled, isTrue);
+      expect(controller.liveKitRoom, isNull);
+      expect(container.read(callControllerProvider).phase, CallPhase.idle);
+      controller.state = CallState(
+        phase: CallPhase.incoming,
+        session: _ringingSession(roomId: 'new-room'),
+      );
+      pending.complete();
+      await cleanup;
+      expect(
+        container.read(callControllerProvider).session?.roomId,
+        'new-room',
+      );
+      expect(container.read(callControllerProvider).phase, CallPhase.incoming);
+    },
+  );
+
   test(
     'MatchSquad mute and video stay local; ordinary calls still sync state',
     () async {
