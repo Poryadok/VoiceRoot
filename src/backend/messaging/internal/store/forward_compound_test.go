@@ -22,6 +22,34 @@ func TestForwardCompoundRejectsNestedOrDifferentActorCommentary(t *testing.T) {
 	require.Error(t, validateForwardCommentary(row))
 }
 
+func TestForwardCompoundCommentaryRequiresParentAttribution(t *testing.T) {
+	for _, postedAsChat := range []bool{false, true} {
+		name := "profile"
+		if postedAsChat {
+			name = "channel"
+		}
+		t.Run(name, func(t *testing.T) {
+			row := MessageRow{ID: uuid.New(), ChatID: uuid.New(), SenderProfileID: uuid.New(), ChatType: "channel", PostedAsChat: postedAsChat}
+			if postedAsChat {
+				row.DisplayChatID = &row.ChatID
+			}
+			commentary := MessageRow{ID: uuid.New(), ChatID: row.ChatID, SenderProfileID: row.SenderProfileID, ChatType: row.ChatType, Content: "commentary", Type: "regular", ContentType: "text", AttachmentsJSON: "[]", MentionsJSON: "[]", PostedAsChat: postedAsChat, DisplayChatID: row.DisplayChatID}
+			row.ForwardCommentary = &commentary
+			require.NoError(t, validateForwardCommentary(row))
+			commentary.PostedAsChat = !postedAsChat
+			require.Error(t, validateForwardCommentary(row), "companion cannot change publication identity")
+			commentary.PostedAsChat = postedAsChat
+			otherChat := uuid.New()
+			commentary.DisplayChatID = &otherChat
+			require.Error(t, validateForwardCommentary(row), "companion cannot display another chat")
+			if postedAsChat {
+				commentary.DisplayChatID = nil
+				require.Error(t, validateForwardCommentary(row), "official commentary must retain destination display")
+			}
+		})
+	}
+}
+
 func TestForwardCompoundExpiredAfterAcquireStaysInvisibleAndReleasesExactRefs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL attachment recovery")

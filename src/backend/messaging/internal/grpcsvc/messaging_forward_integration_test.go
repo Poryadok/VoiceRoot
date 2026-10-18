@@ -348,6 +348,15 @@ func TestMessagingForwardMessage_toChannelSetsPostedAsChat(t *testing.T) {
 	require.Len(t, msgs, 2)
 	require.Equal(t, commentary, msgs[1].GetContent())
 	require.True(t, msgs[0].GetPostedAsChat())
+	require.True(t, msgs[1].GetPostedAsChat(), "commentary keeps the authorized channel identity")
+	for _, message := range msgs {
+		var postedAsChat bool
+		var displayChatID, senderProfileID uuid.UUID
+		require.NoError(t, pool.QueryRow(ctx, `SELECT posted_as_chat, display_chat_id, sender_profile_id FROM messages WHERE id=$1`, message.GetId()).Scan(&postedAsChat, &displayChatID, &senderProfileID))
+		require.True(t, postedAsChat)
+		require.Equal(t, targetChannel, displayChatID)
+		require.Equal(t, profA, senderProfileID, "stored sender remains the forwarding profile")
+	}
 }
 
 // TestMessagingForwardMessage_channelSendPermissionDenied documents Forward send-perm hole fix (P1.5).
@@ -379,11 +388,16 @@ func TestMessagingForwardMessage_channelSendPermissionDenied(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	commentary := "must remain invisible"
 	_, err = client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
 		SourceMessageId: original.GetMessage().GetId(),
 		TargetChat:      chatChannelRef(targetChannel),
+		Commentary:      &commentary,
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	var messages, events int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM messages WHERE chat_id=$1), (SELECT count(*) FROM message_event_outbox WHERE chat_id=$1)`, targetChannel).Scan(&messages, &events))
+	require.Equal(t, []int{0, 0}, []int{messages, events}, "denied compound forward creates no commentary, forward or outbox")
 }
 
 // TestMessagingForwardMessage_e2eToPlainDenied documents FW-06: E2E ciphertext must not land in plain DM.

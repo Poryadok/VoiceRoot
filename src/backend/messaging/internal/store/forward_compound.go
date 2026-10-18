@@ -16,7 +16,7 @@ func validateForwardCommentary(row MessageRow) error {
 	if c == nil {
 		return nil
 	}
-	expected := MessageRow{ID: c.ID, ChatID: row.ChatID, ChatType: row.ChatType, SenderProfileID: row.SenderProfileID, Content: c.Content, Type: "regular", AttachmentsJSON: "[]", MentionsJSON: "[]", GhostOnly: row.GhostOnly, ContentType: "text"}
+	expected := MessageRow{ID: c.ID, ChatID: row.ChatID, ChatType: row.ChatType, SenderProfileID: row.SenderProfileID, Content: c.Content, Type: "regular", AttachmentsJSON: "[]", MentionsJSON: "[]", GhostOnly: row.GhostOnly, ContentType: "text", PostedAsChat: row.PostedAsChat, DisplayChatID: row.DisplayChatID}
 	if c.ID == uuid.Nil || c.ID == row.ID || row.ClientMessageID != nil || strings.TrimSpace(c.Content) == "" || !reflect.DeepEqual(*c, expected) {
 		return errors.New("invalid forward commentary companion")
 	}
