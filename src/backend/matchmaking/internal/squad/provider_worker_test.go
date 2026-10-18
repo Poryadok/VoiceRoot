@@ -58,6 +58,19 @@ func TestProviderTeardownClassificationKeepsUncertainFailuresRetryable(t *testin
 	}
 }
 
+func TestProviderCreationValidationRejectionRequiresCompensation(t *testing.T) {
+	for _, code := range []codes.Code{codes.InvalidArgument, codes.FailedPrecondition} {
+		if !isTerminalProviderCreateError(status.Error(code, "protected creation rejected")) {
+			t.Errorf("terminal creation rejection %s must compensate the recorded Chat resource", code)
+		}
+	}
+	for _, code := range []codes.Code{codes.Unavailable, codes.DeadlineExceeded, codes.Internal, codes.Unknown, codes.Unauthenticated, codes.PermissionDenied, codes.Unimplemented, codes.AlreadyExists, codes.NotFound} {
+		if isTerminalProviderCreateError(status.Error(code, "creation outcome uncertain")) {
+			t.Errorf("uncertain creation outcome %s must preserve the exact request for retry", code)
+		}
+	}
+}
+
 func TestMatchSquadTeardownRetryDelayUsesBoundedExponentialBackoff(t *testing.T) {
 	tests := []struct {
 		attempt int
