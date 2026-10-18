@@ -1,4 +1,5 @@
 import copy
+import tempfile
 import unittest
 import expired_proof
 import sys
