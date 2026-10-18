@@ -109,10 +109,16 @@ func CheckRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
 		return ErrUnavailable
 	}
 	var unsafe bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=current_user AND (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls))
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles a WHERE pg_has_role(current_user,a.oid,'MEMBER') AND
+ (a.rolsuper OR a.rolcreaterole OR a.rolcreatedb OR a.rolreplication OR a.rolbypassrls OR a.rolname IN ('pg_write_server_files','pg_read_server_files','pg_execute_server_program')))
  OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid IN ('voice_party_coverage_receipts'::regclass,'voice_party_coverage_head'::regclass,'voice_party_coverage_operations'::regclass,'voice_party_coverage_steps'::regclass,
- to_regclass('voice_party_resource_components'),to_regclass('voice_party_resource_retirements'),to_regclass('voice_party_resource_component_links'))
- AND (pg_has_role(current_user,c.relowner,'USAGE') OR has_schema_privilege(current_user,c.relnamespace,'CREATE') OR has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')))`).Scan(&unsafe)
+ to_regclass('voice_party_resource_components'),to_regclass('voice_party_resource_retirements'),to_regclass('voice_party_resource_component_links'),
+ to_regclass('voice_native_owner_works'),to_regclass('voice_native_owner_targets'),to_regclass('voice_native_owner_acceptances'))
+ AND EXISTS(SELECT 1 FROM pg_roles a WHERE pg_has_role(current_user,a.oid,'MEMBER') AND
+ (pg_has_role(a.oid,c.relowner,'MEMBER') OR has_schema_privilege(a.oid,c.relnamespace,'CREATE')
+ OR has_table_privilege(a.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+ OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE')
+ AND (pg_has_role(p.proowner,c.relowner,'MEMBER') OR has_table_privilege(p.proowner,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))))))`).Scan(&unsafe)
 	if err != nil || unsafe {
 		return ErrUnavailable
 	}

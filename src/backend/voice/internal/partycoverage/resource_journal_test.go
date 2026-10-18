@@ -116,3 +116,66 @@ func TestProtectedResourceReaderRejectsWriterAndRecoversExactBytes(t *testing.T)
 	defer tx.Rollback(ctx)
 	require.ErrorIs(t, CheckRuntimePrivileges(ctx, tx), ErrUnavailable, "serving startup must reject issuer-table write authority")
 }
+
+func TestRuntimeRejectsMaintenanceOnlyNativeOwnerJournalWrites(t *testing.T) {
+	ctx, c, schema := coverageDB(t)
+	// Privilege-contract fixtures only: actual017 schema/owner transitions belong
+	// to160. Serving must reject writes even before that source is integrated.
+	tables := []string{"voice_native_owner_works", "voice_native_owner_targets", "voice_native_owner_acceptances"}
+	for _, table := range tables {
+		_, err := c.Exec(ctx, "CREATE TABLE "+pgx.Identifier{table}.Sanitize()+"(fixture int)")
+		require.NoError(t, err)
+	}
+	role := "native_guard_" + uuid.NewString()[:8]
+	_, err := c.Exec(ctx, "CREATE ROLE "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		c.Exec(context.Background(), "ROLLBACK")
+		c.Exec(context.Background(), "RESET ROLE")
+		c.Exec(context.Background(), "DROP OWNED BY "+pgx.Identifier{role}.Sanitize())
+		c.Exec(context.Background(), "DROP ROLE "+pgx.Identifier{role}.Sanitize())
+	})
+	_, err = c.Exec(ctx, "GRANT USAGE ON SCHEMA "+pgx.Identifier{schema}.Sanitize()+" TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, "GRANT SELECT ON ALL TABLES IN SCHEMA "+pgx.Identifier{schema}.Sanitize()+" TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	check := func() error {
+		_, err := c.Exec(ctx, "SET ROLE "+pgx.Identifier{role}.Sanitize())
+		require.NoError(t, err)
+		tx, err := c.Begin(ctx)
+		require.NoError(t, err)
+		result := CheckRuntimePrivileges(ctx, tx)
+		require.NoError(t, tx.Rollback(ctx))
+		_, err = c.Exec(ctx, "RESET ROLE")
+		require.NoError(t, err)
+		return result
+	}
+	require.NoError(t, check())
+	for _, table := range tables {
+		_, err = c.Exec(ctx, "GRANT INSERT ON "+pgx.Identifier{table}.Sanitize()+" TO "+pgx.Identifier{role}.Sanitize())
+		require.NoError(t, err)
+		require.ErrorIs(t, check(), ErrUnavailable, "serving may not mint native owner work/acceptance")
+		_, err = c.Exec(ctx, "REVOKE INSERT ON "+pgx.Identifier{table}.Sanitize()+" FROM "+pgx.Identifier{role}.Sanitize())
+		require.NoError(t, err)
+	}
+	_, err = c.Exec(ctx, `CREATE FUNCTION native_owner_privilege_bridge() RETURNS int LANGUAGE SQL SECURITY DEFINER AS 'SELECT 1'`)
+	require.NoError(t, err)
+	require.ErrorIs(t, check(), ErrUnavailable, "callable private-journal owner bridge is unsafe")
+	_, err = c.Exec(ctx, `DROP FUNCTION native_owner_privilege_bridge()`)
+	require.NoError(t, err)
+	group := "native_journal_writer_" + uuid.NewString()[:8]
+	_, err = c.Exec(ctx, "CREATE ROLE "+pgx.Identifier{group}.Sanitize())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		c.Exec(context.Background(), "RESET ROLE")
+		c.Exec(context.Background(), "DROP OWNED BY "+pgx.Identifier{group}.Sanitize())
+		c.Exec(context.Background(), "DROP ROLE "+pgx.Identifier{group}.Sanitize())
+	})
+	_, err = c.Exec(ctx, "GRANT INSERT ON "+pgx.Identifier{tables[0]}.Sanitize()+" TO "+pgx.Identifier{group}.Sanitize())
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, "ALTER ROLE "+pgx.Identifier{role}.Sanitize()+" NOINHERIT")
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, "GRANT "+pgx.Identifier{group}.Sanitize()+" TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	require.ErrorIs(t, check(), ErrUnavailable, "SET ROLE route to non-inherited journal writer is unsafe")
+}
