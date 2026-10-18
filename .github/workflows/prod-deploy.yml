@@ -79,7 +79,7 @@ jobs:
           bash scripts/prod/verify-prod-images.sh
 
       - name: Preserve verified production stack lock
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: production-stack-lock-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.verify_image.outputs.stack_lock_file }}
