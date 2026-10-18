@@ -282,7 +282,7 @@ Notification Service loads APNs configuration in [`http_sender.go`](../src/backe
 | `APNS_PRIVATE_KEY` | Backward-compatible inline `.p8` PEM alias used by the staging/prod secret templates |
 | `APNS_AUTH_KEY_PATH` | Optional mounted `.p8` PEM file; used only when neither inline variable is set |
 | `APNS_BUNDLE_ID` | Required iOS bundle identifier and regular APNs topic |
-| `APNS_VOIP_TOPIC` | Optional VoIP topic; defaults to `APNS_BUNDLE_ID` |
+| `APNS_VOIP_TOPIC` | Optional complete VoIP topic, sent verbatim after trimming; defaults to `APNS_BUNDLE_ID` + `.voip` |
 | `APNS_PRODUCTION` | Set exactly to `false` for Apple's sandbox endpoint; any other or unset value uses production |
 
 All of `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` and one auth-key source are required to enable either HTTP sender. Missing or invalid credentials leave the corresponding sender in noop mode.
