@@ -569,8 +569,9 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 
 Add `/voice.chat.v1.ChatService/ValidateRoleOverrideTarget` with package-local
 `ValidateRoleOverrideTargetRequest { string space_id = 1; string chat_id = 2; }`
-and empty `ValidateRoleOverrideTargetResponse`. This is an accepted target,
-not an implemented endpoint. The complete caller/error/consistency contract is
+and empty `ValidateRoleOverrideTargetResponse`. The source implementation uses
+a dedicated protected listener; runtime acceptance is separate. Configuration
+is documented with the complete caller/error/consistency contract in
 [Role's BE-065 contract](role-service.md#be-065-protected-override-target-validation-accepted-target);
 the [execution plan](../testing/role-override-target-validation-exec-plan.md)
 defines required verification.

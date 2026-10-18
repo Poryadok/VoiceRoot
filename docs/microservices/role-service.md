@@ -555,8 +555,9 @@ not activate the v2 ownership feature.
 
 ## BE-065 protected override target validation (accepted target)
 
-`BE-065-target-v1` is the accepted implementation contract; the existing
-setters do not yet implement this validation. The executable plan and required
+`BE-065-target-v1` is the accepted implementation contract. The source setters
+require fresh protected validation; rollout and real-store acceptance remain
+separate evidence. The executable plan and required
 negative-case matrix are in
 [role-override-target-validation-exec-plan.md](../testing/role-override-target-validation-exec-plan.md).
 
@@ -620,6 +621,41 @@ Role preserves its own actor/ACL errors and owner `NOT_FOUND`/`INVALID_ARGUMENT`
 owner transport/config/verifier failure, `UNIMPLEMENTED` or unavailable validation
 becomes `UNAVAILABLE` on the user mutation. Parent cancellation/deadline remains
 typed. Every failed validation leaves existing rows and mutation events unchanged.
+
+### BE-065 runtime configuration
+
+Role signs with `ROLE_PRINCIPAL_SIGNING_KEYS_DIR` and
+`ROLE_PRINCIPAL_ACTIVE_KID` (the standard current/next PKCS#8 key directory).
+Its separate HTTPS JWKS endpoint is `/.well-known/jwks.json`, configured by
+`ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE`, `ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE` and
+`ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN` (default `:9092`); health HTTP does not expose
+JWKS. Publish only public current/next keys through that TLS endpoint.
+
+Set both `ROLE_CHAT_TARGET_GRPC_ADDR` and `ROLE_SPACE_TARGET_GRPC_ADDR`, each
+owner's `ROLE_CHAT_TARGET_TLS_CA_FILE` / `ROLE_SPACE_TARGET_TLS_CA_FILE` and
+`ROLE_CHAT_TARGET_TLS_SERVER_NAME` / `ROLE_SPACE_TARGET_TLS_SERVER_NAME`, plus
+Role's `ROLE_OVERRIDE_TARGET_CLIENT_CERT_FILE` and
+`ROLE_OVERRIDE_TARGET_CLIENT_KEY_FILE`. Partial configuration fails startup;
+absent configuration never permits a setter write and returns `UNAVAILABLE`.
+No plaintext or ordinary-listener fallback exists. Owner calls each inherit the
+parent deadline and have a maximum two-second call budget.
+
+Each owner has a dedicated listener prefix:
+`CHAT_ROLE_OVERRIDE_PRINCIPAL_` or `SPACE_ROLE_OVERRIDE_PRINCIPAL_`, with required
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, and
+`REPLAY_REDIS_ADDR`; `REPLAY_REDIS_PASSWORD` is optional. The client CA verifies
+Role's mTLS certificate before the workload JWT reaches the handler. Shared
+`S2S_JWKS_URLS_JSON` must include Role's HTTPS endpoint; `S2S_JWKS_CA_FILE` supplies
+an optional private issuer CA. Standard Phase-0 refresh/hard-expiry/unknown-kid
+settings apply. Each owner periodically refreshes Role's complete key set and
+fails closed after hard expiry. Other configured service issuers may be verified
+only to deny their caller authority; none gains this RPC.
+
+Redis replay keys are owner-scoped
+`chat:role-override:principal:replay:<sha256(issuer + NUL + jti)>` and the matching
+`space:` prefix, atomically admitted with `SET NX` for the remaining credential
+lifetime rounded up to milliseconds. Redis failure denies before domain access;
+there is no process-local fallback or reusable positive-validation cache.
 
 ## P3 permanent Space retirement
 

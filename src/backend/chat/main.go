@@ -29,6 +29,7 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/roleoverrideprincipal"
 	"voice/backend/pkg/runtimeconfig"
 
 	authv1 "voice.app/voice/auth/v1"
@@ -54,6 +55,13 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	targetConfig, targetEnabled, targetErr := roleoverrideprincipal.LoadFromEnv("chat")
+	if targetErr != nil {
+		log.Fatalf("Role target principal config: %v", targetErr)
+	}
+	if targetEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Role target listener requires DATABASE_URL")
+	}
 	chatPrincipalIssuer, chatPrincipalJWKS, principalErr := loadChatPrincipalIssuerFromEnv()
 	if principalErr != nil {
 		log.Fatalf("Chat principal issuer: %v", principalErr)
@@ -121,6 +129,25 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		if targetEnabled {
+			runtime, err := roleoverrideprincipal.New(runCtx, targetConfig)
+			if err != nil {
+				log.Fatalf("Role target principal runtime: %v", err)
+			}
+			defer func() { _ = runtime.Close() }()
+			listener, err := net.Listen("tcp", targetConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Role target listen: %v", err)
+			}
+			targetServer := grpc.NewServer(runtime.ServerOptions()...)
+			defer targetServer.Stop()
+			chatv1.RegisterChatServiceServer(targetServer, &grpcsvc.ChatGRPC{DM: &store.DMStore{Pool: pool}})
+			go func() {
+				if err := targetServer.Serve(listener); err != nil {
+					log.Fatalf("Role target serve: %v", err)
+				}
+			}()
+		}
 		if gisPrincipalConfigured {
 			gisPrincipalRuntime, err = gisprincipal.New(context.Background(), gisPrincipalConfig)
 			if err != nil {
@@ -396,7 +423,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+		ordinaryOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(roleoverrideprincipal.OrdinaryUnaryInterceptor("chat")))
+		grpcSrv = grpc.NewServer(ordinaryOptions...)
 		listEnrichmentFailures := grpcsvc.NewListEnrichmentFailuresCounter(metricsReg)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
 			DM:                     dmStore,

@@ -19,6 +19,9 @@ service SpaceService {
   // @voice.security=public_gateway;callers=service:gateway
   rpc DeleteSpace(DeleteSpaceRequest) returns (DeleteSpaceResponse);
   rpc GetSpace(GetSpaceRequest) returns (GetSpaceResponse);
+  // Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+  // @voice.security=protected;callers=service:role
+  rpc ValidateRoleOverrideTarget(ValidateRoleOverrideTargetRequest) returns (ValidateRoleOverrideTargetResponse);
   rpc ListMySpaces(ListMySpacesRequest) returns (ListMySpacesResponse);
   rpc SearchPublicSpaces(SearchPublicSpacesRequest) returns (SearchPublicSpacesResponse);
 
@@ -718,3 +721,11 @@ message GetSpaceDeletionCoordinatorStatusRequest {
 message GetSpaceDeletionCoordinatorStatusResponse {
   voice.space.v1.SpaceDeletionCoordinatorStatus status = 1;
 }
+
+// @voice.unknown_fields=reject
+message ValidateRoleOverrideTargetRequest {
+  string space_id = 1;
+  optional string voice_room_id = 2;
+}
+
+message ValidateRoleOverrideTargetResponse {}

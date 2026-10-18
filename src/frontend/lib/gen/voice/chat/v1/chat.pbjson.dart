@@ -2620,3 +2620,27 @@ const CanCreateDMResponse$json = {
 final $typed_data.Uint8List canCreateDMResponseDescriptor =
     $convert.base64Decode(
         'ChNDYW5DcmVhdGVETVJlc3BvbnNlEhgKB2FsbG93ZWQYASABKAhSB2FsbG93ZWQ=');
+
+@$core.Deprecated('Use validateRoleOverrideTargetRequestDescriptor instead')
+const ValidateRoleOverrideTargetRequest$json = {
+  '1': 'ValidateRoleOverrideTargetRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+  ],
+};
+
+/// Descriptor for `ValidateRoleOverrideTargetRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List validateRoleOverrideTargetRequestDescriptor =
+    $convert.base64Decode(
+        'CiFWYWxpZGF0ZVJvbGVPdmVycmlkZVRhcmdldFJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3'
+        'NwYWNlSWQSFwoHY2hhdF9pZBgCIAEoCVIGY2hhdElk');
+
+@$core.Deprecated('Use validateRoleOverrideTargetResponseDescriptor instead')
+const ValidateRoleOverrideTargetResponse$json = {
+  '1': 'ValidateRoleOverrideTargetResponse',
+};
+
+/// Descriptor for `ValidateRoleOverrideTargetResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List validateRoleOverrideTargetResponseDescriptor =
+    $convert.base64Decode('CiJWYWxpZGF0ZVJvbGVPdmVycmlkZVRhcmdldFJlc3BvbnNl');

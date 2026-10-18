@@ -248,6 +248,15 @@ cache fails closed; this ephemeral replay key is not File-reference authority.
 
 ### Role ownership principal replay
 
+The separate BE-065 Role override-target listeners use receiver-owned Redis
+prefixes `chat:role-override:principal:replay:` and
+`space:role-override:principal:replay:`. The suffix is SHA-256 of
+`issuer + NUL + jti`; atomic `SET NX` uses the signed credential's remaining
+lifetime rounded up to milliseconds. Redis failure fails closed before owner
+store reads. These short-lived replay keys are not resource authority or cached
+positive validation. Configuration is in the
+[Role service contract](microservices/role-service.md#be-065-runtime-configuration).
+
 Social privacy consumers also use shared Redis configured by
 `USER_PRINCIPAL_REPLAY_REDIS_ADDR` and `SPACE_PRINCIPAL_REPLAY_REDIS_ADDR`.
 Keys are `user:principal:replay:<sha256(issuer + NUL + jti)>` and

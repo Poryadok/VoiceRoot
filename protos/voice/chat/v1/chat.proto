@@ -31,6 +31,10 @@ service ChatService {
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse);
   rpc GetChat(GetChatRequest) returns (GetChatResponse);
 
+  // Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+  // @voice.security=protected;callers=service:role
+  rpc ValidateRoleOverrideTarget(ValidateRoleOverrideTargetRequest) returns (ValidateRoleOverrideTargetResponse);
+
   rpc ListQuickAccess(ListQuickAccessRequest) returns (ListQuickAccessResponse);
   rpc AddQuickAccess(AddQuickAccessRequest) returns (AddQuickAccessResponse);
   rpc RemoveQuickAccess(RemoveQuickAccessRequest) returns (RemoveQuickAccessResponse);
@@ -728,3 +732,11 @@ message CanCreateDMRequest {
 message CanCreateDMResponse {
   bool allowed = 1;
 }
+
+// @voice.unknown_fields=reject
+message ValidateRoleOverrideTargetRequest {
+  string space_id = 1;
+  string chat_id = 2;
+}
+
+message ValidateRoleOverrideTargetResponse {}

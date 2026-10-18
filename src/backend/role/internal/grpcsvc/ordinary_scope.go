@@ -187,9 +187,29 @@ func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermiss
 }
 
 func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverrideRequest) (*rolev1.SetChatOverrideResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.SetChatOverrideResponse, error) {
+	spaceID, chatID, err := s.preflightOverrideTarget(ctx, req.GetSpaceId(), req.GetRoleId(), req.GetChat().GetId())
+	if ctx.Err() != nil {
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+	if err != nil {
+		return nil, err
+	}
+	if s.OverrideTargets == nil {
+		return nil, status.Error(codes.Unavailable, "target validation unavailable")
+	}
+	if err := s.OverrideTargets.ValidateChat(ctx, spaceID.String(), chatID.String()); err != nil {
+		return nil, targetValidationError(ctx, err)
+	}
+	if ctx.Err() != nil {
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+	response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.SetChatOverrideResponse, error) {
 		return scoped.setChatOverride(ctx, req)
 	})
+	if err != nil && ctx.Err() != nil {
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+	return response, err
 }
 
 func (s *RoleGRPC) GetEffectivePermissions(ctx context.Context, req *rolev1.GetEffectivePermissionsRequest) (*rolev1.GetEffectivePermissionsResponse, error) {
@@ -229,9 +249,29 @@ func (s *RoleGRPC) GetChatOverrides(ctx context.Context, req *rolev1.GetChatOver
 }
 
 func (s *RoleGRPC) SetVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoiceRoomOverrideRequest) (*rolev1.SetVoiceRoomOverrideResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.SetVoiceRoomOverrideResponse, error) {
+	spaceID, roomID, err := s.preflightOverrideTarget(ctx, req.GetSpaceId(), req.GetRoleId(), req.GetVoiceRoomId())
+	if ctx.Err() != nil {
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+	if err != nil {
+		return nil, err
+	}
+	if s.OverrideTargets == nil {
+		return nil, status.Error(codes.Unavailable, "target validation unavailable")
+	}
+	if err := s.OverrideTargets.ValidateVoice(ctx, spaceID.String(), roomID.String()); err != nil {
+		return nil, targetValidationError(ctx, err)
+	}
+	if ctx.Err() != nil {
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+	response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.SetVoiceRoomOverrideResponse, error) {
 		return scoped.setVoiceRoomOverride(ctx, req)
 	})
+	if err != nil && ctx.Err() != nil {
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+	return response, err
 }
 
 func (s *RoleGRPC) RemoveVoiceRoomOverride(ctx context.Context, req *rolev1.RemoveVoiceRoomOverrideRequest) (*rolev1.RemoveVoiceRoomOverrideResponse, error) {

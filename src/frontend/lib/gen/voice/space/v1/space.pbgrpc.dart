@@ -70,6 +70,17 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getSpace, request, options: options);
   }
 
+  /// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+  /// @voice.security=protected;callers=service:role
+  $grpc.ResponseFuture<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget(
+    $0.ValidateRoleOverrideTargetRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$validateRoleOverrideTarget, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListMySpacesResponse> listMySpaces(
     $0.ListMySpacesRequest request, {
     $grpc.CallOptions? options,
@@ -422,6 +433,12 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/GetSpace',
           ($0.GetSpaceRequest value) => value.writeToBuffer(),
           $0.GetSpaceResponse.fromBuffer);
+  static final _$validateRoleOverrideTarget = $grpc.ClientMethod<
+          $0.ValidateRoleOverrideTargetRequest,
+          $0.ValidateRoleOverrideTargetResponse>(
+      '/voice.space.v1.SpaceService/ValidateRoleOverrideTarget',
+      ($0.ValidateRoleOverrideTargetRequest value) => value.writeToBuffer(),
+      $0.ValidateRoleOverrideTargetResponse.fromBuffer);
   static final _$listMySpaces =
       $grpc.ClientMethod<$0.ListMySpacesRequest, $0.ListMySpacesResponse>(
           '/voice.space.v1.SpaceService/ListMySpaces',
@@ -691,6 +708,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetSpaceRequest.fromBuffer(value),
         ($0.GetSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ValidateRoleOverrideTargetRequest,
+            $0.ValidateRoleOverrideTargetResponse>(
+        'ValidateRoleOverrideTarget',
+        validateRoleOverrideTarget_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ValidateRoleOverrideTargetRequest.fromBuffer(value),
+        ($0.ValidateRoleOverrideTargetResponse value) =>
+            value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.ListMySpacesRequest, $0.ListMySpacesResponse>(
             'ListMySpaces',
@@ -1109,6 +1136,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetSpaceResponse> getSpace(
       $grpc.ServiceCall call, $0.GetSpaceRequest request);
+
+  $async.Future<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ValidateRoleOverrideTargetRequest> $request) async {
+    return validateRoleOverrideTarget($call, await $request);
+  }
+
+  $async.Future<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget(
+          $grpc.ServiceCall call, $0.ValidateRoleOverrideTargetRequest request);
 
   $async.Future<$0.ListMySpacesResponse> listMySpaces_Pre(
       $grpc.ServiceCall $call,

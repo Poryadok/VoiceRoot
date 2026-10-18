@@ -36,9 +36,9 @@ activation, permission-bit redesign or acceptance/deployment is included.
 ## Milestones
 
 - [x] Accepted target contract in all three owning service docs.
-- [ ] Additive proto/bindings and owner handlers reject invalid/ineligible targets.
-- [ ] Dedicated protected owner listeners and signed Role clients fail closed.
-- [ ] Both setters use preflight -> unlocked owner reads -> fenced reauthorization/write.
+- [x] Additive proto/bindings and owner handlers reject invalid/ineligible targets.
+- [x] Dedicated protected owner listeners and signed Role clients fail closed.
+- [x] Both setters use preflight -> unlocked owner reads -> fenced reauthorization/write.
 - [ ] Required negative, real-store and transaction/lock-order checks pass.
 - [ ] Independent security/concurrency review and exact-head hosted checks pass.
 
@@ -111,7 +111,17 @@ PostgreSQL/TLS dependencies. Do not rerun unrelated whole-repository checks.
 - [x] Isolated treehouse34 acquired at base `698d4f064f032ea74abf3ede2017100b26c8ee69`.
 - [x] Canonical contract in owning docs; all four changed documents pass
   `markdown-link-check@3.12.2` with the repository configuration.
-- [ ] Runtime implementation and verification remain open.
+- [x] Source runtime, Go/Dart bindings and negative test matrix implemented.
+- [x] Handler RED: both services returned UNIMPLEMENTED before implementation;
+  principal/ID tests now pass. Chat, Space and Role short suites pass.
+- [x] Actual local TLS/JWKS plus shared miniredis replay test passes for both
+  exact methods; signing tests prove fresh request IDs/JTIs and no forwarded identity.
+- [x] Native Buf 1.50.0 lint, format and breaking against local master pass.
+- [ ] Real PostgreSQL integration, independent review and hosted CI remain open.
+  The attempted Role PostgreSQL test failed before tests ran because testcontainers
+  cannot reach a supported Docker runtime on this Windows host. `make buf-ci`
+  also lacked Docker; native Buf of the same pinned version supplied the
+  lint/format/breaking checks. No real-store PASS or deployment is claimed.
 
 ## Decisions
 

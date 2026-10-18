@@ -8488,6 +8488,121 @@ class GetSpaceDeletionCoordinatorStatusResponse extends $pb.GeneratedMessage {
   SpaceDeletionCoordinatorStatus ensureStatus() => $_ensure(0);
 }
 
+/// @voice.unknown_fields=reject
+class ValidateRoleOverrideTargetRequest extends $pb.GeneratedMessage {
+  factory ValidateRoleOverrideTargetRequest({
+    $core.String? spaceId,
+    $core.String? voiceRoomId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    return result;
+  }
+
+  ValidateRoleOverrideTargetRequest._();
+
+  factory ValidateRoleOverrideTargetRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateRoleOverrideTargetRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateRoleOverrideTargetRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'voiceRoomId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetRequest copyWith(
+          void Function(ValidateRoleOverrideTargetRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ValidateRoleOverrideTargetRequest))
+          as ValidateRoleOverrideTargetRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetRequest create() =>
+      ValidateRoleOverrideTargetRequest._();
+  @$core.override
+  ValidateRoleOverrideTargetRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateRoleOverrideTargetRequest>(
+          create);
+  static ValidateRoleOverrideTargetRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get voiceRoomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set voiceRoomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasVoiceRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearVoiceRoomId() => $_clearField(2);
+}
+
+class ValidateRoleOverrideTargetResponse extends $pb.GeneratedMessage {
+  factory ValidateRoleOverrideTargetResponse() => create();
+
+  ValidateRoleOverrideTargetResponse._();
+
+  factory ValidateRoleOverrideTargetResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateRoleOverrideTargetResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateRoleOverrideTargetResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetResponse copyWith(
+          void Function(ValidateRoleOverrideTargetResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ValidateRoleOverrideTargetResponse))
+          as ValidateRoleOverrideTargetResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetResponse create() =>
+      ValidateRoleOverrideTargetResponse._();
+  @$core.override
+  ValidateRoleOverrideTargetResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateRoleOverrideTargetResponse>(
+          create);
+  static ValidateRoleOverrideTargetResponse? _defaultInstance;
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

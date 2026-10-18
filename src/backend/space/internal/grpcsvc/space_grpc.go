@@ -20,6 +20,7 @@ import (
 type SpaceGRPC struct {
 	spacev1.UnimplementedSpaceServiceServer
 	Store                   *store.SpaceStore
+	roleOverrideTargets     roleOverrideTargetStore // test seam; production uses Store
 	voiceRoomAccessResolver voiceRoomAccessResolver // test seam; production uses Store
 	SpaceEvents             spaceevents.Publisher   // optional; CreateSpace publishes space.created
 	Roles                   rolev1.RoleServiceClient

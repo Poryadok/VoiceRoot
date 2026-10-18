@@ -136,6 +136,17 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getChat, request, options: options);
   }
 
+  /// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+  /// @voice.security=protected;callers=service:role
+  $grpc.ResponseFuture<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget(
+    $0.ValidateRoleOverrideTargetRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$validateRoleOverrideTarget, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListQuickAccessResponse> listQuickAccess(
     $0.ListQuickAccessRequest request, {
     $grpc.CallOptions? options,
@@ -433,6 +444,12 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/GetChat',
           ($0.GetChatRequest value) => value.writeToBuffer(),
           $0.GetChatResponse.fromBuffer);
+  static final _$validateRoleOverrideTarget = $grpc.ClientMethod<
+          $0.ValidateRoleOverrideTargetRequest,
+          $0.ValidateRoleOverrideTargetResponse>(
+      '/voice.chat.v1.ChatService/ValidateRoleOverrideTarget',
+      ($0.ValidateRoleOverrideTargetRequest value) => value.writeToBuffer(),
+      $0.ValidateRoleOverrideTargetResponse.fromBuffer);
   static final _$listQuickAccess =
       $grpc.ClientMethod<$0.ListQuickAccessRequest, $0.ListQuickAccessResponse>(
           '/voice.chat.v1.ChatService/ListQuickAccess',
@@ -699,6 +716,16 @@ abstract class ChatServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetChatRequest.fromBuffer(value),
         ($0.GetChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ValidateRoleOverrideTargetRequest,
+            $0.ValidateRoleOverrideTargetResponse>(
+        'ValidateRoleOverrideTarget',
+        validateRoleOverrideTarget_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ValidateRoleOverrideTargetRequest.fromBuffer(value),
+        ($0.ValidateRoleOverrideTargetResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ListQuickAccessRequest,
             $0.ListQuickAccessResponse>(
         'ListQuickAccess',
@@ -1075,6 +1102,16 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetChatResponse> getChat(
       $grpc.ServiceCall call, $0.GetChatRequest request);
+
+  $async.Future<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ValidateRoleOverrideTargetRequest> $request) async {
+    return validateRoleOverrideTarget($call, await $request);
+  }
+
+  $async.Future<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget(
+          $grpc.ServiceCall call, $0.ValidateRoleOverrideTargetRequest request);
 
   $async.Future<$0.ListQuickAccessResponse> listQuickAccess_Pre(
       $grpc.ServiceCall $call,
