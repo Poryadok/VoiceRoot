@@ -878,6 +878,12 @@ releases, then removes chats/navigation and returns an immutable completion
 receipt. Full request/receipt bytes retain 30 days from this participant's
 completion; compact terminal fence is permanent.
 
+An exact authenticated `PurgeSpace` retry first reads Chat's committed response
+within that original retention window, before requiring Messaging/File clients.
+It returns the saved wrapper including unknown protobuf fields, without repeating
+owner calls. Changed request bytes/hash, corrupt response bindings and expired
+evidence fail closed; they cannot restart cleanup or extend receipt retention.
+
 The same successful local PURGE transaction writes one immutable
 `chat.deleted` envelope to `chat_deleted_event_outbox` for each manifest chat.
 Each envelope binds the Space, operation, purge generation and Chat manifest
