@@ -21,7 +21,7 @@ func TestUpdateRole_CustomRole(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -50,7 +50,7 @@ func TestDeleteRole_CustomRole(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -76,7 +76,7 @@ func TestDeleteRole_SystemRoleDenied(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -103,7 +103,7 @@ func TestSetChatOverride_PerRoleId(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -148,7 +148,7 @@ func TestReorderRoles_UpdatesOrder(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -184,7 +184,7 @@ func TestSetDefaultJoinRole_GetDefaultJoinRole(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()

@@ -598,6 +598,110 @@ Retired spaces cannot be recreated by bootstrap. These scoped-integrity rules
 also apply while transfer entrypoints remain disabled; implementing them does
 not activate the v2 ownership feature.
 
+## BE-065 protected override target validation (accepted target)
+
+`BE-065-target-v1` is the accepted implementation contract. The source setters
+require fresh protected validation; rollout and real-store acceptance remain
+separate evidence. The executable plan and required
+negative-case matrix are in
+[role-override-target-validation-exec-plan.md](../testing/role-override-target-validation-exec-plan.md).
+
+Every `SetChatOverride` attempt freshly calls both
+`/voice.space.v1.SpaceService/ValidateRoleOverrideTarget` (without a room) and
+`/voice.chat.v1.ChatService/ValidateRoleOverrideTarget`. Every
+`SetVoiceRoomOverride` attempt freshly calls Space's same method with the room
+present. A missing client/configuration, optional environment skip, positive
+cache, legacy `GetChat`/`GetSpace`/tree lookup or cross-database query cannot
+authorize a write. Provider success validates existence and local lifecycle;
+it grants no actor permission and returns no owner/member projection.
+
+Both owner methods accept only verified `principal_type=service`, `iss=role`,
+`sub=service:role`, exact `aud=chat|space` and exact full RPC name. The Phase-0
+credential binds the whole deterministic protobuf request (including optional
+field presence), canonical `request_id`, fresh `jti`, `kid` and bounded temporal
+claims (TTL <=30 s). One bearer and one matching `x-request-id` are required;
+raw identity metadata and duplicate authority headers reject before handler.
+Use protected TLS/mTLS with Role JWKS and replay verification. Retry signs a
+fresh JTI and performs a fresh owner read; validation is not a durable receipt
+or reusable capability. Gateway delegated-user, end-user, bot and other service
+principals are forbidden. There is no public Gateway route.
+
+The lock order is mandatory: first perform actor/role-scope/permission/hierarchy
+checks in a short existing fenced Role transaction, release that transaction,
+then make bounded owner RPCs with **no Role transaction or advisory lock held**.
+Finally open the normal fenced Role mutation transaction, repeat all current
+actor/role/hierarchy checks and write in that same transaction. Parent
+cancellation and deadline propagate; each owner call has a bounded deadline.
+Events occur only after successful Role commit. Providers use only their own
+store and lifecycle/journal authority; they never call Role or an ACL-enriched
+provider lookup. This avoids Role -> provider -> Role recursion and lock inversion.
+
+Space validates a live Space, plus a live room in that exact Space if supplied.
+Chat validates an active group/channel row with non-null matching Space ID and
+ordinary local admission. DM, standalone, foreign, deleted and missing targets
+are indistinguishable `NOT_FOUND`. Both providers require canonical non-nil
+UUIDs; a present-empty optional room is `INVALID_ARGUMENT`. Tree placement is
+not resource authority. Nonterminal Space deletion/recovery state, active
+ownership journal and non-LIVE Chat fence deny with `UNAVAILABLE`; known
+terminal fences also deny. Missing legacy fence permits admission only where
+the existing owner's canonical semantics permit it; lookup failure never means
+LIVE. Role's own prepared/frozen/purge/retired fences always win before Owner
+shortcuts. A higher permitted LIVE restoration requires new validation.
+
+This is point-in-time reference validation, **not distributed referential
+integrity**. Deletion after provider snapshot and before Role commit may leave
+an inert logical override row. Actual resource operations must still enforce
+existence/lifecycle; the row cannot resurrect or authorize a deleted resource.
+IDs are not reusable or reparentable; recreation uses a fresh server UUID.
+Group <-> channel conversion preserves identity and remains eligible.
+`RemoveChatOverride` and `RemoveVoiceRoomOverride` remain locally authorized
+cleanup paths and never require live-target lookup. P3 retirement removes Space
+overrides. No `voice.room_deleted` consumer is presumed: that subject is reserved.
+
+Provider errors: malformed input `INVALID_ARGUMENT`; ineligible/missing target
+`NOT_FOUND`; invalid signature/claims/binding/replay `UNAUTHENTICATED`;
+authenticated wrong caller `PERMISSION_DENIED`; known lifecycle fence or
+DB/JWKS/replay dependency failure `UNAVAILABLE`. TLS failure precedes handler.
+Role preserves its own actor/ACL errors and owner `NOT_FOUND`/`INVALID_ARGUMENT`;
+owner transport/config/verifier failure, `UNIMPLEMENTED` or unavailable validation
+becomes `UNAVAILABLE` on the user mutation. Parent cancellation/deadline remains
+typed. Every failed validation leaves existing rows and mutation events unchanged.
+
+### BE-065 runtime configuration
+
+Role signs with `ROLE_PRINCIPAL_SIGNING_KEYS_DIR` and
+`ROLE_PRINCIPAL_ACTIVE_KID` (the standard current/next PKCS#8 key directory).
+Its separate HTTPS JWKS endpoint is `/.well-known/jwks.json`, configured by
+`ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE`, `ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE` and
+`ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN` (default `:9092`); health HTTP does not expose
+JWKS. Publish only public current/next keys through that TLS endpoint.
+
+Set both `ROLE_CHAT_TARGET_GRPC_ADDR` and `ROLE_SPACE_TARGET_GRPC_ADDR`, each
+owner's `ROLE_CHAT_TARGET_TLS_CA_FILE` / `ROLE_SPACE_TARGET_TLS_CA_FILE` and
+`ROLE_CHAT_TARGET_TLS_SERVER_NAME` / `ROLE_SPACE_TARGET_TLS_SERVER_NAME`, plus
+Role's `ROLE_OVERRIDE_TARGET_CLIENT_CERT_FILE` and
+`ROLE_OVERRIDE_TARGET_CLIENT_KEY_FILE`. Partial configuration fails startup;
+absent configuration never permits a setter write and returns `UNAVAILABLE`.
+No plaintext or ordinary-listener fallback exists. Owner calls each inherit the
+parent deadline and have a maximum two-second call budget.
+
+Each owner has a dedicated listener prefix:
+`CHAT_ROLE_OVERRIDE_PRINCIPAL_` or `SPACE_ROLE_OVERRIDE_PRINCIPAL_`, with required
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, and
+`REPLAY_REDIS_ADDR`; `REPLAY_REDIS_PASSWORD` is optional. The client CA verifies
+Role's mTLS certificate before the workload JWT reaches the handler. Shared
+`S2S_JWKS_URLS_JSON` must include Role's HTTPS endpoint; `S2S_JWKS_CA_FILE` supplies
+an optional private issuer CA. Standard Phase-0 refresh/hard-expiry/unknown-kid
+settings apply. Each owner periodically refreshes Role's complete key set and
+fails closed after hard expiry. Other configured service issuers may be verified
+only to deny their caller authority; none gains this RPC.
+
+Redis replay keys are owner-scoped
+`chat:role-override:principal:replay:<sha256(issuer + NUL + jti)>` and the matching
+`space:` prefix, atomically admitted with `SET NX` for the remaining credential
+lifetime rounded up to milliseconds. Redis failure denies before domain access;
+there is no process-local fallback or reusable positive-validation cache.
+
 ## P3 permanent Space retirement
 
 Role is participant 1 of the common Space lifecycle barrier. Before retirement,

@@ -26,6 +26,7 @@ import (
 	"voice/backend/pkg/httpserver"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/roleoverrideprincipal"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
 	"voice/backend/space/internal/authctx"
@@ -50,6 +51,13 @@ const (
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	targetConfig, targetEnabled, targetErr := roleoverrideprincipal.LoadFromEnv("space")
+	if targetErr != nil {
+		log.Fatalf("Role target principal config: %v", targetErr)
+	}
+	if targetEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Role target listener requires DATABASE_URL")
+	}
 	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_SPACE, ":9097")
 	if err != nil {
 		log.Fatalf("Space authority source config: %v", err)
@@ -140,6 +148,25 @@ func main() {
 		defer mutationLockPool.Close()
 
 		spaceStore := &store.SpaceStore{Pool: pool}
+		if targetEnabled {
+			runtime, err := roleoverrideprincipal.New(runCtx, targetConfig)
+			if err != nil {
+				log.Fatalf("Role target principal runtime: %v", err)
+			}
+			defer func() { _ = runtime.Close() }()
+			listener, err := net.Listen("tcp", targetConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Role target listen: %v", err)
+			}
+			targetServer := grpc.NewServer(runtime.ServerOptions()...)
+			defer targetServer.Stop()
+			spacev1.RegisterSpaceServiceServer(targetServer, &grpcsvc.SpaceGRPC{Store: spaceStore})
+			go func() {
+				if err := targetServer.Serve(listener); err != nil {
+					log.Fatalf("Role target serve: %v", err)
+				}
+			}()
+		}
 		go store.RunCommunityRosterExpiryWorker(runCtx, spaceStore, time.Second)
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		var spaceEvents spaceevents.Publisher
@@ -229,6 +256,7 @@ func main() {
 			}()
 		}
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
+		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(roleoverrideprincipal.OrdinaryUnaryInterceptor("space")))
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
 			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),

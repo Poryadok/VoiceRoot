@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"log"
 	"log/slog"
 	"net"
@@ -30,6 +32,15 @@ const serviceName = "role"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	roleIssuer, roleJWKS, issuerErr := loadRolePrincipalIssuerFromEnv()
+	if issuerErr != nil {
+		log.Fatalf("Role principal issuer: %v", issuerErr)
+	}
+	targetClients, closeTargets, targetErr := loadOverrideTargetClients(roleIssuer)
+	if targetErr != nil {
+		log.Fatalf("Role target clients: %v", targetErr)
+	}
+	defer closeTargets()
 	metricsReg := prometheus.NewRegistry()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
@@ -104,7 +115,7 @@ func main() {
 			}
 		}
 		// Construct shared metrics once; both listeners use the same collectors.
-		grpcSrv, principalSrv = newRoleGRPCServers(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), &grpcsvc.RoleGRPC{Store: roleStore, Events: events}, principal)
+		grpcSrv, principalSrv = newRoleGRPCServers(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), &grpcsvc.RoleGRPC{Store: roleStore, Events: events, OverrideTargets: targetClients}, principal)
 		if principalSrv != nil {
 			protectedListener, err := net.Listen("tcp", principalConfig.ListenAddr)
 			if err != nil {
@@ -133,6 +144,33 @@ func main() {
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
+	var jwksServer *http.Server
+	if len(roleJWKS.Keys) > 0 {
+		certificate, err := tls.LoadX509KeyPair(strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE")), strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE")))
+		if err != nil {
+			log.Fatalf("Role principal JWKS TLS: %v", err)
+		}
+		addr := strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN"))
+		if addr == "" {
+			addr = ":9092"
+		}
+		jwksServer = &http.Server{Addr: addr, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/.well-known/jwks.json" {
+				http.NotFound(w, r)
+				return
+			}
+			if r.Method != http.MethodGet {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "application/jwk-set+json")
+			w.Header().Set("Cache-Control", "public, max-age=30")
+			_ = json.NewEncoder(w).Encode(roleJWKS)
+		})}
+		httpserver.ApplyHTTPServerTimeouts(jwksServer)
+		defer func() { _ = jwksServer.Close() }()
+		go func() { errCh <- jwksServer.ListenAndServeTLS("", "") }()
+	}
 	logger.Info("HTTP listening", slog.String("addr", httpAddr))
 	go func() { errCh <- server.ListenAndServe() }()
 

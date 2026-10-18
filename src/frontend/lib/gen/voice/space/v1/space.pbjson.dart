@@ -2700,3 +2700,39 @@ final $typed_data.Uint8List
         'CilHZXRTcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXNSZXNwb25zZRJGCgZzdGF0dXMYAS'
         'ABKAsyLi52b2ljZS5zcGFjZS52MS5TcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXNSBnN0'
         'YXR1cw==');
+
+@$core.Deprecated('Use validateRoleOverrideTargetRequestDescriptor instead')
+const ValidateRoleOverrideTargetRequest$json = {
+  '1': 'ValidateRoleOverrideTargetRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'voice_room_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'voiceRoomId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_voice_room_id'},
+  ],
+};
+
+/// Descriptor for `ValidateRoleOverrideTargetRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List validateRoleOverrideTargetRequestDescriptor =
+    $convert.base64Decode(
+        'CiFWYWxpZGF0ZVJvbGVPdmVycmlkZVRhcmdldFJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3'
+        'NwYWNlSWQSJwoNdm9pY2Vfcm9vbV9pZBgCIAEoCUgAUgt2b2ljZVJvb21JZIgBAUIQCg5fdm9p'
+        'Y2Vfcm9vbV9pZA==');
+
+@$core.Deprecated('Use validateRoleOverrideTargetResponseDescriptor instead')
+const ValidateRoleOverrideTargetResponse$json = {
+  '1': 'ValidateRoleOverrideTargetResponse',
+};
+
+/// Descriptor for `ValidateRoleOverrideTargetResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List validateRoleOverrideTargetResponseDescriptor =
+    $convert.base64Decode('CiJWYWxpZGF0ZVJvbGVPdmVycmlkZVRhcmdldFJlc3BvbnNl');

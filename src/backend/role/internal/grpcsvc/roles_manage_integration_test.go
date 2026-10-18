@@ -153,7 +153,7 @@ func TestGetVoiceRoomOverrides_SetAndList(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -198,7 +198,7 @@ func TestSetChatOverride_PublishesCurrentSetEvent(t *testing.T) {
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
 	events := &recordingRoleEvents{}
-	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets, func(svc *RoleGRPC) { svc.Events = events })
 	defer stop()
 
 	spaceID := uuid.New()
@@ -229,7 +229,7 @@ func TestSetVoiceRoomOverride_PublishesCurrentSetEvent(t *testing.T) {
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
 	events := &recordingRoleEvents{}
-	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets, func(svc *RoleGRPC) { svc.Events = events })
 	defer stop()
 
 	spaceID := uuid.New()
@@ -257,7 +257,7 @@ func TestRemoveChatOverride_PublishesOnlyForDeletedRow(t *testing.T) {
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
 	events := &recordingRoleEvents{}
-	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets, func(svc *RoleGRPC) { svc.Events = events })
 	defer stop()
 
 	spaceID := uuid.New()
@@ -316,7 +316,7 @@ func TestRemoveVoiceRoomOverride_PublishesOnlyForDeletedRow(t *testing.T) {
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
 	events := &recordingRoleEvents{}
-	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets, func(svc *RoleGRPC) { svc.Events = events })
 	defer stop()
 
 	spaceID := uuid.New()
@@ -342,7 +342,7 @@ func TestCreateRole_RequiresManageRolesPermission(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -371,7 +371,7 @@ func TestCreateRole_PositionAtOrAboveActorDenied(t *testing.T) {
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
 	events := &recordingRoleEvents{}
-	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets, func(svc *RoleGRPC) { svc.Events = events })
 	defer stop()
 
 	spaceID, _, actorID := bootstrapRoleManagerAtPositionTwo(t, s)
@@ -409,7 +409,7 @@ func TestCreateRole_PositionBelowActorSucceeds(t *testing.T) {
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
 	events := &recordingRoleEvents{}
-	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets, func(svc *RoleGRPC) { svc.Events = events })
 	defer stop()
 
 	spaceID, _, actorID := bootstrapRoleManagerAtPositionTwo(t, s)
@@ -446,7 +446,7 @@ func TestCreateRole_PositionOwnerBypassPreserved(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -470,7 +470,7 @@ func TestReorderRoles_NonOwnerCannotReorderProtectedHierarchyRoles(t *testing.T)
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID, _, actorID := bootstrapRoleManagerAtPositionTwo(t, s)
@@ -504,7 +504,7 @@ func TestReorderRoles_NonOwnerCannotPromoteRoleToOwnPosition(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	for _, tc := range []struct {
@@ -544,7 +544,7 @@ func TestReorderRoles_MixedBatchIsDeniedAtomically(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID, ownerID, actorID := bootstrapRoleManagerAtPositionTwo(t, s)
@@ -569,7 +569,7 @@ func TestReorderRoles_RequiresManageRolesPermission(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()
@@ -594,7 +594,7 @@ func TestReorderRoles_MalformedOrWrongSpaceLeavesPositionsUnchanged(t *testing.T
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID, ownerID, _ := bootstrapRoleManagerAtPositionTwo(t, s)
@@ -628,7 +628,7 @@ func TestGetEffectivePermissions_ReturnsMask(t *testing.T) {
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	client, stop := startRoleGRPCTestServer(t, s.Pool, withSyntheticOverrideTargets)
 	defer stop()
 
 	spaceID := uuid.New()

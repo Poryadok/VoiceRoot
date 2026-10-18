@@ -24,6 +24,7 @@ const (
 	SpaceService_UpdateSpaceMmConfig_FullMethodName               = "/voice.space.v1.SpaceService/UpdateSpaceMmConfig"
 	SpaceService_DeleteSpace_FullMethodName                       = "/voice.space.v1.SpaceService/DeleteSpace"
 	SpaceService_GetSpace_FullMethodName                          = "/voice.space.v1.SpaceService/GetSpace"
+	SpaceService_ValidateRoleOverrideTarget_FullMethodName        = "/voice.space.v1.SpaceService/ValidateRoleOverrideTarget"
 	SpaceService_ListMySpaces_FullMethodName                      = "/voice.space.v1.SpaceService/ListMySpaces"
 	SpaceService_SearchPublicSpaces_FullMethodName                = "/voice.space.v1.SpaceService/SearchPublicSpaces"
 	SpaceService_CreateVoiceRoom_FullMethodName                   = "/voice.space.v1.SpaceService/CreateVoiceRoom"
@@ -82,6 +83,9 @@ type SpaceServiceClient interface {
 	// @voice.security=public_gateway;callers=service:gateway
 	DeleteSpace(ctx context.Context, in *DeleteSpaceRequest, opts ...grpc.CallOption) (*DeleteSpaceResponse, error)
 	GetSpace(ctx context.Context, in *GetSpaceRequest, opts ...grpc.CallOption) (*GetSpaceResponse, error)
+	// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+	// @voice.security=protected;callers=service:role
+	ValidateRoleOverrideTarget(ctx context.Context, in *ValidateRoleOverrideTargetRequest, opts ...grpc.CallOption) (*ValidateRoleOverrideTargetResponse, error)
 	ListMySpaces(ctx context.Context, in *ListMySpacesRequest, opts ...grpc.CallOption) (*ListMySpacesResponse, error)
 	SearchPublicSpaces(ctx context.Context, in *SearchPublicSpacesRequest, opts ...grpc.CallOption) (*SearchPublicSpacesResponse, error)
 	CreateVoiceRoom(ctx context.Context, in *CreateVoiceRoomRequest, opts ...grpc.CallOption) (*CreateVoiceRoomResponse, error)
@@ -195,6 +199,16 @@ func (c *spaceServiceClient) GetSpace(ctx context.Context, in *GetSpaceRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSpaceResponse)
 	err := c.cc.Invoke(ctx, SpaceService_GetSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ValidateRoleOverrideTarget(ctx context.Context, in *ValidateRoleOverrideTargetRequest, opts ...grpc.CallOption) (*ValidateRoleOverrideTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateRoleOverrideTargetResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ValidateRoleOverrideTarget_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -644,6 +658,9 @@ type SpaceServiceServer interface {
 	// @voice.security=public_gateway;callers=service:gateway
 	DeleteSpace(context.Context, *DeleteSpaceRequest) (*DeleteSpaceResponse, error)
 	GetSpace(context.Context, *GetSpaceRequest) (*GetSpaceResponse, error)
+	// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+	// @voice.security=protected;callers=service:role
+	ValidateRoleOverrideTarget(context.Context, *ValidateRoleOverrideTargetRequest) (*ValidateRoleOverrideTargetResponse, error)
 	ListMySpaces(context.Context, *ListMySpacesRequest) (*ListMySpacesResponse, error)
 	SearchPublicSpaces(context.Context, *SearchPublicSpacesRequest) (*SearchPublicSpacesResponse, error)
 	CreateVoiceRoom(context.Context, *CreateVoiceRoomRequest) (*CreateVoiceRoomResponse, error)
@@ -727,6 +744,9 @@ func (UnimplementedSpaceServiceServer) DeleteSpace(context.Context, *DeleteSpace
 }
 func (UnimplementedSpaceServiceServer) GetSpace(context.Context, *GetSpaceRequest) (*GetSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSpace not implemented")
+}
+func (UnimplementedSpaceServiceServer) ValidateRoleOverrideTarget(context.Context, *ValidateRoleOverrideTargetRequest) (*ValidateRoleOverrideTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateRoleOverrideTarget not implemented")
 }
 func (UnimplementedSpaceServiceServer) ListMySpaces(context.Context, *ListMySpacesRequest) (*ListMySpacesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMySpaces not implemented")
@@ -964,6 +984,24 @@ func _SpaceService_GetSpace_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).GetSpace(ctx, req.(*GetSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ValidateRoleOverrideTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateRoleOverrideTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ValidateRoleOverrideTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ValidateRoleOverrideTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ValidateRoleOverrideTarget(ctx, req.(*ValidateRoleOverrideTargetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1768,6 +1806,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSpace",
 			Handler:    _SpaceService_GetSpace_Handler,
+		},
+		{
+			MethodName: "ValidateRoleOverrideTarget",
+			Handler:    _SpaceService_ValidateRoleOverrideTarget_Handler,
 		},
 		{
 			MethodName: "ListMySpaces",

@@ -580,6 +580,45 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 
 `chat.member_changed` is the single membership-change subject; producers do not emit parallel `chat.member_added`, `chat.member_removed`, or `chat.member_left` subjects. Consumers must tolerate unknown `change` values. Caller-relative DM `DeleteChat` is a `left` membership change and is never a permanent `chat.deleted` event. P3 `chat.deleted` envelopes retain a stable event ID, occurrence time, exact Space/operation/generation/manifest binding, and immutable bytes in `chat_db` until JetStream confirms publication; retries publish those same bytes and deduplication ID.
 
+## BE-065 Role override target validation (accepted target)
+
+Add `/voice.chat.v1.ChatService/ValidateRoleOverrideTarget` with package-local
+`ValidateRoleOverrideTargetRequest { string space_id = 1; string chat_id = 2; }`
+and empty `ValidateRoleOverrideTargetResponse`. The source implementation uses
+a dedicated protected listener; runtime acceptance is separate. Configuration
+is documented with the complete caller/error/consistency contract in
+[Role's BE-065 contract](role-service.md#be-065-protected-override-target-validation-accepted-target);
+the [execution plan](../testing/role-override-target-validation-exec-plan.md)
+defines required verification.
+
+Only a verified Role workload (`principal_type=service`, `iss=role`,
+`sub=service:role`, `aud=chat`, exact full RPC and deterministic whole-body hash)
+may call this method. It requires protected TLS/mTLS, Role JWKS and replay
+verification, fresh JTI, canonical signed request ID matching the sole
+`x-request-id`, and Phase-0 <=30 s lifetime. Reject raw identity metadata,
+duplicate credentials and all delegated-user/end-user/bot/other-service callers.
+The handler itself requires the verified Role principal even on direct calls.
+Do not broaden existing GIS/Search/MatchSquad listeners; ordinary/public
+listeners refuse with `UNAVAILABLE` before domain access. No Gateway route exists.
+
+Under one consistent local store/lifecycle serialization boundary, validate
+canonical non-nil IDs and an active `chats` row whose type is `group|channel`,
+whose `space_id` is non-null and exactly matches, and whose local Space fence
+permits ordinary admission. DM, standalone, absent, foreign-Space and deleted
+rows all return indistinguishable `NOT_FOUND`; malformed IDs return
+`INVALID_ARGUMENT`. Tree placement is not an additional predicate. Known
+non-LIVE/ownership/terminal fences and unavailable/corrupt fence reads return
+`UNAVAILABLE`; absent legacy fence follows existing ordinary-admission semantics.
+No members, owner, name or permission data are returned, and this path never
+calls Role or another ACL-enriched provider API.
+
+Each attempt reads current state; success is a point-in-time existence result,
+not a reservation or capability. Deletion after this snapshot may leave an inert
+Role reference; actual Chat operations must still reject missing/deleted rows.
+No UUID reuse/reparenting is permitted; group/channel conversion preserves
+eligibility. Restoration requires a fresh read. Existing overrides cannot grant
+access across Chat lifecycle fences.
+
 ## Зависимости
 
 - **Social Service** — проверка блокировок при создании DM
