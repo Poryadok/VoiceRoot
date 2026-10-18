@@ -36,10 +36,20 @@ Prepare these existing external objects before composing the patches:
 - ConfigMap `voice-report-threshold-authorities` with
   `USER_S2S_JWKS_URLS_JSON` and `AUTH_S2S_JWKS_URLS_JSON`: each value is the
   **complete currently required issuer map**, not a replacement containing only
-  the new issuer. User's map adds `moderation` with BE-045's exact HTTPS JWKS URL;
+  the new issuer. User's map adds `moderation` with BE-045's exact cert-only mTLS
+  HTTPS JWKS URL
+  `https://voice-moderation-authority:8443/internal/principals/jwks`;
   Auth's map adds `user` with the exact HTTPS endpoint above. Preserve all other
   callers required by the assembled application. Never infer issuer keys from a
   client request, ordinary metadata or target profile.
+
+BE-045 owns this one Moderation signer/JWKS listener and its
+`MODERATION_PRINCIPAL_{JWKS_LISTEN,TLS_CERT_FILE,TLS_KEY_FILE,CLIENT_CA_FILE}`
+configuration. The key endpoint starts before domain/restore readiness and has
+no JWT/floor lookup dependency, so owner verifiers can bootstrap without a trust
+cycle. User's configured JWKS client identity and the union of allowed caller CAs
+must match that listener. Do not retain the temporary report-targets signer or
+publish a second set of Moderation keys.
 
 Compose NetworkPolicies against the exact current base before activation:
 permit `app=voice-moderation` to `app=voice-user` TCP 9466 and `app=voice-user`
