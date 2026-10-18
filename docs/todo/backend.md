@@ -790,7 +790,7 @@ and Voice IDs denied while history remains.
 - [x] **[Analytics] Export CSV includes hashed IDs** — CSV exports include existing `user_id_hashed` / `profile_id_hashed` columns while JSON remains unchanged (`src/backend/analytics/internal/grpcsvc/query.go`).
 - [ ] **[Analytics] User-level activity gap** — `message_sent` hashes `profile_id` only; `user_id_hashed` empty → DAU/retention undercount messengers (`d:\Git\Voice\src\backend\analytics\internal\adapters\domain.go`).
 - [ ] **[Analytics] Gateway health telemetry off by default** — `GATEWAY_ANALYTICS_SAMPLE_RATE` default 0 (`d:\Git\Voice\src\backend\gateway\analytics_telemetry.go`); health dashboard needs explicit enablement.
-- [ ] **[Analytics] CH schema doc naming** — Docs use `user_id`/`profile_id`; DDL uses `user_id_hashed`/`profile_id_hashed` (`docs/microservices/analytics-service.md` vs `d:\Git\Voice\docker\clickhouse\init\001_events.sql`).
+- [x] **[Analytics] CH schema doc naming** — Raw schema and DAU examples use the existing `user_id_hashed` / `profile_id_hashed` names and explain HMAC/empty-ID semantics ([service contract](../microservices/analytics-service.md), `docker/clickhouse/init/001_events.sql`).
 
 ### Role
 
