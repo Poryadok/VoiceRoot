@@ -693,7 +693,6 @@ and Voice IDs denied while history remains.
 - [x] **[Story] Archive purge worker delayed first run** — closed at `d66d92b`: startup `run()` dispatches immediately; `main` passes `serviceCtx` through the worker to cancel in-flight File work; focused `TestStartArchivePurgeWorker_runsOnceOnStartup` and `TestStartArchivePurgeWorker_propagatesServiceCancellationToStartupDispatch` cover both paths. Separate `DeleteStory` orphan-media and compose expiry full-chain TODOs remain open.
 - [ ] **[Story] `game_tag` unvalidated** — free string, no Matchmaking catalog lookup. Path: `src/backend/story/internal/grpcsvc/story.go`.
 - [ ] **[Story] No compose/live E2E for LFP** — Gateway unit test only. Paths: `src/backend/gateway/transcode_stories_test.go`; no `compose_*lfp*` / Flutter LFP create flow in CI ([`.github/ci/e2e-features.yml`](../../.github/ci/e2e-features.yml)).
-- [ ] **[Story] Stale service README** — still says “scaffold”. Path: `src/backend/story/README.md`.
 
 ### Voice
 
