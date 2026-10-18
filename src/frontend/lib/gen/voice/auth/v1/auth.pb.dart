@@ -5361,6 +5361,125 @@ class AcknowledgeSpaceDeletionProofReceiptResponse
   $1.Timestamp ensureAcknowledgedAt() => $_ensure(0);
 }
 
+/// Space-only authoritative session floor; separate from Role and Voice callers.
+class GetSpaceSessionEpochFloorRequest extends $pb.GeneratedMessage {
+  factory GetSpaceSessionEpochFloorRequest({
+    $core.String? accountId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    return result;
+  }
+
+  GetSpaceSessionEpochFloorRequest._();
+
+  factory GetSpaceSessionEpochFloorRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceSessionEpochFloorRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceSessionEpochFloorRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceSessionEpochFloorRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceSessionEpochFloorRequest copyWith(
+          void Function(GetSpaceSessionEpochFloorRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetSpaceSessionEpochFloorRequest))
+          as GetSpaceSessionEpochFloorRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceSessionEpochFloorRequest create() =>
+      GetSpaceSessionEpochFloorRequest._();
+  @$core.override
+  GetSpaceSessionEpochFloorRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceSessionEpochFloorRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSpaceSessionEpochFloorRequest>(
+          create);
+  static GetSpaceSessionEpochFloorRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+}
+
+class GetSpaceSessionEpochFloorResponse extends $pb.GeneratedMessage {
+  factory GetSpaceSessionEpochFloorResponse({
+    $fixnum.Int64? sessionEpochFloor,
+  }) {
+    final result = create();
+    if (sessionEpochFloor != null) result.sessionEpochFloor = sessionEpochFloor;
+    return result;
+  }
+
+  GetSpaceSessionEpochFloorResponse._();
+
+  factory GetSpaceSessionEpochFloorResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceSessionEpochFloorResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceSessionEpochFloorResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aInt64(1, _omitFieldNames ? '' : 'sessionEpochFloor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceSessionEpochFloorResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceSessionEpochFloorResponse copyWith(
+          void Function(GetSpaceSessionEpochFloorResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceSessionEpochFloorResponse))
+          as GetSpaceSessionEpochFloorResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceSessionEpochFloorResponse create() =>
+      GetSpaceSessionEpochFloorResponse._();
+  @$core.override
+  GetSpaceSessionEpochFloorResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceSessionEpochFloorResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSpaceSessionEpochFloorResponse>(
+          create);
+  static GetSpaceSessionEpochFloorResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get sessionEpochFloor => $_getI64(0);
+  @$pb.TagNumber(1)
+  set sessionEpochFloor($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSessionEpochFloor() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSessionEpochFloor() => $_clearField(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =
