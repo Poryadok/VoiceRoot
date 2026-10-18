@@ -344,6 +344,20 @@ listener rejects all other methods. See Story's deployment runbook and
 
 ## Масштабирование
 
+Legacy uploader deletion and expiry must always use persistence-backed blob
+authority, independently of protected listener/reference feature flags. Lock the
+target file `FOR NO KEY UPDATE`, then its blob `FOR UPDATE`; in a fresh statement
+reject any live reference across all aliases, or another usable legacy alias
+whose ledger may be incomplete. Preserve ordinary zero-reference singleton
+deletion. Commit terminal file status, music tombstone and irreversible durable
+GC intent before touching object storage. Missing storage, partial deletion or
+response loss leaves the intent pending for the ordinary reference-GC worker;
+RPC success requires observed completion. Retries preserve the original terminal
+status and operation. Shared/dedup/backfill activation still requires sealed
+owner evidence and writers serialized by the same blob authority. See
+[BE-264 execution plan](../testing/be264-legacy-delete-authority-exec-plan.md)
+for outstanding runtime and concurrency gates.
+
 Upload/download — через presigned URLs (R2 обслуживает напрямую). Конвертация — отдельный пул воркеров, масштабируется по очереди задач.
 
 ### Subscription retention projection (A7 accepted target; not implemented)

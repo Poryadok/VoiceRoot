@@ -20,14 +20,24 @@ func (s *FilesStore) markUnavailableWithMusicEvent(ctx context.Context, id uuid.
 	if err != nil {
 		return err
 	}
+	if err = markUnavailableWithMusicEventTx(ctx, tx, row, status); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// Caller owns the file lock; legacy deletion uses NO KEY UPDATE to avoid
+// deadlocking with a blob-locked reference insertion's FK KEY SHARE.
+func markUnavailableWithMusicEventTx(ctx context.Context, tx pgx.Tx, row FileRow, status string) error {
+	id := row.ID
 	if status == "expired" && row.Status != "ready" {
 		return pgx.ErrNoRows
 	}
 	if row.Status == status {
-		return tx.Commit(ctx)
+		return nil
 	}
 	music := row.UploadIntent == "music" && row.FileType == "audio" && !row.IsE2E
-	if _, err = tx.Exec(ctx, `UPDATE files SET status=$2,updated_at=now(),
+	if _, err := tx.Exec(ctx, `UPDATE files SET status=$2,updated_at=now(),
  music_metadata_revision=music_metadata_revision+CASE WHEN $3 THEN 1 ELSE 0 END,
  music_title=CASE WHEN $3 THEN NULL ELSE music_title END,
  music_artist=CASE WHEN $3 THEN NULL ELSE music_artist END,
@@ -44,11 +54,11 @@ func (s *FilesStore) markUnavailableWithMusicEvent(ctx context.Context, id uuid.
 		if eventErr != nil {
 			return eventErr
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO file_music_event_outbox(event_id,file_id,metadata_revision,payload) VALUES($1,$2,$3,$4)`, event.GetEventId(), id, row.MusicMetadataRevision+1, body); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO file_music_event_outbox(event_id,file_id,metadata_revision,payload) VALUES($1,$2,$3,$4)`, event.GetEventId(), id, row.MusicMetadataRevision+1, body); err != nil {
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 // ApplyAudioProcessing commits metadata and its processing event together. No clock value serves as
