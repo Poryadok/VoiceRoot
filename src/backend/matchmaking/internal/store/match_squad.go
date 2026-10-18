@@ -187,6 +187,9 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 		return MatchSquadProvisioningOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadReceiptMatchTx(ctx, tx, matchID); err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
 	operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
 		SELECT match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes, state,
 		       chat_operation_id, chat_request_sha256, chat_request_bytes, chat_receipt_id, chat_receipt_bytes, chat_id,
@@ -199,8 +202,9 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 	if err != nil {
 		return MatchSquadProvisioningOperation{}, err
 	}
-	if operation.State != "provisioning" {
-		return MatchSquadProvisioningOperation{}, ErrMatchSquadPending
+	mode, err := readMatchSquadReceiptModeTx(ctx, tx, operation, "chat")
+	if err != nil {
+		return MatchSquadProvisioningOperation{}, err
 	}
 	chatReceipt := new(chatv1.MatchSquadChatReceipt)
 	voiceRequest := new(callsv1.CreateMatchSquadRoomRequest)
@@ -234,12 +238,20 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 			return MatchSquadProvisioningOperation{}, ErrMatchSquadConflict
 		}
 	} else {
-		_, err = tx.Exec(ctx, `
+		if mode.dispatch {
+			_, err = tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations
+			 SET chat_receipt_id=$2,chat_receipt_bytes=$3,chat_id=$4,
+			 voice_request_sha256=$5,voice_request_bytes=$6,chat_dispatch_state='RECEIPT_KNOWN',
+			 provision_revision=provision_revision+1,updated_at=clock_timestamp()
+			 WHERE match_id=$1 AND chat_receipt_id IS NULL`, matchID, receiptID, receiptBytes, chatID, voiceRequestHash, voiceRequestBytes)
+		} else {
+			_, err = tx.Exec(ctx, `
 			UPDATE matchmaking_match_squad_operations
 			SET chat_receipt_id=$2, chat_receipt_bytes=$3, chat_id=$4,
 			    voice_request_sha256=$5, voice_request_bytes=$6, updated_at=clock_timestamp()
 			WHERE match_id=$1 AND state='provisioning' AND chat_receipt_id IS NULL
 		`, matchID, receiptID, receiptBytes, chatID, voiceRequestHash, voiceRequestBytes)
+		}
 		if err != nil {
 			return MatchSquadProvisioningOperation{}, err
 		}
@@ -248,6 +260,11 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 		operation.ChatID = &chatID
 		operation.VoiceRequestHash = append([]byte(nil), voiceRequestHash...)
 		operation.VoiceRequestBytes = append([]byte(nil), voiceRequestBytes...)
+	}
+	if mode.abandoned {
+		if err := materializeMatchSquadCompensationTx(ctx, tx, operation, "chat"); err != nil {
+			return MatchSquadProvisioningOperation{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return MatchSquadProvisioningOperation{}, err
@@ -269,6 +286,9 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 		return MatchSquadProvisioningOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadReceiptMatchTx(ctx, tx, matchID); err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
 	operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
 		SELECT match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes, state,
 		       chat_operation_id, chat_request_sha256, chat_request_bytes, chat_receipt_id, chat_receipt_bytes, chat_id,
@@ -281,7 +301,11 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 	if err != nil {
 		return MatchSquadProvisioningOperation{}, err
 	}
-	if operation.State != "provisioning" || operation.ChatReceiptID == nil || len(operation.VoiceRequestBytes) == 0 {
+	mode, err := readMatchSquadReceiptModeTx(ctx, tx, operation, "voice")
+	if err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
+	if operation.ChatReceiptID == nil || len(operation.VoiceRequestBytes) == 0 {
 		return MatchSquadProvisioningOperation{}, ErrMatchSquadPending
 	}
 	if operation.ChatID == nil {
@@ -306,17 +330,29 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 			return MatchSquadProvisioningOperation{}, ErrMatchSquadConflict
 		}
 	} else {
-		_, err = tx.Exec(ctx, `
+		if mode.dispatch {
+			_, err = tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations
+			 SET voice_receipt_id=$2,voice_receipt_bytes=$3,voice_room_id=$4,voice_dispatch_state='RECEIPT_KNOWN',
+			 provision_revision=provision_revision+1,updated_at=clock_timestamp()
+			 WHERE match_id=$1 AND voice_receipt_id IS NULL`, matchID, receiptID, receiptBytes, roomID)
+		} else {
+			_, err = tx.Exec(ctx, `
 			UPDATE matchmaking_match_squad_operations
 			SET voice_receipt_id=$2, voice_receipt_bytes=$3, voice_room_id=$4, updated_at=clock_timestamp()
 			WHERE match_id=$1 AND state='provisioning' AND voice_receipt_id IS NULL AND chat_receipt_id IS NOT NULL
 		`, matchID, receiptID, receiptBytes, roomID)
+		}
 		if err != nil {
 			return MatchSquadProvisioningOperation{}, err
 		}
 		operation.VoiceReceiptID = &receiptID
 		operation.VoiceReceiptBytes = append([]byte(nil), receiptBytes...)
 		operation.VoiceRoomID = &roomID
+	}
+	if mode.abandoned {
+		if err := materializeMatchSquadCompensationTx(ctx, tx, operation, "voice"); err != nil {
+			return MatchSquadProvisioningOperation{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return MatchSquadProvisioningOperation{}, err

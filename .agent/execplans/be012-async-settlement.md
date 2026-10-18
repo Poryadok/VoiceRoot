@@ -85,3 +85,58 @@ persists until actual supported receiving acceptance.
 Prior native205 CLEAR and existing PG/consumer/reset/gate proofs are retained and
 reused where input/risk is unchanged. Old baseline/harness failures remain in
 PROOF.md; a prior local PASS is not hosted CI, coverage certification or rollout.
+
+## Storage checkpoint 2026-10-18T23:30Z
+
+Immutable test-first45c018b6ef35455be25b7b0554f6bad7f473dddf reproduced
+same-caller-transaction abandonment RED (expected ABANDONED, actual LIVE).
+The current storage delta adds monotone dispatch/disposition fences, dispatch-
+backed unresolved compensation slots, strict prerequisite Chat receipt before
+Voice dispatch, replay binding checks and no synthetic aggregate for no dispatch.
+Historical requests are conservatively possibly-issued; receipt absence never
+becomes proof of absence. Migration DOWN refuses any operation evidence; empty
+UP/DOWN/UP restores the predecessor constraints.
+
+Linux PG results in external rudeus147-be012/:
+- settlement-red.*: retained initial RED,7.009s.
+- settlement-green.*: caller-Tx latch/rollback GREEN1,0skip,11.768s.
+- settlement-monotone-red.*: direct SQL reopened disposition (RED preserved).
+- settlement-monotone-green.*: monotone storage fence GREEN1,0skip.
+- settlement-unissued-red.*: synthetic aggregate for no dispatch (RED preserved).
+- settlement-storage-v2-green.*: no-dispatch closure plus rollback/roundtrip
+  GREEN3,0skip,14.953s.
+- settlement-obligation-red.*: fake unresolved aggregate without abandoned
+  dispatch evidence was accepted (RED preserved).
+- settlement-storage-v4-green.*: final storage/replay/evidence guards
+  GREEN3,0skip,29.636s; exact input file SHA256 inventory retained alongside.
+
+This is storage groundwork, not the complete risk matrix above. No production
+reset callers, fresh candidate/ban-guard transition, late-receipt materialization,
+provider settlement dispatcher, independent review or activation is qualified.
+The original commit process has committed45c018b6 and remains in its automatic
+shared-object repack (own chain50924/884/38008/40896/42264/50644); no maintenance
+process or shared Git configuration was killed/changed. Current source changes
+remain on the sole owned WT31 lease while useful PG work proceeds.
+
+Late Chat receipt extension: settlement-late-chat-red.* preserved the original
+compensating-state rejection. Existing Chat/Voice receipt methods now take the
+match fence before operation, retain all original request/receipt validation,
+require an issued marker in021 mode, advance RECEIPT_KNOWN/revision and accept
+exact abandoned replay. Atomic compensation materialization fills only the
+pre-frozen teardown identity and moves WAITING_FOR_CREATION to NOT_STARTED.
+Migration trigger functions preserve predecessor definitions under pre021 names
+for guarded empty rollback; existing non-NULL bytes, receipts and terminal states
+stay immutable. A late Chat receipt never changes Voice's NOT_ISSUED marker.
+
+settlement-late-chat-green.*: Linux PG4PASS/0skip64.202s includes the three
+storage tests and existing full durable provisioning/receipts/lifecycle test.
+Exact source SHA inventory is recorded before run. No mock provider absence or
+coordinator/public activation claim. Graphify update had no output; only owned
+Python35320/launcher47360 were stopped after the bounded window, wrappers exited0;
+this is NOT a Graphify PASS. Git maintenance finished normally;45c018b6 process
+terminal0 confirmed, no shared maintenance/configuration change.
+
+Next: known Chat cleanup while Voice creation remains unknown, durable conflict
+evidence, receipt/teardown lock-order compatibility; consume145 immutable
+2a7079832dd893cf944de5a22f6356484b1830dc private tuple/Accounts/022 guard APIs by
+normal merge. Fresh ban Check stays after inner locks, with account locks outer.
