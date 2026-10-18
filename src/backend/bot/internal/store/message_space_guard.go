@@ -15,7 +15,9 @@ var ErrMessageBindingChanged = errors.New("bot message Space binding changed")
 // Lock order: all distinct actual Space advisory keys, ascending; bot IDs,
 // ascending; whitelist (bot_id,chat_id); delivery/event rows. Message senders use
 // shared Space locks through the external attempt and commit; lifecycle and
-// installation mutations use exclusive locks. No transaction upgrades a lock.
+// installation mutations use exclusive locks. Per-chat enablement uses a shared
+// Space guard and serializes with delivery through the whitelist row instead.
+// No transaction upgrades a lock.
 func lockMessageSpaces(ctx context.Context, tx pgx.Tx, spaces []uuid.UUID) error {
 	ids := make([]string, 0, len(spaces))
 	for _, id := range spaces {

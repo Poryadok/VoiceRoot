@@ -472,7 +472,10 @@ func (s *BotStore) SetChatEnabled(ctx context.Context, botID, chatID, spaceID, i
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+	// Serialize with lifecycle transitions at Space scope, and with delivery at
+	// the whitelist row. An exclusive Space lock here would queue unrelated
+	// recipients behind this bot's in-flight HTTP attempt.
+	if err = lockMessageSpaces(ctx, tx, []uuid.UUID{spaceID}); err != nil {
 		return err
 	}
 	var lifecycleState string
