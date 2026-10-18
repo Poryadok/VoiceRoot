@@ -11,7 +11,7 @@ import (
 // receipt. A revoked/mismatched installation is false; storage failure is unknown.
 func (s *BotStore) CheckCurrentInstallationScope(ctx context.Context, botID, spaceID, actorID, installationID uuid.UUID, scope string) (bool, error) {
 	if s == nil || s.Pool == nil {
-		return false, errors.New("Bot installation storage unavailable")
+		return false, errors.New("bot installation storage unavailable")
 	}
 	if botID == uuid.Nil || spaceID == uuid.Nil || actorID == uuid.Nil || installationID == uuid.Nil || scope != "TEXT_CHAT_CREATE_IN_SPACE" {
 		return false, errors.New("invalid installation binding")
