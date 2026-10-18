@@ -118,9 +118,13 @@ func (i *HS256TokenIssuer) joinTokenUntil(profileID, roomName string, canPublish
 	issuedAt := now.UTC().Unix()
 	header := map[string]string{"alg": "HS256", "typ": "JWT"}
 	video := map[string]any{
-		"roomJoin": true,
-		"room":     roomName,
+		"roomJoin":     true,
+		"room":         roomName,
+		"canPublish":   true,
+		"canSubscribe": true,
 	}
+	// Ordinary call participants retain full media access explicitly, while
+	// callers with an authoritative publish restriction keep that restriction.
 	if canPublish != nil {
 		video["canPublish"] = *canPublish
 	}
