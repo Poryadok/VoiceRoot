@@ -851,7 +851,14 @@ void main() {
           ProviderScope(
             overrides: voiceAppTestOverrides(client: client),
             child: MaterialApp(
-              theme: voiceTestTheme(),
+              theme: voiceTestTheme().copyWith(
+                textTheme: voiceTestTheme().textTheme.apply(
+                  fontFamily: 'Noto Sans',
+                ),
+                primaryTextTheme: voiceTestTheme().primaryTextTheme.apply(
+                  fontFamily: 'Noto Sans',
+                ),
+              ),
               locale: const Locale('en'),
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
