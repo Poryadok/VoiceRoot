@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	spacev1 "voice.app/voice/space/v1"
-	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 )
@@ -52,13 +51,10 @@ func TestPublicAuditReadFiltersACLAndFrozenDisclosure(t *testing.T) {
 	require.NoError(t, err)
 	roles := &auditPermissionRoleStub{allowed: true}
 	service := &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: st, Roles: roles, AuditCursorKey: []byte(strings.Repeat("k", 32))}}
-	actorContext := func(actor uuid.UUID) context.Context {
-		md := metadata.Pairs(authctx.HeaderUserID, account.String(), authctx.HeaderProfileID, actor.String(), authctx.HeaderSessionEpoch, "7")
-		return principal.WithVerified(metadata.NewIncomingContext(ctx, md), principal.Principal{Kind: "delegated_user", Issuer: "gateway", Audience: "space", RPC: spacev1.SpaceService_GetAuditLog_FullMethodName, AccountID: account.String(), ProfileID: actor.String(), SessionEpoch: 7})
-	}
 	auditID := uuid.New()
 	insertSpaceAuditEntry(t, ctx, pool, row.ID, auditID, owner, "member_banned", "account", `{"reason":"fixture ban"}`, time.Now().UTC())
 	req := &spacev1.GetAuditLogRequest{SpaceId: row.ID.String(), Action: proto.String("member_banned")}
+	actorContext := func(actor uuid.UUID) context.Context { return boundAuditFixture(ctx, account, actor, req) }
 	resp, err := service.GetAuditLog(actorContext(member), req)
 	require.NoError(t, err)
 	require.Len(t, resp.GetAuditLogList().GetEntries(), 1)
