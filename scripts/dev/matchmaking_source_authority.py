@@ -30,6 +30,8 @@ MAX_JOB_LOG = 16 << 20
 SOURCE_SHA = re.compile(r"[a-f0-9]{40}\Z")
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 GHCR_BLOB_REDIRECT_HOST = "pkg-containers.githubusercontent.com"
+MAX_REDIRECT_PATH = 8 << 10
+MAX_REDIRECT_QUERY = 8 << 10
 REDIRECT_TARGET_CODES = frozenset((
     "redirect_target_control_invalid", "redirect_target_scheme_invalid",
     "redirect_target_host_invalid", "redirect_target_authority_invalid",
@@ -112,9 +114,47 @@ def _redirect_rejected(code, url, status=307, *, phase="registry-config-redirect
         redirect_host_class=_redirect_host_class(url))
 
 
-def _read_redirected_blob(url, digest, *, limit):
-    if not isinstance(url, str) or any(ord(char) < 0x21 or ord(char) == 0x7f for char in url):
+def _safe_redirect_path(path):
+    if (not path.startswith("/") or path == "/" or len(path) > MAX_REDIRECT_PATH
+        or "\\" in path or re.search(r"%(?![0-9a-fA-F]{2})", path)):
+        return False
+    current = path
+    for _ in range(9):
+        if ("\\" in current or re.search(r"%(?:2f|5c)", current, re.IGNORECASE)
+            or re.search(r"%(?![0-9a-fA-F]{2})", current)):
+            return False
+        segments = current.split("/")[1:]
+        if not segments or any(segment in ("", ".", "..") for segment in segments):
+            return False
+        decoded = urllib.parse.unquote(current)
+        if decoded == current:
+            return True
+        current = decoded
+    return False
+
+
+def _read_expected_blob(response, expected_size):
+    chunks = []
+    remaining = expected_size + 1
+    while remaining:
+        chunk = response.read(min(64 * 1024, remaining))
+        if not chunk:
+            break
+        if len(chunk) > remaining:
+            _reject()
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    body = b"".join(chunks)
+    if len(body) != expected_size:
+        _reject()
+    return body
+
+
+def _read_redirected_blob(url, digest, *, expected_size):
+    if not isinstance(url, str) or any(ord(char) <= 0x20 or 0x7f <= ord(char) <= 0x9f for char in url):
         _redirect_rejected("redirect_target_control_invalid", url)
+    if not DIGEST.fullmatch(digest) or type(expected_size) is not int or not 0 < expected_size <= MAX_REGISTRY_BODY:
+        _redirect_rejected("redirect_target_digest_invalid", url)
     try:
         parsed = urllib.parse.urlsplit(url)
     except ValueError:
@@ -127,18 +167,19 @@ def _read_redirected_blob(url, digest, *, limit):
         _redirect_rejected("redirect_target_host_invalid", url)
     if parsed.username is not None or parsed.password is not None:
         _redirect_rejected("redirect_target_authority_invalid", url)
+    if parsed.netloc.lower() not in (GHCR_BLOB_REDIRECT_HOST, GHCR_BLOB_REDIRECT_HOST + ":443"):
+        _redirect_rejected("redirect_target_authority_invalid", url)
     try:
         if parsed.port not in (None, 443):
             _redirect_rejected("redirect_target_authority_invalid", url)
     except ValueError:
         _redirect_rejected("redirect_target_authority_invalid", url)
-    if parsed.fragment:
+    if parsed.fragment or "#" in url:
         _redirect_rejected("redirect_target_fragment_invalid", url)
-    if not parsed.path.startswith("/ghcr1/blobs/"):
+    if not _safe_redirect_path(parsed.path):
         _redirect_rejected("redirect_target_path_invalid", url)
-    if parsed.path != "/ghcr1/blobs/" + digest:
-        _redirect_rejected("redirect_target_digest_invalid", url)
-    if not parsed.query:
+    if (not parsed.query or len(parsed.query) > MAX_REDIRECT_QUERY
+        or re.search(r"%(?![0-9a-fA-F]{2})", parsed.query)):
         _redirect_rejected("redirect_target_query_invalid", url)
     request = urllib.request.Request(url, headers={"Accept": "application/octet-stream"})
     try:
@@ -148,11 +189,10 @@ def _read_redirected_blob(url, digest, *, limit):
                 raise ReceiptError(phase=_CURRENT_PHASE, code="http_status",
                     failure_class="HTTPResponse", http_status=status)
             declared = response.headers.get("Content-Length")
-            if declared is not None and (not declared.isdigit() or int(declared) > limit):
+            if declared is not None and (not re.fullmatch(r"[0-9]+", declared)
+                or int(declared) != expected_size):
                 _reject()
-            body = response.read(limit + 1)
-            if not 0 < len(body) <= limit or response.read(1):
-                _reject()
+            body = _read_expected_blob(response, expected_size)
             return body, dict(response.headers)
     except ReceiptError:
         raise
@@ -173,7 +213,8 @@ def _read_redirected_blob(url, digest, *, limit):
             failure_class="OSError") from None
 
 
-def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY, blob_redirect_digest=None):
+def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY, blob_redirect_digest=None,
+        blob_expected_size=None):
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname != "ghcr.io" or parsed.username or parsed.password:
         _reject()
@@ -198,7 +239,10 @@ def _read_response(url, headers, *, limit=MAX_REGISTRY_BODY, blob_redirect_diges
         if status == 307 and blob_redirect_digest is not None:
             location = error.headers.get("Location") if error.headers is not None else None
             error.close()
-            return _read_redirected_blob(location or "", blob_redirect_digest, limit=limit)
+            if type(blob_expected_size) is not int or not 0 < blob_expected_size <= limit:
+                _reject()
+            return _read_redirected_blob(location or "", blob_redirect_digest,
+                expected_size=blob_expected_size)
         raise ReceiptError(phase=_CURRENT_PHASE, code="http_error",
             failure_class="HTTPError", http_status=status) from None
     except urllib.error.URLError:
@@ -233,18 +277,23 @@ def _registry_token(name, username, github_token, cache):
     return cache[name]
 
 
-def _registry_get(name, reference, token, *, blob=False):
+def _registry_get(name, reference, token, *, blob=False, blob_size=None):
     global _CURRENT_PHASE
     _CURRENT_PHASE = "registry-config" if blob else (
         "registry-index" if SOURCE_SHA.fullmatch(reference) else "registry-platform-manifest")
     if (name not in authority.IMAGE_NAMES or not isinstance(reference, str)
         or not (SOURCE_SHA.fullmatch(reference) or DIGEST.fullmatch(reference))):
         _reject()
+    if blob and (type(blob_size) is not int or not 0 < blob_size <= MAX_REGISTRY_BODY):
+        _reject()
     endpoint = ("blobs/" if blob else "manifests/") + reference
     url = "https://ghcr.io/v2/poryadok/voiceroot/" + name + "/" + endpoint
     headers = {"Authorization": "Bearer " + token,
         "Accept": "application/octet-stream" if blob else ACCEPT}
-    return _read_response(url, headers, blob_redirect_digest=reference if blob else None)
+    limit = blob_size if blob else MAX_REGISTRY_BODY
+    return _read_response(url, headers, limit=limit,
+        blob_redirect_digest=reference if blob else None,
+        blob_expected_size=blob_size if blob else None)
 
 
 def _image_identity(name, tag, username, github_token, token_cache):
@@ -306,7 +355,8 @@ def _image_identity(name, tag, username, github_token, token_cache):
     if not isinstance(config, dict) or not DIGEST.fullmatch(str(config.get("digest", ""))) \
             or type(config.get("size")) is not int or not 0 < config["size"] <= MAX_REGISTRY_BODY:
         _reject()
-    config_raw, _ = _registry_get(name, config["digest"], token, blob=True)
+    config_raw, _ = _registry_get(name, config["digest"], token,
+        blob=True, blob_size=config["size"])
     if len(config_raw) != config["size"] or "sha256:" + hashlib.sha256(config_raw).hexdigest() != config["digest"]:
         _reject()
     try:
