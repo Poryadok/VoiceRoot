@@ -48,7 +48,7 @@ services:
       - _INBOX.voice.analytics.analytics_v2_telemetry
   auth:
     no_response: true
-    publish: [user.guest_converted, user.account_deleted, user.account_restored, subscription.auth_quarantined, $JS.API.CONSUMER.INFO.subscription_events.auth_subscription_tier, $JS.ACK.subscription_events.auth_subscription_tier.>]
+    publish: [user.registered, user.logged_in, user.logged_out, user.2fa_enabled, user.guest_converted, user.account_deleted, user.account_restored, subscription.auth_quarantined, $JS.API.CONSUMER.INFO.subscription_events.auth_subscription_tier, $JS.ACK.subscription_events.auth_subscription_tier.>]
     subscribe: [_INBOX.voice.auth.requests.>, _INBOX.voice.auth.subscription_tier]
   bot:
     no_response: true
