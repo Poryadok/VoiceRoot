@@ -1,5 +1,27 @@
 # Хранилища данных по микросервисам
 
+## BE-045 private moderation storage contract
+
+Accepted target, implementation tracked in the
+[ExecPlan](testing/async-automod-exec-plan.md): Auth owns immutable private subject,
+lifecycle/deletion revision and terminal fences plus the revisioned moderation
+restriction projection. Bot owns owner-account/actor/installation correspondence
+and positive ownership revision. Messaging owns versioned account-scoped HMAC
+keys, subject/source counter, immutable private evidence outbox and content-free
+expiry receipts. Moderation owns subject/source baseline, contiguous inbox cursor,
+keyed pattern aliases/samples, consumed-through watermark, strikes, account mute
+episode, machine sanction/event outbox and desired Auth restriction revision.
+
+Raw cross-service UUIDs are references, never cross-database foreign keys. Pattern
+digests, not bodies/URLs, have bounded retention; source evidence expires at 30
+days, samples at most 30 days + 10 minutes, strike aliases at most 60 days from
+the last hit, applied receipts at most 30 days from application. Logical windows
+never depend on GC. At the authoritative account purge deadline, participants
+erase raw links, payload hashes/digests, pending retries and personal details
+regardless of missing ACKs/gaps; retain only permanent opaque terminal fences and
+minimal nonpersonal existing-case snapshots. Backup restore imports the protected
+terminal snapshot before serving. Full boundary/rotation rules are in the plan.
+
 Сводка по [MICROSERVICES.md](MICROSERVICES.md) и файлам `docs/microservices/*.md`. Принцип: **database per service** — каждая строка PostgreSQL — отдельная логическая БД (отдельная схема миграций у владельца). Общие правила идентификаторов, ссылок и полей: [DATA_MODEL.md](DATA_MODEL.md). Объём первой волны PostgreSQL по фичам: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 
 **Не БД, но нужны в инфраструктуре:** NATS (шина событий, в локальном Compose — сервис **`nats`** с JetStream, см. [`docker-compose.yml`](../docker-compose.yml) и [DEPLOYMENT.md](DEPLOYMENT.md)), LiveKit (SFU для голоса/видео), объектное хранилище R2. Для локального dev их перечисляют в compose отдельно от Postgres/Redis/ClickHouse.

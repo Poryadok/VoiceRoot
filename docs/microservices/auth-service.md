@@ -1,5 +1,30 @@
 # Auth Service
 
+## Moderation subject and restriction authority (BE-045)
+
+Private `voice.automod.v1.AuthModerationAuthority` owns
+`ResolveModerationSubject`, `ListTerminalModerationSubjects` and
+`ReconcileModerationRestriction`. Messaging and Moderation alone may resolve a
+subject or obtain the complete opaque terminal snapshot. Only Moderation may
+reconcile a restriction. All methods require mTLS and fresh Phase-0 service
+credentials bound to audience `auth`, exact RPC/request bytes/request ID, expiry
+and replay. They are absent from the legacy Auth listener.
+
+Auth assigns one random immutable private moderation subject per account lifetime.
+Resolution returns the exact account/subject binding, positive lifecycle revision,
+deletion cycle/deadline and terminal state. At purge the mapping is erased; the
+opaque terminal subject remains permanent. Reconciliation carries exact subject,
+account, positive moderation revision and `moderation_banned`. Lower revision is
+a no-op, equal revision/equal bytes an idempotent receipt, equal revision/different
+bytes a conflict. Deleted/purged state and Auth-owned restrictions dominate clears.
+Restore preserves effective moderation restrictions. Unknown preexisting suspended
+state becomes an independent legacy restriction until authorized reconciliation;
+an empty new projection must never reactivate it.
+
+All Moderation manual/automatic writers join this fenced path before activation.
+The legacy raw-header `SetAccountStatus` route cannot remain an alternate writer.
+See [the complete privacy/migration/restore contract](../testing/async-automod-exec-plan.md).
+
 ## Обзор
 
 Сервис аутентификации и управления сессиями. Единственный сервис на Java — обусловлено зрелостью Spring Security для сложных auth-сценариев.

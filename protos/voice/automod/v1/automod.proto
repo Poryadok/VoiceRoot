@@ -1,0 +1,185 @@
+syntax = "proto3";
+
+package voice.automod.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/automod/v1;automodv1";
+option java_multiple_files = true;
+option java_package = "app.voice.automod.v1";
+
+// Private authority only. No public Gateway route or shared event payload.
+service AuthModerationAuthority {
+  // @voice.security=protected;callers=service:messaging,service:moderation
+  rpc ResolveModerationSubject(ResolveModerationSubjectRequest) returns (ResolveModerationSubjectResponse);
+  // @voice.security=protected;callers=service:messaging,service:moderation
+  rpc ListTerminalModerationSubjects(ListTerminalModerationSubjectsRequest) returns (ListTerminalModerationSubjectsResponse);
+  // @voice.security=protected;callers=service:moderation
+  rpc ReconcileModerationRestriction(ReconcileModerationRestrictionRequest) returns (ReconcileModerationRestrictionResponse);
+}
+
+service BotModerationAuthority {
+  // @voice.security=protected;callers=service:messaging
+  rpc ResolveBotModerationOwner(ResolveBotModerationOwnerRequest) returns (ResolveBotModerationOwnerResponse);
+}
+
+service ModerationEvidenceService {
+  // @voice.security=protected;callers=service:messaging
+  rpc ProvisionSubject(ProvisionSubjectRequest) returns (ProvisionSubjectResponse);
+  // @voice.security=protected;callers=service:messaging
+  rpc IngestCommittedMessageEvidence(IngestCommittedMessageEvidenceRequest) returns (IngestCommittedMessageEvidenceResponse);
+  // @voice.security=protected;callers=service:messaging
+  rpc GetAccountSendRestriction(GetAccountSendRestrictionRequest) returns (GetAccountSendRestrictionResponse);
+  // @voice.security=protected;callers=service:auth
+  rpc GetEffectiveRestrictionSnapshot(GetEffectiveRestrictionSnapshotRequest) returns (GetEffectiveRestrictionSnapshotResponse);
+}
+
+enum SubjectState {
+  SUBJECT_STATE_UNSPECIFIED = 0;
+  SUBJECT_STATE_LIVE = 1;
+  SUBJECT_STATE_DELETED = 2;
+  SUBJECT_STATE_PURGED = 3;
+}
+
+message SubjectBinding {
+  uint32 protocol_version = 1;
+  string account_id = 2;
+  string subject_id = 3;
+  uint64 lifecycle_revision = 4;
+  SubjectState state = 5;
+  optional string deletion_cycle_id = 6;
+  optional google.protobuf.Timestamp purge_at = 7;
+}
+
+message ResolveModerationSubjectRequest {
+  string account_id = 1;
+  // Required on evidence/retry; absent only for fresh producer admission.
+  optional string subject_id = 2;
+}
+message ResolveModerationSubjectResponse {
+  SubjectBinding subject = 1;
+}
+message ListTerminalModerationSubjectsRequest {}
+message ListTerminalModerationSubjectsResponse {
+  repeated string subject_ids = 1;
+  bool complete = 2;
+}
+
+message ReconcileModerationRestrictionRequest {
+  uint32 protocol_version = 1;
+  string account_id = 2;
+  string subject_id = 3;
+  uint64 revision = 4;
+  bool moderation_banned = 5;
+}
+message ReconcileModerationRestrictionResponse {
+  uint64 revision = 1;
+  SubjectState state = 2;
+}
+
+message ResolveBotModerationOwnerRequest {
+  string bot_id = 1;
+  string sender_profile_id = 2;
+  string chat_id = 3;
+  optional string installation_id = 4;
+  optional string space_id = 5;
+  string scope = 6;
+  string operation_id = 7;
+}
+message ResolveBotModerationOwnerResponse {
+  ResolveBotModerationOwnerRequest binding = 1;
+  string owner_account_id = 2;
+  uint64 ownership_revision = 3;
+}
+
+message ProvisionSubjectRequest {
+  SubjectBinding subject = 1;
+  string source_epoch = 2;
+  // Only zero is accepted. Never infer a baseline from an arbitrary event.
+  uint64 baseline_sequence = 3;
+}
+message ProvisionSubjectResponse {
+  uint64 through_sequence = 1;
+}
+
+enum EvidenceEligibility {
+  EVIDENCE_ELIGIBILITY_UNSPECIFIED = 0;
+  EVIDENCE_ELIGIBILITY_ELIGIBLE = 1;
+  EVIDENCE_ELIGIBILITY_NO_TEXT = 2;
+  EVIDENCE_ELIGIBILITY_E2E = 3;
+}
+
+message PatternDigest {
+  string key_id = 1;
+  bytes hmac_sha256 = 2;
+}
+
+// Immutable deterministic protobuf bytes are privately outboxed with the row.
+message CommittedMessageEvidence {
+  uint32 protocol_version = 1;
+  SubjectBinding subject = 2;
+  string source_epoch = 3;
+  uint64 sequence = 4;
+  string event_id = 5;
+  google.protobuf.Timestamp recorded_at = 6;
+  string message_id = 7;
+  string chat_id = 8;
+  string sender_profile_id = 9;
+  EvidenceEligibility eligibility = 10;
+  repeated PatternDigest digests = 11;
+  uint32 link_count = 12;
+  optional string bot_id = 13;
+  optional string installation_id = 14;
+  uint64 ownership_revision = 15;
+  string operation_id = 16;
+}
+
+// Written separately at expiry; never edits the original evidence bytes/hash.
+message ExpiredMessageEvidence {
+  uint32 protocol_version = 1;
+  SubjectBinding subject = 2;
+  string source_epoch = 3;
+  uint64 sequence = 4;
+  string event_id = 5;
+  google.protobuf.Timestamp recorded_at = 6;
+  bytes original_sha256 = 7;
+}
+
+message IngestCommittedMessageEvidenceRequest {
+  oneof record {
+    CommittedMessageEvidence evidence = 1;
+    ExpiredMessageEvidence expired = 2;
+  }
+}
+enum EvidenceOutcome {
+  EVIDENCE_OUTCOME_UNSPECIFIED = 0;
+  EVIDENCE_OUTCOME_APPLIED = 1;
+  EVIDENCE_OUTCOME_BUFFERED = 2;
+  EVIDENCE_OUTCOME_DUPLICATE = 3;
+  EVIDENCE_OUTCOME_ALREADY_RETIRED = 4;
+  EVIDENCE_OUTCOME_EXPIRED_EVIDENCE = 5;
+  EVIDENCE_OUTCOME_PURGED = 6;
+}
+message IngestCommittedMessageEvidenceResponse {
+  EvidenceOutcome outcome = 1;
+  uint64 through_sequence = 2;
+}
+
+message GetAccountSendRestrictionRequest {
+  string account_id = 1;
+  string subject_id = 2;
+}
+message GetAccountSendRestrictionResponse {
+  bool banned = 1;
+  optional google.protobuf.Timestamp muted_until = 2;
+  uint64 revision = 3;
+}
+
+message GetEffectiveRestrictionSnapshotRequest {
+  string account_id = 1;
+  string subject_id = 2;
+}
+message GetEffectiveRestrictionSnapshotResponse {
+  bool banned = 1;
+  uint64 revision = 2;
+}

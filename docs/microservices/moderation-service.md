@@ -134,7 +134,7 @@ auto_mod_log
 ```
 message.sent event ──► CheckMessage():
   1. Spam pattern detection (repeated messages, link flooding)
-  2. Если trigger → auto-mute (5 мин первый раз, экспоненциально)
+  2. Если trigger → account mute на 1 час; второй независимый hit того же паттерна за 30 дней → perm_ban
 
 report.created event ──► Check thresholds:
   1. Count reports on target in 24h
@@ -163,6 +163,28 @@ report.created event ──► Check thresholds:
 - **Matchmaking Service** — ММ-баны
 - **Notification Service** — (через NATS) уведомление о санкции
 - **Federation Service** — (через NATS) дефедерация при нарушениях
+
+### Private committed-message moderation contract (BE-045)
+
+`voice.automod.v1.ModerationEvidenceService` has protected unary methods
+`ProvisionSubject`, `IngestCommittedMessageEvidence`, `GetAccountSendRestriction`
+and `GetEffectiveRestrictionSnapshot`. Only `service:messaging` may provision,
+ingest or read send restrictions; only `service:auth` may read the effective-ban
+snapshot. Fresh Phase-0 credentials bind exact RPC/request bytes/request ID,
+audience `moderation`, short expiry and replay state; mTLS protects the listener.
+Legacy listeners/headers do not grant access. Evidence carries immutable subject,
+account/source epoch/sequence/source time, event/message/chat/profile identities,
+eligibility and keyed aliases/link count; no raw text or URLs.
+
+Provisioning establishes a verified Auth subject and zero-sequence baseline.
+Ingestion cannot infer a baseline from its first event. One account advisory
+transaction serializes ordered inbox/cursor, samples, consumed-through sequence,
+strikes, effective mute/post-mute state, machine `perm_ban`, log, immutable domain
+event and Auth restriction intent. Duplicate delivery never extends a mute.
+Machine issuer is `service:moderation/automod`, with no fabricated human profile.
+Manual sanctions, revocation, appeals and expiry use this same restriction journal.
+`CheckMessage` becomes read-only existing-state admission, never pattern counting.
+See [the complete contract, retention rules and T1-T12](../testing/async-automod-exec-plan.md).
 
 ## P3 Space deletion classification (accepted target)
 

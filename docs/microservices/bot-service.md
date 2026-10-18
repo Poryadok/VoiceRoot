@@ -1,5 +1,19 @@
 # Bot Service
 
+## Protected moderation-owner authority (BE-045)
+
+`voice.automod.v1.BotModerationAuthority.ResolveBotModerationOwner` accepts only
+fresh request-bound `service:messaging` credentials on its mTLS listener (audience
+`bot`). The request binds bot ID, actual sender profile, installation/scope when
+present, and verified ingress operation. Bot checks its own live bot/installation
+rows and returns the bound IDs, exact owning Auth account and positive ownership
+revision. Client-supplied owner IDs and generic profile lookups are not authority.
+Transferred ownership affects fresh admissions only; committed retries preserve
+their captured owner and create no evidence. Bot output shares that owner's
+ordinary account/pattern history; missing/unavailable/invalid owner authority or
+owner restriction denies new commits. See
+[the complete contract](../testing/async-automod-exec-plan.md).
+
 `SPACE_PRINCIPAL_JWKS_URL` accepts the canonical Space provider path
 `/.well-known/jwks.json` and the existing dedicated-provider alias
 `/space/jwks.json`. Both require exact HTTPS URLs without credentials, query,

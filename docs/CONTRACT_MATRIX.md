@@ -1,5 +1,30 @@
 # Матрица контрактов: Gateway → сервисы и NATS JetStream
 
+## BE-045 private moderation authority (accepted target)
+
+No public REST/WS route or public `message.sent` field is added. Private
+`voice.automod.v1` RPCs use mTLS and exact Phase-0 service/request credentials:
+
+| Owner service / method | Allowed caller |
+| --- | --- |
+| AuthModerationAuthority.ResolveModerationSubject | messaging, moderation |
+| AuthModerationAuthority.ListTerminalModerationSubjects | messaging, moderation |
+| AuthModerationAuthority.ReconcileModerationRestriction | moderation |
+| BotModerationAuthority.ResolveBotModerationOwner | messaging |
+| ModerationEvidenceService.ProvisionSubject | messaging |
+| ModerationEvidenceService.IngestCommittedMessageEvidence | messaging |
+| ModerationEvidenceService.GetAccountSendRestriction | messaging |
+| ModerationEvidenceService.GetEffectiveRestrictionSnapshot | auth |
+
+Principals bind the owner audience, full RPC, deterministic protobuf request
+hash, request ID, short expiry and replay; raw headers never authorize these
+surfaces. Gateway ordinary message admission uses its verified delegated-user
+principal, while Bot ingress binds the actual actor/installation and protected
+owner result. Domain `moderation.sanction_applied` retains its existing public
+schema; delivery is via a durable outbox, with no digest/body/account evidence
+added to the shared message stream. See the
+[complete contract and T1-T12](testing/async-automod-exec-plan.md).
+
 Единая сводка **публичных** маршрутов клиента (REST/WebSocket через API Gateway) и **доменных потоков** JetStream. При изменении маршрутов или издателей/подписчиков событий обновляйте этот файл **и** каноничные разделы в [microservices/api-gateway.md](microservices/api-gateway.md) и [MICROSERVICES.md](MICROSERVICES.md) (раздел «Event Bus»), чтобы они не расходились.
 
 Чеклист перед мержем: [DOCS_CONSISTENCY_AUDIT.md](DOCS_CONSISTENCY_AUDIT.md).
