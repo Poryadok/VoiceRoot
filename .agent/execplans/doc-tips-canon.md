@@ -45,7 +45,7 @@ below are canonical sections, not competing copies of the recipes.
 
 | ID | Source claim / applicability and type | Basis / current assessment | Canonical destination and action |
 | --- | --- | --- | --- |
-| 00 | Append-only lesson file; run STATE routing; old coordination rule | Original preserved; Swarm now owns coordination in TT/tmp/swarm | Source index points to canon; retire competing STATE routing |
+| 00 | Append-only lesson file; run STATE routing; orchestrator-specific rule | Original preserved; the invoked parent skill owns coordination | Source index defers routing to active orchestrator; Swarm uses TT/tmp/swarm, Slave Driver retains its STATE route |
 | 01 | Dirty main; Voice worktree rule | AGENTS + CONTRIBUTING; confirmed | CONTRIBUTING: managed worktrees; link |
 | 02 | Acquire exact lease/path/branch; ownership rule | treehouse skill + AGENTS; confirmed | CONTRIBUTING: managed worktrees; consolidate |
 | 03 | Inspect exact diff/base before integration; rule | RELEASE_EVIDENCE integration section; confirmed | CONTRIBUTING: managed worktrees; link |
@@ -95,9 +95,10 @@ below are canonical sections, not competing copies of the recipes.
   is `.agent/codex/skills`; `.agent/codex/install-local.ps1` is the normal full
   installer. This task does not run it because it replaces unrelated local skills.
   The installed-only tips reference is separately authorized by this task.
-- The original header's run `STATE.md` routing is obsolete for Swarm; use current
-  TT/Swarm coordination. Preserve it in the archived source rather than copying it
-  as a competing backlog instruction.
+- Coordination routing belongs to the currently invoked parent skill. Swarm uses
+  TT and `tmp/swarm/`; Slave Driver keeps its own `tmp/slave-driver/STATE.md` route.
+  The reference defers to those instructions rather than duplicating or replacing
+  either workflow. Preserve the original header in the archived source.
 
 ## Progress and risks
 
