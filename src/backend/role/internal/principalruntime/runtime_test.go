@@ -118,6 +118,8 @@ func TestRuntimeVerifiesBothRotationKeysAndRejectsReplay(t *testing.T) {
 	}{
 		{"current", rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName, f.key},
 		{"next", rolev1.RoleService_AbortOwnershipTransfer_FullMethodName, f.next},
+		{"current", rolev1.RoleService_CheckPermission_FullMethodName, f.key},
+		{"next", rolev1.RoleService_CheckPermission_FullMethodName, f.next},
 	} {
 		t.Run(tc.kid, func(t *testing.T) {
 			token := issueRuntimeToken(t, tc.key, "space", tc.kid, "role", tc.method, "request-"+tc.kid, runtimeHash)
