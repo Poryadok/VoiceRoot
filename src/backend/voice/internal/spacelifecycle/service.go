@@ -16,6 +16,18 @@ type Service struct {
 	Effects *Effects
 }
 
+// RecoverySnapshot publishes the fully configured effect bindings to background
+// recovery. The startup owner must call this after all composition is complete.
+func (s *Service) RecoverySnapshot() *Service {
+	if s == nil || s.Effects == nil {
+		return nil
+	}
+	service := *s
+	effects := *s.Effects
+	service.Effects = &effects
+	return &service
+}
+
 // RetirementCapability is consumed by future full deletion activation preflight.
 // Ejection is useful local progress, never a completed protocol-v1 barrier.
 func (s *Service) RetirementCapability() string {

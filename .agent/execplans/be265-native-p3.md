@@ -98,3 +98,20 @@ stopped only for this owned process, wrapper/session terminal1. No graph update
 PASS is claimed and no other Graphify process was stopped. CodeGraph frozen index
 was qualified by actual source; two bounded read-only calls were terminated after
 no response. Final source hashes and runtime tests are the evidence authority.
+
+## Independent review correction
+
+208 found a concrete startup publication race on frozen fa1528a7: the P3 loop
+started before optional Space composition replaced Effects interfaces. Recovery
+publication now occurs after final wiring and uses a distinct Service/Effects
+snapshot. Meaningful Linux RED on old shared publication called the replacement
+drain instead of the published final drain. Corrected immutable overlay88169345
+passes the concurrent mutation regression with `go test -race` (1.061s), P3 short
+(0.021s), Voice build and P3 vet. No P3 request serialization was changed:208
+withdrew that finding after confirming deterministic wrapper encoding.
+
+This is a bounded successor to fa1528a7; prior73 actual PG tests and realRedis
+writer checks remain applicable to unchanged admission/capture/drain code. Same208
+must recheck the immutable successor before121 integrates it. Graphify was tried
+after the correction, own Python50500/parent44348 verified via RTK27404 and start
+time; bounded no-output attempt stopped, session terminal1. No AST PASS claimed.
