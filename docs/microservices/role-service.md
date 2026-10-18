@@ -207,6 +207,17 @@ BE-116 implementation dependency.
 
 ### Модерация (спейс)
 
+BE-273 accepted target extends the same protected `ResolveVoiceRoomGrants`
+projection with explicit versioned audio/video/share-source capability. Voice
+must not infer `VOICE_VIDEO` or `VOICE_SCREEN_SHARE` from `VOICE_SPEAK`, or
+authorize an unproven source from a legacy/malformed response. Role retains the
+policy epoch and sole Owner bypass; Voice intersects its durable moderator
+restriction with those grants without mutating Role state. Target moderation
+requires `VOICE_MUTE_OTHERS` in the canonical room and `SPACE_VIEW_MEMBER_LIST`;
+the target must be a current Space member. Source construction and the distinct
+Voice-owned moderation version are defined in the
+[Voice contract](voice-service.md#moderator-mute-accepted-target-be-273).
+
 | Константа | Назначение |
 |-----------|------------|
 | `MODERATION_MANAGE_REPORTS` | Жалобы по контенту спейса |

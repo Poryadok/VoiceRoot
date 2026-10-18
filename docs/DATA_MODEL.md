@@ -120,6 +120,35 @@ strict proof не завершает rollout во всех окружениях;
 
 ---
 
+## Space moderator mute ownership (BE-273 accepted target)
+
+Voice owns durable moderation state keyed by canonical
+`(space_id, voice_room_id, target_profile_id)`, not by account, LiveKit identity
+or room incarnation. UUIDs are logical references to Space/User without
+cross-database foreign keys. The desired `moderator_muted` flag and monotonic
+`moderation_version` survive transport/Redis loss, leave/rejoin and logical-room
+empty/reopen. Only authorized clear or permanent logical room/profile/Space
+deletion removes the restriction. Persisting the false state/version preserves
+CAS after clear; zero is reserved for never-created state.
+
+The moderation transaction serializes with the existing Space room-head/media
+admission authority and records the actor/target binding, exact canonical
+operation request, pending cleanup effect and captured admission tuple:
+account/profile, Auth session epoch, Space/logical room, call room/generation,
+admission operation/generation and exact LiveKit room/identity. The issued
+effective publish-source vector and moderation version belong to that same
+admission; no network call spans the transaction. Auth/Space/Role epochs,
+moderation version, roster epoch and media generation are distinct domains.
+
+Voice's existing 24-hour actor/operation/method/request ledger supports replay;
+the moderation-version CAS survives ledger expiry. Pending effects and retired
+identity tombstones remain until safely reconciled, never merely until the
+original Voice JWT expiry. Redis is a projection. Schema/migrations and exact
+retired-bearer reconciliation remain implementation work; this section does not
+declare tables deployed. See the
+[service contract](microservices/voice-service.md#moderator-mute-accepted-target-be-273)
+and [ExecPlan](testing/space-moderator-mute-exec-plan.md).
+
 ## T05. Game integration ownership target
 
 This is the resource-ownership contract for the game-integration target, not a

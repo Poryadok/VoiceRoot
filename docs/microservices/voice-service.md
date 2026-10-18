@@ -478,11 +478,145 @@ every issue/reissue. On membership, `VOICE_JOIN` or `VOICE_SPEAK` loss, self-hos
 LiveKit actively ejects the current participant/media within **2 s p95** and
 **5 s max**. Voice denies a fresh grant/reissue after the authorization change and
 the client retries reconnect for at most 30 s only while its authenticated session
-and epoch are unchanged. A previously issued bearer JWT can still reconnect until
-its ≤60-second expiry: without a LiveKit-side token verifier this is not a
-cryptographic deny-before-connect guarantee. Such stale reconnect is best-effort
-reconciliation followed by the same eject SLA. No cloud media movement is a target:
+and epoch are unchanged. Removing a participant on self-hosted LiveKit does not
+cryptographically revoke issued bearers. LiveKit can refresh a connected client's
+token beyond the original Voice-issued ≤60-second expiry; that expiry is not a
+bound on every refreshed bearer. Without a LiveKit-side verifier there is no
+deny-before-connect or zero-transient-media guarantee. Reconciliation must retain
+exact retired identities beyond the original expiry and re-eject observed stale
+reconnects within the same SLA; a five-second periodic scan alone does not prove
+2 s p95 / 5 s max. Strict SFU admission verification remains separate scope.
+No cloud media movement is a target:
 user grants remain self-hosted by default.
+
+### Moderator mute (accepted target; BE-273)
+
+The accepted `BE273-MODERATOR-MUTE-v1` decision defines the following additions;
+the RPC, schema, source grants and live proof are not implemented by this
+documentation change. Scope is self-hosted canonical Space voice rooms. DM,
+standalone group, MatchSquad, GameSession and federation policies are unchanged.
+Do not activate full-roster/watchers/moves or source-disabled R22.3/D2/D3 here.
+
+**State and authority.** Voice persists `moderator_muted` keyed by
+`(space_id, voice_room_id, target_profile_id)`, independent of transport/admission
+generation. It survives disconnect, leave/rejoin, room empty/reopen, restart,
+Role changes and account-session refresh; another room/profile is unaffected.
+Only authorized clear or permanent logical room/profile/Space deletion removes
+the restriction. Keep `self_is_muted` distinct: either changed moderation flag
+sets/leaves it true. Clearing never opens a microphone, activates a device,
+grants a floor or grants `VOICE_SPEAK`. While restricted all audio-enabling paths,
+including self-unmute and broadcast/floor-related enabling, deny. Self-mute,
+deafen, leave and independently authorized non-audio actions remain available.
+
+The actor is only the verified Gateway delegated principal with fresh Auth
+epoch/profile ownership, current Space membership/discovery,
+`VOICE_MUTE_OTHERS` in the exact canonical room and `SPACE_VIEW_MEMBER_LIST`
+before selecting/disclosing the target. Actor media presence is unnecessary.
+Owner bypass remains Role-owned; Voice adds no hierarchy/immunity rule.
+`actor_profile_id == target_profile_id` denies, including self-clear by a
+moderator. The target must be a current Space member. A new mute requires a
+committed `ACTIVE` participant in this room; tentative admission does not count.
+Clear may address an offline current member with an existing restriction.
+Repeating the current desired state is a no-op, with no new media effect/event.
+BE-044 timeout remains an additional admission/media deny, including listeners;
+it does not itself remove moderator administration rights.
+
+**Protected surface.** Add `SetVoiceRoomParticipantMute` on the existing signed
+Voice user listener and
+`POST /api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}/participants/{target_profile_id}/mute`.
+Path IDs are canonical and body contains required presence-aware boolean
+`moderator_muted`, UUID `operation_id`, and `expected_moderation_version` (zero
+only for never-created state). No body actor/account/media identity is trusted.
+Authorized state reads disclose additive `moderator_muted`, `self_is_muted` and
+`moderation_version`; occupancy-only output never exposes them or a target ID.
+Compatibility `is_muted` means effective audio mute; old client patches cannot
+clear the durable restriction. A receipt contains `operation_id`,
+`target_profile_id`, `moderator_muted`, `self_is_muted` (true when changed),
+`moderation_version` and `enforcement_completed_at`. It is not a token or proof
+of permanent bearer revocation.
+
+Use the existing 24-hour `(actor_profile_id, operation_id, method, canonical
+request)` ledger. Exact retry resumes/replays the same operation; changed input
+conflicts. Monotonic moderation-version CAS orders opposing moderator commands;
+one pending transition per target/key gives competing transitions `409` until
+convergence. A desired-state no-op returns the current version without effect.
+Completed replay still requires current authenticated actor/discovery, never
+restores superseded state and creates no new effect. After ledger expiry the
+version CAS still rejects historical updates against a later state.
+
+Errors follow the existing surface: `400 invalid_argument` for missing/invalid
+fields, `401 unauthenticated`, generic `404 not_found` for undiscoverable,
+nonmember or absent resources without target disclosure, `403 permission_denied`
+for explicit policy deny/self-target/self-unmute, `409 failed_precondition` for
+stale version, non-active target on first mute, inactive room or conflicting
+pending transition, and `503 unavailable` for unknown dependency/capability/media
+outcome. Pre-decision denial has no restriction/roster/grant/event side effect.
+Post-commit failure preserves the durable decision and resumes by the same ID.
+
+**Audio sources.** Extend the same protected Role room-grant projection with
+versioned explicit video/share-source capability, store the issued effective
+source vector in the Space admission, and resolve fresh on join/reissue and
+Role invalidation. Unknown/legacy capabilities cannot authorize unproven sources.
+
+| Source | Required current permission and local condition |
+|---|---|
+| microphone | `VOICE_SPEAK` and not moderator-muted |
+| screen-share audio | `VOICE_SPEAK`, `VOICE_SCREEN_SHARE` and not moderator-muted |
+| camera | `VOICE_VIDEO` |
+| screen-share video | `VOICE_SCREEN_SHARE` |
+
+Membership/Auth/timeout/`VOICE_JOIN` and existing screen-share admission/limits
+still intersect the vector. Set `canPublishSources` to the explicit nonempty
+allowed vector; empty vector means `canPublish=false`, never true with omitted
+allowlist. Microphone mute must not become permanent all-track denial. Track
+source/kind validation must reject audio labelled as an allowed video source on
+the pinned SFU; this is not content inspection of audio encoded into video.
+Neither `MutePublishedTrack` nor modifying Role permissions prevents republish.
+
+**Transaction, enforcement and recovery.** Serialize moderation with the existing
+durable Space room-head/admission authority. One transaction stores desired
+flag/version, actor/target, operation receipt/pending effect, stable state-change
+intent and captured current admission tuple: trusted account/profile/Auth epoch,
+Space/logical room, call room/generation, admission operation/generation and
+exact LiveKit room/identity. No database transaction spans a network call.
+
+Any changed flag retires that exact current media incarnation using existing
+`BeginRoomLeave` / revoker / `CompleteRoomLeave` and generation-bound fence
+release. This temporarily interrupts all current target media, including video
+and listening, before fresh authorized admission with the new source vector;
+it is not a persistent video/listen ban. Other targets/rooms stay independent.
+No unordered in-place `UpdateParticipant` relaxation is introduced. Late
+operations may touch only retired identities, never a replacement generation.
+
+Join/reissue finalization checks the moderation version in that same serialized
+authority: a grant begun before mute cannot later commit unrestricted media.
+Unresolved old cleanup blocks new target admission; no unconditional rollback or
+second fence. Confirmed removal/NotFound and exact release permit fresh
+self-muted admission. Clearing also requires fresh admission/grant when media
+existed, never automatic mic activation. The existing ≤30-second same-session
+client retry policy is not a new auto-rejoin feature.
+
+Immediately trigger durable cleanup; measure active ejection from decision
+commit at 2 s p95 / 5 s max and use the same bound for observed stale reconnect.
+Success means desired state committed plus confirmed cleanup/projection receipt;
+confirmed target absence suffices. SDK timeout/cancellation/transport failure is
+unknown, never proof of absence. Post-commit SDK/DB/Redis failure leaves the
+pending decision/effect intact, blocks target grants and returns `503` or the
+transport deadline/cancellation. Same-operation retries and independently bounded
+recovery contexts with backoff converge after crash/response loss. Recovery must
+not recreate permanently deleted resources or eject a newer admission.
+
+Extend the existing Space reconciler with exact retired identities even after
+active roster/admission changes. Never reuse those identities or drop tombstones
+merely at original JWT expiry; connected-client refreshed bearers remain a
+reconciliation risk. There is no second lifecycle coordinator or ordinary-call
+membership outbox. Stable Voice state-change intent deduplicates one moderation
+version and uses only existing authorized state delivery, with no occupancy-only
+identity/state disclosure; NATS failure never rolls back the restriction.
+Auth/Space/Role epochs, moderation version, roster epoch and media generation
+remain separate values. Source/grant, deterministic concurrency/failure tests and
+pinned actual-media proof are specified in the
+[ExecPlan](../testing/space-moderator-mute-exec-plan.md).
 
 **Roster.** `SPACE_VIEW_MEMBER_LIST` permits full room roster fields
 `profile_id`, display snapshot, muted/deafened/video/speaking state; a Space member
