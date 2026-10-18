@@ -104,9 +104,6 @@ func (s *PartyStore) CreateSourceParty(ctx context.Context, p CreateSourcePartyP
 	if err != nil {
 		return SourcePartySearch{}, err
 	}
-	if err := guard.Check(ctx); err != nil {
-		return SourcePartySearch{}, err
-	}
 	var observedAt time.Time
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&observedAt); err != nil {
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
@@ -160,6 +157,9 @@ ON CONFLICT(search_operation_id) DO NOTHING RETURNING `+sourcePartyCols,
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM matchmaking_party_search_queue_intents WHERE party_id=$1)`, party.ID).Scan(&intent); err != nil || !intent {
 			return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
 		}
+		if err := guard.Check(ctx); err != nil {
+			return SourcePartySearch{}, err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
 		}
@@ -186,6 +186,9 @@ VALUES($1,$2,$3,$4,$5,$6::jsonb,'searching',$7,$8,$9,$9) RETURNING `+sessionSele
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO matchmaking_party_search_queue_intents(party_id,action) VALUES($1,'ENQUEUE')`, party.ID); err != nil {
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
+	}
+	if err := guard.Check(ctx); err != nil {
+		return SourcePartySearch{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
