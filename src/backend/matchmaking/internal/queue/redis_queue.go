@@ -107,10 +107,9 @@ func (q *RedisQueue) RecoverSearch(ctx context.Context, sess SearchRecovery) err
 	if q == nil || q.Client == nil {
 		return ErrQueueUnavailable
 	}
-	const script = `
-	local current = tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '-1')
-	local wanted = tonumber(ARGV[2])
-	if current > wanted then return 0 end
+	const script = generationLua + `
+	if not projection_types_ok() then return -2 end
+	if not can_advance(ARGV[1],ARGV[2],true) then return 0 end
 	local owner = redis.call('GET', KEYS[3])
 	if owner and owner ~= ARGV[1] then return -1 end
 	redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[4])
@@ -127,6 +126,9 @@ func (q *RedisQueue) RecoverSearch(ctx context.Context, sess SearchRecovery) err
 	}
 	if n == -1 {
 		return ErrLockHeld
+	}
+	if n == -2 {
+		return ErrQueueUnavailable
 	}
 	if n == 0 {
 		return ErrQueueGeneration
@@ -149,10 +151,9 @@ func (q *RedisQueue) EnqueueScopedGeneration(ctx context.Context, spaceID *uuid.
 	if q == nil || q.Client == nil {
 		return ErrQueueUnavailable
 	}
-	const script = `
-	local current = tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '-1')
-	local wanted = tonumber(ARGV[2])
-	if current > wanted then return 0 end
+	const script = generationLua + `
+	if not projection_types_ok() then return -2 end
+	if not can_advance(ARGV[1],ARGV[2],true) then return 0 end
 	redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
 	redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 	return 1
@@ -166,6 +167,9 @@ func (q *RedisQueue) EnqueueScopedGeneration(ctx context.Context, spaceID *uuid.
 	if n == 0 {
 		return ErrQueueGeneration
 	}
+	if n == -2 {
+		return ErrQueueUnavailable
+	}
 	return nil
 }
 
@@ -175,11 +179,11 @@ func (q *RedisQueue) RecoverRelease(ctx context.Context, sess SearchRecovery) er
 	if q == nil || q.Client == nil {
 		return ErrQueueUnavailable
 	}
-	const script = `
-	local current = tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '-1')
-	local wanted = tonumber(ARGV[2])
-	if current > wanted then return 0 end
+	const script = generationLua + `
+	if not projection_types_ok() then return -2 end
+	if not can_advance(ARGV[1],ARGV[2],false) then return 0 end
 	redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
+	redis.call('HSET', KEYS[2], 'release:'..ARGV[1], ARGV[2])
 	redis.call('ZREM', KEYS[1], ARGV[1])
 	if redis.call('GET', KEYS[3]) == ARGV[1] then redis.call('DEL', KEYS[3]) end
 	return 1
@@ -191,6 +195,9 @@ func (q *RedisQueue) RecoverRelease(ctx context.Context, sess SearchRecovery) er
 	}
 	if n == 0 {
 		return ErrQueueGeneration
+	}
+	if n == -2 {
+		return ErrQueueUnavailable
 	}
 	return nil
 }
@@ -211,10 +218,9 @@ func (q *RedisQueue) DequeueScopedGeneration(ctx context.Context, spaceID *uuid.
 	if q == nil || q.Client == nil {
 		return ErrQueueUnavailable
 	}
-	const script = `
-	local current = tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '-1')
-	local wanted = tonumber(ARGV[2])
-	if current > wanted then return 0 end
+	const script = generationLua + `
+	if not projection_types_ok() then return -2 end
+	if not can_advance(ARGV[1],ARGV[2],false) then return 0 end
 	redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
 	return redis.call('ZREM', KEYS[1], ARGV[1])
 	`
@@ -225,6 +231,9 @@ func (q *RedisQueue) DequeueScopedGeneration(ctx context.Context, spaceID *uuid.
 	}
 	if removed == 0 && generation == 0 {
 		return ErrNotEnqueued
+	}
+	if removed == -2 {
+		return ErrQueueUnavailable
 	}
 	return nil
 }
