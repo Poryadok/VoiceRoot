@@ -41,7 +41,7 @@ func TestRoleOverrideOwnerFailureMatrixAndNoWrite(t *testing.T) {
 	st, cleanup := startRoleStoreTest(t)
 	defer cleanup()
 	for _, voice := range []bool{false, true} {
-		for _, ownerCode := range []codes.Code{codes.NotFound, codes.InvalidArgument, codes.Unavailable, codes.Unauthenticated, codes.PermissionDenied, codes.Unimplemented, codes.DeadlineExceeded} {
+		for _, ownerCode := range []codes.Code{codes.NotFound, codes.InvalidArgument, codes.Unavailable, codes.Unauthenticated, codes.PermissionDenied, codes.Unimplemented, codes.Canceled, codes.DeadlineExceeded} {
 			f := newOrdinaryHandlerFixture(t, ctx, st.Pool)
 			before := ordinaryHandlerSnapshot(t, ctx, st.Pool)
 			calls := 0
@@ -55,7 +55,7 @@ func TestRoleOverrideOwnerFailureMatrixAndNoWrite(t *testing.T) {
 			}
 			want := ownerCode
 			switch ownerCode {
-			case codes.Unauthenticated, codes.PermissionDenied, codes.Unimplemented:
+			case codes.Unauthenticated, codes.PermissionDenied, codes.Unimplemented, codes.Canceled, codes.DeadlineExceeded:
 				want = codes.Unavailable
 			}
 			require.Equal(t, want, status.Code(err))

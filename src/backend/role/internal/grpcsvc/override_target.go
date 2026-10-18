@@ -56,7 +56,7 @@ func targetValidationError(ctx context.Context, err error) error {
 		return status.FromContextError(ctx.Err()).Err()
 	}
 	switch status.Code(err) {
-	case codes.NotFound, codes.InvalidArgument, codes.Canceled, codes.DeadlineExceeded:
+	case codes.NotFound, codes.InvalidArgument:
 		return err
 	}
 	return status.Error(codes.Unavailable, "target validation unavailable")
