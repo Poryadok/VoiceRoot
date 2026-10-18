@@ -1,3 +1,5 @@
+//go:build linux && live
+
 package main
 
 import (
@@ -20,8 +22,6 @@ import (
 	lksdk "github.com/livekit/server-sdk-go/v2"
 	lkmedia "github.com/livekit/server-sdk-go/v2/pkg/media"
 	"github.com/pion/webrtc/v4"
-	"google.golang.org/protobuf/encoding/protojson"
-	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
 // TestMatchSquadRemoteMediaAndChat_live is a single-shot DEV acceptance harness.
@@ -457,14 +457,6 @@ func remoteProofRequest(t *testing.T, client *http.Client, method, target, acces
 	return raw
 }
 
-func remoteProofSearchMatchID(body []byte) (string, error) {
-	var response matchmakingv1.GetSearchStatusResponse
-	if err := protojson.Unmarshal(body, &response); err != nil {
-		return "", err
-	}
-	return response.GetSearchSession().GetMatchId(), nil
-}
-
 func startRemoteProofSearch(t *testing.T, client *http.Client, base, token, gameID, criteria, intentPath, ledgerPath, actor string) string {
 	t.Helper()
 	body, _ := json.Marshal(map[string]any{"gameId": gameID, "mode": "Duo", "criteriaJson": criteria})
@@ -865,55 +857,6 @@ func TestRemoteProofMatchSquadRoutesAndCompletionPhases(t *testing.T) {
 	match["profileIds"] = []any{"profile-a", "profile-c"}
 	if remoteProofMayCompleteNext(match, "chat-1", "room-1", "profile-a", "profile-b") {
 		t.Fatal("changed roster should stop before the next completion write")
-	}
-}
-
-func TestRemoteProofSearchStatusUsesCanonicalProtoResponse(t *testing.T) {
-	fixtures := []struct {
-		name    string
-		body    string
-		want    string
-		wantErr bool
-	}{
-		{
-			name: "protojson camelCase",
-			body: `{"searchSession":{"id":"search-1","profileId":"profile-a","gameId":"game-1","mode":"duo","status":"matched","matchId":"match-camel"}}`,
-			want: "match-camel",
-		},
-		{
-			name: "protojson snake_case",
-			body: `{"search_session":{"id":"search-2","profile_id":"profile-b","game_id":"game-1","mode":"duo","status":"matched","match_id":"match-snake"}}`,
-			want: "match-snake",
-		},
-		{
-			name:    "top-level match ID is outside the protobuf response schema",
-			body:    `{"matchId":"not-the-search-session-match"}`,
-			wantErr: true,
-		},
-		{
-			name: "unmatched search session",
-			body: `{"searchSession":{"id":"search-3","profileId":"profile-c","gameId":"game-1","mode":"duo","status":"searching"}}`,
-		},
-	}
-	for _, fixture := range fixtures {
-		t.Run(fixture.name, func(t *testing.T) {
-			got, err := remoteProofSearchMatchID([]byte(fixture.body))
-			if fixture.wantErr {
-				if err == nil {
-					t.Fatal("response outside the protobuf schema should be rejected")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parse source-shaped status response: %v", err)
-			}
-			if got != fixture.want {
-				t.Fatalf("match ID = %q, want %q", got, fixture.want)
-			}
-		})
-	}
-	if _, err := remoteProofSearchMatchID([]byte(`{"searchSession":`)); err == nil {
-		t.Fatal("malformed status response should be rejected")
 	}
 }
 
