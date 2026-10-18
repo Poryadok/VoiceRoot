@@ -214,6 +214,48 @@ func TestVoiceRosterInboxConflictingBytesCancelNewerCaptureAndPersistAlert(t *te
 	require.Equal(t, 1, conflicts)
 }
 
+func TestVoiceRosterChangedCandidateResetsAllPartiesAtomically(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := rosterResetDB(t)
+	st := &MatchStore{Pool: pool}
+	a, am := capturedRosterParty(t, pool, nil, 0, uuid.New())
+	b, bm := capturedRosterParty(t, pool, nil, 0, uuid.New())
+	params := CreateProposalParams{GameID: am[0].GameID, Mode: "test", Region: "eu"}
+	for _, sess := range append(am, bm...) {
+		params.Sessions = append(params.Sessions, ProposalSession{SessionID: sess.ID, ProfileID: sess.ProfileID, PartyID: sess.PartyID})
+	}
+	proposal, err := st.CreateProposal(ctx, params)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox ADD CONSTRAINT reject_candidate_cancel CHECK(false)`)
+	require.NoError(t, err)
+	_, err = st.ResetVoiceParties(ctx, []uuid.UUID{b, a, b})
+	require.Error(t, err, "one failed cancellation must roll back every party")
+	for _, member := range append(am, bm...) {
+		sess, err := (&SessionStore{Pool: pool}).Get(ctx, member.ID)
+		require.NoError(t, err)
+		require.Equal(t, SessionStatusPendingAccept, sess.Status)
+	}
+	_, err = pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox DROP CONSTRAINT reject_candidate_cancel`)
+	require.NoError(t, err)
+	result, err := st.ResetVoiceParties(ctx, []uuid.UUID{b, a, b})
+	require.NoError(t, err)
+	require.Equal(t, 2, result.CancelledSessions)
+	match, err := st.Get(ctx, proposal.Match.ID)
+	require.NoError(t, err)
+	require.Equal(t, MatchStatusAbandoned, match.Status)
+	for _, member := range append(am, bm...) {
+		sess, err := (&SessionStore{Pool: pool}).Get(ctx, member.ID)
+		require.NoError(t, err)
+		require.Equal(t, SessionStatusCancelled, sess.Status)
+	}
+	result, err = st.ResetVoiceParties(ctx, []uuid.UUID{a, b})
+	require.NoError(t, err)
+	require.Zero(t, result.CancelledSessions)
+}
+
 func TestVoiceRosterResetOutboxFailureRollsBackInboxAndQueueIntent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("PostgreSQL integration")

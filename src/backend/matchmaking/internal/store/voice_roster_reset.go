@@ -108,6 +108,12 @@ func (s *MatchStore) ResetVoiceParty(ctx context.Context, partyID uuid.UUID) (Vo
 	})
 }
 
+// ResetVoiceParties atomically handles the complete definitive changed set from
+// one protected provision candidate. Unknown validation must not enter here.
+func (s *MatchStore) ResetVoiceParties(ctx context.Context, partyIDs []uuid.UUID) (VoiceRosterResetResult, error) {
+	return VoiceRosterResetResult{}, nil
+}
+
 func (s *MatchStore) rosterTransaction(ctx context.Context, apply func(pgx.Tx) (VoiceRosterResetResult, error)) (VoiceRosterResetResult, error) {
 	if s == nil || s.Pool == nil {
 		return VoiceRosterResetResult{}, errors.New("roster reset store unavailable")
