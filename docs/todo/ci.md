@@ -105,7 +105,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 - [ ] **Helm/Kustomize + GitOps** — отложено; [ADR 004](../adr/004-helm-gitops-deferred.md); ordered rollout остаётся в bash на runner.
 - [ ] **Пересмотреть цель continuous full-stack deploy** — selective deploy есть; GitOps позже.
-- [ ] **`e2e-manifest.sh` / smoke runtime** — awk-парсер YAML хрупкий; 16+ gateway + 15 flutter smoke на master — риск >15 min / flake ([`e2e-manifest.sh`](../../scripts/ci/e2e-manifest.sh), [`e2e-features.yml`](../../.github/ci/e2e-features.yml)).
+- [ ] **Qualify actual smoke duration/flake on Linux** — the shared typed YAML parser rejects malformed/partial selections and preserves catalog order; smoke/full stop before suites on parser failure. Actual Compose/Flutter runtime and flake qualification remain open; do not reduce catalog coverage to claim a timing improvement ([`e2e-manifest.sh`](../../scripts/ci/e2e-manifest.sh), [`e2e-features.yml`](../../.github/ci/e2e-features.yml)).
 
 
 **Промпт-якорь:** `CI/CD + deploy from docs/todo/ci.md` + приоритет/подсекция.
