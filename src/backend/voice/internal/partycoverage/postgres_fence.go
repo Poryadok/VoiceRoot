@@ -22,6 +22,14 @@ func RetirePostgresRole(ctx context.Context, admin *pgx.Conn, role string) error
 	if err != nil || privileged {
 		return fmt.Errorf("retire predecessor role: %w", ErrUnavailable)
 	}
+	// NOLOGIN does not remove an established client's SET ROLE authority. Such a
+	// client could otherwise restore login or schedule privileged external work
+	// between the ACL change and connection termination.
+	var inherited bool
+	err = admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles r WHERE pg_has_role($1::name,r.oid,'MEMBER') AND (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls OR r.rolname IN ('pg_execute_server_program','pg_write_server_files','pg_read_server_files')))`, role).Scan(&inherited)
+	if err != nil || inherited {
+		return fmt.Errorf("predecessor role inherits administrative authority: %w", ErrUnavailable)
+	}
 	// Prepared transactions survive connection termination. Indirect login via
 	// another role can survive NOLOGIN. Neither is safe to guess or auto-clean.
 	if err = admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_prepared_xacts WHERE owner=$1),EXISTS(SELECT 1 FROM pg_auth_members WHERE roleid=$2)`, role, oid).Scan(&prepared, &delegated); err != nil {

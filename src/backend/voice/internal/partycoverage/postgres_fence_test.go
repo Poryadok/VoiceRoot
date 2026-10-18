@@ -62,3 +62,24 @@ func TestRetirePostgresRoleRejectsAuthorityRoles(t *testing.T) {
 	require.Error(t, RetirePostgresRole(ctx, admin, admin.Config().User))
 	require.Error(t, RetirePostgresRole(ctx, admin, ""))
 }
+
+func TestRetirePostgresRoleRejectsInheritedAdministrativeAuthority(t *testing.T) {
+	dsn := testPostgresDSN(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	admin, err := pgx.Connect(ctx, dsn)
+	require.NoError(t, err)
+	defer admin.Close(ctx)
+	suffix := uuid.NewString()[:8]
+	parent := "coverage_admin_" + suffix
+	old := "coverage_old_" + suffix
+	_, err = admin.Exec(ctx, "CREATE ROLE "+pgx.Identifier{parent}.Sanitize()+" CREATEROLE")
+	require.NoError(t, err)
+	defer admin.Exec(context.Background(), "DROP ROLE "+pgx.Identifier{parent}.Sanitize())
+	_, err = admin.Exec(ctx, "CREATE ROLE "+pgx.Identifier{old}.Sanitize()+" LOGIN")
+	require.NoError(t, err)
+	defer admin.Exec(context.Background(), "DROP ROLE "+pgx.Identifier{old}.Sanitize())
+	_, err = admin.Exec(ctx, "GRANT "+pgx.Identifier{parent}.Sanitize()+" TO "+pgx.Identifier{old}.Sanitize())
+	require.NoError(t, err)
+	require.ErrorIs(t, RetirePostgresRole(ctx, admin, old), ErrUnavailable, "old established client must not SET ROLE and undo retirement")
+}

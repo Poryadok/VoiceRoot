@@ -159,3 +159,81 @@ func TestStartupCannotDowngradeActiveOrSuspendedWithoutBinding(t *testing.T) {
 		require.NoError(t, tx.Rollback(ctx))
 	}
 }
+
+func TestStartupRejectsCopiedReceiptWithWrongActualDatabaseIdentity(t *testing.T) {
+	ctx, c, schema := coverageDB(t)
+	b := fixtureBinding()
+	fixtureActive(t, ctx, c, b)
+	role := restrictedRuntimeRole(t, ctx, c, schema)
+	tx, err := c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	require.ErrorIs(t, CheckStartup(ctx, tx, &b), ErrUnavailable, "matching copied head/receipt/config cannot prove the actual connected database identity")
+}
+
+func restrictedRuntimeRole(t *testing.T, ctx context.Context, c *pgx.Conn, schema string) string {
+	t.Helper()
+	role := "coverage_runtime_" + uuid.NewString()[:8]
+	_, err := c.Exec(ctx, "CREATE ROLE "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		c.Exec(context.Background(), "DROP OWNED BY "+pgx.Identifier{role}.Sanitize())
+		c.Exec(context.Background(), "DROP ROLE "+pgx.Identifier{role}.Sanitize())
+	})
+	_, err = c.Exec(ctx, "GRANT USAGE ON SCHEMA "+pgx.Identifier{schema}.Sanitize()+" TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, "GRANT SELECT ON voice_party_coverage_head,voice_party_coverage_receipts TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	return role
+}
+
+func TestStartupAcceptsRestrictedRuntimeWithObservedDatabaseBinding(t *testing.T) {
+	ctx, c, schema := coverageDB(t)
+	tx, err := c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	require.NoError(t, err)
+	identity, err := ObserveDatabaseIdentity(ctx, tx)
+	require.NoError(t, err)
+	require.NotEqual(t, [32]byte{}, identity)
+	require.NoError(t, tx.Rollback(ctx))
+	b := fixtureBinding()
+	b.DatabaseIdentity = identity
+	fixtureActive(t, ctx, c, b)
+	role := restrictedRuntimeRole(t, ctx, c, schema)
+	tx, err = c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
+	require.NoError(t, CheckStartup(ctx, tx, &b))
+}
+
+func TestReadCoverageUsesSameMVCCCutAndFreshPassDetectsSuspension(t *testing.T) {
+	ctx, c, schema := coverageDB(t)
+	b := fixtureBinding()
+	fixtureActive(t, ctx, c, b)
+	cfg := c.Config().Copy()
+	cfg.RuntimeParams["search_path"] = schema
+	other, err := pgx.ConnectConfig(ctx, cfg)
+	require.NoError(t, err)
+	defer other.Close(ctx)
+	tx, err := c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+	first, err := ReadCoverage(ctx, tx, b)
+	require.NoError(t, err)
+	_, err = other.Exec(ctx, `UPDATE voice_party_coverage_head SET phase='SUSPENDED',coverage_id=NULL,revision=revision+1`)
+	require.NoError(t, err)
+	same, err := ReadCoverage(ctx, tx, b)
+	require.NoError(t, err)
+	require.Equal(t, first, same)
+	require.NoError(t, tx.Rollback(ctx))
+	fresh, err := c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	require.NoError(t, err)
+	defer fresh.Rollback(ctx)
+	_, err = ReadCoverage(ctx, fresh, b)
+	require.ErrorIs(t, err, ErrUnavailable)
+}

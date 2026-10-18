@@ -1,7 +1,10 @@
 package partycoverage
 
 import (
+	"context"
+	"errors"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -61,4 +64,41 @@ func TestCutoverJournalMonotoneExactRetryAndLostAck(t *testing.T) {
 	require.Greater(t, started.Revision, suspended.Revision)
 	_, err = j.activate(ctx, validated)
 	require.ErrorIs(t, err, ErrConflict, "previous operation may not revive old certificate")
+}
+
+func TestCutoverJournalConcurrentProofsHaveOneWinner(t *testing.T) {
+	ctx, c, schema := coverageDB(t)
+	j := journal{c}
+	plan := cutPlan{OperationID: uuid.New(), Binding: fixtureBinding(), Scope: []byte(`{"fixture":"concurrency-only"}`)}
+	initial, err := j.prepare(ctx, plan)
+	require.NoError(t, err)
+	cfg := c.Config().Copy()
+	cfg.RuntimeParams["search_path"] = schema
+	other, err := pgx.ConnectConfig(ctx, cfg)
+	require.NoError(t, err)
+	defer other.Close(context.Background())
+	results := make(chan error, 2)
+	go func() { _, err := (journal{c}).advance(ctx, initial, "FROZEN", []byte("first-proof")); results <- err }()
+	go func() {
+		_, err := (journal{other}).advance(ctx, initial, "FROZEN", []byte("second-proof"))
+		results <- err
+	}()
+	wins, conflicts := 0, 0
+	for range 2 {
+		err := <-results
+		if err == nil {
+			wins++
+		} else if errors.Is(err, ErrConflict) {
+			conflicts++
+		} else {
+			t.Fatalf("unexpected concurrent result: %v", err)
+		}
+	}
+	require.Equal(t, 1, wins)
+	require.Equal(t, 1, conflicts)
+	var n, revision int64
+	require.NoError(t, c.QueryRow(ctx, `SELECT count(*) FROM voice_party_coverage_steps`).Scan(&n))
+	require.Equal(t, int64(1), n)
+	require.NoError(t, c.QueryRow(ctx, `SELECT revision FROM voice_party_coverage_head`).Scan(&revision))
+	require.Equal(t, int64(2), revision)
 }
