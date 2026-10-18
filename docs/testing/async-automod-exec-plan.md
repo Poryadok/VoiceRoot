@@ -140,6 +140,21 @@ to c2. Preserve the unknown-suspension Auth restriction during migration.
 
 ## Current evidence and continuation
 
+Shared boot-gate checkpoint: a new process initially admitted effects and a
+properly signed RPC bypassed the closed startup barrier (two meaningful REDs).
+The gate now enforces fresh boot/generation, ordered phase receipt references,
+separate P2 private repair versus P5 effects, immutable phase proof identity and
+permanent invalidation of captured checks after close. Evidence ingestion checks
+the captured token after peer resolution and under its account transaction,
+including immediately before commit. Real PostgreSQL rollback at that final
+check leaves no inbox/action/cursor change; a new ready boot cannot revive the
+old token. Focused gate/decision tests and RPC/store cases passed with the Linux
+race detector. These tests use explicit test phase receipts; they do not prove
+the still-open coordinator's sealed snapshots/census or network readiness.
+The latest own Graphify AST attempt was bounded and cancelled through its own
+session after no output; terminal exit 1 and disappearance of own PIDs 51404/
+54804 were verified, peer PIDs 54412/53644 remained untouched. No AST PASS claimed.
+
 BE-045 c17 resolves the newly discovered Space P3 linkage boundary under existing
 autonomous delegation. The complete [account-core/erasure refinement](async-automod-space-erasure.md)
 requires additive minimized protocol v2 and a separately erasable local coverage

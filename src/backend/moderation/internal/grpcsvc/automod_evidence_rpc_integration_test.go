@@ -50,7 +50,8 @@ func TestAutoModEvidenceRPC_CommittedOnlyAndExactReplay(t *testing.T) {
 	verifier := &socialprincipal.Verifier{Target: "moderation", Capability: "automod-evidence", Issuers: map[string]bool{"messaging": true, "auth": true}, Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }}
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer(grpc.UnaryInterceptor(socialprincipal.StrictUnaryInterceptor(verifier)))
-	automodv1.RegisterModerationEvidenceServiceServer(server, &evidence.Service{Store: automod.NewStore(pool), Auth: evidenceAuthFixture{binding}})
+	gate := automod.NewBootGate()
+	automodv1.RegisterModerationEvidenceServiceServer(server, &evidence.Service{Store: automod.NewStore(pool), Auth: evidenceAuthFixture{binding}, Gate: gate})
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { server.Stop(); _ = listener.Close() })
 	conn, err := grpc.NewClient("passthrough:///automod-private-test", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -70,6 +71,12 @@ func TestAutoModEvidenceRPC_CommittedOnlyAndExactReplay(t *testing.T) {
 	_, err = client.ProvisionSubject(raw, provision)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	admission := &automodv1.GetAccountSendRestrictionRequest{AccountId: account.String(), SubjectId: subject.String()}
+	_, err = client.GetAccountSendRestriction(signed(admission, automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName), admission)
+	require.Equal(t, codes.Unavailable, status.Code(err), "valid private credentials cannot bypass the current-boot privacy barrier")
+	boot, generation := gate.Identity()
+	for phase := automod.BootLocalIssuer; phase <= automod.BootEffectsReady; phase++ {
+		require.NoError(t, gate.Advance(automod.BootReceipt{BootID: boot, Generation: generation, Phase: phase, ProofID: uuid.New()}))
+	}
 	before, err := client.GetAccountSendRestriction(signed(admission, automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName), admission)
 	require.NoError(t, err)
 	require.False(t, before.GetBanned())

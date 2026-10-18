@@ -25,16 +25,27 @@ type Service struct {
 	automodv1.UnimplementedModerationEvidenceServiceServer
 	Store *automod.Store
 	Auth  SubjectResolver
+	Gate  *automod.BootGate
 }
 
-func (s *Service) authorize(ctx context.Context, method string, request proto.Message) error {
+func (s *Service) authorize(ctx context.Context, method string, request proto.Message) (automod.BootCheck, error) {
 	if err := socialprincipal.RequireAutoModEvidence(ctx, method, request); err != nil {
-		return err
+		return nil, err
 	}
 	if s == nil || s.Store == nil || s.Auth == nil {
-		return status.Error(codes.Unavailable, "moderation authority unavailable")
+		return nil, status.Error(codes.Unavailable, "moderation authority unavailable")
 	}
-	return nil
+	var check automod.BootCheck
+	var err error
+	if method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName {
+		check, err = s.Gate.AcquirePrivateRepair(ctx)
+	} else {
+		check, err = s.Gate.AcquireEffects(ctx)
+	}
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "current-boot moderation reconciliation incomplete")
+	}
+	return check, nil
 }
 func (s *Service) fresh(ctx context.Context, captured *automodv1.SubjectBinding) (*automodv1.ResolveModerationSubjectResponse, error) {
 	if captured == nil {
@@ -61,7 +72,8 @@ func (s *Service) fresh(ctx context.Context, captured *automodv1.SubjectBinding)
 	return fresh, nil
 }
 func (s *Service) ProvisionSubject(ctx context.Context, r *automodv1.ProvisionSubjectRequest) (*automodv1.ProvisionSubjectResponse, error) {
-	if err := s.authorize(ctx, automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName, r); err != nil {
+	check, err := s.authorize(ctx, automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName, r)
+	if err != nil {
 		return nil, err
 	}
 	if r.GetBaselineSequence() != 0 {
@@ -75,6 +87,9 @@ func (s *Service) ProvisionSubject(ctx context.Context, r *automodv1.ProvisionSu
 	if err != nil {
 		return nil, err
 	}
+	if err = check(ctx); err != nil {
+		return nil, mapError(err)
+	}
 	if err = s.Store.Provision(ctx, subject(fresh.GetSubject(), epoch)); err != nil {
 		return nil, mapError(err)
 	}
@@ -85,7 +100,8 @@ func (s *Service) ProvisionSubject(ctx context.Context, r *automodv1.ProvisionSu
 	return &automodv1.ProvisionSubjectResponse{ThroughSequence: through, SourceEpoch: r.GetSourceEpoch()}, nil
 }
 func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automodv1.IngestCommittedMessageEvidenceRequest) (*automodv1.IngestCommittedMessageEvidenceResponse, error) {
-	if err := s.authorize(ctx, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName, r); err != nil {
+	check, err := s.authorize(ctx, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName, r)
+	if err != nil {
 		return nil, err
 	}
 	var captured *automodv1.SubjectBinding
@@ -96,7 +112,6 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 	var digests []automod.Digest
 	var linkCount uint32
 	var hash [32]byte
-	var err error
 	if e := r.GetEvidence(); e != nil {
 		if e.GetProtocolVersion() != 1 {
 			return nil, invalid()
@@ -184,10 +199,13 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 	if err != nil {
 		return nil, err
 	}
+	if err = check(ctx); err != nil {
+		return nil, mapError(err)
+	}
 	if err = s.Store.RefreshSubject(ctx, subject(fresh.GetSubject(), epoch)); err != nil {
 		return nil, mapError(err)
 	}
-	envelope := automod.Envelope{Subject: subject(captured, epoch), EventID: eventID, Sequence: int64(sequence), RecordedAt: recorded.AsTime(), Eligibility: eligibility, Digests: digests, LinkCount: linkCount, Hash: hash}
+	envelope := automod.Envelope{Subject: subject(captured, epoch), EventID: eventID, Sequence: int64(sequence), RecordedAt: recorded.AsTime(), Eligibility: eligibility, Digests: digests, LinkCount: linkCount, Hash: hash, BeforeCommit: check}
 	receipt, err := s.Store.Ingest(ctx, envelope)
 	if err != nil {
 		return nil, mapError(err)
@@ -203,7 +221,8 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 	return &automodv1.IngestCommittedMessageEvidenceResponse{Outcome: outcome, ThroughSequence: uint64(receipt.Through)}, nil
 }
 func (s *Service) GetAccountSendRestriction(ctx context.Context, r *automodv1.GetAccountSendRestrictionRequest) (*automodv1.GetAccountSendRestrictionResponse, error) {
-	if err := s.authorize(ctx, automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName, r); err != nil {
+	check, err := s.authorize(ctx, automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName, r)
+	if err != nil {
 		return nil, err
 	}
 	account, err := identifier(r.GetAccountId())
@@ -220,6 +239,9 @@ func (s *Service) GetAccountSendRestriction(ctx context.Context, r *automodv1.Ge
 	}
 	if fresh == nil || !automodclient.ValidSubject(fresh.GetSubject(), account, id) {
 		return nil, status.Error(codes.Unavailable, "fresh subject authority unavailable")
+	}
+	if err = check(ctx); err != nil {
+		return nil, mapError(err)
 	}
 	restriction, err := s.Store.ReadRestriction(ctx, account, id)
 	if err != nil {
@@ -232,7 +254,8 @@ func (s *Service) GetAccountSendRestriction(ctx context.Context, r *automodv1.Ge
 	return response, nil
 }
 func (s *Service) GetEffectiveRestrictionSnapshot(ctx context.Context, r *automodv1.GetEffectiveRestrictionSnapshotRequest) (*automodv1.GetEffectiveRestrictionSnapshotResponse, error) {
-	if err := s.authorize(ctx, automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName, r); err != nil {
+	check, err := s.authorize(ctx, automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName, r)
+	if err != nil {
 		return nil, err
 	}
 	account, err := identifier(r.GetAccountId())
@@ -249,6 +272,9 @@ func (s *Service) GetEffectiveRestrictionSnapshot(ctx context.Context, r *automo
 	}
 	if fresh == nil || !automodclient.ValidSubject(fresh.GetSubject(), account, id) {
 		return nil, status.Error(codes.Unavailable, "fresh subject authority unavailable")
+	}
+	if err = check(ctx); err != nil {
+		return nil, mapError(err)
 	}
 	if err = s.Store.BindSubject(ctx, subject(fresh.GetSubject(), uuid.Nil)); err != nil {
 		return nil, mapError(err)

@@ -31,14 +31,15 @@ type Digest struct {
 	Hash  [32]byte
 }
 type Envelope struct {
-	Subject     Subject
-	EventID     uuid.UUID
-	Sequence    int64
-	RecordedAt  time.Time
-	Eligibility Eligibility
-	Digests     []Digest
-	LinkCount   uint32
-	Hash        [32]byte
+	Subject      Subject
+	EventID      uuid.UUID
+	Sequence     int64
+	RecordedAt   time.Time
+	Eligibility  Eligibility
+	Digests      []Digest
+	LinkCount    uint32
+	Hash         [32]byte
+	BeforeCommit BootCheck `json:"-"`
 }
 type Receipt struct {
 	Through            int64
@@ -113,8 +114,17 @@ func (s *Store) RequireLiveSubjectTx(ctx context.Context, tx pgx.Tx, account, su
 }
 
 func (s *Store) accountTx(ctx context.Context, account uuid.UUID, fn func(pgx.Tx) error) error {
+	return s.accountTxChecked(ctx, account, nil, fn)
+}
+
+func (s *Store) accountTxChecked(ctx context.Context, account uuid.UUID, check BootCheck, fn func(pgx.Tx) error) error {
 	if s == nil || s.Pool == nil || account == uuid.Nil {
 		return ErrSubject
+	}
+	if check != nil {
+		if err := check(ctx); err != nil {
+			return err
+		}
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -124,8 +134,18 @@ func (s *Store) accountTx(ctx context.Context, account uuid.UUID, fn func(pgx.Tx
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('moderation-account-sanction:' || $1::text,0))`, account.String()); err != nil {
 		return err
 	}
+	if check != nil {
+		if err = check(ctx); err != nil {
+			return err
+		}
+	}
 	if err = fn(tx); err != nil {
 		return err
+	}
+	if check != nil {
+		if err = check(ctx); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }
@@ -205,7 +225,7 @@ func (s *Store) Ingest(ctx context.Context, e Envelope) (receipt Receipt, err er
 	if !validEnvelope(e) {
 		return receipt, ErrEvidence
 	}
-	err = s.accountTx(ctx, e.Subject.AccountID, func(tx pgx.Tx) error {
+	err = s.accountTxChecked(ctx, e.Subject.AccountID, e.BeforeCommit, func(tx pgx.Tx) error {
 		var terminal bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1)`, e.Subject.ID).Scan(&terminal); err != nil {
 			return err

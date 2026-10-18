@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"testing"
+	"time"
 	"voice/backend/moderation/internal/automod"
 )
 
@@ -59,4 +61,54 @@ func TestAutoModStore_SubjectParticipantRollsBackWithAndWithoutAccountMapping(t 
 			}
 		})
 	}
+}
+
+func TestAutoModStore_ClosedBootBeforeCommitRollsBackEvidenceEffects(t *testing.T) {
+	ctx := context.Background()
+	pool := automodAdmissionDatabase(t)
+	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	s := automod.NewStore(pool)
+	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
+	require.NoError(t, s.Provision(ctx, subject))
+	ready := func() *automod.BootGate {
+		g := automod.NewBootGate()
+		id, generation := g.Identity()
+		for phase := automod.BootLocalIssuer; phase <= automod.BootEffectsReady; phase++ {
+			require.NoError(t, g.Advance(automod.BootReceipt{BootID: id, Generation: generation, Phase: phase, ProofID: uuid.New()}))
+		}
+		return g
+	}
+	g := ready()
+	check, err := g.AcquireEffects(ctx)
+	require.NoError(t, err)
+	calls := 0
+	hash := sha256.Sum256([]byte("immutable account detector core"))
+	e := automod.Envelope{Subject: subject, EventID: uuid.New(), Sequence: 1, RecordedAt: time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond), Eligibility: automod.Eligible, Digests: []automod.Digest{{KeyID: "current", Hash: hash}}, LinkCount: 3, Hash: hash}
+	e.BeforeCommit = func(ctx context.Context) error {
+		calls++
+		if calls == 3 {
+			g.Close()
+		}
+		return check(ctx)
+	}
+	_, err = s.Ingest(ctx, e)
+	require.ErrorIs(t, err, automod.ErrBootClosed)
+	require.Equal(t, 3, calls)
+	var sequence, actions, inbox int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT through_sequence FROM automod_subjects WHERE subject_id=$1`, subject.ID).Scan(&sequence))
+	require.Zero(t, sequence)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM automod_actions`).Scan(&actions))
+	require.Zero(t, actions)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM automod_inbox`).Scan(&inbox))
+	require.Zero(t, inbox)
+	newBoot := ready()
+	_, err = s.Ingest(ctx, e)
+	require.ErrorIs(t, err, automod.ErrBootClosed, "old captured check remains invalid after another boot is ready")
+	e.BeforeCommit, err = newBoot.AcquireEffects(ctx)
+	require.NoError(t, err)
+	receipt, err := s.Ingest(ctx, e)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), receipt.Through)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM automod_actions`).Scan(&actions))
+	require.Equal(t, 1, actions)
 }

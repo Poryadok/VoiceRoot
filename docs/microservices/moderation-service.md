@@ -293,3 +293,14 @@ same issuer instance. Its certificate-only mTLS JWKS route is
 readiness and serves only the current/next public keys. It never requires the
 JWT, session floor or reciprocal domain RPC which its keys bootstrap.
 
+The shared `automod.BootGate` starts closed for each fresh boot UUID. The owning
+bootstrap coordinator advances ordered `BootReceipt` records P0-P5 only after
+verifying the actual corresponding local/network/durable evidence; a receipt
+reference is not that verification. `AcquirePrivateRepair` opens after complete
+terminal import, while `AcquireEffects` opens only after finite reconciliation.
+Captured checks bind the boot/generation and are rechecked before domain commit
+or dispatch. Closing a gate permanently invalidates its old checks; recovery
+creates a new gate and repeats every phase. Report intake/validation/publication
+receive that same gate through `ReportPrivacyAcquire`, with nil closed. Gate
+unit/RPC tests do not prove sealed snapshots, readiness routing or recovery cuts.
+
