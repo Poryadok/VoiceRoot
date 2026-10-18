@@ -46,7 +46,7 @@ func ConfigFromEnv() (Config, bool) {
 	}
 	voipTopic := strings.TrimSpace(os.Getenv("APNS_VOIP_TOPIC"))
 	if voipTopic == "" {
-		voipTopic = bundleID
+		voipTopic = bundleID + ".voip"
 	}
 	production := strings.TrimSpace(os.Getenv("APNS_PRODUCTION")) != "false"
 	return Config{
