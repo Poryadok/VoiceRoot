@@ -67,6 +67,51 @@ func TestCompositeStoreGlobalAuditReservation(t *testing.T) {
 	}
 }
 
+func TestCompositeStoreMigrationRejectsAmbiguousExistingChatReceipt(t *testing.T) {
+	for _, scenario := range []string{"different_chat", "different_creator", "retained_without_payload"} {
+		t.Run(scenario, func(t *testing.T) {
+			st, b := compositeStoreFixture(t)
+			ctx := context.Background()
+			e := spaceaudit.ReplayEvent{AuditEventID: b.AuditEventId, SpaceID: b.SpaceId, ActorProfileID: b.CreatorProfileId, Action: "chat_created", TargetType: "chat", TargetID: b.ChatId, DetailsJSON: "{}", OccurredAt: timestamppb.New(time.Now().UTC().Add(-366 * 24 * time.Hour))}
+			if scenario == "different_chat" {
+				e.TargetID = uuid.NewString()
+			}
+			if scenario == "different_creator" {
+				e.ActorProfileID = uuid.NewString()
+			}
+			require.NoError(t, st.ImportAuditEvent(ctx, "chat", e))
+			if scenario == "retained_without_payload" {
+				_, err := st.Pool.Exec(ctx, `UPDATE audit_outbox SET delivered_at=clock_timestamp() WHERE audit_event_id=$1`, b.AuditEventId)
+				require.NoError(t, err)
+				deleted, err := st.CleanupExpiredAuditLog(ctx, 10)
+				require.NoError(t, err)
+				require.EqualValues(t, 1, deleted)
+			}
+			down, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000031_composite_audit_reservation.down.sql"))
+			require.NoError(t, err)
+			_, err = st.Pool.Exec(ctx, string(down))
+			require.NoError(t, err)
+			// Reproduce the old schema's independently persisted COMMITTED fence.
+			// Old Commit did not inspect the pre-existing Chat receipt at all.
+			_, err = st.Pool.Exec(ctx, `INSERT INTO space_chat_creation_fences(operation_id,protocol_version,space_id,chat_id,chat_type,node_id,audit_event_id,terminal_state,failure_code) VALUES($1,1,$2,$3,$4,$5,$6,1,0)`, b.OperationId, b.SpaceId, b.ChatId, int32(b.ChatType), b.NodeId, b.AuditEventId)
+			require.NoError(t, err)
+			up, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000031_composite_audit_reservation.up.sql"))
+			require.NoError(t, err)
+			conn, err := st.Pool.Acquire(ctx)
+			require.NoError(t, err)
+			defer conn.Release()
+			_, err = conn.Exec(ctx, string(up))
+			require.Error(t, err, "upgrade must not bless an unprovable historical Chat overlap")
+			_, err = conn.Exec(ctx, "ROLLBACK")
+			require.NoError(t, err)
+			var receipt, fence bool
+			require.NoError(t, conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM audit_event_receipts WHERE audit_event_id=$1),EXISTS(SELECT 1 FROM space_chat_creation_fences WHERE audit_event_id=$1)`, b.AuditEventId).Scan(&receipt, &fence))
+			require.True(t, receipt)
+			require.True(t, fence, "failed migration preserves both evidence records")
+		})
+	}
+}
+
 func TestCompositeStoreCrossSpaceAuditReservationRace(t *testing.T) {
 	st, first := compositeStoreFixture(t)
 	ctx := context.Background()

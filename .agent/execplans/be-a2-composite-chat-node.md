@@ -167,3 +167,13 @@ head/dependency order; no develop checkout, deployment or acceptance appointment
 Chat prepared/HELD/recovery, generic/direct/bot initiating cutover and participant
 drain proof remain author44's explicit integration gap. Source review R1 delta,
 hosted exact-head CI and assembled producer evidence remain required gates.
+
+Independent121 migration follow-up found that origin=chat, equal Space and
+COMMITTED do not prove the original fact. Actual PostgreSQL RED reproduced
+wrong Chat, wrong creator and retained receipt without audit payload: all three
+incorrectly passed the old preflight. The successor refuses every pre-existing
+receipt/composite overlap as ambiguous, preserves both records and exposes no
+bypass. This conservatively also blocks apparently matching historical overlaps;
+they require explicit verified reconciliation, not implicit approval from hashes.
+Current source has not been activated, so no historical overlap is assumed absent
+without inspection and no production repair or data deletion is authorized here.

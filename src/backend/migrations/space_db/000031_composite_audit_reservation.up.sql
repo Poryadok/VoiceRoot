@@ -9,11 +9,14 @@ LANGUAGE sql AS $$
 $$;
 
 DO $$ BEGIN
+  -- Producer/Space/state equality cannot prove the full original Chat fact.
+  -- Creator is in protobuf evidence and receipt hashes may outlive audit rows.
+  -- Refuse ambiguous pre-upgrade overlaps without erasing either record. Even
+  -- apparently matching Chat rows require explicit verified reconciliation.
   IF EXISTS (
     SELECT 1 FROM space_chat_creation_fences f JOIN audit_event_receipts r USING(audit_event_id)
-    WHERE r.origin<>'chat' OR r.space_id<>f.space_id OR f.terminal_state<>1
   ) THEN
-    RAISE EXCEPTION 'existing composite/audit ID collision requires explicit reconciliation';
+    RAISE EXCEPTION 'ambiguous existing composite/audit ID overlap requires explicit verified reconciliation';
   END IF;
 END $$;
 

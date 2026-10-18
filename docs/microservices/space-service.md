@@ -47,6 +47,11 @@ the original COMMITTED Chat tuple. The protected ingress additionally verifies
 the complete saved creator binding. No provisional receipt/fingerprint is created.
 Receipt minimization takes no audit UUID lock and runs after Space cleanup locks.
 Startup of the composite receiver requires migrations `000028` and `000031`.
+The migration refuses every pre-existing receipt/composite audit-ID overlap:
+producer/Space equality and a hash alone cannot prove the full original creator
+binding, particularly after audit payload retention. Even apparently matching
+historical Chat overlaps require explicit verified reconciliation; the migration
+preserves both records and supplies no bypass or automatic evidence deletion.
 
 The receiver config prefix is `SPACE_CHAT_COMPOSITE_`: `GRPC_LISTEN`,
 `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `PRINCIPAL_JWKS_URL`,

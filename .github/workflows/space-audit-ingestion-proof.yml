@@ -73,6 +73,7 @@ jobs:
             TestCompositeStoreFailedEvidenceInsertRollsBackNodeAndFence \
             TestCompositeStoreExpiryIsEnforcedBeforePhysicalCleanup \
             TestCompositeStoreGlobalAuditReservation \
+            TestCompositeStoreMigrationRejectsAmbiguousExistingChatReceipt \
             TestCompositeStoreCrossSpaceAuditReservationRace \
             TestCompositeStoreWaitsForUncommittedLocalAuditReservation \
             TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace \
