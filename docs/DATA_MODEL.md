@@ -316,3 +316,29 @@ one exact live reference or a subject-bound capability and checks the File-owned
 Space fence before any uploader/owner shortcut. Owner rows become externally
 visible only after durable reference acquisition, and release names the exact
 same tuple. Blob GC begins only when File proves zero live references globally.
+
+## Private account moderation identity (BE-045)
+
+Auth owns a random immutable UUID moderation subject for each account lifetime,
+its positive lifecycle revision, deletion cycle and canonical purge deadline.
+This subject is a private protocol identifier; it is neither an account/profile
+alias available to clients nor permission to query message content. At terminal
+purge every raw account/profile mapping and pending personal payload is erased;
+the opaque subject-only fence remains permanent, including after backup restore.
+
+Messaging owns one immutable source epoch and a contiguous committed sequence
+per subject/account. Source time is monotonic database time under that account's
+counter lock, after Chat/Space locks. A logical message plus authored forward
+commentary creates one immutable private evidence event in the message commit;
+exact replay and failed transactions create none. Account-scoped HMAC digests
+carry key IDs but never plaintext/URLs in public events or moderation logs.
+
+Moderation owns the complete desired ban projection and its monotonic revision.
+Auth acknowledges the exact accepted account/subject/revision/desired state;
+an ahead revision alone cannot acknowledge an older request. Machine sanctions
+have nullable human `issued_by` and explicit constrained issuer
+`service:moderation/automod`; report threshold cases carry their separate case
+association. They never fabricate a staff/profile identity. See the owning
+[execution contract](testing/async-automod-exec-plan.md) and
+[startup/restore barriers](testing/async-automod-startup-restore.md) for retention,
+terminal import, finite reconciliation and cross-service authority requirements.

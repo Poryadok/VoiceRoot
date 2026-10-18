@@ -69,6 +69,19 @@ The regression and existing first-bind/purge race tests pass on private Linux
 PostgreSQL. Report-specific participant wiring and complete boot import remain
 part of the coherent activation work.
 
+Messaging commit checkpoint: the real producer test observed a successful
+message with zero private evidence rows (meaningful RED). New insert-result
+tracking and a private hook on ordinary, attachment, game-event and protected
+game-create transactions now allocate the subject sequence/source time and
+immutable keyed payload atomically. The deferred database coverage guard closes
+forgotten/old writers after monotonic activation. Exact same-ID replay remains
+non-inserting even after delivery removes its journal row. Real PostgreSQL tests
+cover injected journal rollback, terminal denial, key identity/omission/retirement
+guards, twelve concurrent same-account sends, metadata-only sends, and one-event
+forward/commentary commits. Three tests passed with the Linux race detector.
+Verified ingress, full producer activation/dispatch, retention and current-boot
+terminal/cursor reconciliation are still open; no completed vertical is claimed.
+
 - [x] Confirm actual TT owner156, fresh base and exclusive lease22.
 - [x] Read c9; ordinary policy choices no longer require a user response.
 - [x] Persist exact owning API/schema and policy contracts before production code.

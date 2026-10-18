@@ -1,0 +1,15 @@
+DO $$ BEGIN
+  IF EXISTS(SELECT 1 FROM automod_producer_state WHERE active) OR
+     EXISTS(SELECT 1 FROM automod_source_subjects) OR EXISTS(SELECT 1 FROM automod_terminal_subjects) OR
+     EXISTS(SELECT 1 FROM automod_hmac_keys) THEN
+    RAISE EXCEPTION 'cannot discard automod source, key or terminal history';
+  END IF;
+END $$;
+DROP TRIGGER automod_message_coverage ON messages;
+DROP FUNCTION automod_message_coverage();
+DROP TABLE automod_expired_receipts,automod_evidence_outbox,automod_hmac_usage,automod_hmac_keys,automod_source_subjects,automod_terminal_subjects;
+DROP FUNCTION automod_evidence_immutable();
+DROP FUNCTION automod_hmac_key_identity_guard();
+DROP TRIGGER automod_producer_state_guard ON automod_producer_state;
+DROP FUNCTION automod_producer_state_guard();
+DROP TABLE automod_producer_state;
