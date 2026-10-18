@@ -97,6 +97,26 @@ GitHub setup:
 
 See [DEPLOYMENT.md](../../docs/DEPLOYMENT.md) for tag policy and approval flow.
 
+## Production smoke
+
+With `PROD_SMOKE_ENABLED=true`, the production workflow runs
+[`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh). Before the shared health,
+storage, frontend and optional staff checks, it requires `401` from protected
+Space, Analytics dashboard and Admin report reads, both without credentials and
+with an intentionally invalid bearer. These are read-only GET requests with
+normal TLS verification, bounded connection/request timeouts and no redirect
+following. No account is created and no real staff token is sent in these
+negative probes; optional shared staff checks still use `PROD_STAFF_TOKEN`.
+
+Any other status or transport error fails the smoke before shared checks. This
+checks the public authentication boundary; it does not prove valid-session ACLs,
+media delivery, deployed release identity or final production acceptance. Real
+rollout and version-sensitive verification still require their authorized window.
+
+The offline fixture runs the actual production wrapper with fake curl and a
+shared-smoke boundary: `bash scripts/ci/prod-smoke_test.sh` (also included in
+`make ci-script-tests`). It makes no network or Kubernetes calls.
+
 ## ClickHouse schema
 
 The `full` path runs `scripts/prod/apply-infra.sh`, waits for the ClickHouse
