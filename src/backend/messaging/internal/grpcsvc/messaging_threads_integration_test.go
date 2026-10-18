@@ -46,7 +46,7 @@ VALUES ($1, 'channel', $2, 0, true, false)
 `, chatID, owner)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
-INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member')
+INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'owner')
 `, chatID, owner)
 	require.NoError(t, err)
 }

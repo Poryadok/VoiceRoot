@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,7 @@ type threadPolicyDeps struct {
 	Policy    *store.SQLChatThreadPolicy
 	Messages  *store.MessagesStore
 	RolePerms mentionsRoleChecker
+	Members   ChatGuard
 }
 
 type mentionsRoleChecker interface {
@@ -47,6 +49,9 @@ func (d threadPolicyDeps) validateSend(ctx context.Context, chatID, profileID uu
 }
 
 func (d threadPolicyDeps) validateMainFeedSend(ctx context.Context, chatID, profileID uuid.UUID, pol *store.ChatThreadPolicy, postedAsChat bool) error {
+	if pol == nil {
+		return status.Error(codes.Unavailable, "chat policy unavailable")
+	}
 	switch pol.ChatType {
 	case "dm":
 		return nil
@@ -56,22 +61,50 @@ func (d threadPolicyDeps) validateMainFeedSend(ctx context.Context, chatID, prof
 		}
 		return nil
 	case "channel":
-		if pol.AllowUserMainFeed && !postedAsChat {
-			return nil
+		if pol.SpaceID == nil {
+			return d.validateStandaloneChannelSend(ctx, chatID, profileID, pol.AllowUserMainFeed, postedAsChat)
 		}
-		if postedAsChat {
-			return nil
+		if isNilDependency(d.RolePerms) {
+			return status.Error(codes.Unavailable, "role service unavailable")
 		}
-		if d.RolePerms != nil && pol.SpaceID != nil {
-			allowed, err := d.RolePerms.HasChatPermission(ctx, *pol.SpaceID, profileID, chatID, permissions.TextChatSendMessages)
-			if err == nil && allowed {
-				return nil
-			}
+		allowed, err := d.RolePerms.HasChatPermission(ctx, *pol.SpaceID, profileID, chatID, permissions.TextChatSendMessages)
+		if err != nil {
+			return status.Error(codes.Unavailable, "role service unavailable")
 		}
-		return status.Error(codes.PermissionDenied, "channel main-feed posts require posted_as_chat")
+		if !allowed {
+			return status.Error(codes.PermissionDenied, "send messages not permitted in this chat")
+		}
+		return nil // The Space Role decision authorizes the existing main-feed mode.
 	default:
 		return status.Error(codes.InvalidArgument, "unsupported chat type")
 	}
+}
+
+func (d threadPolicyDeps) validateStandaloneChannelSend(ctx context.Context, chatID, profileID uuid.UUID, allowUser, postedAsChat bool) error {
+	if isNilDependency(d.Members) {
+		return status.Error(codes.Unavailable, "chat role authority unavailable")
+	}
+	role, err := d.Members.MemberRole(ctx, chatID, profileID)
+	if errors.Is(err, store.ErrNotChatMember) {
+		return status.Error(codes.PermissionDenied, "not a chat member")
+	}
+	if err != nil {
+		return status.Error(codes.Unavailable, "chat role authority unavailable")
+	}
+	role = strings.TrimSpace(role)
+	if role != "owner" && role != "admin" && role != "member" {
+		return status.Error(codes.PermissionDenied, "unknown chat member role")
+	}
+	if postedAsChat {
+		if role != "owner" && role != "admin" {
+			return status.Error(codes.PermissionDenied, "official channel posts require owner or admin")
+		}
+		return nil
+	}
+	if !allowUser {
+		return status.Error(codes.PermissionDenied, "user main-feed posts are disabled for this chat")
+	}
+	return nil
 }
 
 func (d threadPolicyDeps) validateThreadReply(ctx context.Context, chatID, profileID uuid.UUID, pol *store.ChatThreadPolicy, parentID uuid.UUID) error {

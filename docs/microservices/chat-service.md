@@ -1,5 +1,25 @@
 # Chat Service
 
+## Standalone channel publication authority
+
+For a stored `channel` with `space_id IS NULL`, Chat owns the current
+`chat_members` role and `allow_user_main_feed` setting. Only a current `owner`
+or `admin` may publish as the channel (`posted_as_chat=true`). User-identity
+main-feed publication requires both a known current role (`owner`, `admin` or
+`member`) and explicit `allow_user_main_feed=true`; the disabled setting also
+denies owner/admin user-identity posts. Standalone owner/admin `UpdateChat`
+controls that setting. No channel promotion API is implied by this contract.
+
+Messaging uses the existing Chat boundary (`ChatGuard.MemberRole`, production
+`GRPCChatGuard`) for Send, Forward and copy-as-new, without a new role store.
+Forward chooses official mode when user main-feed posts are disabled and user
+mode when enabled; commentary uses the same identity. Stored type/scope wins
+over caller `ChatRef.type`. Missing membership, unknown role, missing policy or
+unavailable authority never grants publication. Denials precede commentary,
+message and event/outbox writes. Space-attached destinations continue to require
+the exact-chat Role `TEXT_CHAT_SEND_MESSAGES` decision; local roles cannot
+replace it. See [forward contract](../features/forward-messages.md#права-основного-потока-канала).
+
 ## Обзор
 
 Управление сущностями чатов: DM (1:1), текстовые **группы** и **каналы** (`type = group` \| `channel`, в т.ч. вне спейса; одинаковая модель, разные дефолты), пользовательские папки.
