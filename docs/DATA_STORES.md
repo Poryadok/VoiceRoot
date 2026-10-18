@@ -12,7 +12,7 @@
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
-| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
+| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay; profile-mutation quotas | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | NATS JetStream (publish); transactional `chat.deleted` outbox |
 | Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `message_send_receipts` binds private exact immediate-send retries to their message and RPC; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
@@ -149,6 +149,7 @@ No cross-database FK or writable copy of Space/Role grants is introduced.
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
 | `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
+| `chat_scope_authority_heads` | Migration `000025`; permanent per-chat positive revision and attachment incarnation head, retained across delete/recreate. Source/lifecycle/managed ownership changes maintain it transactionally; no TTL, truncate, revision reset or safe DOWN. `chats.scope_incarnation` is the current native attachment UUID. |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
@@ -199,6 +200,18 @@ effect reconciliation. DOWN refuses journal or native snapshot evidence; JWT
 expiry alone never authorizes removing tombstones. Runtime/cutover boundaries:
 [Voice service ordinary lifecycle](microservices/voice-service.md#ordinary-dmgroup-sdk-lifecycle-opt-in-runtime-rollout-unverified).
 
+The native Space source is `voice_space_media_room_heads` plus
+`voice_space_media_admissions` (migration `000010`). Migration
+`000013_a3_roster_outbox` adds an independent head `roster_version` and shared
+`voice_roster_outbox`. Ordinary and Space writers save an immutable A3 event in
+their membership transaction; compatibility events retain separate IDs/outboxes.
+Space eligibility is an exact OPEN head and COMMITTED, ACTIVE admission with
+`projection_applied_at`. A creator's finalized admission remains evidence after
+that creator leaves while another participant remains active. Outbox delivery
+leases cannot change saved payload/identity. Delivered evidence and positive
+versions also prevent DOWN; delivery is not permission to forget replay history.
+This native source does not activate source-disabled R22 or certify cold cutover.
+
 Voice owns `voice_room_instances`, `voice_room_memberships`,
 `voice_lifecycle_operations`, `voice_lifecycle_effects`,
 `voice_media_epoch_denials`, `voice_event_outbox`, and
@@ -245,6 +258,21 @@ epoch, lifecycle state and bounded reconnect interval to `voice_room_memberships
 Legacy membership identity remains unknown; no backfill is inferred from Redis
 or profile IDs. This is storage evidence, not an activated party snapshot source.
 
+### `matchmaking_db` A3 party recovery
+
+Migration `000019_a3_party_search` binds captured parties to immutable source
+room/version/manifest and the initiator's verified account/session epoch. Every
+member session and the ENQUEUE queue intent commit with that party. Migration
+`000020_voice_roster_inbox` records exact event identity/hash and room/version,
+retains conflicting bytes, and stores immutable per-session cancellation events.
+Whole-party cancellation, pending-match rollback, recovery generations, RELEASE
+intent and cancellation outbox share one local transaction. Redis is rebuilt
+from these intents; no cross-database foreign key or atomicity is implied.
+Inbox/conflict/cancellation evidence has no automatic purge clock, and DOWN
+refuses even settled rows. Ambiguous provider creation remains a separate durable
+settlement obligation under `BE012-ASYNC-PROVISION-RESET-v1`; cancellation alone
+does not prove that a remote resource was never created.
+
 ## Клиенты и админка
 
 | Компонент           | Хранилище                                                  |
@@ -263,6 +291,18 @@ The staging manifests also retain the legacy `gateway_db`; local Compose carries
 the old deferred-runtime description is superseded.
 
 ---
+
+## User profile-mutation quotas
+
+User owns ephemeral anti-abuse keys
+`user:profile-mutations:v1:{account_uuid}:create` and `:delete` (sorted sets),
+with a `:sequence` counter for each operation. One atomic Lua admission uses
+Redis TIME and admits up to 10 authenticated attempts per rolling hour per
+account per operation. Keys contain timestamps and sequence values, no profile
+payload. Both keys expire one hour after the last admission; denials do not
+renew retention. All User replicas use the existing `USER_REDIS_ADDR`.
+Quota state is separate from durable profile ownership/archival. Redis loss
+fails closed for these mutations; there is no instance-local fallback.
 
 ## Redis: один кластер или несколько
 

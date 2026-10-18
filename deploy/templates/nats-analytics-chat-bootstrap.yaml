@@ -103,7 +103,7 @@ data:
     stream user_events user.account_deleted user.account_restored user.guest_converted user.registered user.logged_in user.logged_out user.2fa_enabled user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
     stream chat_events chat.created chat.updated chat.deleted chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored space.voice_room_access_invalidated
     stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
-    stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left
+    stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left voice.roster_membership_changed
     stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
     stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed
     stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
@@ -135,6 +135,7 @@ data:
     consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata
     consumer message_events bot_message_events message.sent _INBOX.voice.bot.bot_message_events all ''
     consumer_filters story_events matchmaking_story_lfp_v2 _INBOX.voice.matchmaking.matchmaking_story_lfp_v2 all story.lfp_created story.lfp_response
+    pull_consumer voice_events matchmaking_voice_roster_v1 voice.roster_membership_changed all
     consumer_filters subscription_events space_subscription_entitlement _INBOX.voice.space.space_subscription_entitlement new subscription.space_pro_started subscription.space_pro_expired
     pull_consumer user_events user-account-deletion-v1 user.account_deleted all
     consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new '' 5 '[1000000000,5000000000,30000000000,120000000000,300000000000]'

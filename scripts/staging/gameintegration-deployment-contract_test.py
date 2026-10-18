@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 import re
+import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -103,7 +105,14 @@ assert not any("voice-gameintegration" in p.read_text(encoding="utf-8")
                for p in (ROOT / "deploy/prod").rglob("*.yaml")), "GIS must remain absent from production"
 
 prod_verifier = (ROOT / "scripts/prod/verify-prod-images.sh").read_text(encoding="utf-8")
-assert 'select((.environments // ["dev", "staging", "prod"]) | index("prod"))' in prod_verifier
+assert 'production_image_refs.py' in prod_verifier
+prod_refs = subprocess.check_output([
+    sys.executable, str(ROOT / 'scripts/prod/production_image_refs.py'),
+    '--catalog', str(ROOT / 'scripts/ci/staging-image-catalog.json'),
+    '--registry', 'ghcr.io/fixture/voice', '--tag', 'a' * 40,
+], text=True)
+assert 'gameintegration' not in prod_refs, 'GIS must not enter the production image plan'
+assert 'nats-hub-config-renderer\t' in prod_refs
 
 database_initializer = (ROOT / "scripts/staging/init-postgres-databases.sh").read_text(encoding="utf-8")
 assert 'VOICE_ENABLE_GAME_INTEGRATION_DB:-false' in database_initializer

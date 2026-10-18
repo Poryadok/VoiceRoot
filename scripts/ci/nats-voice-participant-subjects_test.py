@@ -11,7 +11,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY = "voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined".split()
-TARGET = LEGACY + ["voice.participant_joined", "voice.participant_left"]
+PARTICIPANT = LEGACY + ["voice.participant_joined", "voice.participant_left"]
+TARGET = PARTICIPANT + ["voice.roster_membership_changed"]
 AGE = 604800000000000
 
 FAKE = r'''
@@ -91,6 +92,16 @@ class VoiceSubjectPreservation(unittest.TestCase):
         result, after = self.invoke(self.initial, fail_update=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(after, self.initial)
+
+    def test_roster_addition_preserves_complete_participant_predecessor(self):
+        before = copy.deepcopy(self.initial)
+        before["config"]["subjects"] = PARTICIPANT
+        result, after = self.invoke(before)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        expected = copy.deepcopy(before)
+        expected["config"]["subjects"] = sorted(TARGET)
+        expected["updates"] = 1
+        self.assertEqual(after, expected)
 
 
 if __name__ == "__main__":

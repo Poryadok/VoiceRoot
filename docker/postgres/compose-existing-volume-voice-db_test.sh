@@ -10,6 +10,8 @@ readonly project="voice-r22-f14-${run_id}"
 readonly volume="${project}_voice_pgdata"
 readonly bootstrap="${project}-bootstrap"
 readonly sentinel_hex='006f6c642d766f6c756d652d73656e74696e656cff'
+# Pin the reviewed catalog, so a future migration must update this proof too.
+readonly expected_voice_version=12
 compose_started=false
 bootstrap_created=false
 volume_created=false
@@ -118,11 +120,39 @@ first_output="$(compose --profile app run --rm compose-db-init 2>&1)" || {
 
 [[ "$(query voice "SELECT count(*) FROM pg_database WHERE datname = 'voice_db'")" == '1' ]] || fail 'voice_db was not created on the existing volume'
 schema_state="$(query voice_db 'SELECT version::text || chr(58) || dirty::text FROM schema_migrations LIMIT 1')"
-[[ "${schema_state}" == '1:false' ]] || fail "expected clean Voice migration version 1, got ${schema_state}"
+[[ "${schema_state}" == "${expected_voice_version}:false" ]] || fail "expected clean Voice migration version ${expected_voice_version}, got ${schema_state}"
 
 tables="$(query voice_db "SELECT string_agg(tablename, ',' ORDER BY tablename) FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'")"
-expected_tables='voice_event_outbox,voice_lifecycle_effects,voice_lifecycle_operations,voice_media_epoch_denials,voice_room_instances,voice_room_memberships'
-[[ "${tables}" == "${expected_tables}" ]] || fail "unexpected Voice tables: ${tables}"
+expected_tables=(
+  voice_account_voice_fences
+  voice_event_outbox
+  voice_game_session_closures
+  voice_game_session_operations
+  voice_game_session_roster_receipts
+  voice_lifecycle_effects
+  voice_lifecycle_operations
+  voice_lifecycle_redis_divergences
+  voice_match_squad_member_effects
+  voice_match_squad_member_grants
+  voice_match_squad_member_operations
+  voice_match_squad_operations
+  voice_media_epoch_denials
+  voice_ordinary_memberships
+  voice_ordinary_outbox
+  voice_ordinary_rooms
+  voice_profile_account_mappings
+  voice_room_instances
+  voice_room_memberships
+  voice_sdk_conversion_fence_receipts
+  voice_space_lifecycle_fence_heads
+  voice_space_lifecycle_fence_receipts
+  voice_space_lifecycle_purge_receipts
+  voice_space_media_admission_outbox
+  voice_space_media_admissions
+  voice_space_media_room_heads
+)
+expected_catalog="$(IFS=,; printf '%s' "${expected_tables[*]}")"
+[[ "${tables}" == "${expected_catalog}" ]] || fail "unexpected Voice tables: ${tables}"
 
 sentinel_before="$(query chat_db 'SELECT encode(payload, '\''hex'\'') FROM r22_existing_volume_sentinel WHERE id = 1')"
 [[ "${sentinel_before}" == "${sentinel_hex}" ]] || fail 'older database sentinel changed during first init'
@@ -133,16 +163,18 @@ second_output="$(compose --profile app run --rm compose-db-init 2>&1)" || {
 }
 schema_state_second="$(query voice_db 'SELECT version::text || chr(58) || dirty::text FROM schema_migrations LIMIT 1')"
 sentinel_after="$(query chat_db 'SELECT encode(payload, '\''hex'\'') FROM r22_existing_volume_sentinel WHERE id = 1')"
-[[ "${schema_state_second}" == '1:false' ]] || fail "second init changed Voice migration state to ${schema_state_second}"
+[[ "${schema_state_second}" == "${expected_voice_version}:false" ]] || fail "second init changed Voice migration state to ${schema_state_second}"
+tables_second="$(query voice_db "SELECT string_agg(tablename, ',' ORDER BY tablename) FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'")"
+[[ "${tables_second}" == "${expected_catalog}" ]] || fail "second init changed Voice table catalog: ${tables_second}"
 [[ "${sentinel_after}" == "${sentinel_before}" ]] || fail 'second init changed the older database sentinel'
 
 if ! grep -Eiq '(no change|already.*current|up to date)' <<<"${second_output}"; then
   fail 'second compose-db-init run did not report an idempotent migration result'
 fi
 
-query voice_db 'UPDATE schema_migrations SET dirty = true WHERE version = 1' >/dev/null
+query voice_db "UPDATE schema_migrations SET dirty = true WHERE version = ${expected_voice_version}" >/dev/null
 dirty_before="$(query voice_db 'SELECT version::text || chr(58) || dirty::text FROM schema_migrations LIMIT 1')"
-[[ "${dirty_before}" == '1:true' ]] || fail "failed to prepare dirty Voice migration state: ${dirty_before}"
+[[ "${dirty_before}" == "${expected_voice_version}:true" ]] || fail "failed to prepare dirty Voice migration state: ${dirty_before}"
 set +e
 dirty_output="$(compose --profile app run --rm compose-db-init 2>&1)"
 dirty_status=$?
@@ -162,5 +194,7 @@ if ! grep -Eiq '(dirty.*voice_db|voice_db.*dirty)' <<<"${dirty_output}"; then
   dirty_contract_failed=true
 fi
 [[ "${dirty_contract_failed}" == false ]] || fail 'dirty Voice migration fail-closed contract failed'
+sentinel_dirty="$(query chat_db 'SELECT encode(payload, '\''hex'\'') FROM r22_existing_volume_sentinel WHERE id = 1')"
+[[ "${sentinel_dirty}" == "${sentinel_before}" ]] || fail 'dirty Voice migration attempt changed the older database sentinel'
 
 echo 'compose-existing-volume-voice-db: PASS'

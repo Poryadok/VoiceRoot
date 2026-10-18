@@ -160,6 +160,12 @@ service BotService {
   - Role: `DeleteRolesCreatedByProfile` (роли с `created_by_profile_id = actor_profile_id`), затем `GetMemberRoles` + `RevokeRole` для назначенных ролей бота
   - Messaging: `UnpinMessagesBySenderInChats` по whitelisted `chat_id` и `sender_profile_id = actor_profile_id`
 - **ListInstalledBots**: `InstalledBot.online` из `bot_presence` (тот же порог, что для slash `online`).
+- `ListInstalledBots.allowed_chats` получает текущий group/channel type через
+  Chat `GetChat` с исходным caller context. Тип принимается только для точного
+  Chat ID в запрошенном Space. При недоступном/запрещённом lookup, неполном или
+  несовпадающем ответе ID из whitelist сохраняется, optional `ChatRef.type`
+  отсутствует; channel по умолчанию не подставляется. Повторяющиеся Chat ID
+  гидратируются один раз на запрос; следующий запрос снова читает Chat.
 
 ### Presence
 

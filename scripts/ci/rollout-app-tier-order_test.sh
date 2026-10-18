@@ -12,7 +12,7 @@ fail() {
 
 line_number() {
   local pattern="$1"
-  grep -nF "${pattern}" "${SCRIPT}" | head -1 | cut -d: -f1
+  grep -nFm1 "${pattern}" "${SCRIPT}" | cut -d: -f1
 }
 
 auth_repair="$(line_number 'bash "${ROOT}/scripts/staging/repair-auth-flyway.sh"')"

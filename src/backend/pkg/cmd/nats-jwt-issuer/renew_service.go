@@ -13,11 +13,17 @@ import (
 // These are the only service additions this explicit operator transition can
 // issue. ACK tails are restricted to the named service-owned consumers.
 var serviceRenewSubjects = map[string][]string{
+	"matchmaking": {
+		"$JS.API.CONSUMER.INFO.voice_events.matchmaking_voice_roster_v1",
+		"$JS.API.CONSUMER.MSG.NEXT.voice_events.matchmaking_voice_roster_v1",
+		"$JS.ACK.voice_events.matchmaking_voice_roster_v1.>",
+	},
 	"role":  {"role.voice_policy_invalidated"},
 	"space": {"space.voice_room_access_invalidated"},
 	"voice": {
 		"voice.participant_joined",
 		"voice.participant_left",
+		"voice.roster_membership_changed",
 		"$JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat",
 		"$JS.ACK.chat_events.voice_space_media_chat.>",
 		"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role",

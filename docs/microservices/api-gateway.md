@@ -20,6 +20,23 @@
 - TLS termination
 - Request ID генерация и propagation (для трейсинга)
 
+## Outbound gRPC resilience
+
+Ordinary upstream ClientConns created by `grpcClientsFromEnv` use the shared
+unary breaker contract in [MICROSERVICES](../MICROSERVICES.md#отказоустойчивость).
+Each connection has independent full-method state and shared immutable
+defaults; there is no enable switch or environment tuning in this slice.
+OPEN/capacity admission rejects with `Unavailable` and the existing HTTP503
+mapping. It never returns cached authority, empty success or fallback content.
+Health Check/List bypass business state; startup/readiness semantics stay intact.
+
+The interceptor does not replay mutations or add application retries/deadlines.
+Configured grpc-go retry is disabled; transparent retries of unprocessed calls
+remain possible. Dedicated protected Space lifecycle, MatchSquad member,
+Matchmaking completion, Voice user and later protected transports keep their
+own unchanged TLS/principal options and are outside this activation. Other Go,
+Java and streaming adoption remains open; this is not all-service completion.
+
 ## Rate Limiting
 
 Правила (из ARCHITECTURE_REQUIREMENTS.md):

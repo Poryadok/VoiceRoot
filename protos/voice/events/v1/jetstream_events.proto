@@ -435,7 +435,22 @@ message VoiceStreamEvent {
     VoiceMemberJoined voice_member_joined = 19;
     VoiceParticipantJoined voice_participant_joined = 20;
     VoiceParticipantLeft voice_participant_left = 21;
+    VoiceRosterMembershipChanged voice_roster_membership_changed = 22;
   }
+}
+
+// A3 party eligibility fact, committed with the source membership transaction.
+message VoiceRosterMembershipChanged {
+  uint32 protocol_version = 1;
+  string room_id = 2;
+  uint64 roster_version = 3;
+  enum Change {
+    CHANGE_UNSPECIFIED = 0;
+    CHANGE_JOINED = 1;
+    CHANGE_LEFT = 2;
+  }
+  Change change = 4;
+  string profile_id = 5;
 }
 
 // A committed ordinary-call membership fact; not an SFU connection or invite.
@@ -774,6 +789,8 @@ message SearchStarted {
 message SearchCancelled {
   string session_id = 1;
   string profile_id = 2;
+  // A3 whole-party reset uses VOICE_ROSTER_CHANGED. Empty for legacy producers.
+  string reason = 3;
 }
 
 message MatchFound {

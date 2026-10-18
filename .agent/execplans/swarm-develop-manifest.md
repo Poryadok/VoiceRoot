@@ -6,6 +6,193 @@ All original TT task scopes and unresolved runtime gates remain authoritative an
 
 ## Source merge order
 
+### Resumed wave 2: latest qualification
+
+Checkpoint addendum at source5dbd0534c9225e7b3edbc3da480e994375f77435:
+BE1442625a0bb958f94267f714e5ed02a42cd146e1c4e is supported179e6 transferred,
+independently193c6CLEAR and normally merged. User migration21 is unique in the
+current registry; source adds its exact fixture entry and preserves earlier
+BE220 mutation budget wiring. Changed-input User image runs after this merge.
+BE2081aba7fc4c90d5b3cfadc23fa2efc9e00e1d993b9 is supported186e5 transferred,
+independently195c5CLEAR and merged prose-only. BE006 actualowner121 handoff
+was read back; exact149c4 reviewed patch74ad8a00d7bb9d2529c2a6f874538b34edeab46838056bfeec42ded3f4191dd2
+applied with whitespace/error check, actual one-file1+/1- inspected and normally
+committed5dbd0534c. Accepted contract/BE007 gates remain exact; no runtime
+completion implied. An early Story README merge attempt hit owned concurrent
+index lock; waited for first merge terminal0 and retried normally, no lock
+deleted or foreign process touched.
+
+Actual new Portal Node24 build PASS, image
+c05f9b04d850f18a6c486297f0fdf248b4733426626bc80312f29e3fe5623007.
+Exact3assets full-byte/hash and callback/unknown-route SPA fallback PASS at
+100m/64Mi, peak25997312/failcnt0, no hostports; owned container removed.
+Initial packaging lookup used the wrong archive path after successful Node
+build; resumed packaging with actual tracked docker/nginx-default.conf, without
+repeating unchanged Node build. Both outcomes remain in external receipts.
+
+Actual normal SSH publication5dbd0534c is confirmed by one due GraphQL read
+22:02:26UTC. Check suites106144745489/106144745761 QUEUED and106144749284 PENDING,
+no checkRuns yet, no hosted PASS. Shared next transport observation22:32:26UTC.
+CI-NATS-V5-AUTHORITY was created as an available coherent A1 supporting source
+task with activeconsumer121, exact187c15 contract/proof boundaries, Linux-only
+resource constraints and mandatory independent preservation/security review.
+Decision attachmentcfd0d3e33f9b9bf9850312e5f4a5be5e is portable; raw failure
+upload500 is not attachment success, exact external log and original hosted run
+remain available.121 keeps integration/CI, source producer self-selects with
+actual own lease; queen is never CI owner.
+
+New Moderation runtime evidence is an OPEN gate:144 combined fullgrpcsvc at
+f453a544d has BE238 counter expected37/actual11 under1CPU and held-lock
+expected0/actual1;142 verified the four metric files match integrated6a1d3b8.
+Do not erase this FAIL with earlier source CLEAR/image PASS.142c12-c16 retains
+exact evidence and asks bounded Astra clarification of best-effort deadline
+undercount/autocommit cancellation ambiguity and strong test partition. No
+contract/assertion/timeout change or repeated runtime has occurred in121's tree.
+This does not infer a cause or product PASS. Original full feature scopes stay
+open. Pending newly accepted source tasks include BE0078a8c9d7 and any later
+immutable offers; only independently reviewed actual transfers are merged.
+
+Latest addendum after the initial wave2 carrier: BE163 supported152e5 actual
+handoff then source33a8dfd775eee3d942121f93f4b8819038d251c8/146c4CLEAR merged;
+BE097 supported150e7 then8e1b677cf247b168103d5eee2120408ac2d0b30d/147c6CLEAR
+merged; BE040 supported153e7 then34640fde433c13073246003b1d009d2c7dba530c/
+165c8CLEAR merged.159 independently rechecked exact5d0d9eee conflict union
+CLEAR in CI021c11; no source-review gap remains for that bounded merge delta.
+Changed-input Story and Gateway canonical images at exacte3dc9ba83 both PASS,
+IDs fa652a5b5aef4f7a93d4bb22f4f1623443ca8cb59e3d176b677f66571bce967c and
+47b2c8a96dd5c5f803e35237ed916958adec25eede0cea53015c42ada41a58a4. Analytics
+image0ffd2cb2d PASS ID2cc3c6167ef91fbc73540c5194f10db733f917aa9d9e89cbefb4ea57f4806649.
+
+AD008 original149 correction7b022225911bfd4a90181b96a20406a236fe853a
+resolves174c7 P2, independently174c13CLEAR; source merged atae3f2b0b.
+Original stale-preview RED retained; guarded detail reload uses existing
+selection/session generation invalidation, four regressions and complete74
+Linux Node24 tests/lint/tsc/build authorPASS. Changed-input packaged Portal
+build and exact assets/resource budget are current owned executable checks,
+not inferred from the earlier image. Broader acceptance remains open.
+
+Astra187 decision SWARMc15 resolves the source-contract question: implement
+fixed v5 subject expansion with exact whole three-source tuple, unchanged
+auth-v4/enrollment/historical deployed-contract, voice/user UPDATE-only
+allowlists and version-aware actor/census/recovery/active receipts. Repinning
+v4 alone is explicitly unsafe because its compiler ignores those two streams.
+Versioned implementation and populated native preservation/crash/noop proof
+plus independent review remain to do. No source/pin mutation has occurred.
+
+Final Graph60495 yielded no output during the bounded current group and was
+cancelled only by its owned handle, terminal1, no final graph PASS. Fresh
+Treehouse census confirms ownWT36 processes[] and exactlease/holder unchanged;
+no unknown process was killed. Previous94631 successful graph proof remains
+historical. Complete-history checkpoint bundle/actual bare restore and exact
+new source ancestry are generated after this documentation carrier.
+
+User resumed the full autonomous colony;121 remains sole develop writer and
+integration/CI owner. Older no-new-agent/transport-blocked statements below are
+historical. At source0ffd2cb2de9a1893a80b1def396f26676011a89a, the following
+new frozen sources are preserved by ordinary merge history. TT supported
+handoffs to121 are actual, not inferred from reviewing. Exact review references
+qualify narrow source only; full original task scopes remain open.
+
+| Task | Frozen source | Independent source evidence |
+| --- | --- | --- |
+| AD007 |b06c8c691c27741c126e08b12453452363769a1a|156c4 |
+| AD006 |ffe04fdeee598a0048b5a9a668cc073a7ca61664|143c7 |
+| BE161 |e7806aab72c73a58d7ff5d112ccdfeea947a5962|159c4 |
+| BE050 fixture |84e70c17517a106cc5c98b4e2bf9f515123b7ba5|143c5 |
+| BE197 |98a05bf0bed7ff7aa467ed49a88a9a30dbcf1043|160c7 |
+| CI024 |e16abbd2d38845b08e3aac95b1291e948aa51706|153c4 |
+| CI025 |0c990e5226a28091001b237028be90286b75ed55|145c5 |
+| BE175 |3673f04a18d171d0db30d0857cbdc8ce23dd57ae|152c5 |
+| BE218 |5ce86bdf836f2d8bf08fd1821cb737b0981771b0|154c6; union151c10 |
+| BE112 |1744fd0332f72dda4d6750be70529cfa90f2ac5d|148c8 |
+| CI026 |69bfab63f722f106038e1559cbf3105bbb30931a|159c3 |
+| CI016 |f1556b8080d001b1290a4eb64acbcead403c09cf|153c5 |
+| BE244 |3622cd162ef48e7ce2b31d0ca1e3863f08e2d603|146c5 |
+| BE162 |3336f8f4cfde8ce4ea4e3a2670837c3283ff229f|150c6 |
+| CI019 |0895010931d24eed11120055407cc12262d15a22|121 bounded review receipt |
+| PL-A4-07 |7b12b8602fa7ef1a0f172f49aec7da4800af1e2d|121 bounded ops-doc review |
+| CI020 |d11cba6772c471928a8c08ec470a84731cdb8005|159c7 |
+| CI021 |ab086484bd116d7bc074bb7f92e34fa7eca66830|121 source review |
+| CI021 fixture |cdd7b4f5e768aa9d0cf903cd814d396d7c542edb|121c9 |
+| BE008 fixture |eef427a1cdab267e96bbeb7b219cb6ce2c8e75bc|143c3 |
+| BE238 |6a1d3b8ff7c12ba4c5b0038f5194a0f3ccf6c715|147c9 resolves metric-lock P2 |
+| BE269 setup |0fb2970adf3409b21906524f030027dfebb20729|149c5 |
+| BE169 |9b8b69c9d2b7d67404969ccb7cfacde2ef7675a5|149c6 |
+| BE175 assertions |7255634fd0e87e0bf1f4ba3c0ee4dab66564a40a|175c5 |
+| BE220 |4919af52427cbef13aa669182c77cdc62b615aff|149c6 |
+| CI030 |86359ec0c86d6feaf3562142e0bc53e801fcdf08|177c5 |
+| BE241 |9fbd30748e46f675ceaf6df02c7676eb6d37a531|173c4 |
+
+Exact source26f2d8fe491c9255cb3c3cbbba3e3642b04c2e84 was normally SSH
+published after real remote8493 readback; no force/rebase/master merge.
+Earlier HTTPS push refusal was OAuth workflow scope, preserved without changing
+credentials. Actual hosted8493 run39166868229 completedFAIL: sole failed job
+ci-script-tests117791642107, four canonical root source-hash errors at
+nats_root_plan.py84. Other jobs passed, skipped jobs are not PASS. Historical
+c08 run39165804964 was cancelled. Exact source/deployed-contract transition
+question is durably requested to Astra in SWARM-DEVELOP-20261018c14, not solved
+by rewriting pins or historical deployed-contract.json. Actual API observation
+21:31:35UTC confirms transport; next shared observation22:01:35UTC.
+
+Actual assembled Linux ops at61e1477:11 strict image gate,7 dispatch,9 smoke,
+7 ClickHouse,3 subset cases PASS plus Auth order and GIS contract PASS, no
+registry/cluster mutation. CI020/21 merge5d0d9eee only conflicts Makefile/TODO:
+both test entries plus verifier retained; one smoke and one subset runtime gap
+retained; obsolete absence/duplicate claims removed.159 independent union
+recheck requested, separate from already CLEAR source deltas. Bare git diff
+initially reported existing CRLF as trailing whitespace; explicit process-local
+cr-at-eol diffcheck PASS with normal other checks retained, no source/global
+setting change. The first conflict-resolution shell attempt expanded Makefile
+variables accidentally; immediately corrected before commit, verified exact
+union, no production execution from that attempt.
+
+Actual combined BE218+BE112 Linux full Realtime428PASS/0skip, focused race12PASS,
+vet0 at backendab6aa8e2. Actual Portal Node24 build and full asset/SPA byte
+verification under100m/64Mi PASS peak17874944/failcnt0.15 changed canonical
+backend images PASS atab6aa8e2; unchanged old22 image proofs reused. Later BE234
+Space image rebuilt alone, then26f2d8fe changed Bot/Moderation/User images each
+PASS. Their exact immutable IDs and context hashes are in external wave2 image
+receipts. Local images are usable artifacts, not published images/deployment.
+
+BE234 actual nil membership panic correction8493fa547529d789a88f0a991810ddf87e8922c4
+recognizes the shared scanner(nil,nil) contract without altering scanner/SQL/
+locks/auth/original tests.146c13 independent CLEAR; original3 panic REDs
+retained. Fixed-source private Linux DinD unchanged tests13PASS=8top+5sub,
+seven PG scenarios and one rawactor unit,0skip/fail, vet0. All owned nested
+fixtures/runner/daemon/volume/network removed; no Windows host port/listener.
+TTc15 corrects c14 provisional tally and attaches raw46a8f2d2,
+DinD receiptbfba23d1, Space image receipt1eca17d9. Space image immutable ID
+1fe4bd722fdf86885e854fb16cfc1a29cf8daeeeeb81512ca8be68831b0fb4af.
+
+CI030 assembled parser first archive omitted workflow files: one FileNotFound
+ERROR, not a product regression. Failure/receipt preserved; same source with
+complete workflows archive then seven tests PASS in network-none Python3.12
+with pinnedPyYAML6.0.3. Analytics changed-input image runs after that result.
+No repeat of unchanged broad suites is inferred or required by this ledger.
+
+Actual pending handoff, despite explicit acceptance messages: BE16333a8dfd7
+(146c4CLEAR, owner152), BE0978e1b677c (147c6CLEAR, owner150), BE04034640fde
+(165c8CLEAR, owner153). They are not silently transferred or merged. Accepted
+AD008d2bae69 remains UNMERGED:174c7 P2 stale saved preview after Apply manifest,
+original149 sole correction writer with guarded reload/stale/logout tests.
+Author task custody remains121 while correction context stays149.
+
+Only publisher requests, not ready integration: BE045 branch31d8d23586efa0012552d0aede6115af20510965
+and BE137 branchaca25d5ffe9cef3d0ac3edcf5ddb3f535eaccdf9 were normally SSH
+published at their authors' explicit requests. Full author/task/runtime/review
+custody remains156/144, no develop merge inferred.
+
+Shared DEV/STAGING protocol was fully reread. No shared stand action occurred;
+task custody does not reserve environment, atomic resource claim/observation/
+protected window and external locks remain required. No Windows test.exe,
+host listeners or firewall changes. Golden/NATS/R22 and broader feature/provider/
+acceptance gates remain open. BE265 current adapter EJECT_ONLY cannot yield
+full deletion receipt without operation-bound durable refreshed-credential
+rejection and settled predeny-handshake/cleanup proof. Source collection is
+not release-ready. Exact continuation/proofs live under
+D:/Git/Voice/tmp/swarm/rudeus121-develop/wave2/continuation.md; final complete
+bundle/fresh bare restore and safe own lease closeout follow the frozen carrier.
+
 Each second parent below is preserved by an ordinary merge commit. Earlier source checkpoints covered by descendants are not duplicated.
 
 | Merge | Source head | Subject | TT association |
@@ -201,3 +388,135 @@ The user authorized exactly one independent reviewer141. Frozen318bc1bf6/source6
 Normal successor1a6acf259b571a80340d99d11ae8adb5a34c15e1 adds those exact parent fields to the expected companion; reflect.DeepEqual, profile/chat/content/metadata integrity and all other validation remain. Three-file delta includes strict matching/profile/channel mismatch tests and API stored sender/display assertions. New unit channel case RED→GREEN; own actual API18PASS/zero skips plus strengthened commentary-denial1PASS/zero skips and store compound6PASS/zero skips preserve zero writes/outbox on denial, rollback and expired-reference reconciliation. Final affected short250PASS/243explicit PG skips, vet/lint0; changed-input Messaging image PASS. Other unchanged image/component proofs are reused.
 
 Same reviewer141 independently rechecked exact1a6acf259 CLEAR, with seven top-level actual PostgreSQL tests PASS/zero skips including communication deadline/cancel. His run is independent evidence, not integration CI. The original A-G review gate is now resolved within this bounded source scope; historical OPEN statements above describe the earlier freeze. Full feature/runtime/acceptance scope and golden/NATS/R22/GitHub gates are unchanged. No pins, source allowlists or CI assertions were weakened. Current review-resume lease20 is ed1d2b69cc7426699a493f97cbe37548, holder rudeus-121-review-fix; source/evidence/final resource receipts are preserved separately under external review-fix-1a6acf259, without overwriting the previous immutable bundle.
+
+
+## Chat composition checkpoint 2026-10-18 22:28 UTC
+
+Current published source is 2a8178da00d005ac7a4bce8ccde1db9d6851018d.
+Normal merges preserve BE007 8a8c9d7db9aa5b5acda94882575cb5c20e7d479d
+(supported190 handoff, independent200c7) and Chat native scope producer
+2e41e0719e5496ad1ac29c740d5bec7269208dd7 (supported176 handoff,
+independent197c6). Native Chat migration25 is unique in this assembled catalog.
+The only authored integration delta2a is13 test insertions: install native25
+in the P3 fixture, read previous permanent head, assert retained absent head
+and advancing revision after purge plus native lookup ErrNoRows. All original
+authorization, owner evidence, zero-effects, exact persisted receipt/replay and
+expiry assertions remain. Independent190 BE007c9 gives bounded test-only CLEAR;
+the earlier200/197 source reviews retain their original scope.
+
+Exact2a Linux private DinD -race selected tests:12 top-level plus11 subtests
+PASS, zero FAIL/SKIP/race, store65.295s/grpcsvc1.684s/gisprincipal7.091s;
+scoped vet exit0. This combines real PostgreSQL P3/native25 with protected TLS
+and negative/unit cases; it does not claim23 independent PG scenarios.
+Nested inventory empty and all own runner/engine/network/volume cleanup exit0.
+Canonical Chat image actual PASS34.5s,
+sha256:3bf28861deb411fd667393c13a5f69bd0feb705daaebab5517106fe8faaddb47.
+Raw source/hash/result/resource receipt lives in external wave2
+chat-composition-summary.json, chat-composition-tests.jsonl,
+chat-composition-dind-receipt.json and target-images-2a8178da0.json.
+
+Actual GitHub API22:28:07.976299UTC confirms remote develop exact2a.
+Hosted run39171746827 has all21 backend-go matrix jobs, pkg/golangci/protobuf,
+Compose/admin/web/Portal and both key-backup goldens SUCCESS; ci-script-tests
+FAIL(job117806333679); Flutter/Auth IN_PROGRESS at this observation.
+Explicit skipped jobs remain skipped. Failed-job log download refused because
+the whole run is still active; no new exact failure cause was invented.
+The prior NATS fixed-authority refusal remains real. Reobserve this actual run
+at a terminal event; do not continuously poll. Transport next observation due
+22:58:07UTC unless a real lifecycle read supplies a newer observation.
+
+NATS decision correction187 CI-NATS-V5-AUTHORITY c4 / SWARM c17 supersedes the
+incorrect three-file tuple premise in187c15: accepted BE102 already changed
+notification too. V5 authority/custody/receipt MUST bind FOUR exact sources;
+notification SHA c0e2bedc509e11117b05c07193257bd53f24e95f7f485325f240cb2f813498bf.
+Restoring the historical template is invalid, since exact equality rejects the
+expanded voice_events contract. Root-derived compiler pins and historical v4,
+auth-v4/enrollment/deployed-contract remain unchanged. Producer197 owns the
+source supporting function;121 retains integration/CI. No pin bypass performed.
+
+ChatScope owner updated all four existing contract gates to155 coherent
+SPACE-CHAT-AUTHORITY-v3 and classified i3 unaffected after source comparison:
+Chat DTO/callers/schema25/ownDB barrier unchanged; native membership provenance
+and initialLIVE0 adaptation belongs to Role/Space consumers, not Chat snapshot.
+Full qualification/activation remains open. Exact CAS/impact receipts are
+chat-v3-edge.json and chat-v3-impact.json; no prerequisite deletion or weakening.
+
+Queued real accepted functions: BE041 c14f59c supported178e8, mandatory ACL
+review still pending;155 immutable foundation8682a79 narrow publication/
+integration/affectedCI function explicitly accepted121, while full Space-chat
+feature task and ongoing qualification source remain155. Foundation194c16 and
+196c11 review bounds exclude full remote authority/activation. Source branch8682
+normally published but not yet merged at this checkpoint. This supersedes old
+historical statements that no Role20 source exists; readiness is not inferred.
+BE238 original144 combined1CPU FAIL remains open;199c17 resolves contract,
+author142 clean successor and separate combined proof remain required.
+
+Complete immutable898 bundle SHA53c0e39887af2b0f6a539e384621f3de67a73ab13ff1284d17c809a330a8cb5a
+was verified and actually restored exact898 with90 accepted heads ancestryPASS.
+This successor needs its own incremental bundle+fresh base/delta restore;
+older bundles/receipts are immutable. No shared stand claims/deployment/tester
+appointment occurred. Current own36 lease d98699dc810d3f2707902abd371fb6c3,
+holder rudeus-121-wave2-integration; no live Chat proof/build handles remain.
+Existing Flutter baseline golden/R22/fullfeature/provider/acceptance gates stay
+open. Historical transport outage records do not negate current SSH/API success.
+
+
+## Reviewed Role foundation integration 2026-10-18 22:44 UTC
+
+Normal conflict-free merge b2cdc3ad251fdc64d1d052c52a8bea2d5d28dabe accepts155
+immutable foundation8682a79f7456439607ae1105df5e82b7a7b20ce5 as the explicitly
+transferred narrow source publication/integration/affectedCI function only.
+Full Space-chat feature task/ongoing handler and qualified authority source
+remain with155. Local persistence/lifecycle review194c16 and codec196c11 bounds
+are retained; remote authority/native membership qualification/target journals,
+workers/client navigation/full feature review and activation remain OPEN.
+Native Role migration20 is unique in this assembled catalog, follows19, and
+has not been deployed. Existing older 'Role20 unimplemented' entries above are
+historical; this is source foundation, not completion of the qualified receiver.
+
+Exact b2 isolated Linux source checks: shared memberadmission plus selected
+Role permissions/memberbinding/store42 top-level +44 subtests PASS,0 FAIL,
+117 explicit integration skips. This is scoped short proof, not full PG PASS.
+Author unchanged foundation6top+4sub realPG0skip64.621s is reused within its
+exact source/review bounds. Selected vet PASS; actual native Role/User/Voice
+go build ./... each PASS, no Windows test executables/listeners. Canonical Role
+Dockerfile actual image PASS26.844s,
+sha256:f4ae555ba1c17d66b16aebfbe254184bad836408612da01a7618331b6db884ee.
+Both additive proto paths buf lint PASS; all9 generated Go files agree across
+three mirrors. Full generated Dart/build/consumer activation remains qualified
+by actual future checks, not inferred from identical Go blobs. Owned runner
+cleanup exit0. Raw hashes/results are foundation-summary.json and
+foundation-check-receipt.json under external wave2.
+
+155c24 coherent SPACE-CHAT-AUTHORITY-v4 preserves v3 and refines Q/A/R/P target
+attempt/publication identity. Owner121 compared the actual refinement to frozen
+Chat2e41 ownDB snapshot: same DTO/callers/native25/lifecycle output, no invitation
+or membership provenance interpretation. Existing SAME four dependency gates
+now pin v4; i4 classified unaffected with evidence. No dependency was deleted
+or weakened; Role/Space consumers must perform their own real adaptation.
+
+Latest user-requested actual GH API22:33:15.519410UTC exit0, remoteef9fc3c3:
+run39172476770 then9SUCCESS/19SKIPPED/20IN_PROGRESS/7QUEUED, not wholeCI PASS.
+Subsequent normalSSH publish b2 succeeded. Next transport observation23:03:15UTC
+unless an actual CI/publication lifecycle read is newer. Previous2a failed-job
+log is now downloaded: same4 CanonicalBootstrapTests at nats_root_plan.py:84,
+72330bytes, no new category. NATSv5 producer197 source is not yet accepted
+ready delivery; full preservation tests/review remain prerequisites.
+
+BE238 corrected clean02571b7/147c23 review received; final exact combined1CPU
+proof/packet pending142, foreignBE137 WIP proof ancestry must not enter source.
+BE265 fa1528a integration/CI continuation explicitly accepted after reading
+task criteria and166c13-c14; actual supported handoff/portable packet plus
+mandatory independent source review still needed before merge. EJECT_ONLY
+still cannot issue full FROZEN/PURGED receipts; provider/stand/full feature
+gates unchanged. BE041178e8 actualhandoff received, mandatory ACLreview pending.
+Auth203 floor offer f04 contains156 publication-only WIP base; not accepted for
+wholesale merge.203 will provide only own clean two-commit delta on actual
+develop and requalify tests/security review; no WIP source laundering.
+
+Normal publisher-only branch checkpoints do not transfer task/CI or authorize
+develop integration:15686e2be0d,14459f70b9c,1586fb3b78b,1451fc23b7a,
+1913536f8fb and1721554ff34. Existing fullfeature work remains with its actual
+authors. No shared stand/deployment/tester appointment, no golden/pin/allowlist
+bypass. Full repository sign-off remains OPEN. Own graph60115 current update
+is pending; do not promote earlier graph successes onto this source.

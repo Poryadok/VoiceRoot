@@ -27,6 +27,7 @@ class AuthPrincipalServicesTest {
   static final MethodDescriptor<Struct,Struct> CONSUME = method(AuthPrincipalServerInterceptor.CONSUME_RPC);
   static final MethodDescriptor<Struct,Struct> LOOKUP = method(AuthPrincipalServerInterceptor.LOOKUP_RPC);
   static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
+  static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method("/" + SERVICE + "/GetRoleSessionEpochFloor");
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AtomicInteger proofCalls = new AtomicInteger(), loginCalls = new AtomicInteger();
   final AtomicReference<VerifiedPrincipal> principal = new AtomicReference<>();
@@ -50,6 +51,10 @@ class AuthPrincipalServicesTest {
           proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
         }))
+        .addMethod(ROLE_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
         .addMethod(LOGIN, ServerCalls.asyncUnaryCall((request, observer) -> {
           loginCalls.incrementAndGet(); observer.onNext(request); observer.onCompleted();
         })).build();
@@ -60,7 +65,7 @@ class AuthPrincipalServicesTest {
     assertEquals(Set.of(ISSUE.getFullMethodName(), CONSUME.getFullMethodName(), LOOKUP.getFullMethodName()), service.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     var floor = AuthPrincipalServices.sessionFloorService(all(), new AuthPrincipalServerInterceptor(fixture.verifier));
-    assertEquals(Set.of(FLOOR.getFullMethodName()), floor.getMethods().stream()
+    assertEquals(Set.of(FLOOR.getFullMethodName(), ROLE_FLOOR.getFullMethodName()), floor.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     for (var missing : Set.of(ISSUE, CONSUME, LOOKUP)) {
       var builder = ServerServiceDefinition.builder(SERVICE);
@@ -84,6 +89,8 @@ class AuthPrincipalServicesTest {
       }
       var floorFailure = assertThrows(StatusRuntimeException.class, () -> call(channel, FLOOR));
       assertEquals(Status.Code.UNIMPLEMENTED, floorFailure.getStatus().getCode());
+      var roleFailure = assertThrows(StatusRuntimeException.class, () -> call(channel, ROLE_FLOOR));
+      assertEquals(Status.Code.UNIMPLEMENTED, roleFailure.getStatus().getCode());
       assertEquals(REQUEST, call(channel, LOGIN));
       assertEquals(0, proofCalls.get()); assertEquals(1, loginCalls.get());
     } finally { stop(channel, server); }
@@ -124,6 +131,27 @@ class AuthPrincipalServicesTest {
       assertEquals(1, proofCalls.get());
       var floorFailure = assertThrows(StatusRuntimeException.class, () -> call(channel, FLOOR));
       assertEquals(Status.Code.UNIMPLEMENTED, floorFailure.getStatus().getCode());
+      assertEquals(1, proofCalls.get());
+    } finally { stop(channel, server); }
+  }
+
+  @Test void trustedMutualTlsRoleCannotBorrowVoiceOrProofAuthority() throws Exception {
+    Server server = floorTlsServer("server-cert.pem");
+    ManagedChannel channel = NettyChannelBuilder.forAddress("localhost", server.getPort())
+        .sslContext(tlsClientContext(true, "server-cert.pem")).build();
+    try {
+      assertEquals(REQUEST, call(channel, ROLE_FLOOR));
+      assertEquals("role", principal.get().issuer());
+      assertEquals(1, proofCalls.get());
+      for (String issuer : Set.of("voice", "space", "gateway")) {
+        var denied = assertThrows(StatusRuntimeException.class, () -> call(channel, ROLE_FLOOR, issuer));
+        assertEquals(Status.Code.PERMISSION_DENIED, denied.getStatus().getCode());
+      }
+      var voice = assertThrows(StatusRuntimeException.class, () -> call(channel, FLOOR, "role"));
+      assertEquals(Status.Code.PERMISSION_DENIED, voice.getStatus().getCode());
+      var binding = assertThrows(StatusRuntimeException.class,
+          () -> call(channel, ROLE_FLOOR, "role", AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC));
+      assertEquals(Status.Code.UNAUTHENTICATED, binding.getStatus().getCode());
       assertEquals(1, proofCalls.get());
     } finally { stop(channel, server); }
   }
@@ -202,8 +230,8 @@ class AuthPrincipalServicesTest {
     var claims = AuthPrincipalVerifierTest.claims();
     claims.put("rpc", rpcOverride == null ? "/" + method.getFullMethodName() : rpcOverride);
     claims.put("request_hash", AuthPrincipalServerInterceptor.requestHash(REQUEST));
-    if (method == CONSUME || method == LOOKUP || method == FLOOR) {
-      String issuer = method == FLOOR ? "voice" : "space";
+    if (method == CONSUME || method == LOOKUP || method == FLOOR || method == ROLE_FLOOR) {
+      String issuer = method == ROLE_FLOOR ? "role" : method == FLOOR ? "voice" : "space";
       claims.put("iss", issuer); claims.put("sub", "service:" + issuer); claims.put("principal_type", "service");
       claims.remove("account_id"); claims.remove("profile_id"); claims.remove("session_epoch");
     }

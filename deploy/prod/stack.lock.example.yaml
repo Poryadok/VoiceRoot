@@ -10,7 +10,6 @@ images:
   bot: abc123def456789
   chat: abc123def456789
   developer-portal: abc123def456789
-  federation: abc123def456789
   file: abc123def456789
   gateway: abc123def456789
   matchmaking: abc123def456789
@@ -27,3 +26,4 @@ images:
   user: abc123def456789
   voice: abc123def456789
   web: abc123def456789
+  nats-hub-config-renderer: abc123def456789
