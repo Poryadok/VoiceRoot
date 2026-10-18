@@ -17,6 +17,9 @@ service AuthService {
   rpc GetOwnershipTransferReceipt(GetOwnershipTransferReceiptRequest) returns (GetOwnershipTransferReceiptResponse);
   // Private Voice-only read of the effective session epoch floor for a verified media actor.
   rpc GetVoiceSessionEpochFloor(GetVoiceSessionEpochFloorRequest) returns (GetVoiceSessionEpochFloorResponse);
+  // @voice.security=protected;callers=service:role
+  // Private Role-only read; shares Auth's durable account and retained floor authority.
+  rpc GetRoleSessionEpochFloor(GetRoleSessionEpochFloorRequest) returns (GetRoleSessionEpochFloorResponse);
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
@@ -393,6 +396,14 @@ message GetVoiceSessionEpochFloorRequest {
 }
 
 message GetVoiceSessionEpochFloorResponse {
+  int64 session_epoch_floor = 1;
+}
+
+message GetRoleSessionEpochFloorRequest {
+  string account_id = 1;
+}
+
+message GetRoleSessionEpochFloorResponse {
   int64 session_epoch_floor = 1;
 }
 

@@ -14,6 +14,8 @@ import app.voice.auth.v1.GetGuestReminderRequest;
 import app.voice.auth.v1.GetGuestReminderResponse;
 import app.voice.auth.v1.GetVoiceSessionEpochFloorRequest;
 import app.voice.auth.v1.GetVoiceSessionEpochFloorResponse;
+import app.voice.auth.v1.GetRoleSessionEpochFloorRequest;
+import app.voice.auth.v1.GetRoleSessionEpochFloorResponse;
 import app.voice.auth.v1.GetEmailVerificationStatusRequest;
 import app.voice.auth.v1.GetEmailVerificationStatusResponse;
 import app.voice.auth.v1.EmailVerificationState;
@@ -111,22 +113,41 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     runProof(responseObserver, () -> {
       requireProofPrincipal("service", "voice");
       rejectUnknownFields(request);
-      java.util.UUID accountId = deletionUuid(request.getAccountId());
-      if (accountRepository == null || sessionEpochFloorStore == null) {
-        throw Status.UNAVAILABLE.withDescription("session epoch floor unavailable").asRuntimeException();
-      }
-      var account = accountRepository.findById(accountId.toString())
-          .orElseThrow(() -> Status.NOT_FOUND.withDescription("account not found").asRuntimeException());
-      long durableEpoch = account.sessionEpoch();
-      long floorEpoch = sessionEpochFloorStore.requireFloor(accountId);
-      long currentEpoch = Math.max(durableEpoch, floorEpoch);
-      if (durableEpoch <= 0 || floorEpoch <= 0 || currentEpoch <= 0) {
-        throw Status.UNAVAILABLE.withDescription("session epoch floor unavailable").asRuntimeException();
-      }
       return GetVoiceSessionEpochFloorResponse.newBuilder()
-          .setSessionEpochFloor(currentEpoch)
+          .setSessionEpochFloor(readSessionEpochFloor(request.getAccountId()))
           .build();
     });
+  }
+
+  @Override
+  public void getRoleSessionEpochFloor(
+      GetRoleSessionEpochFloorRequest request,
+      StreamObserver<GetRoleSessionEpochFloorResponse> responseObserver) {
+    runProof(responseObserver, () -> {
+      requireProofPrincipal("service", "role");
+      rejectUnknownFields(request);
+      return GetRoleSessionEpochFloorResponse.newBuilder()
+          .setSessionEpochFloor(readSessionEpochFloor(request.getAccountId())).build();
+    });
+  }
+
+  private long readSessionEpochFloor(String rawAccountId) {
+    java.util.UUID accountId = deletionUuid(rawAccountId);
+    if (accountId.getMostSignificantBits() == 0 && accountId.getLeastSignificantBits() == 0) {
+      throw Status.INVALID_ARGUMENT.withDescription("account id is required").asRuntimeException();
+    }
+    if (accountRepository == null || sessionEpochFloorStore == null) {
+      throw Status.UNAVAILABLE.withDescription("session epoch floor unavailable").asRuntimeException();
+    }
+    var account = accountRepository.findById(accountId.toString())
+        .orElseThrow(() -> Status.NOT_FOUND.withDescription("account not found").asRuntimeException());
+    long durableEpoch = account.sessionEpoch();
+    long floorEpoch = sessionEpochFloorStore.requireFloor(accountId);
+    long currentEpoch = Math.max(durableEpoch, floorEpoch);
+    if (durableEpoch <= 0 || floorEpoch <= 0 || currentEpoch <= 0) {
+      throw Status.UNAVAILABLE.withDescription("session epoch floor unavailable").asRuntimeException();
+    }
+    return currentEpoch;
   }
 
   @Override

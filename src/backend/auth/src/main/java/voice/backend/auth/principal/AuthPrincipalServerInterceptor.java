@@ -13,6 +13,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String CONSUME_RPC = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof";
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
   public static final String VOICE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor";
+  public static final String ROLE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetRoleSessionEpochFloor";
   public static final String SPACE_DELETE_CONSUME_RPC =
       "/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof";
   public static final String SPACE_DELETE_LOOKUP_RPC =
@@ -36,6 +37,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
     if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
+        && !ROLE_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
         && !SPACE_DELETE_ACK_RPC.equals(rpc)) return next.startCall(call, headers);
     final String token, requestId;
