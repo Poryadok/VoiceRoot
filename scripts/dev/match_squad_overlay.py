@@ -710,7 +710,7 @@ class KubectlClient:
     def __init__(self, namespace=NS):
         self.namespace = namespace
 
-    def call(self, *args, body=None, input_bytes=None):
+    def call(self, *args, body=None, input_bytes=None, text_output=False):
         command = ["kubectl", "--namespace", self.namespace, *args]
         payload = input_bytes
         if body is not None:
@@ -724,6 +724,11 @@ class KubectlClient:
             # kubectl's private stderr may contain full object data. Never echo it.
             raise OverlayError("kubectl command failed stage=" + args[0] +
                                " exit=" + str(result.returncode))
+        if text_output:
+            try:
+                return result.stdout.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise OverlayError("kubectl returned invalid text") from exc
         try:
             return json.loads(result.stdout) if result.stdout.strip() else {}
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -783,7 +788,8 @@ class KubectlClient:
         return result
 
     def wait_deployment(self, plan):
-        self.call("rollout", "status", "deployment/" + plan["name"], "--timeout=600s")
+        self.call("rollout", "status", "deployment/" + plan["name"], "--timeout=600s",
+                  text_output=True)
         target = _Target("Deployment", plan["name"], plan["patchFile"])
         current = self.get(target)
         status = current.get("status", {})
