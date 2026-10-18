@@ -103,6 +103,9 @@ services:
       - $JS.API.STREAM.INFO.matchmaking_events
       - $JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2
       - $JS.ACK.story_events.matchmaking_story_lfp_v2.>
+      - $JS.API.CONSUMER.INFO.voice_events.matchmaking_voice_roster_v1
+      - $JS.API.CONSUMER.MSG.NEXT.voice_events.matchmaking_voice_roster_v1
+      - $JS.ACK.voice_events.matchmaking_voice_roster_v1.>
     subscribe: [_INBOX.voice.matchmaking.>, _INBOX.voice.matchmaking.matchmaking_story_lfp_v2]
   messaging:
     no_response: true
@@ -420,6 +423,8 @@ bootstrap:
     - $JS.API.CONSUMER.CREATE.message_events.bot_message_events
     - $JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2
     - $JS.API.CONSUMER.CREATE.story_events.matchmaking_story_lfp_v2
+    - $JS.API.CONSUMER.INFO.voice_events.matchmaking_voice_roster_v1
+    - $JS.API.CONSUMER.CREATE.voice_events.matchmaking_voice_roster_v1
     - $JS.API.CONSUMER.INFO.subscription_events.space_subscription_entitlement
     - $JS.API.CONSUMER.CREATE.subscription_events.space_subscription_entitlement
     - $JS.API.CONSUMER.INFO.user_events.user-account-deletion-v1

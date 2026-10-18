@@ -149,6 +149,12 @@ The same bounded in-place migration accepts either the complete original set or
 the complete BE-102 predecessor and adds only the remaining accepted subjects.
 All other settings, messages and consumer state stay intact. Native writer
 source tests do not authorize retained grant rotation or stand rollout.
+Matchmaking's preprovisioned `matchmaking_voice_roster_v1` is a pull durable on
+that one subject, with deliver-all and explicit ACK after the PostgreSQL inbox
+transaction. Its actor receives only the exact INFO, NEXT and ACK permissions;
+it cannot create/update consumers or read other actors' durables. The existing
+explicit operator service transition supports this bounded Matchmaking addition;
+source permissions alone do not rotate retained credentials.
 
 These source permissions do not change retained deployed JWTs or authorize
 issuance, Secret replacement or bootstrap replay. Existing-generation rollout

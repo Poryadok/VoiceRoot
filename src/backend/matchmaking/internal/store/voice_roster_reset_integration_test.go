@@ -186,3 +186,53 @@ func TestVoiceRosterInboxConflictingBytesCancelNewerCaptureAndPersistAlert(t *te
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_voice_roster_contract_conflicts`).Scan(&conflicts))
 	require.Equal(t, 1, conflicts)
 }
+
+func TestVoiceRosterResetOutboxFailureRollsBackInboxAndQueueIntent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := rosterResetDB(t)
+	st := &MatchStore{Pool: pool}
+	room := uuid.New()
+	party, members := capturedRosterParty(t, pool, &room, 5, uuid.New())
+	_, err := pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox ADD CONSTRAINT reject_fixture_event CHECK(false)`)
+	require.NoError(t, err)
+	raw := rosterBytes(t, uuid.New(), room, uuid.New(), 6, false)
+	_, err = st.ApplyVoiceRosterEvent(ctx, raw)
+	require.Error(t, err)
+	sess, err := (&SessionStore{Pool: pool}).Get(ctx, members[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, SessionStatusSearching, sess.Status)
+	require.Zero(t, sess.RecoveryGeneration)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_voice_roster_inbox`).Scan(&count))
+	require.Zero(t, count)
+	var action string
+	var revision int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT action,revision FROM matchmaking_party_search_queue_intents WHERE party_id=$1`, party).Scan(&action, &revision))
+	require.Equal(t, "ENQUEUE", action)
+	require.EqualValues(t, 1, revision)
+	_, err = pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox DROP CONSTRAINT reject_fixture_event`)
+	require.NoError(t, err)
+	result, err := st.ApplyVoiceRosterEvent(ctx, raw)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.CancelledSessions)
+	first, err := st.ClaimVoiceRosterCancellation(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.NoError(t, st.FinishVoiceRosterCancellation(ctx, *first, false))
+	_, err = pool.Exec(ctx, `UPDATE matchmaking_voice_roster_cancellation_outbox SET next_attempt_at=clock_timestamp()`)
+	require.NoError(t, err)
+	replay, err := st.ClaimVoiceRosterCancellation(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, replay)
+	require.Equal(t, first.EventID, replay.EventID)
+	require.Equal(t, first.Payload, replay.Payload)
+	require.NotEqual(t, first.LeaseToken, replay.LeaseToken)
+	require.ErrorIs(t, st.FinishVoiceRosterCancellation(ctx, *first, true), ErrRosterCancellationLease)
+	require.NoError(t, st.FinishVoiceRosterCancellation(ctx, *replay, true))
+	env := new(eventsv1.MatchmakingStreamEvent)
+	require.NoError(t, proto.Unmarshal(replay.Payload, env))
+	require.Equal(t, "VOICE_ROSTER_CHANGED", env.GetSearchCancelled().GetReason())
+}

@@ -52,7 +52,7 @@ func serviceReencode(t *testing.T, old []byte, u *jwt.UserClaims, signer nkeys.K
 }
 
 func TestRenewServicePreservesClaimsSeedAndExactGrant(t *testing.T) {
-	for _, role := range []string{"role", "space", "voice", "messaging"} {
+	for _, role := range []string{"role", "space", "voice", "messaging", "matchmaking"} {
 		t.Run(role, func(t *testing.T) {
 			old, at, ot, signer, actor, account, g, _, _ := serviceRenewalFixture(t, role)
 			out, err := renewExistingService(old, at, ot, signer, actor, account, role, g)

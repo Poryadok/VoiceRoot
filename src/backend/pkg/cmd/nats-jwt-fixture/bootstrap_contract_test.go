@@ -97,8 +97,8 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 			t.Errorf("%s appears %d times, want exactly once", key, count)
 		}
 	}
-	if len(counts) != 46 {
-		t.Errorf("central bootstrap defines %d unique durables, want 46", len(counts))
+	if len(counts) != 47 {
+		t.Errorf("central bootstrap defines %d unique durables, want 47", len(counts))
 	}
 	for _, line := range []string{
 		"consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request",
@@ -113,6 +113,7 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 		"consumer chat_events voice_space_media_chat space.voice_room_access_invalidated _INBOX.voice.voice.space_media_chat",
 		"consumer role_events voice_space_media_role role.voice_policy_invalidated _INBOX.voice.voice.space_media_role",
 		"pull_consumer user_events user-account-deletion-v1 user.account_deleted all",
+		"pull_consumer voice_events matchmaking_voice_roster_v1 voice.roster_membership_changed all",
 		"consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new '' 5 '[1000000000,5000000000,30000000000,120000000000,300000000000]'",
 	} {
 		if !strings.Contains(all, "\n"+line+"\n") {
@@ -146,7 +147,14 @@ func TestCanonicalBootstrapACLMatchesConsumers(t *testing.T) {
 			stream, durable := fields[1], fields[2]
 			service, delivery := "", ""
 			if fields[0] == "pull_consumer" {
-				service = "user"
+				switch durable {
+				case "user-account-deletion-v1":
+					service = "user"
+				case "matchmaking_voice_roster_v1":
+					service = "matchmaking"
+				default:
+					t.Fatalf("pull consumer has no explicit owner: %s/%s", stream, durable)
+				}
 			} else {
 				index := 4
 				if fields[0] == "consumer_filters" {
@@ -190,6 +198,7 @@ func TestCanonicalBootstrapACLMatchesConsumers(t *testing.T) {
 		{"matchmaking", "story_events", "matchmaking_story_lfp_v2", "_INBOX.voice.matchmaking.matchmaking_story_lfp_v2"},
 		{"space", "subscription_events", "space_subscription_entitlement", "_INBOX.voice.space.space_subscription_entitlement"},
 		{"user", "user_events", "user-account-deletion-v1", ""},
+		{"matchmaking", "voice_events", "matchmaking_voice_roster_v1", ""},
 		{"auth", "subscription_events", "auth_subscription_tier", "_INBOX.voice.auth.subscription_tier"},
 	} {
 		grant := acl.Services[tc.service]
