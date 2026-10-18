@@ -387,9 +387,14 @@ func (t *transcoder) serveMatchmakingGames(w http.ResponseWriter, r *http.Reques
 	switch {
 	case r.Method == http.MethodGet && rest == "":
 		page := &commonv1.CursorPageRequest{}
-		_ = decodeQueryJSON(page, queryFirst(r, "page"))
+		if err := decodeQueryJSON(page, queryFirst(r, "page")); err != nil {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "invalid games page"))
+			return true
+		}
 		if page.Cursor == "" {
-			page.Cursor = queryFirst(r, "cursor")
+			// Nonempty malformed tokens, including whitespace, must reach strict
+			// validation rather than silently becoming a new traversal.
+			page.Cursor = r.URL.Query().Get("cursor")
 		}
 		if page.PageSize == 0 {
 			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))

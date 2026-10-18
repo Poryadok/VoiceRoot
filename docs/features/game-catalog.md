@@ -81,6 +81,31 @@
 - Недавние игры пользователя — отдельный раздел "Недавнее" для быстрого доступа
 - Страница игры открывается при тапе на карточку в каталоге или из профиля (история матчей)
 
+### Public popularity and paging (BE164-PUBLIC-POPULARITY-v1)
+
+Public `ListGames` ranks active games by the number of global PostgreSQL
+`search_sessions`: `status=searching`, no `space_id`, a nonnull `timeout_at`
+strictly after the database read cutoff. Each participant session counts once,
+including each party member; modes and regions are aggregated. Pending acceptance,
+expired/unknown deadlines and every Space search are excluded. No counts or
+private activity are exposed. Equal scores use `created_at DESC, id DESC`;
+active games with zero live searches remain in the catalog.
+
+Each page reads one coherent live database snapshot. New opaque cursors bind the
+complete ordered active-game membership and next position, without retaining a
+snapshot or encoding scores. An order/membership change returns
+`games_cursor_stale` (`FailedPrecondition`, HTTP 412) and no partial page. A caller
+must discard accumulated pages and restart with an empty cursor; frequent
+reordering may require another explicit restart, never an unbounded retry loop.
+Score changes that preserve order do not invalidate a cursor. Invalid or
+unsupported tokens return `InvalidArgument`/HTTP 400. Valid pre-upgrade
+timestamp/UUID cursors finish their chronological chain; a new empty-cursor
+request always starts popularity order. Staff requests retain chronological
+filtering, and autocomplete retains name-search behavior.
+
+The current Flutter `gameCatalogProvider` requests only the first page; no
+paginated UI traversal is claimed by this backend slice.
+
 ---
 
 ## Пост-v1 backlog
