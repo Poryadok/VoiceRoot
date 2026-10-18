@@ -370,6 +370,64 @@ class KubernetesJSONAdapterTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(kube.KubeAPIError):
                 self.api.get_configmap('voice-staging', name)
 
+    def test_bootstrap_configmap_cas_preserves_metadata_and_reads_back_exact_target(self):
+        import native_configmap_cas
+        name = 'voice-nats-realtime-bootstrap'
+        uid = '11111111-1111-4111-8111-111111111111'
+        old = 'old script\n'; target = 'new script\n'
+        annotations = {'unrelated': 'keep'}
+        current = {'metadata': {'name': name, 'namespace': 'voice-staging', 'uid': uid,
+            'resourceVersion': '42', 'annotations': annotations},
+            'data': {'bootstrap.sh': old, 'other': 'preserve'}}
+        updated = copy.deepcopy(current)
+        updated['metadata']['resourceVersion'] = '43'
+        updated['metadata']['annotations'][native_configmap_cas.ANNOTATION] = '0123456789ab'
+        updated['data']['bootstrap.sh'] = target
+        with patch.object(self.api, 'get_configmap', side_effect=[current, updated]) as get, \
+             patch.object(self.api, '_request', return_value={'ignored': True}) as patch_request:
+            observed = self.api.cas_nats_bootstrap_configmap('voice-staging', name, uid, '42',
+                hashlib.sha256(old.encode()).hexdigest(), '0123456789ab', target)
+        self.assertEqual(observed, updated)
+        self.assertEqual(get.call_count, 2)
+        args = patch_request.call_args.args
+        self.assertEqual(args[:2], ('PATCH', '/api/v1/namespaces/voice-staging/configmaps/' + name))
+        self.assertEqual(args[2], [
+            {'op': 'test', 'path': '/metadata/uid', 'value': uid},
+            {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '42'},
+            {'op': 'replace', 'path': '/data/bootstrap.sh', 'value': target},
+            {'op': 'replace', 'path': '/metadata/annotations', 'value': updated['metadata']['annotations']}])
+        self.assertEqual(patch_request.call_args.kwargs['content_type'], 'application/json-patch+json')
+
+    def test_bootstrap_configmap_cas_reconciles_unknown_once_without_replay(self):
+        name = 'voice-nats-search-bootstrap'
+        uid = '11111111-1111-4111-8111-111111111111'
+        old = 'old script\n'; target = 'new script\n'
+        current = {'metadata': {'name': name, 'namespace': 'voice-staging', 'uid': uid,
+            'resourceVersion': '42'}, 'data': {'bootstrap.sh': old}}
+        updated = copy.deepcopy(current)
+        updated['metadata'].update(resourceVersion='43', annotations={
+            'voice-nats-preservation/contract-operation': '0123456789ab'})
+        updated['data']['bootstrap.sh'] = target
+        with patch.object(self.api, 'get_configmap', side_effect=[current, updated]) as get, \
+             patch.object(self.api, '_request', side_effect=TimeoutError('unknown')) as patch_request:
+            result = self.api.cas_nats_bootstrap_configmap('voice-staging', name, uid, '42',
+                hashlib.sha256(old.encode()).hexdigest(), '0123456789ab', target)
+        self.assertEqual(result, updated)
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(patch_request.call_count, 1)
+
+    def test_bootstrap_configmap_cas_drift_fails_before_patch(self):
+        name = 'voice-nats-search-bootstrap'
+        current = {'metadata': {'name': name, 'namespace': 'voice-staging',
+            'uid': '11111111-1111-4111-8111-111111111111', 'resourceVersion': '43'},
+            'data': {'bootstrap.sh': 'unexpected'}}
+        with patch.object(self.api, 'get_configmap', return_value=current), \
+             patch.object(self.api, '_request') as patch_request, self.assertRaises(kube.KubeAPIError):
+            self.api.cas_nats_bootstrap_configmap('voice-staging', name,
+                '11111111-1111-4111-8111-111111111111', '42', 'a' * 64,
+                '0123456789ab', 'target')
+        patch_request.assert_not_called()
+
     def test_generation_secret_reads_are_fixed_and_tls_metadata_drops_secret_data(self):
         secret = {'metadata': {'name': 'voice-nats-hub-tls-r20261017a',
             'namespace': 'voice-staging', 'uid': '11111111-1111-4111-8111-111111111111',

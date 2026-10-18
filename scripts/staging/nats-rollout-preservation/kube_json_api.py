@@ -236,6 +236,53 @@ class _KubernetesJSONAPIBase:
         return self._request('GET', '/api/v1/namespaces/' + self._segment(namespace)
             + '/configmaps/' + self._segment(name))
 
+    def cas_nats_bootstrap_configmap(self, namespace, name, expected_uid, expected_rv,
+                                    expected_sha256, operation, target_script):
+        """CAS one approved public bootstrap script without widening patch authority."""
+        import hashlib
+        import native_configmap_cas
+
+        if (namespace != NAMESPACE or name not in native_configmap_cas.CONFIGMAP_NAMES
+            or not isinstance(target_script, str)):
+            _fail('bootstrap_configmap_request_invalid')
+        current = self.get_configmap(namespace, name)
+        metadata = current.get('metadata')
+        data = current.get('data')
+        if (not isinstance(metadata, dict) or not isinstance(data, dict)
+            or metadata.get('namespace') != namespace or metadata.get('name') != name
+            or metadata.get('uid') != expected_uid or metadata.get('resourceVersion') != expected_rv
+            or not isinstance(data.get('bootstrap.sh'), str)
+            or hashlib.sha256(data['bootstrap.sh'].encode('utf-8')).hexdigest() != expected_sha256):
+            _fail('bootstrap_configmap_precondition_changed')
+        annotations = metadata.get('annotations')
+        if annotations is not None and not isinstance(annotations, dict):
+            _fail('bootstrap_configmap_annotations_invalid')
+        try:
+            patch = native_configmap_cas.build_request(namespace, name, expected_uid,
+                expected_rv, expected_sha256, operation, target_script, annotations)
+        except native_configmap_cas.ConfigMapCASError:
+            _fail('bootstrap_configmap_request_invalid')
+        path = ('/api/v1/namespaces/' + self._segment(namespace) + '/configmaps/'
+            + self._segment(name))
+        try:
+            self._request('PATCH', path, patch, content_type='application/json-patch+json')
+        except Exception:
+            # The patch may have committed. Reconcile once by GET; never replay it.
+            try:
+                observed = self.get_configmap(namespace, name)
+                native_configmap_cas.verify_readback(observed, namespace, name,
+                    expected_uid, expected_rv, target_script, operation)
+            except Exception:
+                _fail('bootstrap_configmap_cas_unknown')
+            return observed
+        try:
+            observed = self.get_configmap(namespace, name)
+            native_configmap_cas.verify_readback(observed, namespace, name,
+                expected_uid, expected_rv, target_script, operation)
+        except Exception:
+            _fail('bootstrap_configmap_readback_invalid')
+        return observed
+
     def get_secret(self, namespace, name):
         if namespace != NAMESPACE or not isinstance(name, str) or not _CAPTURE_SECRET.fullmatch(name):
             _fail('secret_invalid')
