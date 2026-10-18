@@ -40,7 +40,7 @@ _(Common Developer Portal batch closed in PR #124 — registration form, bot det
 
 - [ ] **[Developer Portal] No design tokens / brand — raw CSS; admin uses `tokens.css`.** — `src/developer-portal/src/styles/global.css`, `src/admin/src/styles/tokens.css`
 - [ ] **[Developer Portal] Ad-hoc routing — `window.location.pathname === '/callback'` instead of router.** — `src/developer-portal/src/App.tsx`
-- [ ] **[Developer Portal] K8s manifest minimal — no resources/limits, single replica, HTTP-only Traefik entrypoint (same as web/admin).** — `deploy/staging/developer-portal.yaml`, `deploy/prod/developer-portal.yaml`
+- [ ] **[Developer Portal] Deployment runtime proof** — manifests define resource budgets and bounded rolling updates (one staging / two production replicas); production already has origin TLS, staging retains the documented HTTPS-edge/HTTP-origin route. Verify real readiness-failure handling, rollout capacity and public HTTPS OAuth callback under the protected environment window; offline validation is not rollout evidence. — `deploy/staging/developer-portal.yaml`, `deploy/prod/developer-portal.yaml`, `docs/DEPLOYMENT.md`
 - [ ] **[Developer Portal] No slug / public bot page preview — `slug` exists on Bot proto but unused in portal.** — `src/developer-portal/src/App.tsx`, `protos/voice/bot/v1/bot.proto`
 
 
