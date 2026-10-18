@@ -69,6 +69,14 @@ room-привязки. WS `call_started` допускает additive `room_type`
 
 ## NATS JetStream: streams, publishers, subscribers
 
+Auth's ordinary registered/logged_in/logged_out/2fa_enabled observations use
+binary `UserStreamEvent` on `user_events` under BE211-OBS-v1 in
+[auth-service.md](microservices/auth-service.md#be211-obs-v1-ordinary-auth-observations-accepted-contract).
+They are bounded best-effort observations after successful operation/SQL commit,
+with stable retry bytes and PubAck, never authorization/audit authority. Empty
+login IP intentionally means unavailable/unverified. This does not weaken the
+separate durable guest-conversion/account-deletion contracts.
+
 **Владелец схемы событий** для stream — сервис из колонки Publishers. Breaking changes в payload / `.proto` — порядок выката [REPOSITORIES.md](REPOSITORIES.md).
 
 | Stream                 | Publishers        | Subscribers |

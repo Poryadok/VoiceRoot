@@ -72,6 +72,16 @@ quarantine после закрытия incident требует отдельно�
 
 ### NATS JetStream (брокер недоступен, переполнение, долгий NAK)
 
+Auth BE211-OBS-v1 observations degrade independently of API success: broker,
+serialization, queue rejection and exhausted retries do not fail completed
+register/login/logout/2FA confirmation. The in-memory dispatcher is bounded to
+1024 outstanding/8 MiB/16 KiB per observation, three one-second attempts,
+100 ms/1 s retry delays and 30 s lifetime; bounded shutdown may drop work.
+Observe fixed-label accepted/published/retried/dropped counters and pending
+gauge. A timeout/exhaustion reports unconfirmed delivery, not proved broker loss.
+Do not replay historical observations or treat counters as a durable loss ledger.
+Guest-conversion and account-deletion durable workflows keep their own contracts.
+
 | Поток / роль | Влияние на Tier 0 | Целевой degraded UX / политика |
 |--------------|-------------------|--------------------------------|
 | **Publish** из Messaging / Chat / Space после успешного commit в БД | Сообщение **сохранено**, но downstream не уведомлён | REST **2xx** сохраняется. **Live** обновления (WS) могут задержаться или отсутствовать до восстановления шины. Клиент: polling не вводим по умолчанию — полагаться на **reconnect + GetMessages** по `chat_id`. |

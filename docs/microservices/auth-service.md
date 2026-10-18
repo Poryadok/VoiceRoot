@@ -721,6 +721,45 @@ acceptance are tracked in [todo/client.md](../todo/client.md) and
 
 ## Публикуемые события (→ NATS)
 
+### BE211-OBS-v1: ordinary Auth observations (accepted contract)
+
+`user.registered`, `user.logged_in`, `user.logged_out`, and `user.2fa_enabled`
+are observations of completed operations, not authorization or exhaustive audit
+authority. Their consumer is Analytics (registered/login). Publish the existing
+binary `UserStreamEvent` with UUID `event_id`, UTC `occurred_at`, matching
+subject/oneof to externally provisioned `user_events`; never create the stream.
+Retries retain exact bytes, ID, timestamp and `Nats-Msg-Id`. Only a positive
+PubAck for `user_events` confirms publication. Duplicates and loss are possible;
+there is no ordering, exactly-once, durable spool or backfill guarantee.
+
+Enqueue only after the whole service operation succeeds and relevant SQL commits,
+using an outer transaction's after-commit callback when necessary. Observation
+failure must not undo security state, fail the API, wait for NATS on the request
+thread, or use caller-runs fallback. Existing Auth failures remain unchanged.
+One process dispatcher bounds outstanding (including retry/in-flight) to 1024,
+serialized bytes to 8 MiB, and each event to 16 KiB. It attempts at most three
+publications with one-second PubAck timeout, delays 100 ms then one second, and
+30-second queue lifetime. Shutdown drains for a bounded interval; crash, expiry,
+overflow, oversize, shutdown and exhausted attempts may lose observations.
+Fixed-label accepted/published/retried/dropped counters and pending gauge expose
+operational outcomes; dropped reasons are serialization, oversize, capacity,
+expired, attempts_exhausted, shutdown, and unavailable. Unconfirmed delivery is
+not certainty of broker loss. Never log payloads, account IDs, IP, device info or
+credentials, or use them as labels. Noop/test mode is not delivery evidence.
+
+Register emits only after full ordinary registration, with persisted account type
+and method guest/email/phone; pending email may still be guest. Login emits only
+for ordinary Login session issuance, never refresh/profile switch. Logout uses
+account/device from its validated refresh record and emits after revocation
+succeeds. Verify2FA emits only for a committed false-to-true confirmation, never
+secret enrollment, failed/repeated confirmation or rolled-back issuance. Missing
+device info uses `{}`. All current REST/gRPC producers deliberately set login
+`ip` to empty, meaning unavailable/unverified; consumers accept it. Forwarding
+headers, Gateway peer and device fields are not client-IP provenance. This slice
+adds no LoginRequest/Gateway metadata. Existing guest conversion, deletion and
+restoration contracts are unchanged. Runtime and deployed acceptance require
+their own evidence.
+
 Доменный поток JetStream: **`user.events`** (совместно с User для событий профиля; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
 | Событие                 | Данные                      |
