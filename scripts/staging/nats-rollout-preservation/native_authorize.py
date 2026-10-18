@@ -78,8 +78,9 @@ def _read_contract_envelope(base, descriptor):
                 or stat.S_IMODE(info.st_mode) != 0o600
                 or info.st_size != descriptor["bytes"]):
             raise Blocked("rollout_native_contract_envelope_invalid")
-        raw = path.open("rb", opener=lambda p, flags: os.open(
-            p, flags | os.O_NOFOLLOW)).read()
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            raw = stream.read()
     except (OSError, ValueError):
         raise Blocked("rollout_native_contract_envelope_invalid") from None
     if (len(raw) != descriptor["bytes"]
