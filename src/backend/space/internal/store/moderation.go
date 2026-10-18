@@ -116,6 +116,14 @@ ON CONFLICT (space_id, account_id) DO UPDATE SET
 		return err
 	}
 
+	// Ban every pending alias of this account, including attempts without a
+	// published member row. Unban cannot revive their old Ensure receipts.
+	banScoped := *s
+	banScoped.tx = tx
+	if err = banScoped.retirePendingAccountAdmissions(ctx, spaceID, accountID); err != nil {
+		return err
+	}
+
 	_, err = tx.Exec(ctx, `
 INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
 VALUES ($1, $2, 'member_banned', 'account', $3, $4::jsonb)

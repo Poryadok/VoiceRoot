@@ -151,7 +151,14 @@ DELETE FROM space_members WHERE space_id = $1 AND profile_id = $2
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
+		retired, err := s.retirePendingMemberAdmission(ctx, spaceID, profileID)
+		if err != nil {
+			return err
+		}
+		if !retired {
+			return pgx.ErrNoRows
+		}
+		return nil
 	}
 	_, err = s.db().Exec(ctx, `
 UPDATE spaces SET member_count = GREATEST(member_count - 1, 0), updated_at = now()
@@ -182,10 +189,18 @@ func (s *SpaceStore) KickMember(ctx context.Context, spaceID, profileID, actor u
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
+		retired, err := s.retirePendingMemberAdmission(ctx, spaceID, profileID)
+		if err != nil {
+			return err
+		}
+		if !retired {
+			return pgx.ErrNoRows
+		}
 	}
-	if _, err := s.db().Exec(ctx, `UPDATE spaces SET member_count=GREATEST(member_count-1,0),updated_at=now() WHERE id=$1`, spaceID); err != nil {
-		return err
+	if tag.RowsAffected() > 0 {
+		if _, err := s.db().Exec(ctx, `UPDATE spaces SET member_count=GREATEST(member_count-1,0),updated_at=now() WHERE id=$1`, spaceID); err != nil {
+			return err
+		}
 	}
 	if _, err := s.db().Exec(ctx, `DELETE FROM space_member_timeouts WHERE space_id=$1 AND profile_id=$2`, spaceID, profileID); err != nil {
 		return err

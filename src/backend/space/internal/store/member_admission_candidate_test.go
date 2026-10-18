@@ -6,12 +6,61 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"voice/backend/pkg/memberadmission"
 )
 
 type admissionCandidateAccess interface {
 	LookupMemberAdmission(context.Context, uuid.UUID) (*MemberAdmissionIntent, error)
 	FindCurrent(context.Context, uuid.UUID, uuid.UUID) (*MemberAdmissionIntent, error)
 	RetireCandidate(context.Context, uuid.UUID, uint64, MemberAdmissionRetirementReason) (*MemberAdmissionIntent, error)
+}
+
+func TestMemberAdmissionNoRowRemovalAndAccountAliasBanFenceReady(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+	owner := uuid.New()
+	space, err := st.CreateSpace(ctx, owner, "Pending administrative removal", "", "public")
+	require.NoError(t, err)
+	applyMemberAuthorityIfPresent(t, st)
+	for _, action := range []string{"leave", "kick"} {
+		in := MemberAdmissionInput{OperationID: uuid.New(), SpaceID: space.ID, ProfileID: uuid.New(), AccountID: uuid.New()}
+		i, err := st.PrepareMemberAdmission(ctx, in)
+		require.NoError(t, err)
+		if action == "leave" {
+			err = st.RemoveMember(ctx, space.ID, in.ProfileID)
+		} else {
+			err = st.KickMember(ctx, space.ID, in.ProfileID, owner)
+		}
+		require.NoError(t, err, action+" must commit a floor even before membership publication")
+		role := uuid.New()
+		receipt, err := memberadmission.EnsureReceiptFingerprint(i.EnsureBinding(), role.String())
+		require.NoError(t, err)
+		_, err = st.PublishMemberAdmission(ctx, in.OperationID, role, receipt[:], nil)
+		require.ErrorIs(t, err, ErrMemberAdmissionStale)
+	}
+	account := uuid.New()
+	var aliases []*MemberAdmissionIntent
+	for range 2 {
+		i, err := st.PrepareMemberAdmission(ctx, MemberAdmissionInput{OperationID: uuid.New(), SpaceID: space.ID, ProfileID: uuid.New(), AccountID: account})
+		require.NoError(t, err)
+		aliases = append(aliases, i)
+	}
+	require.NoError(t, st.BanMember(ctx, space.ID, account, owner, nil, nil))
+	require.NoError(t, st.UnbanMember(ctx, space.ID, account, owner))
+	for _, i := range aliases {
+		role := uuid.New()
+		receipt, err := memberadmission.EnsureReceiptFingerprint(i.EnsureBinding(), role.String())
+		require.NoError(t, err)
+		_, err = st.PublishMemberAdmission(ctx, i.Input.OperationID, role, receipt[:], nil)
+		require.ErrorIs(t, err, ErrMemberAdmissionStale, "ban then unban must not revive any alias candidate")
+	}
+	var count, cleanups int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT member_count FROM spaces WHERE id=$1`, space.ID).Scan(&count))
+	require.Equal(t, 1, count, "unpublished retirements never decrement the owner's count")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_member_role_cleanup WHERE space_id=$1`, space.ID).Scan(&cleanups))
+	require.Equal(t, 4, cleanups)
 }
 
 func TestMemberAdmissionCandidateRetirementRequiresCurrentProof(t *testing.T) {

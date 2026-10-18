@@ -107,8 +107,24 @@ ALTER TABLE space_members ADD COLUMN membership_generation BIGINT,
 UPDATE space_members m SET membership_generation=h.generation,admission_operation_id=h.publication_id
 FROM space_ordinary_member_heads h WHERE h.space_id=m.space_id AND h.profile_id=m.profile_id;
 
+-- Per-profile heads survive ordinary removals. Terminal P3 replaces them with
+-- the existing identity-free Space fence; raw profiles are not permanent data.
+-- Use the canonical participant predicate, including compatible future sets.
+CREATE FUNCTION space_membership_terminal_cleanup_allowed(target UUID) RETURNS boolean LANGUAGE plpgsql STABLE AS $$
+BEGIN
+ RETURN EXISTS(SELECT 1 FROM space_permanent_purge_fences f
+  JOIN space_lifecycle_aggregates a ON a.space_id=f.space_id
+   AND a.deletion_operation_id=f.deletion_operation_id AND a.generation=f.purge_generation
+  WHERE f.space_id=target AND a.phase='PURGED' AND a.local_purge_completed
+   AND NOT EXISTS(SELECT 1 FROM spaces s WHERE s.id=target))
+  AND space_terminal_purge_ready(target);
+END $$;
+
 CREATE FUNCTION space_member_head_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+ IF TG_OP='DELETE' AND space_membership_terminal_cleanup_allowed(OLD.space_id) THEN
+  RETURN OLD;
+ END IF;
  IF TG_OP IN ('DELETE','TRUNCATE') THEN
   RAISE EXCEPTION 'permanent membership head cannot be erased' USING ERRCODE='55000';
  END IF;
@@ -214,12 +230,34 @@ END $$;
 CREATE TRIGGER space_community_owner_episode_changed AFTER UPDATE OR DELETE ON community_owner_authority
 FOR EACH ROW EXECUTE FUNCTION space_community_owner_episode_changed();
 
+CREATE FUNCTION space_membership_terminal_cleanup() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT space_membership_terminal_cleanup_allowed(OLD.id) THEN
+  RAISE EXCEPTION 'membership minimization requires terminal P3 receipts and permanent Space fence' USING ERRCODE='55000';
+ END IF;
+ IF EXISTS(SELECT 1 FROM space_member_admission_outbox WHERE space_id=OLD.id AND delivered_at IS NULL) THEN
+  RAISE EXCEPTION 'membership publication obligations must drain before terminal purge' USING ERRCODE='55000';
+ END IF;
+ -- Role retirement is already a mandatory canonical participant receipt.
+ -- Neither a per-profile floor nor private admission/native provenance remains.
+ DELETE FROM space_member_admission_outbox WHERE space_id=OLD.id;
+ DELETE FROM space_member_role_cleanup WHERE space_id=OLD.id;
+ DELETE FROM space_member_admission_intents WHERE space_id=OLD.id;
+ DELETE FROM space_native_member_publications WHERE space_id=OLD.id;
+ DELETE FROM space_ordinary_member_heads WHERE space_id=OLD.id;
+ DELETE FROM space_community_member_heads WHERE space_id=OLD.id;
+ DELETE FROM space_membership_ownership_heads WHERE space_id=OLD.id;
+ RETURN OLD;
+END $$;
+CREATE TRIGGER space_membership_terminal_cleanup AFTER DELETE ON spaces
+ FOR EACH ROW EXECUTE FUNCTION space_membership_terminal_cleanup();
+
 -- Existing databases without the unrelated Federation-source preflight still
 -- get permanent heads. Full production migration order supplies its revision
 -- function; new inputs participate in exactly that same monotonic Space clock.
 DO $$ DECLARE name TEXT; BEGIN
  IF to_regprocedure('space_authority_revision_changed()') IS NOT NULL THEN
-  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications'] LOOP
+  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications','space_lifecycle_operations','space_lifecycle_participants','space_lifecycle_completions','space_lifecycle_outbox','space_permanent_purge_fences'] LOOP
    EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION space_authority_revision_changed(''space_id'')','space_authority_revision_'||name,name);
    EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION space_authority_revision_floor_guard()','space_authority_revision_'||name||'_truncate',name);
   END LOOP;

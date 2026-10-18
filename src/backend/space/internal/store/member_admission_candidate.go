@@ -125,3 +125,53 @@ func (s *SpaceStore) proveMemberAdmissionRetirement(ctx context.Context, i *Memb
 		return false, ErrMemberAdmissionConflict
 	}
 }
+
+// retirePendingMemberAdmission runs inside an already held Space mutation
+// fence. Administrative removal is itself the proven invalidation; there need
+// not yet be a space_members row or a successful Role preparation.
+func (s *SpaceStore) retirePendingMemberAdmission(ctx context.Context, space, profile uuid.UUID) (bool, error) {
+	if s.tx == nil {
+		return false, ErrMemberAdmissionConflict
+	}
+	i, err := s.FindCurrent(ctx, space, profile)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err = s.invalidateMemberAdmission(ctx, i); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *SpaceStore) retirePendingAccountAdmissions(ctx context.Context, space, account uuid.UUID) error {
+	if s.tx == nil {
+		return ErrMemberAdmissionConflict
+	}
+	rows, err := s.db().Query(ctx, `SELECT profile_id FROM space_ordinary_member_heads WHERE space_id=$1 AND account_id=$2 AND state='PREPARING' ORDER BY profile_id`, space, account)
+	if err != nil {
+		return err
+	}
+	var profiles []uuid.UUID
+	for rows.Next() {
+		var profile uuid.UUID
+		if err = rows.Scan(&profile); err != nil {
+			rows.Close()
+			return err
+		}
+		profiles = append(profiles, profile)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, profile := range profiles {
+		if _, err = s.retirePendingMemberAdmission(ctx, space, profile); err != nil {
+			return err
+		}
+	}
+	return nil
+}

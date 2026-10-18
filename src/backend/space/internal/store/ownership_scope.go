@@ -98,7 +98,8 @@ func checkOwnershipJournalAvailable(ctx context.Context, db ownershipJournalQuer
 func checkLifecycleAvailable(ctx context.Context, db ownershipJournalQuerier, spaceIDs []uuid.UUID) error {
 	var frozen bool
 	if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_lifecycle_aggregates
-		WHERE space_id=ANY($1::uuid[]) AND phase <> 'LIVE')`, spaceIDs).Scan(&frozen); err != nil {
+		WHERE space_id=ANY($1::uuid[]) AND phase <> 'LIVE')
+		OR EXISTS(SELECT 1 FROM space_permanent_purge_fences WHERE space_id=ANY($1::uuid[]))`, spaceIDs).Scan(&frozen); err != nil {
 		return fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
 	}
 	if frozen {

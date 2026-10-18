@@ -59,6 +59,9 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	other, err := st.CreateSpace(ctx, uuid.New(), "unrelated", "", "private")
 	require.NoError(t, err)
 	otherID := other.ID
+	applyMemberAuthorityIfPresent(t, st)
+	_, err = st.Pool.Exec(ctx, `DELETE FROM space_ordinary_member_heads WHERE space_id=$1`, spaceID)
+	require.Error(t, err, "per-profile anti-ABA heads cannot disappear before terminal P3")
 	for _, id := range []uuid.UUID{spaceID, otherID} {
 		_, err = st.Pool.Exec(ctx, `INSERT INTO audit_log(id,space_id,actor_profile_id,action,target_type,target_id,details) VALUES($1,$2,$3,'invite_revoked','invite',$4,'{}')`, uuid.New(), id, uuid.New(), uuid.New())
 		require.NoError(t, err)
@@ -78,6 +81,16 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	require.True(t, exists, "local error must roll back tombstone, event and deletion")
 	_, err = st.Pool.Exec(ctx, `DROP TRIGGER fail_local_purge ON spaces; DROP FUNCTION fail_local_purge()`)
 	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `INSERT INTO space_member_admission_outbox(event_id,operation_id,space_id,profile_id,generation,occurred_at) VALUES($1,$2,$3,$4,1,clock_timestamp())`, uuid.New(), uuid.New(), spaceID, actor)
+	require.NoError(t, err)
+	_, err = finalizer.FinalizeLifecyclePurge(ctx, spaceID, testLifecycleHasher{})
+	require.Error(t, err, "terminal minimization must not erase an undelivered membership event")
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM spaces WHERE id=$1) AND NOT EXISTS(SELECT 1 FROM space_permanent_purge_fences WHERE space_id=$1)`, spaceID).Scan(&exists))
+	require.True(t, exists, "drain failure rolls back Space deletion and terminal fence together")
+	// Simulate the independent dispatcher's durable acknowledgement in this
+	// store fixture. Production publication requires its actual sink receipt.
+	_, err = st.Pool.Exec(ctx, `UPDATE space_member_admission_outbox SET delivered_at=clock_timestamp() WHERE space_id=$1`, spaceID)
+	require.NoError(t, err)
 	var before time.Time
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&before))
 	completed, err := finalizer.FinalizeLifecyclePurge(ctx, spaceID, testLifecycleHasher{})
@@ -85,6 +98,16 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	require.False(t, completed.Snapshot().DeletedEvent.OccurredAt.Before(before))
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM spaces WHERE id=$1) AND NOT EXISTS(SELECT 1 FROM audit_log WHERE space_id=$1) AND EXISTS(SELECT 1 FROM spaces WHERE id=$2) AND EXISTS(SELECT 1 FROM audit_log WHERE space_id=$2) AND EXISTS(SELECT 1 FROM space_lifecycle_outbox WHERE space_id=$1 AND event_type='space.deleted' AND state='READY')`, spaceID, otherID).Scan(&exists))
 	require.True(t, exists)
+	for _, table := range []string{"space_ordinary_member_heads", "space_community_member_heads", "space_membership_ownership_heads", "space_member_admission_intents", "space_native_member_publications", "space_member_role_cleanup", "space_member_admission_outbox"} {
+		var identities int
+		require.NoError(t, st.Pool.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE space_id=$1", spaceID).Scan(&identities))
+		require.Zero(t, identities, "terminal purge must minimize private membership identities: "+table)
+	}
+	var otherHeads int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_ordinary_member_heads WHERE space_id=$1`, otherID).Scan(&otherHeads))
+	require.Equal(t, 1, otherHeads, "unrelated membership anti-ABA heads remain")
+	_, err = st.PrepareMemberAdmission(ctx, MemberAdmissionInput{OperationID: uuid.New(), SpaceID: spaceID, ProfileID: actor, AccountID: uuid.New()})
+	require.ErrorIs(t, err, ErrLifecycleFrozen, "global terminal fence prevents old identities being recreated")
 	replay, err := finalizer.FinalizeLifecyclePurge(ctx, spaceID, testLifecycleHasher{})
 	require.NoError(t, err)
 	require.Equal(t, completed.Snapshot().DeletedEvent, replay.Snapshot().DeletedEvent)
