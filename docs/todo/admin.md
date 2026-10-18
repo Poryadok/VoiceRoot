@@ -12,7 +12,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] Analytics UI: search/voice dashboards deferred** — Gateway `GetDashboard` supports product/engagement/revenue/health/moderation + retention REST; Admin pages wired (batch 4). Search/voice need an accepted backend contract before UI: the current wire has no unambiguous daily-series/distribution or dashboard-filter schema, and source telemetry lacks canonical click-position, concurrency/duration and negotiated-codec facts. Do not ship proxy counters under the final metric names. Contract/RED matrix: [analytics-search-voice-dashboard-contract.md](../testing/analytics-search-voice-dashboard-contract.md). Paths: `docs/features/analytics.md`, `src/backend/analytics/internal/store/query.go`
-- Rich UX backlog (game catalog): genre/platforms presets, rank ladder templates per [game-catalog.md](../features/game-catalog.md) — structured mode/role/rank editor already shipped.
+- Rich UX backlog (game catalog): rank ladder templates per [game-catalog.md](../features/game-catalog.md). Before implementation, define the template names, ordered rank names/values and whether applying a template replaces or merges existing ranks; these are not yet specified. Genre/platform suggestions and the structured mode/role/rank editor are shipped.
 
 ### Developer Portal
 

@@ -66,4 +66,22 @@ describe("CreateGamePage", () => {
     expect(screen.getByRole("button", { name: "Create game" })).toBeDisabled();
     expect(api.createGame).not.toHaveBeenCalled();
   });
+
+  it("saves genre and platform suggestions through the existing config schema", async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><CreateGamePage /></MemoryRouter>);
+    await user.type(screen.getByLabelText("Name"), "Catalog preset game");
+    await user.type(screen.getByLabelText("Genre (optional)"), "MOBA");
+    await user.click(screen.getByRole("checkbox", { name: "PC" }));
+    await user.click(screen.getByRole("checkbox", { name: "Console" }));
+    await user.click(screen.getByRole("button", { name: "Create game" }));
+
+    await waitFor(() => expect(api.createGame).toHaveBeenCalled());
+    const [input] = vi.mocked(api.createGame).mock.calls[0];
+    expect(JSON.parse(input.config_json)).toEqual(expect.objectContaining({
+      genre: "MOBA",
+      platforms: ["pc", "console"],
+      regions: ["global"],
+    }));
+  });
 });

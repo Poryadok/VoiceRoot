@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { GameConfig, GameMode, GameRank, GameRole } from "../lib/gameConfig";
 import {
   formatListInput,
@@ -34,6 +35,14 @@ export function GameConfigEditor({
   onChange,
   validationError,
 }: GameConfigEditorProps) {
+  const genreListId = useId();
+  const genreSuggestions = ["Action", "MOBA", "Shooter", "Strategy"];
+  const platformSuggestions = [
+    { value: "pc", label: "PC" },
+    { value: "console", label: "Console" },
+    { value: "mobile", label: "Mobile" },
+  ];
+
   function addMode() {
     onChange({
       ...config,
@@ -67,11 +76,17 @@ export function GameConfigEditor({
         Genre (optional)
         <input
           value={config.genre ?? ""}
+          list={genreListId}
           onChange={(event) =>
             onChange({ ...config, genre: event.target.value })
           }
           autoComplete="off"
         />
+        <datalist id={genreListId}>
+          {genreSuggestions.map((genre) => (
+            <option key={genre} value={genre} />
+          ))}
+        </datalist>
       </label>
       <label>
         Platforms (comma-separated)
@@ -87,6 +102,26 @@ export function GameConfigEditor({
           autoComplete="off"
         />
       </label>
+      <div role="group" aria-label="Platform suggestions">
+        {platformSuggestions.map(({ value, label }) => (
+          <label key={value} className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={(config.platforms ?? []).some(
+                (platform) => platform.toLowerCase() === value,
+              )}
+              onChange={(event) => {
+                const platforms = (config.platforms ?? []).filter(
+                  (platform) => platform.toLowerCase() !== value,
+                );
+                if (event.target.checked) platforms.push(value);
+                onChange({ ...config, platforms });
+              }}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
       <label>
         Regions
         <input
