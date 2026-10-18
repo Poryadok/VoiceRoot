@@ -73,6 +73,53 @@ class PostRuntime:
                 "streams": [], "consumers": []}
 
 
+def _contract_fixture(base):
+    (base / "inputs").mkdir()
+    (base / "inputs/bootstrap.creds").write_bytes(b"credentials")
+    (base / "server.conf").write_bytes(b"server configuration")
+    (base / "inputs/bootstrap.creds").chmod(0o600)
+    (base / "server.conf").chmod(0o600)
+    source_uid = "33333333-3333-4333-8333-333333333333"
+    source_pv_uid = "44444444-4444-4444-8444-444444444444"
+    verify_uid = "55555555-5555-4555-8555-555555555555"
+    verify_pv_uid = "66666666-6666-4666-8666-666666666666"
+    job_uid = "77777777-7777-4777-8777-777777777777"
+    pod_uid = "88888888-8888-4888-8888-888888888888"
+    attempt = "abcdef12"
+    nonce = "b" * 32
+    job_name = "voice-nats-contract-" + OP + "-" + attempt
+    return {
+        "operation": OP, "native_source_binding": {
+            "binding": {"source_claim": "voice-nats-jsdata-d20261018a",
+                "source_uid": source_uid, "source_pv_name": "source-pv",
+                "source_pv_uid": source_pv_uid, "source_node_name": "pmdebook"},
+            "proof": {"node_hostname": "pmdebook"}},
+        "nats_contract": {"schema": "fixture", "actions": []},
+        "cut": {"manifest": {"archive_sha256": "a" * 64, "bytes": 128}},
+        "events": [
+            {"phase": "census", "state": "PVC_BOUND", "operation": OP,
+                "nonce": nonce, "verification_claim": "voice-nats-verify-" + OP + "-" + attempt,
+                "verification_uid": verify_uid, "verification_pv_name": "verify-pv",
+                "verification_pv_uid": verify_pv_uid, "verification_node_name": "pmdebook",
+                "verification_hostname": "pmdebook", "session_attempt": attempt},
+            {"phase": "census", "state": "JOB_CREATE_INTENT", "operation": OP,
+                "nonce": nonce, "job_name": job_name, "template_sha256": "c" * 64,
+                "verification_uid": verify_uid, "session_attempt": attempt},
+            {"phase": "census", "state": "JOB_CREATED", "operation": OP,
+                "nonce": nonce, "job_name": job_name, "job_uid": job_uid,
+                "template_sha256": "c" * 64, "verification_uid": verify_uid,
+                "session_attempt": attempt},
+            {"phase": "census", "state": "INPUTS_COMPLETE", "operation": OP,
+                "nonce": nonce, "pod_uid": pod_uid, "job_uid": job_uid,
+                "session_attempt": attempt, "input_bundle_sha256": "b" * 64,
+                "input_bundle_bytes": 256},
+            {"phase": "census", "state": "CENSUS_EXECUTION_COMPLETE", "operation": OP,
+                "nonce": nonce, "pod_uid": pod_uid, "job_uid": job_uid,
+                "session_attempt": attempt, "archive_sha256": "a" * 64,
+                "archive_bytes": 128}],
+    }
+
+
 class NativeAuthorizeTests(unittest.TestCase):
     def test_native_authorize_runs_typed_sequence_and_writes_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -177,42 +224,34 @@ class NativeAuthorizeTests(unittest.TestCase):
     def test_prepare_produces_contract_from_census_and_private_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            (base / "inputs").mkdir()
-            (base / "inputs/bootstrap.creds").write_bytes(b"credentials")
-            (base / "server.conf").write_bytes(b"server configuration")
-            (base / "inputs/bootstrap.creds").chmod(0o600)
-            (base / "server.conf").chmod(0o600)
-            source_uid = "33333333-3333-4333-8333-333333333333"
-            source_pv_uid = "44444444-4444-4444-8444-444444444444"
-            verify_uid = "55555555-5555-4555-8555-555555555555"
-            verify_pv_uid = "66666666-6666-4666-8666-666666666666"
-            attempt = "abcdef12"
-            state = {
-                "operation": OP, "native_source_binding": {
-                    "binding": {"source_claim": "voice-nats-jsdata-d20261018a",
-                        "source_uid": source_uid, "source_pv_name": "source-pv",
-                        "source_pv_uid": source_pv_uid, "source_node_name": "pmdebook"},
-                    "proof": {"node_hostname": "pmdebook"}},
-                "nats_contract": {"schema": "fixture", "actions": []},
-                "cut": {"manifest": {"archive_sha256": "a" * 64, "bytes": 128}},
-                "events": [
-                    {"phase": "census", "state": "PVC_BOUND",
-                        "verification_claim": "voice-nats-verify-" + OP + "-" + attempt,
-                        "verification_uid": verify_uid, "verification_pv_name": "verify-pv",
-                        "verification_pv_uid": verify_pv_uid, "verification_node_name": "pmdebook",
-                        "verification_hostname": "pmdebook", "session_attempt": attempt},
-                    {"phase": "census", "state": "INPUTS_COMPLETE",
-                        "input_bundle_sha256": "b" * 64, "input_bundle_bytes": 256},
-                    {"phase": "census", "state": "CENSUS_EXECUTION_COMPLETE",
-                        "archive_sha256": "a" * 64, "archive_bytes": 128}],
-            }
+            state = _contract_fixture(base)
             transaction._produce_native_contract_authority(base, state, {
                 "runner_image": "runner@sha256:" + "e" * 64})
             row = native_authorize._native_contract(base, state)
             envelope = json.loads(row["plan_envelope"].decode())
-            self.assertEqual(envelope["source_pvc_uid"], source_uid)
-            self.assertEqual(envelope["verification_pvc_uid"], verify_uid)
+            self.assertEqual(envelope["source_pvc_uid"], "33333333-3333-4333-8333-333333333333")
+            self.assertEqual(envelope["verification_pvc_uid"], "55555555-5555-4555-8555-555555555555")
             self.assertEqual(row["binding"]["contract_attempt"], envelope["contract_attempt"])
+
+    def test_prepare_rejects_mixed_census_session_before_contract_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            state = _contract_fixture(base)
+            state["events"][3]["session_attempt"] = "deadbeef"
+            with self.assertRaisesRegex(Blocked, "census_binding_invalid"):
+                transaction._produce_native_contract_authority(base, state, {
+                    "runner_image": "runner@sha256:" + "e" * 64})
+            self.assertFalse((base / "native-contract-inputs.json").exists())
+
+    def test_prepare_rejects_archive_mismatch_before_contract_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            state = _contract_fixture(base)
+            state["events"][4]["archive_sha256"] = "f" * 64
+            with self.assertRaisesRegex(Blocked, "census_binding_invalid"):
+                transaction._produce_native_contract_authority(base, state, {
+                    "runner_image": "runner@sha256:" + "e" * 64})
+            self.assertFalse((base / "native-contract-inputs.json").exists())
 
 
 if __name__ == "__main__":

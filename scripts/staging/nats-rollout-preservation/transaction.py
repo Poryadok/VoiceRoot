@@ -56,6 +56,60 @@ def _native_contract_event(events, state_name):
     return rows[0]
 
 
+def _native_contract_census_binding(events, state):
+    """Join one source census session before publishing a contract envelope."""
+    bound = _native_contract_event(events, 'PVC_BOUND')
+    inputs = _native_contract_event(events, 'INPUTS_COMPLETE')
+    execution = _native_contract_event(events, 'CENSUS_EXECUTION_COMPLETE')
+    operation = state.get('operation')
+    nonce = bound.get('nonce')
+    session_attempt = bound.get('session_attempt')
+    if (not isinstance(operation, str) or not re.fullmatch(r'[a-z0-9]{12}', operation)
+            or bound.get('operation') != operation
+            or not isinstance(nonce, str) or not re.fullmatch(r'[0-9a-f]{32}', nonce)
+            or not isinstance(session_attempt, str) or not re.fullmatch(r'[0-9a-f]{8}', session_attempt)):
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    verification_uid = bound.get('verification_uid')
+    if not isinstance(verification_uid, str):
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    creates = [event for event in events if isinstance(event, dict)
+        and event.get('phase') == 'census' and event.get('state') in ('JOB_CREATE_INTENT', 'JOB_CREATED')
+        and event.get('operation') == operation and event.get('nonce') == nonce
+        and event.get('session_attempt') == session_attempt
+        and event.get('verification_uid') == verification_uid]
+    intents = [event for event in creates if event.get('state') == 'JOB_CREATE_INTENT']
+    created = [event for event in creates if event.get('state') == 'JOB_CREATED']
+    if len(intents) != 1 or len(created) != 1:
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    intent, job = intents[0], created[0]
+    job_uid = job.get('job_uid')
+    job_name = job.get('job_name')
+    if (not isinstance(job_uid, str) or not re.fullmatch(
+            r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', job_uid)
+            or not isinstance(job_name, str) or intent.get('job_name') != job_name
+            or intent.get('template_sha256') != job.get('template_sha256')):
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    pod_uid = inputs.get('pod_uid')
+    if (not isinstance(pod_uid, str) or not re.fullmatch(
+            r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', pod_uid)
+            or inputs.get('job_uid') != job_uid or inputs.get('session_attempt') != session_attempt
+            or execution.get('pod_uid') != pod_uid or execution.get('job_uid') != job_uid
+            or execution.get('session_attempt') != session_attempt):
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    for event in (inputs, execution):
+        if ('operation' in event and event.get('operation') != operation
+                or 'nonce' in event and event.get('nonce') != nonce):
+            raise Blocked('rollout_native_contract_census_binding_invalid')
+    manifest = state.get('cut', {}).get('manifest', {})
+    if (execution.get('archive_sha256') != manifest.get('archive_sha256')
+            or execution.get('archive_bytes') != manifest.get('bytes')
+            or not isinstance(execution.get('archive_sha256'), str)
+            or not re.fullmatch(r'[0-9a-f]{64}', execution['archive_sha256'])
+            or type(execution.get('archive_bytes')) is not int):
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    return bound, inputs, execution
+
+
 def _produce_native_contract_authority(base, state, native_config):
     """Persist the exact source-derived contract envelope before authorization."""
     if state.get('native_contract') is not None:
@@ -66,9 +120,7 @@ def _produce_native_contract_authority(base, state, native_config):
     proof = state.get('native_source_binding', {}).get('proof')
     if not isinstance(source, dict) or not isinstance(proof, dict):
         raise Blocked('rollout_native_source_binding_invalid')
-    bound = _native_contract_event(state.get('events', ()), 'PVC_BOUND')
-    inputs = _native_contract_event(state.get('events', ()), 'INPUTS_COMPLETE')
-    execution = _native_contract_event(state.get('events', ()), 'CENSUS_EXECUTION_COMPLETE')
+    bound, inputs, execution = _native_contract_census_binding(state.get('events', ()), state)
     bootstrap = _native_contract_file(base, 'inputs/bootstrap.creds')
     server_conf = _native_contract_file(base, 'server.conf')
     plan = copy.deepcopy(state.get('nats_contract'))
@@ -76,7 +128,7 @@ def _produce_native_contract_authority(base, state, native_config):
         raise Blocked('rollout_native_contract_plan_missing')
     plan_bytes = json.dumps(plan, sort_keys=True, separators=(',', ':'),
         ensure_ascii=False, allow_nan=False).encode('utf-8')
-    nonce = secrets.token_hex(16)
+    nonce = bound['nonce']
     attempt = secrets.token_hex(4)
     request = {'operation': state['operation'], 'nonce': nonce, 'phase': 'contract-migration'}
     manifest = state.get('cut', {}).get('manifest', {})
