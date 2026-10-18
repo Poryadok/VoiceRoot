@@ -2,7 +2,11 @@ package admissionproof
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"encoding/hex"
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +45,7 @@ func TestBootstrapConfigMapCASUsesRealAPIServerAndClosedVAP(t *testing.T) {
 	oldScript, targetScript := "#!/bin/sh\nold\n", "#!/bin/sh\nnew\n"
 	stored, err := admin.CoreV1().ConfigMaps(namespace).Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: bootstrapCASName, Namespace: namespace, Labels: map[string]string{"app": "nats"}, Annotations: map[string]string{"owner": "preserved"}}, Data: map[string]string{"bootstrap.sh": oldScript, "other": "keep"}}, metav1.CreateOptions{})
 	if err != nil { t.Fatal(err) }
-	changed, err := patchBootstrapConfigMap(ctx, runner, stored.Name, bootstrapCASPatch(stored, targetScript, map[string]string{"owner": "preserved", bootstrapCASOp: testOperation}))
+	changed, err := patchBootstrapConfigMap(ctx, runner, stored.Name, pythonBootstrapCASPatch(t, stored, oldScript, targetScript, map[string]string{"owner": "preserved", bootstrapCASOp: testOperation}))
 	if err != nil { t.Fatalf("fixed bootstrap script CAS denied: %v", err) }
 	if changed.UID != stored.UID || changed.ResourceVersion == stored.ResourceVersion || changed.Data["bootstrap.sh"] != targetScript || changed.Data["other"] != "keep" || changed.Annotations["owner"] != "preserved" || changed.Annotations[bootstrapCASOp] != testOperation || changed.Labels["app"] != "nats" { t.Fatalf("CAS did not preserve object custody: %#v", changed) }
 
@@ -85,6 +89,27 @@ func installBootstrapCASVAP(ctx context.Context, t *testing.T, c *kubernetes.Cli
 func bootstrapCASPatch(current *corev1.ConfigMap, target string, annotations map[string]string) []map[string]interface{} {
 	annOp := "add"; if current.Annotations != nil { annOp = "replace" }
 	return []map[string]interface{}{{"op":"test","path":"/metadata/uid","value":string(current.UID)},{"op":"test","path":"/metadata/resourceVersion","value":current.ResourceVersion},{"op":"replace","path":"/data/bootstrap.sh","value":target},{"op":annOp,"path":"/metadata/annotations","value":annotations}}
+}
+
+func pythonBootstrapCASPatch(t *testing.T, current *corev1.ConfigMap, oldScript, target string, annotations map[string]string) []map[string]interface{} {
+	t.Helper()
+	digest := sha256.Sum256([]byte(oldScript))
+	input, err := json.Marshal(map[string]interface{}{
+		"namespace": namespace, "name": current.Name, "uid": string(current.UID),
+		"resource_version": current.ResourceVersion, "sha256": hex.EncodeToString(digest[:]),
+		"operation": testOperation, "target_script": target, "annotations": annotations,
+	})
+	if err != nil { t.Fatal(err) }
+	program := `import json,sys; from native_configmap_cas import build_request; x=json.load(sys.stdin); print(json.dumps(build_request(x['namespace'],x['name'],x['uid'],x['resource_version'],x['sha256'],x['operation'],x['target_script'],x['annotations'])))`
+	cmd := exec.Command("python3", "-c", program)
+	cmd.Dir = "../nats-rollout-preservation"
+	cmd.Stdin = strings.NewReader(string(input))
+	var stdout, stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil { t.Fatalf("run native ConfigMap CAS helper: %v: %s", err, stderr.String()) }
+	var patch []map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout.String()), &patch); err != nil { t.Fatalf("decode native CAS patch: %v: %s", err, stdout.String()) }
+	return patch
 }
 
 func patchBootstrapConfigMap(ctx context.Context, c *kubernetes.Clientset, name string, patch []map[string]interface{}) (*corev1.ConfigMap, error) {
