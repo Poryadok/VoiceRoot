@@ -1985,6 +1985,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: Compose E2E smoke (all features)
         id: compose_e2e_smoke
         env:
@@ -2073,6 +2078,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: A1 multi-account compose proof
         env:
           VOICE_A1_MULTI_ACCOUNT_CLEANUP: "true"
@@ -2126,6 +2136,11 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: T055/T106/T107 Flutter A1 live proof
         env:
           VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP: "true"
@@ -2196,6 +2211,11 @@ jobs:
           docker run --rm --entrypoint /bin/sh voice-minio-mc:ci -c 'command -v mc && command -v sleep && mc --version'
           docker build -f docker/minio/minio.Dockerfile -t voice-minio:ci .
           docker run --rm --entrypoint /bin/sh voice-minio:ci -c 'command -v minio && command -v curl && command -v sleep && minio --version'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: File attachment restart proof
         env:
           VOICE_FILE_ATTACHMENT_RESTART_CLEANUP: "true"

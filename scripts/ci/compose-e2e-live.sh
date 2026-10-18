@@ -9,14 +9,16 @@ export VOICE_RUN_LIVE_COMPOSE="${VOICE_RUN_LIVE_COMPOSE:-true}"
 export VOICE_API_BASE_URL="${VOICE_API_BASE_URL:-http://127.0.0.1:18080}"
 export VOICE_LIVEKIT_PUBLIC_URL="${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}"
 
+# Validate both phases before dependency installation or executing either suite.
+GATEWAY_RUN="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" full_gateway_run)" || exit 1
+flutter_test_list="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" full_flutter)" || exit 1
+mapfile -t FLUTTER_TESTS <<<"${flutter_test_list}"
+
 if [ "$(uname -s)" = "Linux" ] && ! pkg-config --exists opus 2>/dev/null; then
   echo "Installing LiveKit CGO deps for gateway voice media live tests..."
   sudo apt-get update -qq
   DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
 fi
-
-GATEWAY_RUN="$(awk -F"'" '/^full_gateway_run:/ {print $2}' "${MANIFEST}")"
-GATEWAY_RUN="${GATEWAY_RUN:-TestCompose.*_live}"
 
 cd "${ROOT}/src/backend/gateway"
 gateway_status=0
@@ -25,13 +27,6 @@ if go test -count=1 -parallel 1 -timeout 20m -tags live -run "${GATEWAY_RUN}" ./
 else
   gateway_status=$?
   echo "Gateway live phase: FAILED (exit code ${gateway_status})" >&2
-fi
-
-if flutter_test_list="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" full_flutter)"; then
-  mapfile -t FLUTTER_TESTS <<<"${flutter_test_list}"
-else
-  echo "Flutter live phase: FAILED (could not read full_flutter manifest)" >&2
-  exit 1
 fi
 
 cd "${ROOT}/src/frontend"

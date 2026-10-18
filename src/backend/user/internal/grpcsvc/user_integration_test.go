@@ -25,6 +25,7 @@ import (
 	"voice/backend/pkg/privacy"
 
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
@@ -97,6 +98,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles:            profiles,
+		ProfileMutations:    profilemutation.New(rdb),
 		Privacy:             privacyStore,
 		Presence:            store.NewPresenceStore(rdb),
 		DeletedAccounts:     &deletedAccountCheckerStub{},

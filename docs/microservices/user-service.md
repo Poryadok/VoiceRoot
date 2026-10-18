@@ -5,7 +5,7 @@
 Управление профилями пользователей, настройками, приватностью и онлайн-статусом.
 
 **Язык**: Go
-**БД**: PostgreSQL `user_db`, Redis (presence cache)
+**БД**: PostgreSQL `user_db`, Redis (presence cache, shared profile-mutation quotas)
 
 ## Ответственность
 
@@ -409,7 +409,11 @@ sequence, поэтому первый новый provider update не проиг
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Space Service** — `AreCoMembers` для проверки privacy-аудитории `space_members` (User подключает S2S-клиент через `SPACE_GRPC_ADDR`)
-- **Redis** — presence кэш (TTL 5 мин, heartbeat)
+- **Redis** — presence кэш (TTL 5 мин, heartbeat) и обязательный общий допуск
+  `CreateProfile`/`DeleteProfile` через существующий `USER_REDIS_ADDR`: независимо
+  по 10 попыток/скользящий час/аккаунт. Нет локального fallback; отсутствие
+  конфигурации или сбой Redis закрывает только эти операции с `UNAVAILABLE`.
+  Квота и порядок отказа описаны в [Multi-Profile](../features/multi-profile.md#защита-от-злоупотреблений).
 - **File Service** — загрузка аватара/баннера; **not yet deployed** as standalone service — минимальный R2/presigned для статичного аватара может жить в User ([user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md))
 
 ## Subscription downgrade projection (A7 accepted target; not implemented)

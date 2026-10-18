@@ -446,6 +446,17 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 
 ### Compose E2E (локально и CI)
 
+The E2E catalog CLI (`bash scripts/ci/e2e-manifest.sh MANIFEST SECTION`)
+requires Python 3 and `python3 -m pip install -r scripts/ci/requirements-e2e.txt`
+(PyYAML 6.0.3). CI installs that dependency in every catalog-consuming job.
+Selections preserve YAML list order, decode quoted/flow values, and reject
+duplicate keys/items, empty or invalid test lists before emitting names.
+`full_gateway_run` is read by the same parser as a nonempty single-line scalar.
+Smoke/full runners stop before suite execution on parser failure; no test-list
+fallback is inferred. Check with `python3 scripts/ci/e2e_manifest_test.py` and
+`bash scripts/ci/e2e-manifest_test.sh`. These offline checks do not establish
+live smoke duration, provider coverage or product acceptance.
+
 - **`make compose-migrate-all`** — golang-migrate для Go-owned БД; контейнер migrate подключается к Postgres через `host.docker.internal` (compose publish на хост). При конфликте порта **5432** на хосте задайте `POSTGRES_PORT` в `.env` и `VOICE_MIGRATE_PG_HOST` (например `host.docker.internal`) в окружении перед migrate.
 - **Smoke (tier 2 / master push):** `scripts/ci/compose-e2e-smoke.sh` — один тест на фичу продукта.
 - **Full:** `make compose-e2e-live` или workflow [compose-e2e-live.yml](../.github/workflows/compose-e2e-live.yml).

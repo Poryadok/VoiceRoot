@@ -58,5 +58,10 @@ jobs:
       - name: Compose app up
         run: make compose-app-up
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: Compose E2E live (full feature coverage)
         run: make compose-e2e-live

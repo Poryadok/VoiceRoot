@@ -262,7 +262,7 @@ func TestReportIntakeMigrationLegacyProvenance(t *testing.T) {
 	pool := reportIntakePool(t)
 	ctx := context.Background()
 	root := repoRoot(t)
-	down, err := os.ReadFile(filepath.Join(root, "src/backend/migrations/moderation_db/000005_report_intake.down.sql"))
+	down, err := os.ReadFile(filepath.Join(root, "src/backend/migrations/moderation_db/000007_report_intake.down.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(down))
 	require.NoError(t, err, "empty expand migration can roll back")
@@ -271,7 +271,7 @@ func TestReportIntakeMigrationLegacyProvenance(t *testing.T) {
 		_, err = pool.Exec(ctx, `INSERT INTO reports(id,reporter_profile_id,target_type,target_id,category,status) VALUES($1,$2,'story',$3,'spam',$4)`, id, uuid.New(), uuid.New(), state)
 		require.NoError(t, err)
 	}
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(root, "src/backend/migrations/moderation_db/000005_report_intake.up.sql"))
+	integrationtestApplySQL(t, ctx, pool, filepath.Join(root, "src/backend/migrations/moderation_db/000007_report_intake.up.sql"))
 	var state string
 	var legacy bool
 	require.NoError(t, pool.QueryRow(ctx, `SELECT validation_state,validation_publication_legacy FROM reports WHERE id=$1`, pending).Scan(&state, &legacy))

@@ -33,33 +33,42 @@ check_image() {
 
 MISSING=()
 
-if [ -n "${LOCK_FILE}" ] && [ -f "${LOCK_FILE}" ]; then
-  REGISTRY="$(grep '^registry:' "${LOCK_FILE}" | awk '{print $2}')"
-  TAG="$(grep '^tag:' "${LOCK_FILE}" | awk '{print $2}')"
-  echo "Verifying stack lock: ${LOCK_FILE} registry=${REGISTRY} tag=${TAG}"
-  while IFS= read -r line; do
-    name="$(echo "${line}" | sed 's/:.*//' | xargs)"
-    img_tag="$(echo "${line}" | awk -F: '{print $2}' | xargs)"
-    [ -z "${name}" ] && continue
-    [[ "${name}" == images ]] && continue
-    check_image "${name}" "${REGISTRY}/${name}:${img_tag}" || true
-  done < <(grep -E '^  [a-z].*:' "${LOCK_FILE}" || true)
-elif [ -n "${TAG}" ]; then
-  echo "Verifying production images: ${REGISTRY} tag ${TAG}"
-  while IFS= read -r name || [ -n "${name}" ]; do
-    name="${name%%#*}"
-    name="$(echo "${name}" | tr -d '[:space:]')"
-    [ -z "${name}" ] && continue
-    check_image "${name}" "${REGISTRY}/${name}:${TAG}" || true
-  done < <(jq -r '.images[] | select((.environments // ["dev", "staging", "prod"]) | index("prod")) | .name' "${ROOT}/scripts/ci/staging-image-catalog.json")
-  check_image "nats-hub-config-renderer" "${REGISTRY}/nats-hub-config-renderer:${TAG}" || true
-else
-  echo "ERROR: set STACK_LOCK_FILE or VOICE_IMAGE_TAG" >&2
-  exit 1
+# Capture validation directly: process substitution would hide a parser failure
+# and could turn an empty plan into a successful zero-image verification.
+PLAN_ARGS=(--catalog "${ROOT}/scripts/ci/staging-image-catalog.json" --registry "${REGISTRY}" --tag "${TAG}")
+PLAN_ARGS+=(--mode "${DEPLOY_MODE:-full}" --changed-services "${CHANGED_SERVICES:-}")
+if [ "${CHANGED_SERVICES_JSON+x}" = x ]; then
+  PLAN_ARGS+=(--changed-services-json "${CHANGED_SERVICES_JSON}")
 fi
+if [ -n "${LOCK_FILE}" ]; then
+  PLAN_ARGS+=(--lock "${LOCK_FILE}")
+fi
+IMAGE_PLAN="$(python3 "${ROOT}/scripts/prod/production_image_refs.py" "${PLAN_ARGS[@]}")"
+while IFS=$'\t' read -r name ref; do
+  if [ "${name}" = "tag" ]; then
+    TAG="${ref}"
+    echo "Verifying production images: ${REGISTRY} tag ${TAG}"
+  elif [ "${name}" = "scope" ]; then
+    CHANGED="${ref}"
+  else
+    check_image "${name}" "${ref}" || true
+  fi
+done <<< "${IMAGE_PLAN}"
 
 if [ "${#MISSING[@]}" -eq 0 ]; then
+  if [ -n "${PROD_STACK_LOCK_OUT:-}" ]; then
+    mkdir -p "$(dirname "${PROD_STACK_LOCK_OUT}")"
+    # Serialize the already verified plan; do not reread mutable input files.
+    {
+      printf 'version: 1\nregistry: %s\ntag: %s\nimages:\n' "${REGISTRY}" "${TAG}"
+      while IFS=$'\t' read -r name ref; do
+        [ "${name}" = tag ] || [ "${name}" = scope ] || printf '  %s: %s\n' "${name}" "${TAG}"
+      done <<< "${IMAGE_PLAN}"
+    } > "${PROD_STACK_LOCK_OUT}"
+    set_output "stack_lock_file" "${PROD_STACK_LOCK_OUT}"
+  fi
   set_output "deploy_tag" "${TAG}"
+  set_output "changed_services" "${CHANGED}"
   echo "All production images present for tag ${TAG}"
   exit 0
 fi
