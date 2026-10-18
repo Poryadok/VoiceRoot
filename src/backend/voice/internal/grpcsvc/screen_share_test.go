@@ -13,8 +13,8 @@ import (
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 
-	spacev1 "voice.app/voice/space/v1"
 	callsv1 "voice.app/voice/calls/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 func TestVoiceGRPC_StartStopScreenShare(t *testing.T) {
@@ -239,7 +239,7 @@ func TestVoiceGRPC_LeaveVoiceRoom_ClearsScreenShare(t *testing.T) {
 	spaceID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	svc := newTestVoiceService(now, events)
 	configureReadySpaceMediaFixture(svc, &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}})
 	var prepared []voicestore.SpaceMediaAdmission
 	admissions := &screenShareLeaveAdmission{readySpaceMediaAdmission: readySpaceMediaAdmission{preparedAdmissions: &prepared}}

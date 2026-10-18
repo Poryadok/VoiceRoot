@@ -14,6 +14,33 @@ import 'dart:core' as $core;
 
 import 'package:protobuf/protobuf.dart' as $pb;
 
+/// Communication timeout is an additional deny, never membership or Role authority.
+class MemberCommunicationState extends $pb.ProtobufEnum {
+  static const MemberCommunicationState MEMBER_COMMUNICATION_STATE_UNSPECIFIED =
+      MemberCommunicationState._(
+          0, _omitEnumNames ? '' : 'MEMBER_COMMUNICATION_STATE_UNSPECIFIED');
+  static const MemberCommunicationState MEMBER_COMMUNICATION_STATE_CLEAR =
+      MemberCommunicationState._(
+          1, _omitEnumNames ? '' : 'MEMBER_COMMUNICATION_STATE_CLEAR');
+  static const MemberCommunicationState MEMBER_COMMUNICATION_STATE_TIMED_OUT =
+      MemberCommunicationState._(
+          2, _omitEnumNames ? '' : 'MEMBER_COMMUNICATION_STATE_TIMED_OUT');
+
+  static const $core.List<MemberCommunicationState> values =
+      <MemberCommunicationState>[
+    MEMBER_COMMUNICATION_STATE_UNSPECIFIED,
+    MEMBER_COMMUNICATION_STATE_CLEAR,
+    MEMBER_COMMUNICATION_STATE_TIMED_OUT,
+  ];
+
+  static final $core.List<MemberCommunicationState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static MemberCommunicationState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MemberCommunicationState._(super.value, super.name);
+}
+
 class SpaceDeletionPhase extends $pb.ProtobufEnum {
   static const SpaceDeletionPhase SPACE_DELETION_PHASE_UNSPECIFIED =
       SpaceDeletionPhase._(

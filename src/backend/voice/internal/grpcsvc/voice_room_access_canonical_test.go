@@ -80,7 +80,7 @@ func TestJoinVoiceRoom_RequiresMatchingCanonicalSpaceAssertion(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			events := &recordingEvents{}
 			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
-			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true, AccessEpoch: 11}}
+			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true}}
 			roles, legacy := &canonicalRolePermissions{}, &poisonLegacySpaceMembers{}
 			configureReadySpaceMediaFixture(svc, resolver)
 			svc.Roles, svc.SpaceMembers = roles, legacy
@@ -117,7 +117,7 @@ func TestJoinVoiceRoom_RequiresMatchingCanonicalSpaceAssertion(t *testing.T) {
 func TestResolveCanonicalVoiceRoomAccess_RequiresExpectedSpace(t *testing.T) {
 	canonicalSpaceID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	svc := newTestVoiceService(time.Now(), &recordingEvents{})
-	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true}}
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true, CommunicationStateResolved: true}}
 	svc.VoiceRoomAccessResolver = resolver
 
 	access, err := svc.resolveCanonicalVoiceRoomAccess(t.Context(), "", voiceRoomID, profileID)
@@ -133,7 +133,7 @@ func TestJoinVoiceRoom_CanonicalResolverFailuresHaveNoSideEffects(t *testing.T) 
 		name     string
 		resolver AuthoritativeVoiceRoomAccessResolver
 		want     codes.Code
-	}{{"missing resolver", nil, codes.FailedPrecondition}, {"nonmember", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Active: true}}, codes.PermissionDenied}, {"inactive", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Member: true}}, codes.PermissionDenied}, {"malformed", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{Member: true, Active: true}}, codes.PermissionDenied}, {"unavailable", &canonicalAccessResolver{err: status.Error(codes.Unavailable, "space")}, codes.Unavailable}} {
+	}{{"missing resolver", nil, codes.FailedPrecondition}, {"nonmember", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Active: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"inactive", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Member: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"malformed", &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{Member: true, Active: true, CommunicationStateResolved: true}}, codes.PermissionDenied}, {"unavailable", &canonicalAccessResolver{err: status.Error(codes.Unavailable, "space")}, codes.Unavailable}} {
 		t.Run(tc.name, func(t *testing.T) {
 			room, profile := uuid.NewString(), uuid.NewString()
 			events := &recordingEvents{}
@@ -179,7 +179,7 @@ func TestJoinVoiceRoom_RejectsStoredCallSpaceMismatchBeforeParticipantOrEvent(t 
 	canonicalSpaceID, staleSpaceID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	events := &recordingEvents{}
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
-	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true, AccessEpoch: 11}}
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true}}
 	roles, legacy := &canonicalRolePermissions{}, &poisonLegacySpaceMembers{}
 	configureReadySpaceMediaFixture(svc, resolver)
 	svc.Roles, svc.SpaceMembers = roles, legacy
@@ -210,7 +210,7 @@ func TestJoinVoiceRoom_RejectsStoredCallSpaceMismatchBeforeParticipantOrEvent(t 
 }
 
 func TestJoinVoiceRoom_PreservesInputValidationBeforeResolver(t *testing.T) {
-	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Member: true, Active: true}}
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: uuid.NewString(), Member: true, Active: true, CommunicationStateResolved: true}}
 	svc := newTestVoiceService(time.Now(), &recordingEvents{})
 	svc.VoiceRoomAccessResolver = resolver
 	for _, req := range []*callsv1.JoinVoiceRoomRequest{{Space: &spacev1.SpaceRef{Id: uuid.NewString()}}, {VoiceRoomId: "bad", Space: &spacev1.SpaceRef{Id: uuid.NewString()}}, {VoiceRoomId: uuid.NewString()}, {VoiceRoomId: uuid.NewString(), Space: &spacev1.SpaceRef{Id: "bad"}}} {
@@ -233,7 +233,7 @@ func TestJoinVoiceRoom_SpaceLifecycleAdmissionFailsClosed(t *testing.T) {
 			spaceID, roomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 			svc.SpaceLifecycle = tc.controller
-			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11}}
+			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true}}
 			configureReadySpaceMediaFixture(svc, resolver)
 			svc.Roles = &canonicalRolePermissions{}
 			_, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: roomID, Space: &spacev1.SpaceRef{Id: spaceID}})
@@ -251,7 +251,7 @@ func TestGetJoinToken_SpaceMediaDoesNotUseLegacyIssuerOrMintBeforeReadiness(t *t
 		access       CanonicalVoiceRoomAccess
 		resolverErr  error
 		want         codes.Code
-	}{{"media readiness absent", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true, AccessEpoch: 1}, nil, codes.Unavailable}, {"stored mismatch", stored, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true, AccessEpoch: 1}, nil, codes.PermissionDenied}, {"nonmember", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Active: true, AccessEpoch: 1}, nil, codes.PermissionDenied}, {"inactive", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, AccessEpoch: 1}, nil, codes.PermissionDenied}, {"unavailable", canonical, CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "space"), codes.Unavailable}} {
+	}{{"media readiness absent", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true}, nil, codes.Unavailable}, {"stored mismatch", stored, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true}, nil, codes.PermissionDenied}, {"nonmember", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Active: true, AccessEpoch: 1, CommunicationStateResolved: true}, nil, codes.PermissionDenied}, {"inactive", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, AccessEpoch: 1, CommunicationStateResolved: true}, nil, codes.PermissionDenied}, {"unavailable", canonical, CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "space"), codes.Unavailable}} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 			resolver := &canonicalAccessResolver{result: tc.access, err: tc.resolverErr}
@@ -283,7 +283,7 @@ func TestGetJoinToken_ServicePrincipalCannotIssueSpaceMediaOrMutateState(t *test
 	spaceID, roomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	events := &recordingEvents{}
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
-	resolver, roles, tokens := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 2}}, &canonicalRolePermissions{}, &canonicalTokenIssuer{}
+	resolver, roles, tokens := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 2, CommunicationStateResolved: true}}, &canonicalRolePermissions{}, &canonicalTokenIssuer{}
 	svc.VoiceRoomAccessResolver, svc.Roles, svc.Tokens = resolver, roles, tokens
 	call, err := svc.Calls.CreateCall(t.Context(), voicestore.Call{
 		RoomID: uuid.NewString(), LivekitRoomName: "space-room-" + roomID,

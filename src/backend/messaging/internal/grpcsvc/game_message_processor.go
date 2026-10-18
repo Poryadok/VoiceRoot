@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log/slog"
 	"os"
 	"strings"
@@ -77,12 +79,13 @@ type GameAttachmentManifestVerifier interface {
 // Every dependency except storage is required only for a new operation, so an
 // exact retained receipt remains available during outages and after expiry.
 type VerifiedGameMessageProcessor struct {
-	Store    *store.MessagesStore
-	AuthKeys GameAuthKeySource
-	Permits  GameMessageExecutionPermitIssuer
-	Bindings GameBindingAuthority
-	Files    GameAttachmentManifestVerifier
-	Clock    func() time.Time
+	CommunicationAdmission func(context.Context, uuid.UUID, uuid.UUID) (context.Context, context.CancelFunc, error)
+	Store                  *store.MessagesStore
+	AuthKeys               GameAuthKeySource
+	Permits                GameMessageExecutionPermitIssuer
+	Bindings               GameBindingAuthority
+	Files                  GameAttachmentManifestVerifier
+	Clock                  func() time.Time
 }
 
 func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, compactJWS, authorityJWS string) (*store.MessageRow, error) {
@@ -171,20 +174,42 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 		PermitID: permit.ID, GISPermitID: permit.GISPermitID, OperationID: permit.OperationID,
 		RequestSHA256: permit.RequestSHA256,
 	}
+	cleanupParent := ctx
 	abortPermit := func() {
+		cleanup, stop := context.WithTimeout(context.WithoutCancel(cleanupParent), 2*time.Second)
+		defer stop()
 		completion.Outcome = "aborted"
-		if err := p.Store.RecordAbortedGameMessagePermit(ctx, completion); err != nil {
+		if err := p.Store.RecordAbortedGameMessagePermit(cleanup, completion); err != nil {
 			// The permit is short lived; if the local outbox cannot be committed,
 			// try to abort remotely and let GIS expiry remain the final fence.
-			_ = p.Permits.Complete(ctx, permit.ID, permit.GISPermitID, permit.OperationID, "aborted")
+			_ = p.Permits.Complete(cleanup, permit.ID, permit.GISPermitID, permit.OperationID, "aborted")
 			return
 		}
-		_ = p.dispatchGamePermitCompletion(ctx, completion)
+		_ = p.dispatchGamePermitCompletion(cleanup, completion)
 	}
 	if err := p.Bindings.AuthorizeMessageChat(ctx, profileID, authority, message); err != nil {
 		abortPermit()
 		return nil, errors.New("game message chat authorization denied")
 	}
+	remaining := permit.ExpiresAt.Sub(permitNow) - 250*time.Millisecond
+	if remaining <= 0 {
+		abortPermit()
+		return nil, errors.New("auth execution permit expires before bounded message transaction")
+	}
+	transactionWindow := min(remaining, 250*time.Millisecond)
+	deadline := permitMonotonicNow.Add(transactionWindow)
+	ctx, cancelPermitWindow := context.WithDeadline(ctx, deadline)
+	defer cancelPermitWindow()
+	if ctx.Err() != nil {
+		abortPermit()
+		return nil, status.Error(codes.Unavailable, "game message admission deadline expired")
+	}
+	ctx, cancelCommunication, err := p.beginGameCommunicationAction(ctx, message, profileID)
+	if err != nil {
+		abortPermit()
+		return nil, err
+	}
+	defer cancelCommunication()
 	if len(message.Attachments) > 0 {
 		if p.Files == nil {
 			abortPermit()
@@ -195,14 +220,7 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 			return nil, errors.New("file attachment provenance denied")
 		}
 	}
-	remaining := permit.ExpiresAt.Sub(permitNow) - 250*time.Millisecond
-	if remaining <= 0 {
-		abortPermit()
-		return nil, errors.New("auth execution permit expires before bounded message transaction")
-	}
-	transactionWindow := min(remaining, 250*time.Millisecond)
-	deadline := permitMonotonicNow.Add(transactionWindow)
-	transactionCtx, cancel := context.WithTimeout(ctx, transactionWindow)
+	transactionCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	completion.Outcome = "committed"
 	row, err = p.Store.ApplyGameMessageWithExecutionPermit(transactionCtx, message, profileID, deadline, completion)
@@ -211,6 +229,20 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 	}
 	_ = p.dispatchGamePermitCompletion(ctx, completion)
 	return row, nil
+}
+
+func (p *VerifiedGameMessageProcessor) beginGameCommunicationAction(ctx context.Context, message gameprotocol.Message, profileID uuid.UUID) (context.Context, context.CancelFunc, error) {
+	switch message.Operation {
+	case "delete":
+		return ctx, func() {}, nil // own-delete ACL remains enforced by the permit/store path
+	case "create", "edit":
+		if p.CommunicationAdmission == nil {
+			return nil, nil, status.Error(codes.Unavailable, "authoritative chat communication scope unavailable")
+		}
+		return p.CommunicationAdmission(ctx, message.ChatID, profileID)
+	default:
+		return nil, nil, status.Error(codes.InvalidArgument, "unsupported game message operation")
+	}
 }
 
 func executionPermitFailureStage(err error) string {

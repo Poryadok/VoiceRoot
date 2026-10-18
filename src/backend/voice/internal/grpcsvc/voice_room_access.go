@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -12,10 +13,13 @@ import (
 )
 
 type CanonicalVoiceRoomAccess struct {
-	SpaceID     string
-	Member      bool
-	Active      bool
-	AccessEpoch uint64
+	SpaceID                    string
+	Member                     bool
+	Active                     bool
+	AccessEpoch                uint64
+	CommunicationStateResolved bool
+	TimedOut                   bool
+	DecisionDeadline           time.Time
 }
 
 type AuthoritativeVoiceRoomAccessResolver interface {
@@ -37,7 +41,10 @@ func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, expecte
 	if s == nil || s.VoiceRoomAccessResolver == nil {
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.FailedPrecondition, "canonical voice room resolver not configured")
 	}
-	access, err := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(ctx, expectedSpaceID, voiceRoomID, profileID)
+	deadline := time.Now().Add(2 * time.Second)
+	decisionCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	access, err := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(decisionCtx, expectedSpaceID, voiceRoomID, profileID)
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound, codes.Unavailable:
@@ -54,14 +61,27 @@ func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, expecte
 	if access.SpaceID != expectedSpaceID {
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.PermissionDenied, "canonical voice room space does not match expected Space")
 	}
+	if !access.CommunicationStateResolved || access.AccessEpoch == 0 {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space communication authority incomplete")
+	}
+	if access.TimedOut {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.PermissionDenied, "member is timed out in this Space")
+	}
+	if err := decisionCtx.Err(); err != nil {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
+	access.DecisionDeadline = deadline
 	if s.SpaceLifecycle == nil {
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space lifecycle admission unavailable")
 	}
-	if err := s.SpaceLifecycle.CheckAdmission(ctx, access.SpaceID); err != nil {
+	if err := s.SpaceLifecycle.CheckAdmission(decisionCtx, access.SpaceID); err != nil {
 		if errors.Is(err, spacelifecycle.ErrSpaceFrozen) {
 			return CanonicalVoiceRoomAccess{}, status.Error(codes.FailedPrecondition, "Space voice admission is fenced")
 		}
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space lifecycle admission unavailable")
+	}
+	if decisionCtx.Err() != nil {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space admission decision expired")
 	}
 	return access, nil
 }

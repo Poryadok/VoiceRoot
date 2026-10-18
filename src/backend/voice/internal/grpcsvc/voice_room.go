@@ -188,6 +188,8 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancelAdmission := context.WithDeadline(ctx, access.DecisionDeadline)
+	defer cancelAdmission()
 	if access.SpaceID != spaceID {
 		return nil, status.Error(codes.PermissionDenied, "space assertion does not match canonical voice room owner")
 	}

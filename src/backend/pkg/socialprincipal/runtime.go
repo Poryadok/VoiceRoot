@@ -136,7 +136,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 
 func listenerTLSConfig(cfg Config, cert tls.Certificate) (*tls.Config, error) {
 	serverTLS := &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
-	if cfg.Capability != "messaging" {
+	if !RequiresMutualTLS(cfg.Capability) {
 		return serverTLS, nil
 	}
 	if cfg.ClientCAs == nil {
@@ -149,7 +149,7 @@ func listenerTLSConfig(cfg Config, cert tls.Certificate) (*tls.Config, error) {
 
 func jwksHTTPClientTLSConfig(cfg Config, roots *x509.CertPool) (*tls.Config, error) {
 	clientTLS := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
-	if cfg.Capability != "messaging" {
+	if !RequiresMutualTLS(cfg.Capability) {
 		return clientTLS, nil
 	}
 	if cfg.JWKSClientCertFile == "" || cfg.JWKSClientKeyFile == "" {

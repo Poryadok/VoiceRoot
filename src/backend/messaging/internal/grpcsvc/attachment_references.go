@@ -112,6 +112,8 @@ func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row st
 	saved, err := s.Messages.InsertMessageWithReferencesAndOutbox(ctx, row, policy.SpaceID, request, s.AttachmentReferences.Acquire, events)
 	if err != nil {
 		switch {
+		case errors.Is(err, store.ErrSendReceiptConflict):
+			return nil, status.Error(codes.AlreadyExists, "client message key has a different request")
 		case errors.Is(err, store.ErrAttachmentIntentConflict):
 			return nil, status.Error(codes.AlreadyExists, "attachment send request conflicts")
 		case errors.Is(err, store.ErrAttachmentIntentExpired):

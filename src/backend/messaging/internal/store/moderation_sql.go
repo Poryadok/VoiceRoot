@@ -15,14 +15,12 @@ var (
 	ErrSlowModeActive = errors.New("slow mode active")
 )
 
-// SQLModerationGuard enforces space timeouts and chat slow mode.
-// ChatMeta reads chat_db; LastSenderMessageAt reads messaging_db; timeouts read space_db when configured.
-// Integration tests may point all pools at one merged schema; production uses separate URLs.
+// SQLModerationGuard enforces Chat-owned slow mode. Space communication
+// authority is resolved through the protected Space RPC, never through SQL.
 type SQLModerationGuard struct {
-	Pool      *pgxpool.Pool // legacy single-DB tests
-	ChatPool  *pgxpool.Pool
-	MsgPool   *pgxpool.Pool
-	SpacePool *pgxpool.Pool
+	Pool     *pgxpool.Pool // legacy single-DB tests
+	ChatPool *pgxpool.Pool
+	MsgPool  *pgxpool.Pool
 }
 
 func (g *SQLModerationGuard) chatPool() *pgxpool.Pool {
@@ -38,16 +36,6 @@ func (g *SQLModerationGuard) chatPool() *pgxpool.Pool {
 func (g *SQLModerationGuard) msgPool() *pgxpool.Pool {
 	if g != nil && g.MsgPool != nil {
 		return g.MsgPool
-	}
-	if g != nil {
-		return g.Pool
-	}
-	return nil
-}
-
-func (g *SQLModerationGuard) spacePool() *pgxpool.Pool {
-	if g != nil && g.SpacePool != nil {
-		return g.SpacePool
 	}
 	if g != nil {
 		return g.Pool
@@ -77,25 +65,6 @@ SELECT space_id, slow_mode_seconds FROM chats WHERE id = $1
 	return meta, nil
 }
 
-func (g *SQLModerationGuard) IsTimedOut(ctx context.Context, spaceID, profileID uuid.UUID) (bool, error) {
-	pool := g.spacePool()
-	if g == nil || pool == nil {
-		return false, nil
-	}
-	var until time.Time
-	err := pool.QueryRow(ctx, `
-SELECT timed_out_until FROM space_member_timeouts
-WHERE space_id = $1 AND profile_id = $2
-`, spaceID, profileID).Scan(&until)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return time.Now().UTC().Before(until), nil
-}
-
 func (g *SQLModerationGuard) LastSenderMessageAt(ctx context.Context, chatID, profileID uuid.UUID) (*time.Time, error) {
 	pool := g.msgPool()
 	if g == nil || pool == nil {
@@ -121,15 +90,6 @@ func (g *SQLModerationGuard) EnsureCanSend(ctx context.Context, chatID, profileI
 	meta, err := g.ChatMeta(ctx, chatID)
 	if err != nil {
 		return err
-	}
-	if meta.SpaceID != nil {
-		timedOut, err := g.IsTimedOut(ctx, *meta.SpaceID, profileID)
-		if err != nil {
-			return err
-		}
-		if timedOut {
-			return ErrMemberTimedOut
-		}
 	}
 	if meta.SlowModeSeconds > 0 {
 		last, err := g.LastSenderMessageAt(ctx, chatID, profileID)

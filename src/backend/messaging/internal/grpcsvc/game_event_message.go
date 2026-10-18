@@ -14,6 +14,7 @@ import (
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -92,6 +93,23 @@ func (s *MessagingGRPC) SendGameEventMessage(ctx context.Context, req *messaging
 	if err := s.checkSpaceSendPermission(ctx, chatID, senderID); err != nil {
 		return nil, err
 	}
+	clientMessageID, _ := uuid.Parse(intent.GetClientMessageId())
+	saved, receiptErr := s.Messages.GetExactSendReceipt(ctx, chatID, senderID, clientMessageID, messagingv1.MessagingService_SendGameEventMessage_FullMethodName, hash)
+	if receiptErr == nil {
+		id := saved.ID.String()
+		return &messagingv1.SendGameEventMessageResponse{Status: gameintegrationv1.GameEventPublicationStatus_GAME_EVENT_PUBLICATION_STATUS_PUBLISHED, MessageId: &id}, nil
+	}
+	if !errors.Is(receiptErr, pgx.ErrNoRows) {
+		if errors.Is(receiptErr, store.ErrSendReceiptConflict) {
+			return nil, status.Error(codes.AlreadyExists, "game event key has a different request")
+		}
+		return nil, status.Error(codes.Unavailable, "game event receipt authority unavailable")
+	}
+	ctx, cancelCommunication, err := s.beginCommunicationAction(ctx, chatID, senderID)
+	if err != nil {
+		return nil, err
+	}
+	defer cancelCommunication()
 	if s.Moderation != nil {
 		if err := s.Moderation.EnsureCanSend(ctx, chatID, senderID); err != nil {
 			if errors.Is(err, store.ErrMemberTimedOut) {
@@ -109,7 +127,6 @@ func (s *MessagingGRPC) SendGameEventMessage(ctx context.Context, req *messaging
 		}
 	}
 
-	clientMessageID, _ := uuid.Parse(intent.GetClientMessageId())
 	messageID, err := messageid.NewMessageID()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "message id generation failed")
@@ -120,6 +137,7 @@ func (s *MessagingGRPC) SendGameEventMessage(ctx context.Context, req *messaging
 		expiresAt = &value
 	}
 	rowData := store.MessageRow{
+		AdmissionRequestHash: hash, AdmissionRequestRPC: messagingv1.MessagingService_SendGameEventMessage_FullMethodName,
 		ID: messageID, ChatID: chatID, ChatType: chatTypeName(chatType), SenderProfileID: senderID,
 		Content: intent.GetFallbackText(), Type: "regular", AttachmentsJSON: "[]", MentionsJSON: "[]",
 		ClientMessageID: &clientMessageID, ContentType: "text",
@@ -145,7 +163,7 @@ func (s *MessagingGRPC) SendGameEventMessage(ctx context.Context, req *messaging
 	}
 	row, expired, _, err := s.Messages.InsertGameEventMessageWithOutbox(ctx, rowData, expiresAt, spaceID, event)
 	if err != nil {
-		if errors.Is(err, store.ErrGameEventMessageConflict) {
+		if errors.Is(err, store.ErrGameEventMessageConflict) || errors.Is(err, store.ErrSendReceiptConflict) {
 			return nil, status.Error(codes.AlreadyExists, "game event idempotency conflict")
 		}
 		return nil, status.Error(codes.Unavailable, "game event message persistence unavailable")

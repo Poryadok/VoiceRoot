@@ -67,6 +67,17 @@ func (s *VoiceGRPC) ensureConfirmedSpaceMediaCall(ctx context.Context, call voic
 }
 
 func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Call, profileID string, access CanonicalVoiceRoomAccess, maxParticipants int, created bool) (voicestore.Call, error) {
+	if !access.CommunicationStateResolved || access.DecisionDeadline.IsZero() {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space communication authority incomplete")
+	}
+	if access.TimedOut {
+		return voicestore.Call{}, status.Error(codes.PermissionDenied, "member is timed out in this Space")
+	}
+	ctx, cancel := context.WithDeadline(ctx, access.DecisionDeadline)
+	defer cancel()
+	if ctx.Err() != nil {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
 	if s == nil || s.Calls == nil || s.SpaceMediaAdmissions == nil || s.SpaceVoiceRoomGrants == nil || s.SessionEpochChecker == nil || !s.spaceMediaOperational() {
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission is not ready")
 	}
@@ -239,7 +250,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	}
 	latestAccess, accessErr := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(ctx, current.SpaceID, current.VoiceRoomID, profileID)
 	latestGrants, grantErr := s.SpaceVoiceRoomGrants.ResolveVoiceRoomGrants(ctx, current.SpaceID, current.VoiceRoomID, profileID)
-	if accessErr != nil || grantErr != nil || latestAccess.SpaceID != current.SpaceID || !latestAccess.Active || !latestAccess.Member ||
+	if accessErr != nil || grantErr != nil || latestAccess.SpaceID != current.SpaceID || !latestAccess.Active || !latestAccess.Member || !latestAccess.CommunicationStateResolved || latestAccess.TimedOut ||
 		latestAccess.AccessEpoch != access.AccessEpoch || latestGrants.PolicyEpoch != grants.PolicyEpoch ||
 		!latestGrants.CanJoin || !latestGrants.CanSubscribe || latestGrants.CanPublishAudio != grants.CanPublishAudio {
 		if err := s.SpaceMediaAdmissions.MarkAborting(ctx, operationID, generation); err != nil {
@@ -322,6 +333,17 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 }
 
 func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.Call, profileID string, access CanonicalVoiceRoomAccess) (*callsv1.GetJoinTokenResponse, error) {
+	if !access.CommunicationStateResolved || access.DecisionDeadline.IsZero() {
+		return nil, status.Error(codes.Unavailable, "Space communication authority incomplete")
+	}
+	if access.TimedOut {
+		return nil, status.Error(codes.PermissionDenied, "member is timed out in this Space")
+	}
+	ctx, cancel := context.WithDeadline(ctx, access.DecisionDeadline)
+	defer cancel()
+	if ctx.Err() != nil {
+		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
 	if !s.spaceMediaOperational() {
 		return nil, status.Error(codes.Unavailable, "Space media reconciliation is not ready")
 	}
@@ -439,9 +461,15 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 		SessionEpoch: issued.SessionEpoch, AccessEpoch: issued.AccessEpoch, PolicyEpoch: issued.PolicyEpoch,
 		CanJoin: issued.CanJoin, CanPublishAudio: issued.CanPublishAudio, CanSubscribe: issued.CanSubscribe,
 	}
+	if ctx.Err() != nil {
+		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
 	jwt, expiresAt, err := s.SpaceTokens.JoinToken(grant, s.now())
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, "Space media token could not be issued")
+	}
+	if ctx.Err() != nil {
+		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
 	}
 	return &callsv1.GetJoinTokenResponse{Jwt: jwt, LivekitUrl: s.SpaceTokens.LivekitURL(), ExpiresAt: timestamppb.New(expiresAt)}, nil
 }

@@ -164,7 +164,7 @@ func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Contex
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.NotFound, "voice room is not bound to expected Space")
 	}
 	return CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID], AccessEpoch: r.accessEpoch,
+		SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID], AccessEpoch: r.accessEpoch, CommunicationStateResolved: true,
 	}, nil
 }
 
@@ -191,7 +191,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	svc.SpaceMediaReady = true
 	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
 	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}}
 	svc.Roles = listenOnlyRolePermissions{RolePermissionChecker: &canonicalRolePermissions{}}
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
@@ -333,7 +333,7 @@ func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testin
 	svc.SpaceMediaReady = true
 	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{preparedAdmissions: &preparedAdmissions}
 	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}}
 	svc.Roles = &canonicalRolePermissions{}
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{

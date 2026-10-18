@@ -40,7 +40,7 @@ func TestLeaveVoiceRoom_UnjournaledSpaceParticipantFailsClosed(t *testing.T) {
 	profileID := uuid.New().String()
 	now := time.Unix(1700000000, 0).UTC()
 	configureReadySpaceMediaFixture(svc, &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}})
 	svc.Roles = &canonicalRolePermissions{}
 
@@ -75,7 +75,7 @@ func TestGetVoiceStates_SpaceMembersNotConfigured(t *testing.T) {
 	spaceID := uuid.New().String()
 	profileID := uuid.New().String()
 	configureReadySpaceMediaFixture(svc, &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}})
 	svc.Roles = &canonicalRolePermissions{}
 	_, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{

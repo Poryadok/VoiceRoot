@@ -1,5 +1,51 @@
 # Space Service
 
+## Communication timeout authority (BE-044-TIMEOUT-v1)
+
+Accepted implementation target; not a shipped/runtime-acceptance claim. The
+[product action matrix](../features/spaces.md#communication-timeout-be-044-timeout-v1-accepted-target)
+is an additional profile/Space deny. Space owns timeout and evaluation time.
+It evaluates live membership/lifecycle, timeout state and positive `access_epoch`
+under the existing serialized authority snapshot, using its DB clock. Missing or
+expired timeout is CLEAR only for an eligible current member; equality is expired.
+
+`ResolveMemberCommunicationState` is a read-only protected RPC for
+`service:messaging` only: protocol1, exact Space/profile, explicit
+UNSPECIFIED/CLEAR/TIMED_OUT enum, echoed IDs, positive access epoch and evaluation
+timestamp. TIMED_OUT requires an until strictly after evaluation; CLEAR omits it.
+No moderator/reason/audit details or REST route. Voice alone uses the existing
+`ResolveVoiceRoomAccess`, extended with the same versioned evidence from the same
+snapshot; membership/active/discoverable keep their existing meanings.
+
+Both covered decisions require signed exact-RPC/hash/audience/request-bound
+service authority, mTLS, HTTPS trusted JWKS and shared replay protection. Ordinary
+listeners and legacy bearer/header fallback cannot provide this capability.
+All-absent consumer capability leaves covered Space writes/grants unavailable;
+partial configuration fails startup. Unknown version/enum, default/missing data,
+wrong IDs, epoch0 or impossible timestamps are unavailable, never CLEAR.
+Nonmember/undiscoverable resources preserve their generic discovery response.
+
+Timeout set/replace/remove atomically updates the existing access epoch and
+immutable `space.voice_room_access_invalidated` outbox with timeout/audit.
+Migration24 already supplies the timeout mutation trigger; do not double-increment.
+No positive/negative decision cache or downstream SQL into `space_db` is allowed.
+Each new effect obtains a fresh decision within one two-second monotonic
+check-to-commit deadline; a concurrent already-admitted effect may finish within
+that budget. Consumer-local time cannot convert a previous deny into allow.
+
+The provider has two separately configured narrow listeners, both addressed to
+audience `space`: `SPACE_VOICE_COMMUNICATION_` (default `:9094`, Voice room
+resolver only) and `SPACE_MESSAGING_COMMUNICATION_` (default `:9095`, member
+communication resolver only). Each prefix requires `REPLAY_REDIS_ADDR`,
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_CLIENT_CERT_FILE` and
+`JWKS_CLIENT_KEY_FILE`; `GRPC_LISTEN` and `REPLAY_REDIS_PASSWORD` are optional.
+`S2S_JWKS_URLS_JSON` supplies the exact trusted caller's HTTPS endpoint, with
+`S2S_JWKS_CA_FILE` extending server trust when necessary. Replicas use shared
+replay storage; each listener authenticates its one caller and exact method.
+All-absent provider settings leave that listener disabled. Partial settings
+fail startup. The ordinary listener rejects both methods, and the legacy
+`SPACE_VOICE_S2S_TOKEN` cannot authenticate either decision.
+
 ## Обзор
 
 Управление пространствами (аналог Discord-серверов): **дерево sidebar** — единая таблица **`space_tree_nodes`** (текстовые чаты `group`/`channel` и **голосовые комнаты** в одном порядке сортировки), категории, инвайты, участники, шаблоны.

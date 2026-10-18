@@ -59,6 +59,9 @@ func (s *MessagesStore) InsertMessageWithReferences(ctx context.Context, row Mes
 }
 
 func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context, row MessageRow, space *uuid.UUID, request *filev1.AcquireFileReferencesRequest, acquire func(context.Context, *filev1.AcquireFileReferencesRequest) error, events []messageevents.OutboxEvent) (*MessageRow, error) {
+	if err := validateForwardCommentary(row); err != nil {
+		return nil, err
+	}
 	if s == nil || s.Pool == nil || request == nil || len(request.References) == 0 || acquire == nil {
 		return nil, errors.New("attachment reference dependencies unavailable")
 	}
@@ -95,6 +98,9 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		if row.ClientMessageID != nil {
 			existing, loadErr := scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3`, row.ChatID, row.SenderProfileID, *row.ClientMessageID))
 			if loadErr == nil {
+				if err := checkExactSendReceipt(ctx, tx, row); err != nil {
+					return nil, err
+				}
 				if err = tx.Commit(ctx); err != nil {
 					return nil, err
 				}
@@ -186,6 +192,9 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 	if err = s.reconcileMusicInsert(ctx, commit, &row); err != nil {
 		return nil, err
 	}
+	if err := insertForwardCommentaryDB(ctx, commit, row); err != nil {
+		return nil, err
+	}
 	saved, err := insertMessageDB(ctx, commit, row)
 	if err != nil {
 		return nil, err
@@ -194,7 +203,7 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		return nil, ErrAttachmentIntentConflict
 	}
 	for _, event := range events {
-		if event.MessageID != saved.ID || event.ChatID != saved.ChatID {
+		if !compoundEventMatches(row, event) {
 			return nil, errors.New("attachment message outbox does not match inserted message")
 		}
 		if err := enqueueMessageEvent(ctx, commit, event); err != nil {

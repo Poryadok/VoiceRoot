@@ -346,7 +346,10 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	if err != nil && status.Code(err) != codes.NotFound {
 		return err
 	}
-	if err != nil || access.SpaceID != admission.SpaceID.String() || !access.Active || !access.Member || access.AccessEpoch != admission.AccessEpoch {
+	if err == nil && !access.CommunicationStateResolved {
+		return status.Error(codes.Unavailable, "Space communication authority incomplete")
+	}
+	if err != nil || access.SpaceID != admission.SpaceID.String() || !access.Active || !access.Member || access.TimedOut || access.AccessEpoch != admission.AccessEpoch {
 		return c.abortAdmission(ctx, admission)
 	}
 	grants, err := c.Grants.ResolveVoiceRoomGrants(ctx, admission.SpaceID.String(), admission.VoiceRoomID, admission.ProfileID.String())
@@ -465,14 +468,14 @@ func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call,
 		return accessErr
 	}
 	if accessErr == nil {
-		if access.SpaceID != call.SpaceID || access.AccessEpoch == 0 {
+		if access.SpaceID != call.SpaceID || access.AccessEpoch == 0 || !access.CommunicationStateResolved {
 			return fmt.Errorf("incomplete canonical Space voice authority")
 		}
 		if _, err := c.Store.RaiseSpaceMediaEpochFloor(ctx, call.SpaceID, store.SpaceAccessEpoch, access.AccessEpoch); err != nil {
 			return err
 		}
 	}
-	if accessErr != nil || !access.Active || !access.Member {
+	if accessErr != nil || !access.Active || !access.Member || access.TimedOut {
 		return c.eject(ctx, call, participant)
 	}
 

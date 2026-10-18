@@ -202,7 +202,6 @@ func (s *SpaceStore) SetMemberTimeout(
 	if durationSeconds < 60 || durationSeconds > 604800 {
 		return ErrInvalidTimeoutDuration
 	}
-	until := time.Now().UTC().Add(time.Duration(durationSeconds) * time.Second)
 	details, err := json.Marshal(struct {
 		DurationSeconds int32   `json:"duration_seconds"`
 		Reason          *string `json:"reason,omitempty"`
@@ -212,13 +211,13 @@ func (s *SpaceStore) SetMemberTimeout(
 	}
 	_, err = s.db().Exec(ctx, `
 INSERT INTO space_member_timeouts (space_id, profile_id, timed_out_until, timed_out_by_profile_id, reason)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, clock_timestamp() + $3::integer * interval '1 second', $4, $5)
 ON CONFLICT (space_id, profile_id) DO UPDATE SET
   timed_out_until = EXCLUDED.timed_out_until,
   timed_out_by_profile_id = EXCLUDED.timed_out_by_profile_id,
   reason = EXCLUDED.reason,
   created_at = now()
-`, spaceID, profileID, until, actor, reason)
+`, spaceID, profileID, durationSeconds, actor, reason)
 	if err != nil {
 		return err
 	}
@@ -265,16 +264,16 @@ func (s *SpaceStore) IsProfileTimedOut(ctx context.Context, spaceID, profileID u
 			return scoped.IsProfileTimedOut(ctx, spaceID, profileID)
 		})
 	}
-	var until time.Time
+	var timedOut bool
 	err := s.db().QueryRow(ctx, `
-SELECT timed_out_until FROM space_member_timeouts
+SELECT clock_timestamp() < timed_out_until FROM space_member_timeouts
 WHERE space_id = $1 AND profile_id = $2
-`, spaceID, profileID).Scan(&until)
+`, spaceID, profileID).Scan(&timedOut)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	return time.Now().UTC().Before(until), nil
+	return timedOut, nil
 }

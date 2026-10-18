@@ -15,9 +15,9 @@
 | User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | NATS JetStream (publish); transactional `chat.deleted` outbox |
-| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
+| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `message_send_receipts` binds private exact immediate-send retries to their message and RPC; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
-| Space Service        | `space_db`        | Social principal replay   | —                                |
+| Space Service        | `space_db`        | Social principal replay; shared signed Voice/Messaging communication-decision replay | — |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
 | Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
 | File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации       |
