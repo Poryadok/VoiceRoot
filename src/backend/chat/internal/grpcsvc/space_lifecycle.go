@@ -37,6 +37,7 @@ type SpaceLifecycleStoreAPI interface {
 	ApplySpaceLifecycleFence(context.Context, *chatv1.ApplySpaceLifecycleFenceRequest) (*chatv1.ApplySpaceLifecycleFenceResponse, error)
 	GetSpacePurgeManifestPage(context.Context, *chatv1.GetSpacePurgeManifestPageRequest) (*chatv1.GetSpacePurgeManifestPageResponse, error)
 	ValidateSpacePurgeRequest(context.Context, *chatv1.PurgeSpaceRequest) error
+	LookupSpacePurgeReceipt(context.Context, *chatv1.PurgeSpaceRequest) (*chatv1.PurgeSpaceResponse, error)
 	PurgeSpace(context.Context, *chatv1.PurgeSpaceRequest, store.SpacePurgeOwnerEvidence) (*chatv1.PurgeSpaceResponse, error)
 }
 
@@ -138,8 +139,8 @@ func (s *SpaceLifecycleGRPC) PurgeSpace(ctx context.Context, req *chatv1.PurgeSp
 	if err := requireSpaceLifecyclePrincipal(ctx, chatv1.ChatService_PurgeSpace_FullMethodName); err != nil {
 		return nil, err
 	}
-	if s == nil || s.Store == nil || s.Issuer == nil || s.Messaging == nil || s.File == nil {
-		return nil, status.Error(codes.Unavailable, "Chat purge proof clients are not configured")
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.Unavailable, "Chat lifecycle store unavailable")
 	}
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "valid Chat purge request required")
@@ -148,8 +149,15 @@ func (s *SpaceLifecycleGRPC) PurgeSpace(ctx context.Context, req *chatv1.PurgeSp
 	if purge == nil || purge.GetProtocolVersion() != 1 || purge.GetGeneration() < 2 || purge.GetManifest() == nil || purge.GetPurgeDecidedAt() == nil || purge.GetPurgeDecidedAt().CheckValid() != nil || purge.GetParticipantId() != commonv1.ParticipantId_PARTICIPANT_ID_CHAT {
 		return nil, status.Error(codes.InvalidArgument, "valid Chat purge request required")
 	}
-	if err := s.Store.ValidateSpacePurgeRequest(ctx, req); err != nil {
+	replay, err := s.Store.LookupSpacePurgeReceipt(ctx, req)
+	if err != nil {
 		return nil, mapSpaceLifecycleError(err)
+	}
+	if replay != nil {
+		return replay, nil
+	}
+	if s.Issuer == nil || s.Messaging == nil || s.File == nil {
+		return nil, status.Error(codes.Unavailable, "Chat purge proof clients are not configured")
 	}
 	messagingPurge := proto.Clone(purge).(*commonv1.SpacePurgeRequest)
 	messagingPurge.ParticipantId = commonv1.ParticipantId_PARTICIPANT_ID_MESSAGING
