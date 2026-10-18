@@ -817,6 +817,14 @@ receipts. Space-level Messaging completion follows only after every manifest
 chat returns both owner receipts. Full request/receipt bytes retain 30 days from
 this participant's completion and the compact `PURGED` fence is permanent.
 
+After validating the exact Space service principal and complete request binding,
+`PurgeSpace` reads its committed response before requiring File or managed-chat
+purge dependencies. A response-loss retry returns the original receipt and
+preserves unknown response fields without repeating child effects. Changed
+request hashes fail closed; unavailable or corrupt receipt lookup cannot restart
+destructive work. The read uses the original database completion timestamp and
+the same 30-day window as Chat's committed receipt lookup.
+
 Public read-receipt opt-out is serialized against the same per-chat purge lock.
 If any receipt the operation would revoke points to a message already included
 in a `PENDING` purge manifest, `ClearPublicReadReceiptsWithOutbox` rejects the

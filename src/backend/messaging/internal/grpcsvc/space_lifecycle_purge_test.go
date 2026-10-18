@@ -16,6 +16,7 @@ import (
 
 	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/principal"
 )
 
@@ -24,6 +25,84 @@ type spaceLifecyclePurgeStoreFake struct {
 	chatIDs       []uuid.UUID
 	completed     *messagingv1.PurgeSpaceRequest
 	completionErr error
+	lookupBytes   []byte
+	lookupErr     error
+	lookupCalls   []store.SpacePurgeReceiptKey
+}
+
+func (f *spaceLifecyclePurgeStoreFake) GetSpacePurgeResponse(_ context.Context, key store.SpacePurgeReceiptKey) ([]byte, error) {
+	f.lookupCalls = append(f.lookupCalls, key)
+	if f.lookupErr != nil {
+		return nil, f.lookupErr
+	}
+	if f.lookupBytes == nil {
+		return nil, store.ErrSpacePurgeReceiptNotFound
+	}
+	return append([]byte(nil), f.lookupBytes...), nil
+}
+
+func TestPurgeSpaceReplaysCommittedResponseWithoutExternalDependencies(t *testing.T) {
+	request := validMessagingSpacePurgeRequest()
+	saved := &spaceLifecyclePurgeStoreFake{}
+	wire, err := saved.CompleteSpaceLifecyclePurge(context.Background(), request, uuid.NewString())
+	require.NoError(t, err)
+	want := &messagingv1.PurgeSpaceResponse{}
+	require.NoError(t, proto.Unmarshal(wire, want))
+	want.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 1})
+	want.Receipt.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 2})
+	saved.lookupBytes = mustMarshal(want)
+	saved.completed = nil
+	service := &MessagingGRPC{SpaceLifecyclePurger: saved}
+
+	response, err := service.PurgeSpace(messagingSpacePurgeContext(t, request), request)
+	require.NoError(t, err, "lost-response replay must not depend on File or child purgers")
+	require.Equal(t, saved.lookupBytes, mustMarshal(response), "retain original receipt and unknown response fields")
+	require.Len(t, saved.lookupCalls, 1)
+	key := saved.lookupCalls[0]
+	require.Equal(t, uuid.MustParse(request.Purge.SpaceId), key.SpaceID)
+	require.Equal(t, uuid.MustParse(request.Purge.DeletionOperationId), key.DeletionOperationID)
+	require.Equal(t, request.Purge.Generation, key.PurgeGeneration)
+	require.Equal(t, request.Purge.Generation-1, key.SourceScheduleGeneration)
+	require.Equal(t, want.Receipt.RequestSha256, key.MessagingRequestSHA256)
+	require.Empty(t, saved.pageCalls)
+	require.Nil(t, saved.completed)
+}
+
+func TestPurgeSpaceLookupFailureCannotRestartDestructiveWork(t *testing.T) {
+	request := validMessagingSpacePurgeRequest()
+	fixture := &spaceLifecyclePurgeStoreFake{}
+	wrongBinding, err := fixture.CompleteSpaceLifecyclePurge(context.Background(), request, uuid.NewString())
+	require.NoError(t, err)
+	response := &messagingv1.PurgeSpaceResponse{}
+	require.NoError(t, proto.Unmarshal(wrongBinding, response))
+	response.Receipt.RequestSha256[0] ^= 1
+	for _, tc := range []struct {
+		name string
+		err  error
+		wire []byte
+		code codes.Code
+	}{
+		{name: "changed binding", err: store.ErrSpacePurgeReceiptBinding, code: codes.FailedPrecondition},
+		{name: "storage unavailable", err: errors.New("database unavailable"), code: codes.Unavailable},
+		{name: "corrupt receipt", wire: []byte{0xff}, code: codes.Internal},
+		{name: "missing receipt", wire: []byte{}, code: codes.Internal},
+		{name: "wrong receipt request hash", wire: mustMarshal(response), code: codes.Internal},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := validMessagingSpacePurgeRequest()
+			saved := &spaceLifecyclePurgeStoreFake{lookupBytes: tc.wire, lookupErr: tc.err}
+			producer := testSpaceFileProducer(t)
+			chats := &spaceLifecycleChatPurgerFake{}
+			service := &MessagingGRPC{SpaceLifecyclePurger: saved, ManagedChatPurger: chats, SpaceFileProducer: producer}
+			response, err := service.PurgeSpace(messagingSpacePurgeContext(t, request), request)
+			require.Equal(t, tc.code, status.Code(err))
+			require.Nil(t, response)
+			require.Equal(t, 0, producer.Files.(*producerTestFile).releaseCalls)
+			require.Empty(t, chats.requests)
+			require.Empty(t, saved.pageCalls)
+			require.Nil(t, saved.completed)
+		})
+	}
 }
 
 func (f *spaceLifecyclePurgeStoreFake) SpaceManifestChatPage(_ context.Context, spaceID, operationID uuid.UUID, scheduleGeneration uint64, manifestID string, manifestHash []byte, itemCount, pageIndex uint64) ([]uuid.UUID, error) {
@@ -142,6 +221,7 @@ func TestPurgeSpaceRequiresRequestBoundSpacePrincipal(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	require.Empty(t, store.pageCalls)
 	require.Empty(t, chatPurger.requests)
+	require.Empty(t, store.lookupCalls, "untrusted caller must not reach committed receipt lookup")
 }
 
 func validMessagingSpacePurgeRequest() *messagingv1.PurgeSpaceRequest {
