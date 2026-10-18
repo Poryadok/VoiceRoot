@@ -5327,7 +5327,7 @@ abstract class AppLocalizations {
   /// No description provided for @guestConvertVerificationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter the code sent to {email}. Your guest access stays active until it is verified.'**
+  /// **'Enter the verification code for {email}. Your guest access stays active until it is verified.'**
   String guestConvertVerificationSubtitle(Object email);
 
   /// No description provided for @guestConvertCodeLabel.
@@ -5725,6 +5725,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not leave match squad'**
   String get matchSquadLeaveError;
+
+  /// No description provided for @matchSquadRosterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your squad'**
+  String get matchSquadRosterTitle;
 
   /// No description provided for @matchRatingTitle.
   ///
@@ -6643,6 +6649,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Playing {title}'**
   String contactProfilePlayingGame(String title);
+
+  /// No description provided for @matchSquadOpenChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Open chat'**
+  String get matchSquadOpenChat;
 }
 
 class _AppLocalizationsDelegate

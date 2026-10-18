@@ -3149,6 +3149,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get matchSquadLeaveError => 'Could not leave match squad';
 
   @override
+  String get matchSquadRosterTitle => 'Your squad';
+
+  @override
   String get matchRatingTitle => 'Rate your teammates';
 
   @override
@@ -3659,4 +3662,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String contactProfilePlayingGame(String title) {
     return 'Playing $title';
   }
+
+  @override
+  String get matchSquadOpenChat => 'Open chat';
 }

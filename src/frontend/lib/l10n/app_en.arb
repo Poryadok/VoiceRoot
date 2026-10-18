@@ -1372,6 +1372,7 @@
   "matchFoundRespondError": "Could not respond to match",
   "matchSquadLeave": "Leave squad",
   "matchSquadLeaveError": "Could not leave match squad",
+  "matchSquadRosterTitle": "Your squad",
   "matchRatingTitle": "Rate your teammates",
   "matchRatingSubtitle": "Stars are optional for each player.",
   "matchRatingSkipTeammate": "Skip",
@@ -1566,5 +1567,6 @@
   "e2eKeyBackupManage": "Manage encrypted key backup",
   "profileNotInContactsWarning": "Not in contacts · messages may be unsafe",
   "contactProfilePlayingGame": "Playing {title}",
+  "matchSquadOpenChat": "Open chat",
   "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
 }
