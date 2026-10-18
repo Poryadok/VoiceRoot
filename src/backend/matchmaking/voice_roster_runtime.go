@@ -26,7 +26,7 @@ func startVoiceRosterRuntime(parent context.Context, pool *pgxpool.Pool, natsURL
 	}
 	var ready bool
 	if err := pool.QueryRow(parent, `SELECT to_regclass('matchmaking_voice_roster_inbox') IS NOT NULL AND to_regclass('matchmaking_voice_roster_contract_conflicts') IS NOT NULL AND to_regclass('matchmaking_voice_roster_cancellation_outbox') IS NOT NULL AND to_regclass('matchmaking_party_search_queue_intents') IS NOT NULL`).Scan(&ready); err != nil || !ready {
-		return nil, errors.New("Voice roster inbox schema unavailable")
+		return nil, errors.New("voice roster inbox schema unavailable")
 	}
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: "matchmaking_voice_roster_contract_mismatches", Help: "Persisted Voice roster event identity or payload contract conflicts requiring operator intervention."})
 	if err := metrics.Register(gauge); err != nil {

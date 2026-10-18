@@ -34,7 +34,7 @@ func ValidateConsumer(info *nats.ConsumerInfo) error {
 
 func Start(url string, inbox Inbox, logger *slog.Logger) (*Consumer, error) {
 	if inbox == nil {
-		return nil, errors.New("Voice roster inbox unavailable")
+		return nil, errors.New("voice roster inbox unavailable")
 	}
 	nc, err := nats.Connect(url, nats.Name("voice-matchmaking-roster"), nats.CustomInboxPrefix("_INBOX.voice.matchmaking"), nats.Timeout(10*time.Second), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
 	if err != nil {
