@@ -71,6 +71,8 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 	requested := []map[string]any{cmRequest, jobRequestObject}
 	observed := make([]map[string]any, 0, 2)
 	for _, resource := range requested {
+		encoded, err := json.Marshal(resource)
+		if err != nil { t.Fatal(err) }
 		var got map[string]any
 		path := "/apis/batch/v1/namespaces/voice-staging/jobs/" + name
 		if resource["kind"] == "ConfigMap" {
@@ -78,9 +80,9 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 		}
 		var response []byte
 		if resource["kind"] == "ConfigMap" {
-			response, err = client.CoreV1().RESTClient().Post().Namespace("voice-staging").Resource("configmaps").Body(resource).Do(ctx).Raw()
+			response, err = client.CoreV1().RESTClient().Post().Namespace("voice-staging").Resource("configmaps").Body(string(encoded)).Do(ctx).Raw()
 		} else {
-			response, err = client.BatchV1().RESTClient().Post().Namespace("voice-staging").Resource("jobs").Body(resource).Do(ctx).Raw()
+			response, err = client.BatchV1().RESTClient().Post().Namespace("voice-staging").Resource("jobs").Body(string(encoded)).Do(ctx).Raw()
 		}
 		if err != nil { t.Fatalf("API CREATE %s: %v", path, err) }
 		if err := json.Unmarshal(response, &got); err != nil { t.Fatalf("decode raw API response %s: %v", path, err) }
