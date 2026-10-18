@@ -1382,6 +1382,15 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'chatDeleted'
     },
+    {
+      '1': 'space_member_banned',
+      '3': 25,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceMemberBanned',
+      '9': 0,
+      '10': 'spaceMemberBanned'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1413,7 +1422,9 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'cmVkGBYgASgLMh4udm9pY2UuZXZlbnRzLnYxLlNwYWNlUmVzdG9yZWRIAFINc3BhY2VSZXN0b3'
     'JlZBJBCgxjaGF0X3VwZGF0ZWQYFyABKAsyHC52b2ljZS5ldmVudHMudjEuQ2hhdFVwZGF0ZWRI'
     'AFILY2hhdFVwZGF0ZWQSQQoMY2hhdF9kZWxldGVkGBggASgLMhwudm9pY2UuZXZlbnRzLnYxLk'
-    'NoYXREZWxldGVkSABSC2NoYXREZWxldGVkQgkKB3BheWxvYWQ=');
+    'NoYXREZWxldGVkSABSC2NoYXREZWxldGVkElQKE3NwYWNlX21lbWJlcl9iYW5uZWQYGSABKAsy'
+    'Ii52b2ljZS5ldmVudHMudjEuU3BhY2VNZW1iZXJCYW5uZWRIAFIRc3BhY2VNZW1iZXJCYW5uZW'
+    'RCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -1558,12 +1569,14 @@ const SpaceUpdated$json = {
   '1': 'SpaceUpdated',
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'changed_fields', '3': 2, '4': 3, '5': 9, '10': 'changedFields'},
   ],
 };
 
 /// Descriptor for `SpaceUpdated`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List spaceUpdatedDescriptor = $convert
-    .base64Decode('CgxTcGFjZVVwZGF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+final $typed_data.Uint8List spaceUpdatedDescriptor = $convert.base64Decode(
+    'CgxTcGFjZVVwZGF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSJQoOY2hhbmdlZF9maW'
+    'VsZHMYAiADKAlSDWNoYW5nZWRGaWVsZHM=');
 
 @$core.Deprecated('Use spaceDeletedDescriptor instead')
 const SpaceDeleted$json = {
@@ -3845,3 +3858,25 @@ final $typed_data.Uint8List chatDeletedDescriptor = $convert.base64Decode(
     'dGlvbklkEh4KCmdlbmVyYXRpb24YBCABKARSCmdlbmVyYXRpb24SHwoLbWFuaWZlc3RfaWQYBS'
     'ABKAlSCm1hbmlmZXN0SWQSJwoPbWFuaWZlc3Rfc2hhMjU2GAYgASgMUg5tYW5pZmVzdFNoYTI1'
     'Ng==');
+
+@$core.Deprecated('Use spaceMemberBannedDescriptor instead')
+const SpaceMemberBanned$json = {
+  '1': 'SpaceMemberBanned',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {
+      '1': 'banned_by_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'bannedByProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `SpaceMemberBanned`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceMemberBannedDescriptor = $convert.base64Decode(
+    'ChFTcGFjZU1lbWJlckJhbm5lZBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZBIdCgphY2NvdW'
+    '50X2lkGAIgASgJUglhY2NvdW50SWQSLwoUYmFubmVkX2J5X3Byb2ZpbGVfaWQYAyABKAlSEWJh'
+    'bm5lZEJ5UHJvZmlsZUlk');

@@ -3773,6 +3773,7 @@ enum ChatStreamEvent_Payload {
   spaceRestored,
   chatUpdated,
   chatDeleted,
+  spaceMemberBanned,
   notSet
 }
 
@@ -3798,6 +3799,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     SpaceRestored? spaceRestored,
     ChatUpdated? chatUpdated,
     ChatDeleted? chatDeleted,
+    SpaceMemberBanned? spaceMemberBanned,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -3820,6 +3822,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     if (spaceRestored != null) result.spaceRestored = spaceRestored;
     if (chatUpdated != null) result.chatUpdated = chatUpdated;
     if (chatDeleted != null) result.chatDeleted = chatDeleted;
+    if (spaceMemberBanned != null) result.spaceMemberBanned = spaceMemberBanned;
     return result;
   }
 
@@ -3849,6 +3852,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     22: ChatStreamEvent_Payload.spaceRestored,
     23: ChatStreamEvent_Payload.chatUpdated,
     24: ChatStreamEvent_Payload.chatDeleted,
+    25: ChatStreamEvent_Payload.spaceMemberBanned,
     0: ChatStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -3856,7 +3860,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -3892,6 +3896,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
         subBuilder: ChatUpdated.create)
     ..aOM<ChatDeleted>(24, _omitFieldNames ? '' : 'chatDeleted',
         subBuilder: ChatDeleted.create)
+    ..aOM<SpaceMemberBanned>(25, _omitFieldNames ? '' : 'spaceMemberBanned',
+        subBuilder: SpaceMemberBanned.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3928,6 +3934,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(22)
   @$pb.TagNumber(23)
   @$pb.TagNumber(24)
+  @$pb.TagNumber(25)
   ChatStreamEvent_Payload whichPayload() =>
       _ChatStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -3945,6 +3952,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(22)
   @$pb.TagNumber(23)
   @$pb.TagNumber(24)
+  @$pb.TagNumber(25)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -4133,6 +4141,17 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   void clearChatDeleted() => $_clearField(24);
   @$pb.TagNumber(24)
   ChatDeleted ensureChatDeleted() => $_ensure(16);
+
+  @$pb.TagNumber(25)
+  SpaceMemberBanned get spaceMemberBanned => $_getN(17);
+  @$pb.TagNumber(25)
+  set spaceMemberBanned(SpaceMemberBanned value) => $_setField(25, value);
+  @$pb.TagNumber(25)
+  $core.bool hasSpaceMemberBanned() => $_has(17);
+  @$pb.TagNumber(25)
+  void clearSpaceMemberBanned() => $_clearField(25);
+  @$pb.TagNumber(25)
+  SpaceMemberBanned ensureSpaceMemberBanned() => $_ensure(17);
 }
 
 class ChatCreated extends $pb.GeneratedMessage {
@@ -4691,9 +4710,11 @@ class SpaceMemberLeft extends $pb.GeneratedMessage {
 class SpaceUpdated extends $pb.GeneratedMessage {
   factory SpaceUpdated({
     $core.String? spaceId,
+    $core.Iterable<$core.String>? changedFields,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
+    if (changedFields != null) result.changedFields.addAll(changedFields);
     return result;
   }
 
@@ -4712,6 +4733,7 @@ class SpaceUpdated extends $pb.GeneratedMessage {
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..pPS(2, _omitFieldNames ? '' : 'changedFields')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4741,6 +4763,11 @@ class SpaceUpdated extends $pb.GeneratedMessage {
   $core.bool hasSpaceId() => $_has(0);
   @$pb.TagNumber(1)
   void clearSpaceId() => $_clearField(1);
+
+  /// Sorted unique persisted property/aggregate names. Empty or unknown means
+  /// full invalidation; this is not a revision or an authorization grant.
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get changedFields => $_getList(1);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -11892,6 +11919,86 @@ class ChatDeleted extends $pb.GeneratedMessage {
   $core.bool hasManifestSha256() => $_has(5);
   @$pb.TagNumber(6)
   void clearManifestSha256() => $_clearField(6);
+}
+
+/// Privileged internal fact. Never broadcast account/actor identity to members.
+class SpaceMemberBanned extends $pb.GeneratedMessage {
+  factory SpaceMemberBanned({
+    $core.String? spaceId,
+    $core.String? accountId,
+    $core.String? bannedByProfileId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (accountId != null) result.accountId = accountId;
+    if (bannedByProfileId != null) result.bannedByProfileId = bannedByProfileId;
+    return result;
+  }
+
+  SpaceMemberBanned._();
+
+  factory SpaceMemberBanned.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceMemberBanned.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceMemberBanned',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'bannedByProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceMemberBanned clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceMemberBanned copyWith(void Function(SpaceMemberBanned) updates) =>
+      super.copyWith((message) => updates(message as SpaceMemberBanned))
+          as SpaceMemberBanned;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceMemberBanned create() => SpaceMemberBanned._();
+  @$core.override
+  SpaceMemberBanned createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceMemberBanned getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceMemberBanned>(create);
+  static SpaceMemberBanned? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get bannedByProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set bannedByProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBannedByProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBannedByProfileId() => $_clearField(3);
 }
 
 const $core.bool _omitFieldNames =
