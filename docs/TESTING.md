@@ -438,7 +438,7 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 4. **golangci** — только затронутые модули (`pkg` + сервисы из matrix).
 5. **Auth** — Maven test на tier 1; Docker smoke + push — tier 2 (`master`).
 6. **Flutter** — tier 1: `buf-dart-check`, analyze, test; tier 2: APK / Windows / iOS / Chrome deep-link smoke.
-7. **Admin** — tier 1: `npm ci`, **ESLint**, vitest, `tsc`/build; Docker push — tier 2 (`master`). Vitest покрывает OAuth/login, moderation, analytics pages, game catalog config editor, App shell routing smoke (`src/admin/src/test/`).
+7. **Admin** — tier 1: `npm ci`, **ESLint**, vitest, `tsc`/build; Docker push — tier 2 (`master`). Vitest покрывает OAuth/login, moderation, analytics pages, game catalog config editor, App shell routing smoke (`src/admin/src/test/`). Отдельный [Admin browser](../.github/workflows/admin-browser.yml) на изменениях Admin запускает настоящий Chromium поверх собранного SPA: OAuth S256/invalid state, staff queue/assignment, denied resolution с сохранением ввода, sanction Cancel/Confirm, retry resolve, appeal и logout/direct reload. HTTP fixture проверяет запросы и bearer, но не доказывает живые Auth/staff permissions или backend enforcement. Локальный запуск и exact-source JSON/PNG artifacts: [Admin README](../src/admin/README.md).
 8. **Developer Portal** — `npm ci`, test, build; Docker push — tier 2 (`master`).
 8. Проверка ссылок в `docs/` — [`.github/workflows/docs-link-check.yml`](../.github/workflows/docs-link-check.yml).
 
