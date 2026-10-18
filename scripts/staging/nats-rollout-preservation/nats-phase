@@ -73,6 +73,14 @@ SESSION_UID = 65532
 SESSION_GID = 65532
 SESSION_INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds', 'fixture.json'))
 SUPERVISOR_PORT = 9444
+PREFLIGHT_PHASE = 'closed-copy-preflight'
+PREFLIGHT_ACTIONS = ('load-config', 'receive-archive', 'broker-start', 'broker-ready', 'read-jsz', 'broker-stop')
+PREFLIGHT_SCHEMA = 'voice-nats-closed-copy-preflight-v1'
+PREFLIGHT_READBACK_SCHEMA = 'voice-nats-closed-copy-readback-v1'
+PREFLIGHT_ROOT = VERIFY_ROOT / '.voice-nats-closed-copy'
+PREFLIGHT_CONFIG_ROOT = Path('/broker-config')
+PREFLIGHT_STATE_LIMIT = 16 << 10
+PREFLIGHT_JSZ_URL = 'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048'
 
 
 def _identity(args):
@@ -1623,6 +1631,416 @@ def stream_session_readback(receipt, stream, size):
     sys.stdout.buffer.flush()
 
 
+def _preflight_binding(args):
+    """Validate the immutable host/API binding before any PVC or process access."""
+    if (not re.fullmatch(r'[a-f0-9]{8}', getattr(args, 'verification_attempt', '') or '')
+        or not re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', getattr(args, 'job_uid', '') or '')
+        or not re.fullmatch(r'[^\s@]+(?:/[^\s@]+)*@sha256:[a-f0-9]{64}', getattr(args, 'phase_image', '') or '')
+        or not re.fullmatch(r'[a-f0-9]{64}', getattr(args, 'archive_sha256', '') or '')
+        or not re.fullmatch(r'[a-f0-9]{64}', getattr(args, 'server_config_sha256', '') or '')
+        or type(getattr(args, 'archive_bytes', None)) is not int
+        or not 0 < args.archive_bytes <= MAX_TAR_BYTES
+        or type(getattr(args, 'server_config_bytes', None)) is not int
+        or not 0 < args.server_config_bytes <= 256 << 10):
+        raise ValueError('preflight_binding')
+    _identity(args)
+    for field in ('source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid'):
+        _storage_uid(getattr(args, field, None), 'preflight_storage_identity')
+    for field in ('source_node_name', 'verification_node_name'):
+        value = getattr(args, field, None)
+        if not isinstance(value, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value):
+            raise ValueError('preflight_node_identity')
+    for field in ('source_hostname', 'verification_hostname'):
+        value = getattr(args, field, None)
+        if not isinstance(value, str) or not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?', value):
+            raise ValueError('preflight_node_identity')
+    if (args.source_pvc_uid == args.verification_pvc_uid
+        or args.source_pv_uid == args.verification_pv_uid
+        or args.source_node_name != args.verification_node_name
+        or args.source_hostname != args.verification_hostname
+        or os.environ.get('POD_UID') != args.pod_uid):
+        raise ValueError('preflight_identity')
+    return {key: getattr(args, key) for key in (
+        'operation', 'nonce', 'pod_uid', 'job_uid', 'verification_attempt',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'source_node_name', 'source_hostname', 'verification_node_name', 'verification_hostname',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes', 'phase_image')}
+
+
+def _preflight_state_root():
+    root = PREFLIGHT_ROOT
+    try:
+        root.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+    row = root.lstat()
+    if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+        or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+        or stat.S_IMODE(row.st_mode) != 0o700):
+        raise ValueError('preflight_state_custody')
+    return root
+
+
+def _preflight_paths(action, root=None):
+    if action not in PREFLIGHT_ACTIONS:
+        raise ValueError('preflight_action')
+    root = root or _preflight_state_root()
+    stem = action.replace('-', '_')
+    return root / (stem + '.started.json'), root / (stem + '.receipt.json'), root / (stem + '.output')
+
+
+def _private_preflight_json(path):
+    raw = _read_session_file(path, max_bytes=PREFLIGHT_STATE_LIMIT, uid=VERIFICATION_UID,
+        gid=VERIFICATION_GID, mode=0o600, code='preflight_state_custody')
+    try:
+        value = json.loads(raw)
+        if json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() != raw:
+            raise ValueError('preflight_state_invalid')
+        return value
+    except (UnicodeError, TypeError, ValueError):
+        raise ValueError('preflight_state_invalid') from None
+
+
+def _preflight_write(path, raw):
+    if len(raw) > PREFLIGHT_STATE_LIMIT:
+        raise ValueError('preflight_state_size')
+    _write_exclusive(path, raw)
+
+
+def _write_preflight_output(path, raw):
+    if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_CENSUS_BYTES:
+        raise ValueError('preflight_output_size')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        _write_all(fd, raw)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    _fsync_dir(path.parent)
+
+
+def _preflight_action_receipt(action, args, *, input_stream=None, opener=urlopen,
+        supervisor_call=None):
+    """Perform one fixed action once; STARTED without COMPLETE is permanently unknown."""
+    _require_verification_identity()
+    identity = _preflight_binding(args)
+    root = _preflight_state_root()
+    started_path, receipt_path, output_path = _preflight_paths(action, root)
+    started = {'schema': PREFLIGHT_SCHEMA, 'state': 'STARTED', 'action': action, **identity}
+    if receipt_path.exists():
+        raise ValueError('preflight_action_complete_readback_required')
+    if started_path.exists():
+        if _private_preflight_json(started_path) != started:
+            raise ValueError('preflight_started_identity')
+        raise ValueError('preflight_action_unknown')
+    for previous in PREFLIGHT_ACTIONS[:PREFLIGHT_ACTIONS.index(action)]:
+        _, prior_receipt, _ = _preflight_paths(previous, root)
+        if not prior_receipt.exists():
+            raise ValueError('preflight_order')
+        prior = _private_preflight_json(prior_receipt)
+        if prior.get('state') != 'COMPLETE' or any(prior.get(key) != value for key, value in identity.items()):
+            raise ValueError('preflight_order')
+    _preflight_write(started_path, json.dumps(started, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    details = {}
+    if action == 'load-config':
+        raw = _read_bounded(input_stream or sys.stdin.buffer, identity['server_config_bytes'])
+        if hashlib.sha256(raw).hexdigest() != identity['server_config_sha256']:
+            raise ValueError('preflight_config_digest')
+        config = _server_config(raw)
+        if config.replace(b'/verify/store', b'/data') != raw:
+            raise ValueError('preflight_config_shape')
+        config = raw
+        config_root = PREFLIGHT_CONFIG_ROOT
+        config_root_row = config_root.lstat()
+        if not stat.S_ISDIR(config_root_row.st_mode) or stat.S_ISLNK(config_root_row.st_mode):
+            raise ValueError('preflight_config_mount')
+        target = config_root / 'server.conf'
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o440)
+        try:
+            _write_all(fd, config)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        _fsync_dir(config_root)
+        details.update(server_config_sha256=identity['server_config_sha256'],
+            server_config_bytes=len(config))
+    elif action == 'receive-archive':
+        archive_path = OUT_ROOT / 'closed-copy.tar'
+        manifest = _receive_archive(input_stream or sys.stdin.buffer, archive_path,
+            identity['archive_bytes'], identity['archive_sha256'], magic=CENSUS_INPUT_MAGIC)
+        target = VERIFY_ROOT / 'store'
+        native_store.restore_closed_store(archive_path, target, manifest)
+        details.update(archive_sha256=identity['archive_sha256'], archive_bytes=identity['archive_bytes'],
+            manifest_sha256=hashlib.sha256(json.dumps(manifest, sort_keys=True,
+                separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()).hexdigest())
+    elif action == 'broker-start':
+        result = (supervisor_call or _preflight_supervisor_call)('start')
+        details.update(_preflight_broker_identity(result))
+    elif action == 'broker-ready':
+        started_receipt = _preflight_prior_receipt('broker-start', args, root)
+        process = _preflight_started_identity(started_receipt)
+        deadline = time.monotonic() + 120
+        while True:
+            current = _preflight_broker_identity((supervisor_call or _preflight_supervisor_call)('status'), running=True)
+            if current != process:
+                raise ValueError('preflight_broker_changed')
+            try:
+                health_url = 'http://127.0.0.1:8222/healthz?js-enabled-only=true'
+                with opener(health_url, timeout=2) as response:
+                    if getattr(response, 'status', None) == 200:
+                        details.update(process, ready_at_ns=time.time_ns(), readiness_status=200)
+                        break
+            except Exception:
+                pass
+            if time.monotonic() >= deadline:
+                raise ValueError('preflight_broker_not_ready')
+            time.sleep(0.25)
+    elif action == 'read-jsz':
+        started_receipt = _preflight_prior_receipt('broker-start', args, root)
+        expected_process = _preflight_started_identity(started_receipt)
+        ready_receipt = _preflight_prior_receipt('broker-ready', args, root)
+        if _preflight_started_identity(ready_receipt) != expected_process:
+            raise ValueError('preflight_broker_changed')
+        status = (supervisor_call or _preflight_supervisor_call)('status')
+        process = _preflight_broker_identity(status, running=True)
+        if process != expected_process:
+            raise ValueError('preflight_broker_changed')
+        response = opener(PREFLIGHT_JSZ_URL, timeout=30)
+        with response:
+            if getattr(response, 'status', None) != 200:
+                raise ValueError('preflight_jsz_status')
+            raw = response.read(MAX_CENSUS_BYTES + 1)
+        tree = _canonical_jsz(raw)
+        if _preflight_broker_identity((supervisor_call or _preflight_supervisor_call)('status'), running=True) != process:
+            raise ValueError('preflight_broker_changed')
+        _write_preflight_output(output_path, tree)
+        details.update(process, output_name=output_path.name, output_sha256=hashlib.sha256(tree).hexdigest(),
+            output_bytes=len(tree))
+    elif action == 'broker-stop':
+        started_receipt = _preflight_prior_receipt('broker-start', args, root)
+        expected_process = _preflight_started_identity(started_receipt)
+        status = (supervisor_call or _preflight_supervisor_call)('status')
+        before = _preflight_broker_identity(status, running=True)
+        if before != expected_process:
+            raise ValueError('preflight_broker_changed')
+        stopped = (supervisor_call or _preflight_supervisor_call)('stop')
+        identity_after = _preflight_broker_identity(stopped, running=False)
+        if (identity_after.get('pid') != before.get('pid')
+            or identity_after.get('started_at_ns') != before.get('started_at_ns')
+            or identity_after.get('exit_code') != 0):
+            raise ValueError('preflight_broker_stop')
+        details.update(identity_after, stopped_at_ns=identity_after.get('finished_at_ns'))
+    else:
+        raise ValueError('preflight_action')
+    receipt = {'schema': PREFLIGHT_SCHEMA, 'state': 'COMPLETE', 'action': action, **identity, **details}
+    _preflight_write(receipt_path, json.dumps(receipt, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    _fsync_dir(root)
+    return receipt
+
+
+def _preflight_broker_identity(value, *, running=None):
+    expected = {'schema', 'ok', 'running', 'pid', 'started_at_ns', 'nats_binary_sha256'}
+    if isinstance(value, dict) and value.get('running') is False:
+        expected |= {'finished_at_ns', 'exit_code'}
+    if (not isinstance(value, dict) or value.get('schema') != 'voice-nats-supervisor-v1'
+        or set(value) != expected
+        or value.get('ok') is not True or type(value.get('running')) is not bool
+        or (running is not None and value['running'] is not running)
+        or not re.fullmatch(r'[a-f0-9]{64}', value.get('nats_binary_sha256', '') or '')
+        or type(value.get('pid')) is not int or value['pid'] <= 0
+        or type(value.get('started_at_ns')) is not int or value['started_at_ns'] <= 0):
+        raise ValueError('preflight_broker_identity')
+    if not value['running'] and (type(value.get('exit_code')) is not int or value['exit_code'] != 0
+        or type(value.get('finished_at_ns')) is not int or value['finished_at_ns'] < value['started_at_ns']):
+        raise ValueError('preflight_broker_stop')
+    return {key: value[key] for key in ('pid', 'started_at_ns', 'nats_binary_sha256') if key in value} | {
+        key: value[key] for key in ('finished_at_ns', 'exit_code') if key in value}
+
+
+def _preflight_prior_receipt(action, args, root):
+    _started, path, _output = _preflight_paths(action, root)
+    if not path.exists():
+        raise ValueError('preflight_receipt_incomplete')
+    receipt = _private_preflight_json(path)
+    if (receipt.get('schema') != PREFLIGHT_SCHEMA or receipt.get('state') != 'COMPLETE'
+        or receipt.get('action') != action
+        or any(receipt.get(key) != value for key, value in _preflight_binding(args).items())):
+        raise ValueError('preflight_receipt_binding')
+    return receipt
+
+
+def _preflight_started_identity(receipt):
+    process = {key: receipt.get(key) for key in ('pid', 'started_at_ns', 'nats_binary_sha256')}
+    if (type(process['pid']) is not int or process['pid'] <= 0
+        or type(process['started_at_ns']) is not int or process['started_at_ns'] <= 0
+        or not re.fullmatch(r'[a-f0-9]{64}', process['nats_binary_sha256'] or '')):
+        raise ValueError('preflight_broker_identity')
+    return process
+
+
+def _preflight_supervisor_call(action, *, connector=socket.create_connection):
+    if action not in ('start', 'stop', 'status'):
+        raise ValueError('preflight_supervisor_action')
+    raw = json.dumps({'schema': 'voice-nats-supervisor-v1', 'action': action},
+        sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    with connector(('127.0.0.1', SUPERVISOR_PORT), timeout=10) as client:
+        client.sendall(raw)
+        response = bytearray()
+        while len(response) <= 1024:
+            part = client.recv(1)
+            if not part or part == b'\n':
+                break
+            response.extend(part)
+        if not part or len(response) > 1024:
+            raise ValueError('preflight_supervisor_response')
+    try:
+        value = json.loads(response)
+    except (UnicodeError, ValueError):
+        raise ValueError('preflight_supervisor_response') from None
+    if not isinstance(value, dict) or value.get('ok') is not True:
+        raise ValueError('preflight_supervisor_failed')
+    return value
+
+
+def _canonical_jsz(raw):
+    if not isinstance(raw, bytes) or not 1 <= len(raw) <= MAX_CENSUS_BYTES:
+        raise ValueError('preflight_jsz_size')
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('preflight_jsz')
+            result[key] = value
+        return result
+    try:
+        value = json.loads(raw, object_pairs_hook=unique_pairs,
+            parse_constant=lambda _item: (_ for _ in ()).throw(ValueError('preflight_jsz')))
+        canonical = json.dumps(value, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+    except (UnicodeError, TypeError, ValueError):
+        raise ValueError('preflight_jsz') from None
+    if not isinstance(value, dict) or canonical != raw:
+        raise ValueError('preflight_jsz')
+    return canonical
+
+
+def _preflight_readback(action, args, *, root=None):
+    _require_verification_identity()
+    identity = _preflight_binding(args)
+    root = root or _preflight_state_root()
+    started_path, receipt_path, output_path = _preflight_paths(action, root)
+    if not started_path.exists() or not receipt_path.exists():
+        raise ValueError('preflight_receipt_incomplete')
+    started = _private_preflight_json(started_path)
+    receipt = _private_preflight_json(receipt_path)
+    if (started != {'schema': PREFLIGHT_SCHEMA, 'state': 'STARTED', 'action': action, **identity}
+        or not isinstance(receipt, dict)
+        or set(receipt) != _preflight_receipt_fields(action)
+        or any(receipt.get(key) != value for key, value in identity.items())
+        or receipt.get('schema') != PREFLIGHT_SCHEMA or receipt.get('state') != 'COMPLETE'
+        or receipt.get('action') != action):
+        raise ValueError('preflight_receipt_binding')
+    if action == 'load-config':
+        config = PREFLIGHT_CONFIG_ROOT / 'server.conf'
+        row = config.lstat()
+        if (not stat.S_ISREG(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or row.st_nlink != 1 or stat.S_IMODE(row.st_mode) != 0o440
+            or row.st_size != identity['server_config_bytes']):
+            raise ValueError('preflight_config_binding')
+        raw = config.read_bytes()
+        if len(raw) != row.st_size or hashlib.sha256(raw).hexdigest() != identity['server_config_sha256']:
+            raise ValueError('preflight_config_binding')
+    if action == 'read-jsz':
+        expected = {'output_name': output_path.name, 'output_sha256': receipt.get('output_sha256'),
+            'output_bytes': receipt.get('output_bytes')}
+        row = output_path.lstat()
+        if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or row.st_nlink != 1 or stat.S_IMODE(row.st_mode) != 0o600
+            or type(expected['output_bytes']) is not int or not 0 < expected['output_bytes'] <= MAX_CENSUS_BYTES
+            or row.st_size != expected['output_bytes'] or not re.fullmatch('[a-f0-9]{64}', expected['output_sha256'] or '')):
+            raise ValueError('preflight_output_binding')
+        with output_path.open('rb') as stream:
+            raw = stream.read(MAX_CENSUS_BYTES + 1)
+        if len(raw) != row.st_size or hashlib.sha256(raw).hexdigest() != expected['output_sha256']:
+            raise ValueError('preflight_output_binding')
+        stream_preflight_readback(receipt, raw)
+    else:
+        _frame(receipt)
+    return receipt
+
+
+def _preflight_receipt_fields(action):
+    base = {'schema', 'state', 'action', *_preflight_binding_fields()}
+    extra = {
+        'load-config': {'server_config_sha256', 'server_config_bytes'},
+        'receive-archive': {'archive_sha256', 'archive_bytes', 'manifest_sha256'},
+        'broker-start': {'pid', 'started_at_ns', 'nats_binary_sha256'},
+        'broker-ready': {'pid', 'started_at_ns', 'nats_binary_sha256', 'ready_at_ns', 'readiness_status'},
+        'read-jsz': {'pid', 'started_at_ns', 'nats_binary_sha256', 'output_name', 'output_sha256', 'output_bytes'},
+        'broker-stop': {'pid', 'started_at_ns', 'nats_binary_sha256', 'finished_at_ns', 'exit_code', 'stopped_at_ns'},
+    }
+    if action not in extra:
+        raise ValueError('preflight_action')
+    return base | extra[action]
+
+
+def _preflight_binding_fields():
+    return ('operation', 'nonce', 'pod_uid', 'job_uid', 'verification_attempt',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'source_node_name', 'source_hostname', 'verification_node_name', 'verification_hostname',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes', 'phase_image')
+
+
+def stream_preflight_readback(receipt, raw):
+    common = {key: receipt[key] for key in (
+        'operation', 'nonce', 'verification_attempt', 'pod_uid', 'job_uid',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes', 'phase_image')}
+    frames = 0
+    for offset in range(0, len(raw), READBACK_CHUNK):
+        row = {'schema': PREFLIGHT_READBACK_SCHEMA, 'kind': 'data', **common,
+            'sequence': frames, 'data': base64.b64encode(raw[offset:offset + READBACK_CHUNK]).decode('ascii')}
+        _frame(row)
+        frames += 1
+    _frame({'schema': PREFLIGHT_READBACK_SCHEMA, 'kind': 'complete', **common,
+        'status': 'COMPLETE', 'frames': frames, 'byte_count': len(raw),
+        'output_sha256': hashlib.sha256(raw).hexdigest(), 'receipt': receipt})
+
+
+def _read_bounded(stream, expected):
+    if not 0 < expected <= 256 << 10:
+        raise ValueError('preflight_input_size')
+    chunks = bytearray()
+    while len(chunks) < expected:
+        part = stream.read(min(CHUNK, expected - len(chunks)))
+        if not part:
+            raise ValueError('preflight_input_truncated')
+        chunks.extend(part)
+    if stream.read(1):
+        raise ValueError('preflight_input_trailing')
+    return bytes(chunks)
+
+
+def _write_all(fd, raw):
+    view = memoryview(raw)
+    while view:
+        count = os.write(fd, view)
+        if count <= 0:
+            raise ValueError('preflight_write')
+        view = view[count:]
+
+
+def _fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def _serve_session(args):
     _require_verification_identity()
     binding = _session_binding(args)
@@ -1713,6 +2131,23 @@ def serve_census(args):
         time.sleep(60)
 
 
+def serve_closed_copy_preflight(args):
+    """Remain available for the host's fixed same-Pod preflight action vectors."""
+    _require_verification_identity()
+    args.pod_uid = os.environ.get('POD_UID', '')
+    _identity(args)
+    if (not re.fullmatch(r'[a-f0-9]{8}', getattr(args, 'verification_attempt', '') or '')
+        or any(not re.fullmatch(r'[a-f0-9-]{36}', getattr(args, field, '') or '')
+            for field in ('source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid'))
+        or args.source_pvc_uid == args.verification_pvc_uid
+        or args.source_pv_uid == args.verification_pv_uid):
+        raise ValueError('preflight_serve_binding')
+    # The trusted runner owns the API object lifecycle; the helper accepts no
+    # API credentials and only serves closed, identity-bound local actions.
+    while True:
+        time.sleep(60)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(add_help=False)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -1727,6 +2162,9 @@ def main(argv=None):
     mode.add_argument('--read-receipt', action='store_true')
     mode.add_argument('--bind-only', action='store_true')
     mode.add_argument('--serve-census', action='store_true')
+    mode.add_argument('--serve-closed-copy-preflight', action='store_true')
+    mode.add_argument('--preflight-action', choices=PREFLIGHT_ACTIONS)
+    mode.add_argument('--preflight-readback', action='store_true')
     mode.add_argument('--receive-archive', action='store_true')
     mode.add_argument('--serve-selected-session', action='store_true')
     mode.add_argument('--session-action', action='store_true')
@@ -1745,9 +2183,17 @@ def main(argv=None):
     parser.add_argument('--input-bundle-bytes', type=int)
     parser.add_argument('--kernel-bundle-sha256')
     parser.add_argument('--server-config-sha256')
-    parser.add_argument('--action', choices=sorted(SESSION_ACTIONS))
+    parser.add_argument('--action', choices=sorted(SESSION_ACTIONS | frozenset(PREFLIGHT_ACTIONS)))
     parser.add_argument('--archive-sha256')
     parser.add_argument('--archive-bytes', type=int)
+    parser.add_argument('--verification-attempt')
+    parser.add_argument('--job-uid')
+    parser.add_argument('--phase-image')
+    parser.add_argument('--source-node-name')
+    parser.add_argument('--source-hostname')
+    parser.add_argument('--verification-node-name')
+    parser.add_argument('--verification-hostname')
+    parser.add_argument('--server-config-bytes', type=int)
     parser.add_argument('--role', choices=('verification',))
     args = parser.parse_args(argv)
     if args.serve:
@@ -1764,6 +2210,22 @@ def main(argv=None):
             parser.error('serve-census-shape')
         args.pod_uid = os.environ.get('POD_UID', '')
         serve_census(args)
+    if args.serve_closed_copy_preflight:
+        if args.pod_uid is not None or args.phase is not None or args.action is not None:
+            parser.error('preflight-serve-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        serve_closed_copy_preflight(args)
+        return
+    if args.preflight_action is not None or args.preflight_readback:
+        if args.phase is not None or args.action is not None or args.role is not None:
+            parser.error('preflight-action-shape')
+        if args.preflight_action is not None:
+            _frame(_preflight_action_receipt(args.preflight_action, args))
+        else:
+            if not args.action:
+                parser.error('preflight-readback-action-required')
+            _preflight_readback(args.action, args)
+        return
     if args.serve_selected_session:
         if (args.pod_uid is not None or args.phase is not None
             or args.role is not None or args.action is not None

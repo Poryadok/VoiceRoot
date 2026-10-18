@@ -92,6 +92,115 @@ class NatsPhaseTests(unittest.TestCase):
         self.assertEqual(execute.call_args.args[1].archive_bytes, 123)
         self.assertEqual(result, receipt)
 
+    def _preflight_args(self):
+        return types.SimpleNamespace(operation=OPERATION, nonce=NONCE,
+            pod_uid=POD_UID, job_uid='44444444-4444-4444-8444-444444444444',
+            verification_attempt='1234abcd', source_pvc_uid=SOURCE_PVC_UID,
+            source_pv_uid=SOURCE_PV_UID, verification_pvc_uid=VERIFICATION_PVC_UID,
+            verification_pv_uid=VERIFICATION_PV_UID, source_node_name='node-a',
+            source_hostname='node-a.example', verification_node_name='node-a',
+            verification_hostname='node-a.example', archive_sha256='a' * 64,
+            archive_bytes=123, server_config_sha256='b' * 64,
+            server_config_bytes=24, phase_image='registry.example/phase@sha256:' + 'c' * 64)
+
+    def test_closed_copy_preflight_fixed_action_graph_binds_same_pod_and_full_jsz(self):
+        config_root = self.root / 'broker-config'; config_root.mkdir(mode=0o700)
+        original = (phase.PREFLIGHT_ROOT, phase.PREFLIGHT_CONFIG_ROOT)
+        phase.PREFLIGHT_ROOT = self.verification / '.voice-nats-closed-copy'
+        phase.PREFLIGHT_CONFIG_ROOT = config_root
+        self.addCleanup(setattr, phase, 'PREFLIGHT_ROOT', original[0])
+        self.addCleanup(setattr, phase, 'PREFLIGHT_CONFIG_ROOT', original[1])
+        args = self._preflight_args()
+        config = b'host: 127.0.0.1\nport: 4222\nhttp: 127.0.0.1:8222\nresolver: MEMORY\njetstream { store_dir: /data }\n'
+        args.server_config_bytes = len(config)
+        args.server_config_sha256 = hashlib.sha256(config).hexdigest()
+        tree = b'{"account":"A","streams":[],"server":{"id":"nats"},"padding":"' + b'x' * (20 << 10) + b'"}'
+        process = {'schema': 'voice-nats-supervisor-v1', 'ok': True, 'running': True,
+            'pid': 42, 'started_at_ns': 100, 'nats_binary_sha256': 'd' * 64}
+        stopped = {'schema': 'voice-nats-supervisor-v1', 'ok': True, 'running': False,
+            'pid': 42, 'started_at_ns': 100, 'finished_at_ns': 200, 'exit_code': 0,
+            'nats_binary_sha256': 'd' * 64}
+        calls = iter((process, process, process, process, process, stopped))
+        class Response:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self, _limit): return tree
+        def opener(url, timeout):
+            self.assertIn('127.0.0.1:8222', url)
+            self.assertGreater(timeout, 0)
+            return Response()
+        streamed = Output()
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.object(phase, '_receive_archive', return_value={'archive_sha256': 'a' * 64}) as receive, \
+             patch.object(phase.native_store, 'restore_closed_store') as restore, \
+             patch.object(phase, '_fsync_dir'), \
+             patch.object(phase.sys, 'stdout', streamed):
+            receipts = {}
+            receipts['load-config'] = phase._preflight_action_receipt('load-config', args, input_stream=io.BytesIO(config))
+            self.assertEqual((config_root / 'server.conf').read_bytes(), config)
+            receipts['receive-archive'] = phase._preflight_action_receipt('receive-archive', args, input_stream=io.BytesIO(b''))
+            supervisor = lambda action: next(calls)
+            receipts['broker-start'] = phase._preflight_action_receipt('broker-start', args, supervisor_call=supervisor)
+            ready = phase._preflight_action_receipt('broker-ready', args, opener=opener,
+                supervisor_call=supervisor)
+            receipts['broker-ready'] = ready
+            self.assertEqual(ready['pid'], 42)
+            receipts['read-jsz'] = phase._preflight_action_receipt('read-jsz', args, opener=opener,
+                supervisor_call=supervisor)
+            stopped_receipt = phase._preflight_action_receipt('broker-stop', args,
+                supervisor_call=supervisor)
+            receipts['broker-stop'] = stopped_receipt
+            self.assertEqual(stopped_receipt['exit_code'], 0)
+            self.assertEqual(phase._preflight_readback('read-jsz', args)['output_bytes'], len(tree))
+        action_fields = {
+            'load-config': {'server_config_sha256', 'server_config_bytes'},
+            'receive-archive': {'archive_sha256', 'archive_bytes', 'manifest_sha256'},
+            'broker-start': {'pid', 'started_at_ns', 'nats_binary_sha256'},
+            'broker-ready': {'pid', 'started_at_ns', 'nats_binary_sha256', 'ready_at_ns', 'readiness_status'},
+            'read-jsz': {'pid', 'started_at_ns', 'nats_binary_sha256', 'output_name', 'output_sha256', 'output_bytes'},
+            'broker-stop': {'pid', 'started_at_ns', 'nats_binary_sha256', 'finished_at_ns', 'exit_code', 'stopped_at_ns'},
+        }
+        identity_fields = set(phase._preflight_binding(args))
+        for action, receipt in receipts.items():
+            self.assertEqual(set(receipt), identity_fields | {'schema', 'state', 'action'} | action_fields[action])
+            self.assertEqual(receipt['schema'], phase.PREFLIGHT_SCHEMA)
+            self.assertEqual(receipt['state'], 'COMPLETE')
+            self.assertEqual(receipt['action'], action)
+        frames = [json.loads(line) for line in streamed.buffer.getvalue().splitlines()]
+        self.assertEqual([row['sequence'] for row in frames[:-1]], list(range(len(frames) - 1)))
+        common = {key: phase._preflight_binding(args)[key] for key in phase._preflight_binding(args)}
+        for row in frames:
+            self.assertTrue(all(row.get(key) == value for key, value in common.items()))
+        self.assertTrue(all(row['schema'] == phase.PREFLIGHT_READBACK_SCHEMA for row in frames))
+        self.assertEqual(frames[-1]['kind'], 'complete')
+        self.assertEqual(frames[-1]['byte_count'], len(tree))
+        decoded = b''.join(base64.b64decode(row['data'], validate=True) for row in frames[:-1])
+        self.assertEqual(decoded, json.dumps(json.loads(tree), sort_keys=True,
+            separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode())
+        receive.assert_called_once()
+        restore.assert_called_once()
+
+    def test_closed_copy_preflight_rejects_replacement_pod_before_state_access(self):
+        args = self._preflight_args()
+        with patch.object(phase, '_require_verification_identity'), \
+             patch.dict(phase.os.environ, {'POD_UID': '77777777-7777-4777-8777-777777777777'}):
+            with self.assertRaisesRegex(ValueError, 'preflight_identity'):
+                phase._preflight_action_receipt('load-config', args, input_stream=io.BytesIO(b''))
+        self.assertFalse((self.verification / '.voice-nats-closed-copy').exists())
+
+    def test_closed_copy_preflight_started_without_complete_is_never_replayed(self):
+        args = self._preflight_args()
+        root = self.verification / '.voice-nats-closed-copy'; root.mkdir(mode=0o700)
+        marker = {'schema': phase.PREFLIGHT_SCHEMA, 'state': 'STARTED',
+            'action': 'load-config', **phase._preflight_binding(args)}
+        started = root / 'load_config.started.json'
+        started.write_bytes(json.dumps(marker, sort_keys=True, separators=(',', ':')).encode())
+        started.chmod(0o600)
+        with patch.object(phase, '_require_verification_identity'):
+            with self.assertRaisesRegex(ValueError, 'preflight_action_unknown'):
+                phase._preflight_action_receipt('load-config', args, input_stream=io.BytesIO(b''))
+
     def test_census_readback_returns_only_matching_durable_receipt(self):
         state = self.verification / '.voice-nats-verification'
         state.mkdir(mode=0o700)

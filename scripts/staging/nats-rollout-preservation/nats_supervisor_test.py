@@ -3,6 +3,7 @@ import importlib.machinery
 import importlib.util
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import Mock
 
@@ -16,6 +17,7 @@ loader.exec_module(supervisor_module)
 
 class Child:
     def __init__(self):
+        self.pid = 4242
         self.code = None
         self.terminated = False
         self.waited = []
@@ -37,7 +39,7 @@ class BrokerSupervisorTests(unittest.TestCase):
         children = []
         def popen(command, **kwargs):
             child = Child(); children.append(child)
-            self.assertEqual(command, ['/usr/local/bin/nats-server', '--config', '/server.conf'])
+            self.assertEqual(command, ['/usr/local/bin/nats-server', '--config', '/broker-config/server.conf'])
             self.assertIs(kwargs['stdin'], subprocess.DEVNULL)
             self.assertIs(kwargs['stdout'], subprocess.DEVNULL)
             self.assertIs(kwargs['stderr'], subprocess.DEVNULL)
@@ -75,6 +77,33 @@ class BrokerSupervisorTests(unittest.TestCase):
             broker.handle('stop')
         with self.assertRaisesRegex(ValueError, 'shutdown_while_running'):
             broker.handle('shutdown')
+
+    def test_preflight_reports_fixed_binary_and_same_child_orderly_stop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'nats-server'
+            binary.write_bytes(b'fixed nats executable')
+            binary.chmod(0o555)
+            child = Child()
+            def popen(command, **_kwargs):
+                self.assertEqual(command, [str(binary), '--config', '/broker-config/server.conf'])
+                return child
+            broker = supervisor_module.BrokerSupervisor(popen=popen, preflight=True,
+                server=str(binary))
+            self.assertEqual(broker.handle('status'), {'running': False,
+                'pid': None, 'started_at_ns': None, 'exit_code': None,
+                'finished_at_ns': None, 'nats_binary_sha256': __import__('hashlib').sha256(
+                    b'fixed nats executable').hexdigest()})
+            started = broker.handle('start')
+            self.assertTrue(started['running'])
+            self.assertEqual(started['pid'], child.pid)
+            self.assertEqual(started['nats_binary_sha256'], __import__('hashlib').sha256(
+                b'fixed nats executable').hexdigest())
+            stopped = broker.handle('stop')
+            self.assertFalse(stopped['running'])
+            self.assertEqual(stopped['pid'], child.pid)
+            self.assertEqual(stopped['exit_code'], 0)
+            self.assertGreaterEqual(stopped['finished_at_ns'], stopped['started_at_ns'])
+            self.assertEqual(stopped['nats_binary_sha256'], started['nats_binary_sha256'])
 
     def test_protocol_is_closed_and_malformed_requests_do_not_start_child(self):
         broker = supervisor_module.BrokerSupervisor(popen=Mock())
