@@ -11,6 +11,8 @@ CREATE TABLE space_ordinary_member_heads (
     account_id UUID,
     admission_binding_sha256 BYTEA,
     role_receipt_sha256 BYTEA,
+    publication_kind SMALLINT NOT NULL DEFAULT 0 CHECK(publication_kind BETWEEN 0 AND 6),
+    native_publication_sha256 BYTEA,
     PRIMARY KEY (space_id,profile_id),
     CHECK (NOT legacy OR (generation=0 AND state='ACTIVE')),
     CHECK (admission_binding_sha256 IS NULL OR octet_length(admission_binding_sha256)=32),
@@ -30,10 +32,35 @@ CREATE TABLE space_community_member_heads (
     CHECK (generation>=retired_through)
 );
 
+CREATE TABLE space_member_admission_intents (
+ operation_id UUID PRIMARY KEY,
+ space_id UUID NOT NULL, profile_id UUID NOT NULL, account_id UUID NOT NULL,
+ invite_id UUID, guest BOOLEAN NOT NULL,
+ generation BIGINT NOT NULL CHECK(generation>0),
+ request_sha256 BYTEA NOT NULL CHECK(octet_length(request_sha256)=32),
+ binding_sha256 BYTEA NOT NULL CHECK(octet_length(binding_sha256)=32),
+ policy_version BIGINT NOT NULL CHECK(policy_version>0),
+ state TEXT NOT NULL CHECK(state IN ('PREPARING','PUBLISHED','RETIRED')),
+ role_id UUID, role_receipt_sha256 BYTEA, published_at TIMESTAMPTZ,
+ CHECK ((state='PUBLISHED')=(role_id IS NOT NULL AND role_receipt_sha256 IS NOT NULL AND published_at IS NOT NULL)),
+ CHECK (role_receipt_sha256 IS NULL OR octet_length(role_receipt_sha256)=32)
+);
+CREATE INDEX space_member_admission_subject ON space_member_admission_intents(space_id,profile_id);
+CREATE TABLE space_member_admission_outbox (
+ event_id UUID PRIMARY KEY, operation_id UUID NOT NULL UNIQUE,
+ space_id UUID NOT NULL, profile_id UUID NOT NULL,
+ generation BIGINT NOT NULL CHECK(generation>0), occurred_at TIMESTAMPTZ NOT NULL,
+ delivered_at TIMESTAMPTZ
+);
+CREATE TABLE space_member_role_cleanup (
+ operation_id UUID PRIMARY KEY, space_id UUID NOT NULL, profile_id UUID NOT NULL,
+ removal_floor BIGINT NOT NULL CHECK(removal_floor>0), completed_at TIMESTAMPTZ
+);
+
 -- These are explicit existing publications. No Role readiness receipt is
 -- synthesized for them, and reads never invent another publication UUID.
-INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,publication_id,state,legacy)
-SELECT space_id,profile_id,0,gen_random_uuid(),'ACTIVE',true FROM space_members;
+INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,publication_id,state,legacy,publication_kind)
+SELECT space_id,profile_id,0,gen_random_uuid(),'ACTIVE',true,2 FROM space_members;
 
 INSERT INTO space_community_member_heads(space_id,profile_id,generation,owner_generation,episode_id,state)
 SELECT m.space_id,m.profile_id,1,m.owner_generation,gen_random_uuid(),'ACTIVE'
@@ -84,6 +111,11 @@ BEGIN
  IF TG_OP='DELETE' THEN
   UPDATE space_ordinary_member_heads SET generation=generation+1,retired_through=generation+1,
     state='RETIRED',legacy=false WHERE space_id=OLD.space_id AND profile_id=OLD.profile_id;
+  UPDATE space_member_admission_intents SET state='RETIRED'
+   WHERE space_id=OLD.space_id AND profile_id=OLD.profile_id AND state='PREPARING';
+  INSERT INTO space_member_role_cleanup(operation_id,space_id,profile_id,removal_floor)
+   SELECT gen_random_uuid(),space_id,profile_id,retired_through FROM space_ordinary_member_heads
+   WHERE space_id=OLD.space_id AND profile_id=OLD.profile_id;
   RETURN OLD;
  END IF;
  IF TG_OP='UPDATE' AND (NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.profile_id IS DISTINCT FROM OLD.profile_id
@@ -154,7 +186,7 @@ FOR EACH ROW EXECUTE FUNCTION space_community_owner_episode_changed();
 -- function; new inputs participate in exactly that same monotonic Space clock.
 DO $$ DECLARE name TEXT; BEGIN
  IF to_regprocedure('space_authority_revision_changed()') IS NOT NULL THEN
-  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies'] LOOP
+  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents'] LOOP
    EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION space_authority_revision_changed(''space_id'')','space_authority_revision_'||name,name);
    EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION space_authority_revision_floor_guard()','space_authority_revision_'||name||'_truncate',name);
   END LOOP;
