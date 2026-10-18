@@ -22,6 +22,11 @@
 - Bot presence (`bot_presence`, `TouchPresence`); `online` в `ListSlashCommandsForChat` и `ListInstalledBots`
 - Scopes: `TEXT_CHAT_SEND_MESSAGES`, `DM_SEND`, `SPACE_VIEW_MEMBER_LIST`, `MEMBER_ASSIGN_ROLES`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_MANAGE_ROLES` (privileged), `TEXT_CHAT_READ_HISTORY` (privileged); строки совпадают с [role-service.md](role-service.md)
 - Rate limits: 5000 API req/min и 100 role ops/min — Gateway REST (`BotAPI`, `BotRoleOps`, `429` + `Retry-After`); 10 созданий текстовых чатов / день — Bot Service (`bot_daily_chat_creates`, `CreateBotChat`); прямой gRPC обходит Gateway limiter — см. [api-gateway.md](api-gateway.md)
+- Bot-token runtime gRPC дополнительно ограничивается Bot-owned limiter. При
+  настроенном `BOT_REDIS_ADDR` ошибка Redis возвращает `Unavailable` до вызова
+  обработчика; запрос без проверки общей квоты не выполняется. Исчерпанная
+  квота возвращает `ResourceExhausted`, после восстановления Redis запросы
+  снова проверяются по общей квоте. Внешний ответ не содержит диагностику Redis.
 - **gRPC access (v1):** `BOT_GRPC_GATEWAY_ONLY=true` отклоняет прямой gRPC без `x-voice-internal: true` (Gateway) или bot token / account context. Эти legacy callers остаются ограничены Bot-owned method/scope checks; прямой сетевой доступ к Bot не заменяет проверку actor. Prod NetworkPolicy — [`deploy/templates/network-policy-voice-bot.yaml`](../../deploy/templates/network-policy-voice-bot.yaml); mTLS — [`DEPLOYMENT.md`](../DEPLOYMENT.md).
 - Bot token: перманентный, ручной отзыв (`RegenerateToken`)
 - Bot DM: только в ответ на сообщение пользователя (v1)

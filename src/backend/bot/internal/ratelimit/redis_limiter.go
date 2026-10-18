@@ -101,8 +101,8 @@ func (l *RedisGRPCLimiter) UnaryServerInterceptor() grpc.UnaryServerInterceptor 
 		group := grpcGroup(info.FullMethod)
 		allowed, err := l.allow(ctx, group, token)
 		if err != nil {
-			// Fail open when Redis is unavailable (degraded mode).
-			return handler(ctx, req)
+			// Never execute an unmetered operation when shared quota state is unavailable.
+			return nil, status.Error(codes.Unavailable, "bot rate limiter unavailable")
 		}
 		if !allowed {
 			retry := int(defaultConfig().BotAPI.Window.Seconds())
