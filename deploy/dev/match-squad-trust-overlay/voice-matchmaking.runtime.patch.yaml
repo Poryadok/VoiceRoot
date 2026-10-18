@@ -6,6 +6,8 @@ metadata:
 spec:
   template:
     spec:
+      securityContext:
+        fsGroup: 65532
       containers:
         - name: matchmaking
           ports:
