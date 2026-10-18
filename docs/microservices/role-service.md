@@ -296,6 +296,38 @@ permission. Member и Guest не получают его по умолчанию
 | `TEXT_CHAT_SEND_IN_THREADS` | Писать в тредах |
 | `TEXT_CHAT_MANAGE_THREADS` | Модерировать треды |
 | `TEXT_CHAT_SET_SLOW_MODE` | Выставлять slow mode на чате |
+| `TEXT_CHAT_POST_AS_CHAT` | Отдельная official-publication capability; ordinary member дополнительно требует текущий individual grant |
+| `TEXT_CHAT_ADD_MEMBERS` | Инициировать chat-targeted приглашение в родительский Space; отдельно требуется `SPACE_MANAGE_INVITES` |
+
+### Space-chat individual capabilities (accepted implementation contract)
+
+The registry reserves bit 43 for `TEXT_CHAT_POST_AS_CHAT` and bit 44 for
+`TEXT_CHAT_ADD_MEMBERS`, without renumbering existing permissions. New system
+Member/Moderator seeds include only the latter. Guest seeds acquire neither;
+existing guest/admission policy remains conjunctive. Owner/Admin include both
+ordinary bits, but dedicated grant management requires actual current system
+Owner/Admin authority, not an all-bits custom role or a role with the same name.
+
+For an ordinary current Space member, official publication requires a separate
+Role-owned grant bound to this exact chat and current membership incarnation;
+a role-wide allow alone is insufficient, and an explicit node deny wins.
+Addition requires the chat's `member_additions_enabled` policy (default true),
+effective `TEXT_CHAT_ADD_MEMBERS` and separately authorized Space invitation.
+Neither capability implies visibility, send/settings rights, admission bypass
+or local Chat membership. Current Owner/Admin bypass the toggle/individual
+grant only after current membership, exact scope and lifecycle validation.
+
+Only current system Owner/Admin manages the toggle and individual grant.
+Promotion invents no explicit grant; demotion drops implicit authority while
+preserving a separately explicit grant in the same membership incarnation.
+Leave/rejoin, scope move and retirement cannot resurrect or migrate old grants.
+Role owns this state for Space chats; Chat owns equivalent state only for
+standalone chats. Signed caller-relative reads and delegated-user setters,
+authority revision revalidation, additive existing-role migration and the
+targeted-invite consumer are tracked in the
+[implementation plan](../testing/space-chat-permissions-exec-plan.md).
+Registry/seed support alone does not activate those endpoints or prove the
+complete parent-Space admission and exact-chat navigation flow.
 
 ### Голосовая комната (`voice_room_id`)
 

@@ -281,11 +281,14 @@ func configuredMethods(issuer string, allowed []string) (map[string]struct{}, er
 		approved[ProvisionMethod] = struct{}{}
 		approved[SyncMembersMethod] = struct{}{}
 	case "space":
+		approved[ScopeAuthorityMethod] = struct{}{}
 		for _, method := range spaceLifecycleMethods() {
 			approved[method] = struct{}{}
 		}
 	case "search":
 		approved[GetManifestPageMethod] = struct{}{}
+	case "role":
+		approved[ScopeAuthorityMethod] = struct{}{}
 	default:
 		return nil, errors.New("untrusted Chat principal issuer")
 	}

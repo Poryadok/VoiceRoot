@@ -56,9 +56,9 @@ func TestSpacePurgeLooksUpMessagingThenReleasesChatReferencesBeforeLocalPurge(t 
 	require.NotNil(t, local.evidence.MessagingReceipt)
 	require.NotNil(t, local.evidence.FileReleaseReceipt)
 	for _, outbound := range []struct {
-		ctx context.Context
+		ctx              context.Context
 		audience, method string
-		request proto.Message
+		request          proto.Message
 	}{{messaging.ctx, "messaging", messagingv1.MessagingService_GetSpacePurgeReceipt_FullMethodName, messaging.request},
 		{files.ctx, "file", filev1.FileService_ReleaseSpaceDeletionProducerReferences_FullMethodName, files.request}} {
 		callContext := outbound.ctx
@@ -93,6 +93,23 @@ func TestSpacePurgeStopsBeforeFileWhenMessagingReceiptIsMissing(t *testing.T) {
 	_, err := service.PurgeSpace(ctx, &chatv1.PurgeSpaceRequest{Purge: purge})
 	require.Error(t, err)
 	require.Equal(t, []string{"chat-preflight", "messaging"}, events)
+	require.False(t, local.called)
+}
+
+func TestSpacePurgeReplaysCommittedReceiptWithoutOwnerAvailability(t *testing.T) {
+	events := []string{}
+	saved := &chatv1.PurgeSpaceResponse{Receipt: &commonv1.SpacePurgeReceipt{ReceiptId: "committed-receipt"}}
+	local := &spacePurgeStoreFake{events: &events, replay: saved}
+	service := &SpaceLifecycleGRPC{Store: local}
+	ctx := principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "space", Subject: "service:space", Audience: "chat", RPC: chatv1.ChatService_PurgeSpace_FullMethodName})
+	request := &chatv1.PurgeSpaceRequest{Purge: &commonv1.SpacePurgeRequest{
+		ProtocolVersion: 1, Generation: 2, ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_CHAT,
+		Manifest: &commonv1.ManifestBinding{}, PurgeDecidedAt: timestamppb.Now(),
+	}}
+	response, err := service.PurgeSpace(ctx, request)
+	require.NoError(t, err, "a committed exact retry must not depend on owner services")
+	require.True(t, proto.Equal(saved, response))
+	require.Equal(t, []string{"chat-preflight"}, events)
 	require.False(t, local.called)
 }
 
@@ -152,6 +169,12 @@ type spacePurgeStoreFake struct {
 	events   *[]string
 	called   bool
 	evidence store.SpacePurgeOwnerEvidence
+	replay   *chatv1.PurgeSpaceResponse
+}
+
+func (f *spacePurgeStoreFake) LookupSpacePurgeReceipt(context.Context, *chatv1.PurgeSpaceRequest) (*chatv1.PurgeSpaceResponse, error) {
+	*f.events = append(*f.events, "chat-preflight")
+	return f.replay, nil
 }
 
 func (f *spacePurgeStoreFake) PrepareSpaceDeletionManifest(context.Context, *chatv1.PrepareSpaceDeletionManifestRequest) (*chatv1.PrepareSpaceDeletionManifestResponse, error) {

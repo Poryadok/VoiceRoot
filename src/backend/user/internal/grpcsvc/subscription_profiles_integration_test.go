@@ -19,6 +19,7 @@ import (
 
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -48,6 +49,7 @@ func startUserGRPCForSubscriptionTests(t *testing.T, profiles *store.ProfileStor
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles:            profiles,
+		ProfileMutations:    profilemutation.New(rdb),
 		Presence:            store.NewPresenceStore(rdb),
 		DeletedAccounts:     &deletedAccountCheckerStub{},
 		AvatarPresigner:     stubAvatarPresigner{},

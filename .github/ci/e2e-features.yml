@@ -1,5 +1,5 @@
 # E2E feature catalog — smoke (CI tier 2) vs full (compose-e2e-live).
-# Parsed by scripts/ci/e2e-manifest.sh (line-oriented, no external YAML deps).
+# Parsed by scripts/ci/e2e-manifest.sh (Python3 + pinned PyYAML; typed selections).
 
 smoke_gateway:
   - TestComposeAuthLifecycle_live
