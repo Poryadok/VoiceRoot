@@ -10,7 +10,7 @@ from controller import Blocked,file_sha
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from native_store import archive_closed_store
 from nats_contract_actor import Actor
-from nats_contract_plan import declarations_for,ContractError,digest,execute,verify_census
+from nats_contract_plan import declarations_for,stream_updates_for,SCHEMA,MIGRATION_ID,ContractError,digest,execute,verify_census
 from preserve import verify_post_apply,isolated_census,canonical,recovered_census
 from scenario import ready
 
@@ -23,7 +23,7 @@ def stream_updates(state,archive,manifest):
         if event.get('kind')!='nats_contract_mutation_issued':continue
         obj=event.get('object');attempt=event.get('migration_attempt')
         action=next((a for a in state['nats_contract']['actions'] if a['api']=='$JS.API.STREAM.UPDATE.'+str(obj)),None)
-        if (obj not in ('chat_events','social_events','role_events') or action is None or event.get('api')!=action['api']
+        if (obj not in stream_updates_for(state['nats_contract']) or action is None or event.get('api')!=action['api']
             or event.get('target_sha256')!=digest(action['after'])):continue
         if attempt not in opened or attempt not in closed:raise Blocked('nats_stream_update_attempt_incomplete')
         start=opened[attempt];end=closed[attempt]
@@ -117,7 +117,9 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         manifest=archive_closed_store(stage.final_path,archive)
         if records(manifest)!=records(state['cut']['manifest']):raise Blocked('nats_migration_record_bytes_changed')
         old_consumer_states_unchanged(manifest)
-        recovery={'stream_updates':stream_updates(state,archive,manifest)};current=isolated_census(runtime,archive,manifest,'contract-retry',recovery)
+        recovery={'stream_updates':stream_updates(state,archive,manifest)}
+        if plan['schema']==SCHEMA:recovery['migration_id']=MIGRATION_ID
+        current=isolated_census(runtime,archive,manifest,'contract-retry',recovery)
         current,observations=recovered_census(state['cut']['census'],current,recovery,state['cut']['manifest'])
         partial=copy.deepcopy(plan);partial['actions']=[]
         streams={s['name']:s for s in current['streams']};consumers={(c['stream'],c['name']):c for c in current['consumers']}
@@ -145,7 +147,7 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         broker=runtime.start_broker('contract-migration',stage.final_path);ready(runtime,broker)
         attempt={'container_id':runtime.owned[broker]['id'],'server_image':NATS_IMAGE,'started_at':started}
         journal({'kind':'nats_contract_broker_opened',**attempt})
-        actor=Actor(runtime,broker,runtime.owned[broker]['id'],stage.final_path,stage.verify_final_storage,mutation_guard=mutation_guard)
+        actor=Actor(runtime,broker,runtime.owned[broker]['id'],stage.final_path,stage.verify_final_storage,mutation_guard=mutation_guard,plan=plan)
         applied=execute(plan,actor,lambda event:journal({**event,'migration_attempt':attempt['container_id']}))
         runtime.stop(broker);stage.verify_final_storage()
         journal({'kind':'nats_contract_broker_closed',**attempt,'finished_at':dt.datetime.now(dt.timezone.utc).isoformat()});closed=True
@@ -153,7 +155,9 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         manifest=archive_closed_store(stage.final_path,archive)
         if records(manifest)!=records(state['cut']['manifest']):raise Blocked('nats_migration_record_bytes_changed')
         old_state_count=old_consumer_states_unchanged(manifest)
-        recovery={'stream_updates':stream_updates(state,archive,manifest)};row=isolated_census(runtime,archive,manifest,'contract-after',recovery)
+        recovery={'stream_updates':stream_updates(state,archive,manifest)}
+        if plan['schema']==SCHEMA:recovery['migration_id']=MIGRATION_ID
+        row=isolated_census(runtime,archive,manifest,'contract-after',recovery)
         compared,observations=recovered_census(state['cut']['census'],row,recovery,state['cut']['manifest'])
         proof=verify_census(plan,state['cut']['census'],compared)
         proof['ephemeral_recovery_observations']=observations

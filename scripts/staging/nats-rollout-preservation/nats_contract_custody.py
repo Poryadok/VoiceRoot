@@ -5,7 +5,7 @@ untouched. An interrupted CAS is recognized only with its owned annotation.
 """
 import copy,hashlib,re
 from controller import Blocked
-from nats_contract_plan import declarations_for,ContractError,digest
+from nats_contract_plan import declarations_for,SCHEMA,V5_SOURCE_HASHES,V5_SCRIPT_HASHES,ContractError,digest
 
 ANNOTATION='voice-nats-preservation/contract-operation'
 def _validated_target_pairs(plan):
@@ -27,6 +27,17 @@ def advance(kube,state,stage,journal,*,mutation_guard=None):
     if migration.get('verified') is not True or migration.get('old_record_files_verified') is not True:raise Blocked('nats_contract_custody_before_proof')
     contract=state['contract'];wanted=state['nats_target_scripts']
     target_pairs=_validated_target_pairs(state.get('nats_contract'))
+    v5=state['nats_contract']['schema']==SCHEMA
+    if v5:
+        from nats_active_contract import _proof_matches
+        if not _proof_matches(migration.get('proof'),state['nats_contract']['migration_id']):
+            raise Blocked('nats_contract_custody_before_proof')
+    if v5 and (state['nats_contract'].get('sources')!=V5_SOURCE_HASHES or set(wanted)!=set(V5_SCRIPT_HASHES)
+        or any(not isinstance(wanted[part],dict) or wanted[part].get('sha256')!=sha
+            or hashlib.sha256(wanted[part].get('script','').encode()).hexdigest()!=sha for part,sha in V5_SCRIPT_HASHES.items())):
+        raise Blocked('nats_contract_script_unbound')
+    allowed=tuple(V5_SCRIPT_HASHES) if v5 else ('realtime','analytics-chat','search')
+    if any(part not in allowed for part in wanted):raise Blocked('nats_contract_script_unbound')
     existing_pairs=contract.get('consumer_pairs')
     if (not isinstance(existing_pairs,list) or any(not isinstance(pair,list) or len(pair)!=2
         or any(not isinstance(value,str) or not value for value in pair) for pair in existing_pairs)
@@ -34,7 +45,7 @@ def advance(kube,state,stage,journal,*,mutation_guard=None):
         raise Blocked('nats_contract_existing_pairs_invalid')
     complete_pairs=sorted({tuple(pair) for pair in existing_pairs}|{tuple(pair) for pair in target_pairs})
     for part,target in wanted.items():
-        if part not in ('realtime','analytics-chat','search') or hashlib.sha256(target['script'].encode()).hexdigest()!=target['sha256']:raise Blocked('nats_contract_script_unbound')
+        if part not in allowed or hashlib.sha256(target['script'].encode()).hexdigest()!=target['sha256']:raise Blocked('nats_contract_script_unbound')
         expected=next(r for r in contract['scripts'] if r['part']==part)
         stage.verify_final_storage();name='voice-nats-'+part+'-bootstrap';row=kube.get('configmap',name)
         raw=row['data']['bootstrap.sh'].encode();sha=hashlib.sha256(raw).hexdigest()

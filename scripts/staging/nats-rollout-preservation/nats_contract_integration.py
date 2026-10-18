@@ -30,7 +30,7 @@ def fixture_bootstrap_grants(contract):
         or any(len(pair)!=2 or any(not isinstance(value,str) or not value for value in pair) for pair in pairs)):
         raise ValueError('fixture_bootstrap_contract_invalid')
     grants=['$JS.API.INFO']+[prefix+name for name in streams for prefix in ('$JS.API.STREAM.CREATE.','$JS.API.STREAM.INFO.')]
-    grants += ['$JS.API.STREAM.UPDATE.'+name for name in ('chat_events','social_events','role_events')]
+    grants += ['$JS.API.STREAM.UPDATE.'+name for name in ('chat_events','social_events','role_events','voice_events','user_events')]
     grants += [prefix+stream+'.'+durable for stream,durable in sorted(pairs) for prefix in ('$JS.API.CONSUMER.CREATE.','$JS.API.CONSUMER.INFO.')]
     if len(grants)!=len(set(grants)):raise ValueError('fixture_bootstrap_grants_duplicate')
     return grants
@@ -95,7 +95,7 @@ def inner(base):
     import nats_migration
     from preserve import verify_post_apply,canonical,capture_cut
     from nats_contract_actor import Actor
-    from nats_contract_plan import compile_plan,execute,verify_census,DECLARATIONS
+    from nats_contract_plan import compile_plan,execute,verify_census,DECLARATIONS,SCHEMA,MIGRATION_ID,VOICE_ADDITIONS,USER_ADDITIONS
     from nats_contract_plan import CHAT_SUBJECTS_14,ROLE_SUBJECTS_9
     from rollout_census import census
     from bootstrap_renewal import invoke
@@ -132,6 +132,10 @@ def inner(base):
     old=(base/'inputs/bootstrap.creds').read_text()
     token=old.split('-----BEGIN NATS USER JWT-----\n',1)[1].split('\n',1)[0]
     claims=json.loads(base64.urlsafe_b64decode(token.split('.')[1]+'=='))
+    # Both new exact UPDATE grants preexist in this disposable identity. The
+    # historical music renewal below must not be used to add either grant.
+    for stream in ('voice_events','user_events'):
+        assert '$JS.API.STREAM.UPDATE.'+stream in claims['nats']['pub']['allow']
     actor_sha=hashlib.sha256(claims['sub'].encode()).hexdigest()
     public=(base/'inputs/account.public').read_text().strip();account_sha=hashlib.sha256(public.encode()).hexdigest()
     request={'schema':'voice-nats-existing-bootstrap-renewal-v1','old_creds':old,
@@ -166,7 +170,10 @@ def inner(base):
         precut_verifier=runtime.create('precut-record-verify',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','verify'],broker)
         runtime.run(['start',precut_verifier]);assert runtime.run(['wait',precut_verifier])=='0'
         account=(base/'inputs/account.public').read_text().strip()
-        before=census(runtime,broker,account);assert sum(s['state']['messages'] for s in before['streams'])==7
+        before=census(runtime,broker,account);assert sum(s['state']['messages'] for s in before['streams'])==9
+        for stream in ('voice_events','user_events'):
+            assert any(c['stream']==stream and c['num_pending']+c['num_ack_pending']>0 for c in before['consumers'])
+        assert any(c['name']=='notif_voice' and c['num_pending']+c['num_ack_pending']>0 for c in before['consumers'])
         if len(before['consumers'])!=45:raise RuntimeError('reviewed_predecessor_consumer_count_mismatch')
         raw=runtime.monitor_jsz(broker);details=next(a for a in raw['account_details'] if a['id']==account)['stream_detail']
         infos={s['name']:{'config':s['config'],'state':s['state']} for s in details}
@@ -187,9 +194,15 @@ def inner(base):
         # declaration on an empty owned scratch store, never a supplied hash.
         scratch=base/'auth-store';scratch.mkdir(mode=0o700);os.chown(scratch,65532,65532)
         normalizer=runtime.start_broker('normalizer',scratch);ready(runtime,normalizer)
-        actor=Actor(runtime,normalizer,runtime.owned[normalizer]['id'],scratch,fenced)
-        for stream in ('chat_events','social_events','role_events','file_events'):
+        actor=Actor(runtime,normalizer,runtime.owned[normalizer]['id'],scratch,fenced,plan={'schema':SCHEMA,'migration_id':MIGRATION_ID})
+        for stream in ('chat_events','social_events','role_events','file_events','voice_events','user_events'):
             actor._request('$JS.API.STREAM.CREATE.'+stream,copy.deepcopy(infos[stream]['config']))
+        # Actual exact-grant qualification happens on the empty scratch realm
+        # before the captured populated store is opened for migration.
+        for stream,additions in (('voice_events',VOICE_ADDITIONS),('user_events',USER_ADDITIONS)):
+            target=copy.deepcopy(infos[stream]['config']);target['subjects']+=list(additions)
+            actor.mutate('$JS.API.STREAM.UPDATE.'+stream,target)
+            assert actor.info_config(stream)==target
         normalized_consumers={}
         for stream,declaration in DECLARATIONS:
             durable=declaration['durable_name']
@@ -199,10 +212,12 @@ def inner(base):
             assert len(normalized)>len(declaration)
             normalized_consumers[(stream,durable)]=normalized
         runtime.stop(normalizer)
-        plan=compile_plan('/source',infos,existing_consumers,normalized_consumers)
+        plan=compile_plan('/source',infos,existing_consumers,normalized_consumers,version=SCHEMA)
         expected_actions={
             '$JS.API.STREAM.UPDATE.chat_events',
             '$JS.API.STREAM.UPDATE.role_events',
+            '$JS.API.STREAM.UPDATE.voice_events',
+            '$JS.API.STREAM.UPDATE.user_events',
             '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
             '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',
             '$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata',
@@ -262,19 +277,19 @@ def inner(base):
                 raise
         nats_migration.verify_census=diagnostic
         real_mutate=Actor.mutate
-        def interrupted_update(actor,api,body):
-            result=real_mutate(actor,api,body)
-            if api=='$JS.API.STREAM.UPDATE.chat_events':raise RuntimeError('fixture_interrupted_after_update_before_info')
-            return result
-        Actor.mutate=interrupted_update
-        try:
-            apply_contract(base,state,Stage(),state['events'].append)
-        except RuntimeError as error:
-            assert str(error)=='fixture_interrupted_after_update_before_info'
-        else:raise AssertionError('fixture_interruption_not_exercised')
-        finally:Actor.mutate=real_mutate
-        assert not any(e['kind']=='nats_contract_applied' for e in state['events'])
-        assert any(e['kind']=='nats_contract_mutation_issued' for e in state['events'])
+        for interrupted_stream in ('chat_events','voice_events','user_events'):
+            def interrupted_update(actor,api,body):
+                result=real_mutate(actor,api,body)
+                if api=='$JS.API.STREAM.UPDATE.'+interrupted_stream:raise RuntimeError('fixture_interrupted_after_update_before_info')
+                return result
+            Actor.mutate=interrupted_update
+            try:
+                apply_contract(base,state,Stage(),state['events'].append)
+            except RuntimeError as error:
+                assert str(error)=='fixture_interrupted_after_update_before_info'
+            else:raise AssertionError('fixture_interruption_not_exercised')
+            finally:Actor.mutate=real_mutate
+            assert any(e['kind']=='nats_contract_mutation_issued' and e['object']==interrupted_stream for e in state['events'])
         migration=apply_contract(base,state,Stage(),state['events'].append)
         assert migration['verified'] and migration['old_record_files_verified']
         if migration['proof']['old_consumers_preserved']!=45 or migration['proof']['created_consumers']!=3:
@@ -294,7 +309,7 @@ def inner(base):
         current_tree=runtime.monitor_jsz(broker)
         current_details=next(a for a in current_tree['account_details'] if a['id']==account)['stream_detail']
         current_infos,current_consumers=_postmigration_plan_inputs(current_actor,current_details)
-        rollback_plan=compile_plan('/source',current_infos,current_consumers,normalized_consumers)
+        rollback_plan=compile_plan('/source',current_infos,current_consumers,normalized_consumers,version=SCHEMA)
         assert rollback_plan['actions']==[]
         runtime.stop(broker)
         fresh_base=base/'fresh-operation';fresh_base.mkdir(mode=0o750);os.chown(fresh_base,0,65532)
@@ -304,7 +319,7 @@ def inner(base):
             shutil.copyfile(base/name,fresh_base/name);os.chown(fresh_base/name,0,65532);(fresh_base/name).chmod(0o550 if name=='kernel' else 0o440)
         fresh_runtime=DockerRuntime(fresh_base,'freshrollback'+fixture_id)
         fresh_cut=capture_cut(fresh_runtime,store,fenced)
-        assert sum(row['state']['messages'] for row in fresh_cut['census']['streams'])==8
+        assert sum(row['state']['messages'] for row in fresh_cut['census']['streams'])==16
         fresh_cut['manifest_sha256']=digest(fresh_cut['manifest'])
         fresh={'operation':fresh_runtime.operation,'events':[],'custody':{'verified':True,'scope':'same-host-fixture-only'},
             'bootstrap_enrollment':enrollment,'nats_contract':rollback_plan,
@@ -314,7 +329,7 @@ def inner(base):
         fresh_migration=apply_contract(fresh_base,fresh,Stage(),fresh['events'].append)
         assert fresh_migration['verified'] and fresh_migration['applied']==[]
         fresh_proof=verify_post_apply(fresh_runtime,store,fresh_migration['cut'],fenced)
-        assert fresh_proof['messages']==8
+        assert fresh_proof['messages']==16
         for name in list(fresh_runtime.owned):
             row=fresh_runtime.inspect(name);fresh_runtime.run(['rm','-f',row['Id']]);removed.append(row['Id'])
             assert not fresh_runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}'])
@@ -329,8 +344,10 @@ def inner(base):
             'old_consumers_preserved':proof['old_consumers_preserved'],'created_consumers':proof['created_consumers'],
             'normalized_consumers_sha256':digest(plan['consumer_targets']),'native_record_files_equal':True,
             'known_payloads_verified':True,'same_original_store':True,'renewed_existing_actor_auth_verified':True,'normal_migration_phase_and_postapply_proof_verified':True,
-            'fresh_rollback_current_cut_records':8,'post_release_record_payload_verified':True,'rollback_retained_additive_contract':True,
+            'fresh_rollback_current_cut_records':16,'post_release_record_payload_verified':True,'rollback_retained_additive_contract':True,
             'actual_update_before_info_interruption_recovered':True,
+            'voice_user_update_interruptions_recovered':True,'six_new_subjects_accepted':True,'notif_voice_pending_preserved':True,
+            'existing_identity_exact_voice_user_update_grants_proved_before_mutation':True,
             'new_durable_initial_delivery_ack_floors_verified':True,
             'events':[e['kind'] for e in events]}
     finally:
@@ -462,7 +479,7 @@ func seedContract() {
   _,e=js.AddConsumer(expected.Stream,&nats.ConsumerConfig{Durable:expected.Name,FilterSubject:expected.FilterSubject,DeliverSubject:expected.DeliverSubject,DeliverPolicy:nats.DeliverNewPolicy,AckPolicy:nats.AckExplicitPolicy});must(e)
   consumer,e:=js.ConsumerInfo(expected.Stream,expected.Name);must(e)
   if consumer.Config.Durable!=expected.Name || consumer.Config.FilterSubject!=expected.FilterSubject || consumer.Config.DeliverSubject!=expected.DeliverSubject || consumer.Config.DeliverPolicy!=nats.DeliverNewPolicy || consumer.Config.AckPolicy!=nats.AckExplicitPolicy {panic("friend_removed_predecessor_consumer")}
- for _,record:=range []struct{stream,subject,id,payload string}{{"chat_events","chat.created","fixture-chat-created-9ae","nats-9ae-fixture-chat-created-v1"},{"role_events","role.created","fixture-role-created-9ae","nats-9ae-fixture-role-created-v1"}} {
+ for _,record:=range []struct{stream,subject,id,payload string}{{"chat_events","chat.created","fixture-chat-created-9ae","nats-9ae-fixture-chat-created-v1"},{"role_events","role.created","fixture-role-created-9ae","nats-9ae-fixture-role-created-v1"},{"voice_events","voice.call_incoming","fixture-voice-pending","old-voice-pending"},{"user_events","user.profile_updated","fixture-user-pending","old-user-pending"}} {
   message:=nats.NewMsg(record.subject);message.Header.Set(nats.MsgIdHdr,record.id);message.Data=[]byte(record.payload)
   _,e=js.PublishMsg(message);must(e)
  }
@@ -491,6 +508,9 @@ func post(check bool) {
  nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/social.creds"),nats.Timeout(2*time.Second),nats.NoReconnect());must(e);defer nc.Close()
  js,e:=nc.JetStream();must(e)
  if check {verify();message,e:=js.GetMsg("rollout_extra",3);must(e);if string(message.Data)!="known-post-release-record" {panic("post_release_record_changed")};return}
+ for _,subject:=range []string{"voice.participant_joined","voice.participant_left","user.registered","user.logged_in","user.logged_out","user.2fa_enabled"} {
+  _,e=js.Publish(subject,[]byte("new-v5-subject-accepted"));must(e)
+ }
  _,e=js.Publish("rollout.extra",[]byte("known-post-release-record"));must(e)
 }
 '''
@@ -518,7 +538,7 @@ func post(check bool) {
         records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
     for role in ('realtime','notification','analytics-chat','search'):
         n='testdata/deployed-bootstrap-20261004/'+role+'-bootstrap.sh';records['source/scripts/staging/nats-known-baseline/'+n]=base64.b64encode((module/n).read_bytes()).decode()
-    for role in ('realtime','analytics-chat'):
+    for role in ('realtime','analytics-chat','search','notification'):
         n='deploy/templates/nats-'+role+'-bootstrap.yaml';records['source/'+n]=base64.b64encode((source/n).read_bytes()).decode()
     for name, encoded in records.items():
         path=bundle/name

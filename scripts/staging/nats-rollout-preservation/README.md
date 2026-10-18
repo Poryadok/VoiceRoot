@@ -1,5 +1,48 @@
 # Per-rollout NATS preservation
 
+## Fixed participant/Auth observation authority v5
+
+The v5 subject expansion is a distinct migration,
+`chat-space-social-role-media-music-participant-auth-observations-v5`, with plan
+schema `voice-nats-additive-contract-v5` and census proof
+`voice-nats-additive-census-proof-v4`. It retains the exact four v4 consumer
+declarations and unchanged `voice-bootstrap-auth-v4` enrollment semantics.
+
+Root selects one complete fixed four-file tuple: realtime, analytics-chat,
+search and notification. All four target script hashes come from those pinned
+files; no per-file old/new mixture, arbitrary caller hash or pin refresh is
+accepted. Voice declarations must agree in realtime/analytics/notification;
+user declarations must agree in realtime/analytics/search. The preexisting
+historical contract and previous receipts remain byte-identical. The fourth
+notification source is required because its strict stream comparison must
+recognize the same expanded voice subjects; omitting its root-derived hash
+correctly fails the compiler.
+
+Only complete old or target sets are eligible: voice 10 or 12 subjects and user
+10 or 14, independently. V5 adds exactly `voice.participant_joined`,
+`voice.participant_left`, `user.registered`, `user.logged_in`, `user.logged_out`
+and `user.2fa_enabled`, using exact stream UPDATE APIs. It deep-copies the live
+config and changes only the ordered missing subjects. Missing streams, partial
+sets, duplicates, foreign ownership/wildcards or unrelated config drift fail.
+Dynamic and declared old consumers are preserved without recreation.
+
+V5 execution, actor INFO/WRITE, issued-intent recovery and receipt readers admit
+these two extra stream targets only for v5. Old v3/v4 plans cannot acquire their
+authority. V5 receipts require all four exact source digests; the unpublished
+three-source prototype is invalid. After semantic/native preservation proof,
+custody performs the same UID/RV/operation-annotation guarded CAS for all four
+ConfigMaps. A partial or foreign fourth CAS cannot authorize the next rollout;
+the serialized complete receipt and next compile must produce a no-op.
+
+The isolated populated fixture checks pending voice/user consumers including
+`notif_voice`, old message/index and consumer state bytes, actual interruptions
+after both new UPDATEs, all six new subjects and no-op repeat. Exact UPDATE
+grants are exercised with the existing disposable authenticated identity on an
+empty scratch realm before mutating its populated store. This does not modify
+installed credentials, renew permissions, run a bootstrap Job or grant stand
+access. It uses the repository's exact pinned NATS image; its result is separate
+from hosted CI, helper installation, rollout and appointed acceptance.
+
 Normal staging deployment uses a root-owned captured bridge installed once by
 the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.

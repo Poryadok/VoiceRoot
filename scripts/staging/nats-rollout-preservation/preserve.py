@@ -431,7 +431,9 @@ def recovered_census(before,after,recovery,manifest):
         new=streams.get(old['name'])
         if new is None or new.get('created')==old.get('created'):continue
         evidence=recovery.get('stream_updates',{}).get(old['name'])
-        if old['name'] not in ('chat_events','social_events','role_events') or not evidence:raise Blocked('rollout_stream_creation_changed')
+        from nats_contract_plan import MIGRATION_ID
+        allowed=('chat_events','social_events','role_events')+(('voice_events','user_events') if recovery.get('migration_id')==MIGRATION_ID else ())
+        if old['name'] not in allowed or not evidence:raise Blocked('rollout_stream_creation_changed')
         attempt=evidence['attempt'];start=dt.datetime.fromisoformat(attempt['started_at']);end=dt.datetime.fromisoformat(attempt['finished_at'])
         created=dt.datetime.fromisoformat(new['created'].replace('Z','+00:00'))
         if (attempt.get('server_image')!=NATS_IMAGE or not attempt.get('container_id') or start.tzinfo is None or end.tzinfo is None
