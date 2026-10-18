@@ -238,9 +238,11 @@ class NativeAuthorizeTests(unittest.TestCase):
             base = Path(tmp)
             state = _contract_fixture(base)
             state["events"][3]["session_attempt"] = "deadbeef"
-            with self.assertRaisesRegex(Blocked, "census_binding_invalid"):
-                transaction._produce_native_contract_authority(base, state, {
-                    "runner_image": "runner@sha256:" + "e" * 64})
+            with patch("transaction.run_native_contract_job") as contract_job:
+                with self.assertRaisesRegex(Blocked, "census_binding_invalid"):
+                    transaction._produce_native_contract_authority(base, state, {
+                        "runner_image": "runner@sha256:" + "e" * 64})
+            contract_job.assert_not_called()
             self.assertFalse((base / "native-contract-inputs.json").exists())
 
     def test_prepare_rejects_archive_mismatch_before_contract_file(self):
@@ -248,9 +250,11 @@ class NativeAuthorizeTests(unittest.TestCase):
             base = Path(tmp)
             state = _contract_fixture(base)
             state["events"][4]["archive_sha256"] = "f" * 64
-            with self.assertRaisesRegex(Blocked, "census_binding_invalid"):
-                transaction._produce_native_contract_authority(base, state, {
-                    "runner_image": "runner@sha256:" + "e" * 64})
+            with patch("transaction.run_native_contract_job") as contract_job:
+                with self.assertRaisesRegex(Blocked, "census_binding_invalid"):
+                    transaction._produce_native_contract_authority(base, state, {
+                        "runner_image": "runner@sha256:" + "e" * 64})
+            contract_job.assert_not_called()
             self.assertFalse((base / "native-contract-inputs.json").exists())
 
 
