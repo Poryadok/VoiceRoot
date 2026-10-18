@@ -1,6 +1,7 @@
 """Focused fake typed-API consumer for the native authorization entry."""
 import copy
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import native_authorize
+import transaction
 from controller import Blocked
 
 
@@ -171,6 +173,46 @@ class NativeAuthorizeTests(unittest.TestCase):
             bridge_root.Actions(Path("."), native_api=object())
         with self.assertRaisesRegex(Blocked, "native_authority_pair_invalid"):
             bridge_root.Actions(Path("."), native_config={"phase_image": "x"})
+
+    def test_prepare_produces_contract_from_census_and_private_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "inputs").mkdir()
+            (base / "inputs/bootstrap.creds").write_bytes(b"credentials")
+            (base / "server.conf").write_bytes(b"server configuration")
+            (base / "inputs/bootstrap.creds").chmod(0o600)
+            (base / "server.conf").chmod(0o600)
+            source_uid = "33333333-3333-4333-8333-333333333333"
+            source_pv_uid = "44444444-4444-4444-8444-444444444444"
+            verify_uid = "55555555-5555-4555-8555-555555555555"
+            verify_pv_uid = "66666666-6666-4666-8666-666666666666"
+            attempt = "abcdef12"
+            state = {
+                "operation": OP, "native_source_binding": {
+                    "binding": {"source_claim": "voice-nats-jsdata-d20261018a",
+                        "source_uid": source_uid, "source_pv_name": "source-pv",
+                        "source_pv_uid": source_pv_uid, "source_node_name": "pmdebook"},
+                    "proof": {"node_hostname": "pmdebook"}},
+                "nats_contract": {"schema": "fixture", "actions": []},
+                "cut": {"manifest": {"archive_sha256": "a" * 64, "bytes": 128}},
+                "events": [
+                    {"phase": "census", "state": "PVC_BOUND",
+                        "verification_claim": "voice-nats-verify-" + OP + "-" + attempt,
+                        "verification_uid": verify_uid, "verification_pv_name": "verify-pv",
+                        "verification_pv_uid": verify_pv_uid, "verification_node_name": "pmdebook",
+                        "verification_hostname": "pmdebook", "session_attempt": attempt},
+                    {"phase": "census", "state": "INPUTS_COMPLETE",
+                        "input_bundle_sha256": "b" * 64, "input_bundle_bytes": 256},
+                    {"phase": "census", "state": "CENSUS_EXECUTION_COMPLETE",
+                        "archive_sha256": "a" * 64, "archive_bytes": 128}],
+            }
+            transaction._produce_native_contract_authority(base, state, {
+                "runner_image": "runner@sha256:" + "e" * 64})
+            row = native_authorize._native_contract(base, state)
+            envelope = json.loads(row["plan_envelope"].decode())
+            self.assertEqual(envelope["source_pvc_uid"], source_uid)
+            self.assertEqual(envelope["verification_pvc_uid"], verify_uid)
+            self.assertEqual(row["binding"]["contract_attempt"], envelope["contract_attempt"])
 
 
 if __name__ == "__main__":
