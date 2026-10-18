@@ -47,7 +47,8 @@ def fixture():
         'source_claim': 'voice-nats-jsdata-d20261017a', 'source_uid': source_uid,
         'source_pv_name': 'pv-source', 'source_pv_uid': source_pv_uid,
         'source_node_name': 'node-a', 'source_hostname': 'node-a',
-        'verification_claim': 'voice-nats-verify-' + operation,
+        'verification_attempt': attempt,
+        'verification_claim': 'voice-nats-verify-' + operation + '-' + attempt,
         'verification_uid': verify_uid, 'verification_pv_name': 'pv-verify',
         'verification_pv_uid': verify_pv_uid, 'verification_node_name': 'node-a',
         'verification_hostname': 'node-a', 'contract_attempt': attempt,
@@ -269,6 +270,24 @@ class NativeContractRuntimeTests(unittest.TestCase):
         api = FakeAPI(tuple(data)); events = []
         with self.assertRaises(runtime.NativeContractRuntimeError): self.invoke(tuple(data), api, events)
         self.assertEqual(api.calls, [])
+
+    def test_verification_attempt_and_claim_are_required_before_api(self):
+        cases = ('missing-attempt', 'legacy-claim', 'wrong-operation')
+        for case in cases:
+            with self.subTest(case=case):
+                data = list(fixture())
+                binding = copy.deepcopy(data[1])
+                if case == 'missing-attempt':
+                    binding.pop('verification_attempt')
+                elif case == 'legacy-claim':
+                    binding['verification_claim'] = 'voice-nats-verify-' + binding['source_claim'][:12]
+                else:
+                    data[0] = {**data[0], 'operation': '9' * 12}
+                data[1] = binding
+                api = FakeAPI(tuple(data)); events = []
+                with self.assertRaises(runtime.NativeContractRuntimeError):
+                    self.invoke(tuple(data), api, events)
+                self.assertEqual(api.calls, [])
 
 
 if __name__ == '__main__':

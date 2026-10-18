@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import time
 import guard
 import migrations
 import nonnats_plan
@@ -28,6 +29,198 @@ from normalize import normalize_target,image_only_documents
 from errors import safe_error
 from nats_migration import apply_contract
 import rollout_census
+
+
+def run_native_contract_job(api, request, binding, *, runner_image, plan,
+        plan_envelope, journal_events, journal_event, revalidate, timeout=600):
+    """Create/adopt one fixed source-writer Job and run its closed plan adapter.
+
+    The source writer is intentionally idle until the host has verified the
+    exact Job and original Pod identity. A create timeout is reconciled with a
+    GET only; once a Pod UID has been journaled, replacement is UNKNOWN.
+    """
+    import hashlib
+    import json
+    import kube_json_api
+    import native_contract_runtime
+    import verification_job
+
+    try:
+        request = verification_job.validate_request(request)
+        binding = verification_job.validate_contract_binding(binding)
+        wanted = verification_job.document(request, binding, runner_image)
+    except Exception:
+        raise Blocked('rollout_native_contract_job_request_invalid') from None
+    name = wanted['metadata']['name']
+    pod_template = wanted['spec']['template']
+    template_sha = hashlib.sha256(json.dumps(wanted['spec'], sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+    attempt = binding['contract_attempt']
+    common = {'operation': request['operation'], 'nonce': request['nonce'],
+        'contract_attempt': attempt, 'verification_attempt': binding.get('verification_attempt'),
+        'job_name': name, 'job_template_sha256': template_sha, 'runner_image': runner_image,
+        'source_uid': binding['source_uid'], 'source_pv_uid': binding['source_pv_uid'],
+        'verification_uid': binding['verification_uid'], 'verification_pv_uid': binding['verification_pv_uid']}
+    history = [copy.deepcopy(event) for event in journal_events]
+
+    def prior(kind):
+        rows = [event for event in history if isinstance(event, dict) and event.get('kind') == kind
+            and event.get('contract_attempt') == attempt]
+        if len(rows) > 1:
+            raise Blocked('rollout_native_contract_job_journal_ambiguous')
+        return rows[0] if rows else None
+
+    def append(event):
+        journal_event(copy.deepcopy(event))
+        history.append(copy.deepcopy(event))
+
+    intent = {'kind': 'nats_contract_job_create_intent', **common}
+    issued = {'kind': 'nats_contract_job_create_issued', **common}
+    intent_before, issued_before, created_before = (prior(kind) for kind in (
+        'nats_contract_job_create_intent', 'nats_contract_job_create_issued',
+        'nats_contract_job_created'))
+    if intent_before not in (None, intent) or issued_before not in (None, issued):
+        raise Blocked('rollout_native_contract_job_intent_changed')
+    if created_before is not None and (not isinstance(created_before, dict)
+            or set(created_before) != ({'kind', 'job_uid'} | set(common))
+        or {key: created_before.get(key) for key in common} != common
+        or not isinstance(created_before.get('job_uid'), str)
+        or not verification_job.UUID_RE.fullmatch(created_before['job_uid'])):
+        raise Blocked('rollout_native_contract_job_receipt_changed')
+
+    # A known exact Job is adoptable only behind our durable intent. The helper
+    # is idle before any broker start or contract API action.
+    try:
+        current_job = api.get_job(kube_json_api.NAMESPACE, name)
+    except kube_json_api.KubeNotFound:
+        current_job = None
+    if current_job is not None and intent_before is None:
+        raise Blocked('rollout_native_contract_job_preexisting')
+    if intent_before is None:
+        revalidate()
+        append(intent)
+    if current_job is None:
+        if issued_before is not None:
+            raise Blocked('rollout_native_contract_job_create_unknown')
+        revalidate()
+        append(issued)
+        try:
+            current_job = api.create_job(kube_json_api.NAMESPACE, wanted)
+        except Exception:
+            # Never repeat POST. A single exact GET can reconcile the outcome.
+            try:
+                current_job = api.get_job(kube_json_api.NAMESPACE, name)
+            except Exception:
+                raise Blocked('rollout_native_contract_job_create_unknown') from None
+    elif issued_before is None:
+        # A preexisting Job after an intent-only checkpoint cannot be ours;
+        # creating it now would turn an ambiguous boundary into a replay.
+        raise Blocked('rollout_native_contract_job_create_unknown')
+    try:
+        current_job = verification_job.verify_job(current_job, wanted,
+            expected_uid=(created_before or {}).get('job_uid'))
+    except Exception:
+        raise Blocked('rollout_native_contract_job_projection_changed') from None
+    job_uid = current_job['metadata']['uid']
+    created = {'kind': 'nats_contract_job_created', **common, 'job_uid': job_uid}
+    if created_before is not None and created_before != created:
+        raise Blocked('rollout_native_contract_job_uid_changed')
+    if created_before is None:
+        append(created)
+
+    deadline = time.monotonic() + timeout
+    pod = None
+    while time.monotonic() < deadline:
+        try:
+            current_job = verification_job.verify_job(api.get_job(kube_json_api.NAMESPACE, name),
+                wanted, expected_uid=job_uid)
+        except Exception:
+            raise Blocked('rollout_native_contract_job_readback_failed') from None
+        if current_job.get('status', {}).get('failed', 0) > 0:
+            raise Blocked('rollout_native_contract_job_failed')
+        try:
+            pod = api.get_job_pod(kube_json_api.NAMESPACE, name)
+        except kube_json_api.KubeAPIError:
+            # The controller may not have created its sole Pod yet. Multiple
+            # Pods are also fail-closed by the API's cardinality check and will
+            # remain blocked until timeout; none can reach pods/exec here.
+            pod = None
+        if pod is not None:
+            try:
+                verification_job.verify_pod(pod, pod_template, job_uid, 'contract-migration',
+                    expected_node_name=binding['source_node_name'])
+            except Exception:
+                raise Blocked('rollout_native_contract_pod_projection_changed') from None
+        if pod is not None and pod.get('status', {}).get('phase') == 'Running':
+            init = pod.get('status', {}).get('initContainerStatuses', [])
+            containers = pod.get('status', {}).get('containerStatuses', [])
+            if init and len(init) != 1 or containers and len(containers) != 1:
+                raise Blocked('rollout_native_contract_pod_container_set_changed')
+            if init and (init[0].get('name') != 'nats' or init[0].get('restartCount') != 0
+                or init[0].get('state', {}).get('terminated') is not None):
+                raise Blocked('rollout_native_contract_broker_container_changed')
+            if containers and (containers[0].get('name') != 'control'
+                or containers[0].get('restartCount') != 0
+                or containers[0].get('state', {}).get('terminated') is not None):
+                raise Blocked('rollout_native_contract_control_container_changed')
+            if (len(init) == 1 and init[0].get('ready') is True
+                and isinstance(init[0].get('containerID'), str)
+                and init[0]['containerID'].startswith('containerd://')
+                and len(containers) == 1 and containers[0].get('ready') is True
+                and isinstance(containers[0].get('containerID'), str)
+                and containers[0]['containerID'].startswith('containerd://')):
+                break
+        if pod is not None and pod.get('status', {}).get('phase') in ('Failed', 'Succeeded'):
+            raise Blocked('rollout_native_contract_pod_not_live')
+        time.sleep(0.25)
+    else:
+        raise Blocked('rollout_native_contract_pod_wait_timeout')
+
+    pod_uid = pod['metadata']['uid']
+    pod_name = pod['metadata']['name']
+    pod_event = {'kind': 'nats_contract_job_pod_bound', **common,
+        'job_uid': job_uid, 'pod_uid': pod_uid, 'pod_name': pod_name,
+        'nats_container_id': init[0]['containerID'], 'control_container_id': containers[0]['containerID']}
+    prior_pod = prior('nats_contract_job_pod_bound')
+    if prior_pod is not None and prior_pod != pod_event:
+        raise Blocked('rollout_native_contract_pod_replaced')
+    if prior_pod is None:
+        append(pod_event)
+
+    def verify_live_identity():
+        revalidate()
+        live_job = verification_job.verify_job(api.get_job(kube_json_api.NAMESPACE, name),
+            wanted, expected_uid=job_uid)
+        if live_job.get('status', {}).get('failed', 0) > 0:
+            raise Blocked('rollout_native_contract_job_failed')
+        live_pod = api.get_pod(kube_json_api.NAMESPACE, pod_name)
+        verification_job.verify_pod(live_pod, pod_template, job_uid, 'contract-migration',
+            expected_node_name=binding['source_node_name'], expected_uid=pod_uid)
+        live_init = live_pod.get('status', {}).get('initContainerStatuses', [])
+        live_containers = live_pod.get('status', {}).get('containerStatuses', [])
+        if (len(live_init) != 1 or live_init[0].get('name') != 'nats'
+            or live_init[0].get('containerID') != pod_event['nats_container_id']
+            or live_init[0].get('restartCount') != 0 or live_init[0].get('ready') is not True
+            or len(live_containers) != 1 or live_containers[0].get('name') != 'control'
+            or live_containers[0].get('containerID') != pod_event['control_container_id']
+            or live_containers[0].get('restartCount') != 0 or live_containers[0].get('ready') is not True):
+            raise Blocked('rollout_native_contract_pod_replaced')
+
+    verify_live_identity()
+    try:
+        applied = native_contract_runtime.apply_contract(api, request, binding,
+            pod_name=pod_name, pod_uid=pod_uid, job_uid=job_uid, runner_image=runner_image,
+            validated_plan=plan, plan_envelope_bytes=plan_envelope,
+            contract_attempt=attempt, journal_event=append, revalidate=verify_live_identity,
+            journal_events=history)
+    except Exception as error:
+        if isinstance(error, Blocked):
+            raise
+        raise Blocked('rollout_native_contract_execution_unknown') from None
+    verify_live_identity()
+    return {'job_name': name, 'job_uid': job_uid, 'pod_name': pod_name, 'pod_uid': pod_uid,
+        'contract_attempt': attempt, 'verification_attempt': binding.get('verification_attempt'),
+        'applied': applied, 'runner_image': runner_image}
 
 def save(path,row):
     import native_operation_path
