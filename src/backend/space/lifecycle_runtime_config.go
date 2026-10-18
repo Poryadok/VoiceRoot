@@ -43,7 +43,7 @@ func loadLifecycleRuntimeConfig(getenv func(string) string) (lifecycleRuntimeCon
 	if c.Mode != "development" || c.DevTombstoneKeyFile == "" {
 		return c, false, fmt.Errorf("space lifecycle requires a purpose-specific HMAC provider; local key files are permitted only in explicit development mode")
 	}
-	names := []string{"role", "chat", "messaging", "file", "voice", "matchmaking", "search", "subscription", "bot", "notification"}
+	names := []string{"role", "chat", "messaging", "file", "voice", "matchmaking", "search", "subscription", "bot", "notification", "realtime"}
 	for index, name := range names {
 		prefix := "SPACE_LIFECYCLE_" + strings.ToUpper(name)
 		address := strings.TrimSpace(getenv(prefix + "_GRPC_ADDR"))

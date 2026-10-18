@@ -59,7 +59,7 @@ func (s *SpaceStore) CleanupLifecycleEvidence(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if command.RowsAffected() != 10 {
+		if command.RowsAffected() != 11 {
 			return ErrLifecycleEvidenceInvalid
 		}
 		for _, query := range []string{`DELETE FROM space_lifecycle_participants WHERE space_id=$1`, `DELETE FROM space_lifecycle_operations WHERE space_id=$1`, `UPDATE space_lifecycle_aggregates SET evidence_compacted=TRUE WHERE space_id=$1`} {

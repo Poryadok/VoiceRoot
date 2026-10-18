@@ -61,7 +61,32 @@ No timeout reaper or privileged caller boolean is introduced.
 - [ ] Protected wire, Chat bootstrap, all sinks, Space11 consumer, readiness/docs.
 - [ ] Scoped verification, independent review, immutable delivery.
 
-### Intermediate result (not ready for integration)
+### Current implementation checkpoint (not ready for integration)
+
+The real hub now uses committed admission for every chat-scoped sink, including
+profile/Redis/ephemeral routes. Native Chat resolution cannot grant recipient
+ACL. Sender fallback on failed Chat type lookup is removed. Exact manifests,
+strong receipts and terminal denies are transactional; the Space importer,
+registry, protected transport and terminal SQL predicate require participant11.
+Space migration34 is additive to separately owned32/33; no membership triggers
+or RoomClose hooks are changed. Schema is under migrations/realtime_db.
+
+The actual hub+PG race run passed, including blocked recipient sinks, captured
+late scope and stale LIVE hydration. The new 30-day compaction test is running;
+full bytes are discarded while immutable hashes, denies and pending tickets
+survive. Cooperative incarnation close exists; dead-process recovery remains
+unsupported. Local Compose gains an independent PUBLIC-only HTTPS JWKS service
+derived by the existing initializer from the same current/next signer keys,
+avoiding application bootstrap cycles. Partial principal volumes fail startup.
+Compose config parses; initializer image build passed. Bootstrap HTTPS runtime,
+new protected listener composition, Chat native PG cases, Space34 SQL proof,
+canonical docs, generation/drift checks and independent review remain open.
+
+Owned resources: WT41 lease f8e38cf028e75e95fa9ac18395adee7d; Docker network
+rudeus172-p3, PG rudeus172-p3-pg, build cache rudeus172-p3-build; no host ports or
+shared stands. Preserve source/CI custody with actor172; ant121 publication only.
+
+### Historical initial checkpoint (superseded by current implementation)
 
 The metadata admission store/schema and synchronous scope executor exist; five
 tests execute successfully with `-race -tags=realtimep3integration` in owned

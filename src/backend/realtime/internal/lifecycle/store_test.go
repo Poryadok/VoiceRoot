@@ -42,7 +42,7 @@ func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	raw, err := os.ReadFile("../../migrations/000001_admission.up.sql")
+	raw, err := os.ReadFile("../../../migrations/realtime_db/000001_admission.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

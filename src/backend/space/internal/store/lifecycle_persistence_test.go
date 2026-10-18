@@ -33,6 +33,7 @@ var lifecycleTestParticipants = []commonv1.ParticipantId{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT,
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION,
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME,
 }
 
 var lifecycleTestRequestPackages = map[commonv1.ParticipantId]string{
@@ -46,6 +47,7 @@ var lifecycleTestRequestPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: "voice.subscription.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT:          "voice.bot.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME:     "voice.realtime.v1",
 }
 
 type durableLifecycleStore interface {

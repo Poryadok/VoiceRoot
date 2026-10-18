@@ -21,6 +21,40 @@ var (
 
 type Store struct{ Pool *pgxpool.Pool }
 
+func (s *Store) StartClosing(ctx context.Context, id uuid.UUID) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE realtime_incarnations SET state='CLOSING' WHERE id=$1 AND state='OPEN'`, id)
+	return err
+}
+
+// CloseIncarnation is called only after the original local executor has closed
+// irreversibly and drained all scopes/ambiguous transactions. It cannot clear
+// tickets or attest a different process's termination.
+func (s *Store) CloseIncarnation(ctx context.Context, id uuid.UUID) error {
+	tx, err := begin(ctx, s.Pool)
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	var state string
+	if err = tx.QueryRow(ctx, `SELECT state FROM realtime_incarnations WHERE id=$1 FOR UPDATE`, id).Scan(&state); err != nil {
+		return err
+	}
+	if state != "CLOSING" {
+		return ErrConflict
+	}
+	var pending bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM realtime_admissions WHERE incarnation_id=$1 AND state='PENDING')`, id).Scan(&pending); err != nil {
+		return err
+	}
+	if pending {
+		return ErrPending
+	}
+	if _, err = tx.Exec(ctx, `UPDATE realtime_incarnations SET state='CLOSED',closed_at=clock_timestamp() WHERE id=$1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // Open creates a never-reused process incarnation. Reopening an existing UUID,
 // even with the same runtime identity, is forbidden.
 func (s *Store) Open(ctx context.Context, id uuid.UUID, identity string) error {
