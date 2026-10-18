@@ -153,11 +153,23 @@ results from message-only hits, or concurrency/duration from coarse event counts
 
 Analytics Service — чистый consumer, не публикует события в NATS.
 
-Экспортирует метрики в Prometheus для:
-- `analytics.ingest.events_per_second`
-- `analytics.ingest.batch_size`
-- `analytics.ingest.lag_seconds`
-- `analytics.clickhouse.insert_latency`
+Экспортирует operational метрики на `/metrics` в формате Prometheus:
+
+| Метрика | Тип | Значение |
+|---|---|---|
+| `analytics_ingest_events_total` | Counter | События, принятые в buffer через NATS или gRPC; это не число уникальных durable events. |
+| `analytics_ingest_batch_size` | Histogram | Число строк в каждой непустой попытке flush с настроенным flusher, включая ошибки и повторные попытки. Пустой flush и отсутствие flusher не создают sample. Buckets: 1, 10, 100, 1000, 10000 и `+Inf`. |
+| `analytics_ingest_lag_seconds` | Histogram | Неотрицательный lag от timestamp события до NATS ingest; gRPC ingest не добавляет sample. |
+| `analytics_clickhouse_insert_latency_seconds` | Histogram | Длительность попытки ClickHouse insert, включая завершившиеся ошибкой. |
+| `analytics_flush_batches_total` | Counter | Успешные ClickHouse batch flush. |
+| `analytics_flush_errors_total` | Counter | ClickHouse batch flush, завершившиеся ошибкой. |
+| `analytics_buffer_depth` | Gauge | Последняя глубина buffer, наблюдённая NATS consumer; не непрерывное измерение всех gRPC/flush изменений. |
+
+Events per second вычисляется как `rate(analytics_ingest_events_total[5m])`,
+как в [Grafana ingest dashboard](../../deploy/observability/grafana/dashboards/voice-analytics-ingest.json).
+Отдельного gauge `events_per_second` нет. Histogram экспортирует серии
+`_bucket`, `_sum` и `_count`; повторная попытка учитывает фактический размер
+повторного batch и не означает повторный логический event в ClickHouse.
 
 ## Зависимости
 

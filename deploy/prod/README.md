@@ -13,6 +13,25 @@ Kubernetes manifests for `voice-prod` namespace. Mirrors [`deploy/staging/`](../
 
 **Production deploy** requires an explicit `image_tag` (git SHA or semver; no `latest` default).
 
+Before any registry lookup, the image gate validates the entire production
+profile from `staging-image-catalog.json`, plus `nats-hub-config-renderer`.
+An optional stack lock must use the plain mapping format in
+[stack.lock.example.yaml](stack.lock.example.yaml): version1, exactly one
+registry/tag and every production image exactly once. Duplicate/unknown fields,
+YAML aliases/collections, incomplete or nonproduction image sets, mutable tags
+and refs differing from the applied registry/tag are rejected. The verifier
+does not silently fall back when an explicitly requested lock is missing.
+
+After all manifests are found, the workflow preserves the verified plan as a
+`production-stack-lock-<run_id>-<attempt>` artifact and passes its validated tag
+and service scope to apply. `images-only` requires a nonempty set of distinct
+production service names; malformed JSON, unknown names and an empty scope fail
+before registry lookup and before cluster effects. All production images stay
+required even for selective rollout so the preserved lock describes a complete
+release; staging-only game integration and deferred Federation are excluded.
+This gate validates the declared SHA/semver tag policy, not registry tag
+immutability or deployed workload state.
+
 If GHCR packages are private, create a `docker-registry` secret in `voice-prod` and set `VOICE_PROD_IMAGE_PULL_SECRET` (patches all Deployments).
 
 Optional: `VOICE_PROD_APPLY_OBSERVABILITY=true` runs observability apply after app tier.
@@ -86,6 +105,19 @@ Workflow **[Production deploy](../../.github/workflows/prod-deploy.yml)** — ma
 
 Verifies all catalog images via `scripts/prod/verify-prod-images.sh`, then applies via `scripts/prod/render-and-apply-prod.sh`.
 
+In `full` mode, `needs_user_space_rollout=true` selects the shared User/Space
+subset after infra and application manifests are applied. The default remains
+the full ordered app tier; `needs_full_rollout=true` takes precedence even when
+both flags are true. Use the full tier for first bootstrap or changes requiring
+the complete dependency-order/Auth repair sequence. The subset delegates changed
+images to the existing ordered User/Space helper and preserves Space's desired
+replica count. It is a rollout-selection option, not a change to the workloads'
+`Recreate` strategy or a guarantee of uninterrupted service. `app-only` retains
+its existing subset selector; `images-only` retains selective image updates.
+Run `bash scripts/ci/prod-user-space-rollout_test.sh` for isolated dispatch,
+namespace and failure-propagation checks. Live readiness and deployment
+qualification still require the authorized protected rollout window.
+
 GitHub setup:
 
 | Item | Purpose |
@@ -96,6 +128,26 @@ GitHub setup:
 | Variables `VOICE_PROD_K8S_NAMESPACE`, `VOICE_PROD_*_INGRESS_HOST`, `VOICE_PROD_IMAGE_PULL_SECRET` | Prod FQDNs and namespace |
 
 See [DEPLOYMENT.md](../../docs/DEPLOYMENT.md) for tag policy and approval flow.
+
+## Production smoke
+
+With `PROD_SMOKE_ENABLED=true`, the production workflow runs
+[`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh). Before the shared health,
+storage, frontend and optional staff checks, it requires `401` from protected
+Space, Analytics dashboard and Admin report reads, both without credentials and
+with an intentionally invalid bearer. These are read-only GET requests with
+normal TLS verification, bounded connection/request timeouts and no redirect
+following. No account is created and no real staff token is sent in these
+negative probes; optional shared staff checks still use `PROD_STAFF_TOKEN`.
+
+Any other status or transport error fails the smoke before shared checks. This
+checks the public authentication boundary; it does not prove valid-session ACLs,
+media delivery, deployed release identity or final production acceptance. Real
+rollout and version-sensitive verification still require their authorized window.
+
+The offline fixture runs the actual production wrapper with fake curl and a
+shared-smoke boundary: `bash scripts/ci/prod-smoke_test.sh` (also included in
+`make ci-script-tests`). It makes no network or Kubernetes calls.
 
 ## ClickHouse schema
 

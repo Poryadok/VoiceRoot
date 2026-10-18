@@ -30,6 +30,7 @@ import (
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
 	grpcsvc "voice/backend/user/internal/grpcsvc"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/searchprojection"
 	"voice/backend/user/internal/store"
@@ -181,6 +182,11 @@ func main() {
 		defer pool.Close()
 	}
 
+	reportAuthority, err := newReportAuthorityRuntime(context.Background(), pool, grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)))
+	if err != nil {
+		log.Fatalf("user report authority startup: %v", err)
+	}
+	defer reportAuthority.Close()
 	if pool != nil {
 		var blocks grpcsvc.AccountBlockChecker
 		var socialGraph grpcsvc.SocialGraphChecker
@@ -266,6 +272,7 @@ func main() {
 		deletedAccounts = grpcsvc.NewAuthGRPCDeletedAccounts(authConn)
 
 		var presence *store.PresenceStore
+		var profileMutations grpcsvc.ProfileMutationLimiter = profilemutation.New(nil)
 		if redisAddr := strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")); redisAddr != "" {
 			rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 			pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -275,6 +282,7 @@ func main() {
 				log.Fatalf("redis ping: %v", err)
 			}
 			presence = store.NewDurablePresenceStore(rdb, store.NewLastSeenStore(pool))
+			profileMutations = profilemutation.New(rdb)
 			defer func() { _ = rdb.Close() }()
 		}
 
@@ -353,6 +361,7 @@ func main() {
 		srv := grpc.NewServer(ordinaryOptions...)
 		userSvc := &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
+			ProfileMutations:    profileMutations,
 			Privacy:             store.NewPrivacyStore(pool),
 			Presence:            presence,
 			Blocks:              blocks,
@@ -488,7 +497,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(reportAuthority.HTTP(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg)), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)

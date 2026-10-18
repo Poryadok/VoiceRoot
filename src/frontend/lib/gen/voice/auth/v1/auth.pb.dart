@@ -23,6 +23,266 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'auth.pbenum.dart';
 
+/// A complete classification of at most 1000 distinct canonical account UUIDs.
+/// Missing IDs are explicit MISSING records; omission never authorizes LIVE.
+class ClassifyReportAudienceAccountsRequest extends $pb.GeneratedMessage {
+  factory ClassifyReportAudienceAccountsRequest({
+    $core.String? evaluationId,
+    $core.Iterable<$core.String>? accountIds,
+  }) {
+    final result = create();
+    if (evaluationId != null) result.evaluationId = evaluationId;
+    if (accountIds != null) result.accountIds.addAll(accountIds);
+    return result;
+  }
+
+  ClassifyReportAudienceAccountsRequest._();
+
+  factory ClassifyReportAudienceAccountsRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ClassifyReportAudienceAccountsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ClassifyReportAudienceAccountsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'evaluationId')
+    ..pPS(2, _omitFieldNames ? '' : 'accountIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClassifyReportAudienceAccountsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClassifyReportAudienceAccountsRequest copyWith(
+          void Function(ClassifyReportAudienceAccountsRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ClassifyReportAudienceAccountsRequest))
+          as ClassifyReportAudienceAccountsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ClassifyReportAudienceAccountsRequest create() =>
+      ClassifyReportAudienceAccountsRequest._();
+  @$core.override
+  ClassifyReportAudienceAccountsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ClassifyReportAudienceAccountsRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ClassifyReportAudienceAccountsRequest>(create);
+  static ClassifyReportAudienceAccountsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get evaluationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set evaluationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEvaluationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEvaluationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get accountIds => $_getList(1);
+}
+
+class ReportAudienceAccount extends $pb.GeneratedMessage {
+  factory ReportAudienceAccount({
+    $core.String? accountId,
+    ReportAudienceAccountState? state,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (state != null) result.state = state;
+    return result;
+  }
+
+  ReportAudienceAccount._();
+
+  factory ReportAudienceAccount.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReportAudienceAccount.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReportAudienceAccount',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aE<ReportAudienceAccountState>(2, _omitFieldNames ? '' : 'state',
+        enumValues: ReportAudienceAccountState.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReportAudienceAccount clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReportAudienceAccount copyWith(
+          void Function(ReportAudienceAccount) updates) =>
+      super.copyWith((message) => updates(message as ReportAudienceAccount))
+          as ReportAudienceAccount;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReportAudienceAccount create() => ReportAudienceAccount._();
+  @$core.override
+  ReportAudienceAccount createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReportAudienceAccount getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReportAudienceAccount>(create);
+  static ReportAudienceAccount? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  ReportAudienceAccountState get state => $_getN(1);
+  @$pb.TagNumber(2)
+  set state(ReportAudienceAccountState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearState() => $_clearField(2);
+}
+
+class ClassifyReportAudienceAccountsResponse extends $pb.GeneratedMessage {
+  factory ClassifyReportAudienceAccountsResponse({
+    $core.String? evaluationId,
+    $core.Iterable<ReportAudienceAccount>? accounts,
+    $1.Timestamp? observationStartedAt,
+    $1.Timestamp? observationCompletedAt,
+    $core.String? snapshotId,
+    $1.Timestamp? expiresAt,
+  }) {
+    final result = create();
+    if (evaluationId != null) result.evaluationId = evaluationId;
+    if (accounts != null) result.accounts.addAll(accounts);
+    if (observationStartedAt != null)
+      result.observationStartedAt = observationStartedAt;
+    if (observationCompletedAt != null)
+      result.observationCompletedAt = observationCompletedAt;
+    if (snapshotId != null) result.snapshotId = snapshotId;
+    if (expiresAt != null) result.expiresAt = expiresAt;
+    return result;
+  }
+
+  ClassifyReportAudienceAccountsResponse._();
+
+  factory ClassifyReportAudienceAccountsResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ClassifyReportAudienceAccountsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ClassifyReportAudienceAccountsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'evaluationId')
+    ..pPM<ReportAudienceAccount>(2, _omitFieldNames ? '' : 'accounts',
+        subBuilder: ReportAudienceAccount.create)
+    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'observationStartedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(4, _omitFieldNames ? '' : 'observationCompletedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOS(5, _omitFieldNames ? '' : 'snapshotId')
+    ..aOM<$1.Timestamp>(6, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClassifyReportAudienceAccountsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClassifyReportAudienceAccountsResponse copyWith(
+          void Function(ClassifyReportAudienceAccountsResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ClassifyReportAudienceAccountsResponse))
+          as ClassifyReportAudienceAccountsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ClassifyReportAudienceAccountsResponse create() =>
+      ClassifyReportAudienceAccountsResponse._();
+  @$core.override
+  ClassifyReportAudienceAccountsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ClassifyReportAudienceAccountsResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ClassifyReportAudienceAccountsResponse>(create);
+  static ClassifyReportAudienceAccountsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get evaluationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set evaluationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEvaluationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEvaluationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<ReportAudienceAccount> get accounts => $_getList(1);
+
+  @$pb.TagNumber(3)
+  $1.Timestamp get observationStartedAt => $_getN(2);
+  @$pb.TagNumber(3)
+  set observationStartedAt($1.Timestamp value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasObservationStartedAt() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearObservationStartedAt() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $1.Timestamp ensureObservationStartedAt() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $1.Timestamp get observationCompletedAt => $_getN(3);
+  @$pb.TagNumber(4)
+  set observationCompletedAt($1.Timestamp value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasObservationCompletedAt() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearObservationCompletedAt() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $1.Timestamp ensureObservationCompletedAt() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  $core.String get snapshotId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set snapshotId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSnapshotId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSnapshotId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $1.Timestamp get expiresAt => $_getN(5);
+  @$pb.TagNumber(6)
+  set expiresAt($1.Timestamp value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasExpiresAt() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearExpiresAt() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $1.Timestamp ensureExpiresAt() => $_ensure(5);
+}
+
 class RegisterRequest extends $pb.GeneratedMessage {
   factory RegisterRequest({
     $core.String? email,

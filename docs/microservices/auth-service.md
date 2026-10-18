@@ -802,6 +802,30 @@ their own evidence.
 
 ## Зависимости
 
+### Accepted BE-046 report-audience classification
+
+`AuthService.ClassifyReportAudienceAccounts` is a dedicated protected
+`service:user` method, not an ordinary Auth/Gateway surface or an extension of
+the negative-only `FilterDeletedAccountIDs` trust path. It binds an evaluation
+UUID and at most 1000 unique canonical nonnil account UUIDs to the exact
+Phase-0 RPC/body/request ID. mTLS, HTTPS JWKS and shared replay protection apply;
+raw metadata, delegated users and other service issuers are rejected before
+store access.
+
+Auth returns exactly one LIVE/DELETED/MISSING disposition for every requested
+ID plus bounded observation metadata and opaque snapshot ID. LIVE means an
+existing nondeleted account for this potential-audience metric; suspension,
+guest state and presence do not remove it. No omitted ID is implicitly live,
+no subject IDs/content are returned, and inconsistent store state fails closed.
+User must classify every candidate batch within the complete 30-second
+observation window or report unavailable. Auth remains the sole account owner;
+User never reads `auth_db`.
+
+This surface does not change moderation subjects, restrictions or Auth status.
+The [BE-046 plan](../testing/report-threshold-exec-plan.md) preserves BE-045's
+separate subject/lifecycle authority and all ordinary authentication behavior.
+The contract is accepted; producer/runtime activation and proof remain open.
+
 ### Linked provider verification
 
 `linked_identities` хранит единственную account/provider identity вместе с owning

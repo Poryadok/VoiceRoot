@@ -33,6 +33,17 @@ class UserServiceClient extends $grpc.Client {
 
   UserServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// @voice.security=protected;callers=service:moderation
+  /// Dedicated listener; complete potential audience, never a public existence oracle.
+  $grpc.ResponseFuture<$0.ResolveReportThresholdContextResponse>
+      resolveReportThresholdContext(
+    $0.ResolveReportThresholdContextRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolveReportThresholdContext, request,
+        options: options);
+  }
+
   /// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
   /// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
   $grpc.ResponseFuture<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile(
@@ -366,6 +377,12 @@ class UserServiceClient extends $grpc.Client {
 
   // method descriptors
 
+  static final _$resolveReportThresholdContext = $grpc.ClientMethod<
+          $0.ResolveReportThresholdContextRequest,
+          $0.ResolveReportThresholdContextResponse>(
+      '/voice.user.v1.UserService/ResolveReportThresholdContext',
+      ($0.ResolveReportThresholdContextRequest value) => value.writeToBuffer(),
+      $0.ResolveReportThresholdContextResponse.fromBuffer);
   static final _$ensurePrimaryProfile = $grpc.ClientMethod<
           $0.EnsurePrimaryProfileRequest, $0.EnsurePrimaryProfileResponse>(
       '/voice.user.v1.UserService/EnsurePrimaryProfile',
@@ -584,6 +601,16 @@ abstract class UserServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.user.v1.UserService';
 
   UserServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.ResolveReportThresholdContextRequest,
+            $0.ResolveReportThresholdContextResponse>(
+        'ResolveReportThresholdContext',
+        resolveReportThresholdContext_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolveReportThresholdContextRequest.fromBuffer(value),
+        ($0.ResolveReportThresholdContextResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.EnsurePrimaryProfileRequest,
             $0.EnsurePrimaryProfileResponse>(
         'EnsurePrimaryProfile',
@@ -944,6 +971,18 @@ abstract class UserServiceBase extends $grpc.Service {
         ($0.GetSearchProfileCheckpointResponse value) =>
             value.writeToBuffer()));
   }
+
+  $async.Future<$0.ResolveReportThresholdContextResponse>
+      resolveReportThresholdContext_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ResolveReportThresholdContextRequest>
+              $request) async {
+    return resolveReportThresholdContext($call, await $request);
+  }
+
+  $async.Future<$0.ResolveReportThresholdContextResponse>
+      resolveReportThresholdContext($grpc.ServiceCall call,
+          $0.ResolveReportThresholdContextRequest request);
 
   $async.Future<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile_Pre(
       $grpc.ServiceCall $call,

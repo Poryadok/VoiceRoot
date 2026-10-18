@@ -111,6 +111,7 @@ func TestModerationPlatform_GetReport_ResolveReport_AssignReport(t *testing.T) {
 	})
 	require.NoError(t, err)
 	reportID := created.GetReport().GetId()
+	validateFixtureReports(t, pool)
 
 	got, err := client.GetReport(modCtx, &moderationv1.GetReportRequest{ReportId: reportID})
 	require.NoError(t, err)
@@ -118,10 +119,10 @@ func TestModerationPlatform_GetReport_ResolveReport_AssignReport(t *testing.T) {
 	require.Equal(t, "pending", got.GetReport().GetStatus())
 
 	assigned, err := client.ResolveReport(modCtx, &moderationv1.ResolveReportRequest{
-		ReportId:              reportID,
-		NewStatus:             "reviewing",
-		ResolutionJson:        `{"note":"assigned for review"}`,
-		AssignedToProfileId:   strPtr(modProfile.String()),
+		ReportId:            reportID,
+		NewStatus:           "reviewing",
+		ResolutionJson:      `{"note":"assigned for review"}`,
+		AssignedToProfileId: strPtr(modProfile.String()),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "reviewing", assigned.GetReport().GetStatus())
@@ -157,6 +158,7 @@ func TestModerationPlatform_ResolveReport_StatusValidationBeforeMutation(t *test
 	})
 	require.NoError(t, err)
 	reportID := created.GetReport().GetId()
+	validateFixtureReports(t, pool)
 
 	for _, invalidStatus := range []string{"", "garbage"} {
 		invalidStatus := invalidStatus
@@ -215,6 +217,7 @@ func TestModerationPlatform_ResolveReport_CanonicalStatusesAccepted(t *testing.T
 			})
 			require.NoError(t, err)
 
+			validateFixtureReports(t, pool)
 			resolved, err := client.ResolveReport(modCtx, &moderationv1.ResolveReportRequest{
 				ReportId:  created.GetReport().GetId(),
 				NewStatus: wantStatus,
@@ -253,6 +256,7 @@ func TestModerationPlatform_ListReports_queueFilter_content_vs_spaces(t *testing
 		require.NoError(t, err)
 	}
 
+	validateFixtureReports(t, pool)
 	contentList, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
 		StatusFilter: "pending",
 		QueueFilter:  "content",
@@ -308,6 +312,7 @@ func TestModerationPlatform_ListReports_stableCursorPagination(t *testing.T) {
 		_, err = pool.Exec(ctx, `UPDATE reports SET created_at = $2 WHERE id = $1`, report.GetReport().GetId(), spec.at)
 		require.NoError(t, err)
 	}
+	validateFixtureReports(t, pool)
 	tieIDs := append([]string(nil), created[3:]...)
 	sort.Slice(tieIDs, func(i, j int) bool { return tieIDs[i] > tieIDs[j] })
 	want := append(append([]string(nil), created[:3]...), tieIDs...)
@@ -434,9 +439,9 @@ func TestModerationPlatform_CheckMessage_spamMuteFirstSecondOffense(t *testing.T
 	spamBody := "http://spam.example/deal http://spam.example/deal http://spam.example/deal"
 
 	first, err := client.CheckMessage(withInternalModCtx(ctx, senderProfile), &moderationv1.CheckMessageRequest{
-		Chat:             &chatv1.ChatRef{Id: chatID.String(), Type: &dm},
-		Content:          spamBody,
-		SenderProfileId:  senderProfile.String(),
+		Chat:            &chatv1.ChatRef{Id: chatID.String(), Type: &dm},
+		Content:         spamBody,
+		SenderProfileId: senderProfile.String(),
 	})
 	require.NoError(t, err)
 	require.False(t, first.GetCheckResult().GetAllowed())

@@ -83,7 +83,8 @@ func (s *SpaceStore) UpdateMemberNickname(ctx context.Context, spaceID, target, 
 		return nil, ErrNicknameOwnerProtected
 	}
 	row, err := scanMembershipRow(s.db().QueryRow(ctx, `SELECT space_id,profile_id,joined_at,nickname FROM space_members WHERE space_id=$1 AND profile_id=$2 FOR UPDATE`, spaceID, target))
-	if errors.Is(err, pgx.ErrNoRows) {
+	// scanMembershipRow represents an absent local membership as (nil, nil).
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && row == nil {
 		external, lookupErr := s.IsSpaceMember(ctx, spaceID, target)
 		if lookupErr != nil {
 			return nil, lookupErr
@@ -91,6 +92,7 @@ func (s *SpaceStore) UpdateMemberNickname(ctx context.Context, spaceID, target, 
 		if external {
 			return nil, ErrNicknameExternallyManaged
 		}
+		return nil, pgx.ErrNoRows
 	}
 	if err != nil {
 		return nil, err

@@ -7,11 +7,17 @@
 **Язык**: Go
 **БД**: PostgreSQL `moderation_db`
 
+BE-137 global intake follows the accepted [opaque report contract](../testing/report-intake-contract.md):
+Gateway-derived verified reporter, durable receipt-only `202`, asynchronous
+owner decisions, validation-gated staff/count/actions and transactional outbox.
+The implementation must carry new intake state and historical publication
+provenance together; owner absence is not a public rejection or report oracle.
+
 ## Ответственность
 
 - Жалобы на пользователей, сообщения, пространства
 - Категории: spam, harassment, offensive, fake, cheating, other
-- Авто-блокировка: 1% или 10+ жалоб за 24 часа → shadow ban
+- Авто-блокировка: `max(10, ceil(N/100))` distinct qualifying reporter accounts за 24 часа → shadow ban; accepted authority contract below
 - Pattern spam detection → auto-mute
 - Shadow ban (пользователь не знает о бане)
 - Очередь ручной модерации
@@ -78,8 +84,15 @@ service ModerationService {
 reports
 ├── id (UUID)
 ├── reporter_profile_id
+├── reporter_account_id (nullable; verified submission identity, NULL for legacy)
 ├── target_type (user | message | space | story)
 ├── target_id (UUID)
+├── validated_target_account_id (nullable; User LIVE mapping only)
+├── validation_state (PENDING | VALID | MISSING | DELETED)
+├── validation_publication_legacy (boolean; historical events must not replay)
+├── validation_attempts / validation_next_at
+├── validation_claim / validation_claim_until (durable validation lease)
+├── validation_failure_code (sanitized dependency/disposition code)
 ├── category (spam | harassment | offensive | fake | cheating | other)
 ├── description (text, nullable)
 ├── evidence (jsonb — screenshots, message_ids)
@@ -131,6 +144,38 @@ auto_mod_log
 
 ## Авто-модерация
 
+### Scan statistics
+
+`GetAutoModStats.messages_checked` counts configured `CheckMessage` evaluations
+since the scan aggregate was introduced, including allowed/blocked results and
+each retried RPC. The current request has no message ID or idempotency key, so
+this is not a unique-message count. Pattern evaluation happens before the
+existing spam-sender validation; an evaluation followed by that validation error
+still counts. A missing AutoMod implementation bypasses scanning and does not
+count. Historical clean scans cannot be recovered from `auto_mod_log`: the new
+aggregate starts at zero rather than importing an incomplete action-log estimate.
+
+The durable `auto_mod_scan_stats` singleton holds only `messages_checked` and
+`recorded_since`, without message content or profile/message identifiers.
+Concurrent increments are atomic. Counter storage failure emits a generic
+warning and preserves the existing moderation result/error; the aggregate can
+therefore undercount during failures and is not a billing or audit ledger.
+The business decision is computed before synchronous metric persistence. The
+metric receives a child timeout capped at 50 ms and one quarter of the remaining
+caller deadline, reserving the rest for returning the result; canceled callers
+and metric budgets below 1 ms skip persistence. Counter lock/pool/network stalls
+therefore cannot exhaust the business query's context. There is no background
+worker, queue or per-request goroutine. Lock contention/timeouts and skipped
+short-budget samples can undercount; no retry/backlog is fabricated.
+Stats reads fail on missing/broken storage rather than presenting a fabricated
+zero. `blocked` retains its existing action-log aggregation and time coverage;
+it is not a ratio-compatible counterpart of this since-introduction scan count.
+
+Apply the additive migration before deploying the binary. Old binaries can run
+with the extra table but cannot populate it. Rolling back the counter migration
+deletes only this aggregate and resets its baseline if reapplied; preserve it
+for operational continuity and roll back the binary before any schema removal.
+
 ```
 message.sent event ──► CheckMessage():
   1. Spam pattern detection (repeated messages, link flooding)
@@ -138,11 +183,26 @@ message.sent event ──► CheckMessage():
 
 report.created event ──► Check thresholds:
   1. Count reports on target in 24h
-  2. Если ≥10 или ≥1% от активных пользователей → shadow_ban
+  2. Если count ≥ max(10, ceil(authoritative target audience / 100)) → shadow_ban
   3. Добавить в очередь ручной модерации
 ```
 
 ## Публикуемые события (→ NATS)
+
+The accepted BE-046 target is the
+[authoritative report-threshold vertical](../testing/report-threshold-exec-plan.md).
+Only exact user-profile cases are automatic; no profile-as-account UUID
+fallback or environment denominator is authority. Count distinct verified
+submission accounts from VALID unresolved reports with compatible target
+binding and original server time. User supplies a complete fresh potential
+public-profile account denominator; Moderation separately resolves the BE-045
+subject/lifecycle, then rechecks under the common account lock. Unknown authority
+preserves accepted/manual reports and persistent retry, without a sanction.
+
+One logical active account case, machine-issued shadow sanction, log, evidence
+associations and immutable event outbox commit atomically. Review closure writes
+an account cutoff against immediate replay; shadow ban does not mutate Auth
+account status. This is an accepted target, not an assertion of shipped runtime.
 
 Доменный поток JetStream: **`moderation.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 

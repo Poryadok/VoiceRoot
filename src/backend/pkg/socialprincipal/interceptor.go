@@ -23,6 +23,8 @@ func Method(target string) string {
 	switch target {
 	case "automod-evidence":
 		return automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName
+	case "moderation-report-threshold":
+		return "/voice.user.v1.UserService/ResolveReportThresholdContext"
 	case "user":
 		return "/voice.user.v1.UserService/GetPrivacySettings"
 	case "space":
@@ -55,6 +57,8 @@ func AllowsMethod(target, method string) bool {
 			method == automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName ||
 			method == automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName ||
 			method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName
+	case "moderation-report-threshold":
+		return method == Method(target)
 	case "space-voice-communication", "space-messaging-communication":
 		return method == Method(target)
 	case "user":
@@ -318,6 +322,9 @@ func expectedIssuer(target string) string {
 	if target == "automod-evidence" {
 		return "messaging"
 	}
+	if target == "moderation-report-threshold" {
+		return "moderation"
+	}
 	if target == "space-voice-communication" {
 		return "voice"
 	}
@@ -358,7 +365,7 @@ func requiredIssuers(capability string) []string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication" || capability == "automod-evidence"
+	return capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication" || capability == "automod-evidence" || capability == "moderation-report-threshold"
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing

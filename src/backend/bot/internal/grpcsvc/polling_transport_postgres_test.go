@@ -50,31 +50,36 @@ func TestPollingTransportActualHandlerStallReleasesPostgresFence(t *testing.T) {
 		t.Skip("requires PostgreSQL")
 	}
 	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	pool := integrationtest.StartPostgres(t, ctx, "botdb", "")
+	setupCtx, setupCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer setupCancel()
+	pool := integrationtest.StartPostgres(t, setupCtx, "botdb", "")
 	_, file, _, _ := runtime.Caller(0)
 	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", name))
 		require.NoError(t, err)
-		_, err = pool.Exec(ctx, string(raw))
+		_, err = pool.Exec(setupCtx, string(raw))
 		require.NoError(t, err)
 	}
 	st := &store.BotStore{Pool: pool}
 	profile, space, chat, operation := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	bot, token, err := st.CreateBot(ctx, uuid.New(), "Stalled Poll", "", `["TEXT_CHAT_READ_HISTORY"]`, profile)
+	bot, token, err := st.CreateBot(setupCtx, uuid.New(), "Stalled Poll", "", `["TEXT_CHAT_READ_HISTORY"]`, profile)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `UPDATE bots SET is_polling_mode=true WHERE id=$1`, bot.ID)
+	_, err = pool.Exec(setupCtx, `UPDATE bots SET is_polling_mode=true WHERE id=$1`, bot.ID)
 	require.NoError(t, err)
-	_, err = st.InstallInSpace(ctx, bot.ID, space, profile, []uuid.UUID{chat})
+	_, err = st.InstallInSpace(setupCtx, bot.ID, space, profile, []uuid.UUID{chat})
 	require.NoError(t, err)
 	for i := 0; i < 4; i++ {
-		require.NoError(t, st.QueueMessageRecipients(ctx, chat, uuid.New(), uuid.NewString(), map[string]any{"chat_id": chat.String(), "content": strings.Repeat("x", 1024*1024)}))
-		d, err := st.ClaimDueMessageDelivery(ctx)
+		require.NoError(t, st.QueueMessageRecipients(setupCtx, chat, uuid.New(), uuid.NewString(), map[string]any{"chat_id": chat.String(), "content": strings.Repeat("x", 1024*1024)}))
+		d, err := st.ClaimDueMessageDelivery(setupCtx)
 		require.NoError(t, err)
 		require.NotNil(t, d)
-		require.NoError(t, st.DeliverMessage(ctx, d, func(string, string) error { t.Fatal("unexpected webhook"); return nil }))
+		require.NoError(t, st.DeliverMessage(setupCtx, d, func(string, string) error { t.Fatal("unexpected webhook"); return nil }))
 	}
+	setupCancel()
+	// Container startup and fixture writes must not consume the transport proof's
+	// unchanged assertion budget or its independent two-second server cap.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	second, handlerReturned := make(chan struct{}), make(chan error, 1)
 	var active atomic.Bool
 	srv := grpc.NewServer(grpc.InTapHandle(pollEventsTransportTap(2*time.Second)), grpc.StreamInterceptor(func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {

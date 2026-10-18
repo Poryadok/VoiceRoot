@@ -64,6 +64,10 @@ type grpcClients struct {
 	matchmakingCompleteConn   *grpc.ClientConn
 	matchmakingCompleteErr    error
 	moderation                moderationv1.ModerationServiceClient
+	reportIntake              moderationv1.ModerationServiceClient
+	reportIntakeConn          *grpc.ClientConn
+	reportIntakeRequired      bool
+	reportIntakeErr           error
 	subscription              subscriptionv1.SubscriptionServiceClient
 	bot                       botv1.BotServiceClient
 	story                     storyv1.StoryServiceClient
@@ -96,6 +100,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 
 	clients := &grpcClients{}
 	clients.configureAuditInitiatingTransports()
+	clients.configureReportIntake()
 	if cfg, enabled, err := spaceLifecycleClientConfigFromEnv(); err != nil {
 		clients.spaceLifecycleErr = err
 	} else if enabled {
@@ -244,7 +249,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	} else if conn != nil {
 		clients.analytics = analyticsv1.NewAnalyticsQueryServiceClient(conn)
 	}
-	if len(clients.auditInitiatingTransports) == 0 && clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
+	if !clients.reportIntakeRequired && len(clients.auditInitiatingTransports) == 0 && clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
 		return nil
 	}
 	return clients
@@ -256,6 +261,9 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 // first profile request.
 func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 	if c != nil {
+		if err := c.waitReportIntakeReady(ctx); err != nil {
+			return err
+		}
 		if err := c.waitAuditInitiatingReady(ctx); err != nil {
 			return err
 		}
@@ -431,7 +439,7 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveSearch(w, r, rest)
 	case "moderation":
-		if t.clients.moderation == nil {
+		if t.clients.moderation == nil && rest != "reports" {
 			return false
 		}
 		return t.serveModeration(w, r, rest)

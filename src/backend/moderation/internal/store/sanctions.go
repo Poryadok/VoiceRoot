@@ -44,13 +44,17 @@ func (s *SanctionStore) InsertSanction(
 	}
 	err := s.Pool.QueryRow(ctx, `
 INSERT INTO sanctions (target_account_id, type, reason, report_id, issued_by, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+SELECT $1, $2, $3, $4, $5, $6
+WHERE $4::uuid IS NULL OR EXISTS(SELECT 1 FROM reports WHERE id = $4 AND validation_state = 'VALID')
 RETURNING id, target_account_id, type, reason, report_id, issued_by, expires_at, revoked_at, revoked_by, created_at`,
 		targetAccountID, sanctionType, reason, reportAny, issuedBy, expiresAny,
 	).Scan(
 		&row.ID, &row.TargetAccountID, &row.Type, &row.Reason, &row.ReportID,
 		&row.IssuedBy, &row.ExpiresAt, &row.RevokedAt, &row.RevokedBy, &row.CreatedAt,
 	)
+	if errors.Is(err, pgx.ErrNoRows) && reportID != nil {
+		return nil, ErrReportNotValidated
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -113,13 +117,17 @@ func (s *SanctionStore) InsertSanctionTx(ctx context.Context, tx pgx.Tx, targetA
 	}
 	err := tx.QueryRow(ctx, `
 INSERT INTO sanctions (target_account_id, type, reason, report_id, issued_by, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+SELECT $1, $2, $3, $4, $5, $6
+WHERE $4::uuid IS NULL OR EXISTS(SELECT 1 FROM reports WHERE id = $4 AND validation_state = 'VALID')
 RETURNING id, target_account_id, type, reason, report_id, issued_by, expires_at, revoked_at, revoked_by, created_at`,
 		targetAccountID, sanctionType, reason, reportAny, issuedBy, expiresAny,
 	).Scan(
 		&row.ID, &row.TargetAccountID, &row.Type, &row.Reason, &row.ReportID,
 		&row.IssuedBy, &row.ExpiresAt, &row.RevokedAt, &row.RevokedBy, &row.CreatedAt,
 	)
+	if errors.Is(err, pgx.ErrNoRows) && reportID != nil {
+		return nil, ErrReportNotValidated
+	}
 	if err != nil {
 		return nil, err
 	}

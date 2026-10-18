@@ -25,6 +25,300 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'user.pbenum.dart';
 
+class ResolveReportThresholdContextRequest extends $pb.GeneratedMessage {
+  factory ResolveReportThresholdContextRequest({
+    $core.String? evaluationId,
+    $core.String? targetProfileId,
+    $core.String? expectedTargetAccountId,
+    $fixnum.Int64? expectedProfileRevision,
+  }) {
+    final result = create();
+    if (evaluationId != null) result.evaluationId = evaluationId;
+    if (targetProfileId != null) result.targetProfileId = targetProfileId;
+    if (expectedTargetAccountId != null)
+      result.expectedTargetAccountId = expectedTargetAccountId;
+    if (expectedProfileRevision != null)
+      result.expectedProfileRevision = expectedProfileRevision;
+    return result;
+  }
+
+  ResolveReportThresholdContextRequest._();
+
+  factory ResolveReportThresholdContextRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveReportThresholdContextRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveReportThresholdContextRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'evaluationId')
+    ..aOS(2, _omitFieldNames ? '' : 'targetProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'expectedTargetAccountId')
+    ..a<$fixnum.Int64>(4, _omitFieldNames ? '' : 'expectedProfileRevision',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveReportThresholdContextRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveReportThresholdContextRequest copyWith(
+          void Function(ResolveReportThresholdContextRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveReportThresholdContextRequest))
+          as ResolveReportThresholdContextRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveReportThresholdContextRequest create() =>
+      ResolveReportThresholdContextRequest._();
+  @$core.override
+  ResolveReportThresholdContextRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveReportThresholdContextRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveReportThresholdContextRequest>(create);
+  static ResolveReportThresholdContextRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get evaluationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set evaluationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEvaluationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEvaluationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get targetProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set targetProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTargetProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTargetProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get expectedTargetAccountId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set expectedTargetAccountId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasExpectedTargetAccountId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearExpectedTargetAccountId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get expectedProfileRevision => $_getI64(3);
+  @$pb.TagNumber(4)
+  set expectedProfileRevision($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExpectedProfileRevision() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExpectedProfileRevision() => $_clearField(4);
+}
+
+/// Complete observations expire within 30 seconds from the first owner observation.
+/// Moderation separately binds the returned account to BE-045's immutable Auth subject.
+class ResolveReportThresholdContextResponse extends $pb.GeneratedMessage {
+  factory ResolveReportThresholdContextResponse({
+    ReportThresholdContextState? state,
+    $core.String? targetProfileId,
+    $core.String? targetAccountId,
+    $fixnum.Int64? profileRevision,
+    $core.String? metricVersion,
+    $fixnum.Int64? audienceAccounts,
+    $1.Timestamp? observationStartedAt,
+    $1.Timestamp? observationCompletedAt,
+    $1.Timestamp? expiresAt,
+    $core.String? snapshotId,
+    $core.String? evaluationId,
+  }) {
+    final result = create();
+    if (state != null) result.state = state;
+    if (targetProfileId != null) result.targetProfileId = targetProfileId;
+    if (targetAccountId != null) result.targetAccountId = targetAccountId;
+    if (profileRevision != null) result.profileRevision = profileRevision;
+    if (metricVersion != null) result.metricVersion = metricVersion;
+    if (audienceAccounts != null) result.audienceAccounts = audienceAccounts;
+    if (observationStartedAt != null)
+      result.observationStartedAt = observationStartedAt;
+    if (observationCompletedAt != null)
+      result.observationCompletedAt = observationCompletedAt;
+    if (expiresAt != null) result.expiresAt = expiresAt;
+    if (snapshotId != null) result.snapshotId = snapshotId;
+    if (evaluationId != null) result.evaluationId = evaluationId;
+    return result;
+  }
+
+  ResolveReportThresholdContextResponse._();
+
+  factory ResolveReportThresholdContextResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveReportThresholdContextResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveReportThresholdContextResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aE<ReportThresholdContextState>(1, _omitFieldNames ? '' : 'state',
+        enumValues: ReportThresholdContextState.values)
+    ..aOS(2, _omitFieldNames ? '' : 'targetProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'targetAccountId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'profileRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(5, _omitFieldNames ? '' : 'metricVersion')
+    ..aInt64(6, _omitFieldNames ? '' : 'audienceAccounts')
+    ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'observationStartedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'observationCompletedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOS(10, _omitFieldNames ? '' : 'snapshotId')
+    ..aOS(11, _omitFieldNames ? '' : 'evaluationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveReportThresholdContextResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveReportThresholdContextResponse copyWith(
+          void Function(ResolveReportThresholdContextResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveReportThresholdContextResponse))
+          as ResolveReportThresholdContextResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveReportThresholdContextResponse create() =>
+      ResolveReportThresholdContextResponse._();
+  @$core.override
+  ResolveReportThresholdContextResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveReportThresholdContextResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveReportThresholdContextResponse>(create);
+  static ResolveReportThresholdContextResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  ReportThresholdContextState get state => $_getN(0);
+  @$pb.TagNumber(1)
+  set state(ReportThresholdContextState value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasState() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearState() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get targetProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set targetProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTargetProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTargetProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get targetAccountId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set targetAccountId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasTargetAccountId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearTargetAccountId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get profileRevision => $_getI64(3);
+  @$pb.TagNumber(4)
+  set profileRevision($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasProfileRevision() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearProfileRevision() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get metricVersion => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set metricVersion($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasMetricVersion() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearMetricVersion() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get audienceAccounts => $_getI64(5);
+  @$pb.TagNumber(6)
+  set audienceAccounts($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasAudienceAccounts() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearAudienceAccounts() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $1.Timestamp get observationStartedAt => $_getN(6);
+  @$pb.TagNumber(7)
+  set observationStartedAt($1.Timestamp value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasObservationStartedAt() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearObservationStartedAt() => $_clearField(7);
+  @$pb.TagNumber(7)
+  $1.Timestamp ensureObservationStartedAt() => $_ensure(6);
+
+  @$pb.TagNumber(8)
+  $1.Timestamp get observationCompletedAt => $_getN(7);
+  @$pb.TagNumber(8)
+  set observationCompletedAt($1.Timestamp value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasObservationCompletedAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearObservationCompletedAt() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $1.Timestamp ensureObservationCompletedAt() => $_ensure(7);
+
+  @$pb.TagNumber(9)
+  $1.Timestamp get expiresAt => $_getN(8);
+  @$pb.TagNumber(9)
+  set expiresAt($1.Timestamp value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasExpiresAt() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearExpiresAt() => $_clearField(9);
+  @$pb.TagNumber(9)
+  $1.Timestamp ensureExpiresAt() => $_ensure(8);
+
+  @$pb.TagNumber(10)
+  $core.String get snapshotId => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set snapshotId($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasSnapshotId() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearSnapshotId() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get evaluationId => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set evaluationId($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasEvaluationId() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearEvaluationId() => $_clearField(11);
+}
+
 class EnsurePrimaryProfileRequest extends $pb.GeneratedMessage {
   factory EnsurePrimaryProfileRequest({
     $core.String? accountId,

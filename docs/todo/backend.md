@@ -714,7 +714,7 @@ and Voice IDs denied while history remains.
 
 ### Multi-Profile
 
-- [ ] **[Multi-Profile] No create/delete profile rate limits** — anti-abuse spec in `docs/features/multi-profile.md`; no throttling in `CreateProfile` / `DeleteProfile` (`src/backend/user/internal/grpcsvc/user.go`).
+- [ ] **[Multi-Profile] Verify shared profile-mutation quotas in deployment (BE-220)** — source adds required Redis admission before `CreateProfile` / `DeleteProfile`: independent 10 attempts/rolling hour/account/operation, fail closed on Redis errors. Developer Docker evidence and independent review are tracked in TT; versioned deployed verification and acceptance remain separate. See [ExecPlan](../testing/profile-mutation-rate-limits-exec-plan.md).
 - [ ] **[Multi-Profile] Premium vanity `@username` (no `#1234`) not implemented** — all profiles get 4-digit discriminator (`src/backend/user/internal/store/profile.go`); monetization in `docs/features/multi-profile.md`.
 - [ ] **[Multi-Profile] Additional phone per profile not implemented** — spec: доп. номер на профиль (не основной); only account `accounts.phone` → primary profile (`PhoneHashResolver`, `auth.proto` S2S).
 - [ ] **[Multi-Profile] Transfer contact between profiles not implemented** — spec §контакты: перевести контакт в нужный профиль после phone-add; depends on Contacts RPCs ([Social] Contacts RPCs).
@@ -783,7 +783,7 @@ and Voice IDs denied while history remains.
 ### Analytics
 
 
-- [ ] **[Analytics] Prometheus names vs spec** — Code: `analytics_ingest_*`, `analytics_clickhouse_insert_latency_seconds` (`d:\Git\Voice\src\backend\analytics\internal\metrics\metrics.go`); docs: `analytics.ingest.events_per_second`, `analytics.ingest.batch_size` (`docs/microservices/analytics-service.md`). No `events_per_second` or `batch_size` histogram.
+- [x] **[Analytics] Prometheus names vs spec** — Service docs list actual Prometheus names/types and counter-based event rate; `analytics_ingest_batch_size` observes nonempty configured flush attempts, including failures/retries, with empty/nil-flusher negatives covered (`src/backend/analytics/internal/metrics/metrics.go`, `internal/buffer/accumulator_test.go`).
 - [ ] **[Analytics] gRPC ingest lag metric contract gap (blocks parity)** — Docs name `analytics.ingest.lag_seconds` (`docs/microservices/analytics-service.md`) and set a pipeline SLO from NATS event to ClickHouse availability (`docs/ARCHITECTURE_REQUIREMENTS.md`), but do not define this metric's measurement instant, timestamp authority, validity policy (missing, future, or skewed timestamp), histogram shape, or labels/cardinality. Current NATS code observes `time.Since(event.timestamp)` only when non-negative at buffer append; that implementation is not a documented gRPC contract. Product/observability decision needed before TDD parity work: define the metric semantics for direct ack-less gRPC ingest and whether it must remain comparable with durable NATS ingest, then cover `IngestEvent` and `IngestBatch` without changing their external API.
 - [ ] **[Analytics] `DeliverNew` only** — New durable consumers skip backlog (`d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`); acceptable per spec but limits replay/backfill.
 - [x] **[Analytics] Export CSV includes hashed IDs** — CSV exports include existing `user_id_hashed` / `profile_id_hashed` columns while JSON remains unchanged (`src/backend/analytics/internal/grpcsvc/query.go`).

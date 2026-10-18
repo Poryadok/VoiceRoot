@@ -40,15 +40,31 @@ VALUES ($1, 'spam_pattern', $2, $3::jsonb)`,
 	return err
 }
 
+// RecordScan atomically records an evaluation, not a distinct message identity.
+func (s *AutoModStore) RecordScan(ctx context.Context) error {
+	if s == nil || s.Pool == nil {
+		return errStoreNotConfigured
+	}
+	result, err := s.Pool.Exec(ctx, `UPDATE auto_mod_scan_stats
+SET messages_checked = messages_checked + 1 WHERE singleton = true`)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return errors.New("automod scan counter row missing")
+	}
+	return nil
+}
+
 func (s *AutoModStore) Stats(ctx context.Context) (checked, blocked int64, err error) {
 	if s == nil || s.Pool == nil {
 		return 0, 0, errStoreNotConfigured
 	}
 	err = s.Pool.QueryRow(ctx, `
 SELECT
-  COALESCE(SUM(CASE WHEN trigger IN ('spam_pattern', 'report_threshold') THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN action IN ('mute', 'shadow_ban') THEN 1 ELSE 0 END), 0)
-FROM auto_mod_log`).Scan(&checked, &blocked)
+  messages_checked,
+  (SELECT COUNT(*) FROM auto_mod_log WHERE action IN ('mute', 'shadow_ban'))
+FROM auto_mod_scan_stats WHERE singleton = true`).Scan(&checked, &blocked)
 	return checked, blocked, err
 }
 
@@ -94,7 +110,7 @@ SET status = $2,
     resolution = COALESCE($4::jsonb, resolution),
     resolved_at = CASE WHEN $5 THEN now() ELSE resolved_at END,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND validation_state = 'VALID'
 RETURNING id, reporter_profile_id, target_type, target_id, category, description,
           evidence::text, status, assigned_to, resolved_at, resolution::text, created_at`,
 		reportID, status, assignedAny, resolutionAny, setResolved,
@@ -230,7 +246,7 @@ func (s *ReportStore) ListReportsFilteredPage(ctx context.Context, statusFilter,
 SELECT id, reporter_profile_id, target_type, target_id, category, description,
        evidence::text, status, assigned_to, resolved_at, resolution::text, created_at
 FROM reports
-WHERE ($1 = '' OR status = $1)` + queueSQL + cursorSQL + `
+WHERE validation_state = 'VALID' AND ($1 = '' OR status = $1)` + queueSQL + cursorSQL + `
 ORDER BY ` + priorityExpr + `, created_at DESC, id DESC
 LIMIT $` + strconv.Itoa(argN)
 

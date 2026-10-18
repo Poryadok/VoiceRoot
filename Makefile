@@ -311,8 +311,11 @@ image-catalog-drift-check:
 
 ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test matchmaking-source-authority-test complete-match-pki-test
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
+	python3 "$(ROOT)/scripts/prod/verify_prod_images_test.py"
 	python3 "$(ROOT)/scripts/staging/notification-presence-contract_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/prod-clickhouse-init_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/prod-smoke_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/prod-user-space-rollout_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-bootstrap-policy_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-generation-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/restore-nats-generation_test.sh"
@@ -322,6 +325,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/staging/nats-legacy-recovery-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
+	python3 "$(ROOT)/scripts/ci/e2e_manifest_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/compose-fcm-diagnostic-lib-test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
 	python3 "$(ROOT)/scripts/ci/space_media_admission_diagnostics_test.py"

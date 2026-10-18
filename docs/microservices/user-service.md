@@ -5,7 +5,7 @@
 Управление профилями пользователей, настройками, приватностью и онлайн-статусом.
 
 **Язык**: Go
-**БД**: PostgreSQL `user_db`, Redis (presence cache)
+**БД**: PostgreSQL `user_db`, Redis (presence cache, shared profile-mutation quotas)
 
 ## Ответственность
 
@@ -33,6 +33,31 @@ Account/session state remains Auth-owned.
 - **Поиск профилей для добавления в друзья / открытия DM** ([friends.md](../features/friends.md)) — запрос к `user_db` (не Search Service и не `search_db`; см. [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md), таблица фич)
 
 ## Поиск профилей vs Search Service
+
+### Accepted BE-046 report-threshold context
+
+Protected `ResolveReportThresholdContext` is an exact `service:moderation`
+surface, absent from ordinary User gRPC and Gateway. It binds the deterministic
+request containing evaluation/profile and optional expected account/revision.
+User reads its own consistent target binding and distinct nondeleted-profile
+account candidates, then requests complete positive Auth classifications in
+batches of at most 1000. Guests/frozen profiles remain candidates; no User
+lookup treats a missing Auth response as live. No account/viewer list leaves
+User in the response.
+
+`POTENTIAL_PUBLIC_PROFILE_ACCOUNTS_V1` excludes the target's whole account,
+Auth-deleted/purged/missing accounts and accounts without a nondeleted User
+profile. Personal blocks, presence and suspensions do not reduce this potential
+metric or alter public profile privacy. User rechecks target binding/revision
+after classification. The response contains exact profile/account/revision,
+state, metric/count, bounded observation times/expiry and opaque snapshot ID.
+It is invalid after 30 seconds from its first observation. Moderation performs
+its own separately authorized subject/lifecycle lookup before action.
+
+Unknown, partial, inconsistent, stale or incomplete scans are unavailable,
+never zero or a last-good/environment fallback. Authoritative zero is explicitly
+manual-only. See the [accepted plan](../testing/report-threshold-exec-plan.md)
+for the complete activation and verification contract; runtime is not yet claimed.
 
 | Канал | RPC | Когда |
 |-------|-----|--------|
@@ -384,7 +409,11 @@ sequence, поэтому первый новый provider update не проиг
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Space Service** — `AreCoMembers` для проверки privacy-аудитории `space_members` (User подключает S2S-клиент через `SPACE_GRPC_ADDR`)
-- **Redis** — presence кэш (TTL 5 мин, heartbeat)
+- **Redis** — presence кэш (TTL 5 мин, heartbeat) и обязательный общий допуск
+  `CreateProfile`/`DeleteProfile` через существующий `USER_REDIS_ADDR`: независимо
+  по 10 попыток/скользящий час/аккаунт. Нет локального fallback; отсутствие
+  конфигурации или сбой Redis закрывает только эти операции с `UNAVAILABLE`.
+  Квота и порядок отказа описаны в [Multi-Profile](../features/multi-profile.md#защита-от-злоупотреблений).
 - **File Service** — загрузка аватара/баннера; **not yet deployed** as standalone service — минимальный R2/presigned для статичного аватара может жить в User ([user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md))
 
 ## Subscription downgrade projection (A7 accepted target; not implemented)

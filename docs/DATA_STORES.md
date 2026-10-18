@@ -34,7 +34,7 @@ terminal snapshot before serving. Full boundary/rotation rules are in the plan.
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
-| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
+| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay; profile-mutation quotas | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | NATS JetStream (publish); transactional `chat.deleted` outbox |
 | Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `message_send_receipts` binds private exact immediate-send retries to their message and RPC; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
@@ -285,6 +285,18 @@ The staging manifests also retain the legacy `gateway_db`; local Compose carries
 the old deferred-runtime description is superseded.
 
 ---
+
+## User profile-mutation quotas
+
+User owns ephemeral anti-abuse keys
+`user:profile-mutations:v1:{account_uuid}:create` and `:delete` (sorted sets),
+with a `:sequence` counter for each operation. One atomic Lua admission uses
+Redis TIME and admits up to 10 authenticated attempts per rolling hour per
+account per operation. Keys contain timestamps and sequence values, no profile
+payload. Both keys expire one hour after the last admission; denials do not
+renew retention. All User replicas use the existing `USER_REDIS_ADDR`.
+Quota state is separate from durable profile ownership/archival. Redis loss
+fails closed for these mutations; there is no instance-local fallback.
 
 ## Redis: один кластер или несколько
 
