@@ -1,5 +1,17 @@
 # Role Service
 
+For the BE-131 composite vertical, the existing dedicated Role principal
+listener additionally accepts signed `service:space` `CheckPermission` for
+`TEXT_CHAT_CREATE_IN_SPACE` only. The exact request binds canonical nonzero
+Space and subject profile UUIDs, has no Chat or Voice room override, and uses
+fresh method/body/request-ID credentials and single-use JTI. Space derives the
+subject from its verified immutable composite intent; it cannot substitute the
+owner. The protected interceptor rejects all other principal kinds, issuers,
+permissions and scope expansion before the ordinary permission evaluator.
+Unrelated legacy decision reads keep their existing migration boundary. A
+transport/authentication failure is unknown; only a valid authenticated negative
+decision can be treated as permission denial for composite admission.
+
 ## Обзор
 
 Управление ролями и правами в пространствах. Иерархия ролей, гранулярные права, оверрайды по текстовым чатам (`group` / `channel`) и голосовым комнатам.

@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
 )
 
@@ -48,6 +49,11 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		verified, err := verifier.Verify(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash)
 		if err != nil {
 			return nil, verificationStatus(err)
+		}
+		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if err := validateCreationDecision(verified, message, transport.RequestID, requestHash); err != nil {
+				return nil, err
+			}
 		}
 		return handler(principal.WithVerified(ctx, verified), request)
 	}
