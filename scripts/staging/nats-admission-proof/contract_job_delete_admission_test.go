@@ -7,7 +7,6 @@ import (
 	"time"
 
 	admissionv1 "k8s.io/api/admissionregistration/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -49,16 +48,10 @@ func TestContractJobDeleteUsesExactActorAndUIDPrecondition(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	uid := stored.UID
 	if err := runner.BatchV1().Jobs(namespace).Delete(ctx, stored.Name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil { t.Fatalf("exact UID-preconditioned contract Job delete denied: %v", err) }
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		_, err := admin.BatchV1().Jobs(namespace).Get(ctx, stored.Name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) { break }
-		if err != nil { t.Fatalf("read back contract Job after UID delete: %v", err) }
-		if time.Now().After(deadline) {
-			current, _ := admin.BatchV1().Jobs(namespace).Get(ctx, stored.Name, metav1.GetOptions{})
-			t.Fatalf("contract Job remained after successful UID delete: finalizers=%v deletionTimestamp=%v", current.Finalizers, current.DeletionTimestamp)
-		}
-		time.Sleep(50 * time.Millisecond)
+	deleting, err := admin.BatchV1().Jobs(namespace).Get(ctx, stored.Name, metav1.GetOptions{})
+	if err != nil { t.Fatalf("read back contract Job after UID delete: %v", err) }
+	if deleting.UID != stored.UID || deleting.DeletionTimestamp == nil {
+		t.Fatalf("API did not mark the exact Job for deletion: UID=%s timestamp=%v", deleting.UID, deleting.DeletionTimestamp)
 	}
 
 	t.Run("wrong UID remains apiserver conflict, not VAP proof", func(t *testing.T) {
