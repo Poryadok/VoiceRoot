@@ -57,6 +57,36 @@ service MatchmakingService {
 
 ## Модель данных
 
+### A3 Voice roster cancellation
+
+The durable pull consumer `matchmaking_voice_roster_v1` reads only
+`voice.roster_membership_changed` from `voice_events`. It ACKs after its local
+inbox/reset transaction commits; transient database failure leaves delivery for
+retry. Exact replay is a no-op. Conflicting event IDs, conflicting room versions
+or malformed bindings retain evidence and raise the critical
+`VoiceRosterContractMismatch` alert; they never authorize a partially trusted
+roster. Operators must reconcile retained evidence and affected parties before
+resuming a failed rollout. No automatic conflict deletion or recovery is claimed.
+
+A newer room version cancels every member of each captured searching or
+pending-accept party for that room, even when the changed profile was absent from
+the captured manifest. JOINED also cancels that profile's captured SOLO search.
+The same transaction abandons affected pending matches, recovers unrelated
+parties, advances queue generations, writes RELEASE/ENQUEUE intents, and saves
+`mm.search_cancelled` with reason `VOICE_ROSTER_CHANGED` once per cancelled
+session. Older versions cannot cancel a newer capture. Frozen cancellation
+bytes retry independently of broker availability; clients' historical empty
+reason remains compatible.
+
+Protected source revalidation belongs before proposal and before each provider
+forward step/final activation, including background recovery. A definitive
+source change invokes the same whole-party reset; an unavailable or ambiguous
+source stays unknown and permits neither forward creation nor fabricated
+cancellation. `BE012-ASYNC-PROVISION-RESET-v1` additionally requires committed
+pre-RPC dispatch markers, monotone abandonment and receipt-based cleanup of
+possibly created resources. That coordinator/cold-cut activation remains a
+separate implementation and deployment gate; an inbox PASS does not satisfy it.
+
 ### Public game catalog ordering
 
 `ListGames` follows [BE164-PUBLIC-POPULARITY-v1](../features/game-catalog.md#public-popularity-and-paging-be164-public-popularity-v1).

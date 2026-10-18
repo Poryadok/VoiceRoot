@@ -52,7 +52,7 @@ func serviceReencode(t *testing.T, old []byte, u *jwt.UserClaims, signer nkeys.K
 }
 
 func TestRenewServicePreservesClaimsSeedAndExactGrant(t *testing.T) {
-	for _, role := range []string{"role", "space", "voice", "messaging"} {
+	for _, role := range []string{"role", "space", "voice", "messaging", "matchmaking"} {
 		t.Run(role, func(t *testing.T) {
 			old, at, ot, signer, actor, account, g, _, _ := serviceRenewalFixture(t, role)
 			out, err := renewExistingService(old, at, ot, signer, actor, account, role, g)
@@ -87,7 +87,7 @@ func TestRenewServicePreservesClaimsSeedAndExactGrant(t *testing.T) {
 }
 
 func TestRenewVoiceParticipantGrantPreservesDenyVeto(t *testing.T) {
-	for _, deny := range []string{"voice.participant_joined", "voice.participant_left", "voice.*", "voice.>"} {
+	for _, deny := range []string{"voice.participant_joined", "voice.participant_left", "voice.roster_membership_changed", "voice.*", "voice.>"} {
 		old, at, ot, signer, actor, account, g, u, ap := serviceRenewalFixture(t, "voice")
 		u.Pub.Deny = []string{deny}
 		old = serviceReencode(t, old, u, ap)

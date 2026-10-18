@@ -285,5 +285,33 @@ class MatchSquadMembershipState extends $pb.ProtobufEnum {
   const MatchSquadMembershipState._(super.value, super.name);
 }
 
+class MatchmakingPartySnapshotKind extends $pb.ProtobufEnum {
+  static const MatchmakingPartySnapshotKind
+      MATCHMAKING_PARTY_SNAPSHOT_KIND_UNSPECIFIED =
+      MatchmakingPartySnapshotKind._(0,
+          _omitEnumNames ? '' : 'MATCHMAKING_PARTY_SNAPSHOT_KIND_UNSPECIFIED');
+  static const MatchmakingPartySnapshotKind
+      MATCHMAKING_PARTY_SNAPSHOT_KIND_SOLO = MatchmakingPartySnapshotKind._(
+          1, _omitEnumNames ? '' : 'MATCHMAKING_PARTY_SNAPSHOT_KIND_SOLO');
+  static const MatchmakingPartySnapshotKind
+      MATCHMAKING_PARTY_SNAPSHOT_KIND_VOICE_ROSTER =
+      MatchmakingPartySnapshotKind._(2,
+          _omitEnumNames ? '' : 'MATCHMAKING_PARTY_SNAPSHOT_KIND_VOICE_ROSTER');
+
+  static const $core.List<MatchmakingPartySnapshotKind> values =
+      <MatchmakingPartySnapshotKind>[
+    MATCHMAKING_PARTY_SNAPSHOT_KIND_UNSPECIFIED,
+    MATCHMAKING_PARTY_SNAPSHOT_KIND_SOLO,
+    MATCHMAKING_PARTY_SNAPSHOT_KIND_VOICE_ROSTER,
+  ];
+
+  static final $core.List<MatchmakingPartySnapshotKind?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static MatchmakingPartySnapshotKind? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MatchmakingPartySnapshotKind._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

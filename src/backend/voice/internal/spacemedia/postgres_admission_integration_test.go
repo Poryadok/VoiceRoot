@@ -508,7 +508,7 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads")
 	require.NoError(t, headLock.Commit(ctx))
 	require.NoError(t, <-fenceResult)
 	require.NoError(t, <-leaveResult)
@@ -579,7 +579,7 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads")
 	prepareStarted := make(chan struct{})
 	prepareResult := make(chan error, 1)
 	go func() {
@@ -653,7 +653,7 @@ func startSpaceMediaAdmissionPostgres(t *testing.T, ctx context.Context) *pgxpoo
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	migrations := filepath.Join(root, "src", "backend", "migrations", "voice_db")
 	pool := integrationtest.StartPostgres(t, ctx, "voice_space_media_admission", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
-	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission"} {
+	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000013_a3_roster_outbox"} {
 		body, err := os.ReadFile(filepath.Join(migrations, name+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

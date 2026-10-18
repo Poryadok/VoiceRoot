@@ -5079,6 +5079,7 @@ enum VoiceStreamEvent_Payload {
   voiceMemberJoined,
   voiceParticipantJoined,
   voiceParticipantLeft,
+  voiceRosterMembershipChanged,
   notSet
 }
 
@@ -5098,6 +5099,7 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     VoiceMemberJoined? voiceMemberJoined,
     VoiceParticipantJoined? voiceParticipantJoined,
     VoiceParticipantLeft? voiceParticipantLeft,
+    VoiceRosterMembershipChanged? voiceRosterMembershipChanged,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -5118,6 +5120,8 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
       result.voiceParticipantJoined = voiceParticipantJoined;
     if (voiceParticipantLeft != null)
       result.voiceParticipantLeft = voiceParticipantLeft;
+    if (voiceRosterMembershipChanged != null)
+      result.voiceRosterMembershipChanged = voiceRosterMembershipChanged;
     return result;
   }
 
@@ -5144,6 +5148,7 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     19: VoiceStreamEvent_Payload.voiceMemberJoined,
     20: VoiceStreamEvent_Payload.voiceParticipantJoined,
     21: VoiceStreamEvent_Payload.voiceParticipantLeft,
+    22: VoiceStreamEvent_Payload.voiceRosterMembershipChanged,
     0: VoiceStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -5151,7 +5156,7 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -5181,6 +5186,9 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     ..aOM<VoiceParticipantLeft>(
         21, _omitFieldNames ? '' : 'voiceParticipantLeft',
         subBuilder: VoiceParticipantLeft.create)
+    ..aOM<VoiceRosterMembershipChanged>(
+        22, _omitFieldNames ? '' : 'voiceRosterMembershipChanged',
+        subBuilder: VoiceRosterMembershipChanged.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5214,6 +5222,7 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
   @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
   VoiceStreamEvent_Payload whichPayload() =>
       _VoiceStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -5228,6 +5237,7 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
   @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -5382,6 +5392,131 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   void clearVoiceParticipantLeft() => $_clearField(21);
   @$pb.TagNumber(21)
   VoiceParticipantLeft ensureVoiceParticipantLeft() => $_ensure(13);
+
+  @$pb.TagNumber(22)
+  VoiceRosterMembershipChanged get voiceRosterMembershipChanged => $_getN(14);
+  @$pb.TagNumber(22)
+  set voiceRosterMembershipChanged(VoiceRosterMembershipChanged value) =>
+      $_setField(22, value);
+  @$pb.TagNumber(22)
+  $core.bool hasVoiceRosterMembershipChanged() => $_has(14);
+  @$pb.TagNumber(22)
+  void clearVoiceRosterMembershipChanged() => $_clearField(22);
+  @$pb.TagNumber(22)
+  VoiceRosterMembershipChanged ensureVoiceRosterMembershipChanged() =>
+      $_ensure(14);
+}
+
+/// A3 party eligibility fact, committed with the source membership transaction.
+class VoiceRosterMembershipChanged extends $pb.GeneratedMessage {
+  factory VoiceRosterMembershipChanged({
+    $core.int? protocolVersion,
+    $core.String? roomId,
+    $fixnum.Int64? rosterVersion,
+    VoiceRosterMembershipChanged_Change? change,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (roomId != null) result.roomId = roomId;
+    if (rosterVersion != null) result.rosterVersion = rosterVersion;
+    if (change != null) result.change = change;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  VoiceRosterMembershipChanged._();
+
+  factory VoiceRosterMembershipChanged.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceRosterMembershipChanged.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceRosterMembershipChanged',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'roomId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'rosterVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aE<VoiceRosterMembershipChanged_Change>(
+        4, _omitFieldNames ? '' : 'change',
+        enumValues: VoiceRosterMembershipChanged_Change.values)
+    ..aOS(5, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRosterMembershipChanged clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRosterMembershipChanged copyWith(
+          void Function(VoiceRosterMembershipChanged) updates) =>
+      super.copyWith(
+              (message) => updates(message as VoiceRosterMembershipChanged))
+          as VoiceRosterMembershipChanged;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceRosterMembershipChanged create() =>
+      VoiceRosterMembershipChanged._();
+  @$core.override
+  VoiceRosterMembershipChanged createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceRosterMembershipChanged getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceRosterMembershipChanged>(create);
+  static VoiceRosterMembershipChanged? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get roomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set roomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRoomId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get rosterVersion => $_getI64(2);
+  @$pb.TagNumber(3)
+  set rosterVersion($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRosterVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRosterVersion() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  VoiceRosterMembershipChanged_Change get change => $_getN(3);
+  @$pb.TagNumber(4)
+  set change(VoiceRosterMembershipChanged_Change value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasChange() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearChange() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get profileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set profileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProfileId() => $_clearField(5);
 }
 
 /// A committed ordinary-call membership fact; not an SFU connection or invite.
@@ -9248,10 +9383,12 @@ class SearchCancelled extends $pb.GeneratedMessage {
   factory SearchCancelled({
     $core.String? sessionId,
     $core.String? profileId,
+    $core.String? reason,
   }) {
     final result = create();
     if (sessionId != null) result.sessionId = sessionId;
     if (profileId != null) result.profileId = profileId;
+    if (reason != null) result.reason = reason;
     return result;
   }
 
@@ -9271,6 +9408,7 @@ class SearchCancelled extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'sessionId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'reason')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -9309,6 +9447,16 @@ class SearchCancelled extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearProfileId() => $_clearField(2);
+
+  /// A3 whole-party reset uses VOICE_ROSTER_CHANGED. Empty for legacy producers.
+  @$pb.TagNumber(3)
+  $core.String get reason => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set reason($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReason() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReason() => $_clearField(3);
 }
 
 class MatchFound extends $pb.GeneratedMessage {

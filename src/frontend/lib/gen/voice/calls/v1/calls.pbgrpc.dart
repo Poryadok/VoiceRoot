@@ -448,6 +448,17 @@ class VoiceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getActiveCall, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:matchmaking
+  /// Native authority only; never available on the ordinary user listener.
+  $grpc.ResponseFuture<$0.GetMatchmakingPartySnapshotResponse>
+      getMatchmakingPartySnapshot(
+    $0.GetMatchmakingPartySnapshotRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getMatchmakingPartySnapshot, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.StartScreenShareResponse> startScreenShare(
     $0.StartScreenShareRequest request, {
     $grpc.CallOptions? options,
@@ -595,6 +606,12 @@ class VoiceServiceClient extends $grpc.Client {
           '/voice.calls.v1.VoiceService/GetActiveCall',
           ($0.GetActiveCallRequest value) => value.writeToBuffer(),
           $0.GetActiveCallResponse.fromBuffer);
+  static final _$getMatchmakingPartySnapshot = $grpc.ClientMethod<
+          $0.GetMatchmakingPartySnapshotRequest,
+          $0.GetMatchmakingPartySnapshotResponse>(
+      '/voice.calls.v1.VoiceService/GetMatchmakingPartySnapshot',
+      ($0.GetMatchmakingPartySnapshotRequest value) => value.writeToBuffer(),
+      $0.GetMatchmakingPartySnapshotResponse.fromBuffer);
   static final _$startScreenShare = $grpc.ClientMethod<
           $0.StartScreenShareRequest, $0.StartScreenShareResponse>(
       '/voice.calls.v1.VoiceService/StartScreenShare',
@@ -769,6 +786,16 @@ abstract class VoiceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.GetActiveCallRequest.fromBuffer(value),
             ($0.GetActiveCallResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetMatchmakingPartySnapshotRequest,
+            $0.GetMatchmakingPartySnapshotResponse>(
+        'GetMatchmakingPartySnapshot',
+        getMatchmakingPartySnapshot_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetMatchmakingPartySnapshotRequest.fromBuffer(value),
+        ($0.GetMatchmakingPartySnapshotResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.StartScreenShareRequest,
             $0.StartScreenShareResponse>(
         'StartScreenShare',
@@ -972,6 +999,16 @@ abstract class VoiceServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetActiveCallResponse> getActiveCall(
       $grpc.ServiceCall call, $0.GetActiveCallRequest request);
+
+  $async.Future<$0.GetMatchmakingPartySnapshotResponse>
+      getMatchmakingPartySnapshot_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetMatchmakingPartySnapshotRequest> $request) async {
+    return getMatchmakingPartySnapshot($call, await $request);
+  }
+
+  $async.Future<$0.GetMatchmakingPartySnapshotResponse>
+      getMatchmakingPartySnapshot($grpc.ServiceCall call,
+          $0.GetMatchmakingPartySnapshotRequest request);
 
   $async.Future<$0.StartScreenShareResponse> startScreenShare_Pre(
       $grpc.ServiceCall $call,

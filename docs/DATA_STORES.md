@@ -200,6 +200,18 @@ effect reconciliation. DOWN refuses journal or native snapshot evidence; JWT
 expiry alone never authorizes removing tombstones. Runtime/cutover boundaries:
 [Voice service ordinary lifecycle](microservices/voice-service.md#ordinary-dmgroup-sdk-lifecycle-opt-in-runtime-rollout-unverified).
 
+The native Space source is `voice_space_media_room_heads` plus
+`voice_space_media_admissions` (migration `000010`). Migration
+`000013_a3_roster_outbox` adds an independent head `roster_version` and shared
+`voice_roster_outbox`. Ordinary and Space writers save an immutable A3 event in
+their membership transaction; compatibility events retain separate IDs/outboxes.
+Space eligibility is an exact OPEN head and COMMITTED, ACTIVE admission with
+`projection_applied_at`. A creator's finalized admission remains evidence after
+that creator leaves while another participant remains active. Outbox delivery
+leases cannot change saved payload/identity. Delivered evidence and positive
+versions also prevent DOWN; delivery is not permission to forget replay history.
+This native source does not activate source-disabled R22 or certify cold cutover.
+
 Voice owns `voice_room_instances`, `voice_room_memberships`,
 `voice_lifecycle_operations`, `voice_lifecycle_effects`,
 `voice_media_epoch_denials`, `voice_event_outbox`, and
@@ -245,6 +257,21 @@ match creation bindings to `voice_room_instances`, plus verified account/session
 epoch, lifecycle state and bounded reconnect interval to `voice_room_memberships`.
 Legacy membership identity remains unknown; no backfill is inferred from Redis
 or profile IDs. This is storage evidence, not an activated party snapshot source.
+
+### `matchmaking_db` A3 party recovery
+
+Migration `000019_a3_party_search` binds captured parties to immutable source
+room/version/manifest and the initiator's verified account/session epoch. Every
+member session and the ENQUEUE queue intent commit with that party. Migration
+`000020_voice_roster_inbox` records exact event identity/hash and room/version,
+retains conflicting bytes, and stores immutable per-session cancellation events.
+Whole-party cancellation, pending-match rollback, recovery generations, RELEASE
+intent and cancellation outbox share one local transaction. Redis is rebuilt
+from these intents; no cross-database foreign key or atomicity is implied.
+Inbox/conflict/cancellation evidence has no automatic purge clock, and DOWN
+refuses even settled rows. Ambiguous provider creation remains a separate durable
+settlement obligation under `BE012-ASYNC-PROVISION-RESET-v1`; cancellation alone
+does not prove that a remote resource was never created.
 
 ## Клиенты и админка
 
