@@ -31,7 +31,7 @@ func protectedMutation(method string) bool {
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if protectedMutation(info.FullMethod) {
+		if protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "protected lifecycle listener required")
 		}
 		return handler(ctx, req)
@@ -45,7 +45,7 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if !protectedMutation(info.FullMethod) && info.FullMethod != spacev1.SpaceService_GetSpace_FullMethodName {
+		if !protectedMutation(info.FullMethod) && info.FullMethod != spacev1.SpaceService_GetSpace_FullMethodName && info.FullMethod != spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "method is not available on lifecycle listener")
 		}
 		deny := status.Error(codes.Unauthenticated, "invalid lifecycle principal")

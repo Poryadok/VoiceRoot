@@ -66,10 +66,10 @@ type grpcClients struct {
 	search                  searchv1.SearchServiceClient
 	auth                    authv1.AuthServiceClient
 	analytics               analyticsv1.AnalyticsQueryServiceClient
-	voiceUser          callsv1.VoiceServiceClient
-	voiceUserConn      *grpc.ClientConn
-	voiceUserRequired  bool
-	voiceUserErr       error
+	voiceUser               callsv1.VoiceServiceClient
+	voiceUserConn           *grpc.ClientConn
+	voiceUserRequired       bool
+	voiceUserErr            error
 }
 
 type transcoder struct {
@@ -380,6 +380,9 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if t.serveSpaceAudit(w, r, rest) {
+			return true
+		}
 		if t.serveSpaceLifecycle(w, r, rest) {
 			return true
 		}

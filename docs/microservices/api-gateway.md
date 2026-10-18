@@ -493,6 +493,18 @@ Chat; a failed node link is retried/compensated before success is exposed.
 
 ### Audit read
 
+The audit-read implementation uses the existing delegated Gateway-to-Space
+listener (`GATEWAY_SPACE_LIFECYCLE_*` / `SPACE_GATEWAY_LIFECYCLE_*` and
+`SPACE_GATEWAY_PRINCIPAL_*`). It has no
+ordinary-connection fallback: absent signed transport returns `503`. The query
+is validated before its complete protobuf request is hashed and signed; raw
+client identity headers are discarded. Space's ordinary listener rejects
+`GetAuditLog`, and the protected listener rechecks current membership, exact
+Role permission and frozen-Space disclosure on each page. Responses are private,
+`no-store` and retain explicit empty entries/terminal cursor fields. Source
+implementation is separate from exact-head integration, rollout and the pending
+Flutter audit vertical; see [audit REST plan](../testing/space-audit-rest-exec-plan.md).
+
 `GET S/audit-log` → `GetAuditLog`, membership and `SPACE_VIEW_AUDIT_LOG`.
 Query: `actor_profile_id?` (UUID), `action?` (exact nonempty action string),
 `from?` inclusive and `to?` exclusive (RFC3339 UTC, from < to), `page_size?`
