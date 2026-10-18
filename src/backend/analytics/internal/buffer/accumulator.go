@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	analyticsv1 "voice.app/voice/analytics/v1"
+	"voice/backend/analytics/internal/metrics"
 	"voice/backend/analytics/internal/store"
 )
 
@@ -133,6 +134,7 @@ func (a *Accumulator) Flush(ctx context.Context) error {
 		}
 		return nil
 	}
+	metrics.BatchSize.Observe(float64(len(rows)))
 	if err := a.flusher(ctx, rows); err != nil {
 		if a.logger != nil {
 			a.logger.Warn("analytics flush failed", slog.Any("error", err), slog.Int("batch_size", len(batch)))
