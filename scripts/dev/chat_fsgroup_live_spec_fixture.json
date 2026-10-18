@@ -1,0 +1,337 @@
+{
+  "deploymentUid": "eeb8f50d-409a-44e3-93bb-e6ed042db811",
+  "generation": 3,
+  "namespaceUid": "15950fc8-0392-4053-9156-e95e78b596f9",
+  "resourceVersion": "3405996",
+  "schema": "voice-dev-chat-fsgroup-live-spec-fixture-v1",
+  "sourceSha": "98aeee0b0c0b9c7369d7774fa96bef14281ffe83",
+  "spec": {
+    "progressDeadlineSeconds": 600,
+    "replicas": 1,
+    "revisionHistoryLimit": 10,
+    "selector": {
+      "matchLabels": {
+        "app": "voice-chat"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "annotations": {
+          "prometheus.io/path": "/metrics",
+          "prometheus.io/port": "8080",
+          "prometheus.io/scrape": "true"
+        },
+        "labels": {
+          "app": "voice-chat",
+          "app.kubernetes.io/managed-by": "voice-dev",
+          "voice.environment": "dev"
+        }
+      },
+      "spec": {
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "env": [
+              {
+                "name": "NATS_URL",
+                "value": "nats://127.0.0.1:4222"
+              },
+              {
+                "name": "DATABASE_URL",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "CHAT_DATABASE_URL",
+                    "name": "voice-app-secrets"
+                  }
+                }
+              },
+              {
+                "name": "SPACE_DATABASE_URL",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "SPACE_DATABASE_URL",
+                    "name": "voice-app-secrets"
+                  }
+                }
+              },
+              {
+                "name": "CHAT_GRPC_LISTEN",
+                "value": ":9090"
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN",
+                "value": ":9092"
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE",
+                "value": "/etc/voice/match-squad/server/tls.crt"
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE",
+                "value": "/etc/voice/match-squad/server/tls.key"
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE",
+                "value": "/etc/voice/match-squad/ca/ca.crt"
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL",
+                "value": "https://voice-matchmaking.voice-dev.svc:8443/internal/v1/principal/jwks.json"
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE",
+                "value": "/etc/voice/principal-jwks/ca/ca.crt"
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "key": "REDIS_ADDR",
+                    "name": "voice-app-config"
+                  }
+                }
+              },
+              {
+                "name": "CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "password",
+                    "name": "voice-match-squad-replay"
+                  }
+                }
+              }
+            ],
+            "envFrom": [
+              {
+                "configMapRef": {
+                  "name": "voice-app-config"
+                }
+              }
+            ],
+            "image": "ghcr.io/poryadok/voiceroot/chat@sha256:69f759c98b7407a0b958e3f1c13ae845f1a78cb9a5ed424ebca30c1768a80a27",
+            "imagePullPolicy": "IfNotPresent",
+            "name": "chat",
+            "ports": [
+              {
+                "containerPort": 8080,
+                "protocol": "TCP"
+              },
+              {
+                "containerPort": 9090,
+                "protocol": "TCP"
+              },
+              {
+                "containerPort": 8443,
+                "protocol": "TCP"
+              },
+              {
+                "containerPort": 9092,
+                "name": "match-principal",
+                "protocol": "TCP"
+              }
+            ],
+            "readinessProbe": {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/health",
+                "port": 8080,
+                "scheme": "HTTP"
+              },
+              "periodSeconds": 5,
+              "successThreshold": 1,
+              "timeoutSeconds": 1
+            },
+            "resources": {
+              "limits": {
+                "cpu": "500m",
+                "memory": "384Mi"
+              },
+              "requests": {
+                "cpu": "20m",
+                "memory": "64Mi"
+              }
+            },
+            "terminationMessagePath": "/dev/termination-log",
+            "terminationMessagePolicy": "File",
+            "volumeMounts": [
+              {
+                "mountPath": "/etc/voice/match-squad/server",
+                "name": "match-squad-server",
+                "readOnly": true
+              },
+              {
+                "mountPath": "/etc/voice/principal-jwks/ca",
+                "name": "matchmaking-principal-jwks-ca",
+                "readOnly": true
+              },
+              {
+                "mountPath": "/etc/voice/match-squad/replay",
+                "name": "chat-match-squad-replay",
+                "readOnly": true
+              },
+              {
+                "mountPath": "/etc/voice/match-squad/ca",
+                "name": "match-squad-ca",
+                "readOnly": true
+              }
+            ]
+          },
+          {
+            "args": [
+              "-c",
+              "/etc/nats/leaf.conf",
+              "-a",
+              "127.0.0.1",
+              "-m",
+              "8222"
+            ],
+            "env": [
+              {
+                "name": "NATS_CREDS",
+                "value": "[REDACTED_UNRELATED_LITERAL_ENV_VALUE]"
+              }
+            ],
+            "image": "docker.io/library/nats@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb",
+            "imagePullPolicy": "IfNotPresent",
+            "name": "nats-leaf",
+            "resources": {
+              "limits": {
+                "cpu": "500m",
+                "memory": "128Mi"
+              },
+              "requests": {
+                "cpu": "20m",
+                "memory": "64Mi"
+              }
+            },
+            "terminationMessagePath": "/dev/termination-log",
+            "terminationMessagePolicy": "File",
+            "volumeMounts": [
+              {
+                "mountPath": "/etc/nats/leaf.conf",
+                "name": "nats-leaf-config",
+                "readOnly": true,
+                "subPath": "leaf.conf"
+              },
+              {
+                "mountPath": "/var/run/nats/creds/chat.creds",
+                "name": "nats-service-creds",
+                "readOnly": true,
+                "subPath": "chat.creds"
+              },
+              {
+                "mountPath": "/etc/nats/tls/ca.crt",
+                "name": "nats-hub-tls",
+                "readOnly": true,
+                "subPath": "ca.crt"
+              }
+            ]
+          }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "terminationGracePeriodSeconds": 30,
+        "volumes": [
+          {
+            "configMap": {
+              "defaultMode": 420,
+              "name": "voice-nats-leaf-config"
+            },
+            "name": "nats-leaf-config"
+          },
+          {
+            "name": "nats-service-creds",
+            "secret": {
+              "defaultMode": 256,
+              "items": [
+                {
+                  "key": "chat.creds",
+                  "path": "chat.creds"
+                }
+              ],
+              "secretName": "voice-nats-service-credentials"
+            }
+          },
+          {
+            "name": "nats-hub-tls",
+            "secret": {
+              "defaultMode": 420,
+              "items": [
+                {
+                  "key": "ca.crt",
+                  "path": "ca.crt"
+                }
+              ],
+              "secretName": "voice-nats-hub-tls"
+            }
+          },
+          {
+            "name": "match-squad-server",
+            "secret": {
+              "defaultMode": 288,
+              "items": [
+                {
+                  "key": "tls.crt",
+                  "path": "tls.crt"
+                },
+                {
+                  "key": "tls.key",
+                  "path": "tls.key"
+                }
+              ],
+              "secretName": "voice-chat-match-squad-server-tls"
+            }
+          },
+          {
+            "name": "matchmaking-principal-jwks-ca",
+            "secret": {
+              "defaultMode": 288,
+              "items": [
+                {
+                  "key": "ca.crt",
+                  "path": "ca.crt"
+                }
+              ],
+              "secretName": "voice-matchmaking-principal-jwks-ca"
+            }
+          },
+          {
+            "name": "chat-match-squad-replay",
+            "secret": {
+              "defaultMode": 288,
+              "items": [
+                {
+                  "key": "password",
+                  "path": "password"
+                }
+              ],
+              "secretName": "voice-match-squad-replay"
+            }
+          },
+          {
+            "configMap": {
+              "defaultMode": 420,
+              "items": [
+                {
+                  "key": "ca.crt",
+                  "path": "ca.crt"
+                }
+              ],
+              "name": "voice-match-squad-ca"
+            },
+            "name": "match-squad-ca"
+          }
+        ]
+      }
+    }
+  },
+  "status": {
+    "observedGeneration": 3,
+    "updatedReplicas": 1
+  }
+}
