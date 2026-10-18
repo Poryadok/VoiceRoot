@@ -38,8 +38,8 @@ reads/writes were performed by this slice.
 ## Source custody
 
 - Branch: `feature/native-migrations-runtime`
-- Commit: `20ad0af` (implementation and focused tests)
-- Follow-up artifact commit is pushed on the same branch.
+- Commits: `20ad0af` (implementation/tests), `71de291` (evidence), plus the
+  final profile-projection compatibility fix on the same branch.
 - No runtime/shared VAP/transaction/kube API files were changed.
 
 ## Remaining integration

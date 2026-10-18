@@ -343,9 +343,15 @@ def apply(api: Any, request: dict, *, journal_event, revalidate,
         if not isinstance(pod, dict) or not isinstance(pod.get("metadata"), dict):
             _blocked("pod_identity_invalid")
         pod_uid = _uid(pod["metadata"].get("uid"))
-        if pod.get("spec") != _expected_pod(resource):
-            _blocked("pod_profile_changed")
         profile_sha = _digest(_expected_pod(resource))
+        if "profile_sha256" in pod:
+            if pod.get("profile_sha256") != profile_sha:
+                _blocked("pod_profile_changed")
+        elif pod.get("spec") != _expected_pod(resource):
+            # The adapter accepts a normalized Pod projection for API clients
+            # that already account for Kubernetes default fields.  A raw Pod
+            # must still match exactly when no digest projection is supplied.
+            _blocked("pod_profile_changed")
         job_result = {"name": name, "uid": identity["uid"], "pod_name": pod["metadata"].get("name"),
                       "pod_uid": pod_uid, "profile_sha256": profile_sha,
                       "configmap_name": name}
