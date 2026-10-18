@@ -758,6 +758,23 @@ pending targets. Provider outage сохраняет последнее verified 
   каждого `ClientCall`, а не один раз при создании Spring singleton stub.
 - **Redis** — JWT blacklist (запись при logout и отзыве одного access token), OTP throttling и T056-P1 minimum-epoch floor без TTL. Auth записывает floor операцией `max` без TTL, а Gateway и Realtime в strict-режиме читают его fail-closed. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 - **Resend** — отправка email (верификация, password reset)
+
+### Local mail transport acceptance
+
+`BE107-MAIL-HARNESS-v1` separates successful provider submission from inbox
+delivery. The disposable Resend fixture supports per-recipient
+`ACCEPT_THEN_DELIVER`, `REJECT_AT_SUBMISSION`, and `ACCEPT_THEN_BOUNCE` modes.
+An accepted submission has an immutable message ID; a test explicitly settles
+that ID after Auth's send response. Submission capture (`/emails/latest`) is
+inspection only. Only the separate delivered inbox is recipient delivery proof.
+A rejected submission returns non-2xx and has no accepted/inbox message.
+
+The fixture's permanent bounce produces no Auth webhook or callback. It cannot
+verify/promote an account, reset a password, revoke sessions, or invalidate an
+otherwise valid OTP. Recovery uses the ordinary resend and expiry rules. OTPs
+expire at equality with their ten-minute deadline; invalid and expired codes
+share `invalid_otp`. No live delivery guarantee follows from a successful adapter
+return, fixture capture, NoopMailSender, or CapturingMailSender.
 - **NATS** — публикация событий
 
 ## Безопасность
