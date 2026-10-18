@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -27,6 +28,9 @@ func (s *ModerationGRPC) CheckMessage(ctx context.Context, req *moderationv1.Che
 		return &moderationv1.CheckMessageResponse{
 			CheckResult: &moderationv1.CheckResult{Allowed: true},
 		}, nil
+	}
+	if err := s.AutoMod.RecordScan(ctx); err != nil {
+		slog.WarnContext(ctx, "automod scan counter update failed")
 	}
 	content := strings.TrimSpace(req.GetContent())
 	if !isSpamPattern(content) {
