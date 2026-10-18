@@ -32,10 +32,10 @@ SECRET_CONTRACTS = {
     'user-search-cursor': {'voice-user-search-projection': {'cursor-hmac-key'}},
     'principal-secrets': {
         **{'voice-' + service + '-principal-signing': {'current.pem', 'next.pem', 'active-kid'}
-           for service in ('social', 'file', 'search')},
+           for service in ('social', 'file', 'search', 'notification')},
         'voice-principal-ca': {'ca.crt'},
         **{'voice-' + service + '-principal-tls': {'tls.crt', 'tls.key'}
-           for service in ('social', 'user', 'space', 'file', 'user-file', 'search')},
+           for service in ('social', 'user', 'space', 'file', 'user-file', 'search', 'notification')},
         'voice-media-ca': {'ca.crt', 'jwks-ca.crt'},
         'voice-media-jvm-trust': {'truststore.p12'},
         'voice-media-resolver': {'token'},
