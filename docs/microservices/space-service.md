@@ -38,6 +38,23 @@ late signed deliveries cannot insert audit, outbox or node rows. Reserved compos
 audit IDs remain unavailable for a different fact after payload minimization.
 Actual participant drain/completion proof is required before aggregate purge.
 
+The receiver config prefix is `SPACE_CHAT_COMPOSITE_`: `GRPC_LISTEN`,
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `PRINCIPAL_JWKS_URL`,
+`PRINCIPAL_JWKS_CA_FILE`, `PRINCIPAL_JWKS_CLIENT_CERT_FILE`,
+`PRINCIPAL_JWKS_CLIENT_KEY_FILE`, `PRINCIPAL_REDIS_ADDR` and optional
+`PRINCIPAL_REDIS_PASSWORD`. JWKS fetching itself uses mTLS against Chat's existing
+HTTPS principal endpoint; Space never copies Chat signing keys. Partial config
+fails startup. Enabled composite requires the protected Gateway listener and
+Role principal client/Space signer. Its narrow Role decision is a fresh signed
+`service:space` `CheckPermission`, restricted to the immutable actor/Space and
+`TEXT_CHAT_CREATE_IN_SPACE`; the legacy ordinary client is never a fallback.
+Bot's current installation decision uses `SPACE_BOT_COMPOSITE_GRPC_ADDR`,
+`SPACE_BOT_COMPOSITE_TLS_CA_FILE`, `SPACE_BOT_COMPOSITE_TLS_SERVER_NAME`,
+`SPACE_BOT_COMPOSITE_CLIENT_CERT_FILE` and `SPACE_BOT_COMPOSITE_CLIENT_KEY_FILE`,
+pointing to Bot's existing protected Space lifecycle listener. It verifies the
+exact echoed tuple and treats missing/malformed/unauthenticated responses as
+UNKNOWN. Only a valid authenticated `allowed=false` is a domain refusal.
+
 ## Обзор
 
 Управление пространствами (аналог Discord-серверов): **дерево sidebar** — единая таблица **`space_tree_nodes`** (текстовые чаты `group`/`channel` и **голосовые комнаты** в одном порядке сортировки), категории, инвайты, участники, шаблоны.

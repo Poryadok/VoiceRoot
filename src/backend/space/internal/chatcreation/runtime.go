@@ -25,12 +25,15 @@ var ErrDependencyUnavailable = errors.New("composite authentication dependency u
 
 type Config struct {
 	Listen, CertFile, KeyFile, ClientCAFile, JWKSURL, JWKSCAFile, RedisAddr, RedisPassword string
+	JWKSClientCertFile, JWKSClientKeyFile                                                  string
 }
 
 func FromEnv() (Config, bool, error) {
 	c := Config{Listen: os.Getenv("SPACE_CHAT_COMPOSITE_GRPC_LISTEN"), CertFile: os.Getenv("SPACE_CHAT_COMPOSITE_TLS_CERT_FILE"), KeyFile: os.Getenv("SPACE_CHAT_COMPOSITE_TLS_KEY_FILE"), ClientCAFile: os.Getenv("SPACE_CHAT_COMPOSITE_CLIENT_CA_FILE"), JWKSURL: os.Getenv("SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_URL"), JWKSCAFile: os.Getenv("SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_CA_FILE"), RedisAddr: os.Getenv("SPACE_CHAT_COMPOSITE_PRINCIPAL_REDIS_ADDR"), RedisPassword: os.Getenv("SPACE_CHAT_COMPOSITE_PRINCIPAL_REDIS_PASSWORD")}
+	c.JWKSClientCertFile = os.Getenv("SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_CLIENT_CERT_FILE")
+	c.JWKSClientKeyFile = os.Getenv("SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_CLIENT_KEY_FILE")
 	configured := false
-	for _, value := range []string{c.Listen, c.CertFile, c.KeyFile, c.ClientCAFile, c.JWKSURL, c.JWKSCAFile, c.RedisAddr, c.RedisPassword} {
+	for _, value := range []string{c.Listen, c.CertFile, c.KeyFile, c.ClientCAFile, c.JWKSURL, c.JWKSCAFile, c.RedisAddr, c.RedisPassword, c.JWKSClientCertFile, c.JWKSClientKeyFile} {
 		if value != "" {
 			configured = true
 		}
@@ -42,7 +45,7 @@ func FromEnv() (Config, bool, error) {
 }
 
 func (c Config) validate() error {
-	for _, v := range []string{c.Listen, c.CertFile, c.KeyFile, c.ClientCAFile, c.JWKSURL, c.JWKSCAFile, c.RedisAddr} {
+	for _, v := range []string{c.Listen, c.CertFile, c.KeyFile, c.ClientCAFile, c.JWKSURL, c.JWKSCAFile, c.RedisAddr, c.JWKSClientCertFile, c.JWKSClientKeyFile} {
 		if strings.TrimSpace(v) == "" || v != strings.TrimSpace(v) {
 			return errors.New("space Chat composite configuration is incomplete")
 		}
@@ -92,7 +95,11 @@ func New(ctx context.Context, c Config) (*Runtime, error) {
 		return nil, fmt.Errorf("chat JWKS CA: %w", err)
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	jwksIdentity, err := tls.LoadX509KeyPair(c.JWKSClientCertFile, c.JWKSClientKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("chat JWKS client identity: %w", err)
+	}
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{jwksIdentity}}
 	httpClient := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("chat JWKS redirects forbidden") }}
 	resolver, err := principal.NewJWKSResolverWithConfig(principal.JWKSResolverConfig{Fetch: func(ctx context.Context, issuer string) ([]byte, error) {
 		if issuer != "chat" {

@@ -82,7 +82,7 @@ func (s *compositeTransportServer) CommitSpaceChatCreation(ctx context.Context, 
 func TestRealCompositeTLSJWKSReplayAndRevocation(t *testing.T) {
 	serverCA, clientCA, foreignCA := newTransportCA(t, 1), newTransportCA(t, 2), newTransportCA(t, 3)
 	serverCert, certFile, keyFile := serverCA.leaf(t, 10, x509.ExtKeyUsageServerAuth)
-	clientCert, _, _ := clientCA.leaf(t, 11, x509.ExtKeyUsageClientAuth)
+	clientCert, clientCertFile, clientKeyFile := clientCA.leaf(t, 11, x509.ExtKeyUsageClientAuth)
 	foreignCert, _, _ := foreignCA.leaf(t, 12, x509.ExtKeyUsageClientAuth)
 	roots := x509.NewCertPool()
 	require.True(t, roots.AppendCertsFromPEM(serverCA.pem))
@@ -103,11 +103,14 @@ func TestRealCompositeTLSJWKSReplayAndRevocation(t *testing.T) {
 	jwks := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"keys": document})
 	}))
-	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}}
+	jwksClients := x509.NewCertPool()
+	require.True(t, jwksClients.AppendCertsFromPEM(clientCA.pem))
+	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: jwksClients}
 	jwks.StartTLS()
 	defer jwks.Close()
 	replay := miniredis.RunT(t)
 	cfg := Config{Listen: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: clientCAFile, JWKSURL: jwks.URL, JWKSCAFile: serverCAFile, RedisAddr: replay.Addr()}
+	cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile = clientCertFile, clientKeyFile
 	runtime, err := New(context.Background(), cfg)
 	require.NoError(t, err)
 	defer runtime.Close()

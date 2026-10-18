@@ -12,7 +12,7 @@ import (
 	"voice/backend/pkg/principal"
 )
 
-// Store errors are classified by the concrete adapter; authentication and
+// OutcomeStore errors are classified by the concrete adapter; authentication and
 // external admission failures never manufacture a stored terminal outcome.
 type OutcomeStore interface {
 	GetChatCreationOutcome(context.Context, uuid.UUID, uuid.UUID) (*spacev1.SpaceChatCreationOutcome, error)
@@ -21,6 +21,7 @@ type OutcomeStore interface {
 
 type Admission interface {
 	CheckChatCreation(context.Context, *spacev1.SpaceChatCreationBinding) error
+	CheckOutcomeReadScope(context.Context, principal.Principal, uuid.UUID) error
 	CheckOutcomeDisclosure(context.Context, principal.Principal, *spacev1.SpaceChatCreationBinding) error
 }
 
@@ -39,13 +40,13 @@ func (s *Server) mapError(err error) error {
 	return status.Error(codes.Unavailable, "composite persistence unavailable")
 }
 
-func verifiedChat(ctx context.Context) bool {
+func verifiedChat(ctx context.Context, method string) bool {
 	p, ok := principal.FromContext(ctx)
-	return ok && p.Kind == "service" && p.Issuer == "chat" && p.Subject == "service:chat" && p.Audience == "space"
+	return ok && p.Kind == "service" && p.Issuer == "chat" && p.Subject == "service:chat" && p.Audience == "space" && p.RPC == method
 }
 
 func (s *Server) CommitSpaceChatCreation(ctx context.Context, req *spacev1.CommitSpaceChatCreationRequest) (*spacev1.CommitSpaceChatCreationResponse, error) {
-	if !verifiedChat(ctx) {
+	if !verifiedChat(ctx, spacev1.SpaceService_CommitSpaceChatCreation_FullMethodName) {
 		return nil, status.Error(codes.Unauthenticated, "verified Chat service required")
 	}
 	if req == nil || HasUnknown(req) || ValidateBinding(req.GetBinding()) != nil {
@@ -87,8 +88,8 @@ func (s *Server) CommitSpaceChatCreation(ctx context.Context, req *spacev1.Commi
 
 func (s *Server) GetSpaceChatCreationOutcome(ctx context.Context, req *spacev1.GetSpaceChatCreationOutcomeRequest) (*spacev1.GetSpaceChatCreationOutcomeResponse, error) {
 	p, ok := principal.FromContext(ctx)
-	gateway := ok && p.Kind == "delegated_user" && p.Issuer == "gateway" && p.Audience == "space"
-	if !verifiedChat(ctx) && !gateway {
+	gateway := ok && p.Kind == "delegated_user" && p.Issuer == "gateway" && p.Audience == "space" && p.RPC == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName
+	if !verifiedChat(ctx, spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName) && !gateway {
 		return nil, status.Error(codes.Unauthenticated, "verified composite principal required")
 	}
 	if req == nil || HasUnknown(req) || !CanonicalID(req.SpaceId) || !CanonicalID(req.OperationId) {
@@ -96,6 +97,16 @@ func (s *Server) GetSpaceChatCreationOutcome(ctx context.Context, req *spacev1.G
 	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "composite persistence unavailable")
+	}
+	if gateway {
+		if s.Admission == nil {
+			return nil, status.Error(codes.Unavailable, "composite disclosure unavailable")
+		}
+		// PURGED/currently inaccessible Spaces are undiscoverable even when the
+		// private receipt is expired or absent. Never expose private expiry first.
+		if err := s.Admission.CheckOutcomeReadScope(ctx, p, uuid.MustParse(req.SpaceId)); err != nil {
+			return nil, err
+		}
 	}
 	out, err := s.Store.GetChatCreationOutcome(ctx, uuid.MustParse(req.SpaceId), uuid.MustParse(req.OperationId))
 	if err != nil {

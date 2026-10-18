@@ -11,8 +11,7 @@ creating another Chat/node or duplicate audit event.
 
 - TT project voice, task BE-A2-COMPOSITE-CHAT-NODE, actor Рудеус-18.
 - Accepted decision: BE-131 comments c3/c4, BE131-COMPOSITE-v1. This plan does not
-  reopen those semantics. BE-131 c5 has a separate pending initiating-actor trust
-  cutover question; do not invent trusted account/bot context from raw headers.
+  reopen those semantics. BE-131 c8/c9 resolve initiating trust and BE-A2 c4/c5 resolve purge minimization; use verified original decision data, never raw headers.
 - Canon: docs/microservices/api-gateway.md A2 Space REST target;
   docs/microservices/space-service.md audit/lifecycle; chat-service.md producer
   contract; DATA_MODEL.md and DATA_STORES.md forbid cross-service SQL/FKs.
@@ -138,3 +137,7 @@ Core schema confirmation is task evidence, not implementation or test proof.
 Earlier resource/c5 blockers above are historical and resolved. BE131 c8/c9 initiating authority accepted. BE-A2 c4/c5 BE131-COMPOSITE-PURGE-v1 accepted: separate permanent nonpersonal operation/resource and Space purge fences from full evidence. Space deadline aggregate PURGED+30d; Chat deadline own successful purge+30d. Expired private reads fail COMPOSITE_RESULT_EXPIRED with no body; no fabricated abort/success. Chat freezes and drains prepared/HELD before manifest seal; actual audit/chat.created delivery resolves before purge. Frozen Space ingress accepts only original committed composite fact under shared Space tx lock; terminal purge closes it permanently.
 
 Own WT42 proto/generated Go+Dart and binding/service receiver implemented. Meaningful RED11/GREEN11 binding; RED1/GREEN12 credential tests; actual mTLS/HTTPS-JWKS/Redis receiver tests GREEN13. Receiver runtime not production wired yet. Store/migration000028 in progress;4 real PG tests added but run fails before assertions because rootless Docker unsupported on Windows. No DB PASS, completion, deployment or acceptance claim. Consumer44 owns Chat and Bot authority/outbound signer;13 owns ingress, consumes our exact persisted-binding helper. CI/merge custody18.
+
+### Consumed vertical checkpoint
+
+Local protocol86f48e6, sharedcodecdb239b016, atomic store/purge6678fee; principal87fef6621, Gateway3207f158c and Bot/Chatprotoe867285fa consumed from44. Receiver, public outcome scope, Bot currentinstallation and fresh protected Role decision client now wired. Gateway SpacePOST uses protected Chat completion and original Space outcome, never second Upsert. Real Chat JWKS mTLS incompatibility gave meaningfulRED1 thenGREEN22; legacyGateway RED200vs401 thenGREEN8 focused. Broader Space394short and Gateway740short PASS; Space/Gatewayvet PASS. Later targeted76handler/grpc and6accounttype tests PASS;9Botdecision tests PASS. Actual PG tests remain environmentblocked and are not proven by short checks. Independent review and assembled Chat producer/recovery integration are still open; source is not release ready.

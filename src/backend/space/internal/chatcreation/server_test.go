@@ -16,14 +16,27 @@ import (
 
 var errMissing = errors.New("missing")
 
+func TestGatewayScopeDenialHidesPrivateExpiredOutcomeBeforeStoreRead(t *testing.T) {
+	b := bindingFixture()
+	st := &fakeOutcomeStore{readErr: errors.New("private result expired")}
+	s := &Server{Store: st, Admission: &fakeAdmission{scopeErr: status.Error(codes.NotFound, "Space not found")}}
+	ctx := principal.WithVerified(context.Background(), principal.Principal{Kind: "delegated_user", Issuer: "gateway", Audience: "space", RPC: spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName, AccountID: b.GetUser().AccountId, ProfileID: b.CreatorProfileId, AccountType: "regular", SessionEpoch: 7})
+	out, err := s.GetSpaceChatCreationOutcome(ctx, &spacev1.GetSpaceChatCreationOutcomeRequest{SpaceId: b.SpaceId, OperationId: b.OperationId})
+	require.Nil(t, out)
+	require.Equal(t, codes.NotFound, status.Code(err))
+	require.Zero(t, st.reads, "public denial precedes private result/expiry disclosure")
+}
+
 type fakeOutcomeStore struct {
 	saved    *spacev1.SpaceChatCreationOutcome
 	readErr  error
 	commits  int
 	decision codes.Code
+	reads    int
 }
 
 func (s *fakeOutcomeStore) GetChatCreationOutcome(context.Context, uuid.UUID, uuid.UUID) (*spacev1.SpaceChatCreationOutcome, error) {
+	s.reads++
 	return s.saved, s.readErr
 }
 func (s *fakeOutcomeStore) CommitChatCreation(_ context.Context, b *spacev1.SpaceChatCreationBinding, code codes.Code) (*spacev1.SpaceChatCreationOutcome, error) {
@@ -36,6 +49,11 @@ type fakeAdmission struct {
 	err         error
 	calls       int
 	disclosures int
+	scopeErr    error
+}
+
+func (a *fakeAdmission) CheckOutcomeReadScope(context.Context, principal.Principal, uuid.UUID) error {
+	return a.scopeErr
 }
 
 func (a *fakeAdmission) CheckChatCreation(context.Context, *spacev1.SpaceChatCreationBinding) error {
@@ -47,7 +65,7 @@ func (a *fakeAdmission) CheckOutcomeDisclosure(context.Context, principal.Princi
 	return a.err
 }
 func chatContext() context.Context {
-	return principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "chat", Subject: "service:chat", Audience: "space"})
+	return principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "chat", Subject: "service:chat", Audience: "space", RPC: spacev1.SpaceService_CommitSpaceChatCreation_FullMethodName})
 }
 
 func TestServerReplayDoesNotRequireCurrentAdmissionOrRewriteOutcome(t *testing.T) {
@@ -94,7 +112,7 @@ func TestServerDeterministicDomainRefusalIsPersisted(t *testing.T) {
 func TestServerNeverAcceptsRawUnverifiedOrWrongServiceContext(t *testing.T) {
 	st := &fakeOutcomeStore{readErr: errMissing}
 	s := &Server{Store: st, UnknownError: errMissing}
-	for _, ctx := range []context.Context{context.Background(), principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "gateway", Subject: "service:gateway", Audience: "space"}), principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "chat", Subject: "service:chat", Audience: "role"})} {
+	for _, ctx := range []context.Context{context.Background(), principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "gateway", Subject: "service:gateway", Audience: "space", RPC: spacev1.SpaceService_CommitSpaceChatCreation_FullMethodName}), principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "chat", Subject: "service:chat", Audience: "role"})} {
 		_, err := s.CommitSpaceChatCreation(ctx, &spacev1.CommitSpaceChatCreationRequest{Binding: bindingFixture()})
 		require.Equal(t, codes.Unauthenticated, status.Code(err))
 		require.Zero(t, st.commits)
@@ -107,10 +125,10 @@ func TestServerGatewayOutcomeAlwaysRunsDisclosureButChatRecoveryDoesNot(t *testi
 	a := &fakeAdmission{err: status.Error(codes.NotFound, "not found")}
 	s := &Server{Store: st, Admission: a}
 	req := &spacev1.GetSpaceChatCreationOutcomeRequest{SpaceId: b.SpaceId, OperationId: b.OperationId}
-	_, err := s.GetSpaceChatCreationOutcome(chatContext(), req)
+	_, err := s.GetSpaceChatCreationOutcome(principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "chat", Subject: "service:chat", Audience: "space", RPC: spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName}), req)
 	require.NoError(t, err)
 	require.Zero(t, a.disclosures)
-	ctx := principal.WithVerified(context.Background(), principal.Principal{Kind: "delegated_user", Issuer: "gateway", Audience: "space", AccountID: b.GetUser().AccountId, ProfileID: b.CreatorProfileId, SessionEpoch: 7})
+	ctx := principal.WithVerified(context.Background(), principal.Principal{Kind: "delegated_user", Issuer: "gateway", Audience: "space", AccountID: b.GetUser().AccountId, ProfileID: b.CreatorProfileId, SessionEpoch: 7, RPC: spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName})
 	out, err := s.GetSpaceChatCreationOutcome(ctx, req)
 	require.Nil(t, out)
 	require.Equal(t, codes.NotFound, status.Code(err))
