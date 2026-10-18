@@ -56,23 +56,29 @@ func NewStore(pool *pgxpool.Pool) *Store { return &Store{Pool: pool} }
 // BindLiveSubjectTx records a freshly verified Auth LIVE binding under the
 // caller's account lock. It never invents a Messaging source epoch or cursor.
 func (s *Store) BindLiveSubjectTx(ctx context.Context, tx pgx.Tx, account, subject uuid.UUID, revision int64) error {
-	if tx == nil || account == uuid.Nil || subject == uuid.Nil || revision <= 0 {
+	return s.BindSubjectTx(ctx, tx, Subject{ID: subject, AccountID: account, Revision: revision, State: "LIVE"})
+}
+
+// BindSubjectTx accepts only fresh Auth-owned lifecycle authority. It does not
+// create or modify a Messaging source epoch, cursor or detector count.
+func (s *Store) BindSubjectTx(ctx context.Context, tx pgx.Tx, binding Subject) error {
+	if tx == nil || !validLifecycle(binding) {
 		return ErrSubject
 	}
-	if err := lockSubject(ctx, tx, subject); err != nil {
+	if err := lockSubject(ctx, tx, binding.ID); err != nil {
 		return err
 	}
 	var terminal bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1)`, subject).Scan(&terminal); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1)`, binding.ID).Scan(&terminal); err != nil {
 		return err
 	}
 	if terminal {
 		return ErrPurged
 	}
-	tag, err := tx.Exec(ctx, `INSERT INTO automod_subjects(subject_id,account_id,lifecycle_revision,lifecycle_state) VALUES($1,$2,$3,'LIVE')
- ON CONFLICT(subject_id) DO UPDATE SET lifecycle_revision=EXCLUDED.lifecycle_revision,lifecycle_state='LIVE',purge_at=NULL
+	tag, err := tx.Exec(ctx, `INSERT INTO automod_subjects(subject_id,account_id,lifecycle_revision,lifecycle_state,purge_at) VALUES($1,$2,$3,$4,$5)
+	ON CONFLICT(subject_id) DO UPDATE SET lifecycle_revision=EXCLUDED.lifecycle_revision,lifecycle_state=EXCLUDED.lifecycle_state,purge_at=EXCLUDED.purge_at
  WHERE automod_subjects.account_id=EXCLUDED.account_id AND (automod_subjects.lifecycle_revision < EXCLUDED.lifecycle_revision OR
- (automod_subjects.lifecycle_revision=EXCLUDED.lifecycle_revision AND automod_subjects.lifecycle_state='LIVE' AND automod_subjects.purge_at IS NULL))`, subject, account, revision)
+	(automod_subjects.lifecycle_revision=EXCLUDED.lifecycle_revision AND automod_subjects.lifecycle_state=EXCLUDED.lifecycle_state AND automod_subjects.purge_at IS NOT DISTINCT FROM EXCLUDED.purge_at))`, binding.ID, binding.AccountID, binding.Revision, binding.State, binding.PurgeAt)
 	if err != nil {
 		return err
 	}
@@ -80,6 +86,10 @@ func (s *Store) BindLiveSubjectTx(ctx context.Context, tx pgx.Tx, account, subje
 		return ErrConflict
 	}
 	return nil
+}
+
+func (s *Store) BindSubject(ctx context.Context, binding Subject) error {
+	return s.accountTx(ctx, binding.AccountID, func(tx pgx.Tx) error { return s.BindSubjectTx(ctx, tx, binding) })
 }
 
 // RequireLiveSubjectTx consumes a fresh protected Auth binding. The caller must
@@ -118,7 +128,10 @@ func (s *Store) accountTx(ctx context.Context, account uuid.UUID, fn func(pgx.Tx
 }
 
 func validSubject(s Subject) bool {
-	return s.ID != uuid.Nil && s.AccountID != uuid.Nil && s.Epoch != uuid.Nil && s.Revision > 0 &&
+	return s.Epoch != uuid.Nil && validLifecycle(s)
+}
+func validLifecycle(s Subject) bool {
+	return s.ID != uuid.Nil && s.AccountID != uuid.Nil && s.Revision > 0 &&
 		((s.State == "LIVE" && s.PurgeAt == nil) || (s.State == "DELETED" && s.PurgeAt != nil))
 }
 
@@ -380,7 +393,7 @@ func writeAction(ctx context.Context, tx pgx.Tx, subject Subject, a Action) erro
 		if _, err = tx.Exec(ctx, `INSERT INTO automod_event_outbox(event_id,subject_id,payload) VALUES($1,$2,$3)`, uuid.New(), subject.ID, payload); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE automod_subjects SET restriction_revision=restriction_revision+1 WHERE subject_id=$1`, subject.ID); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE automod_subjects SET restriction_revision=restriction_revision+1,desired_banned=true WHERE subject_id=$1`, subject.ID); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO automod_restriction_sync(subject_id) VALUES($1) ON CONFLICT(subject_id) DO UPDATE SET requested_at=clock_timestamp()`, subject.ID); err != nil {

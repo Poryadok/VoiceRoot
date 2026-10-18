@@ -169,3 +169,16 @@ func TestAutoModStore_TerminalFenceRacesFirstProvisionAndRollsBackParticipants(t
 	s.BeforeTerminalPurge = nil
 	require.NoError(t, s.Purge(ctx, subject.ID))
 }
+
+func TestAutoModStore_RejectsUnownedMachineSanction(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires disposable PostgreSQL")
+	}
+	ctx := context.Background()
+	pool := automodAdmissionDatabase(t)
+	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	_, err := pool.Exec(ctx, `INSERT INTO sanctions(target_account_id,type,reason,issued_by,issuer_service) VALUES($1,'perm_ban','invalid owner',NULL,NULL)`, uuid.New())
+	require.ErrorContains(t, err, "sanctions_issuer_kind", "SQL UNKNOWN is not an explicit machine issuer")
+	_, err = pool.Exec(ctx, `INSERT INTO sanctions(target_account_id,type,reason,issued_by,issuer_service,machine_case_id) VALUES($1,'shadow_ban','invalid owner',NULL,NULL,$2)`, uuid.New(), uuid.New())
+	require.ErrorContains(t, err, "sanctions_issuer_kind")
+}

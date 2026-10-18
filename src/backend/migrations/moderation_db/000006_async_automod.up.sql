@@ -2,11 +2,11 @@
 ALTER TABLE sanctions ALTER COLUMN issued_by DROP NOT NULL;
 ALTER TABLE sanctions ADD COLUMN issuer_service text;
 ALTER TABLE sanctions ADD COLUMN machine_case_id uuid;
-ALTER TABLE sanctions ADD CONSTRAINT sanctions_issuer_kind CHECK (
+ALTER TABLE sanctions ADD CONSTRAINT sanctions_issuer_kind CHECK ((
   (issued_by IS NOT NULL AND issuer_service IS NULL AND machine_case_id IS NULL) OR
   (issued_by IS NULL AND issuer_service = 'service:moderation/automod' AND report_id IS NULL AND
     ((type = 'perm_ban' AND machine_case_id IS NULL) OR (type = 'shadow_ban' AND machine_case_id IS NOT NULL)))
-);
+) IS TRUE);
 
 CREATE TABLE automod_terminal_subjects (
   subject_id uuid PRIMARY KEY,
@@ -26,6 +26,7 @@ CREATE TABLE automod_subjects (
   muted_until timestamptz,
   post_mute_count integer NOT NULL DEFAULT 0 CHECK (post_mute_count BETWEEN 0 AND 10),
   restriction_revision bigint NOT NULL DEFAULT 0 CHECK (restriction_revision >= 0),
+  desired_banned boolean NOT NULL DEFAULT false,
   CHECK ((lifecycle_state='LIVE' AND purge_at IS NULL) OR (lifecycle_state='DELETED' AND purge_at IS NOT NULL))
 );
 CREATE TABLE automod_inbox (
