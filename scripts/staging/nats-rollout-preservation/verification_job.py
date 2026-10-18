@@ -30,7 +30,7 @@ ARCHIVE_BINDING_FIELDS = frozenset((
 SELECTED_BINDING_FIELDS = BINDING_FIELDS | frozenset(('session_attempt', 'input_pod_uid',
     'input_bundle_sha256', 'input_bundle_bytes', 'kernel_bundle_sha256',
     'server_config_sha256', 'archive_sha256', 'archive_bytes'))
-CONTRACT_BINDING_FIELDS = BINDING_FIELDS | frozenset(('contract_attempt',
+CONTRACT_BINDING_FIELDS = BINDING_FIELDS | frozenset(('verification_attempt', 'contract_attempt',
     'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256', 'archive_bytes',
     'plan_sha256', 'plan_bytes', 'server_config_sha256', 'bootstrap_creds_sha256',
     'bootstrap_creds_bytes', 'server_config_bytes'))
@@ -185,10 +185,25 @@ def validate_selected_binding(value: object) -> dict:
     return storage | {key: value[key] for key in SELECTED_BINDING_FIELDS - BINDING_FIELDS}
 
 
-def validate_contract_binding(value: object) -> dict:
+def validate_contract_binding(value: object, operation: str) -> dict:
     if not isinstance(value, dict) or set(value) != CONTRACT_BINDING_FIELDS:
         _fail('contract_binding_invalid')
-    storage = validate_binding({key: value[key] for key in BINDING_FIELDS})
+    if not isinstance(operation, str) or not re.fullmatch(r'[a-f0-9]{12}', operation):
+        _fail('contract_operation_invalid')
+    verification_attempt = value.get('verification_attempt')
+    if (not isinstance(verification_attempt, str)
+        or not re.fullmatch(r'[a-f0-9]{8}', verification_attempt)):
+        _fail('verification_attempt_invalid')
+    expected_claim = 'voice-nats-verify-' + operation + '-' + verification_attempt
+    if value.get('verification_claim') != expected_claim:
+        _fail('verification_claim_attempt_mismatch')
+    base = {key: value[key] for key in BINDING_FIELDS}
+    # The shared storage validator intentionally remains strict for phases that
+    # do not use attempt-bound verification PVCs.
+    base['verification_claim'] = 'voice-nats-verify-' + operation
+    storage = validate_binding(base)
+    storage['verification_claim'] = expected_claim
+    storage['verification_attempt'] = verification_attempt
     if not isinstance(value.get('contract_attempt'), str) or not re.fullmatch(r'[a-f0-9]{8}', value['contract_attempt']):
         _fail('contract_attempt_invalid')
     for field in ('input_bundle_sha256', 'archive_sha256', 'plan_sha256', 'server_config_sha256',
@@ -426,7 +441,7 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
     if row['phase'] == 'verification-session':
         return _selected_store_document(row, validate_selected_binding(binding), image)
     if row['phase'] == 'contract-migration':
-        return _contract_migration_document(row, validate_contract_binding(binding), image)
+        return _contract_migration_document(row, validate_contract_binding(binding, row['operation']), image)
     _fail('phase_unsupported')
 
 
@@ -690,7 +705,8 @@ def _contract_migration_document(request: dict, storage: dict, image: str) -> di
     """One admitted source-writer Pod: NATS owns the source; control never mounts it."""
     name = job_name(request)
     labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
-        LABEL_PHASE: 'contract-migration', LABEL_JOB_SELECTOR: name}
+        LABEL_PHASE: 'contract-migration', LABEL_JOB_SELECTOR: name,
+        LABEL_VERIFICATION_ATTEMPT: storage['verification_attempt']}
     common = ['--operation', request['operation'], '--nonce', request['nonce'],
         '--contract-attempt', storage['contract_attempt'],
         '--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
@@ -850,7 +866,7 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
         }
         return vectors
     if row['phase'] == 'contract-migration':
-        storage = validate_contract_binding(binding)
+        storage = validate_contract_binding(binding, row['operation'])
         contract_binary = ['/usr/bin/python3', '/voice-nats-runner/contract_runner.py']
         common = ['--operation', row['operation'], '--nonce', row['nonce'], '--pod-uid', pod_uid,
             '--contract-attempt', storage['contract_attempt'],

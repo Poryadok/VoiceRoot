@@ -37,7 +37,7 @@ SESSION_BINDING = BINDING | {'session_attempt': '1234abcd',
     'kernel_bundle_sha256': 'f' * 64, 'server_config_sha256': '1' * 64,
     'archive_sha256': 'd' * 64, 'archive_bytes': 1234}
 CONTRACT_REQUEST = REQUEST | {'phase': 'contract-migration'}
-CONTRACT_BINDING = BINDING | {'contract_attempt': 'a1b2c3d4',
+CONTRACT_BINDING = CENSUS_BINDING | {'contract_attempt': 'a1b2c3d4',
     'archive_sha256': 'a' * 64, 'archive_bytes': 8192,
     'input_bundle_sha256': '6' * 64, 'input_bundle_bytes': 2048,
     'plan_sha256': '8' * 64, 'plan_bytes': 16384,
@@ -46,6 +46,24 @@ CONTRACT_BINDING = BINDING | {'contract_attempt': 'a1b2c3d4',
 
 
 class VerificationJobTests(unittest.TestCase):
+    def test_contract_binding_requires_attempt_bound_verification_claim(self):
+        storage = jobs.validate_contract_binding(CONTRACT_BINDING, CONTRACT_REQUEST['operation'])
+        self.assertEqual(storage['verification_attempt'], VERIFICATION_ATTEMPT)
+        self.assertEqual(storage['verification_claim'],
+            'voice-nats-verify-' + CONTRACT_REQUEST['operation'] + '-' + VERIFICATION_ATTEMPT)
+
+        invalid = CONTRACT_BINDING | {'verification_claim': BINDING['verification_claim']}
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'verification_claim_attempt_mismatch'):
+            jobs.validate_contract_binding(invalid, CONTRACT_REQUEST['operation'])
+        invalid = CONTRACT_BINDING | {'verification_attempt': 'deadbeef'}
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'verification_claim_attempt_mismatch'):
+            jobs.validate_contract_binding(invalid, CONTRACT_REQUEST['operation'])
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'verification_claim_attempt_mismatch'):
+            jobs.validate_contract_binding(CONTRACT_BINDING, 'd' * 12)
+        invalid = {key: value for key, value in CONTRACT_BINDING.items() if key != 'verification_attempt'}
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'contract_binding_invalid'):
+            jobs.validate_contract_binding(invalid, CONTRACT_REQUEST['operation'])
+
     def test_job_readback_allows_only_kubernetes_defaults_and_exact_uid(self):
         wanted = jobs.document(ARCHIVE_REQUEST, ARCHIVE_BINDING, IMAGE)
         actual = copy.deepcopy(wanted)
@@ -397,6 +415,9 @@ class VerificationJobTests(unittest.TestCase):
     def test_contract_migration_job_separates_source_writer_from_control_state_and_config(self):
         row = jobs.document(CONTRACT_REQUEST, CONTRACT_BINDING, IMAGE)
         pod = row['spec']['template']['spec']
+        self.assertEqual(row['metadata']['labels'][jobs.LABEL_VERIFICATION_ATTEMPT], VERIFICATION_ATTEMPT)
+        self.assertEqual(row['spec']['template']['metadata']['labels'][jobs.LABEL_VERIFICATION_ATTEMPT],
+            VERIFICATION_ATTEMPT)
         self.assertEqual(row['spec']['backoffLimit'], 0)
         self.assertEqual(row['spec']['podReplacementPolicy'], 'Failed')
         self.assertEqual(row['spec']['selector']['matchLabels'],

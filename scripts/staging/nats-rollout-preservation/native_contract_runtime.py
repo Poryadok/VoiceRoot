@@ -68,7 +68,7 @@ def _identity(request: object, binding: object, *, pod_name: object, pod_uid: ob
         job_uid: object, contract_attempt: object, runner_image: object) -> tuple[dict, dict, dict]:
     try:
         row = verification_job.validate_request(request)
-        storage = verification_job.validate_contract_binding(binding)
+        storage = verification_job.validate_contract_binding(binding, row['operation'])
     except Exception:
         _fail('request_or_binding_invalid')
     if row['phase'] != 'contract-migration':
