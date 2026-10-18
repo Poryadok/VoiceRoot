@@ -23,7 +23,9 @@ import 'package:voice_frontend/state/screen_share_providers.dart';
 
 import 'support/gateway_test_client.dart';
 
-class _FakeLiveKitRoom implements VoiceLiveKitRoom {
+class _FakeLiveKitRoom implements OrdinaryVoicePresentationRoom {
+  @override
+  bool ordinaryVoicePresentation = false;
   int connectCalls = 0;
   String? lastUrl;
   bool connectThrows = false;
@@ -254,6 +256,65 @@ Future<void> drainMicrotasks({int rounds = 30}) async {
 }
 
 void main() {
+  const ordinaryRoom = '4b4be70e-25c1-45a9-a853-e454a0f53266';
+  for (final entry in [
+    (VoiceSessionKind.dm, 'voice-dm-$ordinaryRoom', true),
+    (VoiceSessionKind.groupVoice, 'voice-group-$ordinaryRoom', true),
+    (VoiceSessionKind.groupVoice, 'voice-game-session-$ordinaryRoom', false),
+    (VoiceSessionKind.unknown, 'voice-dm-$ordinaryRoom', false),
+  ]) {
+    test(
+      'controller selects presentation context for ${entry.$2} ${entry.$1}',
+      () async {
+        final client = MockClient((request) async {
+          if (request.url.path.endsWith('/token')) {
+            return http.Response(
+              jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://127.0.0.1:7880'}),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        });
+        final realtime = StreamController<RealtimeFrame>.broadcast();
+        final boundRealtime =
+            StreamController<ProfileBoundRealtimeFrame>.broadcast();
+        final fakeRoom = _FakeLiveKitRoom()
+          ..ordinaryVoicePresentation = !entry.$3;
+        final session = VoiceCallSession(
+          roomId: ordinaryRoom,
+          livekitRoomName: entry.$2,
+          chatId: 'chat',
+          initiatorProfileId: 'prof-caller',
+          calleeProfileId: 'peer',
+          mediaKind: VoiceCallMediaKind.audio,
+          status: VoiceCallStatus.ringing,
+          sessionKind: entry.$1,
+        );
+        final container = _callTestContainer(
+          client: client,
+          realtime: realtime,
+          boundRealtime: boundRealtime,
+          fakeRoom: fakeRoom,
+          activeProfileId: 'prof-caller',
+        );
+        addTearDown(container.dispose);
+        addTearDown(realtime.close);
+        addTearDown(boundRealtime.close);
+        container.read(callControllerProvider.notifier).state = CallState(
+          phase: CallPhase.outgoing,
+          session: session,
+        );
+        await _acceptBoundCall(
+          container: container,
+          rawRealtime: realtime,
+          boundRealtime: boundRealtime,
+          session: session,
+          fakeRoom: fakeRoom,
+        );
+        expect(fakeRoom.ordinaryVoicePresentation, entry.$3);
+      },
+    );
+  }
   test(
     'MatchSquad mute and video stay local; ordinary calls still sync state',
     () async {

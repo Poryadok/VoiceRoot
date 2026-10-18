@@ -10,6 +10,24 @@
 
 Типы **текстового** «группа / канал» на голос не дублируются: везде одна и та же модель «люди в комнате», различаются контекст (спейс vs группа) и постоянность комнаты.
 
+## Ordinary media identity (accepted BE-106 target)
+
+DM/group admission сохраняет opaque SDK identity
+`ov:<canonical profile UUID>:<canonical membership UUID>`: refresh сохраняет её,
+а leave/rejoin создаёт новое membership UUID. Публичные roster/voice-state и
+имена/аватары используют profile UUID. Flutter декодирует identity только в
+ordinary presentation context: согласованные DM/group kind, room UUID и
+`voice-dm-<room UUID>` / `voice-group-<room UUID>` из текущей API session,
+без Space/Match binding. Это выбор отображения, не доказательство полномочий.
+
+SDK participant/track операции сохраняют полный opaque key. Несколько поколений
+одного профиля не объединяются: profile-only screen-share lookup не выбирает
+произвольный track при неоднозначности, exact SDK identity адресует только своё
+поколение. Late removal старого key оставляет новое поколение нетронутым.
+Malformed/unknown identity не получает guessed profile из attributes/suffix.
+Существующие plain profile, Space, Game и MatchSquad paths сохраняют их формат.
+Client mapping не активирует backend lifecycle и не заменяет live media proof.
+
 ## Видео и камера
 
 - В DM: аудио-звонок или видео-звонок (выбирается при инициации)

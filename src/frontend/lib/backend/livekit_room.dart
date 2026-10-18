@@ -2,6 +2,13 @@ import 'dart:async';
 
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
+import 'ordinary_voice_identity.dart';
+
+abstract interface class OrdinaryVoicePresentationRoom
+    implements VoiceLiveKitRoom {
+  set ordinaryVoicePresentation(bool enabled);
+}
+
 abstract interface class MatchSquadVoiceLiveKitRoom
     implements VoiceLiveKitRoom {
   String? resolveRemoteParticipantIdentity(String profileId);
@@ -58,8 +65,15 @@ final RegExp _spaceMediaParticipantIdentity = RegExp(
   r'^profile:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):media:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$',
 );
 
-String? _profileIdFromLiveKitIdentity(String identity) {
+String? _profileIdFromLiveKitIdentity(
+  String identity, {
+  bool ordinary = false,
+}) {
   if (_isCanonicalNonzeroUuid(identity)) return identity;
+  if (ordinary) {
+    final parsed = OrdinaryVoiceMediaIdentity.parse(identity);
+    if (parsed != null) return parsed.profileId;
+  }
 
   final match = _spaceMediaParticipantIdentity.firstMatch(identity);
   if (match == null) return null;
@@ -110,8 +124,13 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> disconnect();
 }
 
-class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
-  LiveKitVoiceRoom({livekit.Room? room}) : _room = room ?? livekit.Room();
+class LiveKitVoiceRoom
+    implements MatchSquadVoiceLiveKitRoom, OrdinaryVoicePresentationRoom {
+  LiveKitVoiceRoom({livekit.Room? room, this.ordinaryVoicePresentation = false})
+    : _room = room ?? livekit.Room();
+
+  /// Presentation dispatch only; never an authorization or SDK resource key.
+  bool ordinaryVoicePresentation;
 
   static const Duration _connectTimeout = Duration(seconds: 20);
   static const Duration _mediaEnableTimeout = Duration(seconds: 12);
@@ -278,7 +297,10 @@ class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
     for (final participant in _room.remoteParticipants.values) {
       final isCommander =
           commanderProfileId != null &&
-          _profileIdFromLiveKitIdentity(participant.identity) ==
+          _profileIdFromLiveKitIdentity(
+                participant.identity,
+                ordinary: ordinaryVoicePresentation,
+              ) ==
               commanderProfileId;
       final audible = !(muteOthers && !isCommander);
       for (final publication in participant.audioTrackPublications) {
@@ -435,17 +457,42 @@ class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
   List<livekit.RemoteVideoTrack> remoteScreenShareTracks({
     String? participantIdentity,
   }) {
+    final exactOrdinary =
+        ordinaryVoicePresentation && participantIdentity != null
+        ? OrdinaryVoiceMediaIdentity.parse(participantIdentity)
+        : null;
     if (participantIdentity != null &&
-        !_isCanonicalNonzeroUuid(participantIdentity)) {
+        !_isCanonicalNonzeroUuid(participantIdentity) &&
+        exactOrdinary == null) {
+      return const [];
+    }
+    final candidates = _room.remoteParticipants.values
+        .where((remote) {
+          if (participantIdentity == null) return true;
+          if (exactOrdinary != null) {
+            return remote.identity == exactOrdinary.sdkIdentity;
+          }
+          return _profileIdFromLiveKitIdentity(
+                remote.identity,
+                ordinary: ordinaryVoicePresentation,
+              ) ==
+              participantIdentity;
+        })
+        .toList(growable: false);
+    // The API profile does not choose a membership generation. Keep ambiguous
+    // SDK resources distinct until the old exact participant has been removed.
+    if (participantIdentity != null &&
+        exactOrdinary == null &&
+        candidates.length > 1 &&
+        candidates.any(
+          (remote) =>
+              ordinaryVoicePresentation &&
+              OrdinaryVoiceMediaIdentity.parse(remote.identity) != null,
+        )) {
       return const [];
     }
     final tracks = <livekit.RemoteVideoTrack>[];
-    for (final remote in _room.remoteParticipants.values) {
-      if (participantIdentity != null &&
-          _profileIdFromLiveKitIdentity(remote.identity) !=
-              participantIdentity) {
-        continue;
-      }
+    for (final remote in candidates) {
       for (final publication in remote.videoTrackPublications) {
         if (publication.source == livekit.TrackSource.screenShareVideo &&
             publication.track is livekit.RemoteVideoTrack) {
