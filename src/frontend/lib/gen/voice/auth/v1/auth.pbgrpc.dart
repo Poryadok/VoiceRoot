@@ -33,6 +33,17 @@ class AuthServiceClient extends $grpc.Client {
 
   AuthServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// @voice.security=protected;callers=service:user
+  /// Dedicated report audience listener; never available on ordinary Auth gRPC.
+  $grpc.ResponseFuture<$0.ClassifyReportAudienceAccountsResponse>
+      classifyReportAudienceAccounts(
+    $0.ClassifyReportAudienceAccountsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$classifyReportAudienceAccounts, request,
+        options: options);
+  }
+
   /// Protected Gateway delegated-user issue and Space-only atomic consume.
   $grpc.ResponseFuture<$0.IssueOwnershipTransferProofResponse>
       issueOwnershipTransferProof(
@@ -306,6 +317,12 @@ class AuthServiceClient extends $grpc.Client {
 
   // method descriptors
 
+  static final _$classifyReportAudienceAccounts = $grpc.ClientMethod<
+          $0.ClassifyReportAudienceAccountsRequest,
+          $0.ClassifyReportAudienceAccountsResponse>(
+      '/voice.auth.v1.AuthService/ClassifyReportAudienceAccounts',
+      ($0.ClassifyReportAudienceAccountsRequest value) => value.writeToBuffer(),
+      $0.ClassifyReportAudienceAccountsResponse.fromBuffer);
   static final _$issueOwnershipTransferProof = $grpc.ClientMethod<
           $0.IssueOwnershipTransferProofRequest,
           $0.IssueOwnershipTransferProofResponse>(
@@ -488,6 +505,16 @@ abstract class AuthServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.auth.v1.AuthService';
 
   AuthServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.ClassifyReportAudienceAccountsRequest,
+            $0.ClassifyReportAudienceAccountsResponse>(
+        'ClassifyReportAudienceAccounts',
+        classifyReportAudienceAccounts_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ClassifyReportAudienceAccountsRequest.fromBuffer(value),
+        ($0.ClassifyReportAudienceAccountsResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.IssueOwnershipTransferProofRequest,
             $0.IssueOwnershipTransferProofResponse>(
         'IssueOwnershipTransferProof',
@@ -777,6 +804,18 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($0.AcknowledgeSpaceDeletionProofReceiptResponse value) =>
             value.writeToBuffer()));
   }
+
+  $async.Future<$0.ClassifyReportAudienceAccountsResponse>
+      classifyReportAudienceAccounts_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ClassifyReportAudienceAccountsRequest>
+              $request) async {
+    return classifyReportAudienceAccounts($call, await $request);
+  }
+
+  $async.Future<$0.ClassifyReportAudienceAccountsResponse>
+      classifyReportAudienceAccounts($grpc.ServiceCall call,
+          $0.ClassifyReportAudienceAccountsRequest request);
 
   $async.Future<$0.IssueOwnershipTransferProofResponse>
       issueOwnershipTransferProof_Pre($grpc.ServiceCall $call,

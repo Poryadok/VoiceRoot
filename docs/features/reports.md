@@ -57,6 +57,39 @@
 - **Shadow ban**: пользователь видит свои сообщения и действия, другие их не видят; контент не доставляется; пользователь не знает, что забанен
 - Очевидный спам (паттерн сообщений) → авто-мут первый раз на час, второй раз навсегда; после автомута первые 10 сообщений проверяются на паттерн
 
+### BE-046: accepted authoritative threshold target
+
+The automatic report threshold is `max(10, ceil(N/100))` distinct verified
+submission accounts on one target user profile over `(t-24h,t]`; it is not an
+OR/minimum rule or an environment population estimate. Only VALID unresolved
+reports with a current authoritative account binding contribute. Duplicate
+receipts/categories/profiles from one account count once, and the target's
+own account counts zero without changing the opaque submission receipt.
+
+The autonomous metric `POTENTIAL_PUBLIC_PROFILE_ACCOUNTS_V1` counts distinct
+other nondeleted Auth accounts with at least one nondeleted User profile.
+Guests and frozen profiles count once; target owner, deleted/purged accounts
+and accounts without a live profile are excluded. Blocks, presence,
+suspensions and per-field settings do not shrink this potential denominator;
+this changes no profile read privacy. It avoids lowering a safety threshold
+by manipulating personal restrictions and makes no Sybil-resistance claim.
+
+User and Auth must provide complete positive owner observations, with the
+target binding rechecked and the action committed within 30 seconds of the
+first observation. Unknown/partial/stale authority never uses a fallback.
+Authoritative zero audience and all message/Space/Story targets remain
+manual-only. A qualifying user case creates one account shadow ban pending
+review, never an Auth status suspension or an inferred ban of a content owner.
+
+One account transaction commits the machine-issued sanction, case, log and
+stable event outbox. A closed review episode records a cutoff so old evidence
+cannot immediately recreate the ban. Receipt acceptance/manual review survives
+authority outage; bounded persisted work retries until the evidence ages out.
+Deletion/restore/erasure use the existing subject lifecycle and terminal fences.
+The [implementation plan](../testing/report-threshold-exec-plan.md) defines
+the exact producer, concurrency and privacy checks. This accepted target does
+not claim its runtime activation, CI, deployment or acceptance.
+
 **Ручная модерация:**
 - Глобальные модераторы платформы рассматривают жалобы в очереди
 - Глобальный модератор — отдельная роль с обязательным подтверждённым телефоном

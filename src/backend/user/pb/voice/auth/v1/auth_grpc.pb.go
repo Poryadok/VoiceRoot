@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	AuthService_ClassifyReportAudienceAccounts_FullMethodName       = "/voice.auth.v1.AuthService/ClassifyReportAudienceAccounts"
 	AuthService_IssueOwnershipTransferProof_FullMethodName          = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof"
 	AuthService_ConsumeOwnershipTransferProof_FullMethodName        = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
 	AuthService_GetOwnershipTransferReceipt_FullMethodName          = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
@@ -60,6 +61,9 @@ const (
 //
 // Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 type AuthServiceClient interface {
+	// @voice.security=protected;callers=service:user
+	// Dedicated report audience listener; never available on ordinary Auth gRPC.
+	ClassifyReportAudienceAccounts(ctx context.Context, in *ClassifyReportAudienceAccountsRequest, opts ...grpc.CallOption) (*ClassifyReportAudienceAccountsResponse, error)
 	// Protected Gateway delegated-user issue and Space-only atomic consume.
 	IssueOwnershipTransferProof(ctx context.Context, in *IssueOwnershipTransferProofRequest, opts ...grpc.CallOption) (*IssueOwnershipTransferProofResponse, error)
 	ConsumeOwnershipTransferProof(ctx context.Context, in *ConsumeOwnershipTransferProofRequest, opts ...grpc.CallOption) (*ConsumeOwnershipTransferProofResponse, error)
@@ -119,6 +123,16 @@ type authServiceClient struct {
 
 func NewAuthServiceClient(cc grpc.ClientConnInterface) AuthServiceClient {
 	return &authServiceClient{cc}
+}
+
+func (c *authServiceClient) ClassifyReportAudienceAccounts(ctx context.Context, in *ClassifyReportAudienceAccountsRequest, opts ...grpc.CallOption) (*ClassifyReportAudienceAccountsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClassifyReportAudienceAccountsResponse)
+	err := c.cc.Invoke(ctx, AuthService_ClassifyReportAudienceAccounts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *authServiceClient) IssueOwnershipTransferProof(ctx context.Context, in *IssueOwnershipTransferProofRequest, opts ...grpc.CallOption) (*IssueOwnershipTransferProofResponse, error) {
@@ -457,6 +471,9 @@ func (c *authServiceClient) AcknowledgeSpaceDeletionProofReceipt(ctx context.Con
 //
 // Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 type AuthServiceServer interface {
+	// @voice.security=protected;callers=service:user
+	// Dedicated report audience listener; never available on ordinary Auth gRPC.
+	ClassifyReportAudienceAccounts(context.Context, *ClassifyReportAudienceAccountsRequest) (*ClassifyReportAudienceAccountsResponse, error)
 	// Protected Gateway delegated-user issue and Space-only atomic consume.
 	IssueOwnershipTransferProof(context.Context, *IssueOwnershipTransferProofRequest) (*IssueOwnershipTransferProofResponse, error)
 	ConsumeOwnershipTransferProof(context.Context, *ConsumeOwnershipTransferProofRequest) (*ConsumeOwnershipTransferProofResponse, error)
@@ -518,6 +535,9 @@ type AuthServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAuthServiceServer struct{}
 
+func (UnimplementedAuthServiceServer) ClassifyReportAudienceAccounts(context.Context, *ClassifyReportAudienceAccountsRequest) (*ClassifyReportAudienceAccountsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ClassifyReportAudienceAccounts not implemented")
+}
 func (UnimplementedAuthServiceServer) IssueOwnershipTransferProof(context.Context, *IssueOwnershipTransferProofRequest) (*IssueOwnershipTransferProofResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IssueOwnershipTransferProof not implemented")
 }
@@ -636,6 +656,24 @@ func RegisterAuthServiceServer(s grpc.ServiceRegistrar, srv AuthServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&AuthService_ServiceDesc, srv)
+}
+
+func _AuthService_ClassifyReportAudienceAccounts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClassifyReportAudienceAccountsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ClassifyReportAudienceAccounts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ClassifyReportAudienceAccounts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ClassifyReportAudienceAccounts(ctx, req.(*ClassifyReportAudienceAccountsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _AuthService_IssueOwnershipTransferProof_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1239,6 +1277,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.auth.v1.AuthService",
 	HandlerType: (*AuthServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ClassifyReportAudienceAccounts",
+			Handler:    _AuthService_ClassifyReportAudienceAccounts_Handler,
+		},
 		{
 			MethodName: "IssueOwnershipTransferProof",
 			Handler:    _AuthService_IssueOwnershipTransferProof_Handler,

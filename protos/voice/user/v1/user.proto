@@ -11,6 +11,37 @@ option java_multiple_files = true;
 option java_package = "app.voice.user.v1";
 
 // Canonical values for presence status strings (UpdatePresenceRequest, PresenceStatus).
+enum ReportThresholdContextState {
+  REPORT_THRESHOLD_CONTEXT_STATE_UNSPECIFIED = 0;
+  REPORT_THRESHOLD_CONTEXT_STATE_LIVE = 1;
+  REPORT_THRESHOLD_CONTEXT_STATE_MISSING = 2;
+  REPORT_THRESHOLD_CONTEXT_STATE_DELETED = 3;
+  REPORT_THRESHOLD_CONTEXT_STATE_EMPTY_AUDIENCE = 4;
+}
+
+message ResolveReportThresholdContextRequest {
+  string evaluation_id = 1;
+  string target_profile_id = 2;
+  optional string expected_target_account_id = 3;
+  optional uint64 expected_profile_revision = 4;
+}
+
+// Complete observations expire within 30 seconds from the first owner observation.
+// Moderation separately binds the returned account to BE-045's immutable Auth subject.
+message ResolveReportThresholdContextResponse {
+  ReportThresholdContextState state = 1;
+  string target_profile_id = 2;
+  string target_account_id = 3;
+  uint64 profile_revision = 4;
+  string metric_version = 5;
+  int64 audience_accounts = 6;
+  google.protobuf.Timestamp observation_started_at = 7;
+  google.protobuf.Timestamp observation_completed_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+  string snapshot_id = 10;
+  string evaluation_id = 11;
+}
+
 enum PresenceOnlineStatus {
   PRESENCE_ONLINE_STATUS_UNSPECIFIED = 0;
   PRESENCE_ONLINE_STATUS_ONLINE = 1;
@@ -29,6 +60,9 @@ enum PrivacyPreset {
 
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 service UserService {
+  // @voice.security=protected;callers=service:moderation
+  // Dedicated listener; complete potential audience, never a public existence oracle.
+  rpc ResolveReportThresholdContext(ResolveReportThresholdContextRequest) returns (ResolveReportThresholdContextResponse);
   // S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
   // Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse);
