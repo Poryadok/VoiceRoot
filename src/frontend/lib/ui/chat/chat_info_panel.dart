@@ -1185,6 +1185,11 @@ class ChatBotsSettingsSection extends ConsumerWidget {
     final botsAsync = ref.watch(
       botsInChatProvider((chatId: chatId, spaceId: spaceId)),
     );
+    final installedBotsAsync = ref.watch(installedBotsProvider(spaceId));
+    final installedBotsById = {
+      for (final installed in installedBotsAsync.valueOrNull ?? const [])
+        installed.bot.id: installed,
+    };
 
     return Column(
       key: sectionKey,
@@ -1198,6 +1203,27 @@ class ChatBotsSettingsSection extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
+        if (installedBotsAsync.hasError)
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.chatBotsLoadError,
+                    style: TextStyle(color: voice.textSecondary),
+                  ),
+                ),
+                TextButton.icon(
+                  key: const Key('chat_bot_status_retry'),
+                  onPressed: () =>
+                      ref.invalidate(installedBotsProvider(spaceId)),
+                  icon: const Icon(Icons.refresh),
+                  label: Text(l10n.commonRetry),
+                ),
+              ],
+            ),
+          ),
         botsAsync.when(
           loading: () => const Padding(
             padding: EdgeInsets.all(16),
@@ -1227,6 +1253,20 @@ class ChatBotsSettingsSection extends ConsumerWidget {
                 for (final entry in bots)
                   SwitchListTile(
                     key: Key('chat_bot_toggle_${entry.bot.id}'),
+                    secondary: installedBotsById[entry.bot.id]?.online == false
+                        ? Tooltip(
+                            message: l10n.botUnavailableTooltip,
+                            child: Icon(
+                              Icons.circle,
+                              key: Key(
+                                'chat_bot_offline_indicator_${entry.bot.id}',
+                              ),
+                              size: 10,
+                              color: voice.textDisabled,
+                              semanticLabel: l10n.botOfflineStatus,
+                            ),
+                          )
+                        : null,
                     title: Text(entry.bot.name),
                     subtitle: entry.whitelisted
                         ? null
