@@ -108,7 +108,9 @@ func (s *BotStore) ApplySpaceLifecycleFence(ctx context.Context, req *commonv1.S
 		if err != nil {
 			return nil, err
 		}
-		_, err = tx.Exec(ctx, `UPDATE bot_event_log e SET delivery_status='canceled',claimed_until=NULL,payload='{}'::jsonb WHERE e.delivery_status IN ('pending','deferred') AND e.space_id=$1`, spaceID)
+		_, err = tx.Exec(ctx, `UPDATE bot_event_log e SET delivery_status='canceled',claimed_until=NULL,payload='{}'::jsonb
+WHERE e.delivery_status IN ('pending','deferred') AND (e.space_id=$1 OR
+ (e.event_type='message' AND e.space_id IS NULL AND EXISTS(SELECT 1 FROM bot_chat_whitelist w WHERE w.bot_id=e.bot_id AND w.chat_id::text=e.payload->>'chat_id' AND w.space_id=$1)))`, spaceID)
 		if err != nil {
 			return nil, err
 		}
@@ -185,11 +187,25 @@ func (s *BotStore) PurgeSpace(ctx context.Context, req *commonv1.SpacePurgeReque
 	if state != "PURGE_DECIDED" {
 		return nil, ErrSpaceLifecycleConflict
 	}
+	// Match whitelist-before-delivery ordering. The exclusive Space guard excludes
+	// all message senders while cleanup rows and the terminal receipt commit.
+	whitelist, err := tx.Query(ctx, `SELECT bot_id,chat_id FROM bot_chat_whitelist WHERE space_id=$1 ORDER BY bot_id,chat_id FOR UPDATE`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	for whitelist.Next() {
+	}
+	err = whitelist.Err()
+	whitelist.Close()
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `UPDATE bot_message_deliveries d SET status='canceled',claimed_until=NULL,payload='{}'::jsonb WHERE EXISTS(SELECT 1 FROM bot_chat_whitelist w WHERE w.bot_id=d.bot_id AND w.chat_id=d.chat_id AND w.space_id=$1)`, spaceID)
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE bot_event_log SET delivery_status='canceled',claimed_until=NULL,payload='{}'::jsonb WHERE space_id=$1`, spaceID)
+	_, err = tx.Exec(ctx, `UPDATE bot_event_log e SET delivery_status='canceled',claimed_until=NULL,payload='{}'::jsonb
+WHERE e.space_id=$1 OR (e.event_type='message' AND e.space_id IS NULL AND EXISTS(SELECT 1 FROM bot_chat_whitelist w WHERE w.bot_id=e.bot_id AND w.chat_id::text=e.payload->>'chat_id' AND w.space_id=$1))`, spaceID)
 	if err != nil {
 		return nil, err
 	}

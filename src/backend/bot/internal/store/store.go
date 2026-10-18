@@ -332,12 +332,12 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 		return uuid.Nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	// Lock the bot first to serialize installation changes with delivery and revocation.
-	var lockedBotID uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	// Space guards always precede bot and whitelist row locks.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
 		return uuid.Nil, err
 	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+	var lockedBotID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, err
 	}
 	var lifecycleState string
@@ -427,7 +427,10 @@ func (s *BotStore) UninstallFromSpace(ctx context.Context, botID, spaceID uuid.U
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	// Keep the same bot-first lock order as InstallInSpace and DeliverMessage.
+	// Cleanup is allowed while frozen, but still serializes with guarded sends.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+		return err
+	}
 	var lockedBotID uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -694,7 +697,7 @@ LIMIT $2`, botID, limit)
 func (s *BotStore) MarkEventDelivered(ctx context.Context, eventID uuid.UUID) error {
 	_, err := s.Pool.Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
-WHERE id = $1`, eventID)
+WHERE id = $1 AND delivery_status='pending'`, eventID)
 	return err
 }
 
