@@ -21,22 +21,24 @@ var (
 )
 
 const (
-	ProtocolV1         uint32 = 1
-	WholeRealmRetired         = "WHOLE_REALM_RETIRED"
-	ColdCutDrain              = "COLD_CUT_DRAIN"
-	P3FrozenCompletion        = "P3_FROZEN_COMPLETION"
-	HeadAbsent                = "ABSENT"
-	HeadPresent               = "PRESENT"
-	ResourceDomain            = "voice.party.retirement.resource.v1"
-	WorkDomain                = "voice.party.retirement.owner-work.v1"
-	TargetDomain              = "voice.party.retirement.targets.v1"
-	HeadDomain                = "voice.party.retirement.owner-head.v1"
-	OwnerRequestDomain        = "voice.party.retirement.owner-request.v1"
-	CatalogDomain             = "voice.party.retirement.source-catalog.v1"
-	ProviderDomain            = "voice.party.retirement.provider-manifest.v1"
-	CredentialDomain          = "voice.party.retirement.credential-manifest.v1"
-	BarrierDomain             = "voice.party.retirement.admission-barrier.v1"
-	IssuerDomain              = "voice.party.retirement.issuer-manifest.v1"
+	ProtocolV1             uint32 = 1
+	WholeRealmRetired             = "WHOLE_REALM_RETIRED"
+	ColdCutDrain                  = "COLD_CUT_DRAIN"
+	P3FrozenCompletion            = "P3_FROZEN_COMPLETION"
+	HeadAbsent                    = "ABSENT"
+	HeadPresent                   = "PRESENT"
+	ResourceDomain                = "voice.party.retirement.resource.v1"
+	WorkDomain                    = "voice.party.retirement.owner-work.v1"
+	TargetDomain                  = "voice.party.retirement.targets.v1"
+	HeadDomain                    = "voice.party.retirement.owner-head.v1"
+	OwnerRequestDomain            = "voice.party.retirement.owner-request.v1"
+	CatalogDomain                 = "voice.party.retirement.source-catalog.v1"
+	ProviderDomain                = "voice.party.retirement.provider-manifest.v1"
+	CredentialDomain              = "voice.party.retirement.credential-manifest.v1"
+	BarrierDomain                 = "voice.party.retirement.admission-barrier.v1"
+	IssuerDomain                  = "voice.party.retirement.issuer-manifest.v1"
+	ResolutionDomain              = "voice.party.retirement.domain-resolution.v1"
+	IssuanceEvidenceDomain        = "voice.party.retirement.issuance-evidence.v1"
 )
 
 func Hash(domain string, canonical []byte) Digest {
@@ -85,6 +87,40 @@ type ComponentRef struct {
 type ComponentRecord struct {
 	Ref            ComponentRef
 	CanonicalBytes []byte
+}
+
+// CredentialManifest is protected issuer evidence, never a caller-supplied
+// owner mapping. Opaque native provider bindings are preserved exactly. Unknown
+// historical issuance requires a complete closed source-domain declaration.
+type CredentialManifest struct {
+	Protocol          uint32
+	ProviderBindings  []ProviderIssuanceBinding
+	HistoricalSources []HistoricalIssuanceBinding
+}
+type ProviderIssuanceBinding struct {
+	ProviderBinding Digest
+	Domains         []DomainBinding
+	EvidenceBytes   []byte
+}
+type HistoricalIssuanceBinding struct {
+	SourceKind, OwnerProtocol string
+	Domains                   []DomainBinding
+	EvidenceBytes             []byte
+}
+
+type DomainResolutionEvidence struct {
+	ProviderBinding, UnknownMarker Digest
+	CredentialManifestComponent    ComponentRef
+	EntryHash                      Digest
+}
+type DomainResolution struct {
+	Protocol                     uint32
+	Proof                        ProofRef
+	Work                         OwnerWorkRef
+	WorkHash, TargetManifestHash Digest
+	Cut                          CutBinding
+	Domains                      []DomainBinding
+	Evidence                     []DomainResolutionEvidence
 }
 
 type ResourceDocument struct {
@@ -136,7 +172,8 @@ type OwnerWork struct {
 	SealedTargetManifestBytes []byte
 	SealedTargetManifestHash  Digest
 	SealedTargetCount         uint64
-	RequiredDomains           []DomainBinding
+	CapturedProviderBindings  []Digest
+	UnknownIssuanceMarkers    []Digest
 	ExistingP3                *P3Binding
 }
 
@@ -165,6 +202,8 @@ type verifiedBinding struct {
 	Work                 OwnerWorkRef
 	Cut                  CutBinding
 	WorkHash, TargetHash Digest
+	ResolutionBytes      []byte
+	ResolutionHash       Digest
 }
 type VerifiedRetirement struct{ binding *verifiedBinding }
 
@@ -197,4 +236,17 @@ func (v VerifiedRetirement) TargetManifestHash() Digest {
 		return Digest{}
 	}
 	return v.binding.TargetHash
+}
+
+func (v VerifiedRetirement) DomainResolutionBytes() []byte {
+	if v.binding == nil {
+		return nil
+	}
+	return append([]byte(nil), v.binding.ResolutionBytes...)
+}
+func (v VerifiedRetirement) DomainResolutionHash() Digest {
+	if v.binding == nil {
+		return Digest{}
+	}
+	return v.binding.ResolutionHash
 }

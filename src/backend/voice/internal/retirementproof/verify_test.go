@@ -1,10 +1,12 @@
 package retirementproof
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"sort"
 	"testing"
 
 	"github.com/google/uuid"
@@ -67,6 +69,7 @@ func newFixture() *fixture {
 			b = jsonBytes(struct{ Retired, Replacement []DomainBinding }{[]DomainBinding{domain}, []DomainBinding{replacement}})
 			f.record.Document.Cut.ProviderManifestHash = Hash(ProviderDomain, b)
 		case "CREDENTIAL_MANIFEST":
+			b = jsonBytes(CredentialManifest{Protocol: ProtocolV1, ProviderBindings: []ProviderIssuanceBinding{{digest("opaque native provider binding"), []DomainBinding{domain}, []byte(`{"fixture":"unit-only historical confinement"}`)}}})
 			f.record.Document.Cut.CredentialManifestHash = Hash(CredentialDomain, b)
 		case "ADMISSION_BARRIER":
 			f.record.Document.Cut.ClosedAdmissionBarrierHash = Hash(BarrierDomain, b)
@@ -80,7 +83,7 @@ func newFixture() *fixture {
 	cut = f.record.Document.Cut
 	request := []byte(`{"command":"cold-cut"}`)
 	targets := []byte(`[{"native":"exact-owner-target"}]`)
-	f.work = OwnerWork{Ref: OwnerWorkRef{ProtocolV1, "test-owner-v1", uuid.New(), Hash(OwnerRequestDomain, request)}, Purpose: ColdCutDrain, SourceKind: "NATIVE_SPACE", Cut: cut, SpaceID: uuid.New(), CapturedHead: OwnerHeadBinding{State: HeadAbsent, Hash: Hash(HeadDomain, []byte(HeadAbsent))}, OwnerRequestDomain: OwnerRequestDomain, OwnerRequestBytes: request, SourceManifestHash: digest("NATIVE_SPACE"), SealedTargetManifestBytes: targets, SealedTargetManifestHash: Hash(TargetDomain, targets), SealedTargetCount: 1, RequiredDomains: []DomainBinding{domain}}
+	f.work = OwnerWork{Ref: OwnerWorkRef{ProtocolV1, "test-owner-v1", uuid.New(), Hash(OwnerRequestDomain, request)}, Purpose: ColdCutDrain, SourceKind: "NATIVE_SPACE", Cut: cut, SpaceID: uuid.New(), CapturedHead: OwnerHeadBinding{State: HeadAbsent, Hash: Hash(HeadDomain, []byte(HeadAbsent))}, OwnerRequestDomain: OwnerRequestDomain, OwnerRequestBytes: request, SourceManifestHash: digest("NATIVE_SPACE"), SealedTargetManifestBytes: targets, SealedTargetManifestHash: Hash(TargetDomain, targets), SealedTargetCount: 1, CapturedProviderBindings: []Digest{digest("opaque native provider binding")}}
 	f.installation = Installation{cut.EnvironmentID, cut.AuthorityIncarnation, cut.IssuerImplementationManifestHash}
 	f.seal()
 	return f
@@ -128,7 +131,8 @@ func TestVerifierRejectsCopiedOrIncompleteEvidence(t *testing.T) {
 		{"wrong-source-contract", func(f *fixture) { f.work.SourceManifestHash = digest("other") }},
 		{"changed-target-bytes", func(f *fixture) { f.work.SealedTargetManifestBytes = []byte(`[]`) }},
 		{"wrong-target-count", func(f *fixture) { f.work.SealedTargetCount = 2 }},
-		{"unmapped-credential-domain", func(f *fixture) { f.work.RequiredDomains[0].CredentialCohortID = uuid.New() }},
+		{"unmapped-provider-binding", func(f *fixture) { f.work.CapturedProviderBindings[0] = digest("unknown provider binding") }},
+		{"unknown-history-uncovered", func(f *fixture) { f.work.UnknownIssuanceMarkers = []Digest{digest("unknown historical intent")} }},
 		{"missing-resource-component", func(f *fixture) { f.record.Components = f.record.Components[1:] }},
 		{"changed-component", func(f *fixture) { f.record.Components[0].CanonicalBytes = []byte(`{}`) }},
 		{"noncanonical-receipt", func(f *fixture) { f.record.CanonicalBytes = append(f.record.CanonicalBytes, ' ') }},
@@ -185,5 +189,56 @@ func TestP3PreservesNativeWrapperMethodHash(t *testing.T) {
 	f.work.Ref.RequestHash = Hash(OwnerRequestDomain, wrapper)
 	if _, err = f.verifier().VerifyForWork(context.Background(), f.record.Ref, f.work.Ref); err == nil {
 		t.Fatal("generic digest replaced protobuf method domain")
+	}
+}
+
+func (f *fixture) setCredentialManifest(m CredentialManifest) {
+	b := jsonBytes(m)
+	for i, c := range f.record.Components {
+		if c.Ref.Kind == "CREDENTIAL_MANIFEST" {
+			c.CanonicalBytes = b
+			c.Ref.CanonicalBytesHash = sha256.Sum256(b)
+			f.record.Components[i] = c
+			f.record.Document.Components[i] = c.Ref
+		}
+	}
+	f.record.Document.Cut.CredentialManifestHash = Hash(CredentialDomain, b)
+	f.work.Cut = f.record.Document.Cut
+	f.seal()
+}
+
+func TestIssuanceManifestResolvesEveryOpaqueBindingAndHistoricalSource(t *testing.T) {
+	f := newFixture()
+	f.work.UnknownIssuanceMarkers = []Digest{digest("unknown historical intent")}
+	evidence := []byte(`{"fixture":"unit-only confinement evidence"}`)
+	m := CredentialManifest{Protocol: ProtocolV1, ProviderBindings: []ProviderIssuanceBinding{{f.work.CapturedProviderBindings[0], f.record.Document.RetiredDomains, evidence}}, HistoricalSources: []HistoricalIssuanceBinding{{f.work.SourceKind, f.work.Ref.OwnerProtocol, f.record.Document.RetiredDomains, evidence}}}
+	f.setCredentialManifest(m)
+	verified, err := f.verifier().VerifyForWork(context.Background(), f.record.Ref, f.work.Ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resolution DomainResolution
+	if json.Unmarshal(verified.DomainResolutionBytes(), &resolution) != nil || len(resolution.Evidence) != 2 || len(resolution.Domains) != 1 || resolution.Evidence[1].UnknownMarker != f.work.UnknownIssuanceMarkers[0] || verified.DomainResolutionHash() != Hash(ResolutionDomain, verified.DomainResolutionBytes()) {
+		t.Fatal("incomplete resolution evidence")
+	}
+	copyBytes := verified.DomainResolutionBytes()
+	copyBytes[0] = '!'
+	if verified.DomainResolutionHash() != Hash(ResolutionDomain, verified.DomainResolutionBytes()) {
+		t.Fatal("mutable verified evidence")
+	}
+	// The existing captured binding remains covered. Adding an unaccounted one
+	// must fail rather than accepting the covered subset.
+	f.work.CapturedProviderBindings = append(f.work.CapturedProviderBindings, digest("another unaccounted provider"))
+	sort.Slice(f.work.CapturedProviderBindings, func(i, j int) bool {
+		return bytes.Compare(f.work.CapturedProviderBindings[i][:], f.work.CapturedProviderBindings[j][:]) < 0
+	})
+	if _, err := f.verifier().VerifyForWork(context.Background(), f.record.Ref, f.work.Ref); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("unmapped subset: %v", err)
+	}
+	f = newFixture()
+	m = CredentialManifest{Protocol: ProtocolV1, ProviderBindings: []ProviderIssuanceBinding{{f.work.CapturedProviderBindings[0], f.record.Document.ReplacementDomains, evidence}}}
+	f.setCredentialManifest(m)
+	if _, err := f.verifier().VerifyForWork(context.Background(), f.record.Ref, f.work.Ref); err == nil {
+		t.Fatal("live replacement credentials qualified as retired")
 	}
 }

@@ -57,7 +57,11 @@ func (v TrustedVerifier) VerifyForWork(ctx context.Context, proof ProofRef, work
 	if !found {
 		return VerifiedRetirement{}, conflict("source contract")
 	}
-	for _, required := range w.RequiredDomains {
+	requiredDomains, resolutionEvidence, err := resolveIssuance(r, w)
+	if err != nil {
+		return VerifiedRetirement{}, err
+	}
+	for _, required := range requiredDomains {
 		found = false
 		for _, retired := range r.Document.RetiredDomains {
 			if required == retired {
@@ -85,7 +89,9 @@ func (v TrustedVerifier) VerifyForWork(ctx context.Context, proof ProofRef, work
 	if err != nil {
 		return VerifiedRetirement{}, ErrUnavailable
 	}
-	return VerifiedRetirement{&verifiedBinding{Proof: proof, Work: work, Cut: w.Cut, WorkHash: Hash(WorkDomain, b), TargetHash: w.SealedTargetManifestHash}}, nil
+	workHash := Hash(WorkDomain, b)
+	resolutionBytes := mustJSON(DomainResolution{ProtocolV1, proof, work, workHash, w.SealedTargetManifestHash, w.Cut, requiredDomains, resolutionEvidence})
+	return VerifiedRetirement{&verifiedBinding{Proof: proof, Work: work, Cut: w.Cut, WorkHash: workHash, TargetHash: w.SealedTargetManifestHash, ResolutionBytes: resolutionBytes, ResolutionHash: Hash(ResolutionDomain, resolutionBytes)}}, nil
 }
 
 // ValidateFor is the owner's final same-transaction binding check. It does not
@@ -257,14 +263,19 @@ func validateWork(w OwnerWork) error {
 	default:
 		return conflict("lifecycle head state")
 	}
-	for i, d := range w.RequiredDomains {
-		if !validDomain(d) || (i > 0 && !domainLess(w.RequiredDomains[i-1], d)) {
-			return conflict("required issuance domains")
+	for i, d := range w.CapturedProviderBindings {
+		if d == (Digest{}) || (i > 0 && bytes.Compare(w.CapturedProviderBindings[i-1][:], d[:]) >= 0) {
+			return conflict("captured provider bindings")
+		}
+	}
+	for i, d := range w.UnknownIssuanceMarkers {
+		if d == (Digest{}) || (i > 0 && bytes.Compare(w.UnknownIssuanceMarkers[i-1][:], d[:]) >= 0) {
+			return conflict("unknown issuance markers")
 		}
 	}
 	// Until an owner proves a local-only empty issuance domain, nonempty work
 	// cannot silently claim that its unknown credential history is covered.
-	if w.SealedTargetCount > 0 && len(w.RequiredDomains) == 0 {
+	if w.SealedTargetCount > 0 && len(w.CapturedProviderBindings) == 0 && len(w.UnknownIssuanceMarkers) == 0 {
 		return conflict("unknown issuance domain")
 	}
 	switch w.Purpose {
@@ -281,4 +292,92 @@ func validateWork(w OwnerWork) error {
 		return ErrUnsupported
 	}
 	return nil
+}
+
+func resolveIssuance(r ResourceRecord, w OwnerWork) ([]DomainBinding, []DomainResolutionEvidence, error) {
+	var manifest CredentialManifest
+	var manifestRef ComponentRef
+	for _, c := range r.Components {
+		if c.Ref.Kind == "CREDENTIAL_MANIFEST" {
+			manifestRef = c.Ref
+			if json.Unmarshal(c.CanonicalBytes, &manifest) != nil || !bytes.Equal(mustJSON(manifest), c.CanonicalBytes) {
+				return nil, nil, conflict("credential manifest bytes")
+			}
+		}
+	}
+	if manifest.Protocol != ProtocolV1 {
+		return nil, nil, ErrUnsupported
+	}
+	validateDomains := func(ds []DomainBinding) bool {
+		if len(ds) == 0 {
+			return false
+		}
+		for i, d := range ds {
+			if !validDomain(d) || (i > 0 && !domainLess(ds[i-1], d)) {
+				return false
+			}
+			found := false
+			for _, retired := range r.Document.RetiredDomains {
+				if d == retired {
+					found = true
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	}
+	providers := map[Digest]ProviderIssuanceBinding{}
+	for i, p := range manifest.ProviderBindings {
+		if p.ProviderBinding == (Digest{}) || (i > 0 && bytes.Compare(manifest.ProviderBindings[i-1].ProviderBinding[:], p.ProviderBinding[:]) >= 0) || !validateDomains(p.Domains) || !json.Valid(p.EvidenceBytes) {
+			return nil, nil, conflict("provider issuance manifest")
+		}
+		providers[p.ProviderBinding] = p
+	}
+	history := map[string]HistoricalIssuanceBinding{}
+	for i, h := range manifest.HistoricalSources {
+		key := h.SourceKind + "\x00" + h.OwnerProtocol
+		if h.SourceKind == "" || h.OwnerProtocol == "" || !validateDomains(h.Domains) || !json.Valid(h.EvidenceBytes) || (i > 0 && manifest.HistoricalSources[i-1].SourceKind+"\x00"+manifest.HistoricalSources[i-1].OwnerProtocol >= key) {
+			return nil, nil, conflict("historical issuance manifest")
+		}
+		known := false
+		for _, s := range r.Document.SourceBindings {
+			if s.SourceKind == h.SourceKind && s.OwnerProtocol == h.OwnerProtocol {
+				known = true
+			}
+		}
+		if !known {
+			return nil, nil, conflict("historical source contract")
+		}
+		history[key] = h
+	}
+	required := map[DomainBinding]bool{}
+	evidence := []DomainResolutionEvidence{}
+	for _, binding := range w.CapturedProviderBindings {
+		p, ok := providers[binding]
+		if !ok {
+			return nil, nil, ErrUnsupported
+		}
+		for _, d := range p.Domains {
+			required[d] = true
+		}
+		evidence = append(evidence, DomainResolutionEvidence{ProviderBinding: binding, CredentialManifestComponent: manifestRef, EntryHash: Hash(IssuanceEvidenceDomain, mustJSON(p))})
+	}
+	for _, marker := range w.UnknownIssuanceMarkers {
+		h, ok := history[w.SourceKind+"\x00"+w.Ref.OwnerProtocol]
+		if !ok {
+			return nil, nil, ErrUnsupported
+		}
+		for _, d := range h.Domains {
+			required[d] = true
+		}
+		evidence = append(evidence, DomainResolutionEvidence{UnknownMarker: marker, CredentialManifestComponent: manifestRef, EntryHash: Hash(IssuanceEvidenceDomain, mustJSON(h))})
+	}
+	result := make([]DomainBinding, 0, len(required))
+	for d := range required {
+		result = append(result, d)
+	}
+	sort.Slice(result, func(i, j int) bool { return domainLess(result[i], result[j]) })
+	return result, evidence, nil
 }
