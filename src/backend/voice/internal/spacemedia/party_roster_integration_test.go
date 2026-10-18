@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"voice/backend/voice/internal/rosteroutbox"
 )
 
 func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
@@ -51,6 +52,21 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT event_id,payload FROM voice_roster_outbox WHERE room_id=$1`, a.RoomID).Scan(&replayID, &replayPayload))
 	require.Equal(t, firstID, replayID)
 	require.Equal(t, firstPayload, replayPayload)
+	delivery := &rosteroutbox.Store{Pool: pool}
+	firstLease, err := delivery.Claim(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, firstLease)
+	require.Equal(t, firstID, firstLease.ID.String())
+	require.Equal(t, firstPayload, firstLease.Payload)
+	require.NoError(t, delivery.Retry(ctx, *firstLease, 0))
+	newLease, err := delivery.Claim(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, newLease)
+	require.Equal(t, firstLease.ID, newLease.ID)
+	require.Equal(t, firstLease.Payload, newLease.Payload)
+	require.NotEqual(t, firstLease.LeaseToken, newLease.LeaseToken)
+	require.ErrorIs(t, delivery.Delivered(ctx, *firstLease), rosteroutbox.ErrStaleLease)
+	require.NoError(t, delivery.Delivered(ctx, *newLease))
 	loss := PartyEligibilityLoss{RoomID: uuid.MustParse(a.RoomID), Incarnation: a.OperationID, AccountID: a.AccountID, ProfileID: a.ProfileID, OperationID: a.OperationID, Generation: a.Generation, SessionEpoch: int64(a.SessionEpoch)}
 	stale := loss
 	stale.SessionEpoch++
@@ -73,4 +89,57 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 		"late projection confirmation cannot resurrect a departing last member")
 	require.NoError(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))
 	check(2, []string{"JOINED", "LEFT"})
+}
+
+func TestSpacePartyRoomCloseSharesCallerTransactionAndOrdersDepartures(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	st := NewPostgresAdmissionStore(pool)
+	first := admissionFixture()
+	require.NoError(t, prepareAdmission(ctx, st, &first))
+	require.NoError(t, st.Fence(ctx, first))
+	require.NoError(t, st.MarkCommitted(ctx, first.OperationID, first.Generation))
+	require.NoError(t, st.MarkProjectionApplied(ctx, first.OperationID, first.Generation))
+	second := admissionFixture()
+	second.RoomID = first.RoomID
+	second.SpaceID = first.SpaceID
+	second.VoiceRoomID = first.VoiceRoomID
+	second.CreatedRoom = false
+	second.Events = second.Events[1:]
+	require.NoError(t, prepareAdmission(ctx, st, &second))
+	require.NoError(t, st.Fence(ctx, second))
+	require.NoError(t, st.MarkCommitted(ctx, second.OperationID, second.Generation))
+	require.NoError(t, st.MarkProjectionApplied(ctx, second.OperationID, second.Generation))
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	require.NoError(t, BeginPartyRoomClose(ctx, tx, first.VoiceRoomID, first.RoomGeneration))
+	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, st.ConfirmProjection(ctx, first.OperationID, first.Generation))
+	var version int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT roster_version FROM voice_space_media_room_heads WHERE call_room_id=$1`, first.RoomID).Scan(&version))
+	require.EqualValues(t, 2, version)
+	tx, err = pool.Begin(ctx)
+	require.NoError(t, err)
+	require.NoError(t, BeginPartyRoomClose(ctx, tx, first.VoiceRoomID, first.RoomGeneration))
+	require.NoError(t, BeginPartyRoomClose(ctx, tx, first.VoiceRoomID, first.RoomGeneration))
+	require.NoError(t, tx.Commit(ctx))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT roster_version FROM voice_space_media_room_heads WHERE call_room_id=$1`, first.RoomID).Scan(&version))
+	require.EqualValues(t, 4, version)
+	rows, err := pool.Query(ctx, `SELECT profile_id::text FROM voice_roster_outbox WHERE room_id=$1 AND change='LEFT' ORDER BY roster_version`, first.RoomID)
+	require.NoError(t, err)
+	var profiles []string
+	for rows.Next() {
+		var id string
+		require.NoError(t, rows.Scan(&id))
+		profiles = append(profiles, id)
+	}
+	require.NoError(t, rows.Err())
+	rows.Close()
+	require.Len(t, profiles, 2)
+	require.IsIncreasing(t, profiles)
+	require.ErrorIs(t, st.ConfirmProjection(ctx, first.OperationID, first.Generation), ErrAdmissionConflict)
+	require.ErrorIs(t, st.ConfirmProjection(ctx, second.OperationID, second.Generation), ErrAdmissionConflict)
 }

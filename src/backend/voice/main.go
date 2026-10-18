@@ -620,11 +620,13 @@ func main() {
 			log.Fatal("Space media durable event publisher is not configured")
 		}
 		admissionRelay := &spacemedia.AdmissionOutboxRelay{
+
 			Store: spaceMediaAdmissions, Publisher: admissionPublisher,
 			OnError: func(err error) {
 				logger.Warn("Space media admission outbox delivery failed", slog.String("error", err.Error()))
 			},
 		}
+		go runRosterOutbox(runCtx, lifecyclePool, admissionPublisher, logger)
 		go func() {
 			if err := admissionRelay.Run(runCtx); err != nil && runCtx.Err() == nil {
 				logger.Error("Space media admission outbox relay stopped", slog.String("error", err.Error()))

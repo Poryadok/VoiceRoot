@@ -102,6 +102,7 @@ func (s *PostgresStore) CheckSchema(ctx context.Context) error {
 	var ready bool
 	err := s.pool.QueryRow(ctx, `SELECT to_regclass('voice_ordinary_rooms') IS NOT NULL
 AND to_regclass('voice_ordinary_outbox') IS NOT NULL
+AND to_regclass('voice_roster_outbox') IS NOT NULL
 AND to_regclass('voice_ordinary_memberships') IS NOT NULL
 AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
 AND table_name='voice_sdk_conversion_fence_receipts' AND column_name='ordinary_source_snapshot')

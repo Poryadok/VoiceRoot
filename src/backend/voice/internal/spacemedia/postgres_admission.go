@@ -74,6 +74,8 @@ func (s *PostgresAdmissionStore) CheckSchema(ctx context.Context) error {
 	var ready bool
 	err := s.pool.QueryRow(ctx, `SELECT
 	to_regclass('voice_space_media_admissions') IS NOT NULL
+	AND to_regclass('voice_roster_outbox') IS NOT NULL
+	AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='voice_space_media_room_heads' AND column_name='roster_version')
 	AND to_regclass('voice_space_media_admission_outbox') IS NOT NULL
 	AND to_regclass('voice_space_media_room_heads') IS NOT NULL
 	AND EXISTS (SELECT 1 FROM information_schema.columns
