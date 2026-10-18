@@ -121,8 +121,12 @@ scope under the later accepted decision below.
 - [x] Additional partial-error adapter regression ea3856901 PASS1/0skip9.233s
       from complete immutable e410 archive plus exact implementation/test deltas.
       It proves an explicit authority error dominates partial ChangedPartyIDs.
-- [ ] Static lint and graph update are active. Record terminal results before
-      lease return; no provisional PASS is inferred from their lack of output.
+- [x] Static lint terminal1:2 ST1005 strings corrected in4d6980458;3 unused
+      startup-helper diagnostics remain until145's reserved main wiring exists.
+      No suppression or fake lint PASS. Rerun when actual wiring changes input.
+- [x] Graphify AST update attempted without output/progress; only exact owned
+      Python44752/parent52736 canceled, wrappers terminal-1 and full own chain
+      absent afterward. Graph update is NOT PASS; foreign processes untouched.
 - [ ] Freeze portable checkpoint, safely recycle WT38 rather than holding a
       second scarce worktree. If supporting settlement function remains eligible,
       atomically claim it and obtain a fresh actual-develop lease before writes.
@@ -151,6 +155,12 @@ scope under the later accepted decision below.
   Supporting function is AVAILABLE, with no receiver or responsibility transfer
   inferred. Actual claimant must accept169c9 and use own fresh-develop lease.
   No provider file edits occurred in this checkpoint.
+- Additional Astra BE011c16 MEMBER-ACCOUNT-AUTHORITY-v1 is accepted and read:
+  145 owns private same-cut account/epoch tuples+digest, migration022 and local
+  all-account ban guard. Settlement021 must acquire sorted account advisory
+  transaction locks before match/party/session locks, then use a separate READ
+  COMMITTED ban read. Current gate1fc API is an implementation checkpoint, not
+  certification of that new extension; consume its exact successor before enablement.
 
 ## Risks And Follow-Ups
 
