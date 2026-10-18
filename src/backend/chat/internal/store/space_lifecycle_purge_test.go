@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -41,6 +42,7 @@ func TestSpacePurgeDeletesOnlySavedChatRowsAfterOwnerProofAndReplays(t *testing.
 	pool := startChatDBForStoreTest(t, ctx)
 	applyChatMigrationsForStoreTest(t, ctx, pool)
 	applyChatMigrationFile(t, ctx, pool, "000021_chat_deleted_event_outbox.up.sql")
+	applyScopeAuthorityMigration(t, ctx, pool)
 	spaceID, operationID, profileID := uuid.New(), uuid.New(), uuid.New()
 	chatID := uuid.New()
 	_, err := pool.Exec(ctx, `INSERT INTO chats(id,type,space_id,name,creator_profile_id) VALUES($1,'channel',$2,'remove-me',$3)`, chatID, spaceID, profileID)
@@ -74,8 +76,19 @@ func TestSpacePurgeDeletesOnlySavedChatRowsAfterOwnerProofAndReplays(t *testing.
 	var beforePurge int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM chats WHERE id=$1`, chatID).Scan(&beforePurge))
 	require.Equal(t, 1, beforePurge)
+	var scopeRevisionBefore int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT revision FROM chat_scope_authority_heads WHERE chat_id=$1 AND present`, chatID).Scan(&scopeRevisionBefore))
 	first, err := lifecycle.PurgeSpace(ctx, request, evidence)
 	require.NoError(t, err)
+	// P3 removes the saved native resource while preserving its permanent ABA
+	// guard. The deleted resource must no longer produce current authority.
+	var scopePresent bool
+	var scopeRevisionAfter int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT present,revision FROM chat_scope_authority_heads WHERE chat_id=$1`, chatID).Scan(&scopePresent, &scopeRevisionAfter))
+	require.False(t, scopePresent)
+	require.Greater(t, scopeRevisionAfter, scopeRevisionBefore)
+	_, err = (&DMStore{Pool: pool}).GetSpaceChatScopeAuthority(ctx, chatID, spaceID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// A new process can replay the exact committed wrapper while remote owners
 	// are absent. Preserve unknown owner response fields rather than rebuilding it.
 	restarted := &SpaceLifecycleStore{Pool: pool}
