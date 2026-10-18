@@ -20,10 +20,19 @@ const (
 )
 
 type threadPolicyDeps struct {
-	Policy    *store.SQLChatThreadPolicy
-	Messages  *store.MessagesStore
+	Policy    threadPolicyLoader
+	Messages  threadMessageLookup
 	RolePerms mentionsRoleChecker
 	Members   ChatGuard
+}
+
+type threadPolicyLoader interface {
+	Load(context.Context, uuid.UUID) (*store.ChatThreadPolicy, error)
+}
+
+type threadMessageLookup interface {
+	GetMessageByID(context.Context, uuid.UUID) (*store.MessageRow, error)
+	ThreadHasReplies(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }
 
 type mentionsRoleChecker interface {
@@ -31,7 +40,7 @@ type mentionsRoleChecker interface {
 }
 
 func (d threadPolicyDeps) validateSend(ctx context.Context, chatID, profileID uuid.UUID, threadParentID *uuid.UUID, postedAsChat bool) error {
-	if d.Policy == nil {
+	if isNilDependency(d.Policy) {
 		return status.Error(codes.FailedPrecondition, "chat policy not configured")
 	}
 	pol, err := d.Policy.Load(ctx, chatID)
@@ -41,8 +50,18 @@ func (d threadPolicyDeps) validateSend(ctx context.Context, chatID, profileID uu
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
+	if pol == nil {
+		return status.Error(codes.Unavailable, "chat policy unavailable")
+	}
 
 	if threadParentID != nil {
+		// A thread changes reply permissions, not authority to impersonate a
+		// standalone channel. Self-identity replies retain their thread policy.
+		if pol.ChatType == "channel" && pol.SpaceID == nil && postedAsChat {
+			if err := d.validateStandaloneChannelSend(ctx, chatID, profileID, pol.AllowUserMainFeed, true); err != nil {
+				return err
+			}
+		}
 		return d.validateThreadReply(ctx, chatID, profileID, pol, *threadParentID)
 	}
 	return d.validateMainFeedSend(ctx, chatID, profileID, pol, postedAsChat)
@@ -108,7 +127,7 @@ func (d threadPolicyDeps) validateStandaloneChannelSend(ctx context.Context, cha
 }
 
 func (d threadPolicyDeps) validateThreadReply(ctx context.Context, chatID, profileID uuid.UUID, pol *store.ChatThreadPolicy, parentID uuid.UUID) error {
-	if d.Messages == nil {
+	if isNilDependency(d.Messages) {
 		return status.Error(codes.FailedPrecondition, "messages store not configured")
 	}
 	parent, err := d.Messages.GetMessageByID(ctx, parentID)

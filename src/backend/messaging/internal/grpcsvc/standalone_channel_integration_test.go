@@ -124,6 +124,27 @@ func TestMessagingStandaloneChannelAuthority(t *testing.T) {
 		require.True(t, msg.GetPostedAsChat(), "commentary and forward share the authorized official identity")
 		require.Equal(t, target.String(), msg.GetDisplayChatId())
 	}
+	parentID := history.GetMessageList().GetMessages()[0].GetId()
+	threadSend := func(profile uuid.UUID, ref *chatv1.ChatRef, official bool) (*messagingv1.SendMessageResponse, error) {
+		return client.SendMessage(withProfileCtx(ctx, account, profile), &messagingv1.SendMessageRequest{
+			Chat: ref, ThreadParentId: &parentID, PostedAsChat: &official,
+			Content: "thread reply", AttachmentsJson: "[]", MentionsJson: "[]",
+		})
+	}
+	for _, ref := range []*chatv1.ChatRef{chatChannelRef(target), chatGroupRef(target), chatDMRef(target)} {
+		assertDenied(func() error { _, err := threadSend(member, ref, true); return err })
+	}
+	for _, profile := range []uuid.UUID{owner, admin} {
+		reply, err := threadSend(profile, chatChannelRef(target), true)
+		require.NoError(t, err)
+		require.True(t, reply.GetMessage().GetPostedAsChat())
+		require.Equal(t, target.String(), reply.GetMessage().GetDisplayChatId())
+		require.Equal(t, profile.String(), reply.GetMessage().GetSenderProfileId())
+	}
+	reply, err := threadSend(member, chatChannelRef(target), false)
+	require.NoError(t, err, "ordinary thread replies remain available while user main-feed posts are disabled")
+	require.False(t, reply.GetMessage().GetPostedAsChat())
+	require.Empty(t, reply.GetMessage().GetDisplayChatId())
 	allow := true
 	_, err = chatClient.UpdateChat(withProfileCtx(ctx, account, member), &chatv1.UpdateChatRequest{ChatId: target.String(), AllowUserMainFeed: &allow})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
@@ -137,6 +158,7 @@ func TestMessagingStandaloneChannelAuthority(t *testing.T) {
 		require.NoError(t, send(profile, chatChannelRef(target), false))
 	}
 	assertDenied(func() error { return send(member, chatChannelRef(target), true) })
+	assertDenied(func() error { _, err := threadSend(member, chatChannelRef(target), true); return err })
 	for _, profile := range []uuid.UUID{owner, admin} {
 		require.NoError(t, send(profile, chatChannelRef(target), true))
 	}
@@ -150,6 +172,7 @@ func TestMessagingStandaloneChannelAuthority(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE chat_members SET role='member' WHERE chat_id=$1 AND profile_id=$2`, target, admin)
 	require.NoError(t, err)
 	assertDenied(func() error { _, err := forward(admin, chatChannelRef(target), true, false); return err })
+	assertDenied(func() error { _, err := threadSend(admin, chatChannelRef(target), true); return err })
 	_, err = pool.Exec(ctx, `DELETE FROM chat_members WHERE chat_id=$1 AND profile_id=$2`, target, member)
 	require.NoError(t, err)
 	assertDenied(func() error { _, err := forward(member, chatChannelRef(target), true, false); return err })

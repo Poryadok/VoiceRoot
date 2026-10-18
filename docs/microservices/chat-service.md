@@ -5,6 +5,8 @@
 For a stored `channel` with `space_id IS NULL`, Chat owns the current
 `chat_members` role and `allow_user_main_feed` setting. Only a current `owner`
 or `admin` may publish as the channel (`posted_as_chat=true`). User-identity
+thread replies retain the existing thread policy; adding `thread_parent_id`
+never grants an ordinary member the channel's official identity. User-identity
 main-feed publication requires both a known current role (`owner`, `admin` or
 `member`) and explicit `allow_user_main_feed=true`; the disabled setting also
 denies owner/admin user-identity posts. Standalone owner/admin `UpdateChat`

@@ -134,3 +134,43 @@ func TestChannelMissingPolicyFailsClosed(t *testing.T) {
 	err = s.threadPolicyDeps().validateMainFeedSend(context.Background(), uuid.New(), uuid.New(), nil, true)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 }
+
+type channelThreadPolicy struct{ policy *store.ChatThreadPolicy }
+
+func (p channelThreadPolicy) Load(context.Context, uuid.UUID) (*store.ChatThreadPolicy, error) {
+	return p.policy, nil
+}
+
+type channelThreadMessages struct{ parent *store.MessageRow }
+
+func (m channelThreadMessages) GetMessageByID(context.Context, uuid.UUID) (*store.MessageRow, error) {
+	return m.parent, nil
+}
+
+func (channelThreadMessages) ThreadHasReplies(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+// Exercise validateSend's routing branch, rather than only its main-feed helper.
+func TestStandaloneChannelThreadOfficialIdentity(t *testing.T) {
+	chatID, profileID, parentID := uuid.New(), uuid.New(), uuid.New()
+	for _, allowUser := range []bool{false, true} {
+		for _, role := range []string{"owner", "admin", "member", "unknown", ""} {
+			for _, official := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/user=%t/official=%t", role, allowUser, official), func(t *testing.T) {
+					d := threadPolicyDeps{
+						Policy:   channelThreadPolicy{&store.ChatThreadPolicy{ChatType: "channel", AllowUserMainFeed: allowUser}},
+						Messages: channelThreadMessages{&store.MessageRow{ID: parentID, ChatID: chatID}},
+						Members:  &channelRoleAuthority{role: role},
+					}
+					err := d.validateSend(context.Background(), chatID, profileID, &parentID, official)
+					if official && role != "owner" && role != "admin" {
+						require.Equal(t, codes.PermissionDenied, status.Code(err))
+					} else {
+						require.NoError(t, err, "self-identity thread replies do not require the main-feed setting")
+					}
+				})
+			}
+		}
+	}
+}
