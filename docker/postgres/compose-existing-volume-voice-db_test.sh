@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prove compose-db-init upgrades a PostgreSQL volume that predates voice_db,
+# Prove compose-db-init upgrades a same-major PostgreSQL volume that predates voice_db,
 # without changing data already stored in another service database.
 set -euo pipefail
 
@@ -78,7 +78,7 @@ query() {
   compose exec -T postgres psql -v ON_ERROR_STOP=1 -Atq -U voice -d "${database}" -c "${sql}"
 }
 
-docker image inspect postgres:16-alpine >/dev/null || fail 'postgres:16-alpine is required locally'
+docker image inspect postgres:18-alpine >/dev/null || fail 'postgres:18-alpine is required locally'
 
 docker volume create \
   --label "${label_key}=${run_id}" \
@@ -93,8 +93,9 @@ docker run -d --name "${bootstrap}" \
   -e POSTGRES_USER=voice \
   -e POSTGRES_PASSWORD=voice \
   -e POSTGRES_DB=voice \
+  -e PGDATA=/var/lib/postgresql/data \
   -v "${volume}:/var/lib/postgresql/data" \
-  postgres:16-alpine >/dev/null
+  postgres:18-alpine >/dev/null
 bootstrap_created=true
 wait_for_postgres "${bootstrap}"
 

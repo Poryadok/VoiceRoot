@@ -215,7 +215,7 @@ jobs:
             prom/prometheus:v2.54.1 test rules /tests/chat-list-enrichment-alert-test.yml
       - name: Verify PostgreSQL TCP readiness healthcheck
         run: |
-          docker pull postgres:16-alpine
+          docker pull postgres:18-alpine
           docker pull ghcr.io/jqlang/jq:1.7
           bash scripts/ci/compose-postgres-tcp-readiness_test.sh
       - name: Require NATS JetStream service in compose
