@@ -2,9 +2,6 @@ package spacemedia
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,13 +13,6 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	migration := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "voice_db", "000013_a3_roster_outbox.up.sql")
-	body, err := os.ReadFile(migration)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(body))
-	require.NoError(t, err)
 	st := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
 	require.NoError(t, prepareAdmission(ctx, st, &a))
@@ -60,7 +50,7 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT event_id,payload FROM voice_roster_outbox WHERE room_id=$1`, a.RoomID).Scan(&replayID, &replayPayload))
 	require.Equal(t, firstID, replayID)
 	require.Equal(t, firstPayload, replayPayload)
-	_, err = pool.Exec(ctx, `ALTER TABLE voice_roster_outbox ADD CONSTRAINT reject_test_left CHECK(change <> 'LEFT')`)
+	_, err := pool.Exec(ctx, `ALTER TABLE voice_roster_outbox ADD CONSTRAINT reject_test_left CHECK(change <> 'LEFT')`)
 	require.NoError(t, err)
 	require.Error(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))
 	check(1, []string{"JOINED"})
