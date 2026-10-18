@@ -7,6 +7,7 @@ import (
 	"time"
 
 	admissionv1 "k8s.io/api/admissionregistration/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -48,7 +49,14 @@ func TestContractJobDeleteUsesExactActorAndUIDPrecondition(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	uid := stored.UID
 	if err := runner.BatchV1().Jobs(namespace).Delete(ctx, stored.Name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil { t.Fatalf("exact UID-preconditioned contract Job delete denied: %v", err) }
-	if _, err := admin.BatchV1().Jobs(namespace).Get(ctx, stored.Name, metav1.GetOptions{}); err == nil { t.Fatal("contract Job remained after successful UID delete") }
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		_, err := admin.BatchV1().Jobs(namespace).Get(ctx, stored.Name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) { break }
+		if err != nil { t.Fatalf("read back contract Job after UID delete: %v", err) }
+		if time.Now().After(deadline) { t.Fatal("contract Job remained after successful UID delete") }
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	t.Run("wrong UID remains apiserver conflict, not VAP proof", func(t *testing.T) {
 		current, err := admin.BatchV1().Jobs(namespace).Create(ctx, contractJob("voice-nats-contract-migration-1111111111111111", "contract-migration"), metav1.CreateOptions{})
