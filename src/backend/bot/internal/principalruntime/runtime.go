@@ -90,7 +90,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 	}
 	if spaceCount > 0 {
 		parsed, err := url.Parse(cfg.SpaceJWKSURL)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "/space/jwks.json" {
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.RawPath != "" || (parsed.Path != "/.well-known/jwks.json" && parsed.Path != "/space/jwks.json") {
 			return Config{}, true, errors.New("space principal JWKS URL must use the HTTPS Space JWKS endpoint")
 		}
 	}

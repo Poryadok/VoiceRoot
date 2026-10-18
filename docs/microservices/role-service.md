@@ -1,5 +1,82 @@
 # Role Service
 
+### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
+
+Accepted BE-010 c12/c13 separates the ordinary membership incarnation from an
+independent community source. Space stores pending admission outside
+`space_members`, allocates a monotonic per-member generation, obtains an inert
+Role READY receipt, then publishes membership/count/invite use/outcome/event in
+one local transaction after fresh final admission checks. Role preparation is
+not membership and cannot authorize an ordinary role grant by row presence.
+
+`EnsureDefaultMemberRole` takes protocol1, canonical Space/profile UUIDs,
+positive membership generation, admission operation UUID and exact32-byte
+admission binding digest. Role resolves its current configured default role;
+the caller cannot select a role, permission or human actor. An immutable receipt
+echoes the request and selected role UUID. Exact replay returns the same receipt;
+changed operation binding conflicts and never chooses a new default role.
+`RemoveMemberRoles` binds protocol1, Space/profile, a monotonic removal floor,
+removal operation UUID and exact intent digest. It persists the floor even when
+no role rows exist; late Ensure at/below that floor cannot materialize rights.
+Both methods use fresh exact-request service:space credentials on the dedicated
+Role principal listener and are denied on every ordinary listener.
+
+Receipt SHA256 framing is fixed by `pkg/memberadmission`, independently from
+protobuf authentication hashes. Ensure hashes the ASCII domain
+`voice.member-admission.ensure-receipt.v1` plus NUL, protocol BE32, Space UUID16,
+profile UUID16, membership generation BE64, operation UUID16, original binding
+SHA25632 and selected Role UUID16. Remove uses domain
+`voice.member-admission.remove-receipt.v1` plus NUL and the same fixed fields
+through the original removal binding digest, without a role UUID. IDs must be
+canonical nonzero UUIDs; generation is positive and at most signed int64 max.
+The exported receipt fingerprints have independent Python golden vectors.
+
+Role-owned storage distinguishes ordinary generation-tagged contributions,
+immutable operation receipts, generation floors and independent community
+baseline provenance. It does not insert an inert READY projection into the
+unqualified legacy `member_roles` relation. A default-role receipt remains
+historical evidence after removal, role edits or generation supersession; its
+replay cannot restore a contribution. Owner/bootstrap/ownership/P3 and typed
+community Member-only projection remain separate authorities.
+
+Before preparation/effective authorization, Role fetches protected Space
+`GetMemberAdmissionAuthority` outside its transaction/Space lock. Expected
+generation+operation are supplied together for Ensure. Ordinary rights require
+current LIVE/ownership availability and matching published generation,
+operation and exact Role receipt digest; PREPARING authorizes inert Ensure
+only. No positive membership cache, caller assertion, cross-DB query or missing
+row fallback can substitute. A wait beyond the accepted5s observation budget
+requires a fresh owner read. Space's authority lookup never calls Role.
+
+The same source eligibility guard must cover effective-role/permission/hierarchy
+reads, generic Assign/Revoke actor and target incarnation, authority snapshots
+and derived voice-policy grants. Unknown owner/transport/storage state denies
+or remains unavailable. A completed local leave observed by a new authorization
+cannot leave an orphan Role grant effective; the accepted overlapping-operation
+snapshot limitation remains. Legacy generation0 needs explicit verified Space
+authority and proven provenance backfill, never zero-on-error. Retirement
+dominates the new ledgers and prevents identity reuse.
+
+The c15/c16 clarification preserves unknown legacy grant evidence as
+`UNRESOLVED`; even one current membership source does not prove the old grant's
+origin. Such grants contribute no rights after qualified-reader cutover until a
+new normally authorized assignment reconciles them. New Assign with two eligible
+sources requires an explicit verified membership binding; with one source the
+server may pin that exact incarnation. Never infer both or rebind a retry.
+COMMUNITY eligibility binds positive int64-compatible owner generation and
+per-profile membership generation plus a never-reused membership episode UUID;
+roster revision or row replacement is not episode identity. Generic Revoke pins
+a finite set of legal contribution IDs, never a wildcard against future joins.
+
+This is an implementation target. The current bounded artifact freezes additive
+request/receipt protobufs, the receipt fingerprint codec and ordinary-listener
+denies only. No Role20 schema/receiver, Space authority/head, qualified legacy
+read/write/export cutover or reconciliation is activated. Those remain open
+delivery work after the current finish-and-develop directive. Consumers are the
+future Space admission/publication and Role lifecycle slices; the current Space
+author did not release its planned authority API. No P3/GIS/Voice capability is
+activated here.
+
 For the BE-131 composite vertical, the existing dedicated Role principal
 listener additionally accepts signed `service:space` `CheckPermission` for
 `TEXT_CHAT_CREATE_IN_SPACE` only. The exact request binds canonical nonzero

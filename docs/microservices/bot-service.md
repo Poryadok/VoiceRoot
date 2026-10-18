@@ -1,5 +1,13 @@
 # Bot Service
 
+`SPACE_PRINCIPAL_JWKS_URL` accepts the canonical Space provider path
+`/.well-known/jwks.json` and the existing dedicated-provider alias
+`/space/jwks.json`. Both require exact HTTPS URLs without credentials, query,
+fragment or alternate escaped paths. Space's dedicated JWKS provider currently
+requires trusted server TLS and does not request a client certificate. The alias
+already worked; canonical-path compatibility does not imply an existing
+deployment outage or introduce another JWKS server.
+
 Игровые сценарии и source audit baseline: [game-bot-interactions.md](../features/game-bot-interactions.md).
 Новые card/command/opt-in contracts там помечены **proposed**; существующие RPC
 и scopes этого документа не получают новые гарантии доставки автоматически.

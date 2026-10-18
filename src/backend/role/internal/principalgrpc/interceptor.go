@@ -89,6 +89,9 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			}
 		}
 		switch info.FullMethod {
+		case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName,
+			rolev1.RoleService_RemoveMemberRoles_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		case "/voice.role.v1.RoleService/ApplySpaceLifecycleFence":
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		case "/voice.role.v1.RoleService/GetOwnershipTransferCapabilities",
