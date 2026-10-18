@@ -182,6 +182,11 @@ func main() {
 		defer pool.Close()
 	}
 
+	reportAuthority, err := newReportAuthorityRuntime(context.Background(), pool, grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)))
+	if err != nil {
+		log.Fatalf("user report authority startup: %v", err)
+	}
+	defer reportAuthority.Close()
 	if pool != nil {
 		var blocks grpcsvc.AccountBlockChecker
 		var socialGraph grpcsvc.SocialGraphChecker
@@ -492,7 +497,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(reportAuthority.HTTP(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg)), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)

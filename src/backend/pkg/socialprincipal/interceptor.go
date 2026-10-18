@@ -19,6 +19,8 @@ import (
 
 func Method(target string) string {
 	switch target {
+	case "moderation-report-threshold":
+		return "/voice.user.v1.UserService/ResolveReportThresholdContext"
 	case "user":
 		return "/voice.user.v1.UserService/GetPrivacySettings"
 	case "space":
@@ -46,6 +48,8 @@ func Method(target string) string {
 // whole service merely because it has a verified Social principal.
 func AllowsMethod(target, method string) bool {
 	switch target {
+	case "moderation-report-threshold":
+		return method == Method(target)
 	case "space-voice-communication", "space-messaging-communication":
 		return method == Method(target)
 	case "user":
@@ -289,6 +293,9 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 }
 
 func expectedIssuer(target string) string {
+	if target == "moderation-report-threshold" {
+		return "moderation"
+	}
 	if target == "space-voice-communication" {
 		return "voice"
 	}
@@ -316,7 +323,7 @@ func expectedIssuer(target string) string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+	return capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication" || capability == "moderation-report-threshold"
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing

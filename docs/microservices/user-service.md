@@ -34,6 +34,31 @@ Account/session state remains Auth-owned.
 
 ## Поиск профилей vs Search Service
 
+### Accepted BE-046 report-threshold context
+
+Protected `ResolveReportThresholdContext` is an exact `service:moderation`
+surface, absent from ordinary User gRPC and Gateway. It binds the deterministic
+request containing evaluation/profile and optional expected account/revision.
+User reads its own consistent target binding and distinct nondeleted-profile
+account candidates, then requests complete positive Auth classifications in
+batches of at most 1000. Guests/frozen profiles remain candidates; no User
+lookup treats a missing Auth response as live. No account/viewer list leaves
+User in the response.
+
+`POTENTIAL_PUBLIC_PROFILE_ACCOUNTS_V1` excludes the target's whole account,
+Auth-deleted/purged/missing accounts and accounts without a nondeleted User
+profile. Personal blocks, presence and suspensions do not reduce this potential
+metric or alter public profile privacy. User rechecks target binding/revision
+after classification. The response contains exact profile/account/revision,
+state, metric/count, bounded observation times/expiry and opaque snapshot ID.
+It is invalid after 30 seconds from its first observation. Moderation performs
+its own separately authorized subject/lifecycle lookup before action.
+
+Unknown, partial, inconsistent, stale or incomplete scans are unavailable,
+never zero or a last-good/environment fallback. Authoritative zero is explicitly
+manual-only. See the [accepted plan](../testing/report-threshold-exec-plan.md)
+for the complete activation and verification contract; runtime is not yet claimed.
+
 | Канал | RPC | Когда |
 |-------|-----|--------|
 | **User Service** | `SearchProfiles` | [friends.md](../features/friends.md): подбор по нику/отображаемому имени из канонических данных профиля; учёт приватности и блокировок (совместно с Social при необходимости). |

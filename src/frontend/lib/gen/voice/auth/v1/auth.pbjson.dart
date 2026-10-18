@@ -15,6 +15,24 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use reportAudienceAccountStateDescriptor instead')
+const ReportAudienceAccountState$json = {
+  '1': 'ReportAudienceAccountState',
+  '2': [
+    {'1': 'REPORT_AUDIENCE_ACCOUNT_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'REPORT_AUDIENCE_ACCOUNT_STATE_LIVE', '2': 1},
+    {'1': 'REPORT_AUDIENCE_ACCOUNT_STATE_DELETED', '2': 2},
+    {'1': 'REPORT_AUDIENCE_ACCOUNT_STATE_MISSING', '2': 3},
+  ],
+};
+
+/// Descriptor for `ReportAudienceAccountState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List reportAudienceAccountStateDescriptor = $convert.base64Decode(
+    'ChpSZXBvcnRBdWRpZW5jZUFjY291bnRTdGF0ZRItCilSRVBPUlRfQVVESUVOQ0VfQUNDT1VOVF'
+    '9TVEFURV9VTlNQRUNJRklFRBAAEiYKIlJFUE9SVF9BVURJRU5DRV9BQ0NPVU5UX1NUQVRFX0xJ'
+    'VkUQARIpCiVSRVBPUlRfQVVESUVOQ0VfQUNDT1VOVF9TVEFURV9ERUxFVEVEEAISKQolUkVQT1'
+    'JUX0FVRElFTkNFX0FDQ09VTlRfU1RBVEVfTUlTU0lORxAD');
+
 @$core.Deprecated('Use otpTypeDescriptor instead')
 const OtpType$json = {
   '1': 'OtpType',
@@ -97,6 +115,96 @@ const ProofPurpose$json = {
 final $typed_data.Uint8List proofPurposeDescriptor = $convert.base64Decode(
     'CgxQcm9vZlB1cnBvc2USHQoZUFJPT0ZfUFVSUE9TRV9VTlNQRUNJRklFRBAAEh4KGlBST09GX1'
     'BVUlBPU0VfU1BBQ0VfREVMRVRFEAE=');
+
+@$core.Deprecated('Use classifyReportAudienceAccountsRequestDescriptor instead')
+const ClassifyReportAudienceAccountsRequest$json = {
+  '1': 'ClassifyReportAudienceAccountsRequest',
+  '2': [
+    {'1': 'evaluation_id', '3': 1, '4': 1, '5': 9, '10': 'evaluationId'},
+    {'1': 'account_ids', '3': 2, '4': 3, '5': 9, '10': 'accountIds'},
+  ],
+};
+
+/// Descriptor for `ClassifyReportAudienceAccountsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List classifyReportAudienceAccountsRequestDescriptor =
+    $convert.base64Decode(
+        'CiVDbGFzc2lmeVJlcG9ydEF1ZGllbmNlQWNjb3VudHNSZXF1ZXN0EiMKDWV2YWx1YXRpb25faW'
+        'QYASABKAlSDGV2YWx1YXRpb25JZBIfCgthY2NvdW50X2lkcxgCIAMoCVIKYWNjb3VudElkcw==');
+
+@$core.Deprecated('Use reportAudienceAccountDescriptor instead')
+const ReportAudienceAccount$json = {
+  '1': 'ReportAudienceAccount',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {
+      '1': 'state',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.auth.v1.ReportAudienceAccountState',
+      '10': 'state'
+    },
+  ],
+};
+
+/// Descriptor for `ReportAudienceAccount`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List reportAudienceAccountDescriptor = $convert.base64Decode(
+    'ChVSZXBvcnRBdWRpZW5jZUFjY291bnQSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3VudElkEj'
+    '8KBXN0YXRlGAIgASgOMikudm9pY2UuYXV0aC52MS5SZXBvcnRBdWRpZW5jZUFjY291bnRTdGF0'
+    'ZVIFc3RhdGU=');
+
+@$core
+    .Deprecated('Use classifyReportAudienceAccountsResponseDescriptor instead')
+const ClassifyReportAudienceAccountsResponse$json = {
+  '1': 'ClassifyReportAudienceAccountsResponse',
+  '2': [
+    {'1': 'evaluation_id', '3': 1, '4': 1, '5': 9, '10': 'evaluationId'},
+    {
+      '1': 'accounts',
+      '3': 2,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.auth.v1.ReportAudienceAccount',
+      '10': 'accounts'
+    },
+    {
+      '1': 'observation_started_at',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'observationStartedAt'
+    },
+    {
+      '1': 'observation_completed_at',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'observationCompletedAt'
+    },
+    {'1': 'snapshot_id', '3': 5, '4': 1, '5': 9, '10': 'snapshotId'},
+    {
+      '1': 'expires_at',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `ClassifyReportAudienceAccountsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List classifyReportAudienceAccountsResponseDescriptor = $convert.base64Decode(
+    'CiZDbGFzc2lmeVJlcG9ydEF1ZGllbmNlQWNjb3VudHNSZXNwb25zZRIjCg1ldmFsdWF0aW9uX2'
+    'lkGAEgASgJUgxldmFsdWF0aW9uSWQSQAoIYWNjb3VudHMYAiADKAsyJC52b2ljZS5hdXRoLnYx'
+    'LlJlcG9ydEF1ZGllbmNlQWNjb3VudFIIYWNjb3VudHMSUAoWb2JzZXJ2YXRpb25fc3RhcnRlZF'
+    '9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSFG9ic2VydmF0aW9uU3RhcnRl'
+    'ZEF0ElQKGG9ic2VydmF0aW9uX2NvbXBsZXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi'
+    '5UaW1lc3RhbXBSFm9ic2VydmF0aW9uQ29tcGxldGVkQXQSHwoLc25hcHNob3RfaWQYBSABKAlS'
+    'CnNuYXBzaG90SWQSOQoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3'
+    'RhbXBSCWV4cGlyZXNBdA==');
 
 @$core.Deprecated('Use registerRequestDescriptor instead')
 const RegisterRequest$json = {
