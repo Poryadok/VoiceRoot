@@ -1846,6 +1846,11 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 	if err != nil {
 		return uuid.Nil, err
 	}
+	if add {
+		if err := s.checkReactionPermission(ctx, policy, msg.ChatID, profileID); err != nil {
+			return uuid.Nil, err
+		}
+	}
 	var spaceID uuid.UUID
 	if policy.SpaceID != nil {
 		spaceID = *policy.SpaceID

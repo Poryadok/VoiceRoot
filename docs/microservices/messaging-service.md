@@ -705,6 +705,13 @@ Messaging does **not** own `chats.last_message_at`. Cross-ref — [chat-service.
 
 ## Зависимости
 
+`AddReaction` in a Space chat requires `TEXT_CHAT_ADD_REACTIONS` for the
+authenticated profile and the message's authoritative Space/chat scope before
+writing either the reaction or its event outbox row. Missing or unavailable Role
+authority returns `UNAVAILABLE`; an explicit deny returns `PERMISSION_DENIED`.
+DM and standalone chats do not use Space permissions. `RemoveReaction` still
+allows a member to remove their own reaction after losing add permission.
+
 - **Chat Service** — валидация членства / доступа для **DM**, **группы**, **канала** (в т.ч. standalone)
 - **Space Service** — если у `chats.space_id` задан спейс: членство в спейсе (для канала и группы в спейсе)
 - **Role Service** — проверка прав в спейсе для текстового чата (`chat_id` = `chats.id`, `group` \| `channel`)
