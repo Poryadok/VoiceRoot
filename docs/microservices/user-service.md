@@ -244,9 +244,9 @@ presence (Redis Hash — ephemeral)
 last_seen (Redis string — interim durable)
 ├── key: voice:user:last_seen:{profile_id}
 ├── value: unix timestamp (UTC)
-└── TTL 30 days; refreshed on every heartbeat (until PG lands)
+└── TTL 30 days; compatibility cache refreshed on every heartbeat
 
-last_seen_at (PostgreSQL — target durable)
+profile_last_seen (PostgreSQL — durable)
 ├── profile_id (UUID PK, logical ref → profiles.id)
 ├── last_seen_at (TIMESTAMPTZ, UTC)
 └── updated on session end, heartbeat boundary, explicit offline transition
@@ -258,9 +258,9 @@ last_seen_at (PostgreSQL — target durable)
 |-------|------------|--------|
 | **Redis session hash** | Live `status`, game, custom status, call | **Implemented** — TTL 5 min |
 | **Redis `last_seen` string** | Interim «был(а) N назад» when session expired | **Implemented** — TTL 30 d; refreshed every heartbeat |
-| **PostgreSQL `last_seen_at`** | Durable last seen for header / profile | **Not yet** — no PG column |
+| **PostgreSQL `last_seen_at`** | Durable last seen for header / profile | **Implemented in source** — `user_db/000020`, monotonic heartbeat observations |
 
-Redis-only interim **недостаточен** для long-tail «был 2 недели назад» (30 d cap) и privacy enforcement at scale — target is PG + read-time filter ([presence.md](../features/presence.md) § Interim storage).
+Redis-only interim **недостаточен** для long-tail «был 2 недели назад» (30 d cap) и privacy enforcement at scale — target is PG + read-time filter ([presence.md](../features/presence.md) § Redis cache and durable storage).
 
 При реализации PG: запись `last_seen_at` при transition to offline / idle boundary / graceful disconnect; `GetBulkPresence` / `GetPresence` **merge** Redis live status + PG `last_seen_at` when offline; apply **`show_last_seen`** filter per viewer.
 
@@ -273,7 +273,7 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 | 3 | If the status enum or game title changed → publish `user.presence_changed` with `old_status`, `new_status`; for the first live observation `old_status` is empty and `new_status` is the canonical current status. A game-only change uses the same current status in both fields, including when the title is cleared. Other same-enum heartbeats still complete steps 1–2 but publish nothing. |
 | 4 | Realtime fan-out `presence_update` to friends/subscribers **after** privacy filter (spec) |
 
-**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer is outside its allowed audience), `GetPresence` / `GetBulkPresence` **omit** `last_seen` timestamp (live online independently respects `show_online`). Self may read it; viewerless calls, missing privacy rows and audience dependency errors fail closed. Invisible is shown as offline to others and never leaks a hidden timestamp. Header «был(а)…» in DM — [presence.md](../features/presence.md). Durable PostgreSQL `last_seen_at` remains separate — [todo/backend.md](../todo/backend.md).
+**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer is outside its allowed audience), `GetPresence` / `GetBulkPresence` **omit** `last_seen` timestamp (live online independently respects `show_online`). Self may read it; viewerless calls, missing privacy rows and audience dependency errors fail closed. Invisible is shown as offline to others and never leaks a hidden timestamp. Header «был(а)…» in DM — [presence.md](../features/presence.md). Durable PostgreSQL `last_seen_at` uses the same filtering path; delivery evidence is tracked in BE-050.
 
 ### Current code vs full spec
 
@@ -327,7 +327,7 @@ sequence, поэтому первый новый provider update не проиг
 - `INDEX profiles_account_id_idx (account_id)`
 - `INDEX profiles_created_at_idx (created_at DESC)`
 
-**`last_seen_at`:** spec — таблица в PostgreSQL (см. схема выше). **Code gap:** только Redis hash, без durable persistence — [todo/backend.md](../todo/backend.md).
+**`last_seen_at`:** User-owned `profile_last_seen` (`user_db/000020`) stores only profile ID and UTC timestamp. Every heartbeat persists before Redis acknowledgement; `GREATEST` prevents concurrent/older observations from regressing time. Single/batch reads merge the newer PG/cache timestamp before existing viewer filtering. Durable-store errors fail the read/write; live routing still depends on Redis sessions. Expand first, then deploy the writer; rollback the binary before dropping the table. No historical timestamps are synthesized. Runtime/CI and independent review remain separate delivery evidence.
 
 ## Публикуемые события (→ NATS)
 

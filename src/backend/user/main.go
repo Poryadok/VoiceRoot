@@ -273,7 +273,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("redis ping: %v", err)
 			}
-			presence = store.NewPresenceStore(rdb)
+			presence = store.NewDurablePresenceStore(rdb, store.NewLastSeenStore(pool))
 			defer func() { _ = rdb.Close() }()
 		}
 
