@@ -25,8 +25,6 @@ func TestPostgresConversionCapturesPendingNativeSourceWithoutRedisAndReplaysImmu
 	source, owner, op := pendingGroup(t)
 	require.NoError(t, journal.Create(ctx, source))
 	target := identity()
-	targetRoom, _, _ := pendingGroup(t)
-	targetRoom.Intent.Initiator.AccountID = target.AccountID
 	// Construct with the real initiator instead of rewriting a captured member.
 	targetRoom, err := NewPendingRoom(CreateIntent{OperationID: uuid.New(), RoomID: uuid.New(), ChatID: uuid.New(), Group: true,
 		Initiator: Identity{AccountID: target.AccountID, ProfileID: uuid.New()}, MediaKind: 1}, testNow)
@@ -60,6 +58,78 @@ func TestPostgresConversionCapturesPendingNativeSourceWithoutRedisAndReplaysImmu
 	require.NoError(t, err)
 	_, err = store.ReserveSdkConversionFence(ctx, req, false, "", testNow)
 	require.ErrorIs(t, err, gameprovision.ErrConflict, "old pending receipt cannot infer an empty native source")
+	mismatch := conversionRequest(Identity{AccountID: uuid.New(), ProfileID: owner.ProfileID}, target)
+	_, err = store.ReserveSdkConversionFence(ctx, mismatch, false, "", testNow)
+	require.ErrorIs(t, err, gameprovision.ErrConflict, "missing Redis cannot conceal a mismatched trusted account/profile")
+}
+
+func TestPostgresCommittedConversionSourceCleansExactJournalAndConfirmsProjection(t *testing.T) {
+	pool := ordinaryPostgres(t)
+	ctx := context.Background()
+	journal := NewPostgresStore(pool, storageTestEncoder)
+	c := &Coordinator{Journal: journal, Media: &mediaFake{}, Projection: &projectionFake{}, Now: func() time.Time { return testNow }}
+	pending, owner, _ := pendingGroup(t)
+	r, err := c.Start(ctx, pending.Intent, nil)
+	require.NoError(t, err)
+	target := identity()
+	req := conversionRequest(owner, target)
+	conversion := gameprovision.NewPostgresStore(pool)
+	conversion.EnableOrdinaryConversions()
+	reserved, err := conversion.ReserveSdkConversionFence(ctx, req, false, "", testNow)
+	require.NoError(t, err)
+	b := reserved.NativeSource
+	require.NotNil(t, b)
+	require.NoError(t, c.QuiesceConversionSource(ctx, MediaBinding{RoomID: b.RoomID, RoomOperationID: b.RoomOperationID, AccountID: b.AccountID,
+		ProfileID: b.ProfileID, Generation: b.Generation, FenceOperationID: b.FenceOperationID, MediaIdentity: b.MediaIdentity}))
+	final, err := journal.Load(ctx, r.Intent.RoomID)
+	require.NoError(t, err)
+	require.Equal(t, StageClosed, final.Stage)
+	var fences int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE account_id=$1`, owner.AccountID).Scan(&fences))
+	require.Zero(t, fences)
+	var projected uint64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT projection_version FROM voice_ordinary_rooms WHERE room_id=$1`, r.Intent.RoomID).Scan(&projected))
+	require.Equal(t, final.Version, projected)
+	completed, err := conversion.CompleteSdkConversionFence(ctx, uuid.MustParse(req.OperationId), time.Now().UTC())
+	require.NoError(t, err)
+	require.NotNil(t, completed.ObservedEjectionAt)
+}
+
+func conversionRequest(source, target Identity) *callsv1.FenceSdkConversionRequest {
+	return &callsv1.FenceSdkConversionRequest{OperationId: uuid.NewString(), BindingId: uuid.NewString(), SourceActorId: uuid.NewString(),
+		SourceAccountId: source.AccountID.String(), SourceProfileId: source.ProfileID.String(), TargetAccountId: target.AccountID.String(),
+		TargetProfileId: target.ProfileID.String(), FrozenAuthorityEpoch: 1, FreezeReceiptId: uuid.NewString()}
+}
+
+func TestPostgresReversedConversionIdentitiesDoNotDeadlock(t *testing.T) {
+	pool := ordinaryPostgres(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	a, b := identity(), identity()
+	first, second := gameprovision.NewPostgresStore(pool), gameprovision.NewPostgresStore(pool)
+	first.EnableOrdinaryConversions()
+	second.EnableOrdinaryConversions()
+	start := make(chan struct{})
+	result := make(chan error, 2)
+	go func() {
+		<-start
+		_, err := first.ReserveSdkConversionFence(ctx, conversionRequest(a, b), false, "", testNow)
+		result <- err
+	}()
+	go func() {
+		<-start
+		_, err := second.ReserveSdkConversionFence(ctx, conversionRequest(b, a), false, "", testNow)
+		result <- err
+	}()
+	close(start)
+	for range 2 {
+		select {
+		case err := <-result:
+			require.NoError(t, err)
+		case <-ctx.Done():
+			t.Fatal("reversed identity barriers did not finish", ctx.Err())
+		}
+	}
 }
 
 // This encoder isolates database state/lease tests. It does not establish the

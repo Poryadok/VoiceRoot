@@ -88,6 +88,18 @@ func (s *VoiceGRPC) ordinaryProjectedCall(ctx context.Context, r *ordinarycall.R
 	if call.OrdinaryOperationID != r.Intent.OperationID.String() || call.OrdinaryVersion < r.Version || foreignOrdinaryResource(call) {
 		return voicestore.Call{}, ordinarycall.ErrUnavailable
 	}
+	expected, err := ordinaryCallProjection(r)
+	if err != nil {
+		return voicestore.Call{}, err
+	}
+	if call.Status != expected.Status || call.LivekitRoomName != expected.LivekitRoomName || call.ChatID != expected.ChatID || call.SessionKind != expected.SessionKind || len(call.States) != len(expected.States) {
+		return voicestore.Call{}, ordinarycall.ErrUnavailable
+	}
+	for profile := range expected.States {
+		if _, ok := call.States[profile]; !ok || call.OrdinaryMediaIdentities[profile] != expected.OrdinaryMediaIdentities[profile] {
+			return voicestore.Call{}, ordinarycall.ErrUnavailable
+		}
+	}
 	return call, nil
 }
 

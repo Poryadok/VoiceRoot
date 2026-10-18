@@ -154,6 +154,20 @@ The bounded `ListThreads` successor keeps all projection state in `messaging_db`
 The build worker retains journal entries through the minimum `BUILDING` baseline watermark. Cursor/node GC after 15 minutes preserves nodes reachable from READY heads or unexpired cursor states. This accepted target is not yet migrated or activated; execution details live in [listthreads-versioned-readmodel-exec-plan.md](testing/listthreads-versioned-readmodel-exec-plan.md).
 ### `voice_db` (Voice Service)
 
+The opt-in ordinary DM/group SDK runtime uses migration `000012_ordinary_calls`:
+`voice_ordinary_rooms` is the native operation/membership/effect aggregate and
+private CAS/roster counters; `voice_ordinary_memberships` is a same-transaction
+lookup index, not another account-exclusivity authority;
+`voice_ordinary_outbox` stores immutable protobuf bytes, IDs, recipients/order and
+delivery leases. Account ownership stays in the shared
+`voice_account_voice_fences`, with exact operation/generation and nonexpiring
+pending ordinary ownership. Conversion receipts keep an immutable native-source
+snapshot; NULL historical pending provenance is unknown and cannot imply absence.
+Terminal native rows/retired media identities persist for stale-bearer and late
+effect reconciliation. DOWN refuses journal or native snapshot evidence; JWT
+expiry alone never authorizes removing tombstones. Runtime/cutover boundaries:
+[Voice service ordinary lifecycle](microservices/voice-service.md#ordinary-dmgroup-sdk-lifecycle-opt-in-runtime-rollout-unverified).
+
 Voice owns `voice_room_instances`, `voice_room_memberships`,
 `voice_lifecycle_operations`, `voice_lifecycle_effects`,
 `voice_media_epoch_denials`, `voice_event_outbox`, and

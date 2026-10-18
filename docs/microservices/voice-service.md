@@ -14,16 +14,36 @@ workers ещё не зарегистрированы. Отсутствующий
 базовую схему R22.2 (`000001`). D1 paths явно проверяют наличие `000002`, не
 делая source-disabled readiness зависимой от новой таблицы.
 
-## Ordinary DM/group SDK lifecycle (accepted target; not implemented)
+## Ordinary DM/group SDK lifecycle (opt-in runtime; rollout unverified)
 
 BE106-ORDINARY-SDK-v1 ([decision part 1](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c3),
 [part 2](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c4))
-activates only the ordinary DM/group lifecycle. The existing SDK adapter is
-implemented; ordinary handlers do not yet use the following durable coordinator.
-This target does not register R22, Space watcher/roster, GAME_SESSION, MatchSquad
+activates only the ordinary DM/group lifecycle. The native journal/coordinator,
+handler/read/token routing, exact conversion-source cleanup and persisted recovery
+and event relay are wired by `VOICE_ORDINARY_SDK_ENABLED=true`. This runtime does
+not register R22, Space watcher/roster, GAME_SESSION, MatchSquad
 or federation paths. Their existing dispatch/ownership guards remain authoritative.
 The resumable implementation plan is
 [BE-106 ExecPlan](../../.agent/execplans/be106-ordinary-lifecycle.md).
+
+### Startup and controlled cutover
+
+Before enabling, operators must stop every legacy ordinary writer, close its
+previous SDK rooms and finish/reconcile legacy call/account ownership. This is an
+explicit controlled drain, not automatic adoption. Set
+`VOICE_ORDINARY_LEGACY_DRAINED=true` only with that drain evidence. Startup requires
+the attestation, migration `000012_ordinary_calls`, PostgreSQL, durable Redis,
+LiveKit credentials, NATS, User and Chat configuration. It scans active ordinary
+Redis records and rejects any without matching native operation provenance;
+foreign resource owners retain their existing dispatch. The scan is not a fence
+against concurrently serving legacy processes. Rollout must quiesce them first.
+
+With the flag absent/false, a nonempty native journal refuses startup rather than
+routing native projections through legacy tuple-only mutation. `/ready` checks
+the native schema while enabled. Recovery/outbox workers use persisted leases;
+unfinished creation is scheduled after its bounded preparation window, and old
+terminal room names continue reconciliation indefinitely. This source delivery
+does not establish drain completion, enabled deployment or actual SFU acceptance.
 
 ### Admission and authority
 

@@ -23,12 +23,13 @@ CREATE TABLE voice_ordinary_rooms (
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     CHECK ((lease_token IS NULL) = (lease_until IS NULL)),
-    CHECK (document->'intent'->>'room_id' = room_id::text),
-    CHECK (document->'intent'->>'operation_id' = operation_id::text),
-    CHECK (document->'intent'->>'chat_id' = chat_id::text),
-    CHECK (document->>'stage' = state),
-    CHECK ((document->>'version')::bigint = version),
-    CHECK ((document->>'roster_version')::bigint = roster_version)
+    CHECK ((document->'intent'->>'room_id') IS NOT DISTINCT FROM room_id::text),
+    CHECK ((document->'intent'->>'operation_id') IS NOT DISTINCT FROM operation_id::text),
+    CHECK ((document->'intent'->>'chat_id') IS NOT DISTINCT FROM chat_id::text),
+    CHECK ((document->'intent'->>'group')::boolean IS NOT DISTINCT FROM is_group),
+    CHECK ((document->>'stage') IS NOT DISTINCT FROM state),
+    CHECK ((document->>'version')::bigint IS NOT DISTINCT FROM version),
+    CHECK ((document->>'roster_version')::bigint IS NOT DISTINCT FROM roster_version)
 );
 
 CREATE UNIQUE INDEX voice_ordinary_one_live_group_chat

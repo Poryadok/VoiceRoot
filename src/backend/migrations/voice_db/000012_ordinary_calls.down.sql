@@ -1,6 +1,7 @@
 BEGIN;
 DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM voice_ordinary_rooms) THEN
+  IF EXISTS (SELECT 1 FROM voice_ordinary_rooms) OR
+     EXISTS (SELECT 1 FROM voice_sdk_conversion_fence_receipts WHERE ordinary_source_snapshot IS NOT NULL) THEN
     RAISE EXCEPTION 'ordinary Voice journal/tombstones require an explicit retirement protocol';
   END IF;
 END $$;

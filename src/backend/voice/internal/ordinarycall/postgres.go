@@ -101,6 +101,12 @@ func (s *PostgresStore) CheckSchema(ctx context.Context) error {
 	err := s.pool.QueryRow(ctx, `SELECT to_regclass('voice_ordinary_rooms') IS NOT NULL
 AND to_regclass('voice_ordinary_outbox') IS NOT NULL
 AND to_regclass('voice_ordinary_memberships') IS NOT NULL
+AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+AND table_name='voice_sdk_conversion_fence_receipts' AND column_name='ordinary_source_snapshot')
+AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+AND table_name='voice_ordinary_memberships' AND column_name='session_epoch')
+AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+AND table_name='voice_ordinary_rooms' AND column_name='roster_version')
 AND to_regclass('voice_account_voice_fences') IS NOT NULL
 AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
 AND table_name='voice_account_voice_fences' AND column_name='admission_generation')`).Scan(&ready)
@@ -248,6 +254,9 @@ func (s *PostgresStore) Mutate(ctx context.Context, roomID uuid.UUID, change fun
 	}
 	if !room.EndedAt.IsZero() && before.EndedAt.IsZero() {
 		room.EndedAt = decisionAt
+	}
+	if err := validateRoom(room); err != nil {
+		return nil, err
 	}
 	if err := syncFences(ctx, tx, before, room); err != nil {
 		return nil, err

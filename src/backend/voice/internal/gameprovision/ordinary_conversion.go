@@ -19,10 +19,25 @@ type nativeConversionSnapshot struct {
 
 func snapshotNativeConversion(ctx context.Context, tx pgx.Tx, ids conversionFenceIDSet, legacyRoom string) (nativeConversionSnapshot, error) {
 	snap := nativeConversionSnapshot{Version: 1}
+	var mismatched bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_profile_account_mappings
+WHERE (profile_id=$1 AND account_id<>$2) OR (profile_id=$3 AND account_id<>$4))`,
+		ids.sourceProfile, ids.sourceAccount, ids.targetProfile, ids.targetAccount).Scan(&mismatched); err != nil {
+		return snap, err
+	}
+	if mismatched {
+		return snap, ErrConflict
+	}
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_account_voice_fences
 WHERE account_id=$1 AND (state='active' OR reservation_expires_at>clock_timestamp()))`, ids.targetAccount).Scan(&snap.TargetConflict); err != nil {
 		return snap, err
 	}
+	var targetNative bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_ordinary_memberships m JOIN voice_ordinary_rooms r USING(room_id)
+WHERE m.account_id=$1 AND m.state IN ('PENDING','RESERVED','JOINED','LEAVING') AND r.state<>'CLOSED')`, ids.targetAccount).Scan(&targetNative); err != nil {
+		return snap, err
+	}
+	snap.TargetConflict = snap.TargetConflict || targetNative
 	// A native membership without its exact shared fence is corruption/unknown
 	// cleanup, not evidence of absence. All these reads are nonlocking MVCC reads.
 	var orphan bool
@@ -83,6 +98,8 @@ AND r.document->'intent'->>'operation_id'=r.operation_id::text
 AND r.document->'members'->($2::uuid::text)->>'generation'=m.membership_generation::text
 AND r.document->'members'->($2::uuid::text)->>'fence_operation_id'=m.fence_operation_id::text
 AND r.document->'members'->($2::uuid::text)->>'account_id'=m.account_id::text
+AND r.document->'members'->($2::uuid::text)->>'profile_id'=m.profile_id::text
+AND r.document->'members'->($2::uuid::text)->>'state'=m.state
 AND r.document->'members'->($2::uuid::text)->>'media_identity'=m.media_identity`, ids.sourceAccount, ids.sourceProfile).Scan(
 		&b.RoomID, &b.RoomOperationID, &b.AccountID, &b.ProfileID, &b.Generation, &b.FenceOperationID, &b.MediaIdentity)
 	if err != nil {

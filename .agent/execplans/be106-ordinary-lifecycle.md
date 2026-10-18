@@ -47,14 +47,15 @@ or publish from tentative Redis writes. Both owners coordinate exact API/file sc
 
 ## Milestones
 
-- [ ] Canon and this plan distinguish the accepted target from shipped runtime.
-- [ ] Risk-first deterministic model tests expose admission/terminal/recovery races.
-- [ ] PostgreSQL journal and generation-bound shared fences implement the same
+- [x] Canon and this plan distinguish implemented opt-in runtime from unverified
+  rollout/legacy drain/actual media acceptance.
+- [x] Risk-first deterministic model tests expose admission/terminal/recovery races.
+- [x] PostgreSQL journal and generation-bound shared fences implement the same
   transition model; real database tests prove two-instance serialization.
-- [ ] Ordinary handlers use the journal and SDK recovery/effect path end to end;
+- [x] Ordinary handlers use the journal and SDK recovery/effect path end to end;
   every ordinary read/token path fails closed on unavailable/pending authority.
 - [ ] Opaque ordinary media identities map back to profiles in affected client UI.
-- [ ] Compatibility event outbox preserves stable IDs/recipients and integrates
+- [x] Compatibility event outbox preserves stable IDs/recipients and integrates
   BE-102 committed membership facts without parallel authority.
 - [ ] Scoped service/client checks, graph update, independent concurrency review,
   pushed PR and exact-head required CI establish a reviewable result.
@@ -158,9 +159,28 @@ record failed publication/check attempts without fabricating PR or CI evidence.
   projection adapter and authoritative active lookup implemented. Handler test
   proves Start -> Accept -> opaque token -> End uses one journal. Latest short
   ordinary/grpc run: 229 passed. This is not runtime/actual-media evidence.
-- [ ] Runtime registration, participant wire/outbox delivery, legacy cutover,
-  real Redis concurrency and exact-head CI remain. Finish-only user directive:
-  no new work; preserve final head/base/evidence for sole develop writer121.
+- [x] Opt-in runtime registers native coordinator, recovery/outbox workers and
+  schema readiness. Legacy drain attestation and startup inventory are required;
+  they do not constitute executed drain/deployment evidence. A nonempty native
+  journal refuses legacy fallback after disabling configuration.
+- [x] Coherent BE-102 dependency commits `37187d083` and
+  `0361d8597f776fd02dd312cc6498d26d00bcd890` merged without rewriting history.
+  Adapter freezes existing call envelopes and delegates new participant facts;
+  delivery preserves saved payload, event ID, time, audience and PubAck semantics.
+- [x] Fresh scoped PostgreSQL ordinary + existing SDK conversion suite: 12 PASS,
+  zero fail/skip. New checks include committed native cleanup/projection, reversed
+  identity acquisition and mismatched trusted account/profile with missing Redis.
+- [x] Actual Redis 7 two-client WATCH/EXEC interleaving: one PASS, zero skip;
+  invalidated first attempt retries and delayed old cleanup preserves new indexes.
+- [x] Whole Voice short suite: 626 PASS / 166 SKIP, exit0. These skips are not
+  database proof; scoped real database evidence above is separate.
+- [x] Windows/amd64 CGO=1 race check over ordinarycall/admissionlock/store/grpcsvc:
+  277 PASS, exit0. Pinned golangci-lint2.6.1: zero issues; scoped go vet: exit0.
+- [ ] Graph update is still running at source freeze (owned session35893), AST
+  extraction224/224 completed; unrelated Linux header parse warning recorded.
+- [ ] Independent source review and develop integration belong to existing
+  integrator Рудеус-121. No source review/CI/merge/deployment/acceptance is claimed.
+  Finish-only user directive: no new work; preserve exact head/base/evidence for121.
 
 ## Decisions
 
@@ -202,3 +222,10 @@ Legacy cutover needs explicit validated authority/drain evidence before enabling
 the new path. An integration environment and actual rollout authority remain
 separate from source delivery. BE-102 must not race writes to the ordinary journal,
 handler transaction code, main wiring or account-fence implementation.
+
+At source freeze, frontend opaque-identity presentation is the independently
+owned `FE-BE106-ORDINARY-MEDIA-IDENTITY` consumer (Рудеус-113); its head and checks
+must accompany develop integration before enabling. This author did not edit
+frontend files or claim its validation. Ordinary A3 reader/reconnect production,
+Space/Game participation in conversion's identity barrier and actual media
+acceptance remain separate explicit gaps. No additional milestone is activated.

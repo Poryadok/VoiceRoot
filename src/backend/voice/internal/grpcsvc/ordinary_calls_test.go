@@ -67,6 +67,36 @@ func (j *ordinaryHandlerJournal) Mutate(_ context.Context, id uuid.UUID, change 
 }
 func (*ordinaryHandlerJournal) MarkProjected(context.Context, uuid.UUID, uint64) error { return nil }
 
+func (j *ordinaryHandlerJournal) FindForProfile(_ context.Context, profile uuid.UUID) (*ordinarycall.Room, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	for id := range j.rooms {
+		r, err := j.decode(id)
+		if err != nil {
+			return nil, err
+		}
+		m, ok := r.Members[profile.String()]
+		if ok && r.Stage != ordinarycall.StageClosed && m.State != ordinarycall.MemberLeft && m.State != ordinarycall.MemberAborted {
+			return r, nil
+		}
+	}
+	return nil, ordinarycall.ErrNotFound
+}
+func (j *ordinaryHandlerJournal) FindActiveGroupForChat(_ context.Context, chat uuid.UUID) (*ordinarycall.Room, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	for id := range j.rooms {
+		r, err := j.decode(id)
+		if err != nil {
+			return nil, err
+		}
+		if r.Intent.Group && r.Intent.ChatID == chat && r.Stage != ordinarycall.StageClosed {
+			return r, nil
+		}
+	}
+	return nil, ordinarycall.ErrNotFound
+}
+
 func (j *ordinaryHandlerJournal) AuthorizeMedia(ctx context.Context, binding ordinarycall.MediaBinding) (string, error) {
 	r, err := j.Load(ctx, binding.RoomID)
 	if err != nil {
@@ -146,6 +176,9 @@ func TestOrdinaryHandlersAcceptTokenAndEndUseOneNativeJournal(t *testing.T) {
 	started, err := s.StartCall(ctx, &callsv1.StartCallRequest{LinkedChat: &chatv1.ChatRef{Id: uuid.NewString()}, CalleeProfileId: strPtr(callee.String()), MediaKind: mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO)})
 	require.NoError(t, err)
 	roomID := started.GetCallSession().GetRoomId()
+	active, err := s.GetActiveCall(ctx, &callsv1.GetActiveCallRequest{})
+	require.NoError(t, err)
+	require.Equal(t, roomID, active.GetCallSession().GetRoomId())
 	_, err = s.GetJoinToken(ctx, &callsv1.GetJoinTokenRequest{RoomId: roomID})
 	require.Error(t, err, "ringing reservation must not authorize media")
 	accepted, err := s.AcceptCall(peerCtx, &callsv1.AcceptCallRequest{RoomId: roomID})
@@ -155,6 +188,13 @@ func TestOrdinaryHandlersAcceptTokenAndEndUseOneNativeJournal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ordinarycall.StageActive, stored.Stage)
 	require.Equal(t, uint64(2), stored.RosterVersion)
+	// Losing every Redis projection must recover from the native locator,
+	// without inventing absence or another logical join/event.
+	s.Calls = voicestore.NewMemoryCallStore()
+	s.OrdinaryCalls.Projection = NewOrdinaryProjection(s.Calls.(voicestore.OrdinaryProjectionStore), j)
+	active, err = s.GetActiveCall(ctx, &callsv1.GetActiveCallRequest{})
+	require.NoError(t, err)
+	require.Equal(t, roomID, active.GetCallSession().GetRoomId())
 	token, err := s.GetJoinToken(ctx, &callsv1.GetJoinTokenRequest{RoomId: roomID})
 	require.NoError(t, err)
 	parts := strings.Split(token.GetJwt(), ".")
@@ -174,4 +214,6 @@ func TestOrdinaryHandlersAcceptTokenAndEndUseOneNativeJournal(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, events.accepted)
 	require.Empty(t, events.ended, "ordinary facts belong to the native outbox")
+	_, err = s.GetActiveCall(ctx, &callsv1.GetActiveCallRequest{})
+	require.Error(t, err)
 }

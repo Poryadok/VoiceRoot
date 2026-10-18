@@ -14,6 +14,10 @@ type ordinaryProjection struct {
 	Journal ordinarycall.Journal
 }
 
+func NewOrdinaryProjection(calls voicestore.OrdinaryProjectionStore, journal ordinarycall.Journal) ordinarycall.Projection {
+	return &ordinaryProjection{Calls: calls, Journal: journal}
+}
+
 func (p *ordinaryProjection) Apply(ctx context.Context, room *ordinarycall.Room) error {
 	if p == nil || p.Calls == nil || p.Journal == nil || room == nil {
 		return ordinarycall.ErrUnavailable
