@@ -20,6 +20,21 @@
 
 ## API (gRPC)
 
+**Effective-membership revision/export target.**
+
+The [ListThreads effective-membership contract v1](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+defines Chat's additive internal target, not a shipped API. Chat composes complete
+Space membership, Role-owned `TEXT_CHAT_VIEW` decisions and User eligibility at a
+validated common source cut. Local membership, actual DM self-delete/reopen,
+Space binding and lifecycle changes participate in the transactional source
+revision/outbox. Chat persists effective generations, monotonic pair revisions,
+revocation lineages and committed journal `Q`; it exports pinned complete
+snapshots plus replay to signed caller `messaging` and supplies exact-pair fresh
+admission. First-N enumeration, unsigned caller metadata and a Chat-local table
+trigger alone cannot establish authority. DM self-delete retires only its viewer
+lineage, actual reopen creates a new one, and chat archive remains navigation
+state. The linked contract owns the full source/caller/recovery and race matrix.
+
 `CreateChatRequest.request_id` необязателен для совместимости существующих
 клиентов. Канонический UUID связывается с аутентифицированным
 `creator_profile_id`; в той же транзакции Chat сохраняет хэш нормализованных

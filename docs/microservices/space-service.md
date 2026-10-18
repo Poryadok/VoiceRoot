@@ -29,6 +29,15 @@
 
 ## API (gRPC)
 
+The additive [ListThreads membership source contract](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+requires Space-scoped transactional membership/lifecycle revisions, revocation
+counters, exact replay/outbox records and complete pinned snapshots/head
+validation for signed caller `chat`. Every join/leave/kick/ban and allowed
+restoration participates. A paginated response is complete only with its sealed
+terminal proof; retention pins preserve replay across Chat reconciliation.
+This is an unimplemented activation prerequisite, not a grant on an existing
+ordinary listener or a claim of runtime delivery.
+
 The Social privacy transport exposes only `AreCoMembers` on a dedicated TLS
 listener (9091). Signature, request binding, expiry, Redis replay admission and
 the `service:social` allow-list are checked before domain/store access. The

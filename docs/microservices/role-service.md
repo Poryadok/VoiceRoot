@@ -21,6 +21,16 @@
 
 ## API (gRPC)
 
+The additive [ListThreads membership source contract](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+requires a Space-scoped transactional revision covering every `TEXT_CHAT_VIEW`
+input, including role assignments, text overrides, Owner/Admin effects and
+ownership/lifecycle fences. Role supplies pinned effective decisions and
+authoritative head validation to signed caller `chat`; Chat does not duplicate
+permission precedence. Potential restrictions also increment a durable revocation
+counter. A voice-only epoch or best-effort event cannot satisfy this contract.
+This target is not yet implemented and does not bypass the existing ownership
+freeze or change authorization's completed-decision linearization point.
+
 ```protobuf
 service RoleService {
   // Роли

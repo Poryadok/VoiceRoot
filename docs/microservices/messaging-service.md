@@ -165,16 +165,19 @@ Every local root/reply/edit/delete/hide/ghost mutation appends a change and proj
 
 A builder enumerates authoritative memberships, takes a repeatable-read baseline, bulk-builds both trees, replays post-baseline journal changes and CASes to READY only at zero lag. Cursor states expire after 15 minutes without renewal. GC preserves nodes reachable from READY heads/unexpired cursors and retains the journal through the oldest BUILDING baseline. Activation requires readiness, zero lag, root invariants and sampled dual reads. The full execution/RED contract is [listthreads-versioned-readmodel-exec-plan.md](../testing/listthreads-versioned-readmodel-exec-plan.md).
 
-The full durable membership contract is still incomplete. Space chats derive
-membership from Space and Role `TEXT_CHAT_VIEW`, not `chat_members`; a Chat-only
-table outbox cannot prove their effective viewer set. The successor needs durable
-Space/Role source revisions and reconciliation, Chat-owned effective membership
-revisions and a consistent enumeration watermark. DM delete/reopen and archived
-profile eligibility must also be specified. These are activation prerequisites,
-tracked in [backend.md](../todo/backend.md), not implemented by the unavailable
-guard. The current Messaging Chat adapter inspects only the first 100 members;
-its replacement must provide complete authoritative membership admission before
-the successor can be enabled.
+The [effective-membership contract v1](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+defines owner-scoped Chat/Space/Role/User revisions, complete validated snapshots,
+Chat generation/journal `Q`, a separate Messaging baseline/journal `J`, and
+revocation lineages. READY requires both replay barriers and a generation CAS;
+every page requires exact-pair Chat admission before cursor parsing, a final fresh
+proof and a local visibility-version CAS. Async events alone never authorize a
+read. DM self-delete/reopen invalidates only that viewer's lineage; chat archive
+preserves history, while an ineligible profile cannot be the viewer. Peer deletion
+does not erase surviving history. The durable implementation and complete
+admission replacement remain activation prerequisites in
+[backend.md](../todo/backend.md); the unavailable guard does not implement them.
+The existing first-100-members adapter cannot satisfy this contract. Social-block
+and managed message-time visibility gates must also be covered before activation.
 ### `SendMessageRequest` (spec)
 
 `send_silent` and `delivery_schedule` are in the current proto. `content_payload` remains a future typed-content extension:
