@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Exercise production dispatch and the shared subset selector without a cluster.
+# Exercise production dispatch, its real Python preflight and the subset selector.
 set -euo pipefail
+command -v python3 >/dev/null
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture}"' EXIT
-mkdir -p "${fixture}/scripts/"{prod,staging,storage} "${fixture}/bin"
+mkdir -p "${fixture}/scripts/"{ci,prod,staging,storage} "${fixture}/bin"
 cp "${ROOT}/scripts/prod/render-and-apply-prod.sh" "${fixture}/scripts/prod/"
+cp "${ROOT}/scripts/prod/production_image_refs.py" "${fixture}/scripts/prod/"
+cp "${ROOT}/scripts/ci/staging-image-catalog.json" "${fixture}/scripts/ci/"
 cp "${ROOT}/scripts/staging/rollout-subset.sh" "${fixture}/scripts/staging/"
 for file in prod/load-prod-domains.sh prod/map-prod-env.sh staging/rollout-helpers.sh; do
   printf ':\n' > "${fixture}/scripts/${file}"
@@ -27,13 +30,16 @@ printf 'kubectl %s\n' "$*" >> "${CALLS}"
 STUB
 chmod 755 "${fixture}/bin/kubectl"
 export PATH="${fixture}/bin:${PATH}"
-export VOICE_IMAGE_REGISTRY=example.invalid/voice VOICE_IMAGE_TAG=fixture
+export VOICE_IMAGE_REGISTRY=example.invalid/voice VOICE_IMAGE_TAG=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 export VOICE_K8S_NAMESPACE=voice-prod CHANGED_SERVICES=user,space
 export VOICE_APPLY_OBSERVABILITY=false
 export CALLS="${fixture}/calls"
 run() {
   : > "${CALLS}"
-  bash "${fixture}/scripts/prod/render-and-apply-prod.sh" > "${fixture}/output" 2>&1
+  local status=0
+  bash "${fixture}/scripts/prod/render-and-apply-prod.sh" > "${fixture}/output" 2>&1 || status=$?
+  if [ "${status}" -ne 0 ]; then cat "${fixture}/output" >&2; fi
+  return "${status}"
 }
 has() {
   if ! grep -qFx -- "$1" "${CALLS}"; then
@@ -79,4 +85,12 @@ test "${result}" -eq 7
 absent 'apply-livekit-ingress.sh'
 absent 'kubectl rollout status'
 echo 'PASS subset failure stops production completion'
-echo 'Production User/Space rollout: 6 cases passed (isolated shell fixture).'
+
+set +e
+VOICE_IMAGE_TAG=fixture DEPLOY_MODE=full NEEDS_FULL_ROLLOUT=false NEEDS_USER_SPACE_ROLLOUT=true run
+result=$?
+set -e
+test "${result}" -ne 0
+test ! -s "${CALLS}"
+echo 'PASS real image preflight rejects invalid tag before effects'
+echo 'Production User/Space rollout: 7 cases passed (isolated shell fixture).'
