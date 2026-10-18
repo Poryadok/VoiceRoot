@@ -117,6 +117,7 @@ func (s *MessagingGRPC) threadPolicyDeps() threadPolicyDeps {
 		Policy:    s.ChatThreadPolicy,
 		Messages:  s.Messages,
 		RolePerms: s.ChatRolePermissions,
+		Members:   s.ChatGuard,
 	}
 }
 
@@ -628,15 +629,9 @@ func isNilDependency(dependency any) bool {
 }
 
 func (s *MessagingGRPC) checkSpaceSendPermission(ctx context.Context, chatID, profileID uuid.UUID) error {
-	if s.RolePermissions == nil || s.ChatThreadPolicy == nil {
-		return nil
-	}
-	pol, err := s.ChatThreadPolicy.Load(ctx, chatID)
-	if errors.Is(err, store.ErrChatNotFound) {
-		return status.Error(codes.NotFound, "chat not found")
-	}
+	pol, err := s.loadMutationChatPolicy(ctx, chatID)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return err
 	}
 	if pol == nil || pol.SpaceID == nil {
 		return nil
@@ -644,6 +639,9 @@ func (s *MessagingGRPC) checkSpaceSendPermission(ctx context.Context, chatID, pr
 	chatType := strings.TrimSpace(pol.ChatType)
 	if chatType != "channel" && chatType != "group" {
 		return nil
+	}
+	if isNilDependency(s.RolePermissions) {
+		return status.Error(codes.Unavailable, "role service unavailable")
 	}
 	allowed, err := s.RolePermissions.HasChatPermission(ctx, *pol.SpaceID, profileID, chatID, permissions.TextChatSendMessages)
 	if err != nil {
@@ -1689,7 +1687,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		if !messageTextWithinLimit(commentary) {
 			return nil, status.Error(codes.InvalidArgument, "commentary exceeds 4000 characters")
 		}
-		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary, ghostOnly); err != nil {
+		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary, ghostOnly, postedAsChat); err != nil {
 			return nil, err
 		}
 	}
@@ -1756,7 +1754,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
 
-func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, profileID uuid.UUID, chatType, content string, ghostOnly bool) error {
+func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, profileID uuid.UUID, chatType, content string, ghostOnly, postedAsChat bool) error {
 	msgID, err := messageid.NewMessageID()
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
@@ -1772,6 +1770,10 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 		MentionsJSON:    "[]",
 		GhostOnly:       ghostOnly,
 		ContentType:     "text",
+		PostedAsChat:    postedAsChat,
+	}
+	if postedAsChat {
+		row.DisplayChatID = &chatID
 	}
 	var events []messageevents.OutboxEvent
 	if !ghostOnly {
