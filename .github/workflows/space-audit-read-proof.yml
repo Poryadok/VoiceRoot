@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           go test ./internal/store ./internal/grpcsvc -count=1 -json \
-            -run '^(TestAuditCursor.*|TestSpaceStore_ListAuditLogFilteredPage.*|TestSpaceStore_ListAuditLogSignedPage.*|TestGetAuditLog.*)$' \
+            -run '^(TestAuditCursor.*|TestAuditTimestampBoundPreservesNanosecondPredicates|TestSpaceStore_ListAuditLogFilteredPage.*|TestSpaceStore_ListAuditLogSignedPage.*|TestGetAuditLog.*)$' \
             | tee "$RUNNER_TEMP/space-audit-read.jsonl"
           python3 - "$RUNNER_TEMP/space-audit-read.jsonl" <<'PY'
           import json, sys
@@ -62,6 +62,7 @@ jobs:
               "TestSpaceStore_ListAuditLogSignedPage_UsesDatabaseKeyAcrossStoreInstances",
               "TestAuditCursorRejectsIncompleteOrInvalidLifetime",
               "TestAuditCursorRoundTripAndViewerBinding",
+              "TestAuditTimestampBoundPreservesNanosecondPredicates",
           }
           passed = {e.get("Test") for e in events if e.get("Action") == "pass"}
           skipped = {e.get("Test") for e in events if e.get("Action") == "skip"}

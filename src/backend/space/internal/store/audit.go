@@ -195,6 +195,17 @@ func parseAuditCursorKey(at, id string) (time.Time, uuid.UUID, error) {
 	return parsedAt.UTC(), parsedID, nil
 }
 
+func auditTimestampBound(at time.Time) time.Time {
+	// PostgreSQL stores microseconds. Both x >= from and x < to require a
+	// ceiling, not pgx's truncation, when the requested instant lies between
+	// representable database values. The cursor still hashes the original time.
+	bound := at.UTC().Truncate(time.Microsecond)
+	if bound.Before(at) {
+		bound = bound.Add(time.Microsecond)
+	}
+	return bound
+}
+
 // ListAuditLogFilteredPage returns a newest-first page with a signed cursor
 // bound to the complete query and disclosure scope. The first page fixes the
 // newest visible tuple as the snapshot ceiling for all continuation pages.
@@ -251,10 +262,10 @@ func (s *SpaceStore) ListAuditLogFilteredPage(ctx context.Context, query AuditLo
 		where = append(where, "action = "+addArg(*query.Action))
 	}
 	if query.From != nil {
-		where = append(where, "created_at >= "+addArg(query.From.UTC()))
+		where = append(where, "created_at >= "+addArg(auditTimestampBound(*query.From)))
 	}
 	if query.To != nil {
-		where = append(where, "created_at < "+addArg(query.To.UTC()))
+		where = append(where, "created_at < "+addArg(auditTimestampBound(*query.To)))
 	}
 	if !ceilingAt.IsZero() {
 		atArg := addArg(ceilingAt)

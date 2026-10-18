@@ -48,6 +48,25 @@ func TestGetAuditLog_FiltersCursorAndRevokedAccess(t *testing.T) {
 	require.Equal(t, newer.String(), first.GetAuditLogList().GetEntries()[0].GetId())
 	cursor := first.GetAuditLogList().GetNextCursor()
 	require.NotEmpty(t, cursor)
+	for _, tc := range []struct {
+		name     string
+		from, to time.Time
+		want     uuid.UUID
+	}{
+		{"inclusive from plus one nanosecond", from.Add(time.Nanosecond), to, newer},
+		{"exclusive to plus one nanosecond", from, from.Add(time.Nanosecond), older},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fractional := proto.Clone(request).(*spacev1.GetAuditLogRequest)
+			fractional.From = timestamppb.New(tc.from)
+			fractional.To = timestamppb.New(tc.to)
+			filtered, err := client.GetAuditLog(ownerCtx, fractional)
+			require.NoError(t, err)
+			require.Len(t, filtered.GetAuditLogList().GetEntries(), 1)
+			require.Equal(t, tc.want.String(), filtered.GetAuditLogList().GetEntries()[0].GetId())
+			require.Empty(t, filtered.GetAuditLogList().GetNextCursor())
+		})
+	}
 	request.Page.Cursor = cursor
 	lowercase := owner.String()
 	request.ActorProfileId = &lowercase

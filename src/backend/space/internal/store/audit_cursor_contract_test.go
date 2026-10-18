@@ -62,3 +62,20 @@ func TestAuditCursorRoundTripAndViewerBinding(t *testing.T) {
 	_, err = decodeSignedAuditCursor(cursor, key, binding, now.Add(15*time.Minute))
 	require.ErrorIs(t, err, ErrInvalidAuditCursor)
 }
+
+func TestAuditTimestampBoundPreservesNanosecondPredicates(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"2026-10-18T12:00:00.000000001Z", "2026-10-18T12:00:00.000001Z"},
+		{"2026-10-18T12:00:00.000001Z", "2026-10-18T12:00:00.000001Z"},
+		{"2026-10-18T12:00:00.999999999Z", "2026-10-18T12:00:01Z"},
+		{"1960-01-01T00:00:00.000000001Z", "1960-01-01T00:00:00.000001Z"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			input, err := time.Parse(time.RFC3339Nano, tc.input)
+			require.NoError(t, err)
+			want, err := time.Parse(time.RFC3339Nano, tc.want)
+			require.NoError(t, err)
+			require.Equal(t, want, auditTimestampBound(input))
+		})
+	}
+}
