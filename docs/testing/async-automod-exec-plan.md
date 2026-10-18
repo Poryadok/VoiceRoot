@@ -50,6 +50,15 @@ deadline was correctly rejected; the fixture now asserts that rejection and uses
 an actual terminal import and independently overdue account. This is scoped
 projection evidence, not P0-P5 runtime or whole-vertical acceptance.
 
+JWKS transport checkpoint: the actual Java HTTPS bootstrap regression failed
+with the anonymous default client against a certificate-required issuer. The
+configured workload keypair/CA client then passed the same real TLS fixture;
+missing certificate and wrong CA fail, partial material and automatic issuer
+configuration cannot downgrade. Existing configuration tests also pass (ten
+tests total, zero skips, Linux Java 25). HTTPS endpoint identification remains
+explicit; this fixture does not claim a separate wrong-host deployment check.
+The own Java runner and JDBC database were removed after exporting Surefire XML.
+
 - [x] Confirm actual TT owner156, fresh base and exclusive lease22.
 - [x] Read c9; ordinary policy choices no longer require a user response.
 - [x] Persist exact owning API/schema and policy contracts before production code.

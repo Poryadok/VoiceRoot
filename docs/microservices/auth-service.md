@@ -963,3 +963,10 @@ Private reciprocal calls run outside account DB locks. A restored old database
 requires independently recovered erasure/history material; `complete=true` alone
 cannot certify it. Exact projection acknowledgements bind request IDs, revision
 and desired state/hash; a remote-ahead hint is compared to current local authority.
+
+The principal JWKS HTTP client uses `S2S_JWKS_CA_FILE` and the paired workload
+`S2S_JWKS_CLIENT_CERT_FILE` / `S2S_JWKS_CLIENT_KEY_FILE` (PEM certificate chain
+and unencrypted PKCS#8 private key). Any partial bundle fails startup. Configuring
+Messaging or Moderation principal issuers requires this complete bundle. The
+client retains HTTPS hostname verification, bounded time/body and no redirects;
+certificate-only issuer bootstrap sends no JWT and makes no account/peer RPC.
