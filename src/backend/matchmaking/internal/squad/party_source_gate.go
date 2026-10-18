@@ -22,5 +22,40 @@ type PartySourceGate struct {
 }
 
 func (g *PartySourceGate) ValidateProvision(ctx context.Context, matchID uuid.UUID) (store.ProvisionCandidate, error) {
-	return store.ProvisionCandidate{}, ErrPartyProvisionUnknown
+	if g == nil || g.Store == nil || g.Validator == nil || matchID == uuid.Nil {
+		return store.ProvisionCandidate{}, ErrPartyProvisionUnknown
+	}
+	candidate, err := g.Store.CaptureProvisionCandidate(ctx, matchID)
+	if err != nil {
+		return store.ProvisionCandidate{}, errors.Join(ErrPartyProvisionUnknown, err)
+	}
+	result, err := g.Validator.ValidateCapturedParties(ctx, candidate)
+	if err != nil {
+		// An error dominates any partial changed result: no cancellation can be
+		// inferred while another source remains unavailable or ambiguous.
+		return store.ProvisionCandidate{}, errors.Join(ErrPartyProvisionUnknown, err)
+	}
+	if result.Attempt != nil {
+		if len(result.ChangedPartyIDs) != 0 || !result.Attempt.Matches(candidate) {
+			return store.ProvisionCandidate{}, ErrPartyProvisionUnknown
+		}
+		return candidate, nil
+	}
+	if len(result.ChangedPartyIDs) == 0 {
+		return store.ProvisionCandidate{}, ErrPartyProvisionUnknown
+	}
+	parties := candidate.Parties()
+	allowed := make(map[uuid.UUID]bool, len(parties))
+	for _, party := range parties {
+		allowed[party.ID] = true
+	}
+	for _, id := range result.ChangedPartyIDs {
+		if id == uuid.Nil || !allowed[id] {
+			return store.ProvisionCandidate{}, ErrPartyProvisionUnknown
+		}
+	}
+	if _, err := g.Store.ResetVoiceParties(ctx, result.ChangedPartyIDs); err != nil {
+		return store.ProvisionCandidate{}, errors.Join(ErrPartyProvisionUnknown, err)
+	}
+	return store.ProvisionCandidate{}, ErrPartyProvisionChanged
 }
