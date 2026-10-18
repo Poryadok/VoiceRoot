@@ -87,16 +87,26 @@ class RegistryIdentityTests(unittest.TestCase):
     def test_ghcr_blob_redirect_rejects_unapproved_locations_without_following(self):
         digest = "sha256:" + "a" * 64
         locations = (
-            "http://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
-            "https://evil.example/ghcr1/blobs/" + digest + "?sig=x",
-            "https://pkg-containers.githubusercontent.com/other/" + digest + "?sig=x",
-            "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + "sha256:" + "b" * 64 + "?sig=x",
-            "https://user@pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
-            "https://pkg-containers.githubusercontent.com:444/ghcr1/blobs/" + digest + "?sig=x",
-            "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x#fragment",
-            "https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x\r\nAuthorization: Bearer secret",
+            ("http://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
+                "redirect_target_scheme_invalid", "known_cdn"),
+            ("https://evil.example/ghcr1/blobs/" + digest + "?sig=x",
+                "redirect_target_host_invalid", "other"),
+            ("https://pkg-containers.githubusercontent.com/other/" + digest + "?sig=x",
+                "redirect_target_path_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + "sha256:" + "b" * 64 + "?sig=x",
+                "redirect_target_digest_invalid", "known_cdn"),
+            ("https://user@pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x",
+                "redirect_target_authority_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com:444/ghcr1/blobs/" + digest + "?sig=x",
+                "redirect_target_authority_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x#fragment",
+                "redirect_target_fragment_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?",
+                "redirect_target_query_invalid", "known_cdn"),
+            ("https://pkg-containers.githubusercontent.com/ghcr1/blobs/" + digest + "?sig=x\r\nAuthorization: Bearer secret",
+                "redirect_target_control_invalid", "known_cdn"),
         )
-        for location in locations:
+        for location, code, host_class in locations:
             with self.subTest(location=location), \
                     patch.object(receipt, "_CURRENT_PHASE", "registry-config"), \
                     patch.object(receipt._HTTPS, "open", side_effect=urllib.error.HTTPError(
@@ -104,9 +114,14 @@ class RegistryIdentityTests(unittest.TestCase):
                 with self.assertRaises(receipt.ReceiptError) as raised:
                     receipt._read_response("https://ghcr.io/v2/repo/blobs/" + digest,
                         {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest)
-                self.assertEqual(raised.exception.safe_record()["http_status"], 307)
+                record = raised.exception.safe_record()
+                self.assertEqual(record["phase"], "registry-config-redirect-target")
+                self.assertEqual(record["code"], code)
+                self.assertEqual(record["redirect_host_class"], host_class)
+                self.assertEqual(record["http_status"], 307)
                 self.assertEqual(opened.call_count, 1)
-                self.assertNotIn(location, json.dumps(raised.exception.safe_record()))
+                self.assertNotIn(location, json.dumps(record))
+                self.assertNotIn("sig=x", json.dumps(record))
 
     def test_ghcr_blob_redirect_chain_stops_after_one_hop(self):
         digest = "sha256:" + "a" * 64
@@ -124,9 +139,12 @@ class RegistryIdentityTests(unittest.TestCase):
             with self.assertRaises(receipt.ReceiptError) as raised:
                 receipt._read_response("https://ghcr.io/v2/repo/blobs/" + digest,
                     {"Authorization": "Bearer private-token"}, blob_redirect_digest=digest)
-        self.assertEqual(raised.exception.safe_record()["http_status"], 307)
+        self.assertEqual(raised.exception.safe_record(), {"status": "REJECTED",
+            "phase": "registry-config-redirect-content", "code": "redirect_chain_rejected",
+            "class": "HTTPError", "http_status": 307, "redirect_host_class": "known_cdn"})
         self.assertEqual(len(calls), 2)
         self.assertIsNone(calls[1].get_header("Authorization"))
+        self.assertNotIn("sig=", json.dumps(raised.exception.safe_record()))
 
     def test_index_child_and_config_are_bound_to_linux_amd64(self):
         config = json.dumps({"os": "linux", "architecture": "amd64",
@@ -463,8 +481,9 @@ class DiagnosticTests(unittest.TestCase):
             "repository": {"full_name": "Poryadok/VoiceRoot", "id": 7},
             "head_repository": {"full_name": "Poryadok/VoiceRoot", "id": 7}}
         secret = "private-registry-response"
-        registry_error = receipt.ReceiptError(secret, phase="registry-token", code="http_error",
-            failure_class="HTTPError", http_status=403)
+        registry_error = receipt.ReceiptError(secret, phase="registry-config-redirect-content",
+            code="redirect_chain_rejected", failure_class="HTTPError", http_status=307,
+            redirect_host_class="known_cdn")
 
         def source_capture(*args):
             try:
@@ -482,8 +501,8 @@ class DiagnosticTests(unittest.TestCase):
                 receipt.capture_receipt(11, "token", "actor", target)
             self.assertFalse(target.exists())
         self.assertEqual(raised.exception.safe_record(), {"status": "REJECTED",
-            "phase": "registry-token", "code": "http_error", "class": "HTTPError",
-            "http_status": 403})
+            "phase": "registry-config-redirect-content", "code": "redirect_chain_rejected",
+            "class": "HTTPError", "http_status": 307, "redirect_host_class": "known_cdn"})
         self.assertNotIn(secret, json.dumps(raised.exception.safe_record()))
 
     def test_buildx_and_registry_index_mismatch_blocks_before_receipt_write(self):
