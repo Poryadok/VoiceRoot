@@ -628,7 +628,9 @@ function Portal() {
       return;
     }
     setStatus('Manifest applied');
-    void loadBotCatalog(botId, request, selectionGeneration);
+    // Applying a manifest also changes saved public fields and scopes. Reset
+    // both previews together and reject late replies from the prior generation.
+    selectBot(botId, undefined, request, false, false);
   }
 
   const editScopeWarnings = warningsForPrivilegedScopes(privilegedScopesInJson(editScopesJson));

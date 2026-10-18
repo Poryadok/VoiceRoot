@@ -24,14 +24,17 @@ function setup(options: {
   commandsFail?: boolean;
   detailReject?: boolean;
   commandsReject?: boolean;
+  afterManifestDetail?: Promise<Response>;
 } = {}) {
-  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+  let applied = false;
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     if (path === '/api/v1/bots') {
       return json({ bot_list: { bots: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] } });
     }
     if (path === '/api/v1/bots/a') {
       if (options.detailReject) throw new Error('network unavailable');
+      if (applied && options.afterManifestDetail) return options.afterManifestDetail;
       return json({ bot: options.bot ?? savedBot });
     }
     if (path === '/api/v1/bots/b') {
@@ -41,9 +44,14 @@ function setup(options: {
       if (options.commandsReject) throw new Error('network unavailable');
       return options.commandsFail
         ? json({ error: 'unavailable' }, 503)
-        : json({ command_list: { commands_json: '[{"name":"ping","description":"Ping command"}]' } });
+        : json({ command_list: { commands_json: applied
+          ? '[{"name":"updated","description":"Updated command"}]'
+          : '[{"name":"ping","description":"Ping command"}]' } });
     }
-    if (path.endsWith('/manifest')) return json({ manifest_yaml: '' });
+    if (path.endsWith('/manifest')) {
+      if (init?.method === 'POST') applied = true;
+      return json({ manifest_yaml: '' });
+    }
     throw new Error(`Unexpected request: ${path}`);
   }));
 }
@@ -162,5 +170,69 @@ describe('saved public bot preview', () => {
     const preview = await screen.findByTestId('public-bot-preview');
     expect(await within(preview).findByText('Command preview unavailable')).toBeInTheDocument();
     expect(within(preview).queryByText('Loading command preview…')).not.toBeInTheDocument();
+  });
+
+  it('invalidates saved public data after applying a manifest and reloads detail with commands', async () => {
+    const pending = deferred();
+    setup({ afterManifestDetail: pending.promise });
+    render(<App />);
+    await within(await screen.findByTestId('public-bot-preview')).findByText('/ping');
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to bot' }));
+    await screen.findByText('Manifest applied');
+    expect(screen.queryByTestId('public-bot-preview')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save bot changes' })).toBeDisabled();
+    await act(async () => {
+      pending.resolve(json({ bot: { ...savedBot, name: 'Manifest name', description: 'Manifest description', scopes_json: '[]' } }));
+      await pending.promise;
+    });
+    const preview = within(await screen.findByTestId('public-bot-preview'));
+    expect(preview.getByText('Manifest name')).toBeInTheDocument();
+    expect(preview.getByText('Manifest description')).toBeInTheDocument();
+    expect(preview.getByText('No requested scopes')).toBeInTheDocument();
+    expect(await preview.findByText('/updated')).toBeInTheDocument();
+    expect(preview.queryByText('Saved A')).not.toBeInTheDocument();
+    expect(preview.queryByText('Send messages in allowed text chats')).not.toBeInTheDocument();
+  });
+
+  it.each(['selection', 'logout'])('ignores a late manifest detail refresh after %s', async (change) => {
+    const pending = deferred();
+    setup({ afterManifestDetail: pending.promise });
+    render(<App />);
+    await within(await screen.findByTestId('public-bot-preview')).findByText('/ping');
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to bot' }));
+    await screen.findByText('Manifest applied');
+    expect(screen.queryByTestId('public-bot-preview')).not.toBeInTheDocument();
+    if (change === 'selection') {
+      fireEvent.click(screen.getByRole('button', { name: 'B' }));
+      await within(await screen.findByTestId('public-bot-preview')).findByText('Saved B');
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    }
+    await act(async () => {
+      pending.resolve(json({ bot: { ...savedBot, name: 'Late manifest A' } }));
+      await pending.promise;
+    });
+    expect(screen.queryByText('Late manifest A')).not.toBeInTheDocument();
+    if (change === 'selection') {
+      expect(within(screen.getByTestId('public-bot-preview')).getByText('Saved B')).toBeInTheDocument();
+    } else {
+      expect(screen.queryByTestId('public-bot-preview')).not.toBeInTheDocument();
+    }
+  });
+
+  it('keeps stale public data hidden when post-manifest detail refresh fails', async () => {
+    const pending = deferred();
+    setup({ afterManifestDetail: pending.promise });
+    render(<App />);
+    await within(await screen.findByTestId('public-bot-preview')).findByText('/ping');
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to bot' }));
+    await screen.findByText('Manifest applied');
+    await act(async () => {
+      pending.resolve(json({ error: 'unavailable' }, 503));
+      await pending.promise;
+    });
+    await screen.findByText(/Load bot failed:/);
+    expect(screen.queryByTestId('public-bot-preview')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save bot changes' })).toBeDisabled();
   });
 });
