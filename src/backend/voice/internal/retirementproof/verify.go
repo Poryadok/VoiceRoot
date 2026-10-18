@@ -24,6 +24,11 @@ type TrustedVerifier struct {
 	Resources    ResourceObserver
 }
 
+// ValidateResourceRecord checks canonical shape/bindings only. It authenticates
+// nothing and returns no VerifiedRetirement; protected journal provenance,
+// authoritative owner extraction and current actual observations are mandatory.
+func ValidateResourceRecord(r ResourceRecord) error { return validateResource(r, r.Ref) }
+
 func (v TrustedVerifier) VerifyForWork(ctx context.Context, proof ProofRef, work OwnerWorkRef) (VerifiedRetirement, error) {
 	if v.Journal == nil || v.Owner == nil || v.Installation == nil || v.Resources == nil {
 		return VerifiedRetirement{}, ErrUnavailable
