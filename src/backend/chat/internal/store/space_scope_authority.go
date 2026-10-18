@@ -13,7 +13,7 @@ import (
 // lock over network I/O can participate in this read.
 func (s *DMStore) GetSpaceChatScopeAuthority(ctx context.Context, chatID, spaceID uuid.UUID) (*chatv1.GetSpaceChatScopeAuthorityResponse, error) {
 	if s == nil || s.Pool == nil {
-		return nil, errors.New("Chat scope authority unavailable")
+		return nil, errors.New("chat scope authority unavailable")
 	}
 	var incarnation, headIncarnation uuid.UUID
 	var revision, generation int64

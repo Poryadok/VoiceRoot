@@ -41,7 +41,7 @@ func startChatScopeAuthorityListeners(ctx context.Context, pool *pgxpool.Pool, c
 		}
 	}
 	if len(configs) > 0 && pool == nil {
-		return cleanup, errors.New("Chat scope authority requires DATABASE_URL")
+		return cleanup, errors.New("chat scope authority requires DATABASE_URL")
 	}
 	for _, cfg := range configs {
 		runtime, err := gisprincipal.New(ctx, cfg.Principal)

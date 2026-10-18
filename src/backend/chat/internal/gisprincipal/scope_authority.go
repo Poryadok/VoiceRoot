@@ -9,7 +9,7 @@ import (
 
 const ScopeAuthorityMethod = chatv1.ChatScopeAuthorityService_GetSpaceChatScopeAuthority_FullMethodName
 
-// Each caller gets a separate trust/listener/replay configuration. Neither
+// ScopeAuthorityConfigFromEnv gives each caller separate trust/listener/replay configuration. Neither
 // scope listener exposes lifecycle mutations or Federation snapshots.
 func ScopeAuthorityConfigFromEnv(issuer string) (Config, string, bool, error) {
 	if issuer != "role" && issuer != "space" {
@@ -32,7 +32,7 @@ func ScopeAuthorityConfigFromEnv(issuer string) (Config, string, bool, error) {
 		return Config{}, "", false, nil
 	}
 	if listen == "" || cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.JWKSCAFile == "" || cfg.ReplayAddr == "" || (cfg.JWKSClientCertFile == "") != (cfg.JWKSClientKeyFile == "") {
-		return Config{}, "", true, errors.New("Chat scope authority principal configuration is incomplete")
+		return Config{}, "", true, errors.New("chat scope authority principal configuration is incomplete")
 	}
 	return cfg, listen, true, nil
 }
