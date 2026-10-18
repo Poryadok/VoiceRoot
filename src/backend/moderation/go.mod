@@ -14,8 +14,13 @@ require (
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
+	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/gameintegration v0.0.0 // indirect
 	voice.app/voice/matchmaking v0.0.0
+	voice.app/voice/messaging v0.0.0
 	voice.app/voice/moderation v0.0.0
+	voice.app/voice/space v0.0.0
+	voice.app/voice/story v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 )
@@ -113,3 +118,13 @@ replace voice.app/voice/analytics => ../analytics/pb/voice/analytics
 replace voice.app/voice/events => ../messaging/pb/voice/events
 
 replace voice.app/voice/matchmaking => ../voice/pb/voice/matchmaking
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
+
+replace voice.app/voice/file => ../file/pb/voice/file
+
+replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
+
+replace voice.app/voice/space => ../voice/pb/voice/space
+
+replace voice.app/voice/story => ../voice/pb/voice/story

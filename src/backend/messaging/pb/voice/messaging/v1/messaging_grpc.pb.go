@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	MessagingService_ResolveReportTarget_FullMethodName          = "/voice.messaging.v1.MessagingService/ResolveReportTarget"
 	MessagingService_SendGameEventMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/SendGameEventMessage"
 	MessagingService_SendMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/SendMessage"
 	MessagingService_ApplyGameMessage_FullMethodName             = "/voice.messaging.v1.MessagingService/ApplyGameMessage"
@@ -66,6 +67,8 @@ const (
 // Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 type MessagingServiceClient interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error)
 	// @voice.security=protected;callers=service:bot
 	SendGameEventMessage(ctx context.Context, in *SendGameEventMessageRequest, opts ...grpc.CallOption) (*SendGameEventMessageResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
@@ -131,6 +134,16 @@ type messagingServiceClient struct {
 
 func NewMessagingServiceClient(cc grpc.ClientConnInterface) MessagingServiceClient {
 	return &messagingServiceClient{cc}
+}
+
+func (c *messagingServiceClient) ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveReportTargetResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ResolveReportTarget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *messagingServiceClient) SendGameEventMessage(ctx context.Context, in *SendGameEventMessageRequest, opts ...grpc.CallOption) (*SendGameEventMessageResponse, error) {
@@ -493,6 +506,8 @@ func (c *messagingServiceClient) ImportSpacePurgeManifestPage(ctx context.Contex
 // Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 type MessagingServiceServer interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error)
 	// @voice.security=protected;callers=service:bot
 	SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
@@ -560,6 +575,9 @@ type MessagingServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedMessagingServiceServer struct{}
 
+func (UnimplementedMessagingServiceServer) ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveReportTarget not implemented")
+}
 func (UnimplementedMessagingServiceServer) SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendGameEventMessage not implemented")
 }
@@ -684,6 +702,24 @@ func RegisterMessagingServiceServer(s grpc.ServiceRegistrar, srv MessagingServic
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&MessagingService_ServiceDesc, srv)
+}
+
+func _MessagingService_ResolveReportTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveReportTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ResolveReportTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ResolveReportTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ResolveReportTarget(ctx, req.(*ResolveReportTargetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _MessagingService_SendGameEventMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1323,6 +1359,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.messaging.v1.MessagingService",
 	HandlerType: (*MessagingServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveReportTarget",
+			Handler:    _MessagingService_ResolveReportTarget_Handler,
+		},
 		{
 			MethodName: "SendGameEventMessage",
 			Handler:    _MessagingService_SendGameEventMessage_Handler,

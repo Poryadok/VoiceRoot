@@ -20,7 +20,7 @@ func NewPublisher(url string) (*Publisher, error) {
 	if url == "" {
 		return nil, errors.New("intake NATS URL required")
 	}
-	nc, err := nats.Connect(url, nats.Name("voice-moderation-intake"), nats.CustomInboxPrefix("_INBOX.voice.moderation"), nats.Timeout(5*time.Second), nats.MaxReconnects(-1))
+	nc, err := nats.Connect(url, nats.Name("voice-moderation-intake"), nats.CustomInboxPrefix("_INBOX.voice.moderation"), nats.Timeout(5*time.Second), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
 	if err != nil {
 		return nil, err
 	}

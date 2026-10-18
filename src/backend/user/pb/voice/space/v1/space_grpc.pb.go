@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	SpaceService_ResolveReportTarget_FullMethodName               = "/voice.space.v1.SpaceService/ResolveReportTarget"
 	SpaceService_CreateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/CreateSpace"
 	SpaceService_UpdateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/UpdateSpace"
 	SpaceService_UpdateSpaceMmConfig_FullMethodName               = "/voice.space.v1.SpaceService/UpdateSpaceMmConfig"
@@ -80,6 +81,8 @@ const (
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceClient interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error)
 	CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*CreateSpaceResponse, error)
 	UpdateSpace(ctx context.Context, in *UpdateSpaceRequest, opts ...grpc.CallOption) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
@@ -172,6 +175,16 @@ type spaceServiceClient struct {
 
 func NewSpaceServiceClient(cc grpc.ClientConnInterface) SpaceServiceClient {
 	return &spaceServiceClient{cc}
+}
+
+func (c *spaceServiceClient) ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveReportTargetResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ResolveReportTarget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *spaceServiceClient) CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*CreateSpaceResponse, error) {
@@ -710,6 +723,8 @@ func (c *spaceServiceClient) GetSpaceDeletionCoordinatorStatus(ctx context.Conte
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceServer interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error)
 	CreateSpace(context.Context, *CreateSpaceRequest) (*CreateSpaceResponse, error)
 	UpdateSpace(context.Context, *UpdateSpaceRequest) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
@@ -804,6 +819,9 @@ type SpaceServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSpaceServiceServer struct{}
 
+func (UnimplementedSpaceServiceServer) ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveReportTarget not implemented")
+}
 func (UnimplementedSpaceServiceServer) CreateSpace(context.Context, *CreateSpaceRequest) (*CreateSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSpace not implemented")
 }
@@ -982,6 +1000,24 @@ func RegisterSpaceServiceServer(s grpc.ServiceRegistrar, srv SpaceServiceServer)
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&SpaceService_ServiceDesc, srv)
+}
+
+func _SpaceService_ResolveReportTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveReportTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ResolveReportTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ResolveReportTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ResolveReportTarget(ctx, req.(*ResolveReportTargetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _SpaceService_CreateSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1945,6 +1981,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.space.v1.SpaceService",
 	HandlerType: (*SpaceServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveReportTarget",
+			Handler:    _SpaceService_ResolveReportTarget_Handler,
+		},
 		{
 			MethodName: "CreateSpace",
 			Handler:    _SpaceService_CreateSpace_Handler,

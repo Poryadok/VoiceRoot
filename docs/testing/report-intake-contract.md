@@ -133,3 +133,56 @@ strict signed transport negatives, no pending queue/count/action bypass,
 competing-worker and purge races, stable outbox/automod effects, invalid-target
 scrubbing and legacy publication provenance. Source, isolated Linux runtime,
 hosted CI, deployment and independent acceptance evidence remain distinct.
+
+
+## Four-owner runtime configuration
+
+Each owner uses `<OWNER>_REPORT_TARGETS_` (`USER`, `MESSAGING`, `SPACE`, `STORY`):
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`,
+`MODERATION_JWKS_URL`, `JWKS_CA_FILE`, `REPLAY_REDIS_ADDR`,
+`REPLAY_REDIS_PASSWORD`. Any present setting enables strict complete startup
+validation. Sole trusted issuer is moderation; adding other JWKS issuers fails.
+The shared principal's existing S2S cache duration settings retain their defaults.
+Replay keys include owner namespace and credential JTI, shared by receiver replicas.
+
+Moderation uses `MODERATION_REPORT_TARGETS_` with `SIGNING_KEYS_DIR`, `ACTIVE_KID`
+(exactly two distinct RSA PKCS8 keys named `<kid>.pem`), `JWKS_LISTEN`,
+`JWKS_TLS_CERT_FILE`, `JWKS_TLS_KEY_FILE`, `TLS_CA_FILE`, `CLIENT_CERT_FILE`,
+`CLIENT_KEY_FILE`, and each owner's `<OWNER>_GRPC_ADDR`/`<OWNER>_TLS_SERVER_NAME`.
+Any setting requires all four clients plus signer/HTTPS JWKS configuration.
+No settings disables the worker, preserving accepted PENDING work and ordinary
+listener denial. There is no ordinary-client or automatic gRPC retry fallback.
+`NATS_URL` is required for enabled worker startup; transient stream/publish errors
+remain durable retries. Worker shutdown completes before its transports/pool close.
+BE-046 owns the single VALID hook; without it validation remains manual, without
+the legacy synchronous threshold engine. Migration catalog is scan000005,
+BE045000006, intake000007, BE046000010; duplicate numeric versions are invalid.
+
+The opt-in local/CI Compose overlay `docker-compose.report-targets.yml` extends
+the existing Phase0 fixture without replacing Gateway signing identity. Generate
+its separate report-target fixture first. This is a local compatibility template,
+not authority to deploy or claim DEV/STAGING. Production mounts separate trust,
+signing keys and replay state through its normal deployment secret mechanism.
+
+The four-owner runtime test compiles each actual owner grpcsvc test binary inside
+Linux, starts bounded subprocess fixtures with real owner handlers/stores and
+mTLS/JWKS/replay, then drives signed Moderation client validation and real NATS.
+The User subprocess's current Auth deletion checker is an explicit false fixture;
+current Auth protocol and production deployment are separate evidence. Owner SQL
+fixtures use isolated minimal schemas, not a claim of full owner migration proof.
+
+Reproduce the connected proof inside the repository Linux Docker runner with
+ash scripts/ci/report-target-intake-proof.sh; set disposable
+REPORT_INTAKE_TEST_DSN and REPORT_INTAKE_TEST_NATS_URL. It resets the supplied
+Moderation public schema and owns the two stream names; never point it at a stand.
+It generates ephemeral PKI and Linux owner test binaries, then removes them.
+The opt-in Compose template requires both PHASE0_FIXTURE_DIR from the existing
+Phase0 generator and REPORT_TARGETS_FIXTURE_DIR from
+scripts/dev/generate-report-target-fixture.py <new-directory>. Layer order:
+base, phase0, report-targets. No host ports are added by this overlay.
+
+Full production activation remains gated on BE046 sole-hook integration and the
+verified terminal-account late-callback fence: an owner snapshot predating purge
+must not attach a newly erased account afterward. The partial raw-account link
+purge participant alone is not proof of that fence. No deployment/acceptance is
+claimed by the local proof.
