@@ -113,6 +113,63 @@ verbose log хранится как workflow artifact.
 - Redis-проверки: `GATEWAY_REDIS_ADDR` включает sliding-window rate limiter и blacklist чтение; blacklist key prefix по умолчанию `jwt:blacklist:`, override — `GATEWAY_JWT_BLACKLIST_PREFIX`.
 - Edge smoke после деплоя: `/health`, `/metrics`, `/api/v1/version?platform=<known>&version=<semver>`, один public REST route, один protected REST route с JWT и `/ws` upgrade через Realtime upstream.
 
+### Public staging audio media check
+
+`TestStagingVoiceCallBidirectionalAudio_live` is a separate opt-in Linux harness
+for an authorized operator. It uses the existing synthetic PCM/RTP peers and
+requires ten nonempty advancing audio RTP packets in each direction. Signaling
+alone cannot pass it. It does not run in the ordinary staging smoke.
+
+Prepare two dedicated, verified regular accounts with an existing DM, current
+access tokens, and no active calls. Reserve both accounts exclusively for the
+check. Place this JSON outside the checkout in an owner-only (`chmod 600`) file;
+substitute actual IDs/tokens locally and never attach the file or raw credentials
+to evidence:
+
+```json
+{
+  "schema": "voice-staging-media-v1",
+  "api_origin": "https://api-staging.example.test",
+  "livekit_origin": "wss://livekit-staging.example.test",
+  "chat_id": "existing-dm-uuid",
+  "caller": {"account_id": "caller-account-uuid", "profile_id": "caller-profile-uuid", "access_token": "private-caller-token"},
+  "callee": {"account_id": "callee-account-uuid", "profile_id": "callee-profile-uuid", "access_token": "private-callee-token"}
+}
+```
+
+Use the actual configured staging origins. The API origin must exactly match
+`VOICE_STAGING_URL`; the returned Voice token URLs must both match the fixture's
+WSS origin. TLS verification stays enabled, redirects are rejected, and there
+is no localhost fallback. Before creating a call the harness checks `/users/me`
+against both account/profile pairs and refuses existing active calls. The file
+is locked for the run. The harness does not register accounts, send OTP, reset
+Redis rate limits, or change DM privacy settings.
+
+From `src/backend/gateway`, on Linux with the repository Go version and
+`libopus-dev`, `libopusfile-dev`, `libsoxr-dev`, and `pkg-config` installed:
+
+```sh
+VOICE_RUN_STAGING_MEDIA=true \
+VOICE_STAGING_URL=https://api-staging.example.test \
+VOICE_STAGING_MEDIA_FIXTURE=/absolute/private/media-fixture.json \
+CGO_ENABLED=1 go test -tags=live -run '^TestStagingVoiceCallBidirectionalAudio_live$' -count=1 -parallel=1 -timeout=3m -v .
+```
+
+The harness registers cleanup as soon as call creation returns its room ID;
+after RTP/ICE/token failures it still ends that owned call and checks both
+accounts have no active call. A process kill or uncertain HTTP call-creation
+result can prevent this cleanup: inspect the dedicated accounts' active-call
+state through the normal API before retrying. Do not blindly repeat a mutation
+or terminate an unrelated call. Record the tested source SHA, actual deployed
+commit/image, environment, both-direction RTP result and cleanup result.
+Preparing this harness is not a real staging media PASS or final acceptance.
+
+Portable fixture/preflight tests need no live credentials or native libraries:
+
+```sh
+go test staging_voice_media_fixture_test.go staging_voice_media_fixture_validation_test.go -count=1
+```
+
 ### Java (Auth Service, Spring Boot)
 
 - Юнит и slice-тесты: **JUnit 5**, **Spring Boot Test** (`@WebMvcTest`, `@DataJpaTest` и т.д. по слою).
