@@ -626,7 +626,8 @@ The immutable request fields are `protocol_version`, `space_id`,
 `receipt_id`, the same Space/operation/generation, state exactly `RETIRED`,
 `request_sha256`, `manifest_sha256` and database `retired_at`. Receipt-wrapper
 unknown fields are preserved after known-field validation; request and nested
-unknown fields are rejected before mutation.
+unknown fields, including fields inside `purge_decided_at` Timestamp, are
+rejected before mutation.
 
 The implementation lives behind Role's authenticated TLS listener. Migration
 `000012_space_retirement` extends `role_space_lifecycle` and stores permanent
