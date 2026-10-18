@@ -20,6 +20,7 @@ service AuthService {
   // @voice.security=protected;callers=service:role
   // Private Role-only read; shares Auth's durable account and retained floor authority.
   rpc GetRoleSessionEpochFloor(GetRoleSessionEpochFloorRequest) returns (GetRoleSessionEpochFloorResponse);
+  rpc GetSpaceSessionEpochFloor(GetSpaceSessionEpochFloorRequest) returns (GetSpaceSessionEpochFloorResponse);
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
@@ -514,4 +515,13 @@ message AcknowledgeSpaceDeletionProofReceiptRequest {
 // @voice.hash=domain_separated_sha256
 message AcknowledgeSpaceDeletionProofReceiptResponse {
   google.protobuf.Timestamp acknowledged_at = 1;
+}
+
+// Space-only authoritative session floor; separate from Role and Voice callers.
+message GetSpaceSessionEpochFloorRequest {
+  string account_id = 1;
+}
+
+message GetSpaceSessionEpochFloorResponse {
+  int64 session_epoch_floor = 1;
 }
