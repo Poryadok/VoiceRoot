@@ -52,8 +52,14 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 			return nil, verificationStatus(err)
 		}
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
-			if err := validateCreationDecision(verified, message, transport.RequestID, requestHash); err != nil {
-				return nil, err
+			var decisionErr error
+			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
+				decisionErr = RequireNicknamePermission(principal.WithVerified(ctx, verified), req)
+			} else {
+				decisionErr = validateCreationDecision(verified, message, transport.RequestID, requestHash)
+			}
+			if decisionErr != nil {
+				return nil, decisionErr
 			}
 		}
 		return handler(principal.WithVerified(ctx, verified), request)
