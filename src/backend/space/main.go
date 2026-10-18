@@ -28,6 +28,7 @@ import (
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
+	"voice/backend/space/internal/auditprincipal"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/chatcreation"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
@@ -82,6 +83,13 @@ func main() {
 	if compositeEnabled && (strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" || !publicEnabled) {
 		log.Fatal("Space Chat composite requires DATABASE_URL and protected Gateway listener")
 	}
+	auditConfig, auditEnabled, err := auditprincipal.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Space audit principal config: %v", err)
+	}
+	if auditEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space audit listener requires DATABASE_URL")
+	}
 	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("space")
 	if err != nil {
 		log.Fatalf("space privacy principal config: %v", err)
@@ -117,6 +125,7 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	var publicServer *grpc.Server
+	var auditServer *grpc.Server
 	var sourceServer *grpc.Server
 	var outboxRuntime *ownershipOutboxRuntime
 	var recoveryRuntime *ownershipRecoveryRuntime
@@ -239,6 +248,7 @@ func main() {
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
 			chatcreation.OrdinaryUnary(),
+			auditprincipal.OrdinaryUnary(),
 			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),
 			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
@@ -382,6 +392,28 @@ func main() {
 				}
 			}()
 		}
+		if auditEnabled {
+			auditRuntime, err := auditprincipal.New(runCtx, auditConfig)
+			if err != nil {
+				log.Fatalf("Space audit principal runtime: %v", err)
+			}
+			defer func() { _ = auditRuntime.Close() }()
+			listener, err := net.Listen("tcp", auditConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Space audit principal listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, auditRuntime.ServerOptions()...)
+			auditServer = grpc.NewServer(options...)
+			grpcsvc.RegisterAuditIngestionServer(auditServer, &grpcsvc.AuditIngestionGRPC{Store: spaceStore})
+			defer auditServer.Stop()
+			go func() {
+				logger.Info("audit principal listener started", slog.String("addr", auditConfig.ListenAddr))
+				if err := auditServer.Serve(listener); err != nil {
+					log.Fatalf("Space audit principal serve: %v", err)
+				}
+			}()
+		}
 		if publicEnabled {
 			publicRuntime, err := lifecycleprincipal.New(runCtx, publicConfig)
 			if err != nil {
@@ -478,6 +510,9 @@ func main() {
 		}
 		if publicServer != nil {
 			publicServer.GracefulStop()
+		}
+		if auditServer != nil {
+			auditServer.GracefulStop()
 		}
 		if sourceServer != nil {
 			sourceServer.Stop()

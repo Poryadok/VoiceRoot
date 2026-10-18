@@ -26,8 +26,9 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 
 - [x] Freeze accepted c3/c5 behavior in owning canon and shared codec fixtures.
 - [x] Shared codec/validation/replay hash passes meaningful acceptance cases.
-- [ ] Same-transaction global ID reservation, audit/outbox effect and replay proof.
-- [ ] Signed Role/Chat-only listener, body validation and no legacy fallback.
+- [x] Same-transaction global ID reservation and audit/outbox implementation;
+  actual PostgreSQL replay/concurrency proof remains pending.
+- [x] Signed Role/Chat-only listener, body validation and no legacy fallback.
 - [ ] Independent security/concurrency review and exact-head hosted checks/PR.
 
 ## Detailed Steps
@@ -65,7 +66,14 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 - [x] Shared details/replay tests: meaningful RED on stub behavior, GREEN focused
   package, scoped vet and golangci-lint (0 issues). Frozen digest vectors were
   generated independently with Python struct framing, not implementation output.
-- [ ] Receipt migration/store and protected transport remain unimplemented.
+- [x] Receipt migration/store and protected listener implemented. All 31 transport
+  tests passed, including real local mTLS/JWKS, JWT replay and Redis fail-closed;
+  facade meaningful RED then GREEN. Space short suite 402 tests and vet passed
+  before the final additional PostgreSQL fixtures.
+- [ ] PostgreSQL fixtures compile under short mode but remain unexecuted: local
+  testcontainers failed before domain execution (rootless Docker unsupported on
+  Windows). Dedicated exact-head hosted workflow requires named PASS/no SKIP for
+  wire-to-store, concurrency, retention, backfill, uint64 and migration roundtrip.
 
 ## Decisions
 
@@ -78,6 +86,28 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
   they do not reinterpret existing Space-local details or impose new mask quotas.
 
 ## Risks And Follow-Ups
+
+Author18 assigned receipt-only bounded terminal minimization to BE130 after
+accepted composite c4/c5: migration29 + cleanupAuditIngressEvidence(ctx,tx) erases
+external full fingerprints only at permanent Space PURGED+30d, leaving nonpayload
+global ID/Space/origin markers. Guard denies early/arbitrary mutation and rollback
+of minimized payloads. Helper uses bounded1000-row SKIP LOCKED batches; author18
+owns its call in common CleanupLifecycleEvidence. Actual PG guard/rollback and
+race cases remain required. JWKS compatibility fixture now requires client mTLS
+as the real Role/Chat endpoints do; all31 transport tests PASS, including failure
+of a CA-only JWKS client. Graphify15902 deliberately interrupted after AST183/183
+because this accepted follow-up changes its input; no final success is claimed
+for that obsolete update, and final graph refresh follows the complete source.
+
+Accepted composite decision BE-A2-COMPOSITE-CHAT-NODE c4/c5 is integrated from
+author18's coherent immutable6678fee dependency (protocol86f48e6 and sharedcodec
+ancestor). Migration000028 and checkAuditIngressLifecycle now validate the exact
+persisted COMMITTED binding during freeze/purge and permanent terminal Space
+fence before both receipt lookups, including fresh collision resolution. A new
+PostgreSQL test covers changed binding, frozen original drain and a concurrent
+terminal fence blocking even receipted retries. Full Space short424 and vet pass;
+real PostgreSQL proof and independent review remain pending. Ordinary replay
+c3/c5 is unchanged. This is source integration, not P3 activation or deployment.
 
 Security/concurrency/migration change requires independent review. Current GitHub
 outage blocks remote delivery/checks but not local development; do not duplicate

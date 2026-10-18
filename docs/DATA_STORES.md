@@ -85,8 +85,16 @@ expire with ordinary 365-day payload retention or cascade from audit/outbox;
 authorized P3 minimization must explicitly include them and fence late imports.
 See [Space audit replay codec](microservices/space-service.md#durable-external-replay-codec-v1)
 and [external details codec](microservices/space-service.md#external-audit-details-codec-v1).
-Runtime/migration completion is tracked by BE-130; no deployment follows from this
-accepted design description.
+BE-130 implements the ingestion store and migration `000027_audit_ingestion`;
+real PostgreSQL proof and normal delivery gates remain required. No deployment
+follows from this source description. Rollback refuses any nonempty receipt
+registry, so it cannot silently erase reservations retained after payload cleanup.
+Migration `000029_audit_receipt_minimization` separately erases full external
+fingerprints at aggregate `PURGED + 30 days`, verified against the permanent
+Space fence and database clock. ID/Space/origin markers remain; ordinary
+365-day cleanup never starts this deadline. The immutable trigger permits only
+that due erasure and refuses marker/key changes or deletion. BE-005's cleanup
+integration and real PostgreSQL proof remain required; this does not activate P3.
 
 ### BE-116 Space audit durable ownership (accepted target; not implemented)
 

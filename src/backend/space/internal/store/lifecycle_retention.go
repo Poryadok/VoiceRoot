@@ -16,6 +16,9 @@ func (s *SpaceStore) CleanupLifecycleEvidence(ctx context.Context) error {
 		return err
 	}
 	defer rollbackLifecycleTx(ctx, tx)
+	if err = cleanupAuditIngressEvidence(ctx, tx); err != nil {
+		return err
+	}
 	// Composite full payloads have their frozen aggregate deadline. Permanent
 	// resource/Space fences contain no identities and are deliberately untouched.
 	if _, err = tx.Exec(ctx, `DELETE FROM space_chat_creation_evidence e USING space_chat_creation_fences f WHERE e.operation_id=f.operation_id AND f.full_evidence_expires_at<=clock_timestamp()`); err != nil {
