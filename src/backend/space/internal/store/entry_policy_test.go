@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"voice/backend/space/internal/entrypolicy"
 )
@@ -84,4 +86,48 @@ func TestEntryPolicyCASReplayAndABA(t *testing.T) {
 	third, err := st.SetEntryPolicy(ctx, set)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, third.Version, "A-B-A cannot resurrect version1")
+}
+
+func TestEntryPolicyConcurrentWritersUseDatabaseFence(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	first := &SpaceStore{Pool: pool}
+	actor := uuid.New()
+	space, err := first.CreateSpace(ctx, actor, "Concurrent policy", "", "public")
+	require.NoError(t, err)
+	applyEntryPolicyMigration(t, first)
+	secondPool, err := pgxpool.New(ctx, pool.Config().ConnString())
+	require.NoError(t, err)
+	t.Cleanup(secondPool.Close)
+	second := &SpaceStore{Pool: secondPool}
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var ready sync.WaitGroup
+	ready.Add(2)
+	for _, st := range []*SpaceStore{first, second} {
+		go func(st *SpaceStore) {
+			ready.Done()
+			<-start
+			_, err := st.SetEntryPolicy(ctx, SetEntryPolicyInput{SpaceID: space.ID, ActorProfileID: actor, OperationID: uuid.New(), ExpectedVersion: 1, Policy: entrypolicy.Policy{SchemaVersion: 1, RequireManualApproval: true, Questions: []entrypolicy.Question{}}})
+			results <- err
+		}(st)
+	}
+	ready.Wait()
+	close(start)
+	var success, stale int
+	for range 2 {
+		err := <-results
+		if err == nil {
+			success++
+		} else {
+			require.ErrorIs(t, err, ErrEntryPolicyVersion)
+			stale++
+		}
+	}
+	require.Equal(t, 1, success)
+	require.Equal(t, 1, stale)
+	row, err := first.GetEntryPolicy(ctx, space.ID)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, row.Version)
 }

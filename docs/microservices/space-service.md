@@ -365,8 +365,17 @@ ordinary-member head allocates monotonically increasing positive generations
 per `(space_id,profile_id)`; failures, removal and rejoin never reuse them.
 Existing published ordinary members backfill explicit generation zero, which
 still requires authoritative Space confirmation. Missing head/unknown source
-is not a legacy-zero fallback. Independent community membership keeps its own
-owner/roster generations and contribution source.
+is not a legacy-zero fallback. Independent community membership has a durable
+per-profile episode: positive owner generation, independently monotonic
+membership generation and a UUID allocated once per episode. Continuous valid
+refresh preserves that token; roster/source revision is a heartbeat, not an
+incarnation. Removal, lease equality/gap or owner-generation change invalidates
+the old episode before a new higher generation/UUID. Its permanent head/floor
+survives roster replacement; cleanup of an old source cannot remove a new one.
+Only currently authoritative active legacy rows may initialize an explicit
+migrated episode under the Space fence and fresh DB time. Expired/unknown rows
+are not active. This does not classify historical ambiguous Role grants:
+unproven old provenance remains unresolved rather than guessed as both sources.
 
 `PREPARING_ROLE` is inert technical continuation after automatic/manual
 authorization. It is not membership, reserves no capacity/invite use, and is
