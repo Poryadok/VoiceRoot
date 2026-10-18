@@ -533,13 +533,13 @@ def _validate_chat_fsgroup_secret_mount_boundary(base):
     if observed_config_maps != expected_config_maps:
         raise OverlayError("Chat Secret volume boundary changed")
     expected_mounts = {
-        "chat": {"match-squad-server": "/etc/voice/match-squad/server",
-                 "matchmaking-principal-jwks-ca": "/etc/voice/principal-jwks/ca",
-                 "chat-match-squad-replay": "/etc/voice/match-squad/replay",
-                 "match-squad-ca": "/etc/voice/match-squad/ca"},
-        "nats-leaf": {"nats-leaf-config": "/etc/nats/leaf.conf",
-                      "nats-service-creds": "/var/run/nats/creds/chat.creds",
-                      "nats-hub-tls": "/etc/nats/tls/ca.crt"},
+        "chat": {"match-squad-server": ("/etc/voice/match-squad/server", None),
+                 "matchmaking-principal-jwks-ca": ("/etc/voice/principal-jwks/ca", None),
+                 "chat-match-squad-replay": ("/etc/voice/match-squad/replay", None),
+                 "match-squad-ca": ("/etc/voice/match-squad/ca", None)},
+        "nats-leaf": {"nats-leaf-config": ("/etc/nats/leaf.conf", "leaf.conf"),
+                      "nats-service-creds": ("/var/run/nats/creds/chat.creds", "chat.creds"),
+                      "nats-hub-tls": ("/etc/nats/tls/ca.crt", "ca.crt")},
     }
     containers = pod_spec.get("containers", [])
     if {container.get("name") for container in containers} != set(expected_mounts):
@@ -558,14 +558,14 @@ def _validate_chat_fsgroup_secret_mount_boundary(base):
         for mount in mounts:
             name = mount.get("name")
             volume = by_volume.get(name)
+            expected_path, expected_sub_path = expected.get(name, (None, None))
             if (name not in expected or volume is None or
-                    mount.get("mountPath") != expected[name] or
+                    mount.get("mountPath") != expected_path or
                     mount.get("readOnly") is not True):
                 raise OverlayError("Chat Secret volume boundary changed")
-            expected_sub_path = "leaf.conf" if name == "nats-leaf-config" else None
             if mount.get("subPath") != expected_sub_path:
                 raise OverlayError("Chat Secret volume boundary changed")
-            actual[name] = mount.get("mountPath")
+            actual[name] = (mount.get("mountPath"), mount.get("subPath"))
         if len(actual) != len(mounts):
             raise OverlayError("Chat Secret volume boundary changed")
         mounted[container["name"]] = actual

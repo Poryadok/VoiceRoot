@@ -204,9 +204,10 @@ def chat_post_prefix_snapshot():
         "args": ["-c", "/etc/nats/leaf.conf"],
         "volumeMounts": [nats,
                          {"name": "nats-service-creds",
-                          "mountPath": "/var/run/nats/creds/chat.creds", "readOnly": True},
+                          "mountPath": "/var/run/nats/creds/chat.creds", "readOnly": True,
+                          "subPath": "chat.creds"},
                          {"name": "nats-hub-tls", "mountPath": "/etc/nats/tls/ca.crt",
-                          "readOnly": True}],
+                          "readOnly": True, "subPath": "ca.crt"}],
     })
     pod_spec["volumes"] = [
         {"name": "nats-leaf-config", "configMap": {"name": "voice-nats-leaf-config"}},
@@ -237,6 +238,75 @@ def chat_post_prefix_snapshot():
 
 
 class ChatFilePermissionRecoveryTests(unittest.TestCase):
+    def _captured_live_chat_spec(self):
+        fixture_path = Path(__file__).with_name("chat_fsgroup_live_spec_fixture.json")
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        self.assertEqual(fixture["schema"], "voice-dev-chat-fsgroup-live-spec-fixture-v1")
+        self.assertEqual(fixture["sourceSha"], "98aeee0b0c0b9c7369d7774fa96bef14281ffe83")
+        self.assertEqual(fixture["namespaceUid"], overlay.EXPECTED_NAMESPACE_UID)
+        base = captured_deployment("voice-chat", "chat", fixture["deploymentUid"],
+                                   fixture["resourceVersion"])
+        base["metadata"]["generation"] = fixture["generation"]
+        base["spec"] = copy.deepcopy(fixture["spec"])
+        base["status"] = copy.deepcopy(fixture["status"])
+        return fixture, base
+
+    def test_captured_live_chat_mounts_render_as_exact_fs_group_recovery(self):
+        fixture, base = self._captured_live_chat_spec()
+        pod_spec = base["spec"]["template"]["spec"]
+        nats = next(row for row in pod_spec["containers"] if row["name"] == "nats-leaf")
+        mounts = {row["name"]: row for row in nats["volumeMounts"]}
+        self.assertEqual(mounts["nats-leaf-config"]["subPath"], "leaf.conf")
+        self.assertEqual(mounts["nats-service-creds"]["subPath"], "chat.creds")
+        self.assertEqual(mounts["nats-hub-tls"]["subPath"], "ca.crt")
+
+        target = overlay.CHAT_RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        client = overlay.KubectlClient()
+        plan = overlay.build_object_plan(client, target, base, patch_path)
+        actual_recovery = overlay.strategic_render(client, target, base, patch_path)
+        normal_target = next(row for row in overlay.TARGETS
+                             if row.kind == "Deployment" and row.name == "voice-chat")
+        actual_runtime = overlay.strategic_render(
+            client, normal_target, base,
+            patch_path.with_name("voice-chat.runtime.patch.yaml"))
+        self.assertEqual(actual_recovery, actual_runtime)
+        self.assertEqual(plan["operations"][2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+            "value": 65532,
+        }])
+        self.assertEqual(plan["uid"], fixture["deploymentUid"])
+
+    def test_captured_chat_boundary_rejects_unreviewed_subpath_and_projection_changes(self):
+        for mutation in ("wrong-subpath", "subpath-expr", "wrong-path",
+                         "cross-container", "projected-secret"):
+            with self.subTest(mutation=mutation):
+                _, base = self._captured_live_chat_spec()
+                pod_spec = base["spec"]["template"]["spec"]
+                nats = next(row for row in pod_spec["containers"]
+                            if row["name"] == "nats-leaf")
+                creds = next(row for row in nats["volumeMounts"]
+                             if row["name"] == "nats-service-creds")
+                if mutation == "wrong-subpath":
+                    creds["subPath"] = "other.creds"
+                elif mutation == "subpath-expr":
+                    creds["subPathExpr"] = "$(SECRET_FILE)"
+                elif mutation == "wrong-path":
+                    creds["mountPath"] = "/unexpected"
+                elif mutation == "cross-container":
+                    nats["volumeMounts"].remove(creds)
+                    chat = next(row for row in pod_spec["containers"]
+                                if row["name"] == "chat")
+                    chat["volumeMounts"].append(creds)
+                else:
+                    pod_spec["volumes"].append({"name": "unexpected-projection",
+                        "projected": {"sources": [{"secret": {
+                            "name": "unexpected-secret"}}]}})
+                with self.assertRaisesRegex(
+                        overlay.OverlayError, "Chat Secret volume boundary"):
+                    overlay._validate_chat_fsgroup_secret_mount_boundary(base)
+
     def test_chat_post_prefix_fsgroup_is_the_only_safe_change(self):
         base = chat_post_prefix_snapshot()
         desired = copy.deepcopy(base)
@@ -264,20 +334,20 @@ class ChatFilePermissionRecoveryTests(unittest.TestCase):
         by_volume = {row["name"]: row for row in pod_spec["volumes"]}
         mounted = {
             container["name"]: {
-                mount["name"]: mount.get("mountPath")
+                mount["name"]: (mount.get("mountPath"), mount.get("subPath"))
                 for mount in container.get("volumeMounts", [])
                 if mount["name"] in by_volume
             }
             for container in pod_spec["containers"]
         }
         self.assertEqual(mounted, {
-            "chat": {"match-squad-server": "/etc/voice/match-squad/server",
-                     "matchmaking-principal-jwks-ca": "/etc/voice/principal-jwks/ca",
-                     "chat-match-squad-replay": "/etc/voice/match-squad/replay",
-                     "match-squad-ca": "/etc/voice/match-squad/ca"},
-            "nats-leaf": {"nats-leaf-config": "/etc/nats/leaf.conf",
-                          "nats-service-creds": "/var/run/nats/creds/chat.creds",
-                          "nats-hub-tls": "/etc/nats/tls/ca.crt"},
+            "chat": {"match-squad-server": ("/etc/voice/match-squad/server", None),
+                     "matchmaking-principal-jwks-ca": ("/etc/voice/principal-jwks/ca", None),
+                     "chat-match-squad-replay": ("/etc/voice/match-squad/replay", None),
+                     "match-squad-ca": ("/etc/voice/match-squad/ca", None)},
+            "nats-leaf": {"nats-leaf-config": ("/etc/nats/leaf.conf", "leaf.conf"),
+                          "nats-service-creds": ("/var/run/nats/creds/chat.creds", "chat.creds"),
+                          "nats-hub-tls": ("/etc/nats/tls/ca.crt", "ca.crt")},
         })
         self.assertTrue(all(mount["readOnly"] for container in pod_spec["containers"]
                             for mount in container.get("volumeMounts", [])))
