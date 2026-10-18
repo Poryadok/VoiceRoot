@@ -8,6 +8,40 @@ All original TT task scopes and unresolved runtime gates remain authoritative an
 
 ### Resumed wave 2: latest qualification
 
+Latest addendum after the initial wave2 carrier: BE163 supported152e5 actual
+handoff then source33a8dfd775eee3d942121f93f4b8819038d251c8/146c4CLEAR merged;
+BE097 supported150e7 then8e1b677cf247b168103d5eee2120408ac2d0b30d/147c6CLEAR
+merged; BE040 supported153e7 then34640fde433c13073246003b1d009d2c7dba530c/
+165c8CLEAR merged.159 independently rechecked exact5d0d9eee conflict union
+CLEAR in CI021c11; no source-review gap remains for that bounded merge delta.
+Changed-input Story and Gateway canonical images at exacte3dc9ba83 both PASS,
+IDs fa652a5b5aef4f7a93d4bb22f4f1623443ca8cb59e3d176b677f66571bce967c and
+47b2c8a96dd5c5f803e35237ed916958adec25eede0cea53015c42ada41a58a4. Analytics
+image0ffd2cb2d PASS ID2cc3c6167ef91fbc73540c5194f10db733f917aa9d9e89cbefb4ea57f4806649.
+
+AD008 original149 correction7b022225911bfd4a90181b96a20406a236fe853a
+resolves174c7 P2, independently174c13CLEAR; source merged atae3f2b0b.
+Original stale-preview RED retained; guarded detail reload uses existing
+selection/session generation invalidation, four regressions and complete74
+Linux Node24 tests/lint/tsc/build authorPASS. Changed-input packaged Portal
+build and exact assets/resource budget are current owned executable checks,
+not inferred from the earlier image. Broader acceptance remains open.
+
+Astra187 decision SWARMc15 resolves the source-contract question: implement
+fixed v5 subject expansion with exact whole three-source tuple, unchanged
+auth-v4/enrollment/historical deployed-contract, voice/user UPDATE-only
+allowlists and version-aware actor/census/recovery/active receipts. Repinning
+v4 alone is explicitly unsafe because its compiler ignores those two streams.
+Versioned implementation and populated native preservation/crash/noop proof
+plus independent review remain to do. No source/pin mutation has occurred.
+
+Final Graph60495 yielded no output during the bounded current group and was
+cancelled only by its owned handle, terminal1, no final graph PASS. Fresh
+Treehouse census confirms ownWT36 processes[] and exactlease/holder unchanged;
+no unknown process was killed. Previous94631 successful graph proof remains
+historical. Complete-history checkpoint bundle/actual bare restore and exact
+new source ancestry are generated after this documentation carrier.
+
 User resumed the full autonomous colony;121 remains sole develop writer and
 integration/CI owner. Older no-new-agent/transport-blocked statements below are
 historical. At source0ffd2cb2de9a1893a80b1def396f26676011a89a, the following

@@ -220,6 +220,25 @@ feature runtime gates remain unchanged; no additional reviewer/task/spawn.
 
 ### Resumed full-colony wave 2
 
+Current executable continuation: reviewed BE163/097/040 and corrected AD008
+successor7b022225 are now integrated.159 CI021c11 independently CLEARs the
+5d0d9eee Makefile/TODO union; original source reviews remain separate. Canonical
+changed-input Story/Gateway/Analytics image builds PASS; new Portal packaging
+and budget check runs on exact AD008 correction. Complete checkpoint bundle
+and fresh bare restore precede the next source-authoring stage. Graph60495
+bounded cancellation terminal1 is not a graph PASS; actual census own36 has
+processes[] after cancellation, no unknown process kill.
+
+Astra187 SWARMc15 gives the exact NATSv5 authority decision. Required next
+implementation is source-only planner/actor/census/recovery/active-receipt
+versioning with whole pinned source tuple, unchanged historical contracts and
+auth-v4 enrollment. Required proof includes populated pinned-server pending
+history/native-byte preservation, actual crash after either UPDATE, exact
+recovery and no-op repeat; independent security/preservation review follows.
+No stand operation, pin bypass or premature CI PASS. If a real standard
+source producer accepts this bounded function,121 retains all integration/CI
+custody; otherwise implement on isolated own codex branch after checkpoint.
+
 The user resumed autonomous Swarm delivery and explicitly retained121 as the
 only physical develop writer and CI owner. New source intake uses actual TT
 handoffs, immutable heads and existing independent reviews; no author report is
