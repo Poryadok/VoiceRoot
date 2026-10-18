@@ -19,10 +19,8 @@ require (
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
-	voice.app/voice/file v0.0.0
 	voice.app/voice/role v0.0.0
 	voice.app/voice/space v0.0.0
-	voice.app/voice/story v0.0.0
 	voice/backend/pkg v0.0.0
 )
 

@@ -18,8 +18,8 @@ require (
 	github.com/twitchtv/twirp v8.1.3+incompatible
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
-	voice.app/voice/calls v0.0.0
 	voice.app/voice/auth v0.0.0
+	voice.app/voice/calls v0.0.0
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0

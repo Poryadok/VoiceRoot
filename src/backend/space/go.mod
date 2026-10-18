@@ -95,9 +95,9 @@ require (
 	golang.org/x/net v0.32.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/text v0.24.0
 	golang.org/x/time v0.8.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a
 	voice.app/voice/bot v0.0.0
 	voice.app/voice/file v0.0.0
 	voice.app/voice/gameintegration v0.0.0 // indirect

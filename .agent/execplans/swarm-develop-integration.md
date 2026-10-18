@@ -41,9 +41,9 @@ No new agents or ordinary implementation tasks may be started.
 - [x] Finish BE-102 review, record narrow source CLEAR at exact `0361d8597` (c9).
 - [x] Atomically claim integration task and acquire exclusive worktree lease.
 - [x] Inspect existing develop history and merge cached master with merge commit.
-- [ ] Inventory final source heads, associate TT evidence, dedupe ancestors.
-- [ ] Merge ready dependency groups and resolve conflicts against accepted canon.
-- [ ] Independently review current final identity/ACL source heads before merge.
+- [x] Inventory final source heads, associate TT evidence, dedupe ancestors.
+- [x] Merge ready dependency groups and resolve conflicts against accepted canon.
+- [x] Independently review current final identity/ACL source heads before merge.
 - [ ] Verify assembled generated contracts, migrations, and affected components.
 - [ ] Regenerate graph with `graphify update . --no-cluster`, preserve bundle and
   portable manifest/evidence, reconcile remote develop and publish normally.
@@ -69,8 +69,9 @@ No new agents or ordinary implementation tasks may be started.
    `call_providers.dart`: retain their separate imports and distinct logic.
 6. For a material conflict, record exact parents/hunks and consult the owning
    author. Original authors review integration-authored behavioral deltas.
-7. Run bounded affected checks after coherent groups; broaden only for actual
-   integration risk. Record exact SHA, executed tests, skips and failures. Run
+7. Run bounded affected checks after coherent groups, then the named global
+   full-verification route for this cross-service assembly. Record exact SHA,
+   executed tests, skips and failures. Run
    Realtime only on supported Linux; Windows compilation is not execution.
 8. Remote transport recovery belongs to Rudeus-135. Its observed proxy TLS reset
    is not repaired by repeat probes. Until actual recovery, preserve local
@@ -97,6 +98,42 @@ conflicts: BE-120 `472556807`, BE-122 `eadbf70df`, BE-070 `b5fef7ab`, BE-051
 `21f5959ba`, BE-050 `f8c713b06`, BE-141 `e78be9ddf`; resulting tip `f99f747d8`.
 Author-provided exact final heads and remaining gates continue in TT/manifest.
 
+All frozen final author sources are now included through normal BE106 merge
+`8c7488168bd52cd510df872d3a84d4d115b7a054`. The self-contained source order and
+67 immutable checkpoint dispositions are in `swarm-develop-manifest.md` beside
+this plan. BE211's obsolete contract-gap proposal is explicitly excluded in
+favor of the accepted current author37 source. No current author head remains
+pending. Full original task scopes remain open where only slices were delivered.
+
+Actual populated PostgreSQL baseline698 Space migrations1..25 -> assembled26..31
+PASS: Space/member/audit/outbox rows preserved, local receipt backfilled, new
+local insert reserved; owned container removed. Raw exact SQL and output are in
+portable `tmp/develop-integration/clean-upgrade-log.json`. This proves clean first
+activation only. Migration31's matching-history reconciliation is unfinished;
+existing receipt/fence overlap must remain a fail-closed upgrade blocker.
+
+Assembled Messaging/Space short checks and final BE106 affected Voice short
+checks PASS. Toolchain, compose config/NATS policy and Buf lint/format PASS.
+Supported Docker Linux Realtime short PASS; no native Windows Realtime run.
+Flutter analyze has no issues; full tests returned2205PASS/100SKIP/3FAIL and a
+structured rerun is collecting exact failure evidence. Global backend stopped
+at Bot regressions and resumes unaffected modules without repeating passed
+layers. No complete CI success is claimed.
+
+Bot regression: exclusive per-Space SetChatEnabled queued healthy senders behind
+one blocked webhook. Existing real-PG test reproduced RED twice; shared lifecycle
+guard plus whitelist row serialization changed it to GREEN. Independent author1
+review found first-enable insertion contention; correction`b47d81417` adds a
+same-Space guarded upsert. A deterministic PostgreSQL test establishes two INSERT
+lock waiters before release and passes; author1 gave narrow independent CLEAR.
+Lifecycle fencing remains exclusive and drains all external attempts.
+
+Additional real polling failures exposed shipped Bot4 unique-token index treating
+legacy empty message tokens as slash identities. Additive Bot7 excludes only
+empty tokens; real tokens remain unique. Eight lifecycle cases and a populated
+upgrade/uniqueness/unsafe-downgrade rollback test PASS. This new migration delta
+still needs independent review; prior author1 CLEAR does not cover it.
+
 ## Decisions
 
 - Preserve existing develop instead of replacing it: user requires history.
@@ -108,8 +145,7 @@ Author-provided exact final heads and remaining gates continue in TT/manifest.
 
 ## Risks And Follow-Ups
 
-Current BE-106/BE-130/BE-131 authors are finishing corrections and checks;
-integrate their final immutable successors rather than stale snapshots. BE-064
+BE-106/BE-130/BE-131 final immutable successors are now integrated. BE-064
 has no new implementation source and its clean preparation lease was returned.
 BE-010 final `deff1b0` delivers a bounded policy slice, not the full admission
 runtime; Role20 remains unimplemented and is not a missing commit to invent.
