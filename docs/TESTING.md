@@ -170,6 +170,12 @@ Portable fixture/preflight tests need no live credentials or native libraries:
 go test staging_voice_media_fixture_test.go staging_voice_media_fixture_validation_test.go -count=1
 ```
 
+The `Gateway media test build` workflow compiles the Gateway test binary on
+Linux with `CGO_ENABLED=1`, the native Opus dependencies and `-tags=live` for
+Gateway/pkg pull requests. Its `go test -c` step executes no tests or package
+initializers, needs no staging credentials, and closes only the native build
+gate. Actual media/cleanup evidence still requires the authorized live run.
+
 ### Java (Auth Service, Spring Boot)
 
 - Юнит и slice-тесты: **JUnit 5**, **Spring Boot Test** (`@WebMvcTest`, `@DataJpaTest` и т.д. по слою).
