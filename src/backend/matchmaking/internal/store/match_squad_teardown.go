@@ -142,6 +142,9 @@ func (s *MatchStore) PrepareMatchSquadCompaction(ctx context.Context, aggregateI
 		return MatchSquadCompactionIntent{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadAggregatePrefixTx(ctx, tx, aggregateID); err != nil {
+		return MatchSquadCompactionIntent{}, err
+	}
 	intent, err := scanMatchSquadCompactionIntent(tx.QueryRow(ctx, `
 		SELECT aggregate_id, provider, operation_id, not_before, request_sha256, request_bytes,
 		       receipt_id, receipt_bytes, completed_at
@@ -344,6 +347,9 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 		return MatchSquadTeardownAggregate{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadAggregatePrefixTx(ctx, tx, aggregateID); err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
 	item, err := scanMatchSquadTeardownAggregate(tx.QueryRow(ctx, `
 		SELECT aggregate_id, match_id, state,
 		       chat_teardown_operation_id, chat_teardown_request_sha256, chat_teardown_request_bytes,

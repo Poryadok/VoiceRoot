@@ -140,3 +140,22 @@ Next: known Chat cleanup while Voice creation remains unknown, durable conflict
 evidence, receipt/teardown lock-order compatibility; consume145 immutable
 2a7079832dd893cf944de5a22f6356484b1830dc private tuple/Accounts/022 guard APIs by
 normal merge. Fresh ban Check stays after inner locks, with account locks outer.
+
+2026-10-18T23:46Z: known-Chat/unknown-Voice real PG RED11.672s demonstrated
+that the latch had left known cleanup waiting. The latch now materializes every
+already-known required provider in its own transaction. Teardown receipt and
+compaction preparation acquire match -> operation before aggregate/intent locks;
+record-compaction receipt remains intent-only and does not climb the lock order.
+The new case cleans Chat while Voice remains WAITING_FOR_CREATION, forbids any
+compaction yet, accepts late Voice creation/cleanup, then closes both with the
+match still abandoned and zero completion events; exact receipt replay stays closed.
+Additional premature-close RED preserved (direct SQL could hide unresolved work);
+021 now forbids closing abandoned issued work without known creation bindings
+and a complete aggregate for the exact required set.
+
+settlement-independent-v2-green.*: 5 real PG PASS/0skip26.716s, including
+existing full provisioning/lifecycle and storage roundtrip. Input is immutable
+1445e74d811b7c9cf0393dc3203f3ccf5cd9c0f9 plus exact listed source SHA deltas;
+no actual provider replay or enabled worker recovery is claimed. Remaining named
+work: durable conflict evidence/alerts, common validated intent/dispatch/activation,
+every reset/deadline/decline latch, abandoned recovery scan and real provider tests.
