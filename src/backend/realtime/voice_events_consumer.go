@@ -354,15 +354,15 @@ func consumeVoiceEventMessage(msg *nats.Msg, hub *wsHub, logger *slog.Logger, ac
 	natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown voice event payload", attrs...)
 }
 
-func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
+func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger, shared ...*nats.Conn) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("voice events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-voice-events")...)
+	nc, release, err := consumerNATSConnection(natsURL, "voice-realtime-voice-events", shared...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	defer func() { _ = nc.Drain() }()
+	defer release()
 
 	js, err := nc.JetStream()
 	if err != nil {

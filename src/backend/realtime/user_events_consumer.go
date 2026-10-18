@@ -105,15 +105,15 @@ func subscribeUserEvents(js nats.JetStreamContext, hub *wsHub, friends friendLis
 	return sub, nil
 }
 
-func runUserEventsConsumer(ctx context.Context, hub *wsHub, friends friendLister, viewer presenceViewer, natsURL, instanceID string, logger *slog.Logger) error {
+func runUserEventsConsumer(ctx context.Context, hub *wsHub, friends friendLister, viewer presenceViewer, natsURL, instanceID string, logger *slog.Logger, shared ...*nats.Conn) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("user events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-user-events")...)
+	nc, release, err := consumerNATSConnection(natsURL, "voice-realtime-user-events", shared...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	defer func() { _ = nc.Drain() }()
+	defer release()
 
 	js, err := nc.JetStream()
 	if err != nil {

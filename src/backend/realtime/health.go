@@ -20,6 +20,7 @@ type healthResponse struct {
 type readinessDeps struct {
 	Redis     *redis.Client
 	NatsURL   string
+	NATS      *nats.Conn
 	Consumers *realtimeConsumerReadiness
 }
 
@@ -61,7 +62,11 @@ func checkReadiness(ctx context.Context, deps readinessDeps) (status, reason str
 			return "degraded", "redis_unavailable"
 		}
 	}
-	if url := strings.TrimSpace(deps.NatsURL); url != "" {
+	if deps.NATS != nil {
+		if !deps.NATS.IsConnected() {
+			return "degraded", "nats_unavailable"
+		}
+	} else if url := strings.TrimSpace(deps.NatsURL); url != "" {
 		nc, err := nats.Connect(url, natsConnectOptions("voice-realtime-readiness")...)
 		if err != nil {
 			return "degraded", "nats_unavailable"

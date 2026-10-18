@@ -711,7 +711,6 @@ and Voice IDs denied while history remains.
 ### Realtime
 
 
-- [ ] **[Realtime] Six separate NATS connections per instance** — `main.go` opens one connection per consumer + lag poller (no shared `*nats.Conn`), increasing reconnect churn and FD usage at scale.
 
 ### Multi-Profile
 
