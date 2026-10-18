@@ -131,7 +131,7 @@ def _produce_native_contract_authority(base, state, native_config):
     try:
         import verification_job
         verification_job.validate_request(request)
-        verification_job.validate_contract_binding(binding)
+        verification_job.validate_contract_binding(binding, request['operation'])
     except Exception:
         raise Blocked('rollout_native_contract_binding_invalid') from None
     state['native_contract'] = {
@@ -159,7 +159,7 @@ def run_native_contract_job(api, request, binding, *, runner_image, plan,
 
     try:
         request = verification_job.validate_request(request)
-        binding = verification_job.validate_contract_binding(binding)
+        binding = verification_job.validate_contract_binding(binding, request['operation'])
         wanted = verification_job.document(request, binding, runner_image)
     except Exception:
         raise Blocked('rollout_native_contract_job_request_invalid') from None
