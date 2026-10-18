@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"net"
@@ -84,10 +85,18 @@ func TestAutoModEvidenceRPC_CommittedOnlyAndExactReplay(t *testing.T) {
 	digest := sha256.Sum256([]byte("account keyed pattern"))
 	at := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
 	event := func(seq uint64) *automodv1.IngestCommittedMessageEvidenceRequest {
-		return &automodv1.IngestCommittedMessageEvidenceRequest{Record: &automodv1.IngestCommittedMessageEvidenceRequest_Evidence{Evidence: &automodv1.CommittedMessageEvidence{
-			ProtocolVersion: 1, Subject: binding, SourceEpoch: epoch.String(), Sequence: seq, EventId: uuid.NewString(), RecordedAt: timestamppb.New(at.Add(time.Duration(seq) * time.Second)), MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(), OperationId: uuid.NewString(), Eligibility: automodv1.EvidenceEligibility_EVIDENCE_ELIGIBILITY_ELIGIBLE, Digests: []*automodv1.PatternDigest{{KeyId: "current", HmacSha256: digest[:]}}, LinkCount: 3}}}
+		return &automodv1.IngestCommittedMessageEvidenceRequest{Record: &automodv1.IngestCommittedMessageEvidenceRequest_Core{Core: &automodv1.CommittedAccountCore{
+			ProtocolVersion: 2, Subject: binding, SourceEpoch: epoch.String(), Sequence: seq, EventId: uuid.NewString(), RecordedAt: timestamppb.New(at.Add(time.Duration(seq) * time.Second)), Producer: automodv1.AccountCoreProducer_ACCOUNT_CORE_PRODUCER_USER, Eligibility: automodv1.EvidenceEligibility_EVIDENCE_ELIGIBILITY_ELIGIBLE, Digests: []*automodv1.PatternDigest{{KeyId: "current", HmacSha256: digest[:]}, {KeyId: "next", HmacSha256: digest[:]}}, LinkCount: 3}}}
 	}
+	legacy := &automodv1.IngestCommittedMessageEvidenceRequest{Record: &automodv1.IngestCommittedMessageEvidenceRequest_Evidence{Evidence: &automodv1.CommittedMessageEvidence{ProtocolVersion: 1}}}
+	_, err = client.IngestCommittedMessageEvidence(signed(legacy, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName), legacy)
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "unactivated legacy origin envelope cannot enter the v2 inbox")
 	first := event(1)
+	smuggled := proto.Clone(first).(*automodv1.IngestCommittedMessageEvidenceRequest)
+	unknown := protowire.AppendBytes(protowire.AppendTag(nil, 100, protowire.BytesType), []byte(uuid.NewString()))
+	smuggled.GetCore().Digests[0].ProtoReflect().SetUnknown(unknown)
+	_, err = client.IngestCommittedMessageEvidence(signed(smuggled, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName), smuggled)
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "valid service credentials cannot smuggle nested origin bytes")
 	_, err = client.IngestCommittedMessageEvidence(signed(first, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName), first)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err), "unprovisioned evidence must not invent a stream baseline")
 	_, err = client.ProvisionSubject(signed(provision, automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName), provision)

@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +12,7 @@ import (
 	"time"
 	"voice/backend/messaging/internal/automodevidence"
 	"voice/backend/pkg/automodclient"
+	"voice/backend/pkg/automodwire"
 	automodv1 "voice/backend/pkg/pb/voice/automod/v1"
 )
 
@@ -70,8 +70,12 @@ func (s *MessagesStore) ConfigureAutoMod(ctx context.Context, ring *automodevide
 		return uuid.Nil, automodevidence.ErrKeyRing
 	}
 	var epoch uuid.UUID
-	if err = tx.QueryRow(ctx, `SELECT source_epoch FROM automod_producer_state WHERE singleton`).Scan(&epoch); err != nil {
+	var version int
+	if err = tx.QueryRow(ctx, `SELECT source_epoch,format_version FROM automod_producer_state WHERE singleton`).Scan(&epoch, &version); err != nil {
 		return uuid.Nil, err
+	}
+	if version != automodwire.Version {
+		return uuid.Nil, automodwire.ErrCore
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return uuid.Nil, err
@@ -188,25 +192,22 @@ func (s *MessagesStore) appendAutoModEvidenceTx(ctx context.Context, tx pgx.Tx, 
 	if err = tx.QueryRow(ctx, `SELECT source_epoch FROM automod_producer_state WHERE singleton`).Scan(&epoch); err != nil {
 		return err
 	}
-	evidence := &automodv1.CommittedMessageEvidence{ProtocolVersion: 1, Subject: proto.Clone(a.Subject).(*automodv1.SubjectBinding), SourceEpoch: epoch.String(), Sequence: sequence, EventId: uuid.NewString(), RecordedAt: timestamppb.New(sourceAt), MessageId: row.ID.String(), ChatId: row.ChatID.String(), SenderProfileId: row.SenderProfileID.String(), Eligibility: projection.Eligibility, Digests: projection.Digests, LinkCount: projection.LinkCount, OwnershipRevision: a.OwnershipRevision, OperationId: a.OperationID.String()}
+	evidence := &automodv1.CommittedAccountCore{ProtocolVersion: automodwire.Version, Subject: proto.Clone(a.Subject).(*automodv1.SubjectBinding), SourceEpoch: epoch.String(), Sequence: sequence, EventId: uuid.NewString(), RecordedAt: timestamppb.New(sourceAt), Eligibility: projection.Eligibility, Digests: projection.Digests, LinkCount: projection.LinkCount, OwnershipRevision: a.OwnershipRevision, Producer: automodv1.AccountCoreProducer_ACCOUNT_CORE_PRODUCER_USER}
 	if a.BotID != nil {
-		raw := a.BotID.String()
-		evidence.BotId = &raw
+		evidence.Producer = automodv1.AccountCoreProducer_ACCOUNT_CORE_PRODUCER_BOT
 	}
-	if a.InstallationID != nil {
-		raw := a.InstallationID.String()
-		evidence.InstallationId = &raw
-	}
-	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(evidence)
+	payload, digest, err := automodwire.EncodeCore(evidence)
 	if err != nil {
 		return err
 	}
-	digest := sha256.Sum256(payload)
 	var companion any
 	if row.ForwardCommentary != nil {
 		companion = row.ForwardCommentary.ID
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO automod_evidence_outbox(event_id,subject_id,sequence,message_id,companion_id,source_at,original_sha256,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, evidence.GetEventId(), subject, sequence, row.ID, companion, sourceAt, digest[:], payload); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO automod_evidence_outbox(event_id,subject_id,sequence,source_at,core_sha256,payload) VALUES($1,$2,$3,$4,$5,$6)`, evidence.GetEventId(), subject, sequence, sourceAt, digest[:], payload); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO automod_message_coverage(event_id,message_id,companion_id,chat_id) VALUES($1,$2,$3,$4)`, evidence.GetEventId(), row.ID, companion, row.ChatID); err != nil {
 		return err
 	}
 	for _, digest := range projection.Digests {

@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 	"voice/backend/messaging/internal/automodevidence"
+	"voice/backend/pkg/automodwire"
 	automodv1 "voice/backend/pkg/pb/voice/automod/v1"
 )
 
@@ -98,8 +98,8 @@ func TestAutoModProducerConcurrentSourceOrderAndCompoundMessage(t *testing.T) {
 		require.Equal(t, count, sequence)
 		require.True(t, sourceAt.After(previous))
 		previous = sourceAt
-		var event automodv1.CommittedMessageEvidence
-		require.NoError(t, proto.Unmarshal(payload, &event))
+		event, _, err := automodwire.DecodeCore(payload)
+		require.NoError(t, err)
 		if event.GetEligibility() != automodv1.EvidenceEligibility_EVIDENCE_ELIGIBILITY_ELIGIBLE {
 			metadataOnly++
 			require.Empty(t, event.GetDigests())
@@ -117,10 +117,10 @@ func TestAutoModProducerConcurrentSourceOrderAndCompoundMessage(t *testing.T) {
 	require.True(t, inserted)
 	var payload []byte
 	var companion uuid.UUID
-	require.NoError(t, pool.QueryRow(ctx, `SELECT payload,companion_id FROM automod_evidence_outbox WHERE message_id=$1`, main.ID).Scan(&payload, &companion))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payload,companion_id FROM automod_evidence_outbox JOIN automod_message_coverage USING(event_id) WHERE message_id=$1`, main.ID).Scan(&payload, &companion))
 	require.Equal(t, main.ForwardCommentary.ID, companion)
-	var event automodv1.CommittedMessageEvidence
-	require.NoError(t, proto.Unmarshal(payload, &event))
+	event, _, err := automodwire.DecodeCore(payload)
+	require.NoError(t, err)
 	require.Equal(t, uint64(sends+1), event.GetSequence())
 	require.Equal(t, uint32(3), event.GetLinkCount())
 	require.Len(t, event.GetDigests(), 2)
@@ -129,6 +129,18 @@ func TestAutoModProducerConcurrentSourceOrderAndCompoundMessage(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM automod_evidence_outbox`).Scan(&eventCount))
 	require.Equal(t, sends+2, messageCount)
 	require.Equal(t, sends+1, eventCount, "a forward and commentary are one logical committed send")
+	// Physical companion deletion minimizes the local link, never the account
+	// detector's immutable core or committed source history.
+	_, err = pool.Exec(ctx, `DELETE FROM messages WHERE id=$1`, main.ForwardCommentary.ID)
+	require.NoError(t, err)
+	var bridges int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM automod_message_coverage WHERE message_id=$1`, main.ID).Scan(&bridges))
+	require.Zero(t, bridges)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM automod_evidence_outbox WHERE event_id=$1`, event.GetEventId()).Scan(&bridges))
+	require.Equal(t, 1, bridges)
+	var after []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payload FROM automod_evidence_outbox WHERE event_id=$1`, event.GetEventId()).Scan(&after))
+	require.Equal(t, payload, after)
 }
 
 func TestAutoModProducerKeyRegistryCannotResetOrDropAliases(t *testing.T) {
@@ -153,6 +165,8 @@ func TestAutoModProducerKeyRegistryCannotResetOrDropAliases(t *testing.T) {
 	require.Equal(t, 2, count, "rejected partial rotation must roll back newly registered keys")
 	_, err = pool.Exec(ctx, `UPDATE automod_producer_state SET source_epoch=$1`, uuid.New())
 	require.Error(t, err)
+	_, err = pool.Exec(ctx, `UPDATE automod_producer_state SET format_version=1`)
+	require.Error(t, err, "an unsupported restored v1 cannot be made current by resetting the marker")
 	repeated, err := store.ConfigureAutoMod(ctx, ring)
 	require.NoError(t, err)
 	require.Equal(t, epoch, repeated)
@@ -191,14 +205,20 @@ func TestAutoModProducerCommittedInsertAndExactReplay(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM automod_evidence_outbox`).Scan(&count))
 	require.Equal(t, 1, count, "successful insertion must atomically carry one private evidence event")
 	var payload []byte
-	require.NoError(t, pool.QueryRow(ctx, `SELECT payload FROM automod_evidence_outbox WHERE message_id=$1`, row.ID).Scan(&payload))
-	var evidence automodv1.CommittedMessageEvidence
-	require.NoError(t, proto.Unmarshal(payload, &evidence))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payload FROM automod_evidence_outbox JOIN automod_message_coverage USING(event_id) WHERE message_id=$1`, row.ID).Scan(&payload))
+	evidence, coreHash, err := automodwire.DecodeCore(payload)
+	require.NoError(t, err)
+	var storedHash []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT core_sha256 FROM automod_evidence_outbox WHERE event_id=$1`, evidence.GetEventId()).Scan(&storedHash))
+	require.Equal(t, coreHash[:], storedHash)
 	require.Equal(t, uint64(1), evidence.GetSequence())
 	require.Equal(t, epoch.String(), evidence.GetSourceEpoch())
 	require.Equal(t, uint32(3), evidence.GetLinkCount())
 	require.Len(t, evidence.GetDigests(), 2)
 	require.False(t, bytes.Contains(payload, []byte("private source text")))
+	for _, origin := range []uuid.UUID{row.ID, row.ChatID, row.SenderProfileID, row.AutoModAdmission.OperationID} {
+		require.False(t, bytes.Contains(payload, []byte(origin.String())), "retained detector core cannot carry origin identifiers")
+	}
 	row.ID = uuid.New()
 	row.AutoModAdmission = nil
 	replayed, inserted, err := store.InsertMessageWithOutbox(ctx, row, nil, nil)
@@ -210,9 +230,9 @@ func TestAutoModProducerCommittedInsertAndExactReplay(t *testing.T) {
 	var through int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT through_sequence FROM automod_source_subjects WHERE subject_id=$1`, subject).Scan(&through))
 	require.Equal(t, 1, through)
-	_, err = pool.Exec(ctx, `UPDATE automod_evidence_outbox SET payload=$1 WHERE message_id=$2`, []byte("changed"), saved.ID)
+	_, err = pool.Exec(ctx, `UPDATE automod_evidence_outbox SET payload=$1 WHERE event_id=$2`, []byte("changed"), evidence.GetEventId())
 	require.Error(t, err)
-	_, err = pool.Exec(ctx, `DELETE FROM automod_evidence_outbox WHERE message_id=$1`, saved.ID)
+	_, err = pool.Exec(ctx, `DELETE FROM automod_evidence_outbox WHERE event_id=$1`, evidence.GetEventId())
 	require.NoError(t, err)
 	row.ID = saved.ID
 	_, inserted, err = store.InsertMessageWithOutbox(ctx, row, nil, nil)

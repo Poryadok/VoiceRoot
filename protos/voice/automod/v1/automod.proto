@@ -155,10 +155,47 @@ message ExpiredMessageEvidence {
   bytes original_sha256 = 7;
 }
 
+enum AccountCoreProducer {
+  ACCOUNT_CORE_PRODUCER_UNSPECIFIED = 0;
+  ACCOUNT_CORE_PRODUCER_USER = 1;
+  ACCOUNT_CORE_PRODUCER_BOT = 2;
+}
+
+// Protocol 2: account-purpose PERSONAL evidence, with no origin identifiers.
+// Full message/actor/Bot/installation/operation ownership is verified before
+// insertion and remains outside this immutable core and its equality hash.
+message CommittedAccountCore {
+  uint32 protocol_version = 1;
+  SubjectBinding subject = 2;
+  string source_epoch = 3;
+  uint64 sequence = 4;
+  string event_id = 5;
+  google.protobuf.Timestamp recorded_at = 6;
+  EvidenceEligibility eligibility = 7;
+  repeated PatternDigest digests = 8;
+  uint32 link_count = 9;
+  AccountCoreProducer producer = 10;
+  uint64 ownership_revision = 11;
+}
+
+// Only actual source age >=30 days authorizes this ordered gap receipt.
+message ExpiredAccountCore {
+  uint32 protocol_version = 1;
+  SubjectBinding subject = 2;
+  string source_epoch = 3;
+  uint64 sequence = 4;
+  string event_id = 5;
+  google.protobuf.Timestamp recorded_at = 6;
+  bytes original_core_sha256 = 7;
+}
+
 message IngestCommittedMessageEvidenceRequest {
   oneof record {
+    // Legacy v1 is never accepted by activated v2 consumers or rehashed.
     CommittedMessageEvidence evidence = 1;
     ExpiredMessageEvidence expired = 2;
+    CommittedAccountCore core = 3;
+    ExpiredAccountCore core_expired = 4;
   }
 }
 enum EvidenceOutcome {

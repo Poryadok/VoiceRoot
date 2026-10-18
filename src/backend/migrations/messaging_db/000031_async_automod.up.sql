@@ -3,12 +3,13 @@
 CREATE TABLE automod_producer_state (
   singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
   source_epoch uuid NOT NULL DEFAULT gen_random_uuid(),
+  format_version smallint NOT NULL DEFAULT 2 CHECK(format_version=2),
   active boolean NOT NULL DEFAULT false
 );
 INSERT INTO automod_producer_state DEFAULT VALUES;
 CREATE FUNCTION automod_producer_state_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP='DELETE' OR NEW.source_epoch IS DISTINCT FROM OLD.source_epoch OR (OLD.active AND NOT NEW.active) THEN
+  IF TG_OP='DELETE' OR NEW.source_epoch IS DISTINCT FROM OLD.source_epoch OR NEW.format_version IS DISTINCT FROM OLD.format_version OR (OLD.active AND NOT NEW.active) THEN
     RAISE EXCEPTION 'automod producer epoch and activation cannot be reset';
   END IF;
   RETURN NEW;
@@ -53,17 +54,37 @@ CREATE TABLE automod_evidence_outbox (
   event_id uuid PRIMARY KEY,
   subject_id uuid NOT NULL REFERENCES automod_source_subjects(subject_id) ON DELETE CASCADE,
   sequence bigint NOT NULL CHECK(sequence>0),
-  message_id uuid NOT NULL UNIQUE,
-  companion_id uuid UNIQUE,
   source_at timestamptz NOT NULL,
-  original_sha256 bytea NOT NULL CHECK(octet_length(original_sha256)=32),
+  core_sha256 bytea NOT NULL CHECK(octet_length(core_sha256)=32),
   payload bytea CHECK(payload IS NULL OR octet_length(payload) BETWEEN 1 AND 16384),
   lease_id uuid,
   lease_until timestamptz,
-  UNIQUE(subject_id,sequence),
-  CHECK(companion_id IS NULL OR companion_id<>message_id)
+  UNIQUE(subject_id,sequence)
 );
 CREATE INDEX automod_evidence_outbox_delivery ON automod_evidence_outbox(source_at,event_id);
+-- Erasable local coverage only. Core delivery and counting never join this
+-- bridge. The independent chat selector also covers orphaned message rows.
+CREATE TABLE automod_message_coverage (
+  event_id uuid PRIMARY KEY REFERENCES automod_evidence_outbox(event_id) ON DELETE CASCADE,
+  message_id uuid NOT NULL UNIQUE,
+  companion_id uuid UNIQUE,
+  chat_id uuid NOT NULL,
+  CHECK(companion_id IS NULL OR companion_id<>message_id)
+);
+CREATE INDEX automod_message_coverage_chat ON automod_message_coverage(chat_id);
+CREATE FUNCTION automod_coverage_identity_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'automod coverage links cannot be rewritten';
+END $$;
+CREATE TRIGGER automod_coverage_identity_guard BEFORE UPDATE ON automod_message_coverage
+FOR EACH ROW EXECUTE FUNCTION automod_coverage_identity_guard();
+CREATE FUNCTION automod_remove_deleted_message_coverage() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  DELETE FROM automod_message_coverage WHERE message_id=OLD.id OR companion_id=OLD.id;
+  RETURN NULL;
+END $$;
+CREATE TRIGGER automod_remove_deleted_message_coverage AFTER DELETE ON messages
+FOR EACH ROW EXECUTE FUNCTION automod_remove_deleted_message_coverage();
 CREATE TABLE automod_expired_receipts (
   event_id uuid PRIMARY KEY REFERENCES automod_evidence_outbox(event_id) ON DELETE CASCADE,
   payload bytea NOT NULL CHECK(octet_length(payload) BETWEEN 1 AND 16384)
@@ -75,8 +96,8 @@ BEGIN
     IF NEW.payload IS NULL THEN RAISE EXCEPTION 'new automod evidence payload is required'; END IF;
     RETURN NEW;
   END IF;
-  IF (NEW.event_id,NEW.subject_id,NEW.sequence,NEW.message_id,NEW.companion_id,NEW.source_at,NEW.original_sha256)
-      IS DISTINCT FROM (OLD.event_id,OLD.subject_id,OLD.sequence,OLD.message_id,OLD.companion_id,OLD.source_at,OLD.original_sha256) OR
+  IF (NEW.event_id,NEW.subject_id,NEW.sequence,NEW.source_at,NEW.core_sha256)
+      IS DISTINCT FROM (OLD.event_id,OLD.subject_id,OLD.sequence,OLD.source_at,OLD.core_sha256) OR
      (NEW.payload IS DISTINCT FROM OLD.payload AND NOT (NEW.payload IS NULL AND
         EXISTS(SELECT 1 FROM automod_expired_receipts r WHERE r.event_id=OLD.event_id))) THEN
     RAISE EXCEPTION 'committed automod evidence is immutable';
@@ -92,7 +113,7 @@ FOR EACH ROW EXECUTE FUNCTION automod_evidence_immutable();
 CREATE FUNCTION automod_message_coverage() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF EXISTS(SELECT 1 FROM automod_producer_state WHERE singleton AND active) AND
-     NOT EXISTS(SELECT 1 FROM automod_evidence_outbox e WHERE e.message_id=NEW.id OR e.companion_id=NEW.id) THEN
+     NOT EXISTS(SELECT 1 FROM automod_message_coverage e WHERE e.chat_id=NEW.chat_id AND (e.message_id=NEW.id OR e.companion_id=NEW.id)) THEN
     RAISE EXCEPTION 'committed message requires private automod evidence';
   END IF;
   RETURN NULL;

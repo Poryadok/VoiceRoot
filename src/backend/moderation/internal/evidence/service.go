@@ -4,7 +4,6 @@ package evidence
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -14,6 +13,7 @@ import (
 	"math"
 	"voice/backend/moderation/internal/automod"
 	"voice/backend/pkg/automodclient"
+	"voice/backend/pkg/automodwire"
 	automodv1 "voice/backend/pkg/pb/voice/automod/v1"
 	"voice/backend/pkg/socialprincipal"
 )
@@ -104,6 +104,9 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 	if err != nil {
 		return nil, err
 	}
+	if automodwire.RejectUnknown(r) != nil {
+		return nil, invalid()
+	}
 	var captured *automodv1.SubjectBinding
 	var epoch, eventID uuid.UUID
 	var sequence uint64
@@ -112,8 +115,9 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 	var digests []automod.Digest
 	var linkCount uint32
 	var hash [32]byte
-	if e := r.GetEvidence(); e != nil {
-		if e.GetProtocolVersion() != 1 {
+	if e := r.GetCore(); e != nil {
+		_, hash, err = automodwire.EncodeCore(e)
+		if err != nil {
 			return nil, invalid()
 		}
 		captured = e.GetSubject()
@@ -126,26 +130,6 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 		eventID, err = identifier(e.GetEventId())
 		if err != nil {
 			return nil, err
-		}
-		for _, raw := range []string{e.GetMessageId(), e.GetChatId(), e.GetSenderProfileId(), e.GetOperationId()} {
-			if _, err = identifier(raw); err != nil {
-				return nil, err
-			}
-		}
-		if e.BotId != nil {
-			if _, err = identifier(e.GetBotId()); err != nil {
-				return nil, err
-			}
-			if e.GetOwnershipRevision() == 0 || e.GetOwnershipRevision() > math.MaxInt64 {
-				return nil, invalid()
-			}
-		} else if e.GetOwnershipRevision() != 0 || e.InstallationId != nil {
-			return nil, invalid()
-		}
-		if e.InstallationId != nil {
-			if _, err = identifier(e.GetInstallationId()); err != nil {
-				return nil, err
-			}
 		}
 		switch e.GetEligibility() {
 		case automodv1.EvidenceEligibility_EVIDENCE_ELIGIBILITY_ELIGIBLE:
@@ -167,20 +151,15 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 			digests = append(digests, digest)
 		}
 		linkCount = e.GetLinkCount()
-		encoded, err := proto.MarshalOptions{Deterministic: true}.Marshal(e)
-		if err != nil {
-			return nil, invalid()
-		}
-		hash = sha256.Sum256(encoded)
-	} else if e := r.GetExpired(); e != nil {
-		if e.GetProtocolVersion() != 1 || len(e.GetOriginalSha256()) != 32 {
+	} else if e := r.GetCoreExpired(); e != nil {
+		if automodwire.ValidateExpired(e) != nil {
 			return nil, invalid()
 		}
 		captured = e.GetSubject()
 		sequence = e.GetSequence()
 		recorded = e.GetRecordedAt()
 		eligibility = automod.ExpiredEvidence
-		copy(hash[:], e.GetOriginalSha256())
+		copy(hash[:], e.GetOriginalCoreSha256())
 		epoch, err = identifier(e.GetSourceEpoch())
 		if err != nil {
 			return nil, err

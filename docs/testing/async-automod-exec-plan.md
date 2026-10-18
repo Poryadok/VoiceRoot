@@ -1,5 +1,27 @@
 # ExecPlan: account-scoped asynchronous spam moderation (BE-045)
 
+## Account-core v2 implementation checkpoint
+
+The c17 origin-identifier leak was reproduced against the unactivated v1
+producer. New inserts now create a domain-hashed immutable account-only v2 core
+and a separate local `automod_message_coverage` bridge. Core delivery does not
+need that bridge. Physical primary/companion deletion removes the bridge while
+preserving core bytes, source cursor and eligibility. The format marker cannot
+be reset; no live v1 migration or rehash is claimed.
+
+Linux Docker evidence: codec race tests pass (1.040s), three real-PG producer
+race tests pass (9.937s), and signed private RPC race proof passes (2.628s).
+The latter rejects legacy v1 and nested unknown origin bytes before ingestion;
+the codec rejects unknown fields recursively, incomplete aliases and unsupported
+authority. Buf lint and diff whitespace checks pass. Graphify AST update was
+started for this source; no success receipt yet.
+
+Still open: exact-manifest FROZEN/managed-purge/restore bridge cleanup and zero-link
+proofs, c13 actual sealed terminal authority/startup coordinator, every producer's
+verified admission, private delivery/retention, all sanction-writer composition,
+and assembled activation/review/CI. These scoped passes do not certify Space P3
+or full BE-045 readiness.
+
 ## Purpose
 
 Successfully committed messages create private keyed evidence. Five matching
