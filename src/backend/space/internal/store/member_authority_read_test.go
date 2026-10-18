@@ -1,0 +1,67 @@
+package store
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	spacev1 "voice.app/voice/space/v1"
+)
+
+type memberAuthorityReader interface {
+	ReadMemberAdmissionAuthority(context.Context, *spacev1.GetMemberAdmissionAuthorityRequest) (*spacev1.GetMemberAdmissionAuthorityResponse, error)
+}
+
+func TestMemberAuthorityReadInitialLiveZeroAndMissingAggregateHistory(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+	owner, profile := uuid.New(), uuid.New()
+	space, err := st.CreateSpace(ctx, owner, "Initial lifecycle", "", "public")
+	require.NoError(t, err)
+	_, err = st.JoinSpace(ctx, space.ID, profile, uuid.New())
+	require.NoError(t, err)
+	for _, name := range []string{"000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000024_authority_revision.up.sql", "000030_entry_policy.up.sql"} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(raw))
+		require.NoError(t, err)
+	}
+	applyMemberAuthorityIfPresent(t, st)
+	reader, ok := any(st).(memberAuthorityReader)
+	require.True(t, ok, "native authority must query one owned-DB snapshot rather than reuse a Federation export")
+	req := &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.ID.String(), ProfileId: profile.String()}
+	first, err := reader.ReadMemberAdmissionAuthority(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE, first.GetLifecycle().GetState())
+	require.Zero(t, first.GetLifecycle().GetGeneration(), "first P3 schedule still starts at1")
+	require.EqualValues(t, 1, first.GetOwnership().GetGeneration())
+	require.Equal(t, owner.String(), first.GetOwnership().GetCurrentOwnerProfileId())
+	require.Positive(t, first.GetSpaceAuthorityRevision())
+	require.Equal(t, spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_LEGACY_MIGRATED, first.GetOrdinary().GetPublicationKind())
+	require.True(t, first.GetOrdinary().GetExplicitLegacy())
+	require.Empty(t, first.GetOrdinary().GetRoleReceiptSha256())
+	require.Nil(t, first.GetOrdinary().GetNativePublication())
+	again, err := reader.ReadMemberAdmissionAuthority(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, first.GetSpaceAuthorityRevision(), again.GetSpaceAuthorityRevision(), "authority reads are read-only")
+	require.Equal(t, first.GetOrdinary().GetPublishedBinding().String(), again.GetOrdinary().GetPublishedBinding().String())
+	_, err = pool.Exec(ctx, `INSERT INTO space_lifecycle_operations(operation_id,account_id,actor_profile_id,space_id,session_epoch,method,
+	 request_sha256,confirmation_name_sha256,proof_digest_sha256,binding_sha256,state)
+	 VALUES($1,$2,$3,$4,1,'DELETE',$5,$5,$5,$5,'SCHEDULE_PENDING')`, uuid.New(), uuid.New(), owner, space.ID, make([]byte, 32))
+	require.NoError(t, err)
+	_, err = reader.ReadMemberAdmissionAuthority(ctx, req)
+	require.Error(t, err, "missing aggregate plus durable history is unknown, never initial LIVE0")
+	_, err = pool.Exec(ctx, `INSERT INTO space_lifecycle_aggregates(space_id,deletion_operation_id,phase,generation) VALUES($1,$2,'LIVE',1)`, space.ID, uuid.New())
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO space_permanent_purge_fences(space_id,deletion_operation_id,purge_generation,purged_at) VALUES($1,$2,3,clock_timestamp())`, space.ID, uuid.New())
+	require.NoError(t, err)
+	terminal, err := reader.ReadMemberAdmissionAuthority(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_RETIRED, terminal.GetLifecycle().GetState(), "permanent retirement dominates a recreated LIVE aggregate")
+	require.EqualValues(t, 3, terminal.GetLifecycle().GetGeneration())
+}

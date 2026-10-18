@@ -56,6 +56,39 @@ CREATE TABLE space_member_role_cleanup (
  operation_id UUID PRIMARY KEY, space_id UUID NOT NULL, profile_id UUID NOT NULL,
  removal_floor BIGINT NOT NULL CHECK(removal_floor>0), completed_at TIMESTAMPTZ
 );
+CREATE TABLE space_membership_ownership_heads (
+ space_id UUID PRIMARY KEY, generation BIGINT NOT NULL CHECK(generation>0),
+ owner_profile_id UUID, state TEXT NOT NULL CHECK(state IN ('ACTIVE','RETIRED')),
+ CHECK ((state='ACTIVE')=(owner_profile_id IS NOT NULL))
+);
+INSERT INTO space_membership_ownership_heads(space_id,generation,owner_profile_id,state)
+ SELECT s.id,1,s.owner_profile_id,'ACTIVE' FROM spaces s
+ WHERE NOT EXISTS(SELECT 1 FROM ownership_journal j WHERE j.space_id=s.id AND j.state NOT IN ('completed','aborted'))
+ AND NOT EXISTS(SELECT 1 FROM community_owner_authority a WHERE a.space_id=s.id AND a.status<>'active');
+CREATE TABLE space_native_member_publications (
+ operation_id UUID PRIMARY KEY,space_id UUID NOT NULL,profile_id UUID NOT NULL,
+ generation BIGINT NOT NULL CHECK(generation>0),kind SMALLINT NOT NULL CHECK(kind BETWEEN 3 AND 6),
+ binding_bytes BYTEA NOT NULL,binding_sha256 BYTEA NOT NULL CHECK(octet_length(binding_sha256)=32),
+ state TEXT NOT NULL CHECK(state IN ('RESERVED','PUBLISHED','INVALIDATED')),published_at TIMESTAMPTZ
+);
+CREATE FUNCTION space_membership_ownership_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' THEN
+  INSERT INTO space_membership_ownership_heads(space_id,generation,owner_profile_id,state)
+   VALUES(NEW.id,1,NEW.owner_profile_id,'ACTIVE') ON CONFLICT(space_id) DO NOTHING;
+  RETURN NEW;
+ ELSIF TG_OP='DELETE' THEN
+  UPDATE space_membership_ownership_heads SET generation=generation+1,owner_profile_id=NULL,state='RETIRED' WHERE space_id=OLD.id;
+  RETURN OLD;
+ ELSIF NEW.owner_profile_id IS DISTINCT FROM OLD.owner_profile_id THEN
+  UPDATE space_membership_ownership_heads SET generation=generation+1,owner_profile_id=NEW.owner_profile_id
+   WHERE space_id=NEW.id AND state='ACTIVE' AND owner_profile_id=OLD.owner_profile_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'known ownership authority required' USING ERRCODE='55000'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER space_membership_ownership_changed AFTER INSERT OR UPDATE OF owner_profile_id OR DELETE ON spaces
+ FOR EACH ROW EXECUTE FUNCTION space_membership_ownership_changed();
 
 -- These are explicit existing publications. No Role readiness receipt is
 -- synthesized for them, and reads never invent another publication UUID.
@@ -186,7 +219,7 @@ FOR EACH ROW EXECUTE FUNCTION space_community_owner_episode_changed();
 -- function; new inputs participate in exactly that same monotonic Space clock.
 DO $$ DECLARE name TEXT; BEGIN
  IF to_regprocedure('space_authority_revision_changed()') IS NOT NULL THEN
-  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents'] LOOP
+  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications'] LOOP
    EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION space_authority_revision_changed(''space_id'')','space_authority_revision_'||name,name);
    EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION space_authority_revision_floor_guard()','space_authority_revision_'||name||'_truncate',name);
   END LOOP;
