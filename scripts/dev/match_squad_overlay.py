@@ -63,6 +63,9 @@ TARGETS = (
     _Target("Deployment", "voice-voice", "voice-voice.runtime.patch.yaml"),
     _Target("Deployment", "voice-gateway", "voice-gateway.patch.yaml"),
 )
+RECOVERY_TARGET = _Target(
+    "Deployment", "voice-matchmaking", "matchmaking-fsgroup-recovery.patch.yaml")
+RECOVERY_MODE = "matchmaking-fsgroup-only"
 
 
 class OverlayError(RuntimeError):
@@ -649,7 +652,20 @@ def _read_plan(path, expected_sha):
     return plan
 
 
-def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None):
+def _selected_targets(recovery_only):
+    return (RECOVERY_TARGET,) if recovery_only else TARGETS
+
+
+def _target_patch_path(overlay_dir, target, recovery_only):
+    if recovery_only:
+        if target is not RECOVERY_TARGET:
+            raise OverlayError("recovery target is not fixed")
+        return overlay_dir / RECOVERY_TARGET.patch_file
+    return overlay_dir / target.patch_file
+
+
+def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None,
+            recovery_only=False):
     root = Path(root).resolve()
     plan_path = plan_path.resolve()
     if plan_path.is_relative_to(root):
@@ -658,24 +674,28 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
     overlay_dir = root / "deploy/dev/match-squad-trust-overlay"
     client = client or KubectlClient()
     namespace_uid = validate_namespace(client.get_namespace())
+    selected_targets = _selected_targets(recovery_only)
 
     if not apply:
         if plan_path.exists():
             raise OverlayError("plan path already exists; choose a new path")
         object_plans = []
-        for target in TARGETS:
-            patch_path = overlay_dir / target.patch_file
+        for target in selected_targets:
+            patch_path = _target_patch_path(overlay_dir, target, recovery_only)
             base = client.get(target)
             object_plans.append(build_object_plan(client, target, base, patch_path))
         plan = {"format": 1, "sourceSha": source_sha, "namespace": NS,
                 "namespaceUid": namespace_uid, "targets": object_plans}
+        if recovery_only:
+            plan["recoveryMode"] = RECOVERY_MODE
         digest = _write_plan(plan_path, plan)
         for item in object_plans:
             print("MATCH_SQUAD_OVERLAY_PLANNED kind=" + item["kind"] +
                   " name=" + item["name"] + " uid=" + item["uid"] +
                   " rv=" + item["resourceVersion"] +
                   " render=" + item["desiredRenderSha256"])
-        print("MATCH_SQUAD_OVERLAY_PLAN_READY count=7 sha256=" + digest)
+        print("MATCH_SQUAD_OVERLAY_PLAN_READY count=" + str(len(object_plans)) +
+              " sha256=" + digest)
         return
 
     if not plan_sha:
@@ -683,14 +703,16 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
     plan = _read_plan(plan_path, plan_sha)
     if (plan.get("format") != 1 or plan.get("sourceSha") != source_sha or
             plan.get("namespace") != NS or plan.get("namespaceUid") != namespace_uid or
-            len(plan.get("targets", [])) != len(TARGETS)):
+            (plan.get("recoveryMode") != RECOVERY_MODE if recovery_only else
+             "recoveryMode" in plan) or
+            len(plan.get("targets", [])) != len(selected_targets)):
         raise OverlayError("plan source or namespace binding changed")
     fresh_plans = []
-    for target, frozen in zip(TARGETS, plan["targets"]):
+    for target, frozen in zip(selected_targets, plan["targets"]):
         if (frozen.get("kind"), frozen.get("name"), frozen.get("patchFile")) != (
                 target.kind, target.name, target.patch_file):
             raise OverlayError("plan target order changed")
-        patch_path = overlay_dir / target.patch_file
+        patch_path = _target_patch_path(overlay_dir, target, recovery_only)
         base = client.get(target)
         fresh = build_object_plan(client, target, base, patch_path)
         if fresh != frozen:
@@ -699,7 +721,7 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
 
     # Validate every effective patch against live admission/schema before the
     # first write. The eventual request repeats UID/RV tests to close races.
-    for target, plan in zip(TARGETS, fresh_plans):
+    for target, plan in zip(selected_targets, fresh_plans):
         if plan["alreadySatisfied"]:
             continue
         try:
@@ -715,7 +737,7 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
     # The request itself repeats UID/RV tests to close the race on each object.
     completed = 0
     applied = 0
-    for target, plan in zip(TARGETS, fresh_plans):
+    for target, plan in zip(selected_targets, fresh_plans):
         try:
             if plan["alreadySatisfied"]:
                 current = client.get(target)
@@ -738,6 +760,9 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
             raise OverlayError("overlay stopped at first failed target") from exc
         completed += 1
         print("MATCH_SQUAD_OVERLAY_OBJECT_READY kind=" + target.kind + " name=" + target.name)
+    if recovery_only:
+        print("MATCH_SQUAD_OVERLAY_RECOVERY_COMPLETE count=1")
+        return
     for service, ports in (
             ("voice-matchmaking", {"principal-jwks": 8443}),
             ("voice-chat", {"match-principal": 9092}),
@@ -759,10 +784,12 @@ def main(argv=None):
     parser.add_argument("--plan-file", required=True)
     parser.add_argument("--plan-sha256")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--recover-matchmaking-fsgroup", action="store_true",
+                        help="plan/apply only the fixed source-pinned fsGroup recovery")
     args = parser.parse_args(argv)
     try:
         execute(args.root, args.source_sha, Path(args.plan_file), args.plan_sha256,
-                apply=args.apply)
+                apply=args.apply, recovery_only=args.recover_matchmaking_fsgroup)
     except (OSError, ValueError, KeyError, TypeError, OverlayError):
         print("MatchSquad overlay stopped; inspect the bound plan and exact target state",
               file=sys.stderr)

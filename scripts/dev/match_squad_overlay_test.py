@@ -301,7 +301,7 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             overlay.build_object_plan(client, target, stale, patch_path)
 
     def test_unready_matchmaking_can_plan_exact_fs_group_recovery_when_s2s_is_absent(self):
-        target = overlay.TARGETS[3]
+        target = overlay.RECOVERY_TARGET
         patch_path = (Path(__file__).resolve().parents[2] /
                       "deploy/dev/match-squad-trust-overlay" / target.patch_file)
         base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
@@ -316,15 +316,12 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         container["image"] = overlay.QUALIFIED_IMAGES[target.name]
         container["env"] = [item for item in container["env"]
                              if item["name"] != "S2S_JWKS_URLS_JSON"]
-        desired = copy.deepcopy(base)
-        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
-        client = mock.Mock()
-        client.render.return_value = desired
+        client = overlay.KubectlClient()
         template_fingerprint = overlay.sha256_bytes(
             overlay.canonical_bytes(base["spec"]["template"]))
 
         with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
-                               template_fingerprint, create=True):
+                               template_fingerprint):
             plan = overlay.build_object_plan(client, target, base, patch_path)
 
         self.assertFalse(plan["alreadySatisfied"])
@@ -332,11 +329,21 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
             "value": 65532,
         }])
+        self.assertEqual(plan["patchFile"], "matchmaking-fsgroup-recovery.patch.yaml")
         self.assertEqual(plan["desiredObservedSha256"],
-                         overlay.observed_render_hash(target, desired))
+                         overlay.observed_render_hash(
+                             target, overlay._apply_overlay_operations(
+                                 base, plan["operations"][2:], target)))
+
+        full_target = overlay.TARGETS[3]
+        full_path = patch_path.parent / full_target.patch_file
+        with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                               template_fingerprint):
+            with self.assertRaisesRegex(overlay.OverlayError, "recovery projection"):
+                overlay.build_object_plan(client, full_target, base, full_path)
 
     def test_unready_matchmaking_fs_group_recovery_rejects_other_projection_changes(self):
-        target = overlay.TARGETS[3]
+        target = overlay.RECOVERY_TARGET
         patch_path = (Path(__file__).resolve().parents[2] /
                       "deploy/dev/match-squad-trust-overlay" / target.patch_file)
         base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
@@ -372,15 +379,12 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
 
         for label, changed in target_cases:
             with self.subTest(label=label):
-                desired = copy.deepcopy(changed)
-                desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
-                client = mock.Mock()
-                client.render.return_value = desired
+                client = overlay.KubectlClient()
                 changed_fingerprint = overlay.sha256_bytes(
                     overlay.canonical_bytes(changed["spec"]["template"]))
                 with mock.patch.object(
                         overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
-                        template_fingerprint, create=True):
+                        template_fingerprint):
                     with self.assertRaisesRegex(overlay.OverlayError,
                                                 "not ordinarily ready|recovery projection"):
                         overlay.build_object_plan(client, target, changed, patch_path)
@@ -391,16 +395,68 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             app = next(item for item in s2s_base["spec"]["template"]["spec"]["containers"]
                        if item["name"] == overlay.CONTAINERS[target.name])
             app.setdefault("env", []).append({"name": "S2S_JWKS_URLS_JSON", "value": "{}"})
-            desired = copy.deepcopy(s2s_base)
-            desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
-            client = mock.Mock()
-            client.render.return_value = desired
+            client = overlay.KubectlClient()
             with mock.patch.object(
                     overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
-                    template_fingerprint, create=True):
+                    template_fingerprint):
                 with self.assertRaisesRegex(overlay.OverlayError,
                                             "not ordinarily ready|recovery projection"):
                     overlay.build_object_plan(client, target, s2s_base, patch_path)
+
+    def test_recovery_cli_plan_is_single_purpose_and_cannot_apply_as_normal_overlay(self):
+        target = overlay.RECOVERY_TARGET
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 0, "availableReplicas": 0})
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec["securityContext"] = {}
+        app = next(item for item in pod_spec["containers"]
+                   if item["name"] == overlay.CONTAINERS[target.name])
+        app["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        app["env"] = [item for item in app["env"]
+                      if item["name"] != "S2S_JWKS_URLS_JSON"]
+        template_fingerprint = overlay.sha256_bytes(
+            overlay.canonical_bytes(base["spec"]["template"]))
+
+        class RecoveryClient:
+            def __init__(self):
+                self.renderer = overlay.KubectlClient()
+                self.applied = []
+
+            def get_namespace(self):
+                return {"metadata": {"name": overlay.NS,
+                                     "uid": overlay.EXPECTED_NAMESPACE_UID,
+                                     "labels": overlay.OWNERSHIP}}
+
+            def get(self, requested):
+                if requested != target:
+                    raise AssertionError("recovery mode requested an unexpected target")
+                return copy.deepcopy(base)
+
+            def render(self, requested, current, patch_path):
+                return self.renderer.render(requested, current, patch_path)
+
+        source_sha = "a" * 40
+        root = Path(__file__).resolve().parents[2]
+        client = RecoveryClient()
+        with tempfile.TemporaryDirectory(prefix="overlay-fsgroup-recovery-") as tmp:
+            plan_path = Path(tmp) / "recovery-plan.json"
+            with mock.patch.object(overlay, "_source_identity", return_value=source_sha), \
+                    mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                                      template_fingerprint):
+                overlay.execute(root, source_sha, plan_path, client=client,
+                                recovery_only=True)
+                plan = json.loads(plan_path.read_text(encoding="utf-8"))
+                self.assertEqual(plan["recoveryMode"], overlay.RECOVERY_MODE)
+                self.assertEqual(len(plan["targets"]), 1)
+                self.assertEqual(plan["targets"][0]["patchFile"], target.patch_file)
+                digest = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                with self.assertRaisesRegex(overlay.OverlayError,
+                                            "plan source or namespace binding changed"):
+                    overlay.execute(root, source_sha, plan_path, digest,
+                                    apply=True, client=client, recovery_only=False)
+        self.assertEqual(client.applied, [])
 
     def test_existing_service_port_order_cannot_be_rewritten(self):
         base = captured_service("voice-chat", "service-uid", "17", [
