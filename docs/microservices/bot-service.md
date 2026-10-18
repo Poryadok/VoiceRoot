@@ -242,6 +242,14 @@ bot_message_deliveries
 
 ## Webhook доставка
 
+`BOT_WEBHOOK_DELIVERY_ATTEMPTS` задаёт число HTTP attempts на один вызов
+interaction/autocomplete delivery, включая первый (default `3`).
+`BOT_WEBHOOK_RETRY_BACKOFF_MS` задаёт начальную задержку в миллисекундах
+(default `100`); следующие задержки удваиваются. Пустые, нечисловые и
+неположительные значения используют default. Значения читаются при каждом
+вызове delivery; context cancellation прерывает ожидание следующей попытки.
+Это настройки HTTP delivery, а не durable outbox lease/retry budget.
+
 ```
 Event (NATS: message in whitelisted chat) ──► Bot Service
   │
