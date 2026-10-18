@@ -17,7 +17,8 @@ LABEL_NONCE = 'voice.io/nats-job-nonce'
 LABEL_PHASE = 'voice.io/nats-job-phase'
 LABEL_JOB_SELECTOR = 'voice.io/nats-phase-job'
 LABEL_VERIFICATION_ATTEMPT = 'voice.io/nats-verification-attempt'
-PHASES = frozenset(('archive', 'census', 'bind-verification', 'verification-session', 'contract-migration'))
+PHASES = frozenset(('archive', 'census', 'bind-verification', 'verification-session', 'contract-migration',
+    'closed-copy-preflight'))
 VERIFICATION_BINDING_FIELDS = frozenset(('role', 'claim_name', 'target_uid', 'node_name', 'hostname'))
 VERIFICATION_ATTEMPT_BINDING_FIELDS = VERIFICATION_BINDING_FIELDS | frozenset(('verification_attempt',))
 FIELDS = frozenset(('operation', 'nonce', 'phase'))
@@ -34,6 +35,10 @@ CONTRACT_BINDING_FIELDS = BINDING_FIELDS | frozenset(('verification_attempt', 'c
     'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256', 'archive_bytes',
     'plan_sha256', 'plan_bytes', 'server_config_sha256', 'bootstrap_creds_sha256',
     'bootstrap_creds_bytes', 'server_config_bytes'))
+CLOSED_COPY_BINDING_FIELDS = BINDING_FIELDS | frozenset(('verification_attempt',
+    'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes'))
+CLOSED_COPY_ACTIONS = frozenset(('load-config', 'receive-archive', 'broker-start',
+    'broker-ready', 'read-jsz', 'broker-stop'))
 SELECTED_ACTIONS = frozenset((
     'bootstrap-realtime', 'bootstrap-notification', 'bootstrap-analytics-chat',
     'bootstrap-search', 'kernel-census', 'kernel-seed', 'kernel-verify-closed', 'kernel-drain',
@@ -225,6 +230,26 @@ def validate_contract_binding(value: object, operation: str) -> dict:
     return storage | {key: value[key] for key in CONTRACT_BINDING_FIELDS - BINDING_FIELDS}
 
 
+def validate_closed_copy_binding(request: dict, value: object) -> dict:
+    """Bind an expired-copy preflight to one fresh, nonpromotable scratch attempt."""
+    row = validate_request(request)
+    if row['phase'] != 'closed-copy-preflight':
+        _fail('closed_copy_phase_required')
+    if not isinstance(value, dict) or set(value) != CLOSED_COPY_BINDING_FIELDS:
+        _fail('closed_copy_binding_invalid')
+    storage = validate_census_binding(row, {key: value[key]
+        for key in BINDING_FIELDS | frozenset(('verification_attempt',))})
+    for field in ('archive_sha256', 'server_config_sha256'):
+        if not isinstance(value[field], str) or not re.fullmatch(r'[a-f0-9]{64}', value[field]):
+            _fail('closed_copy_digest_invalid')
+    if (type(value['archive_bytes']) is not int
+        or not 0 < value['archive_bytes'] <= (48 << 30) + (262144 * 1024) + (1 << 20)
+        or type(value['server_config_bytes']) is not int
+        or not 0 < value['server_config_bytes'] <= (256 << 10)):
+        _fail('closed_copy_config_size_invalid')
+    return storage | {key: value[key] for key in CLOSED_COPY_BINDING_FIELDS - BINDING_FIELDS}
+
+
 def validate_image(value: object) -> str:
     if not isinstance(value, str) or not IMAGE_RE.fullmatch(value):
         _fail('image_not_digest_pinned')
@@ -257,7 +282,7 @@ def validate_binder_binding(request: dict, value: object) -> dict:
 def job_name(request: dict, verification_attempt: str | None = None) -> str:
     row = validate_request(request)
     material = row['operation'] + ':' + row['nonce'] + ':' + row['phase']
-    if row['phase'] in ('census', 'bind-verification'):
+    if row['phase'] in ('census', 'bind-verification', 'closed-copy-preflight'):
         if not isinstance(verification_attempt, str) or not re.fullmatch(r'[a-f0-9]{8}', verification_attempt):
             _fail('verification_attempt_invalid')
         material += ':' + verification_attempt
@@ -442,6 +467,8 @@ def document(request: dict, binding: dict, trusted_image: str) -> dict:
         return _selected_store_document(row, validate_selected_binding(binding), image)
     if row['phase'] == 'contract-migration':
         return _contract_migration_document(row, validate_contract_binding(binding, row['operation']), image)
+    if row['phase'] == 'closed-copy-preflight':
+        return _closed_copy_document(row, validate_closed_copy_binding(row, binding), image)
     _fail('phase_unsupported')
 
 
@@ -568,6 +595,80 @@ def _census_document(request: dict, storage: dict, image: str) -> dict:
                     ],
                 },
             },
+        },
+    }
+
+
+def _closed_copy_document(request: dict, storage: dict, image: str) -> dict:
+    """Hold one scratch-only Pod for a fixed broker/JSZ preflight action graph."""
+    name = job_name(request, storage['verification_attempt'])
+    labels = {LABEL_OPERATION: request['operation'], LABEL_NONCE: request['nonce'],
+        LABEL_PHASE: 'closed-copy-preflight', LABEL_JOB_SELECTOR: name,
+        LABEL_VERIFICATION_ATTEMPT: storage['verification_attempt']}
+    common = ['--operation', request['operation'], '--nonce', request['nonce'],
+        '--verification-attempt', storage['verification_attempt'],
+        '--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
+        '--source-node-name', storage['source_node_name'], '--source-hostname', storage['source_hostname'],
+        '--verification-pvc-uid', storage['verification_uid'],
+        '--verification-pv-uid', storage['verification_pv_uid'],
+        '--verification-node-name', storage['verification_node_name'],
+        '--verification-hostname', storage['verification_hostname'], '--phase-image', image,
+        '--archive-sha256', storage['archive_sha256'], '--archive-bytes', str(storage['archive_bytes']),
+        '--server-config-sha256', storage['server_config_sha256'],
+        '--server-config-bytes', str(storage['server_config_bytes'])]
+    return {
+        'apiVersion': 'batch/v1', 'kind': 'Job',
+        'metadata': {'name': name, 'namespace': NAMESPACE, 'labels': copy.deepcopy(labels)},
+        'spec': {
+            'backoffLimit': 0, 'activeDeadlineSeconds': 14400, 'manualSelector': True,
+            'podReplacementPolicy': 'Failed',
+            'selector': {'matchLabels': {LABEL_JOB_SELECTOR: name}},
+            'template': {'metadata': {'labels': labels}, 'spec': {
+                'automountServiceAccountToken': False, 'serviceAccountName': 'default',
+                'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {
+                    'nodeSelectorTerms': [{'matchExpressions': [{'key': 'kubernetes.io/hostname',
+                        'operator': 'In', 'values': [storage['verification_hostname']]}]}]}}},
+                'restartPolicy': 'Never',
+                'securityContext': {'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+                    'fsGroup': 65532, 'fsGroupChangePolicy': 'OnRootMismatch',
+                    'seccompProfile': {'type': 'RuntimeDefault'}},
+                'initContainers': [{
+                    'name': 'nats', 'restartPolicy': 'Always', 'image': image,
+                    'imagePullPolicy': 'IfNotPresent',
+                    'command': ['/usr/bin/python3', '/voice-nats-runner/nats-supervisor'],
+                    'args': ['--preflight'],
+                    'securityContext': {'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+                        'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True,
+                        'capabilities': {'drop': ['ALL']},
+                        'seccompProfile': {'type': 'RuntimeDefault'}},
+                    'resources': {'requests': {'cpu': '500m', 'memory': '512Mi', 'ephemeral-storage': '2Gi'},
+                        'limits': {'cpu': '2', 'memory': '2Gi', 'ephemeral-storage': '4Gi'}},
+                    'volumeMounts': [
+                        {'name': 'target', 'mountPath': '/data', 'subPath': 'store'},
+                        {'name': 'broker-config', 'mountPath': '/broker-config', 'readOnly': True},
+                    ],
+                }],
+                'containers': [{
+                    'name': 'control', 'image': image, 'imagePullPolicy': 'IfNotPresent',
+                    'command': ['/usr/bin/python3', '/voice-nats-runner/phase'],
+                    'args': ['--serve-closed-copy-preflight'] + common,
+                    'env': [{'name': 'POD_UID', 'valueFrom': {'fieldRef': {'fieldPath': 'metadata.uid'}}}],
+                    'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True,
+                        'capabilities': {'drop': ['ALL']}},
+                    'resources': {'requests': {'cpu': '500m', 'memory': '512Mi', 'ephemeral-storage': '49Gi'},
+                        'limits': {'cpu': '2', 'memory': '2Gi', 'ephemeral-storage': '49Gi'}},
+                    'volumeMounts': [
+                        {'name': 'target', 'mountPath': '/verify'},
+                        {'name': 'output', 'mountPath': '/out'},
+                        {'name': 'broker-config', 'mountPath': '/broker-config'},
+                    ],
+                }],
+                'volumes': [
+                    {'name': 'target', 'persistentVolumeClaim': {'claimName': storage['verification_claim']}},
+                    {'name': 'output', 'emptyDir': {'sizeLimit': '49Gi'}},
+                    {'name': 'broker-config', 'emptyDir': {'sizeLimit': '1Mi'}},
+                ],
+            }},
         },
     }
 
@@ -779,7 +880,8 @@ def _contract_migration_document(request: dict, storage: dict, image: str) -> di
 
 def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | None = None,
         action: str | None = None, session_inputs: dict | None = None,
-        action_index: int | None = None, input_pod_uid: str | None = None) -> dict:
+        action_index: int | None = None, input_pod_uid: str | None = None,
+        job_uid: str | None = None, phase_image: str | None = None) -> dict:
     """Return the only admitted in-band helper argv/query shapes for a fixed phase."""
     row = validate_request(request)
     if row['phase'] == 'bind-verification':
@@ -912,6 +1014,39 @@ def exec_vectors(request: dict, pod_uid: str, binding: dict, archive: dict | Non
                     '--issued-sha256', session_inputs['issued_sha256']]
             return {'action': vector}
         _fail('contract_action_unsupported')
+    if row['phase'] == 'closed-copy-preflight':
+        storage = validate_closed_copy_binding(row, binding)
+        if not isinstance(job_uid, str) or not UUID_RE.fullmatch(job_uid):
+            _fail('closed_copy_job_uid_invalid')
+        phase_image = validate_image(phase_image)
+        if action is not None and action not in CLOSED_COPY_ACTIONS:
+            _fail('closed_copy_action_invalid')
+        common = [*binary, '--operation', row['operation'], '--nonce', row['nonce'],
+            '--pod-uid', pod_uid, '--job-uid', job_uid,
+            '--verification-attempt', storage['verification_attempt'],
+            '--source-pvc-uid', storage['source_uid'], '--source-pv-uid', storage['source_pv_uid'],
+            '--verification-pvc-uid', storage['verification_uid'],
+            '--verification-pv-uid', storage['verification_pv_uid'],
+            '--source-node-name', storage['source_node_name'], '--source-hostname', storage['source_hostname'],
+            '--verification-node-name', storage['verification_node_name'],
+            '--verification-hostname', storage['verification_hostname'], '--phase-image', phase_image,
+            '--archive-sha256', storage['archive_sha256'], '--archive-bytes', str(storage['archive_bytes']),
+            '--server-config-sha256', storage['server_config_sha256'],
+            '--server-config-bytes', str(storage['server_config_bytes'])]
+        def contract(command, *, stdin=False):
+            return {'container': 'control', 'command': command, 'stdin': stdin,
+                'stdout': True, 'stderr': False, 'tty': False}
+        action_vectors = {
+            name: contract([*common, '--preflight-action', name], stdin=name in ('load-config', 'receive-archive'))
+            for name in sorted(CLOSED_COPY_ACTIONS)
+        }
+        readback_vectors = {
+            name: contract([*common, '--preflight-readback', '--action', name])
+            for name in sorted(CLOSED_COPY_ACTIONS)
+        }
+        if action is not None:
+            return {'action': action_vectors[action], 'readback': readback_vectors[action]}
+        return {'actions': action_vectors, 'readbacks': readback_vectors}
     _fail('phase_transport_unsupported')
 
 
