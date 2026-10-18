@@ -69,12 +69,20 @@ services.
 | Переменная | Назначение |
 |------------|------------|
 | `CLICKHOUSE_DSN` | DSN для `clickhouse-go` (например `clickhouse://default@clickhouse:9000/voice`) |
+| `ANALYTICS_REQUIRE_PERSISTENCE` | Staging/prod: `true`, обязательные DSN и HMAC key. Допустимы `true/false`, `1/0`, `yes/no` (без учёта регистра); пустое значение — локальный режим, неизвестное значение останавливает запуск. |
 | `NATS_URL` | JetStream consumers (domain streams + `analytics_events`) |
 | `ANALYTICS_ID_HASH_KEY` | HMAC-соль для `account_id` / `profile_id` (не коммитить) |
 | `ANALYTICS_BATCH_MAX_EVENTS` | Размер батча (default 1000) |
 | `ANALYTICS_BATCH_FLUSH_INTERVAL` | Интервал flush (default `5s`) |
 
 Для локального compose задайте `ANALYTICS_ID_HASH_KEY` в `.env` или используйте dev default из `docker-compose.yml`.
+
+Staging/prod manifests требуют оба ключа Secret: `CLICKHOUSE_DSN` и
+`ANALYTICS_ID_HASH_KEY`. При обязательной persistence пустой DSN, отсутствующий
+HMAC key или dev default останавливают процесс до открытия listeners. Настроенный
+DSN должен пройти parse и ClickHouse Ping; ошибка подключения также прерывает
+запуск. Локальный режим без DSN оставляет только HTTP health/metrics и не запускает
+gRPC ingest/query или NATS consumer; это не доказательство работающей persistence.
 
 Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
 
