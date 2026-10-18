@@ -149,6 +149,7 @@ No cross-database FK or writable copy of Space/Role grants is introduced.
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
 | `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
+| `chat_scope_authority_heads` | Migration `000025`; permanent per-chat positive revision and attachment incarnation head, retained across delete/recreate. Source/lifecycle/managed ownership changes maintain it transactionally; no TTL, truncate, revision reset or safe DOWN. `chats.scope_incarnation` is the current native attachment UUID. |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |

@@ -109,6 +109,13 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	scopeAuthorityConfigs, scopeAuthorityErr := loadChatScopeAuthorityConfigs()
+	if scopeAuthorityErr != nil {
+		log.Fatalf("Chat scope authority config: %v", scopeAuthorityErr)
+	}
+	if len(scopeAuthorityConfigs) > 0 && dbURL == "" {
+		log.Fatal("Chat scope authority requires DATABASE_URL")
+	}
 	var grpcSrv *grpc.Server
 	var gisGRPCSrv *grpc.Server
 	var gisPrincipalRuntime *gisprincipal.Runtime
@@ -129,6 +136,11 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		scopeAuthorityCleanup, scopeErr := startChatScopeAuthorityListeners(runCtx, pool, scopeAuthorityConfigs)
+		if scopeErr != nil {
+			log.Fatalf("Chat scope authority listener: %v", scopeErr)
+		}
+		defer scopeAuthorityCleanup()
 		if targetEnabled {
 			runtime, err := roleoverrideprincipal.New(runCtx, targetConfig)
 			if err != nil {
