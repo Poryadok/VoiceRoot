@@ -136,8 +136,8 @@ func TestLoadMatchmakingSigningKeysAcceptsAtomicWriterUpdateInProgress(t *testin
 		t.Skip("Kubernetes projected Secret symlink layout is exercised on Linux")
 	}
 	keysDir := t.TempDir()
-	currentVersion := "..2026_10_17_12_34_56.123456789"
-	nextVersion := "..2026_10_17_12_34_57.123456789"
+	currentVersion := "..2026_10_17_12_34_56.7"
+	nextVersion := "..2026_10_17_12_34_57.4294967295"
 	for _, version := range []string{currentVersion, nextVersion} {
 		versionDir := filepath.Join(keysDir, version)
 		require.NoError(t, os.Mkdir(versionDir, 0o700))
@@ -156,6 +156,25 @@ func TestLoadMatchmakingSigningKeysAcceptsAtomicWriterUpdateInProgress(t *testin
 	require.Len(t, keys, 2)
 	require.Equal(t, expected["current"].N, keys["current"].N)
 	require.Equal(t, expected["next"].N, keys["next"].N)
+}
+
+func TestProjectedSecretTimestampMatchesGoMkdirTempDecimalUint32(t *testing.T) {
+	for _, name := range []string{
+		"..2026_10_17_12_34_56.0",
+		"..2026_10_17_12_34_56.7",
+		"..2026_10_17_12_34_56.123456789",
+		"..2026_10_17_12_34_56.4294967295",
+	} {
+		require.True(t, isProjectedSecretTimestamp(name), name)
+	}
+	for _, name := range []string{
+		"..2026_10_17_12_34_56.0000000007",
+		"..2026_10_17_12_34_56.4294967296",
+		"..2026_10_17_12_34_56.10000000000",
+		"..2026-10-17_12_34_56.7",
+	} {
+		require.False(t, isProjectedSecretTimestamp(name), name)
+	}
 }
 
 func TestLoadMatchmakingSigningKeysUsesPublishedAtomicWriterVersion(t *testing.T) {

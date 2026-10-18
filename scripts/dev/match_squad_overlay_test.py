@@ -75,7 +75,7 @@ def sanitized_live_api_fixture():
         }
     deployment_rows = {
         "voice-matchmaking": ("matchmaking", "f16ecb5d-3ad0-48ad-903b-91bff733d7b9",
-                              "3355912", "61061cc7accc3e0eccc1475a0c77deed5e6424f288f83d7a494ac95228c19e3c"),
+                              "3355912", "7f10b25a34ddc6f301219c63a945e1aa8f89b3b3337b568f35a6d42790394a3e"),
         "voice-chat": ("chat", "eeb8f50d-409a-44e3-93bb-e6ed042db811",
                        "3355858", "d3133792b42a82e69f67dee4b37f5007974be80fb154719ebffb5752b1032d94"),
         "voice-voice": ("voice", "ef11fadf-9857-42e1-a324-31c9a4978138",
@@ -111,6 +111,53 @@ def sanitized_live_api_fixture():
                                    "readOnly": True, "subPath": "leaf.conf"}]})
         objects[("Deployment", name)] = obj
     return objects
+
+
+def matchmaking_secret_mount_snapshot():
+    """Secret-free read-only projection of the current DEV Matchmaking pod template."""
+    deployment = captured_deployment(
+        "voice-matchmaking", "matchmaking",
+        overlay.EXPECTED_OBJECT_UIDS[("Deployment", "voice-matchmaking")], "3392422")
+    pod_spec = deployment["spec"]["template"]["spec"]
+    pod_spec["securityContext"] = {}
+    pod_spec["volumes"] = [
+        {"name": "nats-service-creds", "secret": {
+            "secretName": "voice-nats-service-credentials", "defaultMode": 256,
+            "items": [{"key": "matchmaking.creds", "path": "matchmaking.creds"}]}},
+        {"name": "nats-hub-tls", "secret": {
+            "secretName": "voice-nats-hub-tls", "defaultMode": 420,
+            "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+        {"name": "match-squad-client", "secret": {
+            "secretName": "voice-matchmaking-client-tls", "defaultMode": 288,
+            "items": [{"key": "tls.crt", "path": "tls.crt"},
+                      {"key": "tls.key", "path": "tls.key"}]}},
+        {"name": "matchmaking-principal-signing", "secret": {
+            "secretName": "voice-matchmaking-principal-signing", "defaultMode": 288,
+            "items": [{"key": "current.pem", "path": "current.pem"},
+                      {"key": "next.pem", "path": "next.pem"}]}},
+        {"name": "matchmaking-principal-jwks-tls", "secret": {
+            "secretName": "voice-matchmaking-principal-jwks-tls", "defaultMode": 288,
+            "items": [{"key": "tls.crt", "path": "tls.crt"},
+                      {"key": "tls.key", "path": "tls.key"}]}},
+    ]
+    pod_spec["containers"][0]["volumeMounts"] = [
+        {"name": "match-squad-client", "mountPath": "/etc/voice/match-squad/client",
+         "readOnly": True},
+        {"name": "matchmaking-principal-signing", "mountPath": "/etc/voice/principal/keys",
+         "readOnly": True},
+        {"name": "matchmaking-principal-jwks-tls", "mountPath": "/etc/voice/principal-jwks/tls",
+         "readOnly": True},
+    ]
+    pod_spec["containers"].append({
+        "name": "nats-leaf", "image": "docker.io/library/nats@sha256:" + "c" * 64,
+        "volumeMounts": [
+            {"name": "nats-service-creds", "mountPath": "/var/run/nats/creds/matchmaking.creds",
+             "readOnly": True},
+            {"name": "nats-hub-tls", "mountPath": "/etc/nats/tls/ca.crt",
+             "readOnly": True},
+        ],
+    })
+    return deployment
 
 
 class MatchSquadOverlayApplicatorTests(unittest.TestCase):
@@ -253,6 +300,209 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         with self.assertRaisesRegex(overlay.OverlayError, "not ordinarily ready"):
             overlay.build_object_plan(client, target, stale, patch_path)
 
+    def test_unready_matchmaking_can_plan_exact_fs_group_recovery_when_s2s_is_absent(self):
+        target = overlay.RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["metadata"]["resourceVersion"] = "3392422"
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 0, "availableReplicas": 0})
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec["securityContext"] = {}
+        container = next(item for item in pod_spec["containers"]
+                         if item["name"] == overlay.CONTAINERS[target.name])
+        container["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        container["env"] = [item for item in container["env"]
+                             if item["name"] != "S2S_JWKS_URLS_JSON"]
+        client = overlay.KubectlClient()
+        template_fingerprint = overlay.sha256_bytes(
+            overlay.canonical_bytes(base["spec"]["template"]))
+
+        with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                               template_fingerprint):
+            plan = overlay.build_object_plan(client, target, base, patch_path)
+
+        self.assertFalse(plan["alreadySatisfied"])
+        self.assertEqual(plan["operations"][2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+            "value": 65532,
+        }])
+        self.assertEqual(plan["patchFile"], "matchmaking-fsgroup-recovery.patch.yaml")
+        self.assertEqual(plan["desiredObservedSha256"],
+                         overlay.observed_render_hash(
+                             target, overlay._apply_overlay_operations(
+                                 base, plan["operations"][2:], target)))
+
+        full_target = overlay.TARGETS[3]
+        full_path = patch_path.parent / full_target.patch_file
+        with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                               template_fingerprint):
+            with self.assertRaisesRegex(overlay.OverlayError,
+                                        "not ordinarily ready|recovery projection"):
+                overlay.build_object_plan(client, full_target, base, full_path)
+
+    def test_unready_matchmaking_fs_group_recovery_rejects_other_projection_changes(self):
+        target = overlay.RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 0, "availableReplicas": 0})
+        base["spec"]["template"]["spec"]["securityContext"] = {}
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec.setdefault("volumes", [])
+        app = next(item for item in pod_spec["containers"]
+                   if item["name"] == overlay.CONTAINERS[target.name])
+        app["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        env = base["spec"]["template"]["spec"]["containers"][0]["env"]
+        env[:] = [item for item in env if item["name"] != "S2S_JWKS_URLS_JSON"]
+        template_fingerprint = overlay.sha256_bytes(
+            overlay.canonical_bytes(base["spec"]["template"]))
+        target_cases = []
+        for label, mutate in (
+                ("wrong image", lambda obj: obj["spec"]["template"]["spec"]["containers"][0].update(
+                    {"image": "ghcr.io/poryadok/voiceroot/matchmaking@sha256:" + "f" * 64})),
+                ("extra env", lambda obj: obj["spec"]["template"]["spec"]["containers"][0]["env"].append(
+                    {"name": "UNEXPECTED", "value": "x"})),
+                ("volume drift", lambda obj: obj["spec"]["template"]["spec"]["volumes"].append(
+                    {"name": "unexpected", "emptyDir": {}})),
+                ("container drift", lambda obj: obj["spec"]["template"]["spec"]["containers"].append(
+                    {"name": "unexpected-sidecar", "image": "example.invalid/sidecar:v1"})),
+                ("security drift", lambda obj: obj["spec"]["template"]["spec"]["securityContext"].update(
+                    {"runAsUser": 0})),
+        ):
+            changed = copy.deepcopy(base)
+            mutate(changed)
+            target_cases.append((label, changed))
+
+        for label, changed in target_cases:
+            with self.subTest(label=label):
+                client = overlay.KubectlClient()
+                changed_fingerprint = overlay.sha256_bytes(
+                    overlay.canonical_bytes(changed["spec"]["template"]))
+                with mock.patch.object(
+                        overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                        template_fingerprint):
+                    with self.assertRaisesRegex(overlay.OverlayError,
+                                                "not ordinarily ready|recovery projection|pinned projection|S2S entry"):
+                        overlay.build_object_plan(client, target, changed, patch_path)
+                self.assertNotEqual(changed_fingerprint, template_fingerprint)
+
+        with self.subTest(label="S2S opt-in still present"):
+            s2s_base = copy.deepcopy(base)
+            app = next(item for item in s2s_base["spec"]["template"]["spec"]["containers"]
+                       if item["name"] == overlay.CONTAINERS[target.name])
+            app.setdefault("env", []).append({"name": "S2S_JWKS_URLS_JSON", "value": "{}"})
+            client = overlay.KubectlClient()
+            with mock.patch.object(
+                    overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                    template_fingerprint):
+                with self.assertRaisesRegex(overlay.OverlayError,
+                                            "not ordinarily ready|recovery projection|pinned projection|S2S entry"):
+                    overlay.build_object_plan(client, target, s2s_base, patch_path)
+
+    def test_fs_group_recovery_rejects_ready_deployment_even_when_projection_is_pinned(self):
+        target = overlay.RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 1, "availableReplicas": 1})
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec["securityContext"] = {}
+        app = next(item for item in pod_spec["containers"]
+                   if item["name"] == overlay.CONTAINERS[target.name])
+        app["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        app["env"] = [item for item in app["env"]
+                      if item["name"] != "S2S_JWKS_URLS_JSON"]
+        fingerprint = overlay.sha256_bytes(overlay.canonical_bytes(base["spec"]["template"]))
+        with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                               fingerprint):
+            with self.assertRaisesRegex(overlay.OverlayError,
+                                        "only for an unready Matchmaking Deployment"):
+                overlay.build_object_plan(overlay.KubectlClient(), target, base, patch_path)
+
+    def test_fs_group_recovery_rejects_ready_template_drift(self):
+        target = overlay.RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 1, "availableReplicas": 1})
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec["securityContext"] = {}
+        app = next(item for item in pod_spec["containers"]
+                   if item["name"] == overlay.CONTAINERS[target.name])
+        app["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        app["env"] = [item for item in app["env"]
+                      if item["name"] != "S2S_JWKS_URLS_JSON"]
+        base["spec"]["template"]["metadata"].setdefault("labels", {})["unexpected"] = "drift"
+        with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                               "0" * 64):
+            with self.assertRaisesRegex(overlay.OverlayError,
+                                        "pinned projection"):
+                overlay.build_object_plan(overlay.KubectlClient(), target, base, patch_path)
+
+    def test_recovery_cli_plan_is_single_purpose_and_cannot_apply_as_normal_overlay(self):
+        target = overlay.RECOVERY_TARGET
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 0, "availableReplicas": 0})
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec["securityContext"] = {}
+        app = next(item for item in pod_spec["containers"]
+                   if item["name"] == overlay.CONTAINERS[target.name])
+        app["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        app["env"] = [item for item in app["env"]
+                      if item["name"] != "S2S_JWKS_URLS_JSON"]
+        template_fingerprint = overlay.sha256_bytes(
+            overlay.canonical_bytes(base["spec"]["template"]))
+
+        class RecoveryClient:
+            def __init__(self):
+                self.renderer = overlay.KubectlClient()
+                self.applied = []
+
+            def get_namespace(self):
+                return {"metadata": {"name": overlay.NS,
+                                     "uid": overlay.EXPECTED_NAMESPACE_UID,
+                                     "labels": overlay.OWNERSHIP}}
+
+            def get(self, requested):
+                if requested != target:
+                    raise AssertionError("recovery mode requested an unexpected target")
+                return copy.deepcopy(base)
+
+            def render(self, requested, current, patch_path):
+                return self.renderer.render(requested, current, patch_path)
+
+        source_sha = "a" * 40
+        root = Path(__file__).resolve().parents[2]
+        client = RecoveryClient()
+        with tempfile.TemporaryDirectory(prefix="overlay-fsgroup-recovery-") as tmp:
+            plan_path = Path(tmp) / "recovery-plan.json"
+            with mock.patch.object(overlay, "_source_identity", return_value=source_sha), \
+                    mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                                      template_fingerprint):
+                overlay.execute(root, source_sha, plan_path, client=client,
+                                recovery_only=True)
+                plan = json.loads(plan_path.read_text(encoding="utf-8"))
+                self.assertEqual(plan["recoveryMode"], overlay.RECOVERY_MODE)
+                self.assertEqual(len(plan["targets"]), 1)
+                self.assertEqual(plan["targets"][0]["patchFile"], target.patch_file)
+                digest = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                with self.assertRaisesRegex(overlay.OverlayError,
+                                            "plan source or namespace binding changed"):
+                    overlay.execute(root, source_sha, plan_path, digest,
+                                    apply=True, client=client, recovery_only=False)
+        self.assertEqual(client.applied, [])
+
     def test_existing_service_port_order_cannot_be_rewritten(self):
         base = captured_service("voice-chat", "service-uid", "17", [
             {"name": "http", "port": 8080, "targetPort": 8080},
@@ -285,6 +535,128 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             "/spec/template/spec/volumes/-"])
         self.assertEqual([op["value"]["name"] for op in operations[2:]],
                          ["NEW_ENV", "new-a", "new-b", "new-volume", "new-volume"])
+
+    def test_matchmaking_fs_group_patch_preserves_secret_mode_and_mount_isolation(self):
+        base = matchmaking_secret_mount_snapshot()
+        pod_spec = base["spec"]["template"]["spec"]
+        secret_volumes = {volume["secret"]["secretName"]: volume["secret"]
+                          for volume in pod_spec["volumes"] if "secret" in volume}
+        self.assertEqual(secret_volumes["voice-matchmaking-principal-signing"]["defaultMode"], 288)
+        self.assertEqual(secret_volumes["voice-matchmaking-principal-signing"]["items"], [
+            {"key": "current.pem", "path": "current.pem"},
+            {"key": "next.pem", "path": "next.pem"},
+        ])
+        self.assertEqual(secret_volumes["voice-nats-service-credentials"]["defaultMode"], 256)
+        self.assertEqual(secret_volumes["voice-nats-service-credentials"]["items"], [
+            {"key": "matchmaking.creds", "path": "matchmaking.creds"},
+        ])
+        by_volume_name = {volume["name"]: volume for volume in pod_spec["volumes"]}
+        mounted_secrets = {
+            container["name"]: {
+                by_volume_name[mount["name"]]["secret"]["secretName"]
+                for mount in container.get("volumeMounts", [])
+                if mount["name"] in by_volume_name and "secret" in by_volume_name[mount["name"]]
+            }
+            for container in pod_spec["containers"]
+        }
+        self.assertEqual(mounted_secrets, {
+            "matchmaking": {
+                "voice-matchmaking-client-tls",
+                "voice-matchmaking-principal-signing",
+                "voice-matchmaking-principal-jwks-tls",
+            },
+            "nats-leaf": {"voice-nats-service-credentials", "voice-nats-hub-tls"},
+        })
+
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        operations = overlay.object_patch(base, desired)
+        self.assertEqual(operations[2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup", "value": 65532,
+        }])
+        projected = overlay._apply_overlay_operations(
+            base, operations[2:], overlay._Target("Deployment", "voice-matchmaking", ""))
+        self.assertEqual(projected, desired)
+
+        existing_setting = copy.deepcopy(base)
+        existing_setting["spec"]["template"]["spec"]["securityContext"] = {
+            "runAsNonRoot": True,
+        }
+        desired_existing_setting = copy.deepcopy(existing_setting)
+        desired_existing_setting["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        preserving_operations = overlay.object_patch(existing_setting, desired_existing_setting)
+        self.assertEqual(preserving_operations[2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup", "value": 65532,
+        }])
+        self.assertEqual(overlay._apply_overlay_operations(
+            existing_setting, preserving_operations[2:],
+            overlay._Target("Deployment", "voice-matchmaking", "")), desired_existing_setting)
+        self.assertEqual(
+            [volume["secret"] for volume in projected["spec"]["template"]["spec"]["volumes"]],
+            [volume["secret"] for volume in pod_spec["volumes"]],
+        )
+        target = overlay.TARGETS[3]
+        plan = {"kind": target.kind, "name": target.name, "patchFile": target.patch_file,
+                "uid": base["metadata"]["uid"],
+                "resourceVersion": base["metadata"]["resourceVersion"],
+                "operations": operations,
+                "desiredObservedSha256": overlay.observed_render_hash(target, desired)}
+        client = overlay.KubectlClient()
+        with mock.patch.object(client, "call", return_value=desired) as call:
+            client.server_dry_run(plan)
+        args = call.call_args.args
+        self.assertEqual(args[:3], ("patch", "deployment", "voice-matchmaking"))
+        self.assertIn("--dry-run=server", args)
+        patch_arg = next(arg for arg in args if arg.startswith("--patch="))
+        self.assertEqual(json.loads(patch_arg[len("--patch="):]), operations)
+
+        absent_parent = copy.deepcopy(base)
+        absent_parent["spec"]["template"]["spec"].pop("securityContext")
+        desired_without_parent = copy.deepcopy(absent_parent)
+        desired_without_parent["spec"]["template"]["spec"]["securityContext"] = {"fsGroup": 65532}
+        parent_operations = overlay.object_patch(absent_parent, desired_without_parent)
+        self.assertEqual(parent_operations[2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext",
+            "value": {"fsGroup": 65532},
+        }])
+
+        already_satisfied = copy.deepcopy(desired)
+        self.assertEqual(overlay.object_patch(already_satisfied, copy.deepcopy(already_satisfied)), [
+            {"op": "test", "path": "/metadata/uid", "value": base["metadata"]["uid"]},
+            {"op": "test", "path": "/metadata/resourceVersion",
+             "value": base["metadata"]["resourceVersion"]},
+        ])
+
+    def test_matchmaking_fs_group_patch_rejects_other_security_changes(self):
+        base = matchmaking_secret_mount_snapshot()
+        cases = (
+            ("other fsGroup", {"fsGroup": 1000}),
+            ("extra pod security setting", {"fsGroup": 65532, "runAsNonRoot": True}),
+            ("other deployment", {"fsGroup": 65532}),
+            ("replace existing fsGroup", {"fsGroup": 65532}),
+        )
+        for label, security_context in cases:
+            with self.subTest(case=label):
+                if label == "other deployment":
+                    target = captured_deployment(
+                        "voice-chat", "chat",
+                        overlay.EXPECTED_OBJECT_UIDS[("Deployment", "voice-chat")], "17")
+                    target["spec"]["template"]["spec"]["securityContext"] = {}
+                else:
+                    target = copy.deepcopy(base)
+                if label == "replace existing fsGroup":
+                    target["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 1000
+                desired = copy.deepcopy(target)
+                desired["spec"]["template"]["spec"]["securityContext"] = security_context
+                with self.assertRaises(overlay.OverlayError):
+                    overlay.object_patch(target, desired)
+
+        unrelated = copy.deepcopy(base)
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        desired["spec"]["template"]["spec"]["automountServiceAccountToken"] = False
+        with self.assertRaises(overlay.OverlayError):
+            overlay.object_patch(unrelated, desired)
 
     def test_missing_list_parents_use_single_parent_add_operation(self):
         cases = (
@@ -662,7 +1034,10 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
             recreated["metadata"]["uid"] = "replacement-object"
             overlay.build_object_plan(Renderer(), target, recreated, patch_file)
         with self.assertRaisesRegex(overlay.OverlayError, "image not active"):
-            overlay.build_object_plan(Renderer(), target, base, patch_file)
+            unqualified = copy.deepcopy(base)
+            unqualified["spec"]["template"]["spec"]["containers"][0]["image"] = (
+                "ghcr.io/poryadok/voiceroot/matchmaking@sha256:" + "0" * 64)
+            overlay.build_object_plan(Renderer(), target, unqualified, patch_file)
 
     def test_plan_binds_source_patch_and_render_hashes(self):
         self.assertEqual(len(overlay.sha256_bytes(b"reviewed")), 64)

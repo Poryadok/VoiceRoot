@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 OVERLAY = ROOT / "deploy/dev/match-squad-trust-overlay"
@@ -58,6 +59,25 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
             'name: S2S_JWKS_URLS_JSON\n              value: \'{"gateway":"https://api-dev.comrade.click/.well-known/voice-principal-jwks.json"}\'',
             matchmaking,
         )
+
+    def test_matchmaking_signing_secret_is_group_readable_only_to_nonroot_runtime(self):
+        matchmaking = source("voice-matchmaking.runtime.patch.yaml")
+        self.assertRegex(
+            matchmaking,
+            r"(?m)^    spec:\n      securityContext:\n        fsGroup: 65532$",
+        )
+        match = re.search(
+            r"(?ms)^        - name: matchmaking-principal-signing\n          secret:\n(.*?)(?=^        - name:|\Z)",
+            matchmaking,
+        )
+        self.assertIsNotNone(match)
+        volume = match.group(1)
+        self.assertIn("defaultMode: 288", volume)  # 0440
+        self.assertEqual(
+            re.findall(r"(?m)^              - key: (.+)$", volume),
+            ["current.pem", "next.pem"],
+        )
+        self.assertNotIn("defaultMode: 420", volume)  # 0444 would expose key files to all users
         chat = source("voice-chat.runtime.patch.yaml")
         for value in (
             "CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN",
