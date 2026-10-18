@@ -254,6 +254,13 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 5. Grafana: datasource ClickHouse + dashboards `voice-analytics-*.json` ([`deploy/observability/grafana/`](../deploy/observability/grafana/)); plugin `grafana-clickhouse-datasource`.
 6. **Backfill** (опционально): replay JetStream с `DeliverAll` за N дней — только по runbook, с лимитом объёма; иначе старт с нуля.
 
+**Production:** `full` автоматически ждёт rollout `voice-clickhouse`, затем
+запускает `scripts/prod/apply-clickhouse-init.sh` в выбранном namespace (default
+`voice-prod`). Wrapper через Bash вызывает общий staging-скрипт: bootstrap и
+повторный `full` применяют тот же idempotent SQL, а отсутствие SQL или ошибка
+DDL останавливает apply. `app-only` / `images-only` этот шаг не выполняют.
+Подробности и граница managed ClickHouse — [production runbook](../deploy/prod/README.md#clickhouse-schema).
+
 **Admin UI:** `src/admin` — `/analytics/product`, `/analytics/funnels`, `/analytics/export` (staff JWT).
 
 ### Voice lifecycle storage (source-disabled)

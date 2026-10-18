@@ -66,3 +66,21 @@ GitHub setup:
 | Variables `VOICE_PROD_K8S_NAMESPACE`, `VOICE_PROD_*_INGRESS_HOST`, `VOICE_PROD_IMAGE_PULL_SECRET` | Prod FQDNs and namespace |
 
 See [DEPLOYMENT.md](../../docs/DEPLOYMENT.md) for tag policy and approval flow.
+
+## ClickHouse schema
+
+The `full` path runs `scripts/prod/apply-infra.sh`, waits for the ClickHouse
+StatefulSet rollout, then invokes `scripts/prod/apply-clickhouse-init.sh`. The
+wrapper selects `voice-prod` by default (or the explicit `VOICE_K8S_NAMESPACE`)
+and runs the shared staging implementation through Bash; script execute bits
+are not required. `app-only` and `images-only` do not apply ClickHouse DDL.
+
+The shared implementation publishes the init ConfigMap, waits for native and
+remote authentication, and applies `docker/clickhouse/init/001_events.sql` using
+the Pod's local client. Both first bootstrap and subsequent full rollouts apply
+the additive, idempotent SQL. Missing SQL, a failed apply, or a missing
+`voice.events` / `voice.events_logical` prevents successful completion. This
+path targets the bundled StatefulSet; managed ClickHouse needs its own reviewed
+operator procedure. Local orchestration regression checks run with
+`bash scripts/ci/prod-clickhouse-init_test.sh` without cluster access; they do
+not prove a production rollout or actual ClickHouse authentication.
