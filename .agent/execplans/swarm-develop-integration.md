@@ -56,8 +56,9 @@ No new agents or ordinary implementation tasks may be started.
 2. Integrate independent reviewed leaves first. Preserve every source commit;
    use `git merge --no-ff --no-stat HEAD -m ...`, never squash/rebase/amend/reset.
 3. Assemble shared Role/Space/Chat groups in dependency order. Role Admin17
-   precedes producer18 and entry-policy19; producer20 and later Organizer changes
-   preserve all earlier policy bits. Space ordinary events26 and audit27/29,
+   precedes producer18 and entry-policy19. Role20 was released: admission DTOs
+   and receipt codec are contract-only, with no schema/receiver activation.
+   Space nickname26 and audit27/29,
    composite28, entry-policy30, composite audit-ID correction31 require their
    exact final author order. Do not invent or silently renumber migrations.
 4. Preserve all additive protobuf fields/RPCs. Resolve source proto conflicts
@@ -107,8 +108,11 @@ Author-provided exact final heads and remaining gates continue in TT/manifest.
 
 ## Risks And Follow-Ups
 
-Current BE-106/BE-064/BE-130/BE-131/BE-010 authors are finishing corrections and
-checks; integrate their final immutable successors rather than stale snapshots.
+Current BE-106/BE-130/BE-131 authors are finishing corrections and checks;
+integrate their final immutable successors rather than stale snapshots. BE-064
+has no new implementation source and its clean preparation lease was returned.
+BE-010 final `deff1b0` delivers a bounded policy slice, not the full admission
+runtime; Role20 remains unimplemented and is not a missing commit to invent.
 Shared generated contracts and Role/Space migrations need assembled verification.
 BE-102's source CLEAR excludes actual committed journal emission and Linux
 runtime gates. Several product tasks intentionally retain larger open scopes.
