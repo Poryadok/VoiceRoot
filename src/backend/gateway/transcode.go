@@ -36,40 +36,44 @@ import (
 )
 
 type grpcClients struct {
-	connections             []*grpc.ClientConn
-	userConn                *grpc.ClientConn
-	userRequired            bool
-	userConnectErr          error
-	user                    userv1.UserServiceClient
-	social                  socialv1.SocialServiceClient
-	chat                    chatv1.ChatServiceClient
-	messaging               messagingv1.MessagingServiceClient
-	voice                   callsv1.VoiceServiceClient
-	file                    filev1.FileServiceClient
-	space                   spacev1.SpaceServiceClient
-	spaceLifecycle          spacev1.SpaceServiceClient
-	spaceLifecycleConn      *grpc.ClientConn
-	spaceLifecycleErr       error
-	matchSquadMember        callsv1.MatchSquadMemberServiceClient
-	matchSquadMemberConn    *grpc.ClientConn
-	matchSquadMemberErr     error
-	role                    rolev1.RoleServiceClient
-	notification            notificationv1.NotificationServiceClient
-	matchmaking             matchmakingv1.MatchmakingServiceClient
-	matchmakingComplete     matchmakingv1.MatchmakingServiceClient
-	matchmakingCompleteConn *grpc.ClientConn
-	matchmakingCompleteErr  error
-	moderation              moderationv1.ModerationServiceClient
-	subscription            subscriptionv1.SubscriptionServiceClient
-	bot                     botv1.BotServiceClient
-	story                   storyv1.StoryServiceClient
-	search                  searchv1.SearchServiceClient
-	auth                    authv1.AuthServiceClient
-	analytics               analyticsv1.AnalyticsQueryServiceClient
-	voiceUser          callsv1.VoiceServiceClient
-	voiceUserConn      *grpc.ClientConn
-	voiceUserRequired  bool
-	voiceUserErr       error
+	auditInitiatingTransports []auditInitiatingTransport
+	connections               []*grpc.ClientConn
+	userConn                  *grpc.ClientConn
+	userRequired              bool
+	userConnectErr            error
+	user                      userv1.UserServiceClient
+	social                    socialv1.SocialServiceClient
+	chat                      chatv1.ChatServiceClient
+	chatAudit                 chatv1.ChatServiceClient
+	roleAudit                 rolev1.RoleServiceClient
+	botAuditAdmin             botv1.BotServiceClient
+	messaging                 messagingv1.MessagingServiceClient
+	voice                     callsv1.VoiceServiceClient
+	file                      filev1.FileServiceClient
+	space                     spacev1.SpaceServiceClient
+	spaceLifecycle            spacev1.SpaceServiceClient
+	spaceLifecycleConn        *grpc.ClientConn
+	spaceLifecycleErr         error
+	matchSquadMember          callsv1.MatchSquadMemberServiceClient
+	matchSquadMemberConn      *grpc.ClientConn
+	matchSquadMemberErr       error
+	role                      rolev1.RoleServiceClient
+	notification              notificationv1.NotificationServiceClient
+	matchmaking               matchmakingv1.MatchmakingServiceClient
+	matchmakingComplete       matchmakingv1.MatchmakingServiceClient
+	matchmakingCompleteConn   *grpc.ClientConn
+	matchmakingCompleteErr    error
+	moderation                moderationv1.ModerationServiceClient
+	subscription              subscriptionv1.SubscriptionServiceClient
+	bot                       botv1.BotServiceClient
+	story                     storyv1.StoryServiceClient
+	search                    searchv1.SearchServiceClient
+	auth                      authv1.AuthServiceClient
+	analytics                 analyticsv1.AnalyticsQueryServiceClient
+	voiceUser                 callsv1.VoiceServiceClient
+	voiceUserConn             *grpc.ClientConn
+	voiceUserRequired         bool
+	voiceUserErr              error
 }
 
 type transcoder struct {
@@ -91,6 +95,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	}
 
 	clients := &grpcClients{}
+	clients.configureAuditInitiatingTransports()
 	if cfg, enabled, err := spaceLifecycleClientConfigFromEnv(); err != nil {
 		clients.spaceLifecycleErr = err
 	} else if enabled {
@@ -239,7 +244,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	} else if conn != nil {
 		clients.analytics = analyticsv1.NewAnalyticsQueryServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
+	if len(clients.auditInitiatingTransports) == 0 && clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
 		return nil
 	}
 	return clients
@@ -251,6 +256,9 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 // first profile request.
 func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 	if c != nil {
+		if err := c.waitAuditInitiatingReady(ctx); err != nil {
+			return err
+		}
 		if c.matchSquadMemberErr != nil {
 			return c.matchSquadMemberErr
 		}
