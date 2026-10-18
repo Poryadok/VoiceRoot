@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/voice/internal/spacebarrier"
 	"voice/backend/voice/internal/store"
 )
 
@@ -72,7 +73,9 @@ func (s *PostgresAdmissionStore) CheckSchema(ctx context.Context) error {
 	}
 	var ready bool
 	err := s.pool.QueryRow(ctx, `SELECT
-	to_regclass('voice_space_media_admissions') IS NOT NULL
+	to_regclass('voice_space_media_grants') IS NOT NULL
+ AND to_regclass('voice_space_lifecycle_targets') IS NOT NULL
+ AND to_regclass('voice_space_media_admissions') IS NOT NULL
 	AND to_regclass('voice_space_media_admission_outbox') IS NOT NULL
 	AND to_regclass('voice_space_media_room_heads') IS NOT NULL
 	AND EXISTS (SELECT 1 FROM information_schema.columns
@@ -95,19 +98,23 @@ func (s *PostgresAdmissionStore) ClaimRoomHead(ctx context.Context, voiceRoomID,
 	if !s.usable() || voiceRoomID == "" || spaceID == "" || proposedRoomID == "" || operationID == uuid.Nil {
 		return store.SpaceMediaRoomHead{}, ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return store.SpaceMediaRoomHead{}, fmt.Errorf("begin Space voice-room claim: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	lifecycleGeneration, err := spacebarrier.LockLive(ctx, tx, spaceID)
+	if err != nil {
+		return store.SpaceMediaRoomHead{}, err
+	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))`, voiceRoomID); err != nil {
 		return store.SpaceMediaRoomHead{}, fmt.Errorf("serialize Space voice-room claim: %w", err)
 	}
 	var head store.SpaceMediaRoomHead
 	var roomGeneration int64
-	err = tx.QueryRow(ctx, `SELECT voice_room_id,space_id,call_room_id,room_generation,creator_operation_id,state
+	err = tx.QueryRow(ctx, `SELECT voice_room_id,space_id,call_room_id,room_generation,creator_operation_id,state,lifecycle_generation
 FROM voice_space_media_room_heads WHERE voice_room_id=$1 ORDER BY room_generation DESC LIMIT 1 FOR UPDATE`, voiceRoomID).Scan(
-		&head.VoiceRoomID, &head.SpaceID, &head.RoomID, &roomGeneration, &head.CreatorOperationID, &head.State)
+		&head.VoiceRoomID, &head.SpaceID, &head.RoomID, &roomGeneration, &head.CreatorOperationID, &head.State, &head.LifecycleGeneration)
 	if err == nil {
 		head.RoomGeneration = uint64(roomGeneration)
 	}
@@ -116,14 +123,14 @@ FROM voice_space_media_room_heads WHERE voice_room_id=$1 ORDER BY room_generatio
 			return store.SpaceMediaRoomHead{}, ErrAdmissionConflict
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO voice_space_media_room_heads
-(voice_room_id,room_generation,space_id,call_room_id,creator_operation_id,state)
-VALUES($1,1,$2,$3,$4,'OPEN')`, voiceRoomID, spaceID, proposedRoomID, operationID)
+(voice_room_id,room_generation,space_id,call_room_id,creator_operation_id,state,lifecycle_generation)
+VALUES($1,1,$2,$3,$4,'OPEN',$5)`, voiceRoomID, spaceID, proposedRoomID, operationID, lifecycleGeneration)
 		if err != nil {
 			return store.SpaceMediaRoomHead{}, fmt.Errorf("claim initial Space voice-room incarnation: %w", err)
 		}
-		err = tx.QueryRow(ctx, `SELECT voice_room_id,space_id,call_room_id,room_generation,creator_operation_id,state
+		err = tx.QueryRow(ctx, `SELECT voice_room_id,space_id,call_room_id,room_generation,creator_operation_id,state,lifecycle_generation
 FROM voice_space_media_room_heads WHERE voice_room_id=$1 ORDER BY room_generation DESC LIMIT 1 FOR UPDATE`, voiceRoomID).Scan(
-			&head.VoiceRoomID, &head.SpaceID, &head.RoomID, &roomGeneration, &head.CreatorOperationID, &head.State)
+			&head.VoiceRoomID, &head.SpaceID, &head.RoomID, &roomGeneration, &head.CreatorOperationID, &head.State, &head.LifecycleGeneration)
 		if err == nil {
 			head.RoomGeneration = uint64(roomGeneration)
 		}
@@ -131,7 +138,7 @@ FROM voice_space_media_room_heads WHERE voice_room_id=$1 ORDER BY room_generatio
 	if err != nil {
 		return store.SpaceMediaRoomHead{}, fmt.Errorf("read Space voice-room incarnation: %w", err)
 	}
-	if head.SpaceID != spaceID {
+	if head.SpaceID != spaceID || (head.State != "ENDED" && head.LifecycleGeneration != lifecycleGeneration) {
 		return store.SpaceMediaRoomHead{}, ErrAdmissionConflict
 	}
 	switch head.State {
@@ -169,9 +176,10 @@ FROM voice_space_media_admissions WHERE operation_id=$1 AND voice_room_id=$2 AND
 		head.RoomID = proposedRoomID
 		head.CreatorOperationID = operationID
 		head.State = "OPEN"
+		head.LifecycleGeneration = lifecycleGeneration
 		head.Ready = false
-		_, err = tx.Exec(ctx, `INSERT INTO voice_space_media_room_heads(voice_room_id,room_generation,space_id,call_room_id,creator_operation_id,state)
-VALUES($1,$2,$3,$4,$5,'OPEN')`, voiceRoomID, int64(head.RoomGeneration), spaceID, proposedRoomID, operationID)
+		_, err = tx.Exec(ctx, `INSERT INTO voice_space_media_room_heads(voice_room_id,room_generation,space_id,call_room_id,creator_operation_id,state,lifecycle_generation)
+VALUES($1,$2,$3,$4,$5,'OPEN',$6)`, voiceRoomID, int64(head.RoomGeneration), spaceID, proposedRoomID, operationID, lifecycleGeneration)
 		if err != nil {
 			return store.SpaceMediaRoomHead{}, fmt.Errorf("reopen Space voice-room incarnation: %w", err)
 		}
@@ -280,11 +288,18 @@ func (s *PostgresAdmissionStore) Prepare(ctx context.Context, a Admission) error
 	if err != nil {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return fmt.Errorf("begin Space media admission: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	currentLifecycle, err := spacebarrier.LockLive(ctx, tx, a.SpaceID.String())
+	if err != nil {
+		return err
+	}
+	if currentLifecycle != a.LifecycleGeneration {
+		return ErrAdmissionConflict
+	}
 	var claimedGeneration int64
 	var claimedSpace, claimedRoom string
 	var claimedCreator uuid.UUID
@@ -296,13 +311,13 @@ FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 
 		return ErrRoomHeadPending
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO voice_space_media_admissions
-(operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,request_sha256)
-SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'PREPARED',$19
+(operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,request_sha256,lifecycle_generation)
+SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'PREPARED',$19,$20
 WHERE EXISTS (SELECT 1 FROM voice_space_media_room_heads h WHERE h.voice_room_id=$7 AND h.room_generation=$8
  AND h.space_id=$5 AND h.call_room_id=$6 AND h.state='OPEN'
  AND (($10::boolean AND h.creator_operation_id=$1) OR (NOT $10::boolean AND h.creator_operation_id<>$1)))
 ON CONFLICT(operation_id) DO NOTHING`,
-		a.OperationID, a.Generation, a.AccountID, a.ProfileID, a.SpaceID, a.RoomID, a.VoiceRoomID, int64(a.RoomGeneration), a.Identity, a.CreatedRoom, a.CallStartedAt.UTC(), a.MaxParticipants, int64(a.SessionEpoch), int64(a.AccessEpoch), int64(a.PolicyEpoch), a.CanJoin, a.CanPublishAudio, a.CanSubscribe, fingerprint[:])
+		a.OperationID, a.Generation, a.AccountID, a.ProfileID, a.SpaceID, a.RoomID, a.VoiceRoomID, int64(a.RoomGeneration), a.Identity, a.CreatedRoom, a.CallStartedAt.UTC(), a.MaxParticipants, int64(a.SessionEpoch), int64(a.AccessEpoch), int64(a.PolicyEpoch), a.CanJoin, a.CanPublishAudio, a.CanSubscribe, fingerprint[:], a.LifecycleGeneration)
 	if err != nil {
 		return fmt.Errorf("persist Space media admission intent: %w", err)
 	}
@@ -336,16 +351,26 @@ func (s *PostgresAdmissionStore) Fence(ctx context.Context, a Admission) error {
 	if !s.usable() || a.OperationID == uuid.Nil || a.AccountID == uuid.Nil || a.ProfileID == uuid.Nil || a.RoomID == "" || a.Generation == "" {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return fmt.Errorf("begin Space media fence: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	currentLifecycle, err := spacebarrier.LockLive(ctx, tx, a.SpaceID.String())
+	if err != nil {
+		return err
+	}
+	if currentLifecycle != a.LifecycleGeneration {
+		return ErrAdmissionConflict
+	}
 	var headGeneration int64
 	var headSpace, headRoom, headState string
 	var headCreator uuid.UUID
 	if err = tx.QueryRow(ctx, `SELECT room_generation,space_id,call_room_id,creator_operation_id,state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, a.VoiceRoomID, int64(a.RoomGeneration)).Scan(&headGeneration, &headSpace, &headRoom, &headCreator, &headState); err != nil || headGeneration != int64(a.RoomGeneration) || headSpace != a.SpaceID.String() || headRoom != a.RoomID || headState != "OPEN" || (a.CreatedRoom && headCreator != a.OperationID) || (!a.CreatedRoom && headCreator == a.OperationID) {
 		return ErrRoomHeadPending
+	}
+	if err := spacebarrier.LockIdentities(ctx, tx, a.AccountID.String(), a.ProfileID.String()); err != nil {
+		return err
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO voice_profile_account_mappings(profile_id,account_id) VALUES($1,$2) ON CONFLICT(profile_id) DO NOTHING`, a.ProfileID, a.AccountID); err != nil {
 		return fmt.Errorf("persist Space media account mapping: %w", err)
@@ -388,11 +413,14 @@ func (s *PostgresAdmissionStore) MarkCommitted(ctx context.Context, operationID 
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return fmt.Errorf("begin Space media admission commit: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAdmissionLive(ctx, tx, operationID, generation); err != nil {
+		return err
+	}
 	var voiceRoomID, roomID string
 	var roomGeneration int64
 	err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation,room_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&voiceRoomID, &roomGeneration, &roomID)
@@ -430,11 +458,14 @@ func (s *PostgresAdmissionStore) MarkProjectionApplied(ctx context.Context, oper
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAdmissionLive(ctx, tx, operationID, generation); err != nil {
+		return err
+	}
 	var voiceRoomID string
 	var roomGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&voiceRoomID, &roomGeneration); err != nil {
@@ -511,11 +542,14 @@ func (s *PostgresAdmissionStore) MarkAborting(ctx context.Context, operationID u
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAdmissionCleanup(ctx, tx, operationID, generation); err != nil {
+		return err
+	}
 	var voiceRoomID string
 	var roomGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&voiceRoomID, &roomGeneration); err != nil {
@@ -548,14 +582,33 @@ func (s *PostgresAdmissionStore) ReleaseFence(ctx context.Context, a Admission) 
 	if !s.usable() {
 		return ErrAdmissionUnavailable
 	}
-	tag, err := s.pool.Exec(ctx, `DELETE FROM voice_account_voice_fences WHERE account_id=$1 AND profile_id=$2 AND room_id=$3 AND admission_operation_id=$4 AND admission_generation=$5`, a.AccountID, a.ProfileID, a.RoomID, a.OperationID, a.Generation)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAdmissionCleanup(ctx, tx, a.OperationID, a.Generation); err != nil {
+		return err
+	}
+	var room string
+	var roomGeneration int64
+	if err := tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, a.OperationID, a.Generation).Scan(&room, &roomGeneration); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, room, roomGeneration); err != nil {
+		return err
+	}
+	if err := spacebarrier.LockIdentities(ctx, tx, a.AccountID.String(), a.ProfileID.String()); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM voice_account_voice_fences WHERE account_id=$1 AND profile_id=$2 AND room_id=$3 AND admission_operation_id=$4 AND admission_generation=$5`, a.AccountID, a.ProfileID, a.RoomID, a.OperationID, a.Generation)
 	if err != nil {
 		return fmt.Errorf("release exact Space media fence: %w", err)
 	}
 	if tag.RowsAffected() != 1 {
 		return ErrAdmissionConflict
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 // BeginRoomLeave serializes a participant drain with admissions and room
@@ -564,11 +617,14 @@ func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAdmissionCleanup(ctx, tx, operationID, generation); err != nil {
+		return err
+	}
 	var voiceRoomID string
 	var roomGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&voiceRoomID, &roomGeneration); err != nil {
@@ -619,11 +675,14 @@ func (s *PostgresAdmissionStore) CompleteRoomLeave(ctx context.Context, a Admiss
 	if !s.usable() || a.OperationID == uuid.Nil || a.Generation == "" || a.AccountID == uuid.Nil || a.ProfileID == uuid.Nil || a.RoomID == "" {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAdmissionCleanup(ctx, tx, a.OperationID, a.Generation); err != nil {
+		return err
+	}
 	var voiceRoomID string
 	var roomGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, a.OperationID, a.Generation).Scan(&voiceRoomID, &roomGeneration); err != nil {
@@ -674,11 +733,14 @@ func (s *PostgresAdmissionStore) MarkCleanupCompleted(ctx context.Context, opera
 	if !s.usable() {
 		return ErrAdmissionUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAdmissionCleanup(ctx, tx, operationID, generation); err != nil {
+		return err
+	}
 	var voiceRoomID string
 	var roomGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&voiceRoomID, &roomGeneration); err != nil {
@@ -727,8 +789,8 @@ func (s *PostgresAdmissionStore) RecoveryRows(ctx context.Context, limit int) ([
 	if !s.usable() || limit < 1 || limit > 1000 {
 		return nil, ErrAdmissionUnavailable
 	}
-	rows, err := s.pool.Query(ctx, `SELECT operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,participant_state,projection_applied_at IS NOT NULL
-FROM voice_space_media_admissions WHERE cleanup_completed_at IS NULL
+	rows, err := s.pool.Query(ctx, `SELECT operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,participant_state,projection_applied_at IS NOT NULL,lifecycle_generation
+FROM voice_space_media_admissions a WHERE NOT EXISTS(SELECT 1 FROM voice_space_lifecycle_targets t WHERE t.source_kind='native' AND t.target_id='native:'||a.operation_id) AND cleanup_completed_at IS NULL
  AND (state <> 'COMMITTED' OR projection_applied_at IS NULL OR participant_state='REVOKING') ORDER BY updated_at,operation_id LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("read Space media recovery rows: %w", err)
@@ -739,7 +801,7 @@ FROM voice_space_media_admissions WHERE cleanup_completed_at IS NULL
 		var a Admission
 		var state string
 		var roomGeneration, session, access, policy int64
-		if err := rows.Scan(&a.OperationID, &a.Generation, &a.AccountID, &a.ProfileID, &a.SpaceID, &a.RoomID, &a.VoiceRoomID, &roomGeneration, &a.Identity, &a.CreatedRoom, &a.CallStartedAt, &a.MaxParticipants, &session, &access, &policy, &a.CanJoin, &a.CanPublishAudio, &a.CanSubscribe, &state, &a.ParticipantState, &a.ProjectionApplied); err != nil {
+		if err := rows.Scan(&a.OperationID, &a.Generation, &a.AccountID, &a.ProfileID, &a.SpaceID, &a.RoomID, &a.VoiceRoomID, &roomGeneration, &a.Identity, &a.CreatedRoom, &a.CallStartedAt, &a.MaxParticipants, &session, &access, &policy, &a.CanJoin, &a.CanPublishAudio, &a.CanSubscribe, &state, &a.ParticipantState, &a.ProjectionApplied, &a.LifecycleGeneration); err != nil {
 			return nil, err
 		}
 		if roomGeneration <= 0 || session <= 0 || access <= 0 || policy <= 0 {
@@ -762,7 +824,7 @@ func (s *PostgresAdmissionStore) ProjectionRows(ctx context.Context, after uuid.
 	if !s.usable() || limit < 1 || limit > 1000 {
 		return nil, ErrAdmissionUnavailable
 	}
-	rows, err := s.pool.Query(ctx, `SELECT operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,participant_state,projection_applied_at IS NOT NULL
+	rows, err := s.pool.Query(ctx, `SELECT operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,participant_state,projection_applied_at IS NOT NULL,lifecycle_generation
 FROM voice_space_media_admissions WHERE operation_id > $1 AND state='COMMITTED' AND participant_state='ACTIVE'
  AND projection_applied_at IS NOT NULL AND created_room=$2 ORDER BY operation_id LIMIT $3`, after, creators, limit)
 	if err != nil {
@@ -774,7 +836,7 @@ FROM voice_space_media_admissions WHERE operation_id > $1 AND state='COMMITTED' 
 		var a Admission
 		var state string
 		var roomGeneration, session, access, policy int64
-		if err := rows.Scan(&a.OperationID, &a.Generation, &a.AccountID, &a.ProfileID, &a.SpaceID, &a.RoomID, &a.VoiceRoomID, &roomGeneration, &a.Identity, &a.CreatedRoom, &a.CallStartedAt, &a.MaxParticipants, &session, &access, &policy, &a.CanJoin, &a.CanPublishAudio, &a.CanSubscribe, &state, &a.ParticipantState, &a.ProjectionApplied); err != nil {
+		if err := rows.Scan(&a.OperationID, &a.Generation, &a.AccountID, &a.ProfileID, &a.SpaceID, &a.RoomID, &a.VoiceRoomID, &roomGeneration, &a.Identity, &a.CreatedRoom, &a.CallStartedAt, &a.MaxParticipants, &session, &access, &policy, &a.CanJoin, &a.CanPublishAudio, &a.CanSubscribe, &state, &a.ParticipantState, &a.ProjectionApplied, &a.LifecycleGeneration); err != nil {
 			return nil, err
 		}
 		if roomGeneration <= 0 || session <= 0 || access <= 0 || policy <= 0 {

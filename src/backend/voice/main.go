@@ -606,6 +606,17 @@ func main() {
 			},
 			OnReadiness: spaceMediaServing.Store,
 		}
+		if service, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
+			service.Effects.NativeDrain = spaceMediaCoordinator
+			fence, ok := callStore.(interface {
+				SetSpaceLifecycle(context.Context, string, int64, bool) error
+			})
+			if !ok {
+				log.Fatal("P3 requires lifecycle-fenced Redis projection")
+			}
+			service.Effects.ProjectionFence = fence
+			spaceMediaCoordinator.ResumeP3 = service.ResumePending
+		}
 		voiceSvc.SpaceMediaRevoker = spaceMediaCoordinator
 		invalidationConsumer, err := spacemedia.StartInvalidationConsumer(runCtx, natsURL, spaceMediaCoordinator, logger)
 		if err != nil {

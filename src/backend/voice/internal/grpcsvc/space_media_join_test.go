@@ -67,6 +67,10 @@ func (f currentSessionCheckerFunc) RequireCurrent(ctx context.Context, accountID
 }
 
 func (r readySpaceMediaAdmission) CheckSchema(context.Context) error { return r.err }
+func (r readySpaceMediaAdmission) ReserveSpaceGrant(context.Context, uuid.UUID, uuid.UUID, string, livekit.SpaceRoomGrant) (time.Time, time.Time, error) {
+	issued := time.Unix(1700000000, 0).UTC()
+	return issued, issued.Add(time.Minute), r.err
+}
 func (r readySpaceMediaAdmission) ClaimRoomHead(_ context.Context, voiceRoomID, spaceID, roomID string, operationID uuid.UUID, allowCreate bool) (voicestore.SpaceMediaRoomHead, error) {
 	head := voicestore.SpaceMediaRoomHead{VoiceRoomID: voiceRoomID, SpaceID: spaceID, RoomID: roomID, RoomGeneration: 1, State: "OPEN", Ready: !allowCreate}
 	if allowCreate {

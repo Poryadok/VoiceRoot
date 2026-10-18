@@ -485,11 +485,12 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 	joiner.RoomGeneration, joiner.CreatedRoom = creator.RoomGeneration, false
 	joiner.Events = []AdmissionEvent{{ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("pending join")}}
 	// Prepare the second participant, then hold the canonical room head while
-	// both Fence and the final leave queue on PostgreSQL's actual row lock. The
+	// Fence queues on the room lock while the final leave queues on the outer Space barrier. The
 	// observed wait state makes the chosen Fence-first serialization explicit.
 	require.NoError(t, admissions.Prepare(ctx, joiner))
 	headLock, err := pool.Begin(ctx)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = headLock.Rollback(context.Background()) })
 	var state string
 	require.NoError(t, headLock.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
 	require.Equal(t, "OPEN", state)
@@ -508,7 +509,7 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "pg_advisory_xact_lock")
 	require.NoError(t, headLock.Commit(ctx))
 	require.NoError(t, <-fenceResult)
 	require.NoError(t, <-leaveResult)
@@ -570,6 +571,7 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 	// commits CLOSING, a delayed Prepare and Fence must have no durable effects.
 	headLock, err := pool.Begin(ctx)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = headLock.Rollback(context.Background()) })
 	var state string
 	require.NoError(t, headLock.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
 	leaveStarted := make(chan struct{})
@@ -587,7 +589,7 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 		prepareResult <- admissions.Prepare(ctx, joiner)
 	}()
 	<-prepareStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state")
+	waitForPostgresLockWait(t, ctx, pool, "pg_advisory_xact_lock")
 	require.NoError(t, headLock.Commit(ctx))
 	require.NoError(t, <-leaveResult)
 	require.ErrorIs(t, <-prepareResult, ErrRoomHeadPending)
@@ -653,7 +655,7 @@ func startSpaceMediaAdmissionPostgres(t *testing.T, ctx context.Context) *pgxpoo
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	migrations := filepath.Join(root, "src", "backend", "migrations", "voice_db")
 	pool := integrationtest.StartPostgres(t, ctx, "voice_space_media_admission", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
-	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission"} {
+	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000014_space_media_p3"} {
 		body, err := os.ReadFile(filepath.Join(migrations, name+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

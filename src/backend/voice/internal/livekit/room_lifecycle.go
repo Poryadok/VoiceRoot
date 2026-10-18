@@ -31,11 +31,22 @@ type RoomLifecycle struct {
 	sdk RoomServiceSDK
 }
 
+// RemoveParticipant/DeleteRoom do not invalidate self-hosted refreshed bearers.
+func (a *RoomLifecycle) RetirementCapability() string {
+	if a == nil || a.sdk == nil {
+		return "UNKNOWN"
+	}
+	return "EJECT_ONLY"
+}
+
 func NewRoomLifecycle(sdk RoomServiceSDK) *RoomLifecycle {
 	return &RoomLifecycle{sdk: sdk}
 }
 
 func NewSDKRoomLifecycle(url, apiKey, apiSecret string) *RoomLifecycle {
+	if strings.TrimSpace(url) == "" || strings.TrimSpace(apiKey) == "" || strings.TrimSpace(apiSecret) == "" {
+		return &RoomLifecycle{}
+	}
 	return NewRoomLifecycle(lksdk.NewRoomServiceClient(url, apiKey, apiSecret))
 }
 

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	commonv1 "voice.app/voice/common/v1"
+	"voice/backend/voice/internal/spacebarrier"
 )
 
 type PostgresStore struct{ pool *pgxpool.Pool }
@@ -30,7 +31,9 @@ func (s *PostgresStore) CheckSchema(ctx context.Context) error {
 	var ready bool
 	err := s.pool.QueryRow(ctx, `SELECT to_regclass('voice_space_lifecycle_fence_heads') IS NOT NULL
 AND to_regclass('voice_space_lifecycle_fence_receipts') IS NOT NULL
-AND to_regclass('voice_space_lifecycle_purge_receipts') IS NOT NULL`).Scan(&ready)
+AND to_regclass('voice_space_lifecycle_purge_receipts') IS NOT NULL
+ AND to_regclass('voice_space_lifecycle_targets') IS NOT NULL
+ AND to_regclass('voice_space_media_grants') IS NOT NULL`).Scan(&ready)
 	if err != nil {
 		return fmt.Errorf("check Voice Space lifecycle schema: %w", err)
 	}
@@ -56,12 +59,12 @@ func (s *PostgresStore) ApplyFence(ctx context.Context, req *commonv1.SpaceLifec
 	spaceID, _ := uuid.Parse(req.GetSpaceId())
 	operationID, _ := uuid.Parse(req.GetDeletionOperationId())
 	state := fenceStateString(req.GetDesiredState())
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, req.GetSpaceId()); err != nil {
+	if err := spacebarrier.Lock(ctx, tx, req.GetSpaceId()); err != nil {
 		return nil, err
 	}
 	var oldRequest, oldRequestHash, oldReceipt, oldReceiptHash []byte
@@ -75,6 +78,11 @@ func (s *PostgresStore) ApplyFence(ctx context.Context, req *commonv1.SpaceLifec
 			return nil, ErrUnavailable
 		}
 		if len(oldReceipt) != 0 {
+			var proven bool
+			if err := tx.QueryRow(ctx, `SELECT coverage_sealed AND retirement_proven FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2`, spaceID, int64(req.GetGeneration())).Scan(&proven); err != nil || !proven {
+				return nil, ErrUnavailable
+			}
+
 			if !validReceiptDigest(oldReceipt, oldReceiptHash, "voice.space-lifecycle.receipt.v1\x00") {
 				return nil, ErrUnavailable
 			}
@@ -99,8 +107,15 @@ func (s *PostgresStore) ApplyFence(ctx context.Context, req *commonv1.SpaceLifec
 		stale := headErr == nil && req.GetGeneration() < uint64(currentGeneration)
 		appliedState := state
 		if stale {
+			return nil, ErrConflict
 			appliedState = currentState
 		} else {
+			if currentState == "FROZEN" {
+				var proven bool
+				if err := tx.QueryRow(ctx, `SELECT coverage_sealed AND retirement_proven AND receipt_bytes IS NOT NULL FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2`, spaceID, currentGeneration).Scan(&proven); err != nil || !proven {
+					return nil, ErrUnavailable
+				}
+			}
 			if err := validateTransition(currentGeneration, currentState, req.GetGeneration(), state); err != nil {
 				return nil, err
 			}
@@ -121,6 +136,11 @@ VALUES($1,$2,$3,$4,$5,$6,$7)`, spaceID, int64(req.GetGeneration()), operationID,
 			return nil, err
 		}
 		oldReceiptID = receiptID
+		if state == "FROZEN" {
+			if err := capture(ctx, tx, req, requestHash); err != nil {
+				return nil, err
+			}
+		}
 		if stale {
 			if err := tx.Commit(ctx); err != nil {
 				return nil, err
@@ -136,6 +156,11 @@ VALUES($1,$2,$3,$4,$5,$6,$7)`, spaceID, int64(req.GetGeneration()), operationID,
 	}
 	if err := effect(ctx, proto.Clone(req).(*commonv1.SpaceLifecycleFenceRequest)); err != nil {
 		return nil, err
+	}
+	// Local effect success is not a provider retirement proof. The configured
+	// self-hosted adapter cannot reject refreshed credentials. Keep intent pending.
+	if state == "FROZEN" {
+		return nil, ErrUnavailable
 	}
 	return s.completeFence(ctx, req, requestHash, oldReceiptID, state)
 }
@@ -196,12 +221,12 @@ func (s *PostgresStore) PurgeSpace(ctx context.Context, req *commonv1.SpacePurge
 	}
 	spaceID := uuid.MustParse(req.GetSpaceId())
 	operationID := uuid.MustParse(req.GetDeletionOperationId())
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, req.GetSpaceId()); err != nil {
+	if err := spacebarrier.Lock(ctx, tx, req.GetSpaceId()); err != nil {
 		return nil, err
 	}
 	var generation int64
@@ -220,6 +245,10 @@ FROM voice_space_lifecycle_fence_heads WHERE space_id=$1 FOR UPDATE`, spaceID).S
 	if state != "PURGE_DECIDED" || generation != int64(req.GetGeneration()) || headOperation != operationID ||
 		manifestID != uuid.MustParse(manifest.GetManifestId()) || !bytes.Equal(manifestHash, manifest.GetManifestSha256()) || manifestCount != fmt.Sprint(manifest.GetItemCount()) {
 		return nil, ErrConflict
+	}
+	var retirement bool
+	if err := tx.QueryRow(ctx, `SELECT coverage_sealed AND retirement_proven AND receipt_bytes IS NOT NULL FROM voice_space_lifecycle_fence_receipts WHERE space_id=$1 AND generation=$2 AND applied_state='FROZEN'`, spaceID, generation-1).Scan(&retirement); err != nil || !retirement {
+		return nil, ErrUnavailable
 	}
 	var oldRequest, oldRequestHash, oldReceipt, oldReceiptHash []byte
 	var receiptID uuid.UUID
@@ -263,7 +292,8 @@ VALUES($1,$2,$3,$4,$5,$6)`, spaceID, generation, operationID, requestBytes, requ
 	if err := effect(ctx, proto.Clone(req).(*commonv1.SpacePurgeRequest)); err != nil {
 		return nil, err
 	}
-	return s.completePurge(ctx, req, requestHash, receiptID)
+	// DeleteRoom/NotFound cannot retire old room-scoped credentials either.
+	return nil, ErrUnavailable
 }
 
 func (s *PostgresStore) completePurge(ctx context.Context, req *commonv1.SpacePurgeRequest, requestHash []byte, receiptID uuid.UUID) (*commonv1.SpacePurgeReceipt, error) {
@@ -313,12 +343,12 @@ func (s *PostgresStore) ExpireReceipts(ctx context.Context, before time.Time) er
 	if s == nil || s.pool == nil || before.IsZero() {
 		return ErrUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `DELETE FROM voice_space_lifecycle_fence_receipts WHERE applied_at < $1`, before.UTC()); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM voice_space_lifecycle_fence_receipts r WHERE applied_at < $1 AND NOT EXISTS(SELECT 1 FROM voice_space_lifecycle_targets t WHERE t.space_id=r.space_id AND t.generation=r.generation)`, before.UTC()); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM voice_space_lifecycle_purge_receipts WHERE completed_at < $1`, before.UTC()); err != nil {

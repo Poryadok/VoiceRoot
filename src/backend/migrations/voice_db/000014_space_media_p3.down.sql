@@ -1,0 +1,5 @@
+DROP TABLE voice_space_media_grants;
+DROP TABLE voice_space_lifecycle_targets;
+ALTER TABLE voice_space_lifecycle_fence_receipts DROP COLUMN retirement_proven,DROP COLUMN coverage_sealed;
+ALTER TABLE voice_space_media_room_heads DROP COLUMN lifecycle_generation;
+ALTER TABLE voice_space_media_admissions DROP COLUMN lifecycle_generation;

@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -223,7 +224,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		}
 		events = append([]voicestore.SpaceMediaAdmissionEvent{{ID: callStartedID, Subject: "voice.call_started", Payload: startedEnvelope}}, events...)
 	}
-	admission := voicestore.SpaceMediaAdmission{OperationID: operationID, Generation: generation, RoomGeneration: roomHead.RoomGeneration, AccountID: parsedAccountID,
+	admission := voicestore.SpaceMediaAdmission{OperationID: operationID, Generation: generation, RoomGeneration: roomHead.RoomGeneration, LifecycleGeneration: roomHead.LifecycleGeneration, AccountID: parsedAccountID,
 		ProfileID: parsedProfileID, SpaceID: parsedSpaceID, RoomID: current.RoomID, VoiceRoomID: current.VoiceRoomID, Identity: identity,
 		CreatedRoom: created, CallStartedAt: current.StartedAt, MaxParticipants: maxParticipants,
 		SessionEpoch: issued.SessionEpoch, AccessEpoch: issued.AccessEpoch, PolicyEpoch: issued.PolicyEpoch,
@@ -300,6 +301,24 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	if err := s.SpaceMediaAdmissions.MarkCommitted(ctx, operationID, generation); err != nil {
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission commit is pending recovery")
 	}
+	if projections, ok := s.Calls.(interface {
+		SetSpaceLifecycle(context.Context, string, int64, bool) error
+	}); ok {
+		authority, ok := s.SpaceMediaAdmissions.(interface {
+			ProjectionGeneration(context.Context, uuid.UUID, string) (int64, error)
+		})
+		if !ok {
+			return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection authority unavailable")
+		}
+		lifecycle, err := authority.ProjectionGeneration(ctx, operationID, generation)
+		if err != nil {
+			return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection fenced")
+		}
+		if err := projections.SetSpaceLifecycle(ctx, current.SpaceID, lifecycle, true); err != nil {
+			return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection fenced")
+		}
+	}
+	current.SpaceLifecycleGeneration = roomHead.LifecycleGeneration
 	if created {
 		current, err = s.Calls.CreateCall(ctx, current)
 		if err != nil {
@@ -308,7 +327,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	}
 	current, err = s.Calls.AdmitSpaceMediaParticipant(ctx, current.RoomID, voicestore.SpaceMediaParticipant{
 		AccountID: accountID, AdmissionOperationID: operationID.String(), ProfileID: profileID,
-		RoomGeneration: roomHead.RoomGeneration, CreatedRoom: created,
+		LifecycleGeneration: roomHead.LifecycleGeneration, RoomGeneration: roomHead.RoomGeneration, CreatedRoom: created,
 		Identity: identity, Generation: generation, Issued: issued,
 	}, maxParticipants)
 	if err != nil {
@@ -456,7 +475,8 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 		return nil, status.Error(codes.Unavailable, "Auth session authority unavailable")
 	}
 	grant := livekit.SpaceRoomGrant{
-		AccountID: accountID, ProfileID: profileID, SpaceID: call.SpaceID, VoiceRoomID: call.VoiceRoomID,
+		ProviderBinding: s.SpaceTokens.ProviderBinding(),
+		AccountID:       accountID, ProfileID: profileID, SpaceID: call.SpaceID, VoiceRoomID: call.VoiceRoomID,
 		LiveKitRoomName: call.LivekitRoomName, MediaGeneration: generation,
 		SessionEpoch: issued.SessionEpoch, AccessEpoch: issued.AccessEpoch, PolicyEpoch: issued.PolicyEpoch,
 		CanJoin: issued.CanJoin, CanPublishAudio: issued.CanPublishAudio, CanSubscribe: issued.CanSubscribe,
@@ -464,7 +484,17 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 	if ctx.Err() != nil {
 		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
 	}
-	jwt, expiresAt, err := s.SpaceTokens.JoinToken(grant, s.now())
+	reservations, ok := s.SpaceMediaAdmissions.(interface {
+		ReserveSpaceGrant(context.Context, uuid.UUID, uuid.UUID, string, livekit.SpaceRoomGrant) (time.Time, time.Time, error)
+	})
+	if !ok {
+		return nil, status.Error(codes.Unavailable, "durable Space grant authorization unavailable")
+	}
+	issuedAt, expiresAt, err := reservations.ReserveSpaceGrant(ctx, uuid.New(), operationID, generation, grant)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "Space grant authorization is pending")
+	}
+	jwt, expiresAt, err := s.SpaceTokens.JoinReservedToken(grant, issuedAt, expiresAt)
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, "Space media token could not be issued")
 	}

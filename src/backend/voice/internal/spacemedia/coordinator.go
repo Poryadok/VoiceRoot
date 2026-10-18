@@ -86,6 +86,7 @@ type AuthorityNotice struct {
 }
 
 type Coordinator struct {
+	ResumeP3            func(context.Context) error
 	reconcileMu         sync.Mutex
 	ready               bool
 	Store               Store
@@ -336,6 +337,24 @@ func (c *Coordinator) abortAdmission(ctx context.Context, admission store.SpaceM
 }
 
 func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission store.SpaceMediaAdmission) error {
+	if projections, ok := c.Calls.(interface {
+		SetSpaceLifecycle(context.Context, string, int64, bool) error
+	}); ok {
+		authority, ok := c.Admissions.(interface {
+			ProjectionGeneration(context.Context, uuid.UUID, string) (int64, error)
+		})
+		if !ok {
+			return ErrAdmissionUnavailable
+		}
+		lifecycle, err := authority.ProjectionGeneration(ctx, admission.OperationID, admission.Generation)
+		if err != nil {
+			return err
+		}
+		if err := projections.SetSpaceLifecycle(ctx, admission.SpaceID.String(), lifecycle, true); err != nil {
+			return err
+		}
+	}
+
 	if err := c.Admissions.ConfirmRoomHeadOpen(ctx, admission); err != nil {
 		return err
 	}
@@ -382,7 +401,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 		if creatorErr != nil {
 			return creatorErr
 		}
-		call = store.Call{RoomID: admission.RoomID, LivekitRoomName: "voice-room-" + admission.VoiceRoomID,
+		call = store.Call{RoomID: admission.RoomID, SpaceLifecycleGeneration: admission.LifecycleGeneration, LivekitRoomName: "voice-room-" + admission.VoiceRoomID,
 			VoiceRoomID: admission.VoiceRoomID, SpaceID: admission.SpaceID.String(),
 			SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
 			InitiatorProfileID: creator.ProfileID.String(), MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
@@ -407,7 +426,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	} else {
 		if _, err := c.Calls.AdmitSpaceMediaParticipant(ctx, call.RoomID, store.SpaceMediaParticipant{
 			AccountID: admission.AccountID.String(), AdmissionOperationID: admission.OperationID.String(),
-			RoomGeneration: admission.RoomGeneration, CreatedRoom: admission.CreatedRoom,
+			LifecycleGeneration: admission.LifecycleGeneration, RoomGeneration: admission.RoomGeneration, CreatedRoom: admission.CreatedRoom,
 			ProfileID: admission.ProfileID.String(), Identity: admission.Identity, Generation: admission.Generation,
 			Issued: store.SpaceMediaGrant{SessionEpoch: admission.SessionEpoch, AccessEpoch: admission.AccessEpoch, PolicyEpoch: admission.PolicyEpoch,
 				CanJoin: admission.CanJoin, CanPublishAudio: admission.CanPublishAudio, CanSubscribe: admission.CanSubscribe},
@@ -581,6 +600,26 @@ func (c *Coordinator) ReconcileAll(ctx context.Context) error {
 			c.setReady(false)
 		}
 	}()
+	if projections, ok := c.Calls.(interface {
+		SetSpaceLifecycle(context.Context, string, int64, bool) error
+	}); ok {
+		authority, ok := c.Admissions.(interface {
+			RebuildLifecycleWatermarks(context.Context, interface {
+				SetSpaceLifecycle(context.Context, string, int64, bool) error
+			}) error
+		})
+		if !ok {
+			return ErrAdmissionUnavailable
+		}
+		if err := authority.RebuildLifecycleWatermarks(ctx, projections); err != nil {
+			return err
+		}
+	}
+	if c.ResumeP3 != nil {
+		if err := c.ResumeP3(ctx); err != nil && c.OnError != nil {
+			c.OnError(err)
+		}
+	}
 	if err := c.reconcileAdmissions(ctx); err != nil {
 		return err
 	}
