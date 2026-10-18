@@ -47,6 +47,10 @@ service SpaceService {
   rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
   rpc UnbanMember(UnbanMemberRequest) returns (UnbanMemberResponse);
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  // BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+  // local members only, Owner protected, serialized redacted audit/outbox.
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc UpdateMemberNickname(UpdateMemberNicknameRequest) returns (UpdateMemberNicknameResponse);
   rpc ListBans(ListBansRequest) returns (ListBansResponse);
   rpc TimeoutMember(TimeoutMemberRequest) returns (TimeoutMemberResponse);
   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (RemoveMemberTimeoutResponse);
@@ -717,4 +721,17 @@ message GetSpaceDeletionCoordinatorStatusRequest {
 // @voice.unknown_fields=accept_preserve
 message GetSpaceDeletionCoordinatorStatusResponse {
   voice.space.v1.SpaceDeletionCoordinatorStatus status = 1;
+}
+
+message UpdateMemberNicknameRequest {
+  string space_id = 1;
+  // Explicit target; actor is derived only from the verified principal.
+  string profile_id = 2;
+  // Required presence. Empty (after Unicode White_Space trim) clears SQL NULL.
+  // Otherwise 1..64 Unicode scalars; Cc, separators and Bidi_Control forbidden.
+  optional string nickname = 3;
+}
+
+message UpdateMemberNicknameResponse {
+  SpaceMembership space_membership = 1;
 }

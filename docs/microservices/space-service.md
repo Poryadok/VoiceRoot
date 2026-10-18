@@ -274,6 +274,47 @@ forward-compatible acknowledgement handling.
 
 ### Details registry v1
 
+BE-234 adds the Space-owned `member_nickname_updated` action: target_type is
+`profile`, target_id is the edited local member, and details is exactly
+`{"changed_fields":["nickname"]}`. Neither nickname value is retained. The
+nickname mutation and audit/outbox commit atomically; unchanged canonical values
+produce no new fact. Migration `000026_member_nickname_audit` extends the closed
+registry additively; downgrade refuses while nickname audit evidence exists.
+
+### Member nickname RPC (BE-234-nickname-v2-transport)
+
+`UpdateMemberNicknameRequest` has mandatory UUID `space_id` and target
+`profile_id`, plus required presence of optional string `nickname`. Missing
+nickname is `INVALID_ARGUMENT`; explicitly empty/Unicode White_Space-only clears
+SQL NULL and the response omits nickname. The response contains authoritative
+`SpaceMembership`; `joined_at`, member_count and global profile data do not change.
+See [Spaces](../features/spaces.md#ник-участника-в-спейсе) for the exact 64-scalar
+Unicode validation contract.
+
+Only a verified active-profile actor may invoke the RPC. Current membership and
+effective global `MEMBER_MANAGE_NICKNAMES` are required even for self; no node
+override, omitted target or legacy actor metadata supplies authority. Non-owner
+editing Owner is `FAILED_PRECONDITION`; other target ranks do not add a hierarchy
+gate. Missing local target is `NOT_FOUND` only after caller authorization;
+visible roster-only targets return `FAILED_PRECONDITION` without creating a row.
+Ownership/deletion freeze is checked under the same PostgreSQL Space lock as
+leave/kick and the nickname update, including same-value/clear requests. No-op
+requests recheck authorization. The RPC emits no new domain/Realtime event and
+adds no HTTP/UI route.
+
+The nickname RPC is added to the existing Gateway delegated-user mTLS listener
+and denied by the ordinary listener. The handler requires verified `gateway`
+delegated-user principal, audience `space`, exact RPC/hash and canonical
+account/active-profile UUIDs; metadata alone never supplies an actor. Existing
+JWT/replay/session-epoch checks remain required. Its permission request uses the
+existing protected Role connection (`OwnershipRoles`) and Space signer, with a
+fresh service JWT and exact `MEMBER_MANAGE_NICKNAMES` request for the actor;
+outgoing metadata contains only credential/request binding. Owner/Admin and
+no-op requests also require that signed decision; missing Role connection/signer
+or unavailable dependency returns `UNAVAILABLE`, never the old owner fallback.
+Other existing Space and Role permission transports are unchanged. The broader
+signed Space CheckPermission allowlist remains target-only outside this branch.
+
 `target_type` is one of `space`, `invite`, `profile`, `account`, `role`, `chat`,
 `voice_room`, `category`, `tree_node`; `target_id` is always a UUID. Aggregate
 actions such as `space_updated`, `roles_reordered` and `tree_reordered` target the
@@ -419,7 +460,7 @@ space_members
 ├── space_id (FK)
 ├── profile_id (FK)
 ├── joined_at
-├── nickname (nullable, space-specific)
+├── nickname (nullable, space-specific; UpdateMemberNickname, BE-234-nickname-v1)
 └── UNIQUE(space_id, profile_id)
 
 space_bans

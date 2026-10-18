@@ -2700,3 +2700,52 @@ final $typed_data.Uint8List
         'CilHZXRTcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXNSZXNwb25zZRJGCgZzdGF0dXMYAS'
         'ABKAsyLi52b2ljZS5zcGFjZS52MS5TcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXNSBnN0'
         'YXR1cw==');
+
+@$core.Deprecated('Use updateMemberNicknameRequestDescriptor instead')
+const UpdateMemberNicknameRequest$json = {
+  '1': 'UpdateMemberNicknameRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'nickname',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'nickname',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_nickname'},
+  ],
+};
+
+/// Descriptor for `UpdateMemberNicknameRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateMemberNicknameRequestDescriptor =
+    $convert.base64Decode(
+        'ChtVcGRhdGVNZW1iZXJOaWNrbmFtZVJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSW'
+        'QSHQoKcHJvZmlsZV9pZBgCIAEoCVIJcHJvZmlsZUlkEh8KCG5pY2tuYW1lGAMgASgJSABSCG5p'
+        'Y2tuYW1liAEBQgsKCV9uaWNrbmFtZQ==');
+
+@$core.Deprecated('Use updateMemberNicknameResponseDescriptor instead')
+const UpdateMemberNicknameResponse$json = {
+  '1': 'UpdateMemberNicknameResponse',
+  '2': [
+    {
+      '1': 'space_membership',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceMembership',
+      '10': 'spaceMembership'
+    },
+  ],
+};
+
+/// Descriptor for `UpdateMemberNicknameResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateMemberNicknameResponseDescriptor =
+    $convert.base64Decode(
+        'ChxVcGRhdGVNZW1iZXJOaWNrbmFtZVJlc3BvbnNlEkoKEHNwYWNlX21lbWJlcnNoaXAYASABKA'
+        'syHy52b2ljZS5zcGFjZS52MS5TcGFjZU1lbWJlcnNoaXBSD3NwYWNlTWVtYmVyc2hpcA==');

@@ -49,6 +49,7 @@ const (
 	SpaceService_BanMember_FullMethodName                         = "/voice.space.v1.SpaceService/BanMember"
 	SpaceService_UnbanMember_FullMethodName                       = "/voice.space.v1.SpaceService/UnbanMember"
 	SpaceService_ListMembers_FullMethodName                       = "/voice.space.v1.SpaceService/ListMembers"
+	SpaceService_UpdateMemberNickname_FullMethodName              = "/voice.space.v1.SpaceService/UpdateMemberNickname"
 	SpaceService_ListBans_FullMethodName                          = "/voice.space.v1.SpaceService/ListBans"
 	SpaceService_TimeoutMember_FullMethodName                     = "/voice.space.v1.SpaceService/TimeoutMember"
 	SpaceService_RemoveMemberTimeout_FullMethodName               = "/voice.space.v1.SpaceService/RemoveMemberTimeout"
@@ -107,6 +108,10 @@ type SpaceServiceClient interface {
 	BanMember(ctx context.Context, in *BanMemberRequest, opts ...grpc.CallOption) (*BanMemberResponse, error)
 	UnbanMember(ctx context.Context, in *UnbanMemberRequest, opts ...grpc.CallOption) (*UnbanMemberResponse, error)
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
+	// BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+	// local members only, Owner protected, serialized redacted audit/outbox.
+	// @voice.security=public_gateway;callers=service:gateway
+	UpdateMemberNickname(ctx context.Context, in *UpdateMemberNicknameRequest, opts ...grpc.CallOption) (*UpdateMemberNicknameResponse, error)
 	ListBans(ctx context.Context, in *ListBansRequest, opts ...grpc.CallOption) (*ListBansResponse, error)
 	TimeoutMember(ctx context.Context, in *TimeoutMemberRequest, opts ...grpc.CallOption) (*TimeoutMemberResponse, error)
 	RemoveMemberTimeout(ctx context.Context, in *RemoveMemberTimeoutRequest, opts ...grpc.CallOption) (*RemoveMemberTimeoutResponse, error)
@@ -451,6 +456,16 @@ func (c *spaceServiceClient) ListMembers(ctx context.Context, in *ListMembersReq
 	return out, nil
 }
 
+func (c *spaceServiceClient) UpdateMemberNickname(ctx context.Context, in *UpdateMemberNicknameRequest, opts ...grpc.CallOption) (*UpdateMemberNicknameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateMemberNicknameResponse)
+	err := c.cc.Invoke(ctx, SpaceService_UpdateMemberNickname_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) ListBans(ctx context.Context, in *ListBansRequest, opts ...grpc.CallOption) (*ListBansResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListBansResponse)
@@ -669,6 +684,10 @@ type SpaceServiceServer interface {
 	BanMember(context.Context, *BanMemberRequest) (*BanMemberResponse, error)
 	UnbanMember(context.Context, *UnbanMemberRequest) (*UnbanMemberResponse, error)
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
+	// BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+	// local members only, Owner protected, serialized redacted audit/outbox.
+	// @voice.security=public_gateway;callers=service:gateway
+	UpdateMemberNickname(context.Context, *UpdateMemberNicknameRequest) (*UpdateMemberNicknameResponse, error)
 	ListBans(context.Context, *ListBansRequest) (*ListBansResponse, error)
 	TimeoutMember(context.Context, *TimeoutMemberRequest) (*TimeoutMemberResponse, error)
 	RemoveMemberTimeout(context.Context, *RemoveMemberTimeoutRequest) (*RemoveMemberTimeoutResponse, error)
@@ -802,6 +821,9 @@ func (UnimplementedSpaceServiceServer) UnbanMember(context.Context, *UnbanMember
 }
 func (UnimplementedSpaceServiceServer) ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMembers not implemented")
+}
+func (UnimplementedSpaceServiceServer) UpdateMemberNickname(context.Context, *UpdateMemberNicknameRequest) (*UpdateMemberNicknameResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMemberNickname not implemented")
 }
 func (UnimplementedSpaceServiceServer) ListBans(context.Context, *ListBansRequest) (*ListBansResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListBans not implemented")
@@ -1418,6 +1440,24 @@ func _SpaceService_ListMembers_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_UpdateMemberNickname_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateMemberNicknameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).UpdateMemberNickname(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_UpdateMemberNickname_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).UpdateMemberNickname(ctx, req.(*UpdateMemberNicknameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_ListBans_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListBansRequest)
 	if err := dec(in); err != nil {
@@ -1868,6 +1908,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMembers",
 			Handler:    _SpaceService_ListMembers_Handler,
+		},
+		{
+			MethodName: "UpdateMemberNickname",
+			Handler:    _SpaceService_UpdateMemberNickname_Handler,
 		},
 		{
 			MethodName: "ListBans",

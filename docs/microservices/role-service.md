@@ -363,6 +363,18 @@ to `bot_actor` in the same cutover that enforces their Role allow-list.
 `CheckPermission` cannot become globally strict until every caller of that RPC
 uses a signed principal; each migrated caller is enforced independently while
 remaining callers follow the explicitly tracked migration path.
+
+BE-234-nickname-v2-transport adds one executable exception to the otherwise
+target-only Space permission allowlist: the protected mTLS listener accepts
+`CheckPermission` only for exact `MEMBER_MANAGE_NICKNAMES`, `service:space`,
+audience `role`, exact RPC/request ID/hash binding and absent `chat` and
+`voice_room_id` (present-empty is forbidden). Space vouches for the verified
+actor profile in the request, not the edited member. The service JWT carries no
+user authority. The Role handler repeats the gate before `WithinSpaces` and
+effective-mask calculation, preserving retirement/ownership freeze. Ordinary
+Role listener rejects only this nickname selector; other legacy permission
+branches keep their existing routing. No wildcard, default-role grant or global
+CheckPermission cutover is introduced.
 `Owner` нельзя назначить, снять или переназначить через generic client/member RPC.
 Только dedicated authenticated Space transfer lifecycle меняет Owner и обязан быть
 idempotent по `operation_id`. Unknown caller/RPC, caller с неправильной audience

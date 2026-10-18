@@ -245,6 +245,16 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$listMembers, request, options: options);
   }
 
+  /// BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+  /// local members only, Owner protected, serialized redacted audit/outbox.
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$0.UpdateMemberNicknameResponse> updateMemberNickname(
+    $0.UpdateMemberNicknameRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$updateMemberNickname, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListBansResponse> listBans(
     $0.ListBansRequest request, {
     $grpc.CallOptions? options,
@@ -547,6 +557,11 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/ListMembers',
           ($0.ListMembersRequest value) => value.writeToBuffer(),
           $0.ListMembersResponse.fromBuffer);
+  static final _$updateMemberNickname = $grpc.ClientMethod<
+          $0.UpdateMemberNicknameRequest, $0.UpdateMemberNicknameResponse>(
+      '/voice.space.v1.SpaceService/UpdateMemberNickname',
+      ($0.UpdateMemberNicknameRequest value) => value.writeToBuffer(),
+      $0.UpdateMemberNicknameResponse.fromBuffer);
   static final _$listBans =
       $grpc.ClientMethod<$0.ListBansRequest, $0.ListBansResponse>(
           '/voice.space.v1.SpaceService/ListBans',
@@ -906,6 +921,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ListMembersRequest.fromBuffer(value),
             ($0.ListMembersResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UpdateMemberNicknameRequest,
+            $0.UpdateMemberNicknameResponse>(
+        'UpdateMemberNickname',
+        updateMemberNickname_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UpdateMemberNicknameRequest.fromBuffer(value),
+        ($0.UpdateMemberNicknameResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ListBansRequest, $0.ListBansResponse>(
         'ListBans',
         listBans_Pre,
@@ -1325,6 +1349,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.ListMembersResponse> listMembers(
       $grpc.ServiceCall call, $0.ListMembersRequest request);
+
+  $async.Future<$0.UpdateMemberNicknameResponse> updateMemberNickname_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UpdateMemberNicknameRequest> $request) async {
+    return updateMemberNickname($call, await $request);
+  }
+
+  $async.Future<$0.UpdateMemberNicknameResponse> updateMemberNickname(
+      $grpc.ServiceCall call, $0.UpdateMemberNicknameRequest request);
 
   $async.Future<$0.ListBansResponse> listBans_Pre($grpc.ServiceCall $call,
       $async.Future<$0.ListBansRequest> $request) async {

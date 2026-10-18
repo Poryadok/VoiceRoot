@@ -19,6 +19,12 @@ import (
 
 // StartRoleGRPC boots role_db (when pool is nil) and an in-process RoleService for cross-service tests.
 func StartRoleGRPC(t *testing.T, pool *pgxpool.Pool) (rolev1.RoleServiceClient, func()) {
+	return StartRoleGRPCWithServerOptions(t, pool)
+}
+
+// StartRoleGRPCWithServerOptions installs test transport authentication before
+// the production Role handlers/store for cross-service contract tests.
+func StartRoleGRPCWithServerOptions(t *testing.T, pool *pgxpool.Pool, options ...grpc.ServerOption) (rolev1.RoleServiceClient, func()) {
 	t.Helper()
 	var cleanupPool func()
 	if pool == nil {
@@ -29,7 +35,7 @@ func StartRoleGRPC(t *testing.T, pool *pgxpool.Pool) (rolev1.RoleServiceClient, 
 	}
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(options...)
 	rolev1.RegisterRoleServiceServer(srv, &grpcsvc.RoleGRPC{Store: &store.RoleStore{Pool: pool}})
 	go func() { _ = srv.Serve(lis) }()
 	conn, err := grpc.NewClient("passthrough:///bufnet",
