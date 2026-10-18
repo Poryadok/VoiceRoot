@@ -1,0 +1,3 @@
+DROP TABLE matchmaking_voice_roster_cancellation_outbox;
+DROP TABLE matchmaking_voice_roster_contract_conflicts;
+DROP TABLE matchmaking_voice_roster_inbox;
