@@ -354,7 +354,7 @@ and Voice IDs denied while history remains.
 - [x] **[Role/Space] `SPACE_MANAGE_MATCHMAKING`** — matchmaking configuration is owned by Space, not queue admission: `UpdateSpaceMmConfig` requires this permission; generic `UpdateSpace.mm_config_json` requires it in addition to `SPACE_MANAGE_SETTINGS` for any ordinary settings fields. Regression coverage: `space_mm_permissions_integration_test.go`.
 - [ ] **[Role] Many text-chat permission bits not enforced downstream — Messaging checks send + mentions/threads/pins; не все attach/embed/react/manage/slow-mode bits.** — `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`, `threads_policy.go`
 - [x] **[Role] `SPACE_MANAGE_SETTINGS`** — `UpdateSpace` → `requireSpacePermission(..., SpaceManageSettings)` (`space.go`).
-- [ ] **[Role] Admin ≡ Owner on effective mask — `GetEffectiveMask` short-circuits Admin to `AllMask()`; Admin system role mask is also `all`. Doc algorithm step 5 («кроме Owner-specific») has no distinct owner bits, so Admin is functionally Owner for all 42 flags.** — `src/backend/role/internal/store/roles.go` (`GetEffectiveMask`), `permissions/permissions.go` (`SystemRoles`); `docs/microservices/role-service.md` § «Вычисление effective permissions»
+- [ ] **[Role] BE-068 Admin ordinary permissions and Owner identity** — accepted authority contract permits equal ordinary masks while preserving Owner-only identity/proof gates. Admin seed correction, additive `000017_admin_role_management`, proposed-position hierarchy validation and focused regressions are implemented; exact-head PostgreSQL/migration and A2 runtime acceptance remain required. Admin has no post-override bypass; node denies win. See [authority execution plan](../testing/be068-admin-authority-exec-plan.md).
 
 ### Bot
 
