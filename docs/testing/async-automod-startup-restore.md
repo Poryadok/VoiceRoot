@@ -1,4 +1,15 @@
 BE-045 c12: startup and restore contract, v1
+
+Later c17 refinement: [account-core and Space erasure](async-automod-space-erasure.md)
+requires minimized v2 bytes/hash from insertion and separate erasable local
+coverage links. Before restored origin links or product effects are accessible,
+Messaging reapplies authoritative Space/managed-chat freeze/purge history and
+erases prohibited bridge rows, including orphaned primary/companion links.
+Product restore never reconstructs an old bridge. Unsupported v1 bytes or
+identity-bearing hashes, missing Space recovery evidence and remote-ahead source
+cursors keep affected gates closed. Remaining account-purpose cores stay within
+c9 eligibility/retention; there is no new participant or Mod ACK prerequisite.
+
 Actor: Рудеус-162. Accounting role: architectural/security specialist. Model/effort: gpt-6-astra/high. Focused continuation requested by Рудеус-156; implementation/delivery remains with 156.
 Evidence head: 2cbe608c4bd2bad64182d591622104d90928d00e, atop 25b4/df2319328, branch codex/be045-async-vertical-156. Source claims below refer to this immutable head, not main or later working changes.
 This resolves the new startup/restore question only. Explicit c2 and autonomous c9 detector, Bot liability, retention and purge decisions remain unchanged. No source implementation, tests, CI, runtime activation or deployment has been performed by this specialist.

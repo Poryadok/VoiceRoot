@@ -333,6 +333,15 @@ commentary creates one immutable private evidence event in the message commit;
 exact replay and failed transactions create none. Account-scoped HMAC digests
 carry key IDs but never plaintext/URLs in public events or moderation logs.
 
+The immutable v2 account core/hash contains no origin message/chat/profile/Bot/
+installation/client-operation identifiers. Its temporary local coverage bridge
+is erased at exact Space FROZEN acknowledgement and scoped managed-chat/physical
+cleanup; it is never rebuilt on product restore or used by private dispatch.
+Account-purpose PERSONAL samples/strikes remain eligible within c9 after origin
+Space deletion; account terminal purge still dominates. See the explicit
+[c17 classification](testing/async-automod-space-erasure.md), including unknown
+protobuf fields, unsupported v1 and restored linkage guards.
+
 Moderation owns the complete desired ban projection and its monotonic revision.
 Auth acknowledges the exact accepted account/subject/revision/desired state;
 an ahead revision alone cannot acknowledge an older request. Machine sanctions

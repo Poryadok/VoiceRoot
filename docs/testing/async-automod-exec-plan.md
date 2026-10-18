@@ -140,6 +140,15 @@ to c2. Preserve the unknown-suspension Auth restriction during migration.
 
 ## Current evidence and continuation
 
+BE-045 c17 resolves the newly discovered Space P3 linkage boundary under existing
+autonomous delegation. The complete [account-core/erasure refinement](async-automod-space-erasure.md)
+requires additive minimized protocol v2 and a separately erasable local coverage
+bridge from original insertion. Account-purpose PERSONAL samples remain c9
+eligible after Space deletion; account terminal purge dominates. Implement this
+before activation, reject unsupported v1/unknown bytes, and execute E1-E14 alongside
+c9/c13. The earlier unactivated v1 producer checkpoint is implementation evidence
+only; it cannot authorize silently rehashing any hypothetical live v1 stream.
+
 The additional startup/restore risk is resolved by BE-045 c13 in
 [the startup and restore contract](async-automod-startup-restore.md). It preserves
 c2/c9 and adds P0-P5 method/worker gates, readiness-independent private network

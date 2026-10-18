@@ -2,6 +2,16 @@
 
 ## Обзор
 
+The [BE-045 c17 account-core classification](../testing/async-automod-space-erasure.md)
+keeps bounded account-purpose PERSONAL samples/strikes eligible after the origin
+Space is deleted. The private v2 core and its equality hash contain no origin
+message/chat/profile/Bot/installation/operation identifiers. Space deletion does
+not reset a pattern, create early expiry, remove ordered positions or confer
+spam immunity; delayed still-admissible cores may sanction the captured account.
+Account terminal purge dominates. This never retains Space-target reports or
+their attached evidence, exposes digest data as appeal content, or adds a P3
+coordinator participant. Unsupported identity-bearing v1 data keeps gates closed.
+
 Система модерации: жалобы, автоматическая модерация, санкции, апелляции.
 
 **Язык**: Go

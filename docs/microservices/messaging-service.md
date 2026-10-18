@@ -4,7 +4,7 @@
 
 Every enabled successful insertion, including forward commentary, attachments,
 ghost-only messages and Bot/game output, allocates one account sequence and
-private immutable evidence row in the message transaction. Exact idempotency
+private immutable account-only v2 core in the message transaction. Exact idempotency
 replay allocates none and returns the saved owner/result before fresh authority
 lookups. Chat/Space locks precede the account counter lock. Source time is
 monotonic database time at that lock, never a client timestamp.
@@ -16,6 +16,18 @@ muted/banned/deleted-owner sends before commit. Failed admissions create no coun
 The private dispatcher calls `voice.automod.v1.ModerationEvidenceService` with
 fresh request-bound credentials and mTLS. Public `message.sent`, logs and analytics
 gain no account/digest/plaintext fields. Moderation gains no arbitrary GetMessage.
+The core/hash contains no message/chat/profile/Bot/installation/client-operation
+identifiers or full-envelope commitment. Full owner/actor/operation binding is
+still mandatory before insertion; only producer kind/numeric ownership revision
+may accompany the captured account subject in the core.
+
+The separate local message/chat coverage bridge is erased for the exact Space
+manifest during FROZEN acknowledgement and checked absent at local purge,
+including links whose primary/companion rows are already gone. Ordinary physical
+deletion and managed-chat purge remove scoped bridge links without deleting the
+core or advancing its sequence. Product restore never reconstructs old links;
+private dispatch never reads them. Mod outage/ACK cannot extend linkage retention.
+See the explicit [c17 classification and race/restore contract](../testing/async-automod-space-erasure.md).
 
 Messaging alone owns versioned HMAC keys and the versioned length-framed
 ToLower/TrimSpace text projection (main text, then authored forward commentary).

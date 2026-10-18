@@ -7,7 +7,7 @@ Accepted target, implementation tracked in the
 lifecycle/deletion revision and terminal fences plus the revisioned moderation
 restriction projection. Bot owns owner-account/actor/installation correspondence
 and positive ownership revision. Messaging owns versioned account-scoped HMAC
-keys, subject/source counter, immutable private evidence outbox and content-free
+keys, subject/source counter, immutable account-only v2 core outbox and content-free
 expiry receipts. Moderation owns subject/source baseline, contiguous inbox cursor,
 keyed pattern aliases/samples, consumed-through watermark, strikes, account mute
 episode, machine sanction/event outbox and desired Auth restriction revision.
@@ -21,6 +21,16 @@ erase raw links, payload hashes/digests, pending retries and personal details
 regardless of missing ACKs/gaps; retain only permanent opaque terminal fences and
 minimal nonpersonal existing-case snapshots. Backup restore imports the protected
 terminal snapshot before serving. Full boundary/rotation rules are in the plan.
+
+The separate Messaging-local message/chat coverage bridge is temporary and
+erasable. Exact Space FROZEN acknowledgement removes its manifest links; purge
+completion proves zero links, including orphaned primary/companion rows. A worker
+never joins this bridge. Origin deletion leaves the account-purpose PERSONAL
+core/hash and bounded samples/strikes eligible under c9; it does not impersonate
+account erasure or early source-age expiry. The core/hash contains no origin
+identifiers or full-envelope fingerprint. Restored origin links must be erased
+under authoritative Space/managed-chat fences before access/effects; no old
+bridge is rebuilt on product restore. See [the explicit c17 contract](testing/async-automod-space-erasure.md).
 
 Сводка по [MICROSERVICES.md](MICROSERVICES.md) и файлам `docs/microservices/*.md`. Принцип: **database per service** — каждая строка PostgreSQL — отдельная логическая БД (отдельная схема миграций у владельца). Общие правила идентификаторов, ссылок и полей: [DATA_MODEL.md](DATA_MODEL.md). Объём первой волны PostgreSQL по фичам: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 
