@@ -190,7 +190,7 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 - [x] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` in `.github/ci/e2e-features.yml` smoke_gateway (CI tier 2).
 - [x] **Convert-guest: negative Auth integration tests** — duplicate email, password <8, non-guest token, missing email/phone in `ConvertGuestIntegrationTest`.
 - [x] **Convert-guest: NATS `user.guest_converted`** — `TestComposeConvertGuestNATS_live` shipped (P1.1).
-- [ ] **Guest save-account reminder: server last-shown** — в спеке «локальный или серверный timestamp»; сейчас только `SharedPreferences` (кросс-устройство не синхронизируется).
+- [ ] **Guest save-account reminder: current-version acceptance** — Auth хранит `guest_reminder_last_shown_at` и атомарно резервирует показ не чаще одного раза за любые 24 часа на guest account; `SharedPreferences` служит локальным fast path. Канон включает последующие входы с того же или другого устройства ([auth-and-contacts.md](../features/auth-and-contacts.md#гостевая-учётка)). Реализация и concurrency/cadence tests уже существуют; остаётся приёмка текущей версии по `CL-026`, а не добавление второго server timestamp endpoint.
 
 
 **Промпт-якорь:** `Guest accounts UX from docs/todo/client.md Common Batch 6`.
