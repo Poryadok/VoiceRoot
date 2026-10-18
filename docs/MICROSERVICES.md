@@ -231,7 +231,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | Bot Service          | PostgreSQL `bot_db`                                                                 |
 | Federation Service   | PostgreSQL `federation_db`                                                          |
 | Story Service        | PostgreSQL `story_db`, R2 (медиа)                                                   |
-| Analytics Service    | ClickHouse, Redis (буфер)                                                           |
+| Analytics Service    | ClickHouse; JetStream durable backlog + in-memory batch buffer                       |
 
 ## Масштабирование
 
