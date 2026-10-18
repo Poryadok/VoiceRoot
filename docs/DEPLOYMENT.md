@@ -703,6 +703,26 @@ This configuration documents source requirements only. A rollout still
 requires the normal operator-managed certificates, trusted issuer entry, key
 rotation and deployment procedure.
 
+Both Kubernetes app manifests configure the paired capability and explicitly
+set `NOTIFICATION_RECORD_PUSHES=false`, overriding the shared ConfigMap's
+disposable offline-routing fixture setting. Provision
+`voice-notification-principal-signing` (`current.pem`, `next.pem`, `active-kid`;
+distinct RSA 2048+ PKCS#8 keys, active ID `current` or `next`) and
+`voice-notification-principal-tls` (`tls.crt`, `tls.key`, SAN
+`voice-notification`) under the existing `voice-principal-ca` trust root.
+Notification projects only the two signing PEMs into its key directory; User
+and sidecars never mount these private keys. Its group-only secret mounts use
+Pod `fsGroup: 65532` for the existing nonroot application. User reuses its
+`voice-user-principal-tls` certificate with SAN `voice-user` and the shared
+Redis replay service. Secret preflight requires the new material before apply.
+The app apply scripts install the dedicated additive network policy allowing
+Notification-to-User TCP 9095 and User-to-Notification JWKS TCP 8443; these
+ports have no public ingress. Missing authority fails all non-exempt routing
+attempts, including friend requests, so JetStream can NAK/retry without push.
+Run `python scripts/staging/notification-presence-contract_test.py` (PyYAML)
+for offline source/render pairing and mount/network checks; this is not a
+claim of provisioned secrets or live runtime acceptance.
+
 ## Auth-to-User SDK profile principal
 
 Auth's T14 RS256 signer and request-bound `GetSdkProfileEligibility` client are
