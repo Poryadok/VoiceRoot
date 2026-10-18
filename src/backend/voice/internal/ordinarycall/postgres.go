@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"time"
 
 	"voice/backend/voice/internal/admissionlock"
+	"voice/backend/voice/internal/rosteroutbox"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -290,6 +292,15 @@ updated_at=clock_timestamp() WHERE room_id=$1`, roomID, string(room.Stage), room
 VALUES($1,$2,$3,$4,$5,$6,$7)`, event.ID, roomID, room.Version, index+1, event.Subject, event.Payload, rosterVersion)
 		if err != nil {
 			return nil, err
+		}
+		fact := room.Events[index]
+		if fact.RosterVersion > 0 {
+			if fact.RosterVersion > math.MaxInt64 || (fact.Kind != EventParticipantJoined && fact.Kind != EventParticipantLeft) {
+				return nil, ErrInvalidIntent
+			}
+			if err := rosteroutbox.Append(ctx, tx, roomID, fact.ProfileID, int64(fact.RosterVersion), fact.Kind == EventParticipantJoined); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

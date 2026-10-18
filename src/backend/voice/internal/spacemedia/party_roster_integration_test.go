@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,6 +51,14 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT event_id,payload FROM voice_roster_outbox WHERE room_id=$1`, a.RoomID).Scan(&replayID, &replayPayload))
 	require.Equal(t, firstID, replayID)
 	require.Equal(t, firstPayload, replayPayload)
+	loss := PartyEligibilityLoss{RoomID: uuid.MustParse(a.RoomID), Incarnation: a.OperationID, AccountID: a.AccountID, ProfileID: a.ProfileID, OperationID: a.OperationID, Generation: a.Generation, SessionEpoch: int64(a.SessionEpoch)}
+	stale := loss
+	stale.SessionEpoch++
+	require.ErrorIs(t, st.ApplyPartyEligibilityLoss(ctx, stale), ErrPartySourceChanged)
+	stale = loss
+	stale.Generation += "-replacement"
+	require.ErrorIs(t, st.ApplyPartyEligibilityLoss(ctx, stale), ErrPartySourceChanged)
+	check(1, []string{"JOINED"})
 	_, err := pool.Exec(ctx, `ALTER TABLE voice_roster_outbox ADD CONSTRAINT reject_test_left CHECK(change <> 'LEFT')`)
 	require.NoError(t, err)
 	require.Error(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))
@@ -57,8 +66,9 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	require.NoError(t, st.ConfirmProjection(ctx, a.OperationID, a.Generation), "failed outbox must roll back revocation")
 	_, err = pool.Exec(ctx, `ALTER TABLE voice_roster_outbox DROP CONSTRAINT reject_test_left`)
 	require.NoError(t, err)
-	require.NoError(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))
+	require.NoError(t, st.ApplyPartyEligibilityLoss(ctx, loss))
 	check(2, []string{"JOINED", "LEFT"})
+	require.ErrorIs(t, st.ApplyPartyEligibilityLoss(ctx, loss), ErrPartySourceChanged)
 	require.ErrorIs(t, st.MarkProjectionApplied(ctx, a.OperationID, a.Generation), ErrRoomHeadPending,
 		"late projection confirmation cannot resurrect a departing last member")
 	require.NoError(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))

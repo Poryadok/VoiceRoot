@@ -578,6 +578,10 @@ func (s *PostgresAdmissionStore) ReleaseFence(ctx context.Context, a Admission) 
 // BeginRoomLeave serializes a participant drain with admissions and room
 // closure. The Redis identity remains revoking until CompleteRoomLeave.
 func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID uuid.UUID, generation string) error {
+	return s.beginRoomLeave(ctx, operationID, generation, nil)
+}
+
+func (s *PostgresAdmissionStore) beginRoomLeave(ctx context.Context, operationID uuid.UUID, generation string, loss *PartyEligibilityLoss) error {
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}
@@ -589,11 +593,18 @@ func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID
 	var voiceRoomID string
 	var roomGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT voice_room_id,room_generation FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&voiceRoomID, &roomGeneration); err != nil {
+		if loss != nil && errors.Is(err, pgx.ErrNoRows) {
+			return ErrPartySourceChanged
+		}
 		return err
 	}
 	var headState string
 	var headGeneration int64
-	if err = tx.QueryRow(ctx, `SELECT state,room_generation FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration); err != nil || headGeneration != roomGeneration || (headState != "OPEN" && headState != "CLOSING") {
+	var incarnation, headRoomID uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration, &incarnation, &headRoomID); err != nil || headGeneration != roomGeneration || (headState != "OPEN" && headState != "CLOSING") {
+		if loss != nil && (err == nil || errors.Is(err, pgx.ErrNoRows)) {
+			return ErrPartySourceChanged
+		}
 		return ErrRoomHeadPending
 	}
 	var participantState, admissionState string
@@ -601,6 +612,16 @@ func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID
 	var roomID, profileID uuid.UUID
 	if err = tx.QueryRow(ctx, `SELECT participant_state,state,projection_applied_at IS NOT NULL,room_id,profile_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&participantState, &admissionState, &applied, &roomID, &profileID); err != nil {
 		return err
+	}
+	if loss != nil {
+		var accountID uuid.UUID
+		var epoch int64
+		if err = tx.QueryRow(ctx, `SELECT account_id,session_epoch FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&accountID, &epoch); err != nil {
+			return err
+		}
+		if loss.Incarnation != incarnation || loss.RoomID != headRoomID || loss.RoomID != roomID || loss.ProfileID != profileID || loss.AccountID != accountID || loss.SessionEpoch != epoch || headState != "OPEN" || participantState != "ACTIVE" || admissionState != "COMMITTED" || !applied {
+			return ErrPartySourceChanged
+		}
 	}
 	if participantState == "ENDED" {
 		return tx.Commit(ctx)

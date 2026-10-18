@@ -15,6 +15,7 @@ func TestPostgresPartyOutboxPreservesCompatibilityAndBatchVersions(t *testing.T)
 	ctx := context.Background()
 	st := NewPostgresStore(pool, storageTestEncoder)
 	caller, callee := identity(), identity()
+	caller.SessionEpoch = 7
 	op := uuid.New()
 	room, err := NewPendingRoom(CreateIntent{OperationID: op, RoomID: uuid.New(), ChatID: uuid.New(), Initiator: caller, Callee: &callee, MediaKind: 1}, testNow)
 	require.NoError(t, err)
@@ -56,6 +57,15 @@ func TestPostgresPartyOutboxPreservesCompatibilityAndBatchVersions(t *testing.T)
 	require.Equal(t, 2, compat)
 	_, err = st.Mutate(ctx, room.Intent.RoomID, func(r *Room) error { return r.CommitAdmission(accept, testNow) })
 	require.NoError(t, err)
+	current, err := st.Load(ctx, room.Intent.RoomID)
+	require.NoError(t, err)
+	m := current.Members[caller.ProfileID.String()]
+	loss := PartyEligibilityLoss{RoomID: room.Intent.RoomID, Incarnation: op, AccountID: caller.AccountID, ProfileID: caller.ProfileID, OperationID: m.FenceOperationID, Generation: m.Generation, SessionEpoch: caller.SessionEpoch}
+	stale := loss
+	stale.Generation = uuid.New()
+	require.ErrorIs(t, st.ApplyPartyEligibilityLoss(ctx, stale), ErrPartySourceChanged)
+	require.NoError(t, st.ApplyPartyEligibilityLoss(ctx, loss))
+	require.ErrorIs(t, st.ApplyPartyEligibilityLoss(ctx, loss), ErrPartySourceChanged)
 	_, err = st.Mutate(ctx, room.Intent.RoomID, func(r *Room) error { return r.DecideEnd(caller.ProfileID, "hangup", testNow) })
 	require.NoError(t, err)
 	var count int
