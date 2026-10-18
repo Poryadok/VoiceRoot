@@ -818,7 +818,6 @@ and Voice IDs denied while history remains.
 ### Federation
 
 
-- [ ] **[Federation] Accidental Gateway REST proxy** — `src/backend/gateway/config_test.go` allows `federation` in `GATEWAY_REST_UPSTREAMS_JSON`, but `routing_test.go` blocks public paths; low risk unless someone adds transcoding routes without review.
 - [ ] **[Federation] Generated-only Flutter surface** — `src/frontend/lib/gen/voice/s2s/v1/*`; no `lib/` product code for federation.
 - [x] **[Federation] Repo junk in service dir** — removed `$prof` and `coverage` from git; added to `.gitignore`.
 - [ ] **[Federation] No buf/gateway public API** — S2S protos correctly isolated under `protos/voice/s2s/v1/`; no accidental client exposure via REST transcoding.
