@@ -1,6 +1,7 @@
 package admissionproof
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -80,9 +81,9 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 		}
 		var response []byte
 		if resource["kind"] == "ConfigMap" {
-			response, err = client.CoreV1().RESTClient().Post().Namespace("voice-staging").Resource("configmaps").Body(string(encoded)).Do(ctx).Raw()
+			response, err = client.CoreV1().RESTClient().Post().Namespace("voice-staging").Resource("configmaps").Body(bytes.NewReader(encoded)).Do(ctx).Raw()
 		} else {
-			response, err = client.BatchV1().RESTClient().Post().Namespace("voice-staging").Resource("jobs").Body(string(encoded)).Do(ctx).Raw()
+			response, err = client.BatchV1().RESTClient().Post().Namespace("voice-staging").Resource("jobs").Body(bytes.NewReader(encoded)).Do(ctx).Raw()
 		}
 		if err != nil { t.Fatalf("API CREATE %s: %v", path, err) }
 		if err := json.Unmarshal(response, &got); err != nil { t.Fatalf("decode raw API response %s: %v", path, err) }
