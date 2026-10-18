@@ -278,6 +278,19 @@ business idempotency independently of per-attempt JWT replay rejection.
 
 ## P3 Space lifecycle storage inventory (accepted target)
 
+Composite Space Chat creation stores a no-domain-FK
+`space_chat_creation_fences` row separately from private protobuf outcome bytes
+in `space_chat_creation_evidence`. The former permanently reserves operation,
+Chat, node and audit IDs and contains only the nonpersonal allowlist in
+[DATA_MODEL.md](DATA_MODEL.md#p3-space-deletion-ownership-and-file-references-accepted-target).
+`space_permanent_purge_fences` keeps the Space/deletion-operation/generation/time
+boundary after owner tombstone expiry. It is not the purpose-specific account
+HMAC tombstone and needs no new HMAC family. Live evidence has no ordinary TTL;
+terminal Space purge atomically fixes its deadline to aggregate PURGED+30d.
+Chat's own private evidence uses its own local purge completion+30d. Database
+time enforces the cutoff even if physical cleanup is delayed. Cleanup removes
+all full bytes/personal indexes/digests without removing compact fences.
+
 | Store owner | Additive durable data |
 |---|---|
 | `auth_db` | separate Space-deletion proofs, immutable consume receipts, persistence acknowledgement and purpose-specific post-erasure HMAC lookup index |

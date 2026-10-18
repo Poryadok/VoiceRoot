@@ -58,6 +58,9 @@ func (s *SpaceStore) FinalizeLifecyclePurge(ctx context.Context, spaceID uuid.UU
 			return false, err
 		}
 		snapshot = aggregate.Snapshot()
+		if err := sealChatCreationPurge(ctx, tx, spaceID, uuid.MustParse(snapshot.DeletionOperationID), snapshot.Generation, snapshot.DeletedEvent.OccurredAt); err != nil {
+			return false, err
+		}
 		if err := persistLifecycleSnapshot(ctx, tx, snapshot); err != nil {
 			return false, err
 		}
