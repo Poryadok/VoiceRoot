@@ -17,6 +17,13 @@ CREATE TABLE space_ordinary_member_heads (
     CHECK (NOT legacy OR (generation=0 AND state='ACTIVE')),
     CHECK (admission_binding_sha256 IS NULL OR octet_length(admission_binding_sha256)=32),
     CHECK (role_receipt_sha256 IS NULL OR octet_length(role_receipt_sha256)=32),
+    CHECK (native_publication_sha256 IS NULL OR octet_length(native_publication_sha256)=32),
+    CHECK (state<>'PREPARING' OR (generation>0 AND NOT legacy AND publication_kind=0
+      AND admission_binding_sha256 IS NOT NULL AND role_receipt_sha256 IS NULL AND native_publication_sha256 IS NULL)),
+    CHECK (state<>'ACTIVE' OR (
+      (legacy AND generation=0 AND publication_kind=2 AND admission_binding_sha256 IS NULL AND role_receipt_sha256 IS NULL AND native_publication_sha256 IS NULL)
+      OR (NOT legacy AND generation>0 AND publication_kind=1 AND admission_binding_sha256 IS NOT NULL AND role_receipt_sha256 IS NOT NULL AND native_publication_sha256 IS NULL)
+      OR (NOT legacy AND generation>0 AND publication_kind BETWEEN 3 AND 6 AND native_publication_sha256 IS NOT NULL AND admission_binding_sha256 IS NULL AND role_receipt_sha256 IS NULL))),
     CHECK (generation>=retired_through)
 );
 
@@ -135,8 +142,20 @@ BEGIN
  IF NEW.generation=OLD.generation THEN
   IF TG_TABLE_NAME='space_ordinary_member_heads' THEN
    IF NEW.publication_id IS DISTINCT FROM OLD.publication_id OR NEW.legacy IS DISTINCT FROM OLD.legacy
+   OR NEW.account_id IS DISTINCT FROM OLD.account_id
    OR (OLD.state='RETIRED' AND NEW.state<>'RETIRED') THEN
     RAISE EXCEPTION 'ordinary membership incarnation cannot be rebound' USING ERRCODE='55000';
+   END IF;
+   IF OLD.state IN ('ACTIVE','RETIRED') AND (
+    NEW.state IS DISTINCT FROM OLD.state OR NEW.admission_binding_sha256 IS DISTINCT FROM OLD.admission_binding_sha256
+    OR NEW.role_receipt_sha256 IS DISTINCT FROM OLD.role_receipt_sha256 OR NEW.publication_kind IS DISTINCT FROM OLD.publication_kind
+    OR NEW.native_publication_sha256 IS DISTINCT FROM OLD.native_publication_sha256) THEN
+    RAISE EXCEPTION 'published membership proof is immutable' USING ERRCODE='55000';
+   END IF;
+   IF OLD.state='PREPARING' AND (
+    NEW.admission_binding_sha256 IS DISTINCT FROM OLD.admission_binding_sha256
+    OR NEW.state NOT IN ('PREPARING','ACTIVE')) THEN
+    RAISE EXCEPTION 'prepared admission binding is immutable' USING ERRCODE='55000';
    END IF;
   ELSIF NEW.episode_id IS DISTINCT FROM OLD.episode_id OR NEW.owner_generation IS DISTINCT FROM OLD.owner_generation
    OR (OLD.state='RETIRED' AND NEW.state<>'RETIRED') THEN

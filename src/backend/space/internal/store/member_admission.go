@@ -130,7 +130,8 @@ func (s *SpaceStore) PrepareMemberAdmission(ctx context.Context, in MemberAdmiss
 	_, err = tx.Exec(ctx, `INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,publication_id,state,account_id,admission_binding_sha256)
 	 VALUES($1,$2,$3,$4,'PREPARING',$5,$6) ON CONFLICT(space_id,profile_id) DO UPDATE SET
 	 generation=EXCLUDED.generation,publication_id=EXCLUDED.publication_id,state='PREPARING',legacy=false,
-	 account_id=EXCLUDED.account_id,admission_binding_sha256=EXCLUDED.admission_binding_sha256,role_receipt_sha256=NULL`, in.SpaceID, in.ProfileID, intent.Generation, in.OperationID, in.AccountID, digest[:])
+	 account_id=EXCLUDED.account_id,admission_binding_sha256=EXCLUDED.admission_binding_sha256,role_receipt_sha256=NULL,
+	 publication_kind=0,native_publication_sha256=NULL`, in.SpaceID, in.ProfileID, intent.Generation, in.OperationID, in.AccountID, digest[:])
 	if err != nil {
 		return nil, err
 	}
