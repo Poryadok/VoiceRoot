@@ -72,6 +72,9 @@ jobs:
             TestCompositeStoreCommitAndAbortHaveOneImmutableWinner \
             TestCompositeStoreFailedEvidenceInsertRollsBackNodeAndFence \
             TestCompositeStoreExpiryIsEnforcedBeforePhysicalCleanup \
+            TestCompositeStoreGlobalAuditReservation \
+            TestCompositeStoreCrossSpaceAuditReservationRace \
+            TestCompositeStoreWaitsForUncommittedLocalAuditReservation \
             TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace \
             TestLifecycleOutcomeRetention_RestoredSpaceDropsExpiredPrivateOutcomes \
             TestAuditIngestionLocalExternalCollisionRaceAndRetainedLocalFence; do

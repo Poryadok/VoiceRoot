@@ -38,6 +38,16 @@ late signed deliveries cannot insert audit, outbox or node rows. Reserved compos
 audit IDs remain unavailable for a different fact after payload minimization.
 Actual participant drain/completion proof is required before aggregate purge.
 
+Migration `000031_composite_audit_reservation` serializes composite reservation,
+protected ingress and audit INSERT through one transaction advisory lock per
+audit UUID. The order is Space, audit UUID, then reservation/receipt rows.
+Composite commit rejects any pre-existing receipt or different composite fence;
+the audit trigger rejects local/different facts using a reserved ID while allowing
+the original COMMITTED Chat tuple. The protected ingress additionally verifies
+the complete saved creator binding. No provisional receipt/fingerprint is created.
+Receipt minimization takes no audit UUID lock and runs after Space cleanup locks.
+Startup of the composite receiver requires migrations `000028` and `000031`.
+
 The receiver config prefix is `SPACE_CHAT_COMPOSITE_`: `GRPC_LISTEN`,
 `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `PRINCIPAL_JWKS_URL`,
 `PRINCIPAL_JWKS_CA_FILE`, `PRINCIPAL_JWKS_CLIENT_CERT_FILE`,

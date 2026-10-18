@@ -363,8 +363,8 @@ func main() {
 		compositeService := grpcsvc.NewChatCreationServer(spaceSvc, botComposite)
 		if compositeEnabled {
 			var compositeSchemaReady bool
-			if err := spaceStore.Pool.QueryRow(runCtx, `SELECT to_regclass('space_chat_creation_fences') IS NOT NULL AND to_regclass('space_chat_creation_evidence') IS NOT NULL AND to_regclass('space_permanent_purge_fences') IS NOT NULL`).Scan(&compositeSchemaReady); err != nil || !compositeSchemaReady {
-				log.Fatal("Space Chat composite requires migration 000028")
+			if err := spaceStore.Pool.QueryRow(runCtx, `SELECT to_regclass('space_chat_creation_fences') IS NOT NULL AND to_regclass('space_chat_creation_evidence') IS NOT NULL AND to_regclass('space_permanent_purge_fences') IS NOT NULL AND to_regprocedure('lock_space_audit_id_v1(uuid)') IS NOT NULL`).Scan(&compositeSchemaReady); err != nil || !compositeSchemaReady {
+				log.Fatal("Space Chat composite requires migrations 000028 and 000031")
 			}
 			if spaceSvc.OwnershipRoles == nil {
 				log.Fatal("Space Chat composite requires protected Role decision transport")

@@ -141,3 +141,29 @@ Own WT42 proto/generated Go+Dart and binding/service receiver implemented. Meani
 ### Consumed vertical checkpoint
 
 Local protocol86f48e6, sharedcodecdb239b016, atomic store/purge6678fee; principal87fef6621, Gateway3207f158c and Bot/Chatprotoe867285fa consumed from44. Receiver, public outcome scope, Bot currentinstallation and fresh protected Role decision client now wired. Gateway SpacePOST uses protected Chat completion and original Space outcome, never second Upsert. Real Chat JWKS mTLS incompatibility gave meaningfulRED1 thenGREEN22; legacyGateway RED200vs401 thenGREEN8 focused. Broader Space394short and Gateway740short PASS; Space/Gatewayvet PASS. Later targeted76handler/grpc and6accounttype tests PASS;9Botdecision tests PASS. Actual PG tests remain environmentblocked and are not proven by short checks. Independent review and assembled Chat producer/recovery integration are still open; source is not release ready.
+
+### R1 correction and develop handoff (2026-10-18)
+
+Independent reviewer136 found that the composite audit-ID fence and global
+receipt registry could both reserve the same UUID. Real PostgreSQL16-bookworm
+Go/Testcontainers reproduced all three failures before the correction: existing
+local receipt, existing Role receipt, and local takeover after composite commit.
+Migration000031 now supplies the common audit-ID lock and trigger fence check;
+Commit and both ingestion paths acquire it after Space and before reservation
+rows. Original COMMITTED Chat delivery remains accepted and exact-replayable.
+Receipt minimization moves to the end of the cleanup transaction and its UPDATE
+guard acquires no new advisory lock. Space31 released by69 is used;32 is unused.
+
+Scoped endpoint env is DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine,
+TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1, TESTCONTAINERS_RYUK_DISABLED=true.
+First real original composite test PASS; correction run8PASS; expanded real
+composite/cross-Space collision/uncommitted-local/P3 run12PASS including3subtests.
+Space447short/17packages and vet PASS. These supersede the historical local
+Docker setup blocker above, without replacing hosted CI or consumer proof.
+
+User directive: finish current work and integrate into develop. Ant121 is the
+sole develop writer. Ant18 retains task/check custody and sends immutable final
+head/dependency order; no develop checkout, deployment or acceptance appointment.
+Chat prepared/HELD/recovery, generic/direct/bot initiating cutover and participant
+drain proof remain author44's explicit integration gap. Source review R1 delta,
+hosted exact-head CI and assembled producer evidence remain required gates.
