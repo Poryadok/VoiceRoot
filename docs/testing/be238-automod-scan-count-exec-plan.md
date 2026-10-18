@@ -48,7 +48,23 @@ it ran no tests and is retained as infrastructure failure, not behavioral RED.
 Component short tests and Linux go vet PASS; isolated host static lint reports
 zero issues (no host tests/listeners). Diffcheck PASS. Graphify AST update was
 attempted and canceled after bounded no-output execution; own process chain
-settled, no graph-update PASS claimed. Combined full-service gate remains open.
+settled, no graph-update PASS claimed.
+
+Separate proof candidate60aff9cc28f6d4114233b87204b5aa2dd67e9d7f normally merged
+clean19986529 with original foreignf453. Full one-CPU grpcsvc PASS90.081s,
+zero skips, complete stdout/inspect/image metadata retained externally before
+cleanup. Catalog1/2/3/4/5scan/7intake. Default GOMAXPROCS2, NumCPU16, pool16/0;
+quota/period100000/100000, final548 periods/48 throttled/3117900100ns throttled.
+RPC E37=A8+U29, quiescentD11 within[8,37]; exact primitive/eligibility and held
+zero/recovery assertions also PASS. This proof branch must not be integrated
+as the clean BE238 fix because it contains foreign unaccepted BE137 WIP.
+
+Independent147 TTc21 found the collector was registered but not served by the
+existing Moderation HTTP listener. Accepted P2: add the existing shared
+Prometheus mounting helper to healthHandler, without a new listener. HTTP
+regression RED404; GREEN all three health tests0.018s, four exact finite outcome
+series with no extra labels. Existing health/non-GET behavior remains checked.
+Final successor exact review and qualification remain pending.
 
 ## Purpose and context
 
