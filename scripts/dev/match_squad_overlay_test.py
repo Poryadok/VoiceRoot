@@ -339,7 +339,8 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         full_path = patch_path.parent / full_target.patch_file
         with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
                                template_fingerprint):
-            with self.assertRaisesRegex(overlay.OverlayError, "recovery projection"):
+            with self.assertRaisesRegex(overlay.OverlayError,
+                                        "not ordinarily ready|recovery projection"):
                 overlay.build_object_plan(client, full_target, base, full_path)
 
     def test_unready_matchmaking_fs_group_recovery_rejects_other_projection_changes(self):
@@ -386,7 +387,7 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                         overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
                         template_fingerprint):
                     with self.assertRaisesRegex(overlay.OverlayError,
-                                                "not ordinarily ready|recovery projection"):
+                                                "not ordinarily ready|recovery projection|pinned projection|S2S entry"):
                         overlay.build_object_plan(client, target, changed, patch_path)
                 self.assertNotEqual(changed_fingerprint, template_fingerprint)
 
@@ -400,7 +401,7 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                     overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
                     template_fingerprint):
                 with self.assertRaisesRegex(overlay.OverlayError,
-                                            "not ordinarily ready|recovery projection"):
+                                            "not ordinarily ready|recovery projection|pinned projection|S2S entry"):
                     overlay.build_object_plan(client, target, s2s_base, patch_path)
 
     def test_fs_group_recovery_rejects_ready_deployment_even_when_projection_is_pinned(self):
