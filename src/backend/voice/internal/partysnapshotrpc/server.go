@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/pkg/partyauthority"
 	"voice/backend/voice/internal/matchsquadprincipal"
 	"voice/backend/voice/internal/partysnapshot"
 )
@@ -46,7 +47,8 @@ func (s *Server) GetMatchmakingPartySnapshot(ctx context.Context, req *callsv1.G
 	if s == nil || s.Engine == nil {
 		return nil, status.Error(codes.Unavailable, "native Voice party snapshot unavailable")
 	}
-	cut, err := s.Engine.Snapshot(ctx, partysnapshot.Subject{SearchOperationID: operation, AccountID: account, ProfileID: profile, SessionEpoch: req.GetInitiatorSessionEpoch()})
+	subject := partysnapshot.Subject{SearchOperationID: operation, AccountID: account, ProfileID: profile, SessionEpoch: req.GetInitiatorSessionEpoch()}
+	cut, err := s.Engine.Snapshot(ctx, subject)
 	if err != nil {
 		switch {
 		case errors.Is(err, partysnapshot.ErrStaleSubject):
@@ -57,7 +59,15 @@ func (s *Server) GetMatchmakingPartySnapshot(ctx context.Context, req *callsv1.G
 			return nil, status.Error(codes.Unavailable, "native Voice party snapshot unavailable")
 		}
 	}
+	if !validPrivateAuthority(cut, subject) {
+		return nil, status.Error(codes.Unavailable, "native Voice party snapshot unavailable")
+	}
 	response := &callsv1.GetMatchmakingPartySnapshotResponse{ProtocolVersion: cut.ProtocolVersion, RosterVersion: cut.RosterVersion}
+	response.MemberAuthorityVersion = cut.MemberAuthorityVersion
+	response.SourceAuthoritySha256 = append([]byte(nil), cut.SourceAuthorityHash[:]...)
+	for _, member := range cut.MemberAuthorities {
+		response.MemberAuthorities = append(response.MemberAuthorities, &callsv1.MatchmakingPartyMemberAuthority{ProfileId: member.ProfileID.String(), AccountId: member.AccountID.String(), AdmittedSessionEpoch: member.SessionEpoch})
+	}
 	switch cut.Kind {
 	case "SOLO":
 		response.Kind = callsv1.MatchmakingPartySnapshotKind_MATCHMAKING_PARTY_SNAPSHOT_KIND_SOLO
@@ -73,6 +83,40 @@ func (s *Server) GetMatchmakingPartySnapshot(ctx context.Context, req *callsv1.G
 		response.MemberProfileIds = append(response.MemberProfileIds, member.String())
 	}
 	return response, nil
+}
+
+func validPrivateAuthority(c partysnapshot.Snapshot, s partysnapshot.Subject) bool {
+	if c.ProtocolVersion != 1 || c.MemberAuthorityVersion != partyauthority.Version || c.SourceAuthorityHash == [32]byte{} || len(c.MemberAuthorities) != len(c.MemberProfileIDs) {
+		return false
+	}
+	if _, _, err := partyauthority.Encode(c.MemberAuthorities); err != nil {
+		return false
+	}
+	switch c.Kind {
+	case "SOLO":
+		if c.RoomID != uuid.Nil || c.RosterVersion != 0 || len(c.MemberAuthorities) != 1 {
+			return false
+		}
+	case "VOICE_ROSTER":
+		if c.RoomID == uuid.Nil || c.RosterVersion == 0 || c.RosterVersion > uint64(^uint64(0)>>1) {
+			return false
+		}
+	default:
+		return false
+	}
+	found := false
+	for i, m := range c.MemberAuthorities {
+		if m.ProfileID != c.MemberProfileIDs[i] {
+			return false
+		}
+		if m.ProfileID == s.ProfileID {
+			if m.AccountID != s.AccountID || (c.Kind == "SOLO" && m.SessionEpoch != s.SessionEpoch) {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
 }
 
 func subjectFailure(code codes.Code, reason string) error {

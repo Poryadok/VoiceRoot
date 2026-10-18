@@ -2594,14 +2594,62 @@ const GetMatchmakingPartySnapshotResponse$json = {
       '5': 9,
       '10': 'memberProfileIds'
     },
+    {
+      '1': 'member_authority_version',
+      '3': 6,
+      '4': 1,
+      '5': 13,
+      '10': 'memberAuthorityVersion'
+    },
+    {
+      '1': 'member_authorities',
+      '3': 7,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.calls.v1.MatchmakingPartyMemberAuthority',
+      '10': 'memberAuthorities'
+    },
+    {
+      '1': 'source_authority_sha256',
+      '3': 8,
+      '4': 1,
+      '5': 12,
+      '10': 'sourceAuthoritySha256'
+    },
   ],
 };
 
 /// Descriptor for `GetMatchmakingPartySnapshotResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getMatchmakingPartySnapshotResponseDescriptor =
+final $typed_data.Uint8List getMatchmakingPartySnapshotResponseDescriptor = $convert.base64Decode(
+    'CiNHZXRNYXRjaG1ha2luZ1BhcnR5U25hcHNob3RSZXNwb25zZRIpChBwcm90b2NvbF92ZXJzaW'
+    '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SQAoEa2luZBgCIAEoDjIsLnZvaWNlLmNhbGxzLnYx'
+    'Lk1hdGNobWFraW5nUGFydHlTbmFwc2hvdEtpbmRSBGtpbmQSFwoHcm9vbV9pZBgDIAEoCVIGcm'
+    '9vbUlkEiUKDnJvc3Rlcl92ZXJzaW9uGAQgASgEUg1yb3N0ZXJWZXJzaW9uEiwKEm1lbWJlcl9w'
+    'cm9maWxlX2lkcxgFIAMoCVIQbWVtYmVyUHJvZmlsZUlkcxI4ChhtZW1iZXJfYXV0aG9yaXR5X3'
+    'ZlcnNpb24YBiABKA1SFm1lbWJlckF1dGhvcml0eVZlcnNpb24SXgoSbWVtYmVyX2F1dGhvcml0'
+    'aWVzGAcgAygLMi8udm9pY2UuY2FsbHMudjEuTWF0Y2htYWtpbmdQYXJ0eU1lbWJlckF1dGhvcm'
+    'l0eVIRbWVtYmVyQXV0aG9yaXRpZXMSNgoXc291cmNlX2F1dGhvcml0eV9zaGEyNTYYCCABKAxS'
+    'FXNvdXJjZUF1dGhvcml0eVNoYTI1Ng==');
+
+@$core.Deprecated('Use matchmakingPartyMemberAuthorityDescriptor instead')
+const MatchmakingPartyMemberAuthority$json = {
+  '1': 'MatchmakingPartyMemberAuthority',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {
+      '1': 'admitted_session_epoch',
+      '3': 3,
+      '4': 1,
+      '5': 3,
+      '10': 'admittedSessionEpoch'
+    },
+  ],
+};
+
+/// Descriptor for `MatchmakingPartyMemberAuthority`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchmakingPartyMemberAuthorityDescriptor =
     $convert.base64Decode(
-        'CiNHZXRNYXRjaG1ha2luZ1BhcnR5U25hcHNob3RSZXNwb25zZRIpChBwcm90b2NvbF92ZXJzaW'
-        '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SQAoEa2luZBgCIAEoDjIsLnZvaWNlLmNhbGxzLnYx'
-        'Lk1hdGNobWFraW5nUGFydHlTbmFwc2hvdEtpbmRSBGtpbmQSFwoHcm9vbV9pZBgDIAEoCVIGcm'
-        '9vbUlkEiUKDnJvc3Rlcl92ZXJzaW9uGAQgASgEUg1yb3N0ZXJWZXJzaW9uEiwKEm1lbWJlcl9w'
-        'cm9maWxlX2lkcxgFIAMoCVIQbWVtYmVyUHJvZmlsZUlkcw==');
+        'Ch9NYXRjaG1ha2luZ1BhcnR5TWVtYmVyQXV0aG9yaXR5Eh0KCnByb2ZpbGVfaWQYASABKAlSCX'
+        'Byb2ZpbGVJZBIdCgphY2NvdW50X2lkGAIgASgJUglhY2NvdW50SWQSNAoWYWRtaXR0ZWRfc2Vz'
+        'c2lvbl9lcG9jaBgDIAEoA1IUYWRtaXR0ZWRTZXNzaW9uRXBvY2g=');

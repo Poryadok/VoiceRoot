@@ -91,6 +91,27 @@ The response has `protocol_version=1`. Voice returns one of these exact results:
   party and returns `FAILED_PRECONDITION`; multiple active memberships for the
   initiator are an invariant violation and fail closed.
 
+The protected response also requires private `member_authority_version=1`,
+`member_authorities` (canonical profile/account/positive admitted-session-epoch
+tuples in exactly the profile roster order), and a 32-byte
+`source_authority_sha256`. Voice derives this evidence from the SAME successful
+C1/C2 cut. The opaque digest binds the verified search subject/operation, native
+room incarnation/admission operation/generation, roster version and all durable
+coverage-cut identity fields. Native admitted epoch may differ from the
+initiating device epoch; genuine SOLO uses exactly the verified subject tuple.
+Duplicate native accounts, missing or malformed authority are unavailable.
+
+MM persists the private tuples, their version and separate domain-separated
+manifest hash together with the opaque source digest. Fresh revalidation compares
+them as well as the public roster, so identity/coverage ABA resets the party.
+Every member's admitted account receives the existing account-wide platform MM
+ban check; hidden/soft-deleted profiles never remove that obligation. Local
+admission/reservation/provision transitions and sanction Apply/Revoke serialize
+on sorted account advisory transaction locks before the existing inner lock
+order. READ COMMITTED ban reads run in a separate statement after all account
+locks. Missing authority/checker or storage failure never skips a member. These
+private fields are not copied to public responses, events, errors or telemetry.
+
 The snapshot read and `roster_version` are taken under the same Voice transaction
 boundary as membership mutations. For a concurrent join/leave, the caller sees
 either version `N` before the mutation and later receives event `N+1`, or the

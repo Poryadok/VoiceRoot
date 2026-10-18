@@ -753,4 +753,16 @@ message GetMatchmakingPartySnapshotResponse {
   uint64 roster_version = 4;
   // Unique canonical UUIDs sorted by their 16 unsigned bytes.
   repeated string member_profile_ids = 5;
+  // Private to the protected service:matchmaking capability. No public/event
+  // projection may copy these account bindings or admitted session epochs.
+  uint32 member_authority_version = 6;
+  repeated MatchmakingPartyMemberAuthority member_authorities = 7;
+  // Opaque same-cut native admission/incarnation/coverage identity digest.
+  bytes source_authority_sha256 = 8;
+}
+
+message MatchmakingPartyMemberAuthority {
+  string profile_id = 1;
+  string account_id = 2;
+  int64 admitted_session_epoch = 3;
 }

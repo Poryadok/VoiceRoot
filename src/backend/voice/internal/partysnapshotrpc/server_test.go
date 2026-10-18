@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/pkg/partyauthority"
 	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/matchsquadprincipal"
 	"voice/backend/voice/internal/partysnapshot"
@@ -23,12 +24,17 @@ type snapshotSpy struct {
 	calls   int
 	subject partysnapshot.Subject
 	err     error
+	mutate  func(*partysnapshot.Snapshot)
 }
 
 func (s *snapshotSpy) Snapshot(_ context.Context, subject partysnapshot.Subject) (partysnapshot.Snapshot, error) {
 	s.calls++
 	s.subject = subject
-	return partysnapshot.Snapshot{ProtocolVersion: 1, Kind: "SOLO", MemberProfileIDs: []uuid.UUID{subject.ProfileID}}, s.err
+	cut := partysnapshot.Snapshot{ProtocolVersion: 1, Kind: "SOLO", MemberProfileIDs: []uuid.UUID{subject.ProfileID}, MemberAuthorityVersion: 1, MemberAuthorities: []partyauthority.Member{{ProfileID: subject.ProfileID, AccountID: subject.AccountID, SessionEpoch: subject.SessionEpoch}}, SourceAuthorityHash: [32]byte{1}}
+	if s.mutate != nil {
+		s.mutate(&cut)
+	}
+	return cut, s.err
 }
 
 type verifierFunc func(context.Context, string, string, string, string) (principal.Principal, error)
@@ -59,6 +65,34 @@ func TestProtectedSnapshotCopiesVerifiedSubjectAndNeverUsesClientRoster(t *testi
 	require.Equal(t, []string{req.InitiatorProfileId}, response.MemberProfileIds)
 	require.Empty(t, response.RoomId)
 	require.Zero(t, response.RosterVersion)
+	require.Equal(t, uint32(1), response.MemberAuthorityVersion)
+	require.Len(t, response.MemberAuthorities, 1)
+	require.Equal(t, req.InitiatorAccountId, response.MemberAuthorities[0].AccountId)
+	require.Equal(t, req.InitiatorSessionEpoch, response.MemberAuthorities[0].AdmittedSessionEpoch)
+	require.Len(t, response.SourceAuthoritySha256, 32)
+}
+
+func TestProtectedSnapshotRequiresCompletePrivateAuthorityBeforeResponse(t *testing.T) {
+	for _, mutate := range []func(*partysnapshot.Snapshot){func(c *partysnapshot.Snapshot) { c.MemberAuthorityVersion = 0 }, func(c *partysnapshot.Snapshot) { c.MemberAuthorityVersion = 2 }, func(c *partysnapshot.Snapshot) { c.MemberAuthorities = nil }, func(c *partysnapshot.Snapshot) { c.SourceAuthorityHash = [32]byte{} }, func(c *partysnapshot.Snapshot) { c.MemberAuthorities[0].AccountID = uuid.New() }, func(c *partysnapshot.Snapshot) { c.MemberAuthorities[0].ProfileID = uuid.New() }, func(c *partysnapshot.Snapshot) { c.MemberAuthorities[0].SessionEpoch = 0 }, func(c *partysnapshot.Snapshot) { c.MemberAuthorities[0].SessionEpoch++ }} {
+		req := validRequest()
+		spy := &snapshotSpy{mutate: mutate}
+		response, err := (&Server{Engine: spy}).GetMatchmakingPartySnapshot(signedContext(t, req), req)
+		require.Nil(t, response)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		require.Equal(t, 1, spy.calls)
+	}
+}
+func TestProtectedRosterPreservesNativeEpochDistinctFromDevice(t *testing.T) {
+	req := validRequest()
+	spy := &snapshotSpy{mutate: func(c *partysnapshot.Snapshot) {
+		c.Kind = "VOICE_ROSTER"
+		c.RoomID = uuid.New()
+		c.RosterVersion = 1
+		c.MemberAuthorities[0].SessionEpoch = 6
+	}}
+	response, err := (&Server{Engine: spy}).GetMatchmakingPartySnapshot(signedContext(t, req), req)
+	require.NoError(t, err)
+	require.Equal(t, int64(6), response.MemberAuthorities[0].AdmittedSessionEpoch)
 }
 
 func TestProtectedSnapshotRejectsSpoofAndMalformedInputBeforeEngine(t *testing.T) {

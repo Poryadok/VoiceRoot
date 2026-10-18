@@ -112,6 +112,6 @@ func TestPostgresTwoPassRetriesConcurrentMutationWithFreshAuth(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), result.RosterVersion)
 	require.Equal(t, 4, nativeReads)
-	require.Equal(t, 2, authReads)
+	require.Equal(t, 4, authReads)
 	require.Zero(t, pool.Stat().AcquiredConns())
 }

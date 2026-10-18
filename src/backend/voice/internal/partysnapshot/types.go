@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"voice/backend/pkg/partyauthority"
 )
 
 var (
@@ -107,11 +108,14 @@ type Normalizer interface {
 }
 
 type Snapshot struct {
-	ProtocolVersion  uint32
-	Kind             string
-	RoomID           uuid.UUID
-	RosterVersion    uint64
-	MemberProfileIDs []uuid.UUID
+	MemberAuthorityVersion uint32
+	MemberAuthorities      []partyauthority.Member
+	SourceAuthorityHash    [32]byte
+	ProtocolVersion        uint32
+	Kind                   string
+	RoomID                 uuid.UUID
+	RosterVersion          uint64
+	MemberProfileIDs       []uuid.UUID
 }
 
 type Engine struct {
