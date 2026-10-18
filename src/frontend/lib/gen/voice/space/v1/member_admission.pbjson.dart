@@ -73,6 +73,38 @@ final $typed_data.Uint8List memberAdmissionSourceStateDescriptor = $convert.base
     '1CRVJfQURNSVNTSU9OX1NPVVJDRV9TVEFURV9BQ1RJVkUQAxIpCiVNRU1CRVJfQURNSVNTSU9O'
     'X1NPVVJDRV9TVEFURV9SRVRJUkVEEAQ=');
 
+@$core.Deprecated('Use memberAdmissionPublicationKindDescriptor instead')
+const MemberAdmissionPublicationKind$json = {
+  '1': 'MemberAdmissionPublicationKind',
+  '2': [
+    {'1': 'MEMBER_ADMISSION_PUBLICATION_KIND_UNSPECIFIED', '2': 0},
+    {'1': 'MEMBER_ADMISSION_PUBLICATION_KIND_ADMISSION_ROLE_READY', '2': 1},
+    {'1': 'MEMBER_ADMISSION_PUBLICATION_KIND_LEGACY_MIGRATED', '2': 2},
+    {'1': 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE', '2': 3},
+    {
+      '1': 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE',
+      '2': 4
+    },
+    {
+      '1': 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_RECOVERY',
+      '2': 5
+    },
+    {'1': 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL', '2': 6},
+  ],
+};
+
+/// Descriptor for `MemberAdmissionPublicationKind`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List memberAdmissionPublicationKindDescriptor = $convert.base64Decode(
+    'Ch5NZW1iZXJBZG1pc3Npb25QdWJsaWNhdGlvbktpbmQSMQotTUVNQkVSX0FETUlTU0lPTl9QVU'
+    'JMSUNBVElPTl9LSU5EX1VOU1BFQ0lGSUVEEAASOgo2TUVNQkVSX0FETUlTU0lPTl9QVUJMSUNB'
+    'VElPTl9LSU5EX0FETUlTU0lPTl9ST0xFX1JFQURZEAESNQoxTUVNQkVSX0FETUlTU0lPTl9QVU'
+    'JMSUNBVElPTl9LSU5EX0xFR0FDWV9NSUdSQVRFRBACEjkKNU1FTUJFUl9BRE1JU1NJT05fUFVC'
+    'TElDQVRJT05fS0lORF9OQVRJVkVfT1dORVJfQ1JFQVRFEAMSQwo/TUVNQkVSX0FETUlTU0lPTl'
+    '9QVUJMSUNBVElPTl9LSU5EX05BVElWRV9DT01NVU5JVFlfT1dORVJfQ1JFQVRFEAQSRQpBTUVN'
+    'QkVSX0FETUlTU0lPTl9QVUJMSUNBVElPTl9LSU5EX05BVElWRV9DT01NVU5JVFlfT1dORVJfUk'
+    'VDT1ZFUlkQBRI4CjRNRU1CRVJfQURNSVNTSU9OX1BVQkxJQ0FUSU9OX0tJTkRfTkFUSVZFX0JP'
+    'VF9JTlNUQUxMEAY=');
+
 @$core.Deprecated('Use getMemberAdmissionAuthorityRequestDescriptor instead')
 const GetMemberAdmissionAuthorityRequest$json = {
   '1': 'GetMemberAdmissionAuthorityRequest',
@@ -124,6 +156,222 @@ final $typed_data.Uint8List getMemberAdmissionAuthorityRequestDescriptor = $conv
     'bl9pZBgFIAEoCUgBUhxleHBlY3RlZEFkbWlzc2lvbk9wZXJhdGlvbklkiAEBEhwKB2NoYXRfaW'
     'QYBiABKAlIAlIGY2hhdElkiAEBQhYKFF9leHBlY3RlZF9nZW5lcmF0aW9uQiIKIF9leHBlY3Rl'
     'ZF9hZG1pc3Npb25fb3BlcmF0aW9uX2lkQgoKCF9jaGF0X2lk');
+
+@$core.Deprecated('Use nativeMembershipPublicationBindingDescriptor instead')
+const NativeMembershipPublicationBinding$json = {
+  '1': 'NativeMembershipPublicationBinding',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'publication_operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'publicationOperationId'
+    },
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 4, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'ordinary_generation',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'ordinaryGeneration'
+    },
+    {
+      '1': 'kind',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.MemberAdmissionPublicationKind',
+      '10': 'kind'
+    },
+    {
+      '1': 'initiating_service',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '10': 'initiatingService'
+    },
+    {
+      '1': 'initiating_account_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'initiatingAccountId',
+      '17': true
+    },
+    {
+      '1': 'initiating_profile_id',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '10': 'initiatingProfileId'
+    },
+    {'1': 'request_sha256', '3': 10, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'producer_operation_id',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '10': 'producerOperationId'
+    },
+    {
+      '1': 'producer_evidence_sha256',
+      '3': 12,
+      '4': 1,
+      '5': 12,
+      '10': 'producerEvidenceSha256'
+    },
+    {
+      '1': 'application_id',
+      '3': 13,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'applicationId',
+      '17': true
+    },
+    {
+      '1': 'environment_id',
+      '3': 14,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'environmentId',
+      '17': true
+    },
+    {
+      '1': 'corporation_key',
+      '3': 15,
+      '4': 1,
+      '5': 9,
+      '9': 3,
+      '10': 'corporationKey',
+      '17': true
+    },
+    {
+      '1': 'previous_owner_profile_id',
+      '3': 16,
+      '4': 1,
+      '5': 9,
+      '9': 4,
+      '10': 'previousOwnerProfileId',
+      '17': true
+    },
+    {
+      '1': 'previous_owner_account_id',
+      '3': 17,
+      '4': 1,
+      '5': 9,
+      '9': 5,
+      '10': 'previousOwnerAccountId',
+      '17': true
+    },
+    {
+      '1': 'expected_owner_generation',
+      '3': 18,
+      '4': 1,
+      '5': 4,
+      '9': 6,
+      '10': 'expectedOwnerGeneration',
+      '17': true
+    },
+    {
+      '1': 'result_owner_generation',
+      '3': 19,
+      '4': 1,
+      '5': 4,
+      '9': 7,
+      '10': 'resultOwnerGeneration',
+      '17': true
+    },
+    {'1': 'bot_id', '3': 20, '4': 1, '5': 9, '9': 8, '10': 'botId', '17': true},
+    {
+      '1': 'installation_id',
+      '3': 21,
+      '4': 1,
+      '5': 9,
+      '9': 9,
+      '10': 'installationId',
+      '17': true
+    },
+    {
+      '1': 'published_at',
+      '3': 22,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'publishedAt'
+    },
+  ],
+  '8': [
+    {'1': '_initiating_account_id'},
+    {'1': '_application_id'},
+    {'1': '_environment_id'},
+    {'1': '_corporation_key'},
+    {'1': '_previous_owner_profile_id'},
+    {'1': '_previous_owner_account_id'},
+    {'1': '_expected_owner_generation'},
+    {'1': '_result_owner_generation'},
+    {'1': '_bot_id'},
+    {'1': '_installation_id'},
+  ],
+};
+
+/// Descriptor for `NativeMembershipPublicationBinding`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List nativeMembershipPublicationBindingDescriptor = $convert.base64Decode(
+    'CiJOYXRpdmVNZW1iZXJzaGlwUHVibGljYXRpb25CaW5kaW5nEikKEHByb3RvY29sX3ZlcnNpb2'
+    '4YASABKA1SD3Byb3RvY29sVmVyc2lvbhI4ChhwdWJsaWNhdGlvbl9vcGVyYXRpb25faWQYAiAB'
+    'KAlSFnB1YmxpY2F0aW9uT3BlcmF0aW9uSWQSGQoIc3BhY2VfaWQYAyABKAlSB3NwYWNlSWQSHQ'
+    'oKcHJvZmlsZV9pZBgEIAEoCVIJcHJvZmlsZUlkEi8KE29yZGluYXJ5X2dlbmVyYXRpb24YBSAB'
+    'KARSEm9yZGluYXJ5R2VuZXJhdGlvbhJCCgRraW5kGAYgASgOMi4udm9pY2Uuc3BhY2UudjEuTW'
+    'VtYmVyQWRtaXNzaW9uUHVibGljYXRpb25LaW5kUgRraW5kEi0KEmluaXRpYXRpbmdfc2Vydmlj'
+    'ZRgHIAEoCVIRaW5pdGlhdGluZ1NlcnZpY2USNwoVaW5pdGlhdGluZ19hY2NvdW50X2lkGAggAS'
+    'gJSABSE2luaXRpYXRpbmdBY2NvdW50SWSIAQESMgoVaW5pdGlhdGluZ19wcm9maWxlX2lkGAkg'
+    'ASgJUhNpbml0aWF0aW5nUHJvZmlsZUlkEiUKDnJlcXVlc3Rfc2hhMjU2GAogASgMUg1yZXF1ZX'
+    'N0U2hhMjU2EjIKFXByb2R1Y2VyX29wZXJhdGlvbl9pZBgLIAEoCVITcHJvZHVjZXJPcGVyYXRp'
+    'b25JZBI4Chhwcm9kdWNlcl9ldmlkZW5jZV9zaGEyNTYYDCABKAxSFnByb2R1Y2VyRXZpZGVuY2'
+    'VTaGEyNTYSKgoOYXBwbGljYXRpb25faWQYDSABKAlIAVINYXBwbGljYXRpb25JZIgBARIqCg5l'
+    'bnZpcm9ubWVudF9pZBgOIAEoCUgCUg1lbnZpcm9ubWVudElkiAEBEiwKD2NvcnBvcmF0aW9uX2'
+    'tleRgPIAEoCUgDUg5jb3Jwb3JhdGlvbktleYgBARI+ChlwcmV2aW91c19vd25lcl9wcm9maWxl'
+    'X2lkGBAgASgJSARSFnByZXZpb3VzT3duZXJQcm9maWxlSWSIAQESPgoZcHJldmlvdXNfb3duZX'
+    'JfYWNjb3VudF9pZBgRIAEoCUgFUhZwcmV2aW91c093bmVyQWNjb3VudElkiAEBEj8KGWV4cGVj'
+    'dGVkX293bmVyX2dlbmVyYXRpb24YEiABKARIBlIXZXhwZWN0ZWRPd25lckdlbmVyYXRpb26IAQ'
+    'ESOwoXcmVzdWx0X293bmVyX2dlbmVyYXRpb24YEyABKARIB1IVcmVzdWx0T3duZXJHZW5lcmF0'
+    'aW9uiAEBEhoKBmJvdF9pZBgUIAEoCUgIUgVib3RJZIgBARIsCg9pbnN0YWxsYXRpb25faWQYFS'
+    'ABKAlICVIOaW5zdGFsbGF0aW9uSWSIAQESPQoMcHVibGlzaGVkX2F0GBYgASgLMhouZ29vZ2xl'
+    'LnByb3RvYnVmLlRpbWVzdGFtcFILcHVibGlzaGVkQXRCGAoWX2luaXRpYXRpbmdfYWNjb3VudF'
+    '9pZEIRCg9fYXBwbGljYXRpb25faWRCEQoPX2Vudmlyb25tZW50X2lkQhIKEF9jb3Jwb3JhdGlv'
+    'bl9rZXlCHAoaX3ByZXZpb3VzX293bmVyX3Byb2ZpbGVfaWRCHAoaX3ByZXZpb3VzX293bmVyX2'
+    'FjY291bnRfaWRCHAoaX2V4cGVjdGVkX293bmVyX2dlbmVyYXRpb25CGgoYX3Jlc3VsdF9vd25l'
+    'cl9nZW5lcmF0aW9uQgkKB19ib3RfaWRCEgoQX2luc3RhbGxhdGlvbl9pZA==');
+
+@$core.Deprecated('Use memberAdmissionNativePublicationProofDescriptor instead')
+const MemberAdmissionNativePublicationProof$json = {
+  '1': 'MemberAdmissionNativePublicationProof',
+  '2': [
+    {
+      '1': 'kind',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.MemberAdmissionPublicationKind',
+      '10': 'kind'
+    },
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'binding_sha256', '3': 3, '4': 1, '5': 12, '10': 'bindingSha256'},
+  ],
+};
+
+/// Descriptor for `MemberAdmissionNativePublicationProof`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List memberAdmissionNativePublicationProofDescriptor =
+    $convert.base64Decode(
+        'CiVNZW1iZXJBZG1pc3Npb25OYXRpdmVQdWJsaWNhdGlvblByb29mEkIKBGtpbmQYASABKA4yLi'
+        '52b2ljZS5zcGFjZS52MS5NZW1iZXJBZG1pc3Npb25QdWJsaWNhdGlvbktpbmRSBGtpbmQSIQoM'
+        'b3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBIlCg5iaW5kaW5nX3NoYTI1NhgDIAEoDF'
+        'INYmluZGluZ1NoYTI1Ng==');
 
 @$core.Deprecated('Use memberAdmissionLifecycleAuthorityDescriptor instead')
 const MemberAdmissionLifecycleAuthority$json = {
@@ -224,6 +472,22 @@ const MemberAdmissionOrdinaryAuthority$json = {
       '5': 12,
       '10': 'preparingAdmissionBindingSha256'
     },
+    {
+      '1': 'publication_kind',
+      '3': 9,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.MemberAdmissionPublicationKind',
+      '10': 'publicationKind'
+    },
+    {
+      '1': 'native_publication',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.MemberAdmissionNativePublicationProof',
+      '10': 'nativePublication'
+    },
   ],
 };
 
@@ -238,7 +502,10 @@ final $typed_data.Uint8List memberAdmissionOrdinaryAuthorityDescriptor = $conver
     'cm9sZVJlY2VpcHRTaGEyNTYSTQoRcHJlcGFyaW5nX2JpbmRpbmcYByABKAsyIC52b2ljZS5yb2'
     'xlLnYxLk1lbWJlcnNoaXBCaW5kaW5nUhBwcmVwYXJpbmdCaW5kaW5nEksKInByZXBhcmluZ19h'
     'ZG1pc3Npb25fYmluZGluZ19zaGEyNTYYCCABKAxSH3ByZXBhcmluZ0FkbWlzc2lvbkJpbmRpbm'
-    'dTaGEyNTY=');
+    'dTaGEyNTYSWQoQcHVibGljYXRpb25fa2luZBgJIAEoDjIuLnZvaWNlLnNwYWNlLnYxLk1lbWJl'
+    'ckFkbWlzc2lvblB1YmxpY2F0aW9uS2luZFIPcHVibGljYXRpb25LaW5kEmQKEm5hdGl2ZV9wdW'
+    'JsaWNhdGlvbhgKIAEoCzI1LnZvaWNlLnNwYWNlLnYxLk1lbWJlckFkbWlzc2lvbk5hdGl2ZVB1'
+    'YmxpY2F0aW9uUHJvb2ZSEW5hdGl2ZVB1YmxpY2F0aW9u');
 
 @$core.Deprecated('Use memberAdmissionCommunityAuthorityDescriptor instead')
 const MemberAdmissionCommunityAuthority$json = {

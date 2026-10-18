@@ -42,6 +42,51 @@ enum MemberAdmissionSourceState {
   MEMBER_ADMISSION_SOURCE_STATE_RETIRED = 4;
 }
 
+// Publication provenance does not grant a role or add another membership source.
+enum MemberAdmissionPublicationKind {
+  MEMBER_ADMISSION_PUBLICATION_KIND_UNSPECIFIED = 0;
+  MEMBER_ADMISSION_PUBLICATION_KIND_ADMISSION_ROLE_READY = 1;
+  MEMBER_ADMISSION_PUBLICATION_KIND_LEGACY_MIGRATED = 2;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE = 3;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE = 4;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_RECOVERY = 5;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL = 6;
+}
+
+// Persisted private canonical bytes. SHA256 is domain-separated by
+// "voice.space.native-membership-publication.v1" plus NUL. The protected
+// authority response discloses only the compact proof below, not this metadata.
+message NativeMembershipPublicationBinding {
+  uint32 protocol_version = 1;
+  string publication_operation_id = 2;
+  string space_id = 3;
+  string profile_id = 4;
+  uint64 ordinary_generation = 5;
+  MemberAdmissionPublicationKind kind = 6;
+  string initiating_service = 7;
+  optional string initiating_account_id = 8;
+  string initiating_profile_id = 9;
+  bytes request_sha256 = 10;
+  string producer_operation_id = 11;
+  bytes producer_evidence_sha256 = 12;
+  optional string application_id = 13;
+  optional string environment_id = 14;
+  optional string corporation_key = 15;
+  optional string previous_owner_profile_id = 16;
+  optional string previous_owner_account_id = 17;
+  optional uint64 expected_owner_generation = 18;
+  optional uint64 result_owner_generation = 19;
+  optional string bot_id = 20;
+  optional string installation_id = 21;
+  google.protobuf.Timestamp published_at = 22;
+}
+
+message MemberAdmissionNativePublicationProof {
+  MemberAdmissionPublicationKind kind = 1;
+  string operation_id = 2;
+  bytes binding_sha256 = 3;
+}
+
 message MemberAdmissionLifecycleAuthority {
   uint64 generation = 1;
   MemberAdmissionLifecycleState state = 2;
@@ -63,6 +108,10 @@ message MemberAdmissionOrdinaryAuthority {
   // PREPARING is inert; this identifies the current candidate for Ensure only.
   voice.role.v1.MembershipBinding preparing_binding = 7; // positive ORDINARY only
   bytes preparing_admission_binding_sha256 = 8;
+  MemberAdmissionPublicationKind publication_kind = 9;
+  // Exactly one proof for ACTIVE positive ordinary publication: field6 for
+  // ADMISSION_ROLE_READY, this field for a native kind. Neither for legacy0.
+  MemberAdmissionNativePublicationProof native_publication = 10;
 }
 
 message MemberAdmissionCommunityAuthority {
