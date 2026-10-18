@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -51,6 +50,9 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 	if _, err := client.CoreV1().Namespaces().Create(ctx, namespaceObject("voice-staging"), metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
+	mutating, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().List(ctx, metav1.ListOptions{})
+	if err != nil { t.Fatal(err) }
+	if len(mutating.Items) != 0 { t.Fatalf("unexpected mutating webhook configurations in isolated envtest: %d", len(mutating.Items)) }
 
 	// Exact source-backed request fixture supplied by the migration producer.
 	// SHA-256 below is over the literal UTF-8 SQL bytes.
@@ -69,34 +71,19 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 	requested := []map[string]any{cmRequest, jobRequestObject}
 	observed := make([]map[string]any, 0, 2)
 	for _, resource := range requested {
-		encoded, err := json.Marshal(resource)
-		if err != nil {
-			t.Fatal(err)
-		}
 		var got map[string]any
 		path := "/apis/batch/v1/namespaces/voice-staging/jobs/" + name
 		if resource["kind"] == "ConfigMap" {
 			path = "/api/v1/namespaces/voice-staging/configmaps/" + name
 		}
+		var response []byte
 		if resource["kind"] == "ConfigMap" {
-			var obj struct {
-				APIVersion string `json:"apiVersion"`
-				Kind       string `json:"kind"`
-				Metadata   metav1.ObjectMeta `json:"metadata"`
-				Immutable  *bool `json:"immutable"`
-				Data       map[string]string `json:"data"`
-			}
-			if err := json.Unmarshal(encoded, &obj); err != nil { t.Fatal(err) }
-			configMap := coreConfigMap(obj)
-			created, err := client.CoreV1().ConfigMaps("voice-staging").Create(ctx, &configMap, metav1.CreateOptions{})
-			if err != nil { t.Fatalf("ConfigMap CREATE %s: %v", path, err) }
-			got, err = toMap(created)
+			response, err = client.CoreV1().RESTClient().Post().Namespace("voice-staging").Resource("configmaps").Body(resource).Do(ctx).Raw()
 		} else {
-			jobValue := batchJob(jobRequestObject)
-			created, err := client.BatchV1().Jobs("voice-staging").Create(ctx, &jobValue, metav1.CreateOptions{})
-			if err != nil { t.Fatalf("Job CREATE %s: %v", path, err) }
-			got, err = toMap(created)
+			response, err = client.BatchV1().RESTClient().Post().Namespace("voice-staging").Resource("jobs").Body(resource).Do(ctx).Raw()
 		}
+		if err != nil { t.Fatalf("API CREATE %s: %v", path, err) }
+		if err := json.Unmarshal(response, &got); err != nil { t.Fatalf("decode raw API response %s: %v", path, err) }
 		if err != nil { t.Fatal(err) }
 		observed = append(observed, got)
 		for _, line := range defaultDiff(resource, got) { t.Logf("DEFAULT %s", line) }
@@ -146,14 +133,6 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 func namespaceObject(name string) *corev1.Namespace {
 	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{"kubernetes.io/metadata.name": name}}}
 }
-
-func coreConfigMap(o struct { APIVersion string `json:"apiVersion"`; Kind string `json:"kind"`; Metadata metav1.ObjectMeta `json:"metadata"`; Immutable *bool `json:"immutable"`; Data map[string]string `json:"data"` }) corev1.ConfigMap {
-	return corev1.ConfigMap{TypeMeta: metav1.TypeMeta{APIVersion:o.APIVersion,Kind:o.Kind}, ObjectMeta:o.Metadata, Immutable:o.Immutable, Data:o.Data}
-}
-
-func batchJob(o map[string]any) batchv1.Job { b,_:=json.Marshal(o); var v batchv1.Job; _=json.Unmarshal(b,&v); return v }
-
-func toMap(value any) (map[string]any, error) { b,err:=json.Marshal(value); if err!=nil{return nil,err}; var out map[string]any; err=json.Unmarshal(b,&out); return out,err }
 
 func defaultDiff(want, got any) []string {
 	var rows []string
