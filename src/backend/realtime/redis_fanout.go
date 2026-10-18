@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	defaultRedisProfilePrefix = "voice:rt:prof:"
 	defaultRedisFanoutChannel = "voice:rt:fanout"
 
 	fanoutMsgMarkRead    = "mark_read"
@@ -33,56 +32,30 @@ type redisFanoutPayload struct {
 }
 
 type redisFanoutConfig struct {
-	Client          *redis.Client
-	Hub             *wsHub
-	InstanceID      string
-	KeyPrefix       string
-	FanoutChannel   string
-	ProfileRegistry *redisProfileRegistry // optional override; nil uses Client + KeyPrefix
+	Client        *redis.Client
+	Hub           *wsHub
+	InstanceID    string
+	FanoutChannel string
 }
 
 type redisFanout struct {
-	rdb             *redis.Client
-	hub             *wsHub
-	instanceID      string
-	fanoutChannel   string
-	profileRegistry *redisProfileRegistry
+	rdb           *redis.Client
+	hub           *wsHub
+	instanceID    string
+	fanoutChannel string
 }
 
 func newRedisFanout(cfg redisFanoutConfig) *redisFanout {
-	prefix := strings.TrimSpace(cfg.KeyPrefix)
-	if prefix == "" {
-		prefix = defaultRedisProfilePrefix
-	}
 	ch := strings.TrimSpace(cfg.FanoutChannel)
 	if ch == "" {
 		ch = defaultRedisFanoutChannel
 	}
-	reg := cfg.ProfileRegistry
-	if reg == nil && cfg.Client != nil {
-		reg = newRedisProfileRegistry(cfg.Client, prefix)
-	}
 	return &redisFanout{
-		rdb:             cfg.Client,
-		hub:             cfg.Hub,
-		instanceID:      cfg.InstanceID,
-		fanoutChannel:   ch,
-		profileRegistry: reg,
+		rdb:           cfg.Client,
+		hub:           cfg.Hub,
+		instanceID:    cfg.InstanceID,
+		fanoutChannel: ch,
 	}
-}
-
-func (f *redisFanout) Register(ctx context.Context, profileID, connID string) error {
-	if f == nil || f.profileRegistry == nil {
-		return nil
-	}
-	return f.profileRegistry.Register(ctx, profileID, f.instanceID, connID)
-}
-
-func (f *redisFanout) Unregister(ctx context.Context, profileID, connID string) error {
-	if f == nil || f.profileRegistry == nil {
-		return nil
-	}
-	return f.profileRegistry.Unregister(ctx, profileID, f.instanceID, connID)
 }
 
 func (f *redisFanout) PublishTyping(ctx context.Context, chatID, profileID, kind, srcConn string) error {

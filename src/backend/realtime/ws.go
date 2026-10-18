@@ -247,11 +247,6 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			timer.Stop()
 		}
 		hasLocalProfileConn := hub.unregisterConn(reg)
-		if rf != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = rf.Unregister(ctx, claims.ProfileID, connID)
-			cancel()
-		}
 		if !hasLocalProfileConn {
 			updatePresence(context.Background(), presence, claims, "invisible", "")
 		}
@@ -259,14 +254,6 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	}()
 	readerCtx, cancelReader := context.WithCancel(context.Background())
 	defer cancelReader()
-
-	if rf != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if err := rf.Register(ctx, claims.ProfileID, connID); err != nil {
-			svcLogger.Warn("ws redis register failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
-		}
-		cancel()
-	}
 
 	var mu sync.Mutex
 	var seq int64
