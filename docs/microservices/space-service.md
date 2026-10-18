@@ -1,5 +1,43 @@
 # Space Service
 
+## Composite Chat creation (accepted implementation contract)
+
+`CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`
+credential bound to exact RPC, operation/request ID and protobuf hash over mTLS;
+shared replay storage and rotating HTTPS JWKS fail closed. Ordinary listeners
+deny this method. `GetSpaceChatCreationOutcome` accepts private Chat recovery or
+the protected Gateway delegated-user path. Gateway additionally proves original
+creator/account ownership and current Space membership/lifecycle admission;
+service authentication alone never authorizes public disclosure.
+
+Space rechecks current membership, guest policy, Role
+`TEXT_CHAT_CREATE_IN_SPACE`, lifecycle/ownership fencing and capacity before the
+first node commit. Bot creation additionally requires Bot-owned current exact
+bot/actor/installation/scope admission. Missing authority is UNKNOWN, never an
+ABORTED result. Network checks hold no Space DB lock; local transaction checks
+repeat under the shared Space advisory lock. The same lock serializes composite
+node/result writes with freeze, audit ingress and terminal purge. The operation
+lock is acquired before the Space lock. Node plus immutable COMMITTED result,
+or deterministic domain refusal plus ABORTED result, commit atomically; ordinary
+tree audit is not emitted for this internal step. Ordinary Upsert keeps its audit.
+
+Chat owns prepared/HELD work and autonomous recovery. Exact replay returns the
+original typed snapshot even after node movement/removal and never reinserts it.
+Gateway waits for Chat completion and reads that snapshot instead of issuing a
+second ordinary tree Upsert. An absent receipt/timeout does not prove abort.
+The complete tuple, terminal retention and pre-manifest drain contract are in
+[DATA_MODEL.md](../DATA_MODEL.md#p3-space-deletion-ownership-and-file-references-accepted-target).
+
+During freeze/purging, protected Chat audit ingress may finish only the original
+`chat_created` fact matching a saved COMMITTED composite's audit/Space/Chat/creator
+binding and exact empty details codec. It does not rerun interactive ACL or admit
+new ordinary commits. Ingress takes the shared Space transaction lock before
+receipt lookup, including duplicate/retry paths. Terminal purge records a
+permanent Space fence atomically with fixed evidence deadlines and local deletion;
+late signed deliveries cannot insert audit, outbox or node rows. Reserved composite
+audit IDs remain unavailable for a different fact after payload minimization.
+Actual participant drain/completion proof is required before aggregate purge.
+
 ## Обзор
 
 Управление пространствами (аналог Discord-серверов): **дерево sidebar** — единая таблица **`space_tree_nodes`** (текстовые чаты `group`/`channel` и **голосовые комнаты** в одном порядке сортировки), категории, инвайты, участники, шаблоны.

@@ -109,5 +109,37 @@ class ParticipantOperationState extends $pb.ProtobufEnum {
   const ParticipantOperationState._(super.value, super.name);
 }
 
+class SpaceChatCreationOutcomeState extends $pb.ProtobufEnum {
+  static const SpaceChatCreationOutcomeState
+      SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED =
+      SpaceChatCreationOutcomeState._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED');
+  static const SpaceChatCreationOutcomeState
+      SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED =
+      SpaceChatCreationOutcomeState._(1,
+          _omitEnumNames ? '' : 'SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED');
+  static const SpaceChatCreationOutcomeState
+      SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED =
+      SpaceChatCreationOutcomeState._(
+          2, _omitEnumNames ? '' : 'SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED');
+
+  static const $core.List<SpaceChatCreationOutcomeState> values =
+      <SpaceChatCreationOutcomeState>[
+    SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED,
+    SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED,
+    SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED,
+  ];
+
+  static final $core.List<SpaceChatCreationOutcomeState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static SpaceChatCreationOutcomeState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const SpaceChatCreationOutcomeState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
