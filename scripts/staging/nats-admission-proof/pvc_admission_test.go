@@ -19,15 +19,13 @@ import (
 )
 
 const (
-	pvcPolicyName      = "voice-nats-scratch-pvc-contract"
-	pvcBindingName     = "voice-nats-scratch-pvc-contract"
-	pvcParamName       = "voice-nats-admission-fixture"
-	pvcDenyMessage     = "PVC differs from the required verification/restore storage contract"
-	stagingRunner      = "system:serviceaccount:voice-staging:voice-nats-staging-runner"
-	fixturePVCSize     = "8589934592"
-	fixturePVCMax      = "17179869184"
-	fixtureRestoreSize = "17179869184"
-	fixtureRestoreMax  = "34359738368"
+	pvcPolicyName  = "voice-nats-scratch-pvc-contract"
+	pvcBindingName = "voice-nats-scratch-pvc-contract"
+	pvcParamName   = "voice-nats-admission-fixture"
+	pvcDenyMessage = "PVC differs from the required verification storage contract"
+	stagingRunner  = "system:serviceaccount:voice-staging:voice-nats-staging-runner"
+	fixturePVCSize = "8589934592"
+	fixturePVCMax  = "17179869184"
 )
 
 func TestScratchPVCVAPUsesRequiredFixtureParameters(t *testing.T) {
@@ -63,15 +61,11 @@ func TestScratchPVCVAPUsesRequiredFixtureParameters(t *testing.T) {
 		"verification_pvc_size_bytes": fixturePVCSize,
 		"verification_pvc_max_bytes":  fixturePVCMax,
 		"verification_storage_class":  "local-path",
-		"replacement_pvc_size_bytes":  fixtureRestoreSize,
-		"replacement_pvc_max_bytes":   fixtureRestoreMax,
-		"replacement_storage_class":   "local-path",
 	}}, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := rolePVC("verification", "")
-	restore := rolePVC("restore", "abcdef12")
+	base := rolePVC()
 	sourceFixture := base.DeepCopy()
 	sourceFixture.Name = "voice-nats-jsdata-d20261017a"
 	if _, err := admin.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, sourceFixture, metav1.CreateOptions{}); err != nil {
@@ -86,9 +80,6 @@ func TestScratchPVCVAPUsesRequiredFixtureParameters(t *testing.T) {
 	}
 	if _, err := runnerClient.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, base.DeepCopy(), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("trusted fixture scratch PVC rejected: %v", err)
-	}
-	if _, err := runnerClient.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, restore.DeepCopy(), metav1.CreateOptions{}); err != nil {
-		t.Fatalf("trusted fixture restore PVC rejected: %v", err)
 	}
 	for _, tc := range []struct {
 		name string
@@ -144,37 +135,13 @@ func TestScratchPVCVAPUsesRequiredFixtureParameters(t *testing.T) {
 			}
 		})
 	}
-	for _, tc := range []struct {
-		name string
-		edit func(*corev1.PersistentVolumeClaim)
-	}{
-		{"missing restore attempt", func(p *corev1.PersistentVolumeClaim) { delete(p.Labels, "voice.io/nats-restore-attempt") }},
-		{"malformed restore attempt", func(p *corev1.PersistentVolumeClaim) { p.Labels["voice.io/nats-restore-attempt"] = "ABCDEF12" }},
-		{"wrong restore name", func(p *corev1.PersistentVolumeClaim) { p.Name = "voice-nats-restore-" + testOperation + "-abcdef13" }},
-		{"restore has wrong exact request", func(p *corev1.PersistentVolumeClaim) {
-			p.Spec.Resources.Requests[corev1.ResourceStorage] = resourceQuantity("17179869185")
-		}},
-		{"restore has wrong storage class", func(p *corev1.PersistentVolumeClaim) { class := "other"; p.Spec.StorageClassName = &class }},
-		{"restore extra label", func(p *corev1.PersistentVolumeClaim) { p.Labels["attacker.invalid/extra"] = "yes" }},
-	} {
-		t.Run("restore "+tc.name, func(t *testing.T) {
-			candidate := restore.DeepCopy()
-			candidate.Name = "voice-nats-restore-" + testOperation + "-abcdef12"
-			candidate.Labels["voice.io/nats-operation"] = testOperation
-			candidate.Labels["voice.io/nats-job-nonce"] = testNonce
-			tc.edit(candidate)
-			if err := createPVCAs(ctx, t, cfg, stagingRunner, candidate); err == nil || !strings.Contains(err.Error(), pvcDenyMessage) {
-				t.Fatalf("mutated restore PVC was not denied by VAP: %v", err)
-			}
-		})
-	}
 	// Existing source PVCs are selected by name and never created by this runner.
 	source := base.DeepCopy()
 	source.Name = "voice-nats-jsdata-d20261017a"
 	if err := createPVCAs(ctx, t, cfg, stagingRunner, source); err == nil || !strings.Contains(err.Error(), pvcDenyMessage) {
 		t.Fatalf("source PVC CREATE was not denied: %v", err)
 	}
-	for _, name := range []string{"voice-nats-jsdata-d20261017a", base.Name, restore.Name} {
+	for _, name := range []string{"voice-nats-jsdata-d20261017a", base.Name} {
 		stored, err := admin.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("read protected PVC fixture %s: %v", name, err)
@@ -221,18 +188,13 @@ func startAdmissionAPIServer(t *testing.T) (*rest.Config, func()) {
 	return cfg, stop
 }
 
-func rolePVC(role, attempt string) *corev1.PersistentVolumeClaim {
+func rolePVC() *corev1.PersistentVolumeClaim {
 	class := "local-path"
 	mode := corev1.PersistentVolumeFilesystem
 	op := testOperation
 	name := "voice-nats-verify-" + op
 	size := fixturePVCSize
-	labels := map[string]string{"voice.io/nats-operation": op, "voice.io/nats-job-nonce": testNonce, "voice.io/nats-pvc-role": role}
-	if role == "restore" {
-		name = "voice-nats-restore-" + op + "-" + attempt
-		size = fixtureRestoreSize
-		labels["voice.io/nats-restore-attempt"] = attempt
-	}
+	labels := map[string]string{"voice.io/nats-operation": op, "voice.io/nats-job-nonce": testNonce, "voice.io/nats-pvc-role": "verification"}
 	return &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
 		Name: name, Namespace: namespace, Labels: labels,
 	}, Spec: corev1.PersistentVolumeClaimSpec{
@@ -276,8 +238,8 @@ func installScratchPVCPolicy(ctx context.Context, t *testing.T, client *kubernet
 func scratchPVCExpressions() []string {
 	create := []string{
 		"request.namespace == 'voice-staging' && request.userInfo.username == '" + stagingRunner + "'",
-		"object.metadata.labels['voice.io/nats-pvc-role'] in ['verification', 'restore']",
-		"(object.metadata.labels['voice.io/nats-pvc-role'] == 'verification' && object.metadata.name == 'voice-nats-verify-' + object.metadata.labels['voice.io/nats-operation'] && !('voice.io/nats-restore-attempt' in object.metadata.labels) && object.metadata.labels.size() == 3) || (object.metadata.labels['voice.io/nats-pvc-role'] == 'restore' && object.metadata.name == 'voice-nats-restore-' + object.metadata.labels['voice.io/nats-operation'] + '-' + object.metadata.labels['voice.io/nats-restore-attempt'] && object.metadata.labels['voice.io/nats-restore-attempt'].matches('^[a-f0-9]{8}$') && object.metadata.labels.size() == 4)",
+		"object.metadata.labels['voice.io/nats-pvc-role'] == 'verification'",
+		"object.metadata.name == 'voice-nats-verify-' + object.metadata.labels['voice.io/nats-operation'] && !('voice.io/nats-restore-attempt' in object.metadata.labels) && object.metadata.labels.size() == 3",
 		"object.metadata.labels['voice.io/nats-operation'].matches('^[a-f0-9]{12}$')",
 		"object.metadata.labels['voice.io/nats-job-nonce'].matches('^[a-f0-9]{32}$')",
 		"!has(object.metadata.annotations) || object.metadata.annotations.size() == 0",
@@ -285,13 +247,13 @@ func scratchPVCExpressions() []string {
 		"!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0 || (object.metadata.finalizers.size() == 1 && object.metadata.finalizers[0] == 'kubernetes.io/pvc-protection')",
 		"object.spec.accessModes == ['ReadWriteOnce']",
 		"object.spec.volumeMode == 'Filesystem'",
-		"object.spec.storageClassName == (object.metadata.labels['voice.io/nats-pvc-role'] == 'verification' ? params.data['verification_storage_class'] : params.data['replacement_storage_class'])",
+		"object.spec.storageClassName == params.data['verification_storage_class']",
 		"object.spec.resources.requests.size() == 1",
 		"!has(object.spec.resources.limits) || object.spec.resources.limits.size() == 0",
-		"object.spec.resources.requests.storage == (object.metadata.labels['voice.io/nats-pvc-role'] == 'verification' ? params.data['verification_pvc_size_bytes'] : params.data['replacement_pvc_size_bytes'])",
+		"object.spec.resources.requests.storage == params.data['verification_pvc_size_bytes']",
 		"quantity(object.spec.resources.requests.storage).isInteger() && quantity(object.spec.resources.requests.storage).asInteger() > 0",
-		"quantity(object.spec.resources.requests.storage).asInteger() <= int(object.metadata.labels['voice.io/nats-pvc-role'] == 'verification' ? params.data['verification_pvc_max_bytes'] : params.data['replacement_pvc_max_bytes'])",
-		"int(object.metadata.labels['voice.io/nats-pvc-role'] == 'verification' ? params.data['verification_pvc_max_bytes'] : params.data['replacement_pvc_max_bytes']) > 0",
+		"quantity(object.spec.resources.requests.storage).asInteger() <= int(params.data['verification_pvc_max_bytes'])",
+		"int(params.data['verification_pvc_max_bytes']) > 0",
 		"!has(object.spec.volumeName) && !has(object.spec.selector) && !has(object.spec.volumeAttributesClassName)",
 		"!has(object.spec.dataSource) && !has(object.spec.dataSourceRef)",
 	}
@@ -299,7 +261,7 @@ func scratchPVCExpressions() []string {
 	for _, expression := range create {
 		out = append(out, "request.operation != 'CREATE' || ("+expression+")")
 	}
-	out = append(out, "request.operation == 'CREATE' || (request.operation in ['UPDATE', 'DELETE'] && !(oldObject.metadata.name.matches('^voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}$') || oldObject.metadata.name.matches('^voice-nats-verify-[a-f0-9]{12}$') || oldObject.metadata.name.matches('^voice-nats-restore-[a-f0-9]{12}-[a-f0-9]{8}$')))")
+	out = append(out, "request.operation == 'CREATE' || (request.operation in ['UPDATE', 'DELETE'] && !(oldObject.metadata.name.matches('^voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}$') || oldObject.metadata.name.matches('^voice-nats-verify-[a-f0-9]{12}$')))")
 	return out
 }
 

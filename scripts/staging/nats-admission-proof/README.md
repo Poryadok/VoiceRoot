@@ -10,23 +10,38 @@ scratch PVC shape using explicit fixture values for trusted storage settings.
 The matrices exercise actual upstream admission for Job, Pod, PVC, and CONNECT
 requests, including denial controls for changed fields.
 
-The exact producer snapshot is `testdata/producer-e7721b3/verification_job.py`,
-from immutable commit `e7721b3af5e68b2e06e7053a2d79307279149008`. It defines
-source-only archive and target-only census Jobs, plus `bind-verification` and
-`bind-restore`. Census has no source PVC mount; archive bytes arrive through
-fixed exec vectors which bind operation, nonce, Pod/PVC/PV identities, archive
-digest, and byte count. Synthetic image digest, storage capacities/classes,
-and Job-controller username are fixture parameters only; they do not prove a
-published production image or installed STAGING configuration. VAP cannot
-look up a Job object to compare a Pod owner UID across resources. The policy
-therefore admits Pod CREATE only for its explicitly parameterized trusted Job
-controller identity, and the runtime must compare the owner UID to the exact
-Job UID on readback before exec. Target controller identity qualification,
-published image digest, network-policy enforcement, and target installation
-remain separate gates. Tests run only in the private Linux control plane and
-never contact STAGING/DEV. See the parent artifact
-`tmp/slave-driver/pr-refresh-20261016/RUN/staging-admission-proof-20261017.md`
-for source hashes, results, and remaining target-enforcement gates.
+The contract-migration Job/Pod/CONNECT proof consumes exact producer source
+`testdata/producer-dff102a/verification_job.py`, from immutable commit
+`dff102a95011f428b9541281da2baaea38c38153` (blob
+`9bfa4f646f8987a4bf3626283ce68f18a4ee7d7d`, SHA-256
+`fb720abf8e6886a83ada988efae9416d4ed140338bf01f9780e9bf10c8fe2be9`). The
+test exercises the real API's `contract-migration` Job, its source-writing
+NATS sidecar and isolated control container, the controller-created Pod, and
+the producer's fixed exec vectors. Mutations cover source claim rebinding,
+control access to the source or NATS state, Secret/hostPath mounts, token
+mounting, arbitrary command/image/UID changes, and replacement of the
+`POD_UID` DownwardAPI field reference. The helper source compares this
+`metadata.uid` environment value with the supplied Pod UID before acting.
+
+VAP cannot look up the newly created Job to compare the Pod owner UID across
+resources. It pins the qualified controller fixture identity, Job name and
+owner-reference shape, and a UUID-shaped owner UID; runtime must still compare
+that UID with the exact Job UID and reread Pod/container identity before every
+exec or recovery action. The test parameters use only a fixture image digest
+and controller username; they do not prove a published image or installed
+STAGING identity. Archive/census/binder Job and Pod tests still use their
+older captured producer fixture. The separate census CONNECT test consumes
+current vectors from immutable producer commit
+`3e8bae3b84363d0aa5ac34579c7b1415233e67ab`; its Job template is unchanged,
+and its vectors add `consume-census-inputs` while binding the input Pod UID,
+bundle digest, archive digest, and storage UIDs. All five census vectors pass
+the real API/VAP test; changed argv, stream mode, container, Pod, and actor are
+denied. This command-admission proof does not validate census receipt contents.
+The production census schema and published image digest remain separate gates.
+Tests run only in the private Linux control plane and never
+contact STAGING/DEV. See the parent artifact
+`tmp/slave-driver/pr-refresh-20261016/RUN/staging-admission-proof-selected-session-20261017.md`
+for exact hashes, results, and remaining target-enforcement gates.
 
 The command, PVC, Job, and Pod shapes remain coupled to the rootless helper and
 runtime contracts. Update the regression matrix only from committed producer

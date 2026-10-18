@@ -98,6 +98,14 @@ func TestArchiveJobVAPValidatesProducerOutput(t *testing.T) {
 	if err := createJob(ctx, runner, base); err != nil {
 		t.Fatalf("producer archive Job rejected by VAP/Kubernetes: %v", err)
 	}
+	for _, removedPhase := range []string{"restore", "bind-restore", "verification-session"} {
+		candidate := base.DeepCopy()
+		candidate.Labels["voice.io/nats-job-phase"] = removedPhase
+		candidate.Spec.Template.Labels["voice.io/nats-job-phase"] = removedPhase
+		if err := createJob(ctx, runner, candidate); err == nil || !strings.Contains(err.Error(), jobPolicyName) {
+			t.Errorf("removed Job phase %q was not denied by VAP: %v", removedPhase, err)
+		}
+	}
 	census := decodeFixtureJob(t, fixture.CensusJob)
 	for _, tc := range []struct {
 		name string
@@ -169,7 +177,7 @@ func installArchiveJobPolicy(ctx context.Context, t *testing.T, client *kubernet
 			validations = append(validations, admissionv1.Validation{Expression: "object.metadata.labels['voice.io/nats-job-phase'] != '" + phase + "' || (" + expr + ")", Message: jobDenyMessage})
 		}
 	}
-	for _, expr := range []string{"!has(object.spec.template.spec.nodeName)", "object.metadata.labels['voice.io/nats-job-phase'] != 'archive' || !has(object.spec.template.spec.securityContext.fsGroup)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly) || object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly == false)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.containers[0].volumeMounts[0].readOnly) || object.spec.template.spec.containers[0].volumeMounts[0].readOnly == false)", "!has(object.spec.template.spec.hostNetwork) || object.spec.template.spec.hostNetwork == false", "!has(object.spec.template.spec.shareProcessNamespace) || object.spec.template.spec.shareProcessNamespace == false", "!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0", "!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0"} {
+	for _, expr := range []string{"object.metadata.labels['voice.io/nats-job-phase'] in ['archive','census']", "!has(object.spec.template.spec.nodeName)", "object.metadata.labels['voice.io/nats-job-phase'] != 'archive' || !has(object.spec.template.spec.securityContext.fsGroup)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly) || object.spec.template.spec.volumes[0].persistentVolumeClaim.readOnly == false)", "object.metadata.labels['voice.io/nats-job-phase'] != 'census' || (!has(object.spec.template.spec.containers[0].volumeMounts[0].readOnly) || object.spec.template.spec.containers[0].volumeMounts[0].readOnly == false)", "!has(object.spec.template.spec.hostNetwork) || object.spec.template.spec.hostNetwork == false", "!has(object.spec.template.spec.shareProcessNamespace) || object.spec.template.spec.shareProcessNamespace == false", "!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0", "!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0"} {
 		validations = append(validations, admissionv1.Validation{Expression: expr, Message: jobDenyMessage})
 	}
 	paramKind := &admissionv1.ParamKind{APIVersion: "v1", Kind: "ConfigMap"}

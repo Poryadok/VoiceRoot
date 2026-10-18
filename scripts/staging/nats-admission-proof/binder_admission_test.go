@@ -47,6 +47,9 @@ func TestProducerBinderJobsPassVAPAndKubernetes(t *testing.T) {
 	client := clientAs(ctx, t, cfg, stagingRunner)
 
 	for phase, raw := range fixture.BindJobs {
+		if phase != "bind-verification" {
+			continue
+		}
 		t.Run(phase, func(t *testing.T) {
 			base := decodeFixtureJob(t, raw)
 			for _, tc := range []struct {
@@ -95,6 +98,12 @@ func TestProducerBinderJobsPassVAPAndKubernetes(t *testing.T) {
 			}
 		})
 	}
+	obsolete := decodeFixtureJob(t, fixture.BindJobs["bind-verification"])
+	obsolete.Labels["voice.io/nats-job-phase"] = "bind-restore"
+	obsolete.Spec.Template.Labels["voice.io/nats-job-phase"] = "bind-restore"
+	if err := createJob(ctx, client, obsolete); err == nil || !strings.Contains(err.Error(), binderPolicyName) {
+		t.Fatalf("obsolete bind-restore phase was not denied by VAP: %v", err)
+	}
 }
 
 func decodeFixtureJob(t *testing.T, raw map[string]interface{}) *batchv1.Job {
@@ -114,8 +123,12 @@ func installBinderJobPolicy(ctx context.Context, t *testing.T, client *kubernete
 	t.Helper()
 	fail, equivalent, scope := admissionv1.Fail, admissionv1.Equivalent, admissionv1.NamespacedScope
 	validations := []admissionv1.Validation{{Expression: "request.namespace == 'voice-staging'", Message: binderDenyMessage},
-		{Expression: "request.userInfo.username == '" + stagingRunner + "'", Message: binderDenyMessage}}
+		{Expression: "request.userInfo.username == '" + stagingRunner + "'", Message: binderDenyMessage},
+		{Expression: "object.metadata.labels['voice.io/nats-job-phase'] == 'bind-verification'", Message: binderDenyMessage}}
 	for phase, raw := range fixture.BindJobs {
+		if phase != "bind-verification" {
+			continue
+		}
 		for _, expression := range exactJobCELExpressions(raw) {
 			if strings.HasPrefix(expression, "object.spec.template.spec.containers[0].image == ") {
 				expression = "has(object.spec.template.spec.containers[0].image) && object.spec.template.spec.containers[0].image == params.data['phase_image']"

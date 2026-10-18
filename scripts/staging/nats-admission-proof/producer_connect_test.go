@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	producerConnectPolicyName  = "voice-nats-archive-connect-contract"
-	producerConnectBindingName = "voice-nats-archive-connect-contract"
-	producerConnectDenyMessage = "exec does not match the producer archive protocol"
+	producerConnectPolicyName  = "voice-nats-helper-connect-contract"
+	producerConnectBindingName = "voice-nats-helper-connect-contract"
+	producerConnectDenyMessage = "exec does not match the fixed helper protocol"
 )
 
 func TestProducerConnectVAPEvaluatesBothFixedVectors(t *testing.T) {
@@ -224,5 +224,9 @@ func producerConnectExpression(fixture producerFixture, podNames map[string]stri
 	censusInputReceipt := "(!has(object.stdin) || object.stdin == false) && object.command == " + list(fixture.CensusExecVectors["census_read_input_receipt"])
 	censusReceive := "has(object.stdin) && object.stdin == true && object.command == " + list(fixture.CensusExecVectors["census_receive_archive"])
 	censusReadback := "(!has(object.stdin) || object.stdin == false) && object.command == " + list(fixture.CensusExecVectors["census_same_pod_readback"])
-	return "(" + common + ") && ((" + archiveName + " && ((" + archiveCreate + ") || (" + archiveReadback + "))) || (" + censusName + " && ((" + censusLoad + ") || (" + censusInputReceipt + ") || (" + censusReceive + ") || (" + censusReadback + "))) )"
+	censusVectors := []string{"(" + censusLoad + ")", "(" + censusInputReceipt + ")", "(" + censusReceive + ")", "(" + censusReadback + ")"}
+	if consumeInputs, ok := fixture.CensusExecVectors["census_consume_inputs"]; ok {
+		censusVectors = append(censusVectors, "((!has(object.stdin) || object.stdin == false) && object.command == "+list(consumeInputs)+")")
+	}
+	return "(" + common + ") && ((" + archiveName + " && ((" + archiveCreate + ") || (" + archiveReadback + "))) || (" + censusName + " && (" + strings.Join(censusVectors, " || ") + ")))"
 }

@@ -37,14 +37,14 @@ func loadProducerFixture(t *testing.T) producerFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sourceDir = filepath.Join(workingDir, "testdata", "producer-e7721b3")
+		sourceDir = filepath.Join(workingDir, "testdata", "producer-95f3d4c49")
 	}
 	sourceBytes, err := os.ReadFile(filepath.Join(sourceDir, "verification_job.py"))
 	if err != nil {
 		t.Fatalf("read committed producer source: %v", err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(sourceBytes)); got != "6ace5f69db816d18dc3bf6ff6e692e42d4cc44c25bf8e1a870a2e05372af3844" {
-		t.Fatalf("producer source bytes do not match commit e7721b3: sha256=%s", got)
+	if got := fmt.Sprintf("%x", sha256.Sum256(sourceBytes)); got != "186bfb42890f4f508af4134d3c0b5116732c037e4310bbce8c303109a5854df0" {
+		t.Fatalf("producer source bytes do not match commit 95f3d4c49: sha256=%s", got)
 	}
 	program := `import json, verification_job as j
 archive_request = {'operation': '0123456789ab', 'nonce': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'phase': 'archive'}
@@ -55,7 +55,7 @@ pod_uid = 'c5c81fc7-86d6-4d62-8b84-9912d0805bf2'
 image = 'ghcr.io/poryadok/voice-nats-phase@sha256:' + 'a' * 64
 archive = {'sha256': 'b' * 64, 'bytes': 4096}
 bind_jobs = {}
-for phase, role, claim in [('bind-verification','verification','voice-nats-verify-0123456789ab'),('bind-restore','restore','voice-nats-restore-0123456789ab-deadbeef')]:
+for phase, role, claim in [('bind-verification','verification','voice-nats-verify-0123456789ab')]:
     bind_request = {'operation': archive_request['operation'], 'nonce': archive_request['nonce'], 'phase': phase}
     bind_jobs[phase] = j.document(bind_request, {'role':role,'claim_name':claim,'target_uid':'55555555-5555-4555-8555-555555555555','node_name':'k3s-worker-1'}, image)
 print(json.dumps({'job':j.document(archive_request,archive_binding,image),'census_job':j.document(census_request,census_binding,image),'bind_jobs':bind_jobs,'exec_vectors':j.exec_vectors(archive_request,pod_uid,archive_binding),'census_exec_vectors':j.exec_vectors(census_request,pod_uid,census_binding,archive),'binding':archive_binding,'census_binding':census_binding,'pod_uid':pod_uid}))`
@@ -70,7 +70,7 @@ print(json.dumps({'job':j.document(archive_request,archive_binding,image),'censu
 	if err := json.Unmarshal(stdout.Bytes(), &fixture); err != nil {
 		t.Fatalf("decode producer Job fixture: %v: %s", err, stdout.String())
 	}
-	if fixture.Job == nil || fixture.CensusJob == nil || len(fixture.BindJobs) != 2 || fixture.BindJobs["bind-verification"] == nil || fixture.BindJobs["bind-restore"] == nil || fixture.ExecVectors["archive_create_and_stream"] == nil || fixture.ExecVectors["archive_same_pod_readback"] == nil || len(fixture.CensusExecVectors) != 4 {
+	if fixture.Job == nil || fixture.CensusJob == nil || len(fixture.BindJobs) != 1 || fixture.BindJobs["bind-verification"] == nil || fixture.ExecVectors["archive_create_and_stream"] == nil || fixture.ExecVectors["archive_same_pod_readback"] == nil || len(fixture.CensusExecVectors) != 4 {
 		t.Fatalf("producer omitted Job or fixed exec vectors: %s", fmt.Sprintf("%s", stdout.String()))
 	}
 	return fixture
