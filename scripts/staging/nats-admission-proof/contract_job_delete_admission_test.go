@@ -54,7 +54,10 @@ func TestContractJobDeleteUsesExactActorAndUIDPrecondition(t *testing.T) {
 		_, err := admin.BatchV1().Jobs(namespace).Get(ctx, stored.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) { break }
 		if err != nil { t.Fatalf("read back contract Job after UID delete: %v", err) }
-		if time.Now().After(deadline) { t.Fatal("contract Job remained after successful UID delete") }
+		if time.Now().After(deadline) {
+			current, _ := admin.BatchV1().Jobs(namespace).Get(ctx, stored.Name, metav1.GetOptions{})
+			t.Fatalf("contract Job remained after successful UID delete: finalizers=%v deletionTimestamp=%v", current.Finalizers, current.DeletionTimestamp)
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
