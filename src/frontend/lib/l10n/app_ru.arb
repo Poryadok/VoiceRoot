@@ -1319,6 +1319,8 @@
   "matchRatingSubmitError": "Не удалось отправить оценку",
   "matchRatingBanError": "Не удалось забанить в матчмейкинге",
   "matchHistoryLoadError": "Не удалось загрузить историю матчей",
+  "matchHistoryFindPlayers": "Найти игроков",
+  "matchHistoryRatePlayer": "Оценить",
   "profileMmRating": "Рейтинг ММ: {rating} ★",
   "e2eEnableTitle": "Включить сквозное шифрование",
   "e2eChatInfoSwitchLabel": "Сквозное шифрование",

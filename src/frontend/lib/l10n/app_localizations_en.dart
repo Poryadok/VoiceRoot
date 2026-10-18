@@ -3225,6 +3225,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get matchHistoryAddFriend => 'Add friend';
 
   @override
+  String get matchHistoryFindPlayers => 'Find players';
+
+  @override
+  String get matchHistoryRatePlayer => 'Rate';
+
+  @override
   String get e2eEnableTitle => 'Enable end-to-end encryption';
 
   @override
