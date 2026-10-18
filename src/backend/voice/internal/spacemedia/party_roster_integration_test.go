@@ -2,12 +2,46 @@ package spacemedia
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"voice/backend/voice/internal/rosteroutbox"
 )
+
+func TestSpacePartyRosterDowngradePreservesDeliveredEvidence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	st := NewPostgresAdmissionStore(pool)
+	a := admissionFixture()
+	require.NoError(t, prepareAdmission(ctx, st, &a))
+	require.NoError(t, st.Fence(ctx, a))
+	require.NoError(t, st.MarkCommitted(ctx, a.OperationID, a.Generation))
+	require.NoError(t, st.MarkProjectionApplied(ctx, a.OperationID, a.Generation))
+	_, err := pool.Exec(ctx, `UPDATE voice_roster_outbox SET delivered_at=clock_timestamp()`)
+	require.NoError(t, err)
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	down, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../migrations/voice_db/000013_a3_roster_outbox.down.sql"))
+	require.NoError(t, err)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, string(down))
+	require.ErrorContains(t, err, "cannot remove Voice roster history")
+	_, err = conn.Exec(ctx, "ROLLBACK")
+	require.NoError(t, err)
+	var version, count int64
+	require.NoError(t, conn.QueryRow(ctx, `SELECT roster_version,(SELECT count(*) FROM voice_roster_outbox) FROM voice_space_media_room_heads WHERE call_room_id=$1`, a.RoomID).Scan(&version, &count))
+	require.EqualValues(t, 1, version)
+	require.EqualValues(t, 1, count)
+}
 
 func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	if testing.Short() {

@@ -32,6 +32,33 @@ func rosterResetDB(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+func TestVoiceRosterInboxDowngradePreservesSettledEvidence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := rosterResetDB(t)
+	room, profile := uuid.New(), uuid.New()
+	capturedRosterParty(t, pool, &room, 1, profile)
+	_, err := (&MatchStore{Pool: pool}).ApplyVoiceRosterEvent(ctx, rosterBytes(t, uuid.New(), room, profile, 2, false))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE matchmaking_voice_roster_cancellation_outbox SET delivered_at=clock_timestamp()`)
+	require.NoError(t, err)
+	down, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/matchmaking_db/000020_voice_roster_inbox.down.sql"))
+	require.NoError(t, err)
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	_, err = conn.Exec(ctx, string(down))
+	require.ErrorContains(t, err, "cannot remove Voice roster inbox or cancellation evidence")
+	_, err = conn.Exec(ctx, "ROLLBACK")
+	require.NoError(t, err)
+	var inbox, outbox int64
+	require.NoError(t, conn.QueryRow(ctx, `SELECT (SELECT count(*) FROM matchmaking_voice_roster_inbox),(SELECT count(*) FROM matchmaking_voice_roster_cancellation_outbox)`).Scan(&inbox, &outbox))
+	require.EqualValues(t, 1, inbox)
+	require.EqualValues(t, 1, outbox)
+}
+
 func capturedRosterParty(t *testing.T, pool *pgxpool.Pool, room *uuid.UUID, version int64, profiles ...uuid.UUID) (uuid.UUID, []SearchSession) {
 	t.Helper()
 	ctx := context.Background()
