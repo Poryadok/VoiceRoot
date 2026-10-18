@@ -8,6 +8,50 @@ All original TT task scopes and unresolved runtime gates remain authoritative an
 
 ### Resumed wave 2: latest qualification
 
+Checkpoint addendum at source5dbd0534c9225e7b3edbc3da480e994375f77435:
+BE1442625a0bb958f94267f714e5ed02a42cd146e1c4e is supported179e6 transferred,
+independently193c6CLEAR and normally merged. User migration21 is unique in the
+current registry; source adds its exact fixture entry and preserves earlier
+BE220 mutation budget wiring. Changed-input User image runs after this merge.
+BE2081aba7fc4c90d5b3cfadc23fa2efc9e00e1d993b9 is supported186e5 transferred,
+independently195c5CLEAR and merged prose-only. BE006 actualowner121 handoff
+was read back; exact149c4 reviewed patch74ad8a00d7bb9d2529c2a6f874538b34edeab46838056bfeec42ded3f4191dd2
+applied with whitespace/error check, actual one-file1+/1- inspected and normally
+committed5dbd0534c. Accepted contract/BE007 gates remain exact; no runtime
+completion implied. An early Story README merge attempt hit owned concurrent
+index lock; waited for first merge terminal0 and retried normally, no lock
+deleted or foreign process touched.
+
+Actual new Portal Node24 build PASS, image
+c05f9b04d850f18a6c486297f0fdf248b4733426626bc80312f29e3fe5623007.
+Exact3assets full-byte/hash and callback/unknown-route SPA fallback PASS at
+100m/64Mi, peak25997312/failcnt0, no hostports; owned container removed.
+Initial packaging lookup used the wrong archive path after successful Node
+build; resumed packaging with actual tracked docker/nginx-default.conf, without
+repeating unchanged Node build. Both outcomes remain in external receipts.
+
+Actual normal SSH publication5dbd0534c is confirmed by one due GraphQL read
+22:02:26UTC. Check suites106144745489/106144745761 QUEUED and106144749284 PENDING,
+no checkRuns yet, no hosted PASS. Shared next transport observation22:32:26UTC.
+CI-NATS-V5-AUTHORITY was created as an available coherent A1 supporting source
+task with activeconsumer121, exact187c15 contract/proof boundaries, Linux-only
+resource constraints and mandatory independent preservation/security review.
+Decision attachmentcfd0d3e33f9b9bf9850312e5f4a5be5e is portable; raw failure
+upload500 is not attachment success, exact external log and original hosted run
+remain available.121 keeps integration/CI, source producer self-selects with
+actual own lease; queen is never CI owner.
+
+New Moderation runtime evidence is an OPEN gate:144 combined fullgrpcsvc at
+f453a544d has BE238 counter expected37/actual11 under1CPU and held-lock
+expected0/actual1;142 verified the four metric files match integrated6a1d3b8.
+Do not erase this FAIL with earlier source CLEAR/image PASS.142c12-c16 retains
+exact evidence and asks bounded Astra clarification of best-effort deadline
+undercount/autocommit cancellation ambiguity and strong test partition. No
+contract/assertion/timeout change or repeated runtime has occurred in121's tree.
+This does not infer a cause or product PASS. Original full feature scopes stay
+open. Pending newly accepted source tasks include BE0078a8c9d7 and any later
+immutable offers; only independently reviewed actual transfers are merged.
+
 Latest addendum after the initial wave2 carrier: BE163 supported152e5 actual
 handoff then source33a8dfd775eee3d942121f93f4b8819038d251c8/146c4CLEAR merged;
 BE097 supported150e7 then8e1b677cf247b168103d5eee2120408ac2d0b30d/147c6CLEAR

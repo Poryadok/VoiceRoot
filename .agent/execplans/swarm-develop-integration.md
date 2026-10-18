@@ -220,6 +220,21 @@ feature runtime gates remain unchanged; no additional reviewer/task/spawn.
 
 ### Resumed full-colony wave 2
 
+Source checkpoint5dbd0534c includes the final currently ready BE144/BE208
+reviewed transfers and exact BE006 one-line reviewed patch; normal remote
+publication and22:02:26UTC GraphQL exactreadback succeeded. Current checks are
+queued/pending, not hosted PASS. NewPortal build/asset/SPA/resource budget PASS
+peak25997312/failcnt0; User changed-input build is the last owned build at this
+checkpoint. Complete-history bundle/actual fresh bare restore and TT receipts
+precede guarded return of own36, freeing a real resource for the now available
+CI-NATS-V5-AUTHORITY supporting A1 source function.121 retains dormant delivery/
+integration/CI through actual source-ready or CI events, never queen custody.
+No idle polling or holding a lease for another worker's response.
+
+New BE238 combined fullgrpcsvc FAIL remains explicit despite previous147c9
+source CLEAR/image PASS: counters37→11 and held-lock0→1.142 exact-source
+triage/Astra request is pending; no assertions or best-effort contract weakened.
+
 Current executable continuation: reviewed BE163/097/040 and corrected AD008
 successor7b022225 are now integrated.159 CI021c11 independently CLEARs the
 5d0d9eee Makefile/TODO union; original source reviews remain separate. Canonical
