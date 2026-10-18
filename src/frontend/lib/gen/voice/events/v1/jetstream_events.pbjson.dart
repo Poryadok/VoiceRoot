@@ -3177,13 +3177,14 @@ const RatingSubmitted$json = {
     {'1': 'rated_profile_id', '3': 3, '4': 1, '5': 9, '10': 'ratedProfileId'},
     {'1': 'stars', '3': 4, '4': 1, '5': 5, '10': 'stars'},
   ],
+  '10': ['profile_id'],
 };
 
 /// Descriptor for `RatingSubmitted`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List ratingSubmittedDescriptor = $convert.base64Decode(
     'Cg9SYXRpbmdTdWJtaXR0ZWQSGQoIbWF0Y2hfaWQYASABKAlSB21hdGNoSWQSKAoQcmF0ZXJfcH'
     'JvZmlsZV9pZBgCIAEoCVIOcmF0ZXJQcm9maWxlSWQSKAoQcmF0ZWRfcHJvZmlsZV9pZBgDIAEo'
-    'CVIOcmF0ZWRQcm9maWxlSWQSFAoFc3RhcnMYBCABKAVSBXN0YXJz');
+    'CVIOcmF0ZWRQcm9maWxlSWQSFAoFc3RhcnMYBCABKAVSBXN0YXJzUgpwcm9maWxlX2lk');
 
 @$core.Deprecated('Use playerBannedDescriptor instead')
 const PlayerBanned$json = {

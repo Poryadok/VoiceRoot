@@ -397,6 +397,7 @@ message ChatListItem {
 }
 
 message ChatList {
+  reserved "chats";
   repeated ChatListItem items = 1;
   string next_cursor = 2;
 }

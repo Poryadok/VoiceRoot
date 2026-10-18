@@ -2282,6 +2282,7 @@ const GetJoinTokenResponse$json = {
       '10': 'authorizationDigest'
     },
   ],
+  '10': ['join_token_response'],
 };
 
 /// Descriptor for `GetJoinTokenResponse`. Decode as a `google.protobuf.DescriptorProto`.
@@ -2291,7 +2292,7 @@ final $typed_data.Uint8List getJoinTokenResponseDescriptor = $convert.base64Deco
     'dXJsGAMgASgJUgpsaXZla2l0VXJsEh8KC21lZGlhX2Vwb2NoGAQgASgJUgptZWRpYUVwb2NoEi'
     'wKEnNwYWNlX2FjY2Vzc19lcG9jaBgFIAEoBFIQc3BhY2VBY2Nlc3NFcG9jaBIqChFyb2xlX3Bv'
     'bGljeV9lcG9jaBgGIAEoBFIPcm9sZVBvbGljeUVwb2NoEjEKFGF1dGhvcml6YXRpb25fZGlnZX'
-    'N0GAcgASgMUhNhdXRob3JpemF0aW9uRGlnZXN0');
+    'N0GAcgASgMUhNhdXRob3JpemF0aW9uRGlnZXN0UhNqb2luX3Rva2VuX3Jlc3BvbnNl');
 
 @$core.Deprecated('Use updateVoiceStateResponseDescriptor instead')
 const UpdateVoiceStateResponse$json = {
@@ -2315,13 +2316,14 @@ const GetVoiceStatesResponse$json = {
       '10': 'participants'
     },
   ],
+  '10': ['voice_state_list'],
 };
 
 /// Descriptor for `GetVoiceStatesResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getVoiceStatesResponseDescriptor =
-    $convert.base64Decode(
-        'ChZHZXRWb2ljZVN0YXRlc1Jlc3BvbnNlEkkKDHBhcnRpY2lwYW50cxgBIAMoCzIlLnZvaWNlLm'
-        'NhbGxzLnYxLlZvaWNlUGFydGljaXBhbnRTdGF0ZVIMcGFydGljaXBhbnRz');
+final $typed_data.Uint8List getVoiceStatesResponseDescriptor = $convert.base64Decode(
+    'ChZHZXRWb2ljZVN0YXRlc1Jlc3BvbnNlEkkKDHBhcnRpY2lwYW50cxgBIAMoCzIlLnZvaWNlLm'
+    'NhbGxzLnYxLlZvaWNlUGFydGljaXBhbnRTdGF0ZVIMcGFydGljaXBhbnRzUhB2b2ljZV9zdGF0'
+    'ZV9saXN0');
 
 @$core.Deprecated('Use getActiveCallResponseDescriptor instead')
 const GetActiveCallResponse$json = {

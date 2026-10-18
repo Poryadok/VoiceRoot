@@ -812,6 +812,10 @@ const PrivacySettings$json = {
     {'1': '_allow_forward'},
     {'1': '_show_read_receipts'},
   ],
+  '9': [
+    {'1': 13, '2': 14},
+  ],
+  '10': ['show_online_include_guests'],
 };
 
 /// Descriptor for `PrivacySettings`. Decode as a `google.protobuf.DescriptorProto`.
@@ -839,7 +843,8 @@ final $typed_data.Uint8List privacySettingsDescriptor = $convert.base64Decode(
     'cndhcmQYEyABKAhIAVIMYWxsb3dGb3J3YXJkiAEBEjEKEnNob3dfcmVhZF9yZWNlaXB0cxgUIA'
     'EoCEgCUhBzaG93UmVhZFJlY2VpcHRziAEBEkQKDnNob3dfbGFzdF9zZWVuGBUgASgLMh4udm9p'
     'Y2UudXNlci52MS5Qcml2YWN5QXVkaWVuY2VSDHNob3dMYXN0U2VlbkIOCgxfcHJlc2V0X2VudW'
-    '1CEAoOX2FsbG93X2ZvcndhcmRCFQoTX3Nob3dfcmVhZF9yZWNlaXB0cw==');
+    '1CEAoOX2FsbG93X2ZvcndhcmRCFQoTX3Nob3dfcmVhZF9yZWNlaXB0c0oECA0QDlIac2hvd19v'
+    'bmxpbmVfaW5jbHVkZV9ndWVzdHM=');
 
 @$core.Deprecated('Use updatePresenceRequestDescriptor instead')
 const UpdatePresenceRequest$json = {
@@ -1431,6 +1436,7 @@ const GetBulkPresenceResponse$json = {
     },
   ],
   '3': [GetBulkPresenceResponse_ByProfileIdEntry$json],
+  '10': ['bulk_presence_response'],
 };
 
 @$core.Deprecated('Use getBulkPresenceResponseDescriptor instead')
@@ -1455,7 +1461,8 @@ final $typed_data.Uint8List getBulkPresenceResponseDescriptor = $convert.base64D
     'ChdHZXRCdWxrUHJlc2VuY2VSZXNwb25zZRJbCg1ieV9wcm9maWxlX2lkGAEgAygLMjcudm9pY2'
     'UudXNlci52MS5HZXRCdWxrUHJlc2VuY2VSZXNwb25zZS5CeVByb2ZpbGVJZEVudHJ5UgtieVBy'
     'b2ZpbGVJZBpdChBCeVByb2ZpbGVJZEVudHJ5EhAKA2tleRgBIAEoCVIDa2V5EjMKBXZhbHVlGA'
-    'IgASgLMh0udm9pY2UudXNlci52MS5QcmVzZW5jZVN0YXR1c1IFdmFsdWU6AjgB');
+    'IgASgLMh0udm9pY2UudXNlci52MS5QcmVzZW5jZVN0YXR1c1IFdmFsdWU6AjgBUhZidWxrX3By'
+    'ZXNlbmNlX3Jlc3BvbnNl');
 
 @$core.Deprecated('Use getNotificationRoutingPresenceRequestDescriptor instead')
 const GetNotificationRoutingPresenceRequest$json = {

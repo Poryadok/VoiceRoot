@@ -26,6 +26,40 @@
 - В CI: линт и формат контрактов (**buf**); при изменении публичных API — проверка обратной совместимости. **Breaking change** допускается только с явным описанием в PR и согласованным порядком выката потребителей.
 - Сгенерированный код: политика ниже (один источник истины — `protos/`; артефакты в git или при сборке).
 
+### Резервирование удалённых полей
+
+При удалении поля резервируются его номер и имя в том же полностью
+квалифицированном message. Историю сверяют с текущим descriptor: уже занятый
+номер нельзя резервировать или перенумеровывать ради исторической схемы.
+Если старое имя свободно, допускается резервировать только имя, сохраняя
+текущие поля. Удалённые messages не восстанавливают ради резервов; для домена
+без подтверждённых удалений резервы не придумывают.
+
+Аудит merged history до `698d4f064f032ea74abf3ede2017100b26c8ee69`
+подтвердил свободные пары `PrivacySettings.13/show_online_include_guests`
+и `BanFromMMRequest.3/until`. Дополнительно зарезервированы только свободные
+исторические имена:
+
+| Message | Зарезервированное имя |
+|---|---|
+| `bot.GetWebhookURLResponse`, `bot.GetChatWhitelistResponse` | `webhook_url_response`, `whitelist_response` соответственно |
+| `calls.GetJoinTokenResponse`, `calls.GetVoiceStatesResponse` | `join_token_response`, `voice_state_list` соответственно |
+| `chat.ChatList`, `events.RatingSubmitted` | `chats`, `profile_id` соответственно |
+| `file.GetFileURLResponse`, `messaging.GetBulkReadStateResponse` | `file_url_response`, `bulk_read_state` соответственно |
+| `story.GetStoryFeedResponse`, `user.GetBulkPresenceResponse` | `story_feed_response`, `bulk_presence_response` соответственно |
+| `matchmaking.BanFromMMRequest`, `UnbanFromMMRequest`, `GetMMBanStatusRequest` | `account_id` |
+| `notification.RelayNotificationRequest` | `user_id` |
+| `s2s.AuthenticateUserResponse`, `RoleChangedEvent`, `UserBannedEvent`, `UserUnbannedEvent`, `RoleEntry`, `BanEntry`, `NotifyUserRequest` | `user_id` |
+
+В таблице опущены общие части package `voice.<domain>.v1`. Номера этих
+name-only резервов остаются заняты текущими полями; `stars` остаётся активным
+именем в `RateMatchRequest` и `RatingSubmitted`. Проверка `buf breaking`
+сохраняет профиль `FILE` и текущую integration base (`master`/PR base).
+Это не доказательство совместимости со всеми исторически выпущенными
+клиентами и не исправление прежних wire/JSON breaks при flatten/rename.
+Такое исправление требует отдельного migration решения и rollout потребителей
+с точным опубликованным SHA/descriptor baseline.
+
 ### Политика codegen (что коммитим, что генерим)
 
 | Артефакт | Путь | В git | Как обновить локально | Проверка в CI |

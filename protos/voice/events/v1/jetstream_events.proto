@@ -789,6 +789,7 @@ message MatchCompleted {
 }
 
 message RatingSubmitted {
+  reserved "profile_id";
   string match_id = 1;
   string rater_profile_id = 2;
   string rated_profile_id = 3;

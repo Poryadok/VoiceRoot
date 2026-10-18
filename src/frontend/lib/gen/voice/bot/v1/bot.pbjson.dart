@@ -821,11 +821,13 @@ const GetWebhookURLResponse$json = {
   '8': [
     {'1': '_url'},
   ],
+  '10': ['webhook_url_response'],
 };
 
 /// Descriptor for `GetWebhookURLResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getWebhookURLResponseDescriptor = $convert.base64Decode(
-    'ChVHZXRXZWJob29rVVJMUmVzcG9uc2USFQoDdXJsGAEgASgJSABSA3VybIgBAUIGCgRfdXJs');
+    'ChVHZXRXZWJob29rVVJMUmVzcG9uc2USFQoDdXJsGAEgASgJSABSA3VybIgBAUIGCgRfdXJsUh'
+    'R3ZWJob29rX3VybF9yZXNwb25zZQ==');
 
 @$core.Deprecated('Use setChatWhitelistResponseDescriptor instead')
 const SetChatWhitelistResponse$json = {
@@ -849,13 +851,14 @@ const GetChatWhitelistResponse$json = {
       '10': 'allowedChats'
     },
   ],
+  '10': ['whitelist_response'],
 };
 
 /// Descriptor for `GetChatWhitelistResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getChatWhitelistResponseDescriptor =
     $convert.base64Decode(
         'ChhHZXRDaGF0V2hpdGVsaXN0UmVzcG9uc2USOwoNYWxsb3dlZF9jaGF0cxgBIAMoCzIWLnZvaW'
-        'NlLmNoYXQudjEuQ2hhdFJlZlIMYWxsb3dlZENoYXRz');
+        'NlLmNoYXQudjEuQ2hhdFJlZlIMYWxsb3dlZENoYXRzUhJ3aGl0ZWxpc3RfcmVzcG9uc2U=');
 
 @$core.Deprecated('Use sendBotMessageResponseDescriptor instead')
 const SendBotMessageResponse$json = {

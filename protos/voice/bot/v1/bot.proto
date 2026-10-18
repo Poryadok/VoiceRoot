@@ -259,10 +259,12 @@ message GetCommandsResponse {
 }
 message SetWebhookURLResponse {}
 message GetWebhookURLResponse {
+  reserved "webhook_url_response";
   optional string url = 1;
 }
 message SetChatWhitelistResponse {}
 message GetChatWhitelistResponse {
+  reserved "whitelist_response";
   repeated voice.chat.v1.ChatRef allowed_chats = 1;
 }
 message SendBotMessageResponse {

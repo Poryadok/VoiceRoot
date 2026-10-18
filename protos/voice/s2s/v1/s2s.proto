@@ -34,6 +34,7 @@ message AuthenticateUserRequest {
 }
 
 message AuthenticateUserResponse {
+  reserved "user_id";
   bool ok = 1;
   string account_id = 2;
   string profile_id = 3;
@@ -83,6 +84,7 @@ message EventStreamResponse {
 }
 
 message RoleChangedEvent {
+  reserved "user_id";
   string account_id = 1;
   string profile_id = 2;
   repeated string added_roles = 3;
@@ -90,6 +92,7 @@ message RoleChangedEvent {
 }
 
 message UserBannedEvent {
+  reserved "user_id";
   string account_id = 1;
   string profile_id = 2;
   string reason = 3;
@@ -97,6 +100,7 @@ message UserBannedEvent {
 }
 
 message UserUnbannedEvent {
+  reserved "user_id";
   string account_id = 1;
   string profile_id = 2;
 }
@@ -123,12 +127,14 @@ message SyncSnapshotResponse {
 }
 
 message RoleEntry {
+  reserved "user_id";
   string account_id = 1;
   string profile_id = 2;
   repeated string role_ids = 3;
 }
 
 message BanEntry {
+  reserved "user_id";
   string account_id = 1;
   string profile_id = 2;
   int64 banned_until = 3; // 0 = permanent
@@ -137,6 +143,7 @@ message BanEntry {
 // ─────────────────────────── Push Notifications ───────────────────────────
 
 message NotifyUserRequest {
+  reserved "user_id";
   string account_id = 1;
   string space_id = 2;
   string type = 3; // see enum FederationPushEventType for canonical tokens; prefer type_enum when set
