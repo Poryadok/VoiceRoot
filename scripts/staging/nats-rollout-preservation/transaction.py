@@ -218,9 +218,69 @@ def run_native_contract_job(api, request, binding, *, runner_image, plan,
             raise
         raise Blocked('rollout_native_contract_execution_unknown') from None
     verify_live_identity()
+    close_common = {'contract_attempt': attempt, 'job_name': name, 'job_uid': job_uid,
+        'pod_uid': pod_uid, 'runner_image': runner_image}
+    close_intent = {'kind': 'nats_contract_job_close_intent', **close_common}
+    close_issued = {'kind': 'nats_contract_job_close_issued', **close_common}
+    close_complete = {'kind': 'nats_contract_job_closed', **close_common}
+    prior_close_intent, prior_close_issued, prior_close_complete = (
+        prior(kind) for kind in ('nats_contract_job_close_intent',
+            'nats_contract_job_close_issued', 'nats_contract_job_closed'))
+    if (prior_close_intent not in (None, close_intent)
+        or prior_close_issued not in (None, close_issued)
+        or prior_close_complete not in (None, close_complete)):
+        raise Blocked('rollout_native_contract_job_close_history_changed')
+    if prior_close_complete is None:
+        if prior_close_intent is None:
+            revalidate()
+            append(close_intent)
+        if prior_close_issued is None:
+            revalidate()
+            append(close_issued)
+            try:
+                deleted = api.delete_job(kube_json_api.NAMESPACE, name, job_uid)
+                if deleted is not True:
+                    raise RuntimeError('delete_unconfirmed')
+            except Exception:
+                # The close may have reached the API. Only GET may reconcile it.
+                try:
+                    observed = api.get_job(kube_json_api.NAMESPACE, name)
+                except kube_json_api.KubeNotFound:
+                    observed = None
+                except Exception:
+                    raise Blocked('rollout_native_contract_job_close_unknown') from None
+                if observed is not None:
+                    try:
+                        verification_job.verify_job(observed, wanted, expected_uid=job_uid)
+                    except Exception:
+                        raise Blocked('rollout_native_contract_job_close_identity_changed') from None
+                    raise Blocked('rollout_native_contract_job_close_unknown') from None
+        else:
+            try:
+                observed = api.get_job(kube_json_api.NAMESPACE, name)
+            except kube_json_api.KubeNotFound:
+                observed = None
+            except Exception:
+                raise Blocked('rollout_native_contract_job_close_unknown') from None
+            if observed is not None:
+                try:
+                    verification_job.verify_job(observed, wanted, expected_uid=job_uid)
+                except Exception:
+                    raise Blocked('rollout_native_contract_job_close_identity_changed') from None
+                raise Blocked('rollout_native_contract_job_close_unknown')
+        append(close_complete)
+    else:
+        try:
+            api.get_job(kube_json_api.NAMESPACE, name)
+        except kube_json_api.KubeNotFound:
+            pass
+        except Exception:
+            raise Blocked('rollout_native_contract_job_close_readback_unknown') from None
+        else:
+            raise Blocked('rollout_native_contract_job_close_readback_changed')
     return {'job_name': name, 'job_uid': job_uid, 'pod_name': pod_name, 'pod_uid': pod_uid,
         'contract_attempt': attempt, 'verification_attempt': binding.get('verification_attempt'),
-        'applied': applied, 'runner_image': runner_image}
+        'applied': applied, 'runner_image': runner_image, 'job_closed': True}
 
 def save(path,row):
     import native_operation_path

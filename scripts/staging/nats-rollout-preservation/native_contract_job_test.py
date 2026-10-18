@@ -17,11 +17,12 @@ IMAGE = 'registry.example/phase@sha256:' + 'd' * 64
 
 
 class FakeAPI:
-    def __init__(self, *, create_unknown=False, pod_uid=POD_UID):
+    def __init__(self, *, create_unknown=False, pod_uid=POD_UID, replacement_uid=None):
         self.calls = []
         self.job = None
         self.create_unknown = create_unknown
         self.pod_uid = pod_uid
+        self.replacement_uid = replacement_uid
 
     def get_job(self, namespace, name):
         self.calls.append(('get_job', namespace, name))
@@ -48,7 +49,17 @@ class FakeAPI:
         return pod
 
     def get_pod(self, namespace, name):
-        return self.get_job_pod(namespace, name)
+        pod = self.get_job_pod(namespace, name)
+        if self.replacement_uid is not None:
+            pod['metadata']['uid'] = self.replacement_uid
+        return pod
+
+    def delete_job(self, namespace, name, uid):
+        self.calls.append(('delete_job', namespace, name, uid))
+        if self.job is None or self.job['metadata'].get('uid') != uid:
+            raise RuntimeError('job identity changed')
+        self.job = None
+        return True
 
 
 def inputs():
@@ -90,15 +101,17 @@ class NativeContractJobTests(unittest.TestCase):
         self.assertEqual(events[0]['kind'], 'nats_contract_job_create_intent')
         self.assertEqual(events[1]['kind'], 'nats_contract_job_create_issued')
         self.assertEqual(events[2]['kind'], 'nats_contract_job_created')
+        self.assertEqual(events[-3]['kind'], 'nats_contract_job_close_intent')
+        self.assertEqual(events[-2]['kind'], 'nats_contract_job_close_issued')
+        self.assertEqual(events[-1]['kind'], 'nats_contract_job_closed')
+        self.assertEqual(kinds.count('delete_job'), 1)
 
     def test_replaced_pod_fails_before_contract_adapter(self):
-        api = FakeAPI()
+        api = FakeAPI(replacement_uid='33333333-3333-4333-8333-333333333333')
         events = []
-        self.invoke(api, events=events)
-        api.pod_uid = '33333333-3333-4333-8333-333333333333'
         with self.assertRaises(Exception):
             self.invoke(api, events=events, adapter=lambda *args, **kwargs: self.fail('adapter ran'))
-        self.assertFalse(any(call[0] == 'exec' for call in api.calls))
+        self.assertFalse(any(call[0] == 'delete_job' for call in api.calls))
 
 
 if __name__ == '__main__':
