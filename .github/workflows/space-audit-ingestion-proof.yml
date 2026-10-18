@@ -1,4 +1,4 @@
-name: Space audit ingestion proof
+name: Space audit and composite proof
 
 on:
   pull_request:
@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           go test -race ./internal/auditprincipal ./internal/grpcsvc ./internal/store \
-            -run '^(TestAuditRuntimeTLSJWKSThenReplayAndDependencyFailure|TestAuditIngestion.*)$' \
+            -run '^(TestAuditRuntimeTLSJWKSThenReplayAndDependencyFailure|TestAuditIngestion.*|TestCompositeStore.*|TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace|TestLifecycleOutcomeRetention_RestoredSpaceDropsExpiredPrivateOutcomes)$' \
             -count=1 -v 2>&1 | tee "$TEST_LOG"
           for test_name in \
             TestAuditRuntimeTLSJWKSThenReplayAndDependencyFailure \
@@ -68,6 +68,12 @@ jobs:
             TestAuditIngestionFrozenCompositeAndPermanentTerminalFence \
             TestAuditIngestionTerminalMinimizationKeepsNonpayloadFence \
             TestAuditIngestionMigrationRoundTripAndUint64 \
+            TestCompositeStoreReplayOriginalWithoutReinsertingDeletedNode \
+            TestCompositeStoreCommitAndAbortHaveOneImmutableWinner \
+            TestCompositeStoreFailedEvidenceInsertRollsBackNodeAndFence \
+            TestCompositeStoreExpiryIsEnforcedBeforePhysicalCleanup \
+            TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace \
+            TestLifecycleOutcomeRetention_RestoredSpaceDropsExpiredPrivateOutcomes \
             TestAuditIngestionLocalExternalCollisionRaceAndRetainedLocalFence; do
             grep -Eq -- "^--- PASS: ${test_name}([[:space:]]|$)" "$TEST_LOG"
           done
