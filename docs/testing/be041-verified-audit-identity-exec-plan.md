@@ -28,17 +28,17 @@ proof. Other thirteen authctx adoption chains remain BE-041 work.
 
 ## Milestones and detailed steps
 
-1. [ ] Demonstrate existing audit projection and raw-handler admission violate
+1. [x] Demonstrate existing audit projection and raw-handler admission violate
    the accepted contract using focused Linux RED tests.
-2. [ ] Implement `UserIdentity`/`RequireDelegatedUser` with canonical non-nil
+2. [x] Implement `UserIdentity`/`RequireDelegatedUser` with canonical non-nil
    account/profile UUIDs, positive epoch, exact request/audience/RPC binding,
    gateway delegated kind and no mixed bot capability. Read verified context
    only; preserve explicit account type, including empty compatibility value.
-3. [ ] Migrate interceptor, ordinary handler and public wrapper together. Extract
+3. [x] Migrate interceptor, ordinary handler and public wrapper together. Extract
    profile-explicit ACL cores while preserving legacy wrapper behavior.
-4. [ ] Migrate test-only ledger fixtures to explicit bound verified context;
+4. [x] Migrate test-only ledger fixtures to explicit bound verified context;
    these fixtures are not network-authentication evidence.
-5. [ ] Prove real REST Gateway route/issuer to Space mTLS listener/handler using
+5. [x] Prove real REST Gateway route/issuer to Space mTLS listener/handler using
    HTTPS JWKS, Redis floor/replay and PostgreSQL audit data inside owned Linux
    isolation; exercise positive membership/Role/cursor and denial/disclosure.
 6. [ ] Run affected Linux package/component tests, vet/lint; obtain independent
@@ -59,7 +59,31 @@ or host listeners; no shared DEV/STAGING claim or deployment is part of this wor
 
 - [x] Reconciled actual task/base and accepted decision; own WT31 lease acquired.
 - [x] Authors155/144 confirmed no overlapping target edits.
-- [ ] RED/GREEN and complete Linux route proof.
+- [x] Linux Go1.26.5 RED: valid audit verifier case failed because it synthesized
+  `x-voice-user-id`. GREEN shared principal suite and Space handler/interceptor
+  short checks; existing Gateway audit route/error checks passed.
+- [x] Complete Linux PostgreSQL/Redis/HTTPS JWKS/mTLS route proof passed. A separate
+  Gateway test process exercises the actual REST handler, issuer and dedicated
+  client against production Space admission and public handler. It asserts
+  owner/member reads, viewer-bound continuation, Role deny/outage, owner-only
+  unwired Role policy, hidden outsider, frozen disclosure, floor corruption/
+  absence/revocation, mixed/duplicate/raw metadata, signature binding, malformed
+  signed identity/epoch, expiry/future claims, replay and missing client TLS cert.
+  Rejected credentials never increment the post-verifier admission probe; audit
+  read cases preserve existing ledger entries. All selected audit PostgreSQL
+  tests also passed, including the original cross-instance saga assertions.
+- [x] The initial combined PostgreSQL run retained one FAIL from an old direct
+  cross-instance ledger fixture lacking verified context; the real route passed
+  in that run. The fixture now binds the same exact request to explicit test-only
+  verified context. The corrected combined run passed in 108.657s with zero skips;
+  real route portion passed in 15.60s. No production compatibility fallback added.
+- [x] Native Linux golangci-lint2.6.1 built with Go1.26.5 reported zero issues for
+  shared principal, Space grpcsvc/lifecycleprincipal and Gateway. Scoped Linux
+  vet passed; focused Gateway race check is recorded with the delivery evidence.
+- [ ] Independent ACL source review, assembled integration and required hosted CI.
+- [ ] Final graph regeneration: the owned AST update stalled for over five minutes
+  and was canceled after attribution; no completion claim. No foreign process
+  was stopped.
 
 ## Decisions
 
