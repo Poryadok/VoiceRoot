@@ -482,21 +482,37 @@ message UnpinTreeNodeRequest {
 
 Доменный поток JetStream: **`chat.events`** (совместно с Chat; события спейса и дерева — те же потребители; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
+Accepted target `BE038-ORDINARY-v1`, not a shipped guarantee: ordinary mutations
+commit domain data and immutable deterministic event bytes/ID/subject in one
+`space_db` transaction. Success records a durable publication obligation without
+waiting for NATS. Fenced expiring claims retry indefinitely; only a matching
+`chat_events` PubAck marks delivery. No global/per-Space ordering is promised:
+consumers refresh current authority rather than replay state deltas. The exact
+coverage, failure/recovery, audience, P3 cleanup and T1–T12 acceptance rules are
+in [ordinary event delivery](../testing/space-ordinary-events-exec-plan.md).
+Audit, ownership, media invalidation and P3 delivery remain distinct.
+
 | Событие                 | Данные                          |
 |-------------------------|---------------------------------|
-| `space.created`         | space_id, owner_id              |
+| `space.created`         | space_id, owner_profile_id      |
 | `space.updated`         | space_id, changed_fields        |
 | `space.deletion_scheduled` | space_id, owner_id, purge_after |
 | `space.restored`        | space_id, owner_id              |
 | `space.deleted`         | space_id (only after converged irreversible purge) |
 | `space.member_joined`   | space_id, profile_id            |
 | `space.member_left`     | space_id, profile_id            |
-| `space.member_banned`   | space_id, account_id, banned_by |
+| `space.member_banned`   | target additive payload: space_id, account_id, banned_by_profile_id |
 | `voice.room_created`         | reserved; not currently emitted |
 | `voice.room_deleted`         | reserved; not currently emitted |
-| `space.tree_node_upserted`   | space_id, node_id, kind, chat_id?, voice_room_id?, **is_pinned**, **pin_order** |
-| `space.tree_node_removed`    | space_id, node_id               |
+| `space.tree_changed` (`change=upserted`) | space_id, node_id, kind, chat_id?, voice_room_id?, **is_pinned**, **pin_order** |
+| `space.tree_changed` (`change=removed`) | space_id, node_id |
 | `space.invite_created`  | space_id, invite_code           |
+
+`SpaceUpdated.changed_fields` is an additive target. Empty legacy or unknown
+keys mean full invalidation; ownership's already saved bytes are not rewritten.
+Tree rows above retain the existing wire subject, not new dual-published
+`space.tree_node_*` subjects. Invite codes and ban identities are privileged
+internal data: no generic Space WS/push broadcast is authorized.
 
 The separate `space.voice_room_access_invalidated` subject carries an
 immutable `ChatStreamEvent` with `event_id`, `space_id`, `access_epoch` and

@@ -77,7 +77,7 @@ room-привязки. WS `call_started` допускает additive `room_type`
 | `social.events`        | Social            | Analytics, Notification, Chat, Federation |
 | `role.events`          | Role              | Analytics, Notification, Federation, Realtime |
 | `message.events`       | Messaging         | Analytics, Notification, Search, Moderation, Realtime |
-| `chat.events`          | Chat, Space       | Analytics, Notification, Realtime |
+| `chat.events`          | Chat, Space       | Analytics, Notification, Realtime, Search |
 | `voice.events`         | Voice             | Analytics, Notification, Realtime |
 | `moderation.events`    | Moderation        | Analytics, Notification, User |
 | `subscription.events`  | Subscription      | Auth, Analytics, User, Space, Voice, File, Notification |

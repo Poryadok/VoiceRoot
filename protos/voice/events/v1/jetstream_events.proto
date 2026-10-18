@@ -335,6 +335,7 @@ message ChatStreamEvent {
     voice.events.v1.SpaceRestored space_restored = 22;
     ChatUpdated chat_updated = 23;
     ChatDeleted chat_deleted = 24;
+    SpaceMemberBanned space_member_banned = 25;
   }
 }
 
@@ -382,6 +383,9 @@ message SpaceMemberLeft {
 
 message SpaceUpdated {
   string space_id = 1;
+  // Sorted unique persisted property/aggregate names. Empty or unknown means
+  // full invalidation; this is not a revision or an authorization grant.
+  repeated string changed_fields = 2;
 }
 
 // @voice.unknown_fields=accept_preserve
@@ -973,4 +977,11 @@ message ChatDeleted {
   uint64 generation = 4;
   string manifest_id = 5;
   bytes manifest_sha256 = 6;
+}
+
+// Privileged internal fact. Never broadcast account/actor identity to members.
+message SpaceMemberBanned {
+  string space_id = 1;
+  string account_id = 2;
+  string banned_by_profile_id = 3;
 }
