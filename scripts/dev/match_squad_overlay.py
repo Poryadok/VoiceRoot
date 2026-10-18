@@ -499,14 +499,29 @@ def _validate_chat_fsgroup_secret_mount_boundary(base):
         "chat-match-squad-replay": ("voice-match-squad-replay", 288,
                                      [("password", "password")]),
     }
-    secret_rows = [volume for volume in volumes if "secret" in volume]
-    if len(secret_rows) != len(expected_volumes):
+    expected_config_maps = {
+        "nats-leaf-config": ("voice-nats-leaf-config", None),
+        "match-squad-ca": ("voice-match-squad-ca", [("ca.crt", "ca.crt")]),
+    }
+    if len(volumes) != len(expected_volumes) + len(expected_config_maps):
         raise OverlayError("Chat Secret volume boundary changed")
     observed = {}
-    for volume in secret_rows:
+    observed_config_maps = {}
+    for volume in volumes:
+        if set(volume) != {"name", "secret"} and set(volume) != {"name", "configMap"}:
+            raise OverlayError("Chat Secret volume boundary changed")
+        if "configMap" in volume:
+            source = volume["configMap"]
+            if (set(source) - {"name", "items", "defaultMode"} or
+                    source.get("defaultMode", 420) != 420):
+                raise OverlayError("Chat Secret volume boundary changed")
+            observed_config_maps[volume.get("name")] = (
+                source.get("name"),
+                [(item.get("key"), item.get("path")) for item in source.get("items", [])]
+                if "items" in source else None)
+            continue
         secret = volume.get("secret", {})
-        if set(volume) != {"name", "secret"} or set(secret) != {
-                "secretName", "defaultMode", "items"}:
+        if set(secret) != {"secretName", "defaultMode", "items"}:
             raise OverlayError("Chat Secret volume boundary changed")
         if any(set(item) != {"key", "path"} for item in secret.get("items", [])):
             raise OverlayError("Chat Secret volume boundary changed")
@@ -515,11 +530,15 @@ def _validate_chat_fsgroup_secret_mount_boundary(base):
             [(item.get("key"), item.get("path")) for item in secret.get("items", [])])
     if observed != expected_volumes:
         raise OverlayError("Chat Secret volume boundary changed")
+    if observed_config_maps != expected_config_maps:
+        raise OverlayError("Chat Secret volume boundary changed")
     expected_mounts = {
         "chat": {"match-squad-server": "/etc/voice/match-squad/server",
                  "matchmaking-principal-jwks-ca": "/etc/voice/principal-jwks/ca",
-                 "chat-match-squad-replay": "/etc/voice/match-squad/replay"},
-        "nats-leaf": {"nats-service-creds": "/var/run/nats/creds/chat.creds",
+                 "chat-match-squad-replay": "/etc/voice/match-squad/replay",
+                 "match-squad-ca": "/etc/voice/match-squad/ca"},
+        "nats-leaf": {"nats-leaf-config": "/etc/nats/leaf.conf",
+                      "nats-service-creds": "/var/run/nats/creds/chat.creds",
                       "nats-hub-tls": "/etc/nats/tls/ca.crt"},
     }
     containers = pod_spec.get("containers", [])
@@ -528,17 +547,28 @@ def _validate_chat_fsgroup_secret_mount_boundary(base):
     by_volume = {volume.get("name"): volume for volume in volumes}
     mounted = {}
     for container in containers:
-        secret_mounts = [mount for mount in container.get("volumeMounts", [])
-                         if mount.get("name") in by_volume and
-                         "secret" in by_volume[mount["name"]]]
-        if any(mount.get("readOnly") is not True for mount in secret_mounts):
+        mounts = container.get("volumeMounts", [])
+        expected = expected_mounts[container["name"]]
+        if len(mounts) != len(expected) or any(
+                set(mount) not in ({"name", "mountPath", "readOnly"},
+                                   {"name", "mountPath", "readOnly", "subPath"})
+                for mount in mounts):
             raise OverlayError("Chat Secret volume boundary changed")
-        if any("subPath" in mount for mount in secret_mounts):
+        actual = {}
+        for mount in mounts:
+            name = mount.get("name")
+            volume = by_volume.get(name)
+            if (name not in expected or volume is None or
+                    mount.get("mountPath") != expected[name] or
+                    mount.get("readOnly") is not True):
+                raise OverlayError("Chat Secret volume boundary changed")
+            expected_sub_path = "leaf.conf" if name == "nats-leaf-config" else None
+            if mount.get("subPath") != expected_sub_path:
+                raise OverlayError("Chat Secret volume boundary changed")
+            actual[name] = mount.get("mountPath")
+        if len(actual) != len(mounts):
             raise OverlayError("Chat Secret volume boundary changed")
-        if len({mount.get("name") for mount in secret_mounts}) != len(secret_mounts):
-            raise OverlayError("Chat Secret volume boundary changed")
-        mounted[container["name"]] = {
-            mount["name"]: mount.get("mountPath") for mount in secret_mounts}
+        mounted[container["name"]] = actual
     if mounted != expected_mounts:
         raise OverlayError("Chat Secret volume boundary changed")
 

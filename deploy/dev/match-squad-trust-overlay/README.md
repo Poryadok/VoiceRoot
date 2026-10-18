@@ -41,7 +41,7 @@ python3 -B scripts/dev/match_squad_overlay.py --root . \
   --plan-sha256 'REVIEWED_PLAN_DIGEST' --recover-chat-fsgroup --apply
 ```
 
-Chat's nonroot image reads its TLS Secret projection from files with mode `0440`; the pod-level fsGroup supplies the matching group access while preserving the Secret mode and read-only mount. Kubernetes applies fsGroup to every Secret volume in the pod. The existing `0400` NATS credential therefore becomes group-readable by the pod group, but that volume remains mounted only in the `nats-leaf` sidecar; Chat's server-key Secret remains mounted only in the Chat container. The focused contract pins the Secret key names, modes, mount paths, container assignments, and read-only state. Do not broaden these mounts or change Secret modes.
+Chat's nonroot image reads its TLS Secret projection from files with mode `0440`; the pod-level fsGroup supplies the matching group access while preserving the Secret mode and read-only mount. Kubernetes applies fsGroup to every Secret volume in the pod. The existing `0400` NATS credential therefore becomes group-readable by the pod group, but that volume remains mounted only in the `nats-leaf` sidecar; Chat's server-key Secret remains mounted only in the Chat container. The recovery guard pins the complete supported volume-source set (five direct Secrets and the two existing ConfigMaps), each mount path, read-only state, and container assignment. Projected Secrets, unknown volume sources, or extra mounts are rejected. Do not broaden these mounts or change Secret modes.
 
 For Matchmaking recovery, use the separate flag and matching source-qualified template as shown below:
 

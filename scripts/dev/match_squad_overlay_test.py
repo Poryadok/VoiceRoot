@@ -266,15 +266,17 @@ class ChatFilePermissionRecoveryTests(unittest.TestCase):
             container["name"]: {
                 mount["name"]: mount.get("mountPath")
                 for mount in container.get("volumeMounts", [])
-                if mount["name"] in by_volume and "secret" in by_volume[mount["name"]]
+                if mount["name"] in by_volume
             }
             for container in pod_spec["containers"]
         }
         self.assertEqual(mounted, {
             "chat": {"match-squad-server": "/etc/voice/match-squad/server",
                      "matchmaking-principal-jwks-ca": "/etc/voice/principal-jwks/ca",
-                     "chat-match-squad-replay": "/etc/voice/match-squad/replay"},
-            "nats-leaf": {"nats-service-creds": "/var/run/nats/creds/chat.creds",
+                     "chat-match-squad-replay": "/etc/voice/match-squad/replay",
+                     "match-squad-ca": "/etc/voice/match-squad/ca"},
+            "nats-leaf": {"nats-leaf-config": "/etc/nats/leaf.conf",
+                          "nats-service-creds": "/var/run/nats/creds/chat.creds",
                           "nats-hub-tls": "/etc/nats/tls/ca.crt"},
         })
         self.assertTrue(all(mount["readOnly"] for container in pod_spec["containers"]
@@ -284,7 +286,8 @@ class ChatFilePermissionRecoveryTests(unittest.TestCase):
         for mutation in ("extra-secret-volume", "nats-secret-mounted-in-chat",
                          "chat-server-key-mounted-in-nats", "wrong-mount-path",
                          "secret-subpath", "extra-secret-volume-policy",
-                         "duplicate-secret-mount"):
+                         "duplicate-secret-mount", "projected-secret-volume",
+                         "unknown-volume-source", "extra-nonsecret-mount"):
             with self.subTest(mutation=mutation):
                 base = chat_post_prefix_snapshot()
                 pod_spec = base["spec"]["template"]["spec"]
@@ -305,6 +308,20 @@ class ChatFilePermissionRecoveryTests(unittest.TestCase):
                         pod_spec["containers"][0]["volumeMounts"][0]["subPath"] = "tls.key"
                     elif mutation == "extra-secret-volume-policy":
                         pod_spec["volumes"][1]["secret"]["optional"] = True
+                    elif mutation == "projected-secret-volume":
+                        pod_spec["volumes"].append({"name": "injected-projected", "projected": {
+                            "sources": [{"secret": {"name": "unexpected-secret",
+                                                        "items": [{"key": "tls.key",
+                                                                   "path": "tls.key"}]}}]}})
+                        pod_spec["containers"][0]["volumeMounts"].append({
+                            "name": "injected-projected", "mountPath": "/unexpected",
+                            "readOnly": True})
+                    elif mutation == "unknown-volume-source":
+                        pod_spec["volumes"].append({"name": "unexpected", "emptyDir": {}})
+                    elif mutation == "extra-nonsecret-mount":
+                        pod_spec["containers"][0]["volumeMounts"].append({
+                            "name": "nats-leaf-config", "mountPath": "/unexpected",
+                            "readOnly": True, "subPath": "leaf.conf"})
                     else:
                         pod_spec["containers"][0]["volumeMounts"].append(
                             copy.deepcopy(pod_spec["containers"][0]["volumeMounts"][0]))
