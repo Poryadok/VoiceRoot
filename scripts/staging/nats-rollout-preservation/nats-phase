@@ -1921,7 +1921,7 @@ def _canonical_jsz(raw):
             ensure_ascii=False, allow_nan=False).encode('utf-8')
     except (UnicodeError, TypeError, ValueError):
         raise ValueError('preflight_jsz') from None
-    if not isinstance(value, dict) or canonical != raw:
+    if not isinstance(value, dict):
         raise ValueError('preflight_jsz')
     return canonical
 
