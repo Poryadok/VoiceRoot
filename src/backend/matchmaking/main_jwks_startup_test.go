@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -64,6 +65,9 @@ func TestMatchmakingJWKSStartsBeforeSpaceProviderReadiness(t *testing.T) {
 		"MATCHMAKING_TEST_TLS_KEY=" + keyFile,
 		"MATCHMAKING_TEST_LISTEN_ADDR=" + jwksAddr,
 		"MATCHMAKING_TEST_SPACE_ADDR=" + spaceListener.Addr().String(),
+	}
+	if runtime.GOOS == "windows" {
+		command.Env = append(command.Env, "SYSTEMROOT="+os.Getenv("SYSTEMROOT"))
 	}
 	var childOutput bytes.Buffer
 	command.Stdout = &childOutput
@@ -141,7 +145,12 @@ func runMatchmakingJWKSChild() {
 	keyFile := os.Getenv("MATCHMAKING_TEST_TLS_KEY")
 	listenAddr := os.Getenv("MATCHMAKING_TEST_LISTEN_ADDR")
 	spaceAddr := os.Getenv("MATCHMAKING_TEST_SPACE_ADDR")
+	// Winsock needs SYSTEMROOT even when the service fixture isolates its env.
+	systemRoot := os.Getenv("SYSTEMROOT")
 	os.Clearenv()
+	if runtime.GOOS == "windows" {
+		_ = os.Setenv("SYSTEMROOT", systemRoot)
+	}
 	for key, value := range map[string]string{
 		"DATABASE_URL":                              "postgres://test:test@127.0.0.1:5432/voice?sslmode=disable",
 		"SPACE_GRPC_ADDR":                           spaceAddr,
