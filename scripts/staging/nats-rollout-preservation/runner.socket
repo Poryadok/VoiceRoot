@@ -1,0 +1,14 @@
+[Unit]
+Description=Voice STAGING NATS fixed runner socket
+PartOf=voice-nats-preservation-runner.service
+
+[Socket]
+ListenStream=/run/voice-nats-preservation/runner.sock
+SocketUser=root
+SocketGroup=pmd
+SocketMode=0660
+DirectoryMode=0755
+Service=voice-nats-preservation-runner.service
+
+[Install]
+WantedBy=sockets.target

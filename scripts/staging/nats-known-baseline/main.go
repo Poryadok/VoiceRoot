@@ -10,23 +10,57 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/nats-io/nats.go"
 )
 
-// The root controller verifies actual Docker ownership/mounts before starting
-// this unprivileged kernel in the broker's network-none namespace. The kernel
-// independently refuses every interface except loopback and every caller URL.
-func isolatedKernel() bool {
-	if runtime.GOOS != "linux" || os.Geteuid() != 65532 {
+// Kubernetes supplies loopback and one pod Ethernet interface. NATS remains
+// loopback-only; admission and default-deny egress policy provide the separate
+// workload/network boundary. Census also runs as the NATS owner so O_NOATIME
+// source access does not require CAP_FOWNER; other phases remain UID 65532.
+func isolatedPodInterfaces(interfaces []net.Interface) bool {
+	if len(interfaces) != 2 {
+		return false
+	}
+	seenLoopback, seenPodEthernet := false, false
+	for _, iface := range interfaces {
+		switch iface.Name {
+		case "lo":
+			if iface.Flags&net.FlagLoopback == 0 || iface.Flags&net.FlagUp == 0 {
+				return false
+			}
+			seenLoopback = true
+		case "eth0":
+			if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+				return false
+			}
+			seenPodEthernet = true
+		default:
+			return false
+		}
+	}
+	return seenLoopback && seenPodEthernet
+}
+
+func knownKernelPhase(phase string) bool {
+	return phase == "seed" || phase == "verify-closed" || phase == "drain" || phase == "verify-drained" || phase == "census"
+}
+
+func kernelUIDAllowed(phase string, uid int) bool {
+	if !knownKernelPhase(phase) {
+		return false
+	}
+	return uid == 65532
+}
+
+func isolatedKernelForPhase(phase string) bool {
+	if runtime.GOOS != "linux" || !kernelUIDAllowed(phase, os.Geteuid()) {
 		return false
 	}
 	interfaces, e := net.Interfaces()
-	if e != nil || len(interfaces) != 1 {
-		return false
-	}
-	return interfaces[0].Flags&net.FlagLoopback != 0
+	return e == nil && isolatedPodInterfaces(interfaces)
 }
 
 func privateInput(name string) ([]byte, error) {
@@ -65,10 +99,19 @@ func connectRole(role string) (*nats.Conn, error) {
 	return nc, nil
 }
 
-func readSnapshot() (fixtureSnapshot, error) {
-	b, e := privateInput("fixture.json")
-	if e != nil {
-		return fixtureSnapshot{}, e
+func readSnapshot(sessionState bool) (fixtureSnapshot, error) {
+	var b []byte
+	var e error
+	if sessionState {
+		b, e = readSessionSnapshot("/state/kernel_seed.output")
+		if e != nil {
+			return fixtureSnapshot{}, fixedError("fixture_snapshot_invalid")
+		}
+	} else {
+		b, e = privateInput("fixture.json")
+		if e != nil {
+			return fixtureSnapshot{}, e
+		}
 	}
 	var s fixtureSnapshot
 	d := json.NewDecoder(bytes.NewReader(b))
@@ -77,6 +120,32 @@ func readSnapshot() (fixtureSnapshot, error) {
 		return fixtureSnapshot{}, fixedError("fixture_snapshot_invalid")
 	}
 	return s, nil
+}
+
+func readSessionSnapshot(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() < 1 || info.Size() > 256<<10 {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || int(stat.Uid) != os.Geteuid() || int(stat.Gid) != os.Getegid() {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	f := os.NewFile(uintptr(fd), path)
+	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, (256<<10)+1))
+	if err != nil || len(raw) != info.Size() || len(raw) > 256<<10 {
+		return nil, fixedError("fixture_snapshot_invalid")
+	}
+	return raw, nil
 }
 
 func writeResult(name string, v any) error {
@@ -102,11 +171,15 @@ func runKernel(args []string) error {
 	flags := flag.NewFlagSet("known-nats-kernel", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	phase := flags.String("phase", "", "fixed owned isolation phase")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || !isolatedKernel() {
+	sessionState := flags.Bool("session-state", false, "read the durable session seed snapshot")
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return fixedError("kernel_isolation_invalid")
 	}
-	if *phase != "seed" && *phase != "verify-closed" && *phase != "drain" && *phase != "verify-drained" && *phase != "census" {
+	if !knownKernelPhase(*phase) {
 		return fixedError("phase_invalid")
+	}
+	if !isolatedKernelForPhase(*phase) {
+		return fixedError("kernel_isolation_invalid")
 	}
 	a, e := connectRole("bootstrap")
 	if e != nil {
@@ -137,7 +210,7 @@ func runKernel(args []string) error {
 		}
 		return writeResult("fixture.json", s)
 	}
-	s, e := readSnapshot()
+	s, e := readSnapshot(*sessionState)
 	if e != nil {
 		return e
 	}

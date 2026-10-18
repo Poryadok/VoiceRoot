@@ -1,0 +1,36 @@
+[Unit]
+Description=Voice STAGING nonroot NATS rollout runner
+Requires=voice-nats-preservation-runner.socket
+After=network-online.target
+
+[Service]
+Type=simple
+User=voice-nats-runner
+Group=voice-nats-runner
+ExecStart=/usr/bin/python3 -I /usr/lib/voice-nats-preservation/current/runner_service.py
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+ReadOnlyPaths=/usr/lib/voice-nats-preservation /etc/voice-nats-preservation
+ReadWritePaths=/var/lib/voice-nats-preservation/trusted-runner
+TasksMax=16
+MemoryMax=256M
+LimitNOFILE=128
+Restart=no
+

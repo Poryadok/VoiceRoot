@@ -19,10 +19,30 @@ from controller import Blocked
 from stage_runtime import pv_storage_path
 
 ROOT=Path('/var/lib/voice-nats-preservation')
+RUNNER_STATE_ROOT=Path('/var/lib/voice-nats-preservation/trusted-runner/state')
+OWNER_UID=0
 NS='voice-staging'
 MARKER='voice-nats-generation'
 UUID=re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 SHA=re.compile(r'[a-f0-9]{64}')
+
+def configure_runner_state(state_root):
+    """Bind the installed nonroot engine to its one bootstrap-owned state tree."""
+    global ROOT,OWNER_UID
+    state_root=Path(state_root)
+    owner=os.geteuid()
+    if owner==0 or state_root!=RUNNER_STATE_ROOT:
+        raise Blocked('runner_state_root_invalid')
+    operations=state_root/'operations'
+    for path in (state_root,operations):
+        try:row=path.lstat()
+        except OSError:raise Blocked('runner_state_custody_invalid') from None
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid!=owner or stat.S_IMODE(row.st_mode)!=0o700):
+            raise Blocked('runner_state_custody_invalid')
+    ROOT=operations
+    OWNER_UID=owner
+    return operations
 
 def frontend_image_only(target):
     if target.get('mode')!='images-only':return False

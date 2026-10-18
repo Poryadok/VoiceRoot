@@ -7,6 +7,7 @@ import copy
 import ast
 import contextlib
 import io
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -17,6 +18,15 @@ from controller import archive_closed_store
 
 
 class ResumeGuardTests(unittest.TestCase):
+    def test_runner_owned_lock_and_journal_primitives_accept_only_explicit_owner(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);root.chmod(0o700)
+            with patch.object(root_main,'ROOT',root):
+                with root_main.operation_lock(owner_uid=os.geteuid()):
+                    root_main.save(root/'state.json',{'phase':'FENCED'},owner_uid=os.geteuid())
+                    self.assertEqual(root_main.private_json(root/'state.json',owner_uid=os.geteuid()),{'phase':'FENCED'})
+                    with self.assertRaises(Blocked):root_main.private_json(root/'state.json')
+
     def test_operator_error_exposes_only_static_label_or_exception_type(self):
         self.assertEqual(root_main.operator_error(Blocked('pv_storage_path_unsupported')),'pv_storage_path_unsupported')
         self.assertEqual(root_main.operator_error(Blocked('PRIVATE_TEST_SEED_OR_STDERR')),'blocked_unclassified')

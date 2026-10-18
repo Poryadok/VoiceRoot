@@ -1,0 +1,2339 @@
+#!/usr/bin/python3
+"""Fixed, independently pinned non-root archive helper for the staging PVC."""
+import base64
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+from urllib.request import urlopen
+
+import native_store
+
+
+SCHEMA = 'voice-nats-archive-stream-v1'
+CHUNK = 48 << 10
+MAX_BYTES = 48 << 30
+MAX_ENTRIES = 262144
+MAX_TAR_BYTES = MAX_BYTES + (MAX_ENTRIES * 1024) + (1 << 20)
+MAX_MANIFEST_BYTES = 512 << 20
+MAX_CENSUS_BYTES = 64 << 20
+READBACK_CHUNK = 48 << 10
+MAX_READBACK_LINE = 96 << 10
+DATA_ROOT = Path('/data')
+OUT_ROOT = Path('/out')
+VERIFY_ROOT = Path('/verify')
+INPUT_ROOT = Path('/inputs/private')
+SESSION_INPUT_ROOT = Path('/inputs')
+KERNEL = Path('/voice-nats-runner/kernel')
+NATS_SERVER = Path('/usr/local/bin/nats-server')
+MAX_INPUT_BYTES = 4 << 20
+INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds',
+    'operator.jwt', 'account.jwt', 'system-account.jwt', 'account.public',
+    'system-account.public', 'server.conf', 'fixture.json'))
+CENSUS_INPUT_SCHEMA = 'voice-nats-census-inputs-v1'
+CENSUS_INPUT_FILES = frozenset(('bootstrap.creds', 'server.conf'))
+VERIFY_PHASES = frozenset(('census',))
+RECEIPT_SCHEMA = 'voice-nats-verification-v1'
+CENSUS_SCHEMA = 'voice-nats-census-v1'
+CENSUS_READBACK_SCHEMA = 'voice-nats-census-readback-v1'
+ARCHIVE_UID = 10000
+ARCHIVE_GID = 10000
+VERIFICATION_UID = 65532
+VERIFICATION_GID = 65532
+CENSUS_INPUT_MAGIC = b'VOICE-NATS-CENSUS-INPUT-v1\0'
+SESSION_ACTIONS = frozenset((
+    'bootstrap-realtime', 'bootstrap-notification', 'bootstrap-analytics-chat',
+    'bootstrap-search', 'kernel-census', 'kernel-seed', 'kernel-verify-closed',
+    'kernel-drain', 'broker-ready', 'broker-restart-prepare', 'broker-restart-complete',
+    'kernel-verify-drained', 'session-close', 'session-stop'))
+SESSION_KERNEL_PHASES = {
+    'kernel-census': 'census', 'kernel-seed': 'seed',
+    'kernel-verify-closed': 'verify-closed', 'kernel-drain': 'drain',
+    'kernel-verify-drained': 'verify-drained'}
+SESSION_BOOTSTRAP_SCRIPTS = {
+    'bootstrap-realtime': '/voice-nats-runner/bootstrap/realtime-bootstrap.sh',
+    'bootstrap-notification': '/voice-nats-runner/bootstrap/notification-bootstrap.sh',
+    'bootstrap-analytics-chat': '/voice-nats-runner/bootstrap/analytics-chat-bootstrap.sh',
+    'bootstrap-search': '/voice-nats-runner/bootstrap/search-bootstrap.sh'}
+SESSION_ROOT = Path('/state')
+SESSION_SOCKET = SESSION_ROOT / 'session.sock'
+SESSION_MAX_MESSAGE = 16 << 10
+SESSION_MAX_OUTPUT = 64 << 20
+SESSION_FRAME = 48 << 10
+SESSION_FRAME_LINE = 96 << 10
+SESSION_UID = 65532
+SESSION_GID = 65532
+SESSION_INPUT_FILES = frozenset(('bootstrap.creds', 'social.creds', 'realtime.creds', 'fixture.json'))
+SUPERVISOR_PORT = 9444
+PREFLIGHT_PHASE = 'closed-copy-preflight'
+PREFLIGHT_ACTIONS = ('load-config', 'receive-archive', 'broker-start', 'broker-ready', 'read-jsz', 'broker-stop')
+PREFLIGHT_SCHEMA = 'voice-nats-closed-copy-preflight-v1'
+PREFLIGHT_READBACK_SCHEMA = 'voice-nats-closed-copy-readback-v1'
+PREFLIGHT_ROOT = VERIFY_ROOT / '.voice-nats-closed-copy'
+PREFLIGHT_CONFIG_ROOT = Path('/broker-config')
+PREFLIGHT_STATE_LIMIT = 16 << 10
+PREFLIGHT_JSZ_URL = 'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048'
+
+
+def _identity(args):
+    if (not re.fullmatch('[a-f0-9]{12}', args.operation)
+        or not re.fullmatch('[a-f0-9]{32}', args.nonce)
+        or not re.fullmatch('[a-f0-9-]{36}', args.pod_uid)):
+        raise ValueError('identity')
+
+
+def _storage_uid(value, label):
+    if not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', value):
+        raise ValueError(label)
+    return value
+
+
+def _archive_identity(args):
+    return {
+        'source_pvc_uid': _storage_uid(getattr(args, 'source_pvc_uid', None), 'archive_source_pvc_uid'),
+        'source_pv_uid': _storage_uid(getattr(args, 'source_pv_uid', None), 'archive_source_pv_uid'),
+    }
+
+
+def _mode_allows(row, uid, gid, bits):
+    shift = 6 if row.st_uid == uid else 3 if row.st_gid == gid else 0
+    return ((row.st_mode >> shift) & bits) == bits
+
+
+def _require_archive_helper_identity():
+    """Keep source archive/readback RPCs in the NATS-owner helper profile."""
+    if os.geteuid() != ARCHIVE_UID or os.getegid() != ARCHIVE_GID:
+        raise ValueError('archive_helper_identity')
+
+
+def _require_verification_identity():
+    """The disposable census helper runs as its fixed non-root scratch owner."""
+    if os.geteuid() != VERIFICATION_UID or os.getegid() != VERIFICATION_GID:
+        raise ValueError('verification_identity')
+
+
+def source_readable_by_archive_helper(root, *, uid=ARCHIVE_UID, gid=ARCHIVE_GID):
+    """Check the O_NOATIME source profile without changing directory atimes."""
+    root = Path(root)
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        row = directory.lstat()
+        # controller.READ includes O_NOATIME; Linux permits that for the file
+        # owner or CAP_FOWNER, not for a merely readable group member.
+        if (not stat.S_ISDIR(row.st_mode) or row.st_uid != uid
+            or not _mode_allows(row, uid, gid, 5)):
+            return False
+        try:
+            directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY
+                | os.O_NOFOLLOW | os.O_NOATIME)
+        except OSError:
+            return False
+        try:
+            with os.scandir(directory_fd) as entries:
+                for entry in entries:
+                    child_path = directory / entry.name
+                    child = entry.stat(follow_symlinks=False)
+                    if stat.S_ISDIR(child.st_mode):
+                        if child.st_uid != uid or not _mode_allows(child, uid, gid, 5):
+                            return False
+                        pending.append(child_path)
+                    elif stat.S_ISREG(child.st_mode):
+                        if child.st_uid != uid or not _mode_allows(child, uid, gid, 4):
+                            return False
+                    else:
+                        return False
+        finally:
+            os.close(directory_fd)
+    return True
+
+
+def validate_verification_mounts(verification, output, inputs, *, verification_pvc_uid):
+    """Check the target-only scratch boundary; the selected source is never mounted."""
+    paths = [Path(verification), Path(output), Path(inputs)]
+    for path in paths:
+        row = path.lstat()
+        if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
+            raise ValueError('verification_mounts')
+    if (len({path.resolve() for path in paths}) != len(paths)
+        or not re.fullmatch('[a-f0-9-]{36}', verification_pvc_uid or '')
+        or not os.access(paths[0], os.W_OK)
+        or not os.access(paths[1], os.W_OK)
+        or not os.access(paths[2], os.W_OK)):
+        raise ValueError('verification_mounts')
+    return paths
+
+
+def _server_config(raw):
+    if not isinstance(raw, bytes) or not 1 <= len(raw) <= 256 << 10:
+        raise ValueError('verification_inputs')
+    try:
+        text = raw.decode('utf-8', errors='strict')
+    except UnicodeError:
+        raise ValueError('verification_inputs') from None
+    required = ('host: 127.0.0.1\n', 'port: 4222\n', 'http: 127.0.0.1:8222\n',
+        'resolver: MEMORY\n')
+    store_lines = ('jetstream { store_dir: /data }\n',
+        'jetstream: { store_dir: /data, max_file_store: 64MB, max_memory_store: 16MB }\n')
+    if any(text.count(value) != 1 for value in required) or sum(text.count(value) for value in store_lines) != 1:
+        raise ValueError('verification_inputs')
+    for line in store_lines:
+        if line in text:
+            return text.replace(line, line.replace('/data', '/verify/store', 1), 1).encode()
+    raise ValueError('verification_inputs')
+
+
+def _input_binding(args, *, pod_uid=None):
+    source_uid = _storage_uid(getattr(args, 'source_pvc_uid', None), 'verification_source_pvc_uid')
+    source_pv_uid = _storage_uid(getattr(args, 'source_pv_uid', None), 'verification_source_pv_uid')
+    target_uid = _storage_uid(getattr(args, 'verification_pvc_uid', None), 'verification_target_pvc_uid')
+    target_pv_uid = _storage_uid(getattr(args, 'verification_pv_uid', None), 'verification_target_pv_uid')
+    archive_sha = getattr(args, 'archive_sha256', '')
+    archive_bytes = getattr(args, 'archive_bytes', None)
+    kernel_sha = getattr(args, 'kernel_bundle_sha256', '')
+    server_sha = getattr(args, 'server_config_sha256', '')
+    session_attempt = getattr(args, 'session_attempt', '')
+    input_bundle_sha256 = getattr(args, 'input_bundle_sha256', '')
+    input_bundle_bytes = getattr(args, 'input_bundle_bytes', None)
+    if (source_uid == target_uid or source_pv_uid == target_pv_uid
+        or not re.fullmatch('[a-f0-9]{64}', archive_sha or '')
+        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES
+        or not re.fullmatch('[a-f0-9]{8}', session_attempt or '')
+        or not re.fullmatch('[a-f0-9]{64}', input_bundle_sha256 or '')
+        or type(input_bundle_bytes) is not int or not 0 < input_bundle_bytes <= MAX_INPUT_BYTES):
+        raise ValueError('verification_input_binding')
+    if pod_uid is None:
+        pod_uid = args.pod_uid
+    return {'purpose': 'verification', 'operation': args.operation, 'nonce': args.nonce,
+        'pod_uid': pod_uid, 'source_pvc_uid': source_uid, 'source_pv_uid': source_pv_uid,
+        'verification_pvc_uid': target_uid, 'verification_pv_uid': target_pv_uid,
+        'archive_sha256': archive_sha, 'archive_bytes': archive_bytes,
+        'session_attempt': session_attempt, 'input_bundle_sha256': input_bundle_sha256,
+        'input_bundle_bytes': input_bundle_bytes}
+
+
+def _input_action_paths(args):
+    state = VERIFY_ROOT / 'state' / args.operation / args.session_attempt
+    marker = state / 'inputs.started.json'
+    receipt = state / 'inputs.receipt.json'
+    return state, marker, receipt
+
+
+def read_input_receipt(args):
+    _require_verification_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    binding = _input_binding(args)
+    state, marker_path, receipt_path = _input_action_paths(args)
+    directory = state.lstat()
+    if (not stat.S_ISDIR(directory.st_mode) or stat.S_ISLNK(directory.st_mode)
+        or directory.st_uid != os.geteuid() or stat.S_IMODE(directory.st_mode) != 0o700):
+        raise ValueError('verification_inputs_incomplete')
+    try:
+        marker = _private_json(marker_path)
+        receipt = _private_json(receipt_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        raise ValueError('verification_inputs_incomplete') from None
+    if (not isinstance(marker, dict) or marker != {'schema': 'voice-nats-input-action-v1',
+        'phase': 'inputs', **binding, 'state': 'STARTED'}):
+        raise ValueError('verification_input_binding')
+    receipt = _private_json(receipt_path)
+    expected_receipt = {'schema': 'voice-nats-input-receipt-v1',
+        'phase': 'inputs', **binding, 'status': 'COMPLETE', 'file_count': len(INPUT_FILES)}
+    if (not isinstance(receipt, dict) or set(receipt) != set(expected_receipt) | {
+        'kernel_bundle_sha256', 'server_config_sha256'}
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
+        raise ValueError('verification_inputs_incomplete')
+    _private_inputs()
+    _verify_session_input_projection(receipt)
+    return receipt
+
+
+def _census_input_action_paths(args):
+    state = VERIFY_ROOT / 'state' / args.operation / args.session_attempt
+    return state, state / 'census-inputs.started.json', state / 'census-inputs.receipt.json'
+
+
+def _verify_census_input_projection(receipt):
+    attempt_root = VERIFY_ROOT / 'state' / receipt['operation'] / receipt['session_attempt']
+    owned_dirs = (VERIFY_ROOT / 'state', VERIFY_ROOT / 'state' / receipt['operation'],
+        attempt_root, VERIFY_ROOT / 'kernelinputbundle', VERIFY_ROOT / 'inputs',
+        VERIFY_ROOT / 'inputs' / 'public')
+    for directory in owned_dirs:
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_incomplete')
+    bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public = VERIFY_ROOT / 'inputs' / 'public'
+    if (set(path.name for path in bundle.iterdir()) != {'bootstrap.creds'}
+        or set(path.name for path in public.iterdir()) != {'server.conf'}):
+        raise ValueError('verification_inputs_incomplete')
+    creds = _read_session_file(bundle / 'bootstrap.creds', max_bytes=256 << 10,
+        uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+    config = _read_session_file(public / 'server.conf', max_bytes=256 << 10,
+        uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+    kernel_hash = hashlib.sha256(json.dumps({'bootstrap.creds': hashlib.sha256(creds).hexdigest()},
+        sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    if (kernel_hash != receipt.get('kernel_bundle_sha256')
+        or hashlib.sha256(config).hexdigest() != receipt.get('server_config_sha256')):
+        raise ValueError('verification_inputs_incomplete')
+
+
+def read_census_input_receipt(args):
+    """Read the exact two-file, durable PREPARE census input projection."""
+    _require_verification_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    input_pod_uid = getattr(args, 'input_pod_uid', None)
+    _identity(argparse.Namespace(operation=args.operation, nonce=args.nonce, pod_uid=input_pod_uid))
+    binding = _input_binding(args, pod_uid=input_pod_uid)
+    state, marker_path, receipt_path = _census_input_action_paths(args)
+    directory = state.lstat()
+    if (not stat.S_ISDIR(directory.st_mode) or stat.S_ISLNK(directory.st_mode)
+        or directory.st_uid != os.geteuid() or stat.S_IMODE(directory.st_mode) != 0o700):
+        raise ValueError('verification_inputs_incomplete')
+    try:
+        marker = _private_json(marker_path)
+        receipt = _private_json(receipt_path)
+    except (OSError, ValueError):
+        raise ValueError('verification_inputs_incomplete') from None
+    expected_marker = {'schema': 'voice-nats-census-input-action-v1',
+        'phase': 'census-inputs', **binding, 'state': 'STARTED'}
+    if marker != expected_marker:
+        raise ValueError('verification_input_binding')
+    expected_receipt = {'schema': 'voice-nats-census-input-receipt-v1',
+        'phase': 'census-inputs', **binding, 'status': 'COMPLETE',
+        'file_count': len(CENSUS_INPUT_FILES)}
+    if (not isinstance(receipt, dict) or set(receipt) != set(expected_receipt) | {
+        'kernel_bundle_sha256', 'server_config_sha256'}
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
+        raise ValueError('verification_inputs_incomplete')
+    _verify_census_input_projection(receipt)
+    return receipt
+
+
+def _census_consumption_binding(args, input_receipt):
+    return {'purpose': 'verification', 'operation': args.operation, 'nonce': args.nonce,
+        'pod_uid': args.pod_uid, 'input_pod_uid': input_receipt['pod_uid'],
+        'source_pvc_uid': input_receipt['source_pvc_uid'],
+        'source_pv_uid': input_receipt['source_pv_uid'],
+        'verification_pvc_uid': input_receipt['verification_pvc_uid'],
+        'verification_pv_uid': input_receipt['verification_pv_uid'],
+        'archive_sha256': input_receipt['archive_sha256'],
+        'archive_bytes': input_receipt['archive_bytes'],
+        'session_attempt': input_receipt['session_attempt'],
+        'input_bundle_sha256': input_receipt['input_bundle_sha256'],
+        'input_bundle_bytes': input_receipt['input_bundle_bytes'],
+        'kernel_bundle_sha256': input_receipt['kernel_bundle_sha256'],
+        'server_config_sha256': input_receipt['server_config_sha256']}
+
+
+def read_census_consumption_receipt(args):
+    """Validate the loader receipt and same-attempt consumption receipt without mutation."""
+    input_receipt = read_census_input_receipt(args)
+    binding = _census_consumption_binding(args, input_receipt)
+    state, _, _ = _census_input_action_paths(argparse.Namespace(
+        operation=args.operation, session_attempt=args.session_attempt))
+    marker_path = state / 'census-consumption.started.json'
+    receipt_path = state / 'census-consumption.receipt.json'
+    try:
+        marker = _private_json(marker_path)
+        receipt = _private_json(receipt_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        raise ValueError('verification_input_consumption_unknown') from None
+    expected_marker = {'schema': 'voice-nats-census-consumption-action-v1',
+        'phase': 'census-consumption', **binding, 'state': 'STARTED'}
+    if marker != expected_marker:
+        raise ValueError('verification_input_consumption_unknown')
+    expected_receipt = {'schema': 'voice-nats-census-consumption-receipt-v1',
+        'phase': 'census-consumption', **binding, 'status': 'COMPLETE'}
+    if (not isinstance(receipt, dict) or set(receipt) != set(expected_receipt)
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
+        raise ValueError('verification_input_consumption_unknown')
+    return receipt
+
+
+def consume_census_inputs(args):
+    """Durably bind already-loaded census inputs to this exact execution Pod."""
+    _require_verification_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    input_receipt = read_census_input_receipt(args)
+    binding = _census_consumption_binding(args, input_receipt)
+    state, _, _ = _census_input_action_paths(argparse.Namespace(
+        operation=args.operation, session_attempt=args.session_attempt))
+    marker_path = state / 'census-consumption.started.json'
+    receipt_path = state / 'census-consumption.receipt.json'
+    if marker_path.exists() or receipt_path.exists():
+        if not marker_path.exists() or not receipt_path.exists():
+            raise ValueError('verification_input_consumption_unknown')
+        return read_census_consumption_receipt(args)
+    marker = {'schema': 'voice-nats-census-consumption-action-v1',
+        'phase': 'census-consumption', **binding, 'state': 'STARTED'}
+    fd = os.open(marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as marker_stream:
+        marker_stream.write(json.dumps(marker, sort_keys=True, separators=(',', ':')).encode())
+        marker_stream.flush(); os.fsync(marker_stream.fileno())
+    dirfd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(dirfd)
+    finally: os.close(dirfd)
+    receipt = {'schema': 'voice-nats-census-consumption-receipt-v1',
+        'phase': 'census-consumption', **binding, 'status': 'COMPLETE'}
+    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as receipt_stream:
+        receipt_stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
+        receipt_stream.flush(); os.fsync(receipt_stream.fileno())
+    dirfd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(dirfd)
+    finally: os.close(dirfd)
+    return receipt
+
+
+def load_census_inputs(raw=None, *, operation, nonce, pod_uid, binding_args, input_stream=None):
+    """Install only the trusted bootstrap credential and NATS config for PREPARE census."""
+    _require_verification_identity()
+    _identity(argparse.Namespace(operation=operation, nonce=nonce, pod_uid=pod_uid))
+    if os.environ.get('POD_UID') != pod_uid:
+        raise ValueError('verification_pod_identity')
+    binding = _input_binding(binding_args)
+    if (binding['operation'] != operation or binding['nonce'] != nonce
+        or binding['pod_uid'] != pod_uid):
+        raise ValueError('verification_input_binding')
+    state, marker_path, receipt_path = _census_input_action_paths(binding_args)
+    state_root = VERIFY_ROOT / 'state'
+    operation_root = state_root / operation
+    for directory in (state_root, operation_root):
+        directory.mkdir(mode=0o700, exist_ok=True)
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_custody')
+    state.mkdir(mode=0o700, exist_ok=False)
+    state_row = state.lstat()
+    if (not stat.S_ISDIR(state_row.st_mode) or stat.S_ISLNK(state_row.st_mode)
+        or state_row.st_uid != os.geteuid() or state_row.st_gid != os.getegid()
+        or stat.S_IMODE(state_row.st_mode) != 0o700 or any(state.iterdir())):
+        raise ValueError('verification_inputs_already_started')
+    marker_value = {'schema': 'voice-nats-census-input-action-v1',
+        'phase': 'census-inputs', **binding, 'state': 'STARTED'}
+    fd = os.open(marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as marker_stream:
+        marker_stream.write(json.dumps(marker_value, sort_keys=True, separators=(',', ':')).encode())
+        marker_stream.flush(); os.fsync(marker_stream.fileno())
+    for directory in (state, VERIFY_ROOT):
+        dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(dirfd)
+        finally: os.close(dirfd)
+    if raw is None:
+        if input_stream is None: input_stream = sys.stdin.buffer
+        raw = input_stream.read(MAX_INPUT_BYTES + 1)
+    if (not isinstance(raw, (bytes, bytearray)) or not 1 <= len(raw) <= MAX_INPUT_BYTES
+        or len(raw) != binding['input_bundle_bytes']
+        or hashlib.sha256(raw).hexdigest() != binding['input_bundle_sha256']):
+        raise ValueError('verification_inputs')
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value: raise ValueError('verification_inputs')
+            value[key] = item
+        return value
+    try:
+        bundle = json.loads(raw, object_pairs_hook=pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError('verification_inputs')))
+    except (ValueError, TypeError, UnicodeError):
+        raise ValueError('verification_inputs') from None
+    if (not isinstance(bundle, dict) or set(bundle) != {'schema', 'operation', 'nonce', 'pod_uid', 'files'}
+        or bundle.get('schema') != CENSUS_INPUT_SCHEMA
+        or bundle.get('operation') != operation or bundle.get('nonce') != nonce
+        or bundle.get('pod_uid') != pod_uid or not isinstance(bundle.get('files'), dict)
+        or set(bundle['files']) != CENSUS_INPUT_FILES):
+        raise ValueError('verification_inputs')
+    INPUT_ROOT.mkdir(mode=0o700, parents=False, exist_ok=False)
+    root = INPUT_ROOT.lstat()
+    if (not stat.S_ISDIR(root.st_mode) or root.st_uid != os.geteuid()
+        or stat.S_IMODE(root.st_mode) & 0o077):
+        raise ValueError('verification_inputs')
+    decoded = {}
+    for name, encoded in bundle['files'].items():
+        if not isinstance(encoded, str) or len(encoded) > 512 << 10:
+            raise ValueError('verification_inputs')
+        try:
+            import base64
+            data = base64.b64decode(encoded.encode('ascii'), validate=True)
+        except (ValueError, UnicodeError):
+            raise ValueError('verification_inputs') from None
+        if not 1 <= len(data) <= 256 << 10:
+            raise ValueError('verification_inputs')
+        decoded[name] = data
+    _server_config(decoded['server.conf'])
+    for name in sorted(CENSUS_INPUT_FILES):
+        _write_exclusive(INPUT_ROOT / name, decoded[name], mode=0o440)
+    fd = os.open(INPUT_ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+    kernel_bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public_root = VERIFY_ROOT / 'inputs' / 'public'
+    kernel_bundle.mkdir(mode=0o700, exist_ok=False)
+    (VERIFY_ROOT / 'inputs').mkdir(mode=0o700, exist_ok=True)
+    public_root.mkdir(mode=0o700, exist_ok=False)
+    _write_exclusive(kernel_bundle / 'bootstrap.creds', decoded['bootstrap.creds'], mode=0o440)
+    _write_exclusive(public_root / 'server.conf', decoded['server.conf'], mode=0o440)
+    kernel_hash = hashlib.sha256(json.dumps({'bootstrap.creds':
+        hashlib.sha256(decoded['bootstrap.creds']).hexdigest()}, sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+    for directory in (kernel_bundle, public_root, public_root.parent, state,
+        operation_root, state_root, VERIFY_ROOT):
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+    receipt = {'schema': 'voice-nats-census-input-receipt-v1',
+        'phase': 'census-inputs', **binding, 'status': 'COMPLETE',
+        'file_count': len(decoded), 'kernel_bundle_sha256': kernel_hash,
+        'server_config_sha256': hashlib.sha256(decoded['server.conf']).hexdigest()}
+    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as receipt_stream:
+        receipt_stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
+        receipt_stream.flush(); os.fsync(receipt_stream.fileno())
+    dirfd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(dirfd)
+    finally: os.close(dirfd)
+    return receipt
+
+
+def load_inputs(raw=None, *, operation, nonce, pod_uid, binding_args, input_stream=None):
+    """Install the closed input bundle with a PVC-persisted, no-replay receipt."""
+    _require_verification_identity()
+    _identity(argparse.Namespace(operation=operation, nonce=nonce, pod_uid=pod_uid))
+    if os.environ.get('POD_UID') != pod_uid:
+        raise ValueError('verification_pod_identity')
+    binding = _input_binding(binding_args)
+    if (binding['operation'] != operation or binding['nonce'] != nonce
+        or binding['pod_uid'] != pod_uid):
+        raise ValueError('verification_input_binding')
+    state, marker_path, receipt_path = _input_action_paths(binding_args)
+    state_root = VERIFY_ROOT / 'state'
+    operation_root = state_root / operation
+    for directory in (state_root, operation_root):
+        directory.mkdir(mode=0o700, exist_ok=True)
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_custody')
+    state.mkdir(mode=0o700, exist_ok=False)
+    state_row = state.lstat()
+    if (not stat.S_ISDIR(state_row.st_mode) or stat.S_ISLNK(state_row.st_mode)
+        or state_row.st_uid != os.geteuid() or stat.S_IMODE(state_row.st_mode) != 0o700
+        or any(state.iterdir())):
+        raise ValueError('verification_inputs_already_started')
+    marker_value = {'schema': 'voice-nats-input-action-v1', 'phase': 'inputs',
+        **binding, 'state': 'STARTED'}
+    fd = os.open(marker_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as marker_stream:
+        marker_stream.write(json.dumps(marker_value, sort_keys=True, separators=(',', ':')).encode())
+        marker_stream.flush(); os.fsync(marker_stream.fileno())
+    for directory in (state, VERIFY_ROOT):
+        dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(dirfd)
+        finally: os.close(dirfd)
+    if raw is None:
+        if input_stream is None: input_stream = sys.stdin.buffer
+        raw = input_stream.read(MAX_INPUT_BYTES + 1)
+    if (not isinstance(raw, (bytes, bytearray)) or not 1 <= len(raw) <= MAX_INPUT_BYTES
+        or len(raw) != binding['input_bundle_bytes']
+        or hashlib.sha256(raw).hexdigest() != binding['input_bundle_sha256']):
+        raise ValueError('verification_inputs')
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value: raise ValueError('verification_inputs')
+            value[key] = item
+        return value
+    try:
+        bundle = json.loads(raw, object_pairs_hook=pairs)
+    except (ValueError, TypeError, UnicodeError):
+        raise ValueError('verification_inputs') from None
+    if (not isinstance(bundle, dict) or set(bundle) != {'schema', 'operation', 'nonce', 'pod_uid', 'files'}
+        or bundle.get('schema') != 'voice-nats-verification-inputs-v1'
+        or bundle.get('operation') != operation or bundle.get('nonce') != nonce
+        or bundle.get('pod_uid') != pod_uid or not isinstance(bundle.get('files'), dict)
+        or set(bundle['files']) != INPUT_FILES):
+        raise ValueError('verification_inputs')
+    INPUT_ROOT.mkdir(mode=0o700, parents=False, exist_ok=False)
+    root = INPUT_ROOT.lstat()
+    if (not stat.S_ISDIR(root.st_mode) or root.st_uid != os.geteuid()
+        or stat.S_IMODE(root.st_mode) & 0o077):
+        raise ValueError('verification_inputs')
+    decoded = {}
+    for name, encoded in bundle['files'].items():
+        if not isinstance(encoded, str) or len(encoded) > 512 << 10:
+            raise ValueError('verification_inputs')
+        try:
+            import base64
+            data = base64.b64decode(encoded.encode('ascii'), validate=True)
+        except (ValueError, UnicodeError):
+            raise ValueError('verification_inputs') from None
+        if not 1 <= len(data) <= 256 << 10:
+            raise ValueError('verification_inputs')
+        decoded[name] = data
+    _server_config(decoded['server.conf'])
+    for name in sorted(INPUT_FILES):
+        path = INPUT_ROOT / name
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o440)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(decoded[name]); stream.flush(); os.fsync(stream.fileno())
+    fd = os.open(INPUT_ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+    # The census Pod's emptyDir is temporary. Persist a disjoint fixed bundle
+    # and broker-only config projection on this operation's nonpromotable PVC
+    # before reporting the input action COMPLETE.
+    session_root = state
+    kernel_bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public_root = VERIFY_ROOT / 'inputs' / 'public'
+    kernel_bundle.mkdir(mode=0o700, exist_ok=False)
+    (VERIFY_ROOT / 'inputs').mkdir(mode=0o700, exist_ok=True)
+    public_root.mkdir(mode=0o700, exist_ok=False)
+    for name in sorted(SESSION_INPUT_FILES):
+        _write_exclusive(kernel_bundle / name, decoded[name], mode=0o440)
+    _write_exclusive(public_root / 'server.conf', decoded['server.conf'], mode=0o440)
+    kernel_bundle_hash = hashlib.sha256(json.dumps({name: hashlib.sha256(decoded[name]).hexdigest()
+        for name in sorted(SESSION_INPUT_FILES)}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    for directory in (kernel_bundle, public_root, public_root.parent, session_root,
+        operation_root, state_root, VERIFY_ROOT):
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+    receipt = {'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs',
+        **binding, 'status': 'COMPLETE', 'file_count': len(decoded),
+        'kernel_bundle_sha256': kernel_bundle_hash,
+        'server_config_sha256': hashlib.sha256(decoded['server.conf']).hexdigest()}
+    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as receipt_stream:
+        receipt_stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
+        receipt_stream.flush(); os.fsync(receipt_stream.fileno())
+    dirfd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(dirfd)
+    finally: os.close(dirfd)
+    return receipt
+
+
+def _verify_session_input_projection(receipt):
+    owned_dirs = (
+        VERIFY_ROOT / 'state', VERIFY_ROOT / 'state' / receipt['operation'],
+        VERIFY_ROOT / 'state' / receipt['operation'] / receipt['session_attempt'],
+        VERIFY_ROOT / 'kernelinputbundle', VERIFY_ROOT / 'inputs', VERIFY_ROOT / 'inputs' / 'public')
+    for directory in owned_dirs:
+        row = directory.lstat()
+        if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or stat.S_IMODE(row.st_mode) != 0o700):
+            raise ValueError('verification_inputs_incomplete')
+    bundle = VERIFY_ROOT / 'kernelinputbundle'
+    public = VERIFY_ROOT / 'inputs' / 'public'
+    if (set(path.name for path in bundle.iterdir()) != SESSION_INPUT_FILES
+        or set(path.name for path in public.iterdir()) != {'server.conf'}):
+        raise ValueError('verification_inputs_incomplete')
+    digests = {}
+    for name in sorted(SESSION_INPUT_FILES):
+        raw = _read_session_file(bundle / name, max_bytes=256 << 10,
+            uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+        digests[name] = hashlib.sha256(raw).hexdigest()
+    config = _read_session_file(public / 'server.conf', max_bytes=256 << 10,
+        uid=os.geteuid(), gid=os.getegid(), mode=0o440, code='verification_inputs_incomplete')
+    bundle_hash = hashlib.sha256(json.dumps(digests, sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+    if (bundle_hash != receipt.get('kernel_bundle_sha256')
+        or hashlib.sha256(config).hexdigest() != receipt.get('server_config_sha256')):
+        raise ValueError('verification_inputs_incomplete')
+
+
+def _private_inputs():
+    rows = {}
+    if not INPUT_ROOT.is_dir() or INPUT_ROOT.is_symlink():
+        raise ValueError('verification_inputs')
+    entries = sorted(path.name for path in INPUT_ROOT.iterdir())
+    if set(entries) != INPUT_FILES:
+        raise ValueError('verification_inputs')
+    for name in entries:
+        path = INPUT_ROOT / name
+        row = path.lstat()
+        if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid() or row.st_nlink != 1
+            or stat.S_IMODE(row.st_mode) != 0o440 or row.st_size > 256 << 10):
+            raise ValueError('verification_inputs')
+        data = path.read_bytes()
+        if len(data) != row.st_size:
+            raise ValueError('verification_inputs')
+        rows[name] = data
+    rows['server.conf'] = _server_config(rows['server.conf'])
+    return rows
+
+
+def _private_census_inputs():
+    rows = {}
+    if not INPUT_ROOT.is_dir() or INPUT_ROOT.is_symlink():
+        raise ValueError('verification_inputs')
+    entries = sorted(path.name for path in INPUT_ROOT.iterdir())
+    if set(entries) != CENSUS_INPUT_FILES:
+        raise ValueError('verification_inputs')
+    for name in entries:
+        path = INPUT_ROOT / name
+        row = path.lstat()
+        if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid() or row.st_nlink != 1
+            or stat.S_IMODE(row.st_mode) != 0o440 or not 1 <= row.st_size <= 256 << 10):
+            raise ValueError('verification_inputs')
+        data = path.read_bytes()
+        if len(data) != row.st_size:
+            raise ValueError('verification_inputs')
+        rows[name] = data
+    rows['server.conf'] = _server_config(rows['server.conf'])
+    return rows
+
+
+def _wait_nats(process, *, deadline_seconds=120, clock=time.monotonic, sleep=time.sleep,
+               get=urlopen):
+    deadline = clock() + deadline_seconds
+    while clock() < deadline:
+        if process.poll() is not None:
+            raise ValueError('verification_server_failed')
+        try:
+            with get('http://127.0.0.1:8222/healthz?js-enabled-only=true', timeout=1) as response:
+                if response.status == 200:
+                    return
+        except Exception:
+            pass
+        sleep(0.25)
+    raise ValueError('verification_server_timeout')
+
+
+def _read_exact(stream, size):
+    chunks = bytearray()
+    while len(chunks) < size:
+        part = stream.read(min(CHUNK, size - len(chunks)))
+        if not part:
+            raise ValueError('verification_input_truncated')
+        chunks.extend(part)
+    return bytes(chunks)
+
+
+def _receive_archive(stream, archive_path, expected_bytes, expected_sha256, *, magic=CENSUS_INPUT_MAGIC):
+    if _read_exact(stream, len(magic)) != magic:
+        raise ValueError('verification_input_header')
+    manifest_size = int.from_bytes(_read_exact(stream, 4), 'big')
+    if not 1 <= manifest_size <= MAX_MANIFEST_BYTES:
+        raise ValueError('verification_manifest_size')
+    manifest_raw = _read_exact(stream, manifest_size)
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result: raise ValueError('verification_manifest')
+            result[key] = value
+        return result
+    try:
+        manifest = json.loads(manifest_raw, object_pairs_hook=unique_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError('verification_manifest')))
+        canonical = json.dumps(manifest, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+    except (UnicodeError, TypeError, ValueError):
+        raise ValueError('verification_manifest') from None
+    if canonical != manifest_raw or not isinstance(manifest, dict):
+        raise ValueError('verification_manifest')
+    tar_size = int.from_bytes(_read_exact(stream, 8), 'big')
+    if (tar_size != expected_bytes or not 0 < tar_size <= MAX_TAR_BYTES
+        or manifest.get('archive_sha256') != expected_sha256):
+        raise ValueError('verification_archive_binding')
+    digest = hashlib.sha256()
+    written = 0
+    fd = os.open(archive_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        while written < tar_size:
+            chunk = _read_exact(stream, min(CHUNK, tar_size - written))
+            view = memoryview(chunk)
+            while view:
+                count = os.write(fd, view)
+                if count <= 0: raise ValueError('verification_archive_write')
+                view = view[count:]
+            digest.update(chunk)
+            written += len(chunk)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    if stream.read(1):
+        raise ValueError('verification_input_trailing_bytes')
+    if written != expected_bytes or digest.hexdigest() != expected_sha256:
+        raise ValueError('verification_archive_digest')
+    if native_store.verify_archive(archive_path, manifest) is not True:
+        raise ValueError('verification_archive')
+    return manifest
+
+
+def run_verification(phase_name, args, input_stream=None):
+    """Accept one streamed source archive, restore the target-only scratch, and census it."""
+    _require_verification_identity()
+    if phase_name not in VERIFY_PHASES:
+        raise ValueError('verification_phase')
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    source_uid = getattr(args, 'source_pvc_uid', '')
+    source_pv_uid = getattr(args, 'source_pv_uid', '')
+    verification_uid = getattr(args, 'verification_pvc_uid', '')
+    verification_pv_uid = getattr(args, 'verification_pv_uid', '')
+    archive_sha256 = getattr(args, 'archive_sha256', '')
+    archive_bytes = getattr(args, 'archive_bytes', None)
+    _storage_uid(source_uid, 'verification_source_pvc_uid')
+    _storage_uid(source_pv_uid, 'verification_source_pv_uid')
+    _storage_uid(verification_uid, 'verification_target_pvc_uid')
+    _storage_uid(verification_pv_uid, 'verification_target_pv_uid')
+    if (source_uid == verification_uid or source_pv_uid == verification_pv_uid
+        or not re.fullmatch('[a-f0-9]{64}', archive_sha256 or '')
+        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES):
+        raise ValueError('verification_binding')
+    verification, output, inputs = validate_verification_mounts(VERIFY_ROOT, OUT_ROOT, INPUT_ROOT,
+        verification_pvc_uid=verification_uid)
+    operation_state = verification / '.voice-nats-verification'
+    read_census_consumption_receipt(args)
+    allowed_verification = {operation_state, verification / 'state',
+        verification / 'kernelinputbundle', verification / 'inputs'}
+    if (any(path not in allowed_verification for path in verification.iterdir()) or any(output.iterdir())):
+        raise ValueError('verification_already_started')
+    if not operation_state.exists():
+        operation_state.mkdir(mode=0o700)
+    state_row = operation_state.lstat()
+    if (not stat.S_ISDIR(state_row.st_mode) or stat.S_ISLNK(state_row.st_mode)
+        or state_row.st_uid != os.geteuid() or stat.S_IMODE(state_row.st_mode) != 0o700):
+        raise ValueError('verification_state_invalid')
+    marker = operation_state / (args.operation + '-' + args.nonce + '.census.started.json')
+    marker_value = {'schema': RECEIPT_SCHEMA, 'phase': phase_name, 'purpose': 'verification',
+        'operation': args.operation, 'nonce': args.nonce, 'pod_uid': args.pod_uid,
+        'source_pvc_uid': source_uid, 'source_pv_uid': source_pv_uid,
+        'verification_pvc_uid': verification_uid, 'verification_pv_uid': verification_pv_uid,
+        'archive_sha256': archive_sha256, 'archive_bytes': archive_bytes, 'state': 'STARTED'}
+    try:
+        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except FileExistsError:
+        raise ValueError('verification_already_started') from None
+    with os.fdopen(fd, 'wb') as marker_stream:
+        marker_stream.write(json.dumps(marker_value, sort_keys=True, separators=(',', ':')).encode())
+        marker_stream.flush(); os.fsync(marker_stream.fileno())
+    for directory in (operation_state, verification):
+        dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(dirfd)
+        finally: os.close(dirfd)
+
+    archive = output / 'verification-source.tar'
+    if input_stream is None: input_stream = sys.stdin.buffer
+    manifest = _receive_archive(input_stream, archive, archive_bytes, archive_sha256)
+    store = verification / 'store'
+    native_store.restore_closed_store(archive, store, manifest)
+    rows = _private_census_inputs()
+    config = output / 'verification-server.conf'
+    fd = os.open(config, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as config_stream:
+        config_stream.write(rows['server.conf']); config_stream.flush(); os.fsync(config_stream.fileno())
+    config_row = config.lstat()
+    if not stat.S_ISREG(config_row.st_mode) or config_row.st_size != len(rows['server.conf']):
+        raise ValueError('verification_server_config')
+
+    server = subprocess.Popen([str(NATS_SERVER), '-c', str(config)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        close_fds=True, env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/nonexistent'})
+    try:
+        _wait_nats(server)
+        child = subprocess.run([str(KERNEL), '--phase', phase_name], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+            timeout=7200, check=False, env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/nonexistent'})
+        if child.returncode != 0:
+            raise ValueError('verification_kernel_failed')
+    finally:
+        server.terminate()
+        try:
+            if server.wait(timeout=30) != 0:
+                raise ValueError('verification_server_stop_failed')
+        except subprocess.TimeoutExpired:
+            raise ValueError('verification_server_stop_timeout') from None
+
+    result_path = output / 'census.json'
+    result_stat = result_path.lstat()
+    if (not stat.S_ISREG(result_stat.st_mode) or result_stat.st_size < 1
+        or result_stat.st_size > MAX_CENSUS_BYTES):
+        raise ValueError('verification_result')
+    raw_result = result_path.read_bytes()
+    if len(raw_result) != result_stat.st_size:
+        raise ValueError('verification_result')
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result: raise ValueError('verification_result')
+            result[key] = value
+        return result
+    try:
+        result = json.loads(raw_result, object_pairs_hook=unique_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError('verification_result')))
+        if (not isinstance(result, dict) or set(result) != {'schema', 'account', 'streams', 'consumers'}
+            or result.get('schema') != CENSUS_SCHEMA or not isinstance(result.get('account'), str)
+            or not isinstance(result.get('streams'), list) or not isinstance(result.get('consumers'), list)):
+            raise ValueError('verification_result')
+        result_bytes = json.dumps(result, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+    except (UnicodeError, TypeError, ValueError):
+        raise ValueError('verification_result') from None
+    if len(result_bytes) > MAX_CENSUS_BYTES:
+        raise ValueError('verification_result')
+    census_path = operation_state / (args.operation + '-' + args.nonce + '.census.json')
+    fd = os.open(census_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as result_stream:
+        result_stream.write(result_bytes); result_stream.flush(); os.fsync(result_stream.fileno())
+    receipt = {'schema': RECEIPT_SCHEMA, 'phase': phase_name, 'purpose': 'verification',
+        'operation': args.operation, 'nonce': args.nonce, 'pod_uid': args.pod_uid,
+        'source_pvc_uid': source_uid, 'source_pv_uid': source_pv_uid,
+        'verification_pvc_uid': verification_uid, 'verification_pv_uid': verification_pv_uid,
+        'archive_sha256': archive_sha256, 'archive_bytes': archive_bytes,
+        'census_sha256': hashlib.sha256(result_bytes).hexdigest(), 'status': 'COMPLETE'}
+    receipt_path = operation_state / (args.operation + '-' + args.nonce + '.receipt.json')
+    with receipt_path.open('xb') as receipt_stream:
+        receipt_stream.write(json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode())
+        receipt_stream.flush(); os.fsync(receipt_stream.fileno())
+    for directory in (operation_state, verification, output):
+        dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try: os.fsync(dirfd)
+        finally: os.close(dirfd)
+    return receipt
+
+
+def read_verification_receipt(phase_name, args):
+    """Read only the durable result for this exact Pod/operation; never replay it."""
+    _require_verification_identity()
+    if phase_name != 'census':
+        raise ValueError('verification_phase')
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    read_census_consumption_receipt(args)
+    verification = VERIFY_ROOT.lstat()
+    if (not stat.S_ISDIR(verification.st_mode) or stat.S_ISLNK(verification.st_mode)
+        or not os.access(VERIFY_ROOT, os.W_OK)
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'source_pvc_uid', '') or '')
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'source_pv_uid', '') or '')
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'verification_pvc_uid', '') or '')
+        or not re.fullmatch('[a-f0-9-]{36}', getattr(args, 'verification_pv_uid', '') or '')
+        or args.source_pvc_uid == args.verification_pvc_uid
+        or not re.fullmatch('[a-f0-9]{64}', getattr(args, 'archive_sha256', '') or '')
+        or type(getattr(args, 'archive_bytes', None)) is not int
+        or not 0 < args.archive_bytes <= MAX_TAR_BYTES):
+        raise ValueError('verification_mounts')
+    operation_state = VERIFY_ROOT / '.voice-nats-verification'
+    directory = operation_state.lstat()
+    if (not stat.S_ISDIR(directory.st_mode) or stat.S_ISLNK(directory.st_mode)
+        or directory.st_uid != os.geteuid() or stat.S_IMODE(directory.st_mode) != 0o700):
+        raise ValueError('verification_state_invalid')
+    expected_marker = {'schema', 'phase', 'purpose', 'operation', 'nonce', 'pod_uid',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'archive_sha256', 'archive_bytes', 'state'}
+    marker = _private_json(operation_state / (args.operation + '-' + args.nonce + '.census.started.json'))
+    if (not isinstance(marker, dict) or set(marker) != expected_marker
+        or marker != {'schema': RECEIPT_SCHEMA, 'phase': phase_name, 'purpose': 'verification',
+            'operation': args.operation, 'nonce': args.nonce, 'pod_uid': args.pod_uid,
+            'source_pvc_uid': args.source_pvc_uid, 'source_pv_uid': args.source_pv_uid,
+            'verification_pvc_uid': args.verification_pvc_uid,
+            'verification_pv_uid': args.verification_pv_uid,
+            'archive_sha256': args.archive_sha256, 'archive_bytes': args.archive_bytes,
+            'state': 'STARTED'}):
+        raise ValueError('verification_receipt_binding')
+    receipt_path = operation_state / (args.operation + '-' + args.nonce + '.receipt.json')
+    try:
+        row = receipt_path.lstat()
+    except FileNotFoundError:
+        raise ValueError('verification_receipt_incomplete') from None
+    if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid()
+        or stat.S_IMODE(row.st_mode) != 0o600 or row.st_nlink != 1
+        or not 1 <= row.st_size <= 16384):
+        raise ValueError('verification_receipt_incomplete')
+    receipt = _private_json(receipt_path)
+    if (not isinstance(receipt, dict) or set(receipt) != {
+            'schema', 'phase', 'purpose', 'operation', 'nonce', 'pod_uid', 'source_pvc_uid',
+            'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+            'archive_sha256', 'archive_bytes', 'census_sha256', 'status'}
+        or receipt.get('schema') != RECEIPT_SCHEMA or receipt.get('phase') != phase_name
+        or receipt.get('purpose') != 'verification'
+        or receipt.get('operation') != args.operation or receipt.get('nonce') != args.nonce
+        or receipt.get('pod_uid') != args.pod_uid
+        or receipt.get('source_pvc_uid') != args.source_pvc_uid
+        or receipt.get('source_pv_uid') != args.source_pv_uid
+        or receipt.get('verification_pvc_uid') != args.verification_pvc_uid
+        or receipt.get('verification_pv_uid') != args.verification_pv_uid
+        or receipt.get('archive_sha256') != args.archive_sha256
+        or receipt.get('archive_bytes') != args.archive_bytes
+        or not re.fullmatch('[a-f0-9]{64}', receipt.get('archive_sha256', ''))
+        or not re.fullmatch('[a-f0-9]{64}', receipt.get('census_sha256', ''))
+        or receipt.get('status') != 'COMPLETE'):
+        raise ValueError('verification_receipt_binding')
+    census_path = operation_state / (args.operation + '-' + args.nonce + '.census.json')
+    try:
+        census_stat = census_path.lstat()
+    except FileNotFoundError:
+        raise ValueError('verification_receipt_incomplete') from None
+    if (not stat.S_ISREG(census_stat.st_mode) or census_stat.st_uid != os.geteuid()
+        or stat.S_IMODE(census_stat.st_mode) != 0o600 or census_stat.st_nlink != 1
+        or not 1 <= census_stat.st_size <= MAX_CENSUS_BYTES):
+        raise ValueError('verification_receipt_incomplete')
+    census_raw = census_path.read_bytes()
+    if len(census_raw) != census_stat.st_size or hashlib.sha256(census_raw).hexdigest() != receipt['census_sha256']:
+        raise ValueError('verification_receipt_binding')
+    try:
+        census = json.loads(census_raw)
+    except (UnicodeError, ValueError):
+        raise ValueError('verification_receipt_binding') from None
+    if (not isinstance(census, dict) or set(census) != {'schema', 'account', 'streams', 'consumers'}
+        or census.get('schema') != CENSUS_SCHEMA or not isinstance(census.get('account'), str)
+        or not isinstance(census.get('streams'), list) or not isinstance(census.get('consumers'), list)
+        or json.dumps(census, sort_keys=True, separators=(',', ':'), ensure_ascii=False,
+            allow_nan=False).encode('utf-8') != census_raw):
+        raise ValueError('verification_receipt_binding')
+    return {'receipt': receipt, 'census': census}
+
+
+def bind_only(args):
+    """Open a read-only mount of one newly created WFFC target, then exit.
+
+    Kubernetes attachment and typed API readback establish claim/PV identity;
+    this fixed process only causes scheduling and proves the target mount exists.
+    It has no source volume, fsGroup, file writes, or caller-provided path.
+    """
+    if (args.role != 'verification'
+        or os.geteuid() != 65532 or os.getegid() != 65532):
+        raise ValueError('bind_profile')
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('bind_pod_identity')
+    row = VERIFY_ROOT.lstat()
+    if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
+        raise ValueError('bind_target_mount')
+    return {'schema': 'voice-nats-bind-mount-v1', 'operation': args.operation,
+        'nonce': args.nonce, 'pod_uid': args.pod_uid, 'role': args.role,
+        'mounted': True}
+
+
+def _frame(row):
+    encoded = json.dumps(row, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
+    if len(encoded) + 1 > MAX_READBACK_LINE:
+        raise ValueError('readback_frame_size')
+    sys.stdout.buffer.write(encoded + b'\n')
+    sys.stdout.buffer.flush()
+
+
+def stream_census_readback(result):
+    """Emit the full bounded census as fixed-size records over pods/exec stdout."""
+    receipt, census = result['receipt'], result['census']
+    raw = json.dumps(census, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
+    if (not raw or len(raw) > MAX_CENSUS_BYTES
+        or hashlib.sha256(raw).hexdigest() != receipt.get('census_sha256')):
+        raise ValueError('verification_receipt_binding')
+    identity = {key: receipt[key] for key in
+        ('operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'source_pv_uid',
+         'verification_pvc_uid', 'verification_pv_uid', 'purpose',
+         'archive_sha256', 'archive_bytes')}
+    count = 0
+    for sequence, offset in enumerate(range(0, len(raw), READBACK_CHUNK)):
+        chunk = raw[offset:offset + READBACK_CHUNK]
+        _frame({'schema': CENSUS_READBACK_SCHEMA, **identity, 'kind': 'data',
+            'sequence': sequence, 'data': base64.b64encode(chunk).decode('ascii')})
+        count += 1
+    _frame({'schema': CENSUS_READBACK_SCHEMA, **identity, 'kind': 'complete',
+        'frames': count, 'byte_count': len(raw), 'census_sha256': receipt['census_sha256'],
+        'receipt': receipt})
+
+
+def _stream(archive, manifest, args):
+    _identity(args)
+    identity = _archive_identity(args)
+    fd = os.open(archive, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    digest = hashlib.sha256()
+    size = 0
+    sequence = 0
+    with os.fdopen(fd, 'rb') as source:
+        before = os.fstat(fd)
+        if not 0 < before.st_size <= MAX_TAR_BYTES:
+            raise ValueError('archive-size')
+        while True:
+            data = source.read(CHUNK)
+            if not data:
+                break
+            size += len(data)
+            if size > MAX_TAR_BYTES:
+                raise ValueError('archive-size')
+            digest.update(data)
+            _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+                **identity,
+                'pod_uid': args.pod_uid, 'kind': 'data', 'sequence': sequence,
+                'data': base64.b64encode(data).decode('ascii')})
+            sequence += 1
+        after = os.fstat(fd)
+        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+            after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            raise ValueError('archive-changed')
+    if digest.hexdigest() != manifest['archive_sha256']:
+        raise ValueError('archive-digest')
+    manifest_raw = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
+    if len(manifest_raw) > MAX_MANIFEST_BYTES:
+        raise ValueError('manifest-size')
+    manifest_digest = hashlib.sha256(manifest_raw).hexdigest()
+    manifest_frames = 0
+    for offset in range(0, len(manifest_raw), CHUNK):
+        _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+            **identity,
+            'pod_uid': args.pod_uid, 'kind': 'manifest', 'sequence': manifest_frames,
+            'data': base64.b64encode(manifest_raw[offset:offset+CHUNK]).decode('ascii')})
+        manifest_frames += 1
+    _frame({'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+        **identity,
+        'pod_uid': args.pod_uid, 'kind': 'complete', 'frames': sequence,
+        'manifest_frames': manifest_frames, 'archive_sha256': digest.hexdigest(),
+        'manifest_sha256': manifest_digest})
+
+
+def _manifest_path():
+    return OUT_ROOT / 'archive.manifest.json'
+
+
+def create_and_stream(args):
+    _require_archive_helper_identity()
+    _identity(args)
+    identity = _archive_identity(args)
+    target = OUT_ROOT / 'archive.tar'
+    marker = _manifest_path()
+    partial = OUT_ROOT / 'archive.partial.tar'
+    if target.exists() or marker.exists() or partial.exists():
+        # A previous invocation may have reached durable output before the
+        # caller lost its stream. Only explicit recovery may read it back.
+        raise ValueError('archive_already_started')
+    if not source_readable_by_archive_helper(DATA_ROOT):
+        raise ValueError('archive_source_permissions')
+    manifest = native_store.archive_closed_store(DATA_ROOT, partial)
+    if not native_store.verify_archive(partial, manifest):
+        raise ValueError('archive-verification')
+    os.link(partial, target, follow_symlinks=False)
+    partial.unlink()
+    manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
+    record = {'schema': SCHEMA, 'operation': args.operation, 'nonce': args.nonce,
+        'pod_uid': args.pod_uid, **identity, 'archive_sha256': manifest['archive_sha256'],
+        'manifest': manifest}
+    pending = marker.with_suffix('.pending')
+    fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as output:
+        output.write(json.dumps(record, sort_keys=True, separators=(',', ':')).encode())
+        output.flush()
+        os.fsync(output.fileno())
+    os.link(pending, marker, follow_symlinks=False)
+    pending.unlink()
+    directory = os.open(OUT_ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(directory)
+    finally: os.close(directory)
+    _stream(target, manifest, args)
+
+
+def stream_existing(args):
+    _require_archive_helper_identity()
+    _identity(args)
+    identity = _archive_identity(args)
+    target = OUT_ROOT / 'archive.tar'
+    record = _private_json(_manifest_path())
+    if (set(record) != {'schema', 'operation', 'nonce', 'pod_uid', 'source_pvc_uid', 'source_pv_uid',
+            'archive_sha256', 'manifest'}
+        or record.get('schema') != SCHEMA or record.get('operation') != args.operation
+        or record.get('nonce') != args.nonce or record.get('pod_uid') != args.pod_uid
+        or record.get('source_pvc_uid') != identity['source_pvc_uid']
+        or record.get('source_pv_uid') != identity['source_pv_uid']
+        or record.get('archive_sha256') != record.get('manifest', {}).get('archive_sha256')
+        or native_store.verify_archive(target, record['manifest']) is not True):
+        raise ValueError('archive-readback-binding')
+    _stream(target, record['manifest'], args)
+
+
+def _private_json(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+            or before.st_nlink != 1 or before.st_mode & 0o077
+            or not 1 <= before.st_size <= MAX_MANIFEST_BYTES):
+            raise ValueError('manifest-custody')
+        raw = bytearray()
+        while len(raw) <= before.st_size:
+            part = os.read(fd, min(1 << 20, before.st_size + 1 - len(raw)))
+            if not part: break
+            raw.extend(part)
+        after = os.fstat(fd)
+        if (len(raw) != before.st_size or (before.st_dev, before.st_ino, before.st_size,
+            before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino,
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+            raise ValueError('manifest-changed')
+        return json.loads(raw)
+    finally:
+        os.close(fd)
+
+
+def _session_binding(args):
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('session_pod_identity')
+    if not re.fullmatch('[a-f0-9]{8}', args.session_attempt or ''):
+        raise ValueError('session_attempt')
+    input_pod_uid = getattr(args, 'input_pod_uid', '')
+    input_sha = getattr(args, 'input_bundle_sha256', '')
+    input_bytes = getattr(args, 'input_bundle_bytes', None)
+    archive_sha = getattr(args, 'archive_sha256', '')
+    archive_bytes = getattr(args, 'archive_bytes', None)
+    kernel_sha = getattr(args, 'kernel_bundle_sha256', '')
+    server_sha = getattr(args, 'server_config_sha256', '')
+    if (not re.fullmatch('[a-f0-9-]{36}', input_pod_uid or '')
+        or not re.fullmatch('[a-f0-9]{64}', input_sha or '')
+        or type(input_bytes) is not int or not 0 < input_bytes <= MAX_INPUT_BYTES
+        or not re.fullmatch('[a-f0-9]{64}', archive_sha or '')
+        or type(archive_bytes) is not int or not 0 < archive_bytes <= MAX_TAR_BYTES
+        or not re.fullmatch('[a-f0-9]{64}', kernel_sha or '')
+        or not re.fullmatch('[a-f0-9]{64}', server_sha or '')):
+        raise ValueError('session_input_binding')
+    return {
+        'schema': 'voice-nats-session-action-v1',
+        'operation': args.operation,
+        'nonce': args.nonce,
+        'pod_uid': args.pod_uid,
+        'input_pod_uid': input_pod_uid,
+        'session_attempt': args.session_attempt,
+        'input_bundle_sha256': input_sha,
+        'input_bundle_bytes': input_bytes,
+        'archive_sha256': archive_sha,
+        'archive_bytes': archive_bytes,
+        'kernel_bundle_sha256': kernel_sha,
+        'server_config_sha256': server_sha,
+        'source_pvc_uid': _storage_uid(args.source_pvc_uid, 'session_source_pvc_uid'),
+        'source_pv_uid': _storage_uid(args.source_pv_uid, 'session_source_pv_uid'),
+        'verification_pvc_uid': _storage_uid(args.verification_pvc_uid, 'session_verification_pvc_uid'),
+        'verification_pv_uid': _storage_uid(args.verification_pv_uid, 'session_verification_pv_uid'),
+    }
+
+
+def _session_consume_inputs(binding, root):
+    """Validate the prior loader Pod's durable bundle and journal this Pod's adoption."""
+    root = _session_state_root(root)
+    started_path = root / 'input-consumption.started.json'
+    receipt_path = root / 'input-consumption.receipt.json'
+    intent = {'schema': 'voice-nats-session-input-consumption-v1', 'state': 'STARTED',
+        **{key: binding[key] for key in ('operation', 'nonce', 'pod_uid', 'input_pod_uid',
+            'session_attempt', 'input_bundle_sha256', 'input_bundle_bytes', 'archive_sha256',
+            'archive_bytes', 'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid',
+            'verification_pv_uid')}}
+    if started_path.exists() or receipt_path.exists():
+        raise ValueError('session_input_consumption_unknown')
+    _write_exclusive(started_path, json.dumps(intent, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    input_root = SESSION_INPUT_ROOT
+    row = input_root.lstat()
+    if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+        or row.st_uid != SESSION_UID or row.st_gid != SESSION_GID
+        or stat.S_IMODE(row.st_mode) != 0o700
+        or set(path.name for path in input_root.iterdir()) != SESSION_INPUT_FILES):
+        raise ValueError('session_inputs')
+    digests = {}
+    for name in sorted(SESSION_INPUT_FILES):
+        raw = _read_session_file(input_root / name, max_bytes=256 << 10,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o440, code='session_inputs')
+        digests[name] = hashlib.sha256(raw).hexdigest()
+    bundle_sha = hashlib.sha256(json.dumps(digests, sort_keys=True,
+        separators=(',', ':')).encode()).hexdigest()
+    if bundle_sha != binding['kernel_bundle_sha256']:
+        raise ValueError('session_inputs_digest')
+    loader_started = root / 'inputs.started.json'
+    loader_receipt = root / 'inputs.receipt.json'
+    started = _read_session_file(loader_started, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_inputs_incomplete')
+    receipt_raw = _read_session_file(loader_receipt, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_inputs_incomplete')
+    try:
+        started_value = json.loads(started)
+        receipt = json.loads(receipt_raw)
+    except (UnicodeError, ValueError):
+        raise ValueError('session_inputs_incomplete') from None
+    input_binding = {'purpose': 'verification', 'operation': binding['operation'],
+        'nonce': binding['nonce'], 'pod_uid': binding['input_pod_uid'],
+        'source_pvc_uid': binding['source_pvc_uid'], 'source_pv_uid': binding['source_pv_uid'],
+        'verification_pvc_uid': binding['verification_pvc_uid'],
+        'verification_pv_uid': binding['verification_pv_uid'],
+        'archive_sha256': binding['archive_sha256'], 'archive_bytes': binding['archive_bytes'],
+        'session_attempt': binding['session_attempt'],
+        'input_bundle_sha256': binding['input_bundle_sha256'],
+        'input_bundle_bytes': binding['input_bundle_bytes']}
+    expected_started = {'schema': 'voice-nats-input-action-v1', 'phase': 'inputs',
+        **input_binding, 'state': 'STARTED'}
+    expected_receipt = {'schema': 'voice-nats-input-receipt-v1', 'phase': 'inputs',
+        **input_binding, 'status': 'COMPLETE', 'file_count': len(INPUT_FILES),
+        'kernel_bundle_sha256': binding['kernel_bundle_sha256'],
+        'server_config_sha256': binding['server_config_sha256']}
+    if (started_value != expected_started or not isinstance(receipt, dict)
+        or set(receipt) != set(expected_receipt)
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())
+        or receipt.get('kernel_bundle_sha256') != bundle_sha):
+        raise ValueError('session_inputs_incomplete')
+    complete = {'schema': intent['schema'], 'state': 'COMPLETE',
+        **{key: intent[key] for key in intent if key not in ('schema', 'state')},
+        'kernel_bundle_sha256': bundle_sha,
+        'server_config_sha256': receipt['server_config_sha256']}
+    _write_exclusive(receipt_path, json.dumps(complete, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    return complete
+
+
+def _session_state_root(root=SESSION_ROOT):
+    root = Path(root)
+    row = root.lstat()
+    if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+        or row.st_uid != SESSION_UID or row.st_gid != SESSION_GID
+        or stat.S_IMODE(row.st_mode) != 0o700):
+        raise ValueError('session_state_custody')
+    return root
+
+
+def _write_exclusive(path, raw, mode=0o600):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+    try:
+        view = memoryview(raw)
+        while view:
+            count = os.write(fd, view)
+            if count <= 0:
+                raise ValueError('session_state_write')
+            view = view[count:]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(parent_fd)
+    finally:
+        os.close(parent_fd)
+
+
+def _session_action_paths(root, action):
+    if action not in SESSION_ACTIONS:
+        raise ValueError('session_action_invalid')
+    slug = action.replace('-', '_')
+    return root / (slug + '.started.json'), root / (slug + '.receipt.json'), root / (slug + '.output')
+
+
+def _session_inputs():
+    root = SESSION_INPUT_ROOT
+    row = root.lstat()
+    if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode):
+        raise ValueError('session_inputs')
+    entries = sorted(path.name for path in root.iterdir())
+    expected = sorted(SESSION_INPUT_FILES)
+    if entries != expected:
+        raise ValueError('session_inputs')
+    data = {}
+    for name in expected:
+        path = root / name
+        data[name] = _read_session_file(path, max_bytes=256 << 10,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o440, code='session_inputs')
+    return data
+
+
+def _read_session_file(path, *, max_bytes, uid=None, gid=None,
+        mode=0o600, code='session_state_file'):
+    """Read one fixed private file without following links or accepting swaps."""
+    if uid is None:
+        uid = SESSION_UID
+    if gid is None:
+        gid = SESSION_GID
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if hasattr(os, 'O_CLOEXEC'):
+        flags |= os.O_CLOEXEC
+    fd = os.open(path, flags)
+    try:
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != uid or before.st_gid != gid
+            or before.st_nlink != 1 or stat.S_IMODE(before.st_mode) != mode
+            or not 0 < before.st_size <= max_bytes):
+            raise ValueError(code)
+        chunks = []
+        remaining = before.st_size
+        while remaining:
+            chunk = os.read(fd, min(1 << 20, remaining))
+            if not chunk:
+                raise ValueError(code)
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        if os.read(fd, 1):
+            raise ValueError(code)
+        after = os.fstat(fd)
+        if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+            raise ValueError(code)
+        return b''.join(chunks)
+    finally:
+        os.close(fd)
+
+
+def _perform_session_action(action, root):
+    if action in SESSION_KERNEL_PHASES:
+        _session_inputs()
+        phase = SESSION_KERNEL_PHASES[action]
+        command = [str(KERNEL), '--phase', phase]
+        if phase in ('verify-closed', 'drain', 'verify-drained'):
+            command.append('--session-state')
+        result = subprocess.run(command, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800, check=False)
+        if result.returncode != 0:
+            raise ValueError('session_kernel_failed')
+        name = 'census.json' if phase == 'census' else 'fixture.json' if phase == 'seed' else None
+        if name is None:
+            return None
+        source = OUT_ROOT / name
+        raw = _read_session_file(source, max_bytes=SESSION_MAX_OUTPUT,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_kernel_output')
+        target = root / (action.replace('-', '_') + '.output')
+        _write_exclusive(target, raw)
+        return {'output_name': target.name, 'output_sha256': hashlib.sha256(raw).hexdigest(),
+            'output_bytes': len(raw)}
+    script = SESSION_BOOTSTRAP_SCRIPTS.get(action)
+    if script is not None:
+        _session_inputs()
+        env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/tmp',
+            'NATS_URL': 'nats://127.0.0.1:4222',
+            'NATS_CREDS': '/inputs/bootstrap.creds'}
+        result = subprocess.run(['/bin/sh', script], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+            timeout=1800, check=False)
+        if result.returncode != 0:
+            raise ValueError('session_bootstrap_failed')
+        return None
+    if action in ('broker-ready', 'broker-restart-prepare', 'broker-restart-complete',
+        'session-close', 'session-stop'):
+        command = {'broker-ready': 'start', 'broker-restart-prepare': 'stop',
+            'broker-restart-complete': 'start', 'session-close': 'stop',
+            'session-stop': 'shutdown'}[action]
+        _supervisor_call(command)
+        return None
+    raise ValueError('session_action_invalid')
+
+
+def _supervisor_call(action, *, connector=socket.create_connection):
+    if action not in ('start', 'stop', 'status', 'shutdown'):
+        raise ValueError('supervisor_action_invalid')
+    request = {'schema': 'voice-nats-supervisor-v1', 'action': action}
+    raw = json.dumps(request, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    if len(raw) > 256:
+        raise ValueError('supervisor_request')
+    with connector(('127.0.0.1', SUPERVISOR_PORT), timeout=10) as client:
+        client.sendall(raw)
+        response = bytearray()
+        while len(response) <= 256:
+            part = client.recv(1)
+            if not part or part == b'\n':
+                break
+            response.extend(part)
+        if not part or len(response) > 256:
+            raise ValueError('supervisor_response')
+    try:
+        value = json.loads(response)
+    except (UnicodeError, ValueError):
+        raise ValueError('supervisor_response') from None
+    fields = {'schema', 'ok', 'running'} | ({'stopping'} if action == 'shutdown' else set())
+    expected_running = action == 'start'
+    if (not isinstance(value, dict) or set(value) != fields
+        or value.get('schema') != 'voice-nats-supervisor-v1' or value.get('ok') is not True
+        or value.get('running') is not expected_running
+        or (action == 'shutdown' and value.get('stopping') is not True)):
+        raise ValueError('supervisor_action_failed')
+    return value
+
+
+def _session_receipt(action, binding, root, *, perform):
+    started_path, receipt_path, output_path = _session_action_paths(root, action)
+    started = {'schema': binding['schema'], 'state': 'STARTED', 'action': action,
+        **{key: binding[key] for key in binding if key != 'schema'}}
+    if receipt_path.exists():
+        receipt, output = _session_readback(action, binding, root)
+        if output is not None:
+            output.close()
+        return receipt
+    if started_path.exists():
+        existing = json.loads(_read_session_file(started_path, max_bytes=SESSION_MAX_MESSAGE,
+            uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_started_custody'))
+        if existing != started:
+            raise ValueError('session_started_identity')
+        raise ValueError('session_action_unknown')
+    _write_exclusive(started_path, json.dumps(started, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    details = perform(action, root)
+    receipt = {'schema': binding['schema'], 'state': 'COMPLETE', 'action': action,
+        **{key: binding[key] for key in binding if key != 'schema'}}
+    if details:
+        receipt.update(details)
+    _write_exclusive(receipt_path, json.dumps(receipt, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    return receipt
+
+
+def _session_readback(action, binding, root):
+    _session_state_root(root)
+    started_path, receipt_path, output_path = _session_action_paths(root, action)
+    if not started_path.exists() or not receipt_path.exists():
+        raise ValueError('session_receipt_missing')
+    started = json.loads(_read_session_file(started_path, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_started_custody'))
+    receipt = json.loads(_read_session_file(receipt_path, max_bytes=SESSION_MAX_MESSAGE,
+        uid=SESSION_UID, gid=SESSION_GID, mode=0o600, code='session_receipt_custody'))
+    identity = {key: binding[key] for key in binding if key != 'schema'}
+    expected_started = {'schema': binding['schema'], 'state': 'STARTED', 'action': action, **identity}
+    expected_receipt = {'schema': binding['schema'], 'state': 'COMPLETE', 'action': action, **identity}
+    output_fields = {'output_name', 'output_bytes', 'output_sha256'}
+    if (started != expected_started or not isinstance(receipt, dict)
+        or not set(receipt) in (set(expected_receipt), set(expected_receipt) | output_fields)
+        or any(receipt.get(key) != value for key, value in expected_receipt.items())):
+        raise ValueError('session_receipt_identity')
+    output_values = {key: receipt.get(key) for key in output_fields}
+    if any(value is not None for value in output_values.values()):
+        if set(receipt) != set(expected_receipt) | output_fields:
+            raise ValueError('session_receipt_output')
+        output = output_values['output_name']
+        if (output != output_path.name or type(output_values['output_bytes']) is not int
+            or not isinstance(output_values['output_sha256'], str)
+            or not re.fullmatch('[a-f0-9]{64}', output_values['output_sha256'])):
+            raise ValueError('session_receipt_output')
+        fd = os.open(root / output, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != SESSION_UID
+            or before.st_gid != SESSION_GID or before.st_nlink != 1
+            or stat.S_IMODE(before.st_mode) != 0o600
+            or before.st_size != output_values['output_bytes']
+            or before.st_size > SESSION_MAX_OUTPUT):
+            os.close(fd)
+            raise ValueError('session_receipt_output')
+        digest = hashlib.sha256()
+        read_size = 0
+        while True:
+            part = os.read(fd, 1 << 20)
+            if not part:
+                break
+            digest.update(part)
+            read_size += len(part)
+        after = os.fstat(fd)
+        if (read_size != before.st_size or (before.st_dev, before.st_ino, before.st_size,
+            before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino,
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            or digest.hexdigest() != output_values['output_sha256']):
+            os.close(fd)
+            raise ValueError('session_receipt_output')
+        os.lseek(fd, 0, os.SEEK_SET)
+        output_stream = os.fdopen(fd, 'rb')
+    else:
+        if output_path.exists():
+            raise ValueError('session_receipt_output')
+        output_stream = None
+    return receipt, output_stream
+
+
+def _session_rpc(args, *, readback):
+    action = getattr(args, 'action', None)
+    if action not in SESSION_ACTIONS:
+        raise ValueError('session_action_invalid')
+    binding = _session_binding(args)
+    request = {'schema': 'voice-nats-session-rpc-v1', 'action': action,
+        'readback': bool(readback), 'binding': binding}
+    raw = json.dumps(request, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() + b'\n'
+    if len(raw) > SESSION_MAX_MESSAGE:
+        raise ValueError('session_rpc_size')
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        client.settimeout(30)
+        client.connect(str(SESSION_SOCKET))
+        client.sendall(raw)
+        response = bytearray()
+        while len(response) <= SESSION_MAX_MESSAGE:
+            part = client.recv(1)
+            if not part or part == b'\n':
+                break
+            response.extend(part)
+        if len(response) > SESSION_MAX_MESSAGE or not part:
+            raise ValueError('session_rpc_response')
+        result = json.loads(response)
+        if not isinstance(result, dict) or result.get('ok') is not True or not isinstance(result.get('receipt'), dict):
+            raise ValueError('session_rpc_failed')
+        receipt = result['receipt']
+        if not readback:
+            if client.recv(1):
+                raise ValueError('session_rpc_response')
+            _frame(receipt)
+            return receipt
+        expected = receipt.get('output_bytes', 0)
+        if type(expected) is not int or not 0 <= expected <= SESSION_MAX_OUTPUT:
+            raise ValueError('session_rpc_response')
+        with tempfile.TemporaryFile(dir=OUT_ROOT) as payload:
+            digest = hashlib.sha256()
+            remaining = expected
+            while remaining:
+                part = client.recv(min(SESSION_FRAME, remaining))
+                if not part:
+                    raise ValueError('session_rpc_output')
+                payload.write(part)
+                digest.update(part)
+                remaining -= len(part)
+            if client.recv(1):
+                raise ValueError('session_rpc_output')
+            if digest.hexdigest() != receipt.get('output_sha256', hashlib.sha256(b'').hexdigest()):
+                raise ValueError('session_rpc_output')
+            payload.seek(0)
+            stream_session_readback(receipt, payload, expected)
+        return receipt
+    finally:
+        client.close()
+
+
+def stream_session_readback(receipt, stream, size):
+    common = {key: receipt[key] for key in ('operation', 'nonce', 'pod_uid', 'session_attempt',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid', 'action')}
+    frames = 0
+    offset = 0
+    while offset < size:
+        chunk = stream.read(min(SESSION_FRAME, size - offset))
+        if not chunk:
+            raise ValueError('session_readback_output')
+        record = {'schema': 'voice-nats-session-readback-v1', 'kind': 'data', **common,
+            'sequence': frames, 'data': base64.b64encode(chunk).decode('ascii')}
+        line = json.dumps(record, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+        if len(line) > SESSION_FRAME_LINE:
+            raise ValueError('session_readback_frame')
+        sys.stdout.buffer.write(line)
+        frames += 1
+        offset += len(chunk)
+    complete = {'schema': 'voice-nats-session-readback-v1', 'kind': 'complete', **common,
+        'status': 'COMPLETE', 'frames': frames, 'byte_count': size,
+        'output_sha256': receipt.get('output_sha256', hashlib.sha256(b'').hexdigest()),
+        'receipt': receipt}
+    line = json.dumps(complete, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    if len(line) > SESSION_FRAME_LINE:
+        raise ValueError('session_readback_frame')
+    sys.stdout.buffer.write(line)
+    sys.stdout.buffer.flush()
+
+
+def _preflight_binding(args):
+    """Validate the immutable host/API binding before any PVC or process access."""
+    if (not re.fullmatch(r'[a-f0-9]{8}', getattr(args, 'verification_attempt', '') or '')
+        or not re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', getattr(args, 'job_uid', '') or '')
+        or not re.fullmatch(r'[^\s@]+(?:/[^\s@]+)*@sha256:[a-f0-9]{64}', getattr(args, 'phase_image', '') or '')
+        or not re.fullmatch(r'[a-f0-9]{64}', getattr(args, 'archive_sha256', '') or '')
+        or not re.fullmatch(r'[a-f0-9]{64}', getattr(args, 'server_config_sha256', '') or '')
+        or type(getattr(args, 'archive_bytes', None)) is not int
+        or not 0 < args.archive_bytes <= MAX_TAR_BYTES
+        or type(getattr(args, 'server_config_bytes', None)) is not int
+        or not 0 < args.server_config_bytes <= 256 << 10):
+        raise ValueError('preflight_binding')
+    _identity(args)
+    for field in ('source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid'):
+        _storage_uid(getattr(args, field, None), 'preflight_storage_identity')
+    for field in ('source_node_name', 'verification_node_name'):
+        value = getattr(args, field, None)
+        if not isinstance(value, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}', value):
+            raise ValueError('preflight_node_identity')
+    for field in ('source_hostname', 'verification_hostname'):
+        value = getattr(args, field, None)
+        if not isinstance(value, str) or not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?', value):
+            raise ValueError('preflight_node_identity')
+    if (args.source_pvc_uid == args.verification_pvc_uid
+        or args.source_pv_uid == args.verification_pv_uid
+        or args.source_node_name != args.verification_node_name
+        or args.source_hostname != args.verification_hostname
+        or os.environ.get('POD_UID') != args.pod_uid):
+        raise ValueError('preflight_identity')
+    return {key: getattr(args, key) for key in (
+        'operation', 'nonce', 'pod_uid', 'job_uid', 'verification_attempt',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'source_node_name', 'source_hostname', 'verification_node_name', 'verification_hostname',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes', 'phase_image')}
+
+
+def _preflight_state_root():
+    root = PREFLIGHT_ROOT
+    try:
+        root.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+    row = root.lstat()
+    if (not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode)
+        or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+        or stat.S_IMODE(row.st_mode) != 0o700):
+        raise ValueError('preflight_state_custody')
+    return root
+
+
+def _preflight_paths(action, root=None):
+    if action not in PREFLIGHT_ACTIONS:
+        raise ValueError('preflight_action')
+    root = root or _preflight_state_root()
+    stem = action.replace('-', '_')
+    return root / (stem + '.started.json'), root / (stem + '.receipt.json'), root / (stem + '.output')
+
+
+def _private_preflight_json(path):
+    raw = _read_session_file(path, max_bytes=PREFLIGHT_STATE_LIMIT, uid=VERIFICATION_UID,
+        gid=VERIFICATION_GID, mode=0o600, code='preflight_state_custody')
+    try:
+        value = json.loads(raw)
+        if json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() != raw:
+            raise ValueError('preflight_state_invalid')
+        return value
+    except (UnicodeError, TypeError, ValueError):
+        raise ValueError('preflight_state_invalid') from None
+
+
+def _preflight_write(path, raw):
+    if len(raw) > PREFLIGHT_STATE_LIMIT:
+        raise ValueError('preflight_state_size')
+    _write_exclusive(path, raw)
+
+
+def _write_preflight_output(path, raw):
+    if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_CENSUS_BYTES:
+        raise ValueError('preflight_output_size')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        _write_all(fd, raw)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    _fsync_dir(path.parent)
+
+
+def _preflight_action_receipt(action, args, *, input_stream=None, opener=urlopen,
+        supervisor_call=None):
+    """Perform one fixed action once; STARTED without COMPLETE is permanently unknown."""
+    _require_verification_identity()
+    identity = _preflight_binding(args)
+    root = _preflight_state_root()
+    started_path, receipt_path, output_path = _preflight_paths(action, root)
+    started = {'schema': PREFLIGHT_SCHEMA, 'state': 'STARTED', 'action': action, **identity}
+    if receipt_path.exists():
+        raise ValueError('preflight_action_complete_readback_required')
+    if started_path.exists():
+        if _private_preflight_json(started_path) != started:
+            raise ValueError('preflight_started_identity')
+        raise ValueError('preflight_action_unknown')
+    for previous in PREFLIGHT_ACTIONS[:PREFLIGHT_ACTIONS.index(action)]:
+        _, prior_receipt, _ = _preflight_paths(previous, root)
+        if not prior_receipt.exists():
+            raise ValueError('preflight_order')
+        prior = _private_preflight_json(prior_receipt)
+        if prior.get('state') != 'COMPLETE' or any(prior.get(key) != value for key, value in identity.items()):
+            raise ValueError('preflight_order')
+    _preflight_write(started_path, json.dumps(started, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    details = {}
+    if action == 'load-config':
+        raw = _read_bounded(input_stream or sys.stdin.buffer, identity['server_config_bytes'])
+        if hashlib.sha256(raw).hexdigest() != identity['server_config_sha256']:
+            raise ValueError('preflight_config_digest')
+        config = _server_config(raw)
+        if config.replace(b'/verify/store', b'/data') != raw:
+            raise ValueError('preflight_config_shape')
+        config = raw
+        config_root = PREFLIGHT_CONFIG_ROOT
+        config_root_row = config_root.lstat()
+        if not stat.S_ISDIR(config_root_row.st_mode) or stat.S_ISLNK(config_root_row.st_mode):
+            raise ValueError('preflight_config_mount')
+        target = config_root / 'server.conf'
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o440)
+        try:
+            _write_all(fd, config)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        _fsync_dir(config_root)
+        details.update(server_config_sha256=identity['server_config_sha256'],
+            server_config_bytes=len(config))
+    elif action == 'receive-archive':
+        archive_path = OUT_ROOT / 'closed-copy.tar'
+        manifest = _receive_archive(input_stream or sys.stdin.buffer, archive_path,
+            identity['archive_bytes'], identity['archive_sha256'], magic=CENSUS_INPUT_MAGIC)
+        target = VERIFY_ROOT / 'store'
+        native_store.restore_closed_store(archive_path, target, manifest)
+        details.update(archive_sha256=identity['archive_sha256'], archive_bytes=identity['archive_bytes'],
+            manifest_sha256=hashlib.sha256(json.dumps(manifest, sort_keys=True,
+                separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()).hexdigest())
+    elif action == 'broker-start':
+        result = (supervisor_call or _preflight_supervisor_call)('start')
+        details.update(_preflight_broker_identity(result))
+    elif action == 'broker-ready':
+        started_receipt = _preflight_prior_receipt('broker-start', args, root)
+        process = _preflight_started_identity(started_receipt)
+        deadline = time.monotonic() + 120
+        while True:
+            current = _preflight_broker_identity((supervisor_call or _preflight_supervisor_call)('status'), running=True)
+            if current != process:
+                raise ValueError('preflight_broker_changed')
+            try:
+                health_url = 'http://127.0.0.1:8222/healthz?js-enabled-only=true'
+                with opener(health_url, timeout=2) as response:
+                    if getattr(response, 'status', None) == 200:
+                        details.update(process, ready_at_ns=time.time_ns(), readiness_status=200)
+                        break
+            except Exception:
+                pass
+            if time.monotonic() >= deadline:
+                raise ValueError('preflight_broker_not_ready')
+            time.sleep(0.25)
+    elif action == 'read-jsz':
+        started_receipt = _preflight_prior_receipt('broker-start', args, root)
+        expected_process = _preflight_started_identity(started_receipt)
+        ready_receipt = _preflight_prior_receipt('broker-ready', args, root)
+        if _preflight_started_identity(ready_receipt) != expected_process:
+            raise ValueError('preflight_broker_changed')
+        status = (supervisor_call or _preflight_supervisor_call)('status')
+        process = _preflight_broker_identity(status, running=True)
+        if process != expected_process:
+            raise ValueError('preflight_broker_changed')
+        response = opener(PREFLIGHT_JSZ_URL, timeout=30)
+        with response:
+            if getattr(response, 'status', None) != 200:
+                raise ValueError('preflight_jsz_status')
+            raw = response.read(MAX_CENSUS_BYTES + 1)
+        tree = _canonical_jsz(raw)
+        if _preflight_broker_identity((supervisor_call or _preflight_supervisor_call)('status'), running=True) != process:
+            raise ValueError('preflight_broker_changed')
+        _write_preflight_output(output_path, tree)
+        details.update(process, output_name=output_path.name, output_sha256=hashlib.sha256(tree).hexdigest(),
+            output_bytes=len(tree))
+    elif action == 'broker-stop':
+        started_receipt = _preflight_prior_receipt('broker-start', args, root)
+        expected_process = _preflight_started_identity(started_receipt)
+        status = (supervisor_call or _preflight_supervisor_call)('status')
+        before = _preflight_broker_identity(status, running=True)
+        if before != expected_process:
+            raise ValueError('preflight_broker_changed')
+        stopped = (supervisor_call or _preflight_supervisor_call)('stop')
+        identity_after = _preflight_broker_identity(stopped, running=False)
+        if (identity_after.get('pid') != before.get('pid')
+            or identity_after.get('started_at_ns') != before.get('started_at_ns')
+            or identity_after.get('exit_code') != 0):
+            raise ValueError('preflight_broker_stop')
+        details.update(identity_after, stopped_at_ns=identity_after.get('finished_at_ns'))
+    else:
+        raise ValueError('preflight_action')
+    receipt = {'schema': PREFLIGHT_SCHEMA, 'state': 'COMPLETE', 'action': action, **identity, **details}
+    _preflight_write(receipt_path, json.dumps(receipt, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode())
+    _fsync_dir(root)
+    return receipt
+
+
+def _preflight_broker_identity(value, *, running=None):
+    expected = {'schema', 'ok', 'running', 'pid', 'started_at_ns', 'nats_binary_sha256'}
+    if isinstance(value, dict) and value.get('running') is False:
+        expected |= {'finished_at_ns', 'exit_code'}
+    if (not isinstance(value, dict) or value.get('schema') != 'voice-nats-supervisor-v1'
+        or set(value) != expected
+        or value.get('ok') is not True or type(value.get('running')) is not bool
+        or (running is not None and value['running'] is not running)
+        or not re.fullmatch(r'[a-f0-9]{64}', value.get('nats_binary_sha256', '') or '')
+        or type(value.get('pid')) is not int or value['pid'] <= 0
+        or type(value.get('started_at_ns')) is not int or value['started_at_ns'] <= 0):
+        raise ValueError('preflight_broker_identity')
+    if not value['running'] and (type(value.get('exit_code')) is not int or value['exit_code'] != 0
+        or type(value.get('finished_at_ns')) is not int or value['finished_at_ns'] < value['started_at_ns']):
+        raise ValueError('preflight_broker_stop')
+    return {key: value[key] for key in ('pid', 'started_at_ns', 'nats_binary_sha256') if key in value} | {
+        key: value[key] for key in ('finished_at_ns', 'exit_code') if key in value}
+
+
+def _preflight_prior_receipt(action, args, root):
+    _started, path, _output = _preflight_paths(action, root)
+    if not path.exists():
+        raise ValueError('preflight_receipt_incomplete')
+    receipt = _private_preflight_json(path)
+    if (receipt.get('schema') != PREFLIGHT_SCHEMA or receipt.get('state') != 'COMPLETE'
+        or receipt.get('action') != action
+        or any(receipt.get(key) != value for key, value in _preflight_binding(args).items())):
+        raise ValueError('preflight_receipt_binding')
+    return receipt
+
+
+def _preflight_started_identity(receipt):
+    process = {key: receipt.get(key) for key in ('pid', 'started_at_ns', 'nats_binary_sha256')}
+    if (type(process['pid']) is not int or process['pid'] <= 0
+        or type(process['started_at_ns']) is not int or process['started_at_ns'] <= 0
+        or not re.fullmatch(r'[a-f0-9]{64}', process['nats_binary_sha256'] or '')):
+        raise ValueError('preflight_broker_identity')
+    return process
+
+
+def _preflight_supervisor_call(action, *, connector=socket.create_connection):
+    if action not in ('start', 'stop', 'status'):
+        raise ValueError('preflight_supervisor_action')
+    raw = json.dumps({'schema': 'voice-nats-supervisor-v1', 'action': action},
+        sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    with connector(('127.0.0.1', SUPERVISOR_PORT), timeout=10) as client:
+        client.sendall(raw)
+        response = bytearray()
+        while len(response) <= 1024:
+            part = client.recv(1)
+            if not part or part == b'\n':
+                break
+            response.extend(part)
+        if not part or len(response) > 1024:
+            raise ValueError('preflight_supervisor_response')
+    try:
+        value = json.loads(response)
+    except (UnicodeError, ValueError):
+        raise ValueError('preflight_supervisor_response') from None
+    if not isinstance(value, dict) or value.get('ok') is not True:
+        raise ValueError('preflight_supervisor_failed')
+    return value
+
+
+def _canonical_jsz(raw):
+    if not isinstance(raw, bytes) or not 1 <= len(raw) <= MAX_CENSUS_BYTES:
+        raise ValueError('preflight_jsz_size')
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('preflight_jsz')
+            result[key] = value
+        return result
+    try:
+        value = json.loads(raw, object_pairs_hook=unique_pairs,
+            parse_constant=lambda _item: (_ for _ in ()).throw(ValueError('preflight_jsz')))
+        canonical = json.dumps(value, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+    except (UnicodeError, TypeError, ValueError):
+        raise ValueError('preflight_jsz') from None
+    if not isinstance(value, dict):
+        raise ValueError('preflight_jsz')
+    return canonical
+
+
+def _preflight_readback(action, args, *, root=None):
+    _require_verification_identity()
+    identity = _preflight_binding(args)
+    root = root or _preflight_state_root()
+    started_path, receipt_path, output_path = _preflight_paths(action, root)
+    if not started_path.exists() or not receipt_path.exists():
+        raise ValueError('preflight_receipt_incomplete')
+    started = _private_preflight_json(started_path)
+    receipt = _private_preflight_json(receipt_path)
+    if (started != {'schema': PREFLIGHT_SCHEMA, 'state': 'STARTED', 'action': action, **identity}
+        or not isinstance(receipt, dict)
+        or set(receipt) != _preflight_receipt_fields(action)
+        or any(receipt.get(key) != value for key, value in identity.items())
+        or receipt.get('schema') != PREFLIGHT_SCHEMA or receipt.get('state') != 'COMPLETE'
+        or receipt.get('action') != action):
+        raise ValueError('preflight_receipt_binding')
+    if action == 'load-config':
+        config = PREFLIGHT_CONFIG_ROOT / 'server.conf'
+        row = config.lstat()
+        if (not stat.S_ISREG(row.st_mode) or stat.S_ISLNK(row.st_mode)
+            or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or row.st_nlink != 1 or stat.S_IMODE(row.st_mode) != 0o440
+            or row.st_size != identity['server_config_bytes']):
+            raise ValueError('preflight_config_binding')
+        raw = config.read_bytes()
+        if len(raw) != row.st_size or hashlib.sha256(raw).hexdigest() != identity['server_config_sha256']:
+            raise ValueError('preflight_config_binding')
+    if action == 'read-jsz':
+        expected = {'output_name': output_path.name, 'output_sha256': receipt.get('output_sha256'),
+            'output_bytes': receipt.get('output_bytes')}
+        row = output_path.lstat()
+        if (not stat.S_ISREG(row.st_mode) or row.st_uid != os.geteuid() or row.st_gid != os.getegid()
+            or row.st_nlink != 1 or stat.S_IMODE(row.st_mode) != 0o600
+            or type(expected['output_bytes']) is not int or not 0 < expected['output_bytes'] <= MAX_CENSUS_BYTES
+            or row.st_size != expected['output_bytes'] or not re.fullmatch('[a-f0-9]{64}', expected['output_sha256'] or '')):
+            raise ValueError('preflight_output_binding')
+        with output_path.open('rb') as stream:
+            raw = stream.read(MAX_CENSUS_BYTES + 1)
+        if len(raw) != row.st_size or hashlib.sha256(raw).hexdigest() != expected['output_sha256']:
+            raise ValueError('preflight_output_binding')
+        stream_preflight_readback(receipt, raw)
+    else:
+        _frame(receipt)
+    return receipt
+
+
+def _preflight_receipt_fields(action):
+    base = {'schema', 'state', 'action', *_preflight_binding_fields()}
+    extra = {
+        'load-config': {'server_config_sha256', 'server_config_bytes'},
+        'receive-archive': {'archive_sha256', 'archive_bytes', 'manifest_sha256'},
+        'broker-start': {'pid', 'started_at_ns', 'nats_binary_sha256'},
+        'broker-ready': {'pid', 'started_at_ns', 'nats_binary_sha256', 'ready_at_ns', 'readiness_status'},
+        'read-jsz': {'pid', 'started_at_ns', 'nats_binary_sha256', 'output_name', 'output_sha256', 'output_bytes'},
+        'broker-stop': {'pid', 'started_at_ns', 'nats_binary_sha256', 'finished_at_ns', 'exit_code', 'stopped_at_ns'},
+    }
+    if action not in extra:
+        raise ValueError('preflight_action')
+    return base | extra[action]
+
+
+def _preflight_binding_fields():
+    return ('operation', 'nonce', 'pod_uid', 'job_uid', 'verification_attempt',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'source_node_name', 'source_hostname', 'verification_node_name', 'verification_hostname',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes', 'phase_image')
+
+
+def stream_preflight_readback(receipt, raw):
+    common = {key: receipt[key] for key in (
+        'operation', 'nonce', 'verification_attempt', 'pod_uid', 'job_uid',
+        'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'source_node_name', 'source_hostname', 'verification_node_name', 'verification_hostname',
+        'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes', 'phase_image')}
+    frames = 0
+    for offset in range(0, len(raw), READBACK_CHUNK):
+        row = {'schema': PREFLIGHT_READBACK_SCHEMA, 'kind': 'data', **common,
+            'sequence': frames, 'data': base64.b64encode(raw[offset:offset + READBACK_CHUNK]).decode('ascii')}
+        _frame(row)
+        frames += 1
+    _frame({'schema': PREFLIGHT_READBACK_SCHEMA, 'kind': 'complete', **common,
+        'status': 'COMPLETE', 'frames': frames, 'byte_count': len(raw),
+        'output_sha256': hashlib.sha256(raw).hexdigest(), 'receipt': receipt})
+
+
+def _read_bounded(stream, expected):
+    if not 0 < expected <= 256 << 10:
+        raise ValueError('preflight_input_size')
+    chunks = bytearray()
+    while len(chunks) < expected:
+        part = stream.read(min(CHUNK, expected - len(chunks)))
+        if not part:
+            raise ValueError('preflight_input_truncated')
+        chunks.extend(part)
+    if stream.read(1):
+        raise ValueError('preflight_input_trailing')
+    return bytes(chunks)
+
+
+def _write_all(fd, raw):
+    view = memoryview(raw)
+    while view:
+        count = os.write(fd, view)
+        if count <= 0:
+            raise ValueError('preflight_write')
+        view = view[count:]
+
+
+def _fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _serve_session(args):
+    _require_verification_identity()
+    binding = _session_binding(args)
+    root = _session_state_root()
+    _session_consume_inputs(binding, root)
+    if SESSION_SOCKET.exists() or SESSION_SOCKET.is_symlink():
+        raise ValueError('session_socket_exists')
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        server.bind(str(SESSION_SOCKET))
+        os.chmod(SESSION_SOCKET, 0o600)
+        server.listen(4)
+        server.settimeout(1.0)
+        closing = False
+        while not closing:
+            try:
+                conn, _ = server.accept()
+            except socket.timeout:
+                continue
+            with conn:
+                conn.settimeout(30)
+                if hasattr(socket, 'SO_PEERCRED'):
+                    import struct
+                    credentials = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i'))
+                    _pid, uid, gid = struct.unpack('3i', credentials)
+                    if uid != SESSION_UID or gid != SESSION_GID:
+                        raise ValueError('session_peer_identity')
+                data = bytearray()
+                while len(data) <= SESSION_MAX_MESSAGE and b'\n' not in data:
+                    part = conn.recv(4096)
+                    if not part:
+                        break
+                    data.extend(part)
+                line, sep, trailing = bytes(data).partition(b'\n')
+                if not sep or trailing or len(line) > SESSION_MAX_MESSAGE:
+                    raise ValueError('session_rpc_request')
+                request = json.loads(line)
+                if (not isinstance(request, dict) or set(request) != {'schema', 'action', 'readback', 'binding'}
+                    or request.get('schema') != 'voice-nats-session-rpc-v1'
+                    or request.get('binding') != binding or type(request.get('readback')) is not bool
+                    or request.get('action') not in SESSION_ACTIONS):
+                    raise ValueError('session_rpc_request')
+                action = request['action']
+                if request['readback']:
+                    receipt, output = _session_readback(action, binding, root)
+                else:
+                    if action == 'session-stop':
+                        _session_readback('session-close', binding, root)
+                    receipt = _session_receipt(action, binding, root,
+                        perform=_perform_session_action)
+                response = {'ok': True, 'receipt': receipt}
+                encoded = json.dumps(response, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() + b'\n'
+                if len(encoded) > SESSION_MAX_MESSAGE:
+                    raise ValueError('session_rpc_response')
+                conn.sendall(encoded)
+                if request['readback'] and output is not None:
+                    try:
+                        while True:
+                            chunk = output.read(SESSION_FRAME)
+                            if not chunk:
+                                break
+                            conn.sendall(chunk)
+                    finally:
+                        output.close()
+                closing = action == 'session-stop' and not request['readback']
+    finally:
+        server.close()
+        try:
+            SESSION_SOCKET.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def serve(args):
+    _require_archive_helper_identity()
+    _identity(args)
+    _archive_identity(args)
+    while True:
+        time.sleep(60)
+
+
+def serve_census(args):
+    _require_verification_identity()
+    _identity(args)
+    if os.environ.get('POD_UID') != args.pod_uid:
+        raise ValueError('verification_pod_identity')
+    while True:
+        time.sleep(60)
+
+
+def serve_closed_copy_preflight(args):
+    """Remain available for the host's fixed same-Pod preflight action vectors."""
+    _require_verification_identity()
+    args.pod_uid = os.environ.get('POD_UID', '')
+    _identity(args)
+    if (not re.fullmatch(r'[a-f0-9]{8}', getattr(args, 'verification_attempt', '') or '')
+        or any(not re.fullmatch(r'[a-f0-9-]{36}', getattr(args, field, '') or '')
+            for field in ('source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid'))
+        or args.source_pvc_uid == args.verification_pvc_uid
+        or args.source_pv_uid == args.verification_pv_uid):
+        raise ValueError('preflight_serve_binding')
+    # The trusted runner owns the API object lifecycle; the helper accepts no
+    # API credentials and only serves closed, identity-bound local actions.
+    while True:
+        time.sleep(60)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(add_help=False)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--serve', action='store_true')
+    mode.add_argument('--create-and-stream', action='store_true')
+    mode.add_argument('--stream-existing', action='store_true')
+    mode.add_argument('--load-inputs', action='store_true')
+    mode.add_argument('--read-input-receipt', action='store_true')
+    mode.add_argument('--load-census-inputs', action='store_true')
+    mode.add_argument('--read-census-input-receipt', action='store_true')
+    mode.add_argument('--consume-census-inputs', action='store_true')
+    mode.add_argument('--read-receipt', action='store_true')
+    mode.add_argument('--bind-only', action='store_true')
+    mode.add_argument('--serve-census', action='store_true')
+    mode.add_argument('--serve-closed-copy-preflight', action='store_true')
+    mode.add_argument('--preflight-action', choices=PREFLIGHT_ACTIONS)
+    mode.add_argument('--preflight-readback', action='store_true')
+    mode.add_argument('--receive-archive', action='store_true')
+    mode.add_argument('--serve-selected-session', action='store_true')
+    mode.add_argument('--session-action', action='store_true')
+    mode.add_argument('--session-readback', action='store_true')
+    mode.add_argument('--phase', choices=sorted(VERIFY_PHASES))
+    parser.add_argument('--operation', required=True)
+    parser.add_argument('--nonce', required=True)
+    parser.add_argument('--pod-uid', required=False)
+    parser.add_argument('--source-pvc-uid')
+    parser.add_argument('--source-pv-uid')
+    parser.add_argument('--verification-pvc-uid')
+    parser.add_argument('--verification-pv-uid')
+    parser.add_argument('--session-attempt')
+    parser.add_argument('--input-pod-uid')
+    parser.add_argument('--input-bundle-sha256')
+    parser.add_argument('--input-bundle-bytes', type=int)
+    parser.add_argument('--kernel-bundle-sha256')
+    parser.add_argument('--server-config-sha256')
+    parser.add_argument('--action', choices=sorted(SESSION_ACTIONS | frozenset(PREFLIGHT_ACTIONS)))
+    parser.add_argument('--archive-sha256')
+    parser.add_argument('--archive-bytes', type=int)
+    parser.add_argument('--verification-attempt')
+    parser.add_argument('--job-uid')
+    parser.add_argument('--phase-image')
+    parser.add_argument('--source-node-name')
+    parser.add_argument('--source-hostname')
+    parser.add_argument('--verification-node-name')
+    parser.add_argument('--verification-hostname')
+    parser.add_argument('--server-config-bytes', type=int)
+    parser.add_argument('--role', choices=('verification',))
+    args = parser.parse_args(argv)
+    if args.serve:
+        if args.pod_uid is not None: parser.error('serve-shape')
+        try: _archive_identity(args)
+        except ValueError: parser.error('serve-storage-identity-required')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        serve(args)
+    if args.serve_census:
+        if (args.pod_uid is not None or args.phase is not None or args.source_pvc_uid is not None
+            or args.source_pv_uid is not None or args.verification_pvc_uid is not None
+            or args.verification_pv_uid is not None or args.archive_sha256 is not None
+            or args.archive_bytes is not None):
+            parser.error('serve-census-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        serve_census(args)
+    if args.serve_closed_copy_preflight:
+        if args.pod_uid is not None or args.phase is not None or args.action is not None:
+            parser.error('preflight-serve-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        serve_closed_copy_preflight(args)
+        return
+    if args.preflight_action is not None or args.preflight_readback:
+        if args.phase is not None or args.action is not None or args.role is not None:
+            parser.error('preflight-action-shape')
+        if args.preflight_action is not None:
+            _frame(_preflight_action_receipt(args.preflight_action, args))
+        else:
+            if not args.action:
+                parser.error('preflight-readback-action-required')
+            _preflight_readback(args.action, args)
+        return
+    if args.serve_selected_session:
+        if (args.pod_uid is not None or args.phase is not None
+            or args.role is not None or args.action is not None
+            or args.input_pod_uid is None or args.input_bundle_sha256 is None
+            or args.input_bundle_bytes is None or args.kernel_bundle_sha256 is None
+            or args.server_config_sha256 is None or args.archive_sha256 is None
+            or args.archive_bytes is None):
+            parser.error('serve-selected-session-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        _serve_session(args)
+        return
+    if args.bind_only:
+        if (args.role is None or args.phase is not None or args.source_pvc_uid is not None
+            or args.verification_pvc_uid is not None or args.pod_uid is not None):
+            parser.error('bind-only-shape')
+        args.pod_uid = os.environ.get('POD_UID', '')
+        return bind_only(args)
+    if args.pod_uid is None: parser.error('pod-uid-required')
+    if args.session_action or args.session_readback:
+        if (args.action is None or args.phase is not None
+            or args.role is not None or args.input_pod_uid is None
+            or args.input_bundle_sha256 is None or args.input_bundle_bytes is None
+            or args.kernel_bundle_sha256 is None or args.server_config_sha256 is None
+            or args.archive_sha256 is None or args.archive_bytes is None
+            or args.session_attempt is None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid):
+            parser.error('session-action-shape')
+        _session_rpc(args, readback=args.session_readback)
+        return
+    if args.load_inputs:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None):
+            parser.error('load-inputs-shape')
+        result = load_inputs(None, operation=args.operation, nonce=args.nonce,
+            pod_uid=args.pod_uid, binding_args=args, input_stream=sys.stdin.buffer)
+        _frame(result)
+        return result
+    if args.read_input_receipt:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None):
+            parser.error('read-input-receipt-shape')
+        result = read_input_receipt(args)
+        _frame(result)
+        return result
+    if args.load_census_inputs:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None or args.input_pod_uid is not None):
+            parser.error('load-census-inputs-shape')
+        result = load_census_inputs(None, operation=args.operation, nonce=args.nonce,
+            pod_uid=args.pod_uid, binding_args=args, input_stream=sys.stdin.buffer)
+        _frame(result)
+        return result
+    if args.read_census_input_receipt:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None or not args.input_pod_uid):
+            parser.error('read-census-input-receipt-shape')
+        result = read_census_input_receipt(args)
+        _frame(result)
+        return result
+    if args.consume_census_inputs:
+        if (args.phase is not None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.session_attempt is None or not args.input_bundle_sha256
+            or args.input_bundle_bytes is None or not args.input_pod_uid):
+            parser.error('consume-census-inputs-shape')
+        result = consume_census_inputs(args)
+        _frame(result)
+        return result
+    if args.read_receipt:
+        if (args.phase is None or not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None
+            or args.input_pod_uid is None or args.session_attempt is None
+            or args.input_bundle_sha256 is None or args.input_bundle_bytes is None):
+            parser.error('verification-volume-identity-required')
+        receipt = read_verification_receipt(args.phase, args)
+        stream_census_readback(receipt)
+        return receipt
+    if args.receive_archive:
+        if (not args.source_pvc_uid or not args.source_pv_uid
+            or not args.verification_pvc_uid or not args.verification_pv_uid
+            or not args.archive_sha256 or args.archive_bytes is None or args.phase is not None
+            or args.input_pod_uid is None or args.session_attempt is None
+            or args.input_bundle_sha256 is None or args.input_bundle_bytes is None):
+            parser.error('verification-volume-identity-required')
+        receipt = run_verification('census', args)
+        return receipt
+    (create_and_stream if args.create_and_stream else stream_existing)(args)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception:
+        # Kubernetes logs and exec status never receive archive data or paths.
+        sys.stderr.write('nats_phase_failed\n')
+        raise SystemExit(1)

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import guard
 import migrations
@@ -19,7 +20,7 @@ import space_safeguards
 import renderer_root
 from controller import Blocked, file_sha
 from native_store import verify_archive,preflight as native_preflight
-from root_main import capture_inputs,revalidate_inputs,save as root_save,private_json
+from root_main import NativeCaptureReader,capture_inputs,revalidate_inputs,save as root_save,private_json
 from docker_runtime import DockerRuntime
 from runtime_stage import RolloutStage
 from preserve import capture_cut, verify_post_apply, canonical
@@ -29,8 +30,10 @@ from nats_migration import apply_contract
 import rollout_census
 
 def save(path,row):
-    root_save(path,row,limit=128<<20)
-    if Path(path).name=='checkpoint.json':
+    import native_operation_path
+    owner_uid=native_operation_path.owner_uid_for_path(path)
+    root_save(path,row,limit=128<<20,owner_uid=owner_uid)
+    if Path(path).name=='checkpoint.json' and owner_uid==0:
         import deployment_report
         deployment_report.checkpoint(row)
 
@@ -130,7 +133,20 @@ def validate_full_story_rollback_schema(previous,current):
 
 
 def context(stage):
-    result={k:copy.deepcopy(getattr(stage,k)) for k in ('expected','snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv')} | {'final_path':str(stage.final_path)}
+    result={k:copy.deepcopy(getattr(stage,k)) for k in ('expected','snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv')}
+    # A native stage deliberately has no host-visible PV path. Keep the legacy
+    # path only in legacy contexts; reading it here would reintroduce the
+    # forbidden hostPath authority into checkpoints and journal callbacks.
+    if getattr(stage,'native_api',None) is None:
+        result['final_path']=str(stage.final_path)
+    else:
+        pv=result['final_pv']
+        if (not isinstance(pv,dict) or set(pv)!={'metadata'}
+            or not isinstance(pv['metadata'],dict)
+            or set(pv['metadata'])-{'name','uid','resourceVersion'}):
+            raise Blocked('rollout_native_pv_path_forbidden')
+        if getattr(stage,'source_identity',None) is not None:
+            result['source_identity']=copy.deepcopy(stage.source_identity)
     if 'original_live_census' in vars(stage):
         result['original_live_census']=rollout_census.validate_snapshot(vars(stage)['original_live_census'])
     return result
@@ -155,11 +171,34 @@ def require_original_live_census(stage,events):
     return validated
 
 
-def reconstruct(kube,state,journal):
-    ctx=state['context'];stage=RolloutStage(kube,state['operation'],ctx['expected'],journal)
+def reconstruct(kube,state,journal,native_api=None):
+    ctx=state['context']
+    if native_api is not None:
+        if 'final_path' in ctx:
+            raise Blocked('rollout_native_context_contains_host_path')
+        import native_runtime_stage
+        stage=native_runtime_stage.NativeRolloutStage(native_api,state['operation'],
+            ctx['expected'],journal,history=state.get('events',[]),account_id=None)
+        # Keep the authority marker explicit for context() and downstream
+        # guards. The typed client is injected by the trusted bridge only.
+        stage.native_api=native_api
+    else:
+        if 'final_path' not in ctx:
+            raise Blocked('rollout_native_authority_missing')
+        stage=RolloutStage(kube,state['operation'],ctx['expected'],journal)
     for name in ('snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv'):
         setattr(stage,name,copy.deepcopy(ctx[name]))
-    stage.final_path=Path(ctx['final_path'])
+    if native_api is None:
+        stage.final_path=Path(ctx['final_path'])
+    elif 'source_identity' in ctx:
+        stage.source_identity=copy.deepcopy(ctx['source_identity'])
+    if 'native_source_binding' in state:
+        if native_api is None:
+            raise Blocked('rollout_native_authority_missing')
+        import kube_json_api
+        try:kube_json_api.resolve_source_binding(native_api,operation=state['operation'],expected=state['native_source_binding'])
+        except kube_json_api.KubeAPIError:raise Blocked('rollout_native_source_binding_changed') from None
+        stage.native_api=native_api
     snapshot=ctx.get('original_live_census')
     intent=_shutdown_census_intent(state.get('events',[]))
     if snapshot is not None:
@@ -177,6 +216,8 @@ def reconstruct(kube,state,journal):
     if state.get('renderer_authority') is not None:
         stage.renderer_transition=copy.deepcopy(state['renderer_authority']['descriptor'])
         stage.renderer_post_start=lambda current:renderer_root.verify_live(current,state['renderer_authority'])
+    if native_api is not None:
+        stage.recover()
     return stage
 
 
@@ -200,7 +241,7 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,native_api=None,native_config=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -210,6 +251,14 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    native_source=None
+    if native_api is not None:
+        if not isinstance(native_config,dict) or not isinstance(native_config.get('phase_image'),str):
+            raise Blocked('rollout_native_authority_missing')
+        import kube_json_api
+        try:native_source=kube_json_api.resolve_source_binding(native_api,operation=operation)
+        except kube_json_api.KubeAPIError:raise Blocked('rollout_native_source_binding_invalid') from None
+        state['native_source_binding']=copy.deepcopy(native_source)
     if gis_first_install is not None:
         import gis_first_install as gis
         if gis_source_root is None or not isinstance(gis_source_capture,dict):
@@ -278,8 +327,39 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             # existing workloads, then verifies those same UIDs/templates
             # after the GIS-only target has been applied.
             snapshot_names=existing
-        stage=RolloutStage.capture(kube,operation,journal,
-            sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []))
+        try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
+        except FileNotFoundError:enrollment=None
+        account_id=None
+        if native_api is not None:
+            import native_runtime_stage
+            generation=native_source['proof']['generation']
+            account_capture=[]
+            state['provenance']=capture_inputs(
+                NativeCaptureReader(native_api,generation,contract),base,contract,generation,
+                bootstrap_enrollment=enrollment,public_account_callback=account_capture.append,
+                native_private=True)
+            if len(account_capture)!=1:
+                raise Blocked('rollout_native_account_capture_invalid')
+            account_id=account_capture[0]
+            core={native_runtime_stage.HUB,'voice-gateway',
+                *('voice-'+name for name in native_runtime_stage.LEAVES)}
+            extras=sorted(snapshot_names-core)
+            stage=native_runtime_stage.NativeRolloutStage.capture(native_api,operation,journal,
+                extras,expected_identity=None,history=state['events'],account_id=account_id)
+            stage.native_api=native_api
+        else:
+            stage=RolloutStage.capture(kube,operation,journal,
+                sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []))
+        if native_source is not None:
+            source=native_source['binding']
+            if (stage.expected['source_claim']!=source['source_claim']
+                or stage.expected['source_claim_uid']!=source['source_uid']
+                or stage.expected['source_pv_uid']!=source['source_pv_uid']
+                or stage.expected['generation']!=native_source['proof']['generation']
+                or stage.expected['namespace_uid']!=native_source['proof']['namespace_uid']
+                or stage.expected['marker_uid']!=native_source['proof']['marker_uid']
+                or stage.expected['source_node_uid']!=native_source['proof']['node_uid']):
+                raise Blocked('rollout_native_source_binding_mismatch')
         if target['mode']=='images-only':
             manifests,target=image_only_documents(stage,manifests,target,renderer_authority=renderer_authority)
             save(base/'apply-manifests.json',manifests)
@@ -300,16 +380,31 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         import source_plan
         source_plan.verify_db_init(kube,non_nats)
         state['context']=context(stage)
-        claim=kube.get('pvc',stage.expected['source_claim'])
+        if native_api is not None:
+            claim=native_api.get_pvc(namespace='voice-staging',name=stage.expected['source_claim'])
+        else:
+            claim=kube.get('pvc',stage.expected['source_claim'])
         capacity=claim['status']['capacity']['storage']
-        state['native_capacity']=native_preflight(stage.final_path,base,capacity)
-        state['combined_space_capacity']=space_safeguards.combined_capacity(base,state['native_capacity'],state['space_preflight'])
+        if native_api is None:
+            state['native_capacity']=native_preflight(stage.final_path,base,capacity)
+        else:
+            # The native helper reports an authenticated manifest over the
+            # operation-bound archive stream. A PV request is not capacity,
+            # and there is no host PV path to scan for used bytes.
+            if not isinstance(capacity,str):raise Blocked('rollout_native_capacity_readback_invalid')
+            state['native_capacity']={'reported_capacity':capacity,'max_bytes':48<<30,
+                'max_files':262144,'source_pvc_uid':stage.expected['source_claim_uid'],
+                'source_pv_uid':stage.expected['source_pv_uid']}
+            if state['space_preflight'] is not None and state['space_preflight']['requirement']['backup_required']:
+                raise Blocked('rollout_native_space_backup_capacity_adapter_required')
+            state['combined_space_capacity']=None
+        if native_api is None:
+            state['combined_space_capacity']=space_safeguards.combined_capacity(base,state['native_capacity'],state['space_preflight'])
         if state['space_preflight'] is not None:
             state['space_preflight']['source_sha']=target['tag']
             state['space_preflight']['migration_plan_sha256']=target['migration_sha256']
-        try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
-        except FileNotFoundError:enrollment=None
-        state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
+        if native_api is None:
+            state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
         if enrollment is not None:state['bootstrap_enrollment']=copy.deepcopy(enrollment)
         if nats_authority is not None:
             if enrollment is None:raise Blocked('nats_migration_enrollment_missing')
@@ -317,8 +412,13 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             state['nats_contract_binding']=copy.deepcopy(nats_authority['binding'])
             state['nats_target_scripts']=copy.deepcopy(nats_authority['scripts'])
             state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
-        shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
-        state['kernel_sha256']=file_sha(base/'kernel')
+        if native_api is None:
+            shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
+            state['kernel_sha256']=file_sha(base/'kernel')
+        else:
+            # The native helper image pins the kernel; keep only the source
+            # digest in the UID 65532 operation journal.
+            state['kernel_sha256']=file_sha(code/'kernel')
     except Exception as error:
         import deployment_report
         deployment_report.capture_failure(error)
@@ -332,11 +432,38 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         if before_fence is not None:before_fence()
         stage.runtime_base=base
         stage.fence();state['context']=context(stage);state['fence_status']='VERIFIED'
+        if native_source is not None:
+            import kube_json_api
+            try:kube_json_api.resolve_source_binding(native_api,operation=operation,expected=native_source)
+            except kube_json_api.KubeAPIError:raise Blocked('rollout_native_source_binding_changed') from None
         save(base/'checkpoint.json',state)
-        runtime=DockerRuntime(base,operation)
+        if native_api is None:
+            runtime=DockerRuntime(base,operation)
+        else:
+            import tokenless_job
+            source=native_source['binding']
+            legacy_binding={'claim_name':source['source_claim'],'claim_uid':source['source_uid'],
+                'pv_name':source['source_pv_name'],'pv_uid':source['source_pv_uid'],
+                'node_name':source['source_node_name'],
+                'node_hostname':native_source['proof']['node_hostname']}
+            def persist_native_phase(event):
+                import kube_json_api
+                try:
+                    kube_json_api.resolve_source_binding(native_api,operation=operation,expected=native_source)
+                    stage.verify_final_storage()
+                except (kube_json_api.KubeAPIError, Exception) as error:
+                    raise Blocked('rollout_native_source_changed_before_phase') from None
+                journal({'phase':'COLD_BACKUP',**event})
+            runtime=tokenless_job.PvcArchiveRuntime(native_api,base,legacy_binding,
+                native_config['phase_image'],operation,secrets.token_hex(32),
+                persist_intent=persist_native_phase,
+                persist_result=persist_native_phase,
+                account_id=account_id,
+                verification_pvc_size_bytes=native_config.get('verification_pvc_size_bytes'),
+                verification_storage_class=native_config.get('verification_storage_class'))
         state['phase']='COLD_BACKUP';save(base/'checkpoint.json',state)
         live_catalog=require_original_live_census(stage,state['events'])
-        state['cut']=capture_cut(runtime,stage.final_path,stage.verify_final_storage,
+        state['cut']=capture_cut(runtime,None if native_api is not None else stage.final_path,stage.verify_final_storage,
             live_catalog=live_catalog)
         save(base/'rollout-before-manifest.json',state['cut']['manifest'])
         state['cut']['manifest_sha256']=file_sha(base/'rollout-before-manifest.json')

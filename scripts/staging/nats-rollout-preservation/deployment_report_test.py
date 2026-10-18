@@ -92,16 +92,16 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(row['command']['cause'],'os_permission_denied')
         self.assertEqual(row['current_action'],'kubectl.get')
 
-    def test_client_blocked_response_preserves_only_safe_details(self):
+    def test_client_never_reads_root_response_files_for_unmigrated_actions(self):
         import bridge_client
-        import os
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
             for name in ('inbox','responses'):(root/name).mkdir(mode=0o700)
             nonce='a'*64;path=root/'responses'/(nonce+'.json')
             path.write_text(json.dumps({'status':'BLOCKED','error':'command_failed','stdout':'SECRET'}));path.chmod(0o440)
-            with self.assertRaises(bridge.BridgeError) as caught:bridge_client.submit({'nonce':nonce},root,timeout=1)
-            self.assertEqual(caught.exception.safe_result,{'status':'BLOCKED','error':'command_failed'})
+            with self.assertRaisesRegex(bridge.BridgeError,'bridge_runner_action_not_migrated'):
+                bridge_client.submit({'nonce':nonce,'action':'prepare'},root,timeout=1)
+            self.assertTrue(path.exists())
 
     def test_workflow_collection_is_always_and_does_not_mask_result(self):
         import yaml
