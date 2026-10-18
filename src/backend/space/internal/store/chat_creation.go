@@ -116,6 +116,18 @@ func (s *SpaceStore) CommitChatCreation(ctx context.Context, binding *spacev1.Sp
 	if !errors.Is(err, ErrCompositeUnknown) {
 		return nil, err
 	}
+	// Space precedes the global audit-ID lock; both receipt and composite
+	// writers use this lock before examining either reservation table.
+	if _, err = tx.Exec(ctx, `SELECT lock_space_audit_id_v1($1::uuid)`, binding.AuditEventId); err != nil {
+		return nil, err
+	}
+	var auditReserved bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM audit_event_receipts WHERE audit_event_id=$1) OR EXISTS(SELECT 1 FROM space_chat_creation_fences WHERE audit_event_id=$1)`, binding.AuditEventId).Scan(&auditReserved); err != nil {
+		return nil, err
+	}
+	if auditReserved {
+		return nil, ErrCompositeConflict
+	}
 	// A purged Space remains unusable after its owner tombstone expires. A new
 	// operation cannot recreate the Space or convert absence into a saved abort.
 	var purged bool

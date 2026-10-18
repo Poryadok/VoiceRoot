@@ -24,6 +24,9 @@ func checkAuditIngressLifecycle(ctx context.Context, tx pgx.Tx, producer string,
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1::bigint)`, spaceMutationAdvisoryKey(spaceID)); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `SELECT lock_space_audit_id_v1($1::uuid)`, event.AuditEventID); err != nil {
+		return err
+	}
 	var purged, frozen bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_permanent_purge_fences WHERE space_id=$1),EXISTS(SELECT 1 FROM space_lifecycle_aggregates WHERE space_id=$1 AND phase<>'LIVE')`, spaceID).Scan(&purged, &frozen); err != nil {
 		return err
