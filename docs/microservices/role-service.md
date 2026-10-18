@@ -138,6 +138,7 @@ BE-116 implementation dependency.
 | `SPACE_MANAGE_SETTINGS` | Название, иконка, видимость, правила входа и пр. |
 | `SPACE_MANAGE_ROLES` | Создавать/редактировать/удалять роли ниже своей позиции (политика иерархии) |
 | `SPACE_MANAGE_INVITES` | Создавать и отзывать инвайт-ссылки |
+| `SPACE_APPROVE_JOIN_REQUESTS` | Принятый target: читать заявки/ответы, approve/reject; отдельное делегируемое право, по умолчанию Owner/Admin/Moderator |
 | `SPACE_VIEW_AUDIT_LOG` | Читать аудит-лог |
 | `SPACE_MANAGE_CUSTOM_EMOJIS` | Кастомные эмодзи спейса |
 | `SPACE_MANAGE_BOTS` | Добавлять/удалять ботов, их scopes |
@@ -145,6 +146,15 @@ BE-116 implementation dependency.
 | `SPACE_VIEW_MEMBER_LIST` | Видеть список участников спейса (ростер, не контент чатов) |
 
 ### Участники спейса
+
+`SPACE_APPROVE_JOIN_REQUESTS` относится к Space, а не к отдельному текстовому
+чату или голосовой комнате. Admission API должен проверять его для текущего
+actor и точного Space при каждом чтении/решении. `SPACE_MANAGE_INVITES`,
+`SPACE_MANAGE_SETTINGS`, `MEMBER_BAN` и имя `Moderator` не заменяют effective
+permission. Member и Guest не получают его по умолчанию; custom roles могут
+делегировать его по обычным правилам Role. Runtime registry, defaults,
+миграция существующих системных ролей и admission consumers ещё входят в
+реализацию BE-010; строка таблицы не означает, что они уже реализованы.
 
 | Константа | Назначение |
 |-----------|------------|
