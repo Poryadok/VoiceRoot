@@ -73,6 +73,13 @@ func TestProvisionPartyGateFreshCutUnknownAndAtomicChangedReset(t *testing.T) {
 	require.ErrorIs(t, err, squad.ErrPartyProvisionUnknown)
 	require.Zero(t, unknown.Hash())
 	assertPending()
+	gate.Validator = provisionValidatorFunc(func(context.Context, store.ProvisionCandidate) (partysource.ProvisionValidation, error) {
+		return partysource.ProvisionValidation{ChangedPartyIDs: []uuid.UUID{candidate.Parties()[0].ID}}, partysource.ErrUnknown
+	})
+	_, err = gate.ValidateProvision(ctx, proposal.Match.ID)
+	require.ErrorIs(t, err, squad.ErrPartyProvisionUnknown, "an authority error overrides any partial changed IDs")
+	assertPending()
+	gate.Validator = validator
 	missing := &squad.PartySourceGate{Store: st}
 	_, err = missing.ValidateProvision(ctx, proposal.Match.ID)
 	require.ErrorIs(t, err, squad.ErrPartyProvisionUnknown)
@@ -98,4 +105,10 @@ func TestProvisionPartyGateFreshCutUnknownAndAtomicChangedReset(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, store.SessionStatusCancelled, got.Status)
 	}
+}
+
+type provisionValidatorFunc func(context.Context, store.ProvisionCandidate) (partysource.ProvisionValidation, error)
+
+func (f provisionValidatorFunc) ValidateCapturedParties(ctx context.Context, candidate store.ProvisionCandidate) (partysource.ProvisionValidation, error) {
+	return f(ctx, candidate)
 }
