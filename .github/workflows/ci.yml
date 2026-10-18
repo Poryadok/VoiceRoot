@@ -1163,7 +1163,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: src/developer-portal/package-lock.json
-      - name: npm ci, lint, test, build
+      - name: npm ci, lint, test
         working-directory: src/developer-portal
         env:
           VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
@@ -1173,7 +1173,18 @@ jobs:
           npm ci
           npm run lint
           npm test
-          npm run build
+      # PR verification and selected master publication already compile in Docker.
+      - name: Build developer-portal without Docker
+        if: >-
+          github.event_name != 'pull_request' &&
+          (github.event_name != 'push' || github.ref != 'refs/heads/master' ||
+           needs.changes.outputs.run_developer_portal != 'true')
+        working-directory: src/developer-portal
+        env:
+          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
+          VITE_OAUTH_CLIENT_ID: voice-developer-portal
+          VITE_OAUTH_DISABLED: "false"
+        run: npm run build
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
@@ -1420,7 +1431,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: src/admin/package-lock.json
-      - name: npm ci, lint, test, build
+      - name: npm ci, lint, test
         working-directory: src/admin
         env:
           VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
@@ -1430,7 +1441,18 @@ jobs:
           npm ci
           npm run lint
           npm test
-          npm run build
+      # PR verification and selected master publication already compile in Docker.
+      - name: Build admin without Docker
+        if: >-
+          github.event_name != 'pull_request' &&
+          (github.event_name != 'push' || github.ref != 'refs/heads/master' ||
+           needs.changes.outputs.run_admin != 'true')
+        working-directory: src/admin
+        env:
+          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
+          VITE_OAUTH_CLIENT_ID: voice-admin
+          VITE_OAUTH_DISABLED: "false"
+        run: npm run build
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
