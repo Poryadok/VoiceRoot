@@ -1,5 +1,10 @@
 {
   "appTitle": "Voice",
+  "spaceLeaveTitle": "Leave Space?",
+  "spaceLeaveAction": "Leave Space",
+  "spaceLeaveMessage": "You will lose access to this Space and its chats. Your active voice connection in this Space will end.",
+  "spaceLeaveOwnerHint": "Transfer ownership to another member before leaving.",
+  "spaceLeaveUncertain": "Could not confirm whether you left. Refresh your Spaces before trying again.",
   "sdkAuthorizationTitle": "Connect a game",
   "sdkAuthorizationLoadError": "Could not load authorization details.",
   "sdkAuthorizationTemporaryFailure": "Voice is temporarily unavailable. Try approving again or restart the authorization from the game.",

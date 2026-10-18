@@ -49,6 +49,14 @@ final groupActiveCallProvider =
 
 enum CallPhase { idle, outgoing, incoming, connecting, active, ended, failed }
 
+class _VoiceRoomEntry {
+  _VoiceRoomEntry({required this.spaceId, required this.profileId});
+  final String spaceId;
+  final String? profileId;
+  VoiceCallSession? session;
+  VoiceLiveKitRoom? room;
+}
+
 class CallState {
   const CallState({
     this.phase = CallPhase.idle,
@@ -203,6 +211,8 @@ class CallController extends StateNotifier<CallState> {
   bool _startCallInFlight = false;
   bool _groupVoiceInFlight = false;
   bool _voiceRoomInFlight = false;
+  int _voiceRoomEntryGeneration = 0;
+  _VoiceRoomEntry? _pendingVoiceRoomEntry;
   int _connectGeneration = 0;
   final Uuid _operationIds = const Uuid();
   final Map<String, String> _matchSquadJoinOperationIds = {};
@@ -414,6 +424,12 @@ class CallController extends StateNotifier<CallState> {
     }
     if (_voiceRoomInFlight) return;
     _voiceRoomInFlight = true;
+    final entryGeneration = ++_voiceRoomEntryGeneration;
+    final entry = _VoiceRoomEntry(
+      spaceId: spaceId,
+      profileId: _ref.read(authControllerProvider).session?.activeProfileId,
+    );
+    _pendingVoiceRoomEntry = entry;
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
     try {
       final result = await _ref
@@ -423,7 +439,7 @@ class CallController extends StateNotifier<CallState> {
             voiceRoomId: voiceRoomId,
             spaceId: spaceId,
           );
-      if (!mounted) return;
+      if (!mounted || entryGeneration != _voiceRoomEntryGeneration) return;
       switch (result) {
         case VoiceApiOk(:final data):
           final session = VoiceCallSession(
@@ -438,6 +454,7 @@ class CallController extends StateNotifier<CallState> {
             voiceRoomId: data.voiceRoomId,
             spaceId: spaceId,
           );
+          entry.session = session;
           state = state.copyWith(session: session, clearOutgoingTarget: true);
           await _connectLiveKit(session);
         case VoiceApiFailure(:final message):
@@ -449,6 +466,9 @@ class CallController extends StateNotifier<CallState> {
       }
     } finally {
       _voiceRoomInFlight = false;
+      if (entryGeneration == _voiceRoomEntryGeneration) {
+        _pendingVoiceRoomEntry = null;
+      }
     }
   }
 
@@ -571,6 +591,37 @@ class CallController extends StateNotifier<CallState> {
       _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
       _refreshGroupActiveCalls();
     }
+  }
+
+  /// Membership has already been removed. Detach only this Space's local media;
+  /// a stale disconnect must not end a subsequent call or another participant's room.
+  Future<void> disconnectDepartedSpace(
+    String spaceId, {
+    required String profileId,
+  }) async {
+    final boundSession =
+        state.session?.spaceId == spaceId &&
+        state.voiceBindingProfileId == profileId;
+    final entry = _pendingVoiceRoomEntry;
+    final pendingEntry =
+        entry?.spaceId == spaceId && entry?.profileId == profileId;
+    if (!boundSession && !pendingEntry) return;
+    final ownsCurrentSession =
+        boundSession ||
+        (pendingEntry && identical(state.session, entry!.session));
+    if (pendingEntry) {
+      ++_voiceRoomEntryGeneration;
+      _pendingVoiceRoomEntry = null;
+    }
+    final departedRoom = boundSession ? _room : entry?.room;
+    if (identical(_room, departedRoom)) _room = null;
+    if (ownsCurrentSession) {
+      ++_connectGeneration;
+      _pendingVoiceRetry = null;
+      state = const CallState();
+      _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
+    }
+    await departedRoom?.disconnect();
   }
 
   Future<VoiceApiResult<void>> leaveMatchSquad({String? matchId}) async {
@@ -824,8 +875,15 @@ class CallController extends StateNotifier<CallState> {
             session,
           );
         }
+        if (identical(_pendingVoiceRoomEntry?.session, session)) {
+          _pendingVoiceRoomEntry!.room = room;
+        }
         room.onAudioPlaybackUnlockNeeded = (needsUnlock) {
-          if (!mounted) return;
+          if (!mounted ||
+              !_isConnectCurrent(connectGeneration, connectRoomId) ||
+              !identical(_room, room)) {
+            return;
+          }
           state = state.copyWith(needsAudioPlaybackUnlock: needsUnlock);
         };
         room.onTracksChanged = () {
@@ -849,6 +907,8 @@ class CallController extends StateNotifier<CallState> {
           );
           if (!mounted ||
               !_isConnectCurrent(connectGeneration, connectRoomId)) {
+            if (identical(_room, room)) _room = null;
+            await room.disconnect();
             return;
           }
           state = state.copyWith(
@@ -864,6 +924,8 @@ class CallController extends StateNotifier<CallState> {
         } on Object {
           if (!mounted ||
               !_isConnectCurrent(connectGeneration, connectRoomId)) {
+            if (identical(_room, room)) _room = null;
+            await room.disconnect();
             return;
           }
           await _failLiveKitConnect(

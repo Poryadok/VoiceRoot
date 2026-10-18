@@ -12,6 +12,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Voice';
 
   @override
+  String get spaceLeaveTitle => 'Leave Space?';
+
+  @override
+  String get spaceLeaveAction => 'Leave Space';
+
+  @override
+  String get spaceLeaveMessage =>
+      'You will lose access to this Space and its chats. Your active voice connection in this Space will end.';
+
+  @override
+  String get spaceLeaveOwnerHint =>
+      'Transfer ownership to another member before leaving.';
+
+  @override
+  String get spaceLeaveUncertain =>
+      'Could not confirm whether you left. Refresh your Spaces before trying again.';
+
+  @override
   String get sdkAuthorizationTitle => 'Connect a game';
 
   @override
