@@ -6,6 +6,9 @@
 
 Архитектура сервисов и БД: [MICROSERVICES.md](MICROSERVICES.md). Голос/LiveKit: [microservices/voice-service.md](microservices/voice-service.md). Матрица маршрутов и JetStream: [CONTRACT_MATRIX.md](CONTRACT_MATRIX.md).
 
+Минимальные действия оператора alpha, проверяемые результаты и границы ещё
+неисполненных drills: [Alpha operator runbook](ALPHA_OPERATOR_RUNBOOK.md).
+
 ---
 
 ## Целевые SLO по пользовательским путям
