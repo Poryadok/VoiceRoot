@@ -20,6 +20,7 @@ require (
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
 	voice.app/voice/role v0.0.0
+	voice.app/voice/space v0.0.0
 	voice/backend/pkg v0.0.0
 )
 
@@ -89,11 +90,19 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/story v0.0.0 // indirect
 )
 
 replace voice/backend/pkg => ../pkg
 
 replace voice.app/voice/role => ./pb/voice/role
+
+replace voice.app/voice/space => ../voice/pb/voice/space
+
+replace voice.app/voice/file => ../file/pb/voice/file
+
+replace voice.app/voice/story => ../voice/pb/voice/story
 
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
