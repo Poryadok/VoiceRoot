@@ -714,7 +714,7 @@ and Voice IDs denied while history remains.
 
 ### Multi-Profile
 
-- [ ] **[Multi-Profile] No create/delete profile rate limits** — anti-abuse spec in `docs/features/multi-profile.md`; no throttling in `CreateProfile` / `DeleteProfile` (`src/backend/user/internal/grpcsvc/user.go`).
+- [ ] **[Multi-Profile] Verify shared profile-mutation quotas in deployment (BE-220)** — source adds required Redis admission before `CreateProfile` / `DeleteProfile`: independent 10 attempts/rolling hour/account/operation, fail closed on Redis errors. Developer Docker evidence and independent review are tracked in TT; versioned deployed verification and acceptance remain separate. See [ExecPlan](../testing/profile-mutation-rate-limits-exec-plan.md).
 - [ ] **[Multi-Profile] Premium vanity `@username` (no `#1234`) not implemented** — all profiles get 4-digit discriminator (`src/backend/user/internal/store/profile.go`); monetization in `docs/features/multi-profile.md`.
 - [ ] **[Multi-Profile] Additional phone per profile not implemented** — spec: доп. номер на профиль (не основной); only account `accounts.phone` → primary profile (`PhoneHashResolver`, `auth.proto` S2S).
 - [ ] **[Multi-Profile] Transfer contact between profiles not implemented** — spec §контакты: перевести контакт в нужный профиль после phone-add; depends on Contacts RPCs ([Social] Contacts RPCs).
