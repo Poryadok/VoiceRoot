@@ -185,6 +185,12 @@ type ProtectedJournal interface {
 	ReadResourceProof(context.Context, ProofRef) (ResourceRecord, error)
 }
 type OwnerWorkReader interface {
+	// ReadOwnerWork reads the owner's immutable journal and independently
+	// extracts/checks CapturedProviderBindings and UnknownIssuanceMarkers against
+	// ALL retained sealed target/grant/intent bytes, including expired and
+	// possibly-issued history. A stored or caller-provided subset is insufficient.
+	// The leaf cannot interpret source-specific native target encodings; this
+	// complete authoritative extraction is part of the owning reader's contract.
 	ReadOwnerWork(context.Context, OwnerWorkRef) (OwnerWork, error)
 }
 type InstallationReader interface {
