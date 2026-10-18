@@ -139,7 +139,7 @@ func TestRoleSourceRejectsDirtyFilteredDisabledAndAlteredCatalogs(t *testing.T) 
 	}
 	for name, mutation := range map[string]string{
 		"dirty":               `UPDATE schema_migrations SET dirty=true`,
-		"unknown version":     `UPDATE schema_migrations SET version=17`,
+		"unknown version":     `UPDATE schema_migrations SET version=18`,
 		"filtered SDK source": `ALTER TABLE game_session_grants ENABLE ROW LEVEL SECURITY`,
 		"inactive policy":     `CREATE POLICY hidden_members ON member_roles USING(false)`,
 		"disabled counter":    `ALTER TABLE game_session_grants DISABLE TRIGGER role_sdk_authority_grants`,

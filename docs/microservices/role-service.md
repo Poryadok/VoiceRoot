@@ -260,10 +260,34 @@ voice_room_overrides
 3. Для каждой роли пользователя (по позиции):
    Base |= role.permissions
 4. Применить оверрайды целевого узла (chat или voice_room):
-   Base &= ~node_override.deny
    Base |= node_override.allow
-5. Admin → все права кроме Owner-specific
+   Base &= ~node_override.deny
+5. Admin использует обычное объединение ролей и оверрайды; финального bypass нет
 ```
+
+`SPACE_MANAGE_ROLES` — обычное делегируемое право на управление кастомными
+ролями строго ниже максимальной позиции вызывающего. Новая позиция при
+`UpdateRole` тоже обязана оставаться ниже неё; проверка и запись выполняются
+в одной fenced Space-транзакции. `MEMBER_ASSIGN_ROLES` отдельно управляет
+назначением/снятием нижестоящих ролей. Node override может менять mask узла,
+но не разрешает глобальное управление ролями: для него всегда нужен unscoped
+permission decision без `chat_id` / `voice_room_id`.
+
+Системный Admin по умолчанию имеет все ordinary permission bits, включая
+`SPACE_MANAGE_ROLES`. Его mask может совпадать с mask Owner; Owner-specific
+authority не является permission bit и не возникает из mask. Только настоящий
+Owner имеет существующий bypass после lifecycle fences; generic назначение и
+снятие Owner запрещено даже самому Owner. Передача и owner-only lifecycle
+сохраняют отдельные identity/proof gates.
+
+Миграция `role_db/000017_admin_role_management` добавляет только отсутствующий
+bit 2 реальным system Admin rows, сохраняя остальные bits, custom roles и
+overrides. Существующие policy triggers записывают durable invalidation.
+Повторный UP не меняет данные; DOWN отказывает вместо отзыва ранее выданных
+прав без доказательства их происхождения. Для исправления нужен отдельный
+reviewed forward migration. Authority snapshot reader принимает clean schema
+16 и 17 с одним и тем же полным catalog/trigger/function proof; unknown/dirty
+версии и изменённый catalog по-прежнему fail closed.
 
 ## Phase-0 principal и caller matrix (target; не реализовано)
 

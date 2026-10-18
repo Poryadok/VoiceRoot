@@ -20,6 +20,20 @@ func TestSystemRoles_Hierarchy(t *testing.T) {
 	require.Greater(t, roles[0].Position, roles[4].Position)
 }
 
+func TestSystemAdminReceivesAllOrdinaryPermissions(t *testing.T) {
+	roles, err := SystemRoles()
+	require.NoError(t, err)
+	all, err := AllMask()
+	require.NoError(t, err)
+	for _, role := range roles {
+		if role.Name == RoleAdmin {
+			require.Equal(t, all, role.Mask, "Admin manages lower roles; ordinary bits never prove Owner identity")
+			return
+		}
+	}
+	t.Fatal("system Admin role missing")
+}
+
 func TestHasPermission_MemberDefault(t *testing.T) {
 	memberMask, err := memberDefaultMask()
 	require.NoError(t, err)
@@ -41,5 +55,5 @@ func TestAllMask_Union(t *testing.T) {
 	require.NoError(t, err)
 	send, err := MaskFor(TextChatSendMessages)
 	require.NoError(t, err)
-	require.NotZero(t, all & send)
+	require.NotZero(t, all&send)
 }

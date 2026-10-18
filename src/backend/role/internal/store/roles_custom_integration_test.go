@@ -88,7 +88,7 @@ func TestSetDefaultJoinRole_AssignsGuestOnJoin(t *testing.T) {
 	require.Equal(t, permissions.RoleGuest, got.Name)
 }
 
-func TestGetEffectiveMask_AdminNotOwnerExclusive(t *testing.T) {
+func TestGetEffectiveMask_AdminOrdinaryPermissionsRespectNodeDenies(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -104,11 +104,53 @@ func TestGetEffectiveMask_AdminNotOwnerExclusive(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.AssignMemberRole(ctx, spaceID, adminID, adminRoleID, adminID))
 
-	ownerExclusive, err := permissions.OwnerExclusiveMask()
+	manage, err := permissions.MaskFor(permissions.SpaceManageRoles)
 	require.NoError(t, err)
 	mask, err := s.GetEffectiveMask(ctx, spaceID, adminID, nil, nil)
 	require.NoError(t, err)
-	require.Equal(t, uint64(0), mask&ownerExclusive)
+	all, err := permissions.AllMask()
+	require.NoError(t, err)
+	require.Equal(t, all, mask, "ordinary mask equality must not imply ownership")
+	chatID, voiceID := uuid.New(), uuid.New()
+	require.NoError(t, s.SetChatOverride(ctx, chatID, adminRoleID, manage, manage))
+	require.NoError(t, s.SetVoiceRoomOverride(ctx, voiceID, adminRoleID, manage, manage))
+	for _, scope := range []struct{ chat, voice *uuid.UUID }{{&chatID, nil}, {nil, &voiceID}} {
+		mask, err := s.GetEffectiveMask(ctx, spaceID, adminID, scope.chat, scope.voice)
+		require.NoError(t, err)
+		require.Zero(t, mask&manage, "Admin must not bypass applicable node denies")
+	}
+}
+
+func TestGetEffectiveMask_OwnerBypassAndScopedManagementGrantRemainDistinct(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL effective permissions")
+	}
+	ctx := context.Background()
+	pool := StartRoleDBForStoreTest(t, ctx)
+	ApplyRoleMigrationsForStoreTest(t, ctx, pool)
+	s := &RoleStore{Pool: pool}
+	space, owner, member, chat := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, s.BootstrapSpaceRoles(ctx, space, owner))
+	ownerRole, err := s.RoleIDByName(ctx, space, permissions.RoleOwner)
+	require.NoError(t, err)
+	memberRole, err := s.RoleIDByName(ctx, space, permissions.RoleMember)
+	require.NoError(t, err)
+	require.NoError(t, s.AssignMemberRole(ctx, space, member, memberRole, owner))
+	manage, err := permissions.MaskFor(permissions.SpaceManageRoles)
+	require.NoError(t, err)
+	require.NoError(t, s.SetChatOverride(ctx, chat, ownerRole, 0, manage))
+	require.NoError(t, s.SetChatOverride(ctx, chat, memberRole, manage, 0))
+	mask, err := s.GetEffectiveMask(ctx, space, owner, &chat, nil)
+	require.NoError(t, err)
+	require.NotZero(t, mask&manage, "genuine Owner retains its ordinary bypass")
+	mask, err = s.GetEffectiveMask(ctx, space, member, &chat, nil)
+	require.NoError(t, err)
+	require.NotZero(t, mask&manage, "node bit representation remains ordinary/delegable")
+	mask, err = s.GetEffectiveMask(ctx, space, member, nil, nil)
+	require.NoError(t, err)
+	require.Zero(t, mask&manage, "node allow must not grant global role management")
+	_, err = s.CreateCustomRole(ctx, space, permissions.RoleOwner, manage, 100, &owner)
+	require.Error(t, err, "unique role name prevents a custom display name from impersonating the seeded Owner")
 }
 
 func TestRemoveVoiceRoomOverride_DeletesRow(t *testing.T) {
