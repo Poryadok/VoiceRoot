@@ -147,7 +147,19 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 		if addr == "" {
 			return nil, nil
 		}
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		policy := grpcclient.DefaultBreakerConfig()
+		policy.Observe = func(event grpcclient.BreakerEvent) {
+			if logger != nil {
+				logger.Debug("gateway grpc circuit breaker", slog.String("method", event.Method),
+					slog.String("state", event.State), slog.String("reason", event.Reason))
+			}
+		}
+		breaker, err := grpcclient.NewUnaryBreaker(policy)
+		if err != nil {
+			return nil, err
+		}
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithDisableRetry(), grpc.WithChainUnaryInterceptor(breaker.UnaryClientInterceptor()))
 		if err != nil {
 			return nil, err
 		}
