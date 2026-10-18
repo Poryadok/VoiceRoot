@@ -29,7 +29,7 @@ func (s *DMStore) GetSpaceChatScopeAuthority(ctx context.Context, chatID, spaceI
 		return nil, err
 	}
 	if incarnation == uuid.Nil || incarnation != headIncarnation || revision <= 0 || !present || generation < 0 {
-		return nil, errors.New("Chat scope authority inconsistent")
+		return nil, errors.New("chat scope authority inconsistent")
 	}
 	response := &chatv1.GetSpaceChatScopeAuthorityResponse{
 		ProtocolVersion: 1, ChatId: chatID.String(), ExpectedSpaceId: spaceID.String(), ActualSpaceId: spaceID.String(),
