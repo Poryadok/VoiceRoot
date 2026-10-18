@@ -7,6 +7,7 @@ import (
 
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/dispatch"
+	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 )
@@ -25,7 +26,7 @@ func socialFriendRequestRestartSpec() notificationConsumerRestartSpec {
 			"type": "friend_request", "friend_request_id": requestID, "sender_profile_id": requesterID.String(),
 		}},
 		run: func(ctx context.Context, natsURL string, tokens *store.DeviceTokenStore, pusher *dispatch.PushDispatcher) error {
-			return runSocialEventsConsumer(ctx, natsURL, tokens, pusher, nil, nil, nil)
+			return runSocialEventsConsumer(ctx, natsURL, tokens, pusher, presence.OfflineChecker{}, nil, nil)
 		},
 	}
 }

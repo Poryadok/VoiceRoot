@@ -290,9 +290,10 @@ recording flag continues to select offline presence routing independently;
 only the two-flag opt-in captures push data or registers the debug route.
 
 The disposable Compose Notification fixture opts in to both flags for its
-existing FCM delivery E2E consumer. Production and staging configuration keep
-their existing recording/routing setting but omit the debug HTTP flag, so the
-unauthenticated route and capture wrapper remain disabled there. This is a
+existing FCM delivery E2E consumer. Production and staging app manifests explicitly
+disable recording/offline fixture routing and omit the debug HTTP flag, so the
+authenticated User routing authority is used and the unauthenticated route and
+capture wrapper remain disabled there. This is a
 configuration/source boundary, not evidence of deployed runtime acceptance.
 
 Отдельного доменного stream **`notification.events`** нет: события ниже — **телеметрия доставки**; публикация в **`analytics.notification.*`** (см. [MICROSERVICES.md](../MICROSERVICES.md) — раздел «Аналитика»).
