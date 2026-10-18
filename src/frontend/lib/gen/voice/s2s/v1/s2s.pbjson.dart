@@ -61,6 +61,7 @@ const AuthenticateUserResponse$json = {
     {'1': 'expires_at', '3': 5, '4': 1, '5': 3, '10': 'expiresAt'},
     {'1': 'error', '3': 6, '4': 1, '5': 9, '10': 'error'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `AuthenticateUserResponse`. Decode as a `google.protobuf.DescriptorProto`.
@@ -68,7 +69,7 @@ final $typed_data.Uint8List authenticateUserResponseDescriptor = $convert.base64
     'ChhBdXRoZW50aWNhdGVVc2VyUmVzcG9uc2USDgoCb2sYASABKAhSAm9rEh0KCmFjY291bnRfaW'
     'QYAiABKAlSCWFjY291bnRJZBIdCgpwcm9maWxlX2lkGAMgASgJUglwcm9maWxlSWQSGQoIcm9s'
     'ZV9pZHMYBCADKAlSB3JvbGVJZHMSHQoKZXhwaXJlc19hdBgFIAEoA1IJZXhwaXJlc0F0EhQKBW'
-    'Vycm9yGAYgASgJUgVlcnJvcg==');
+    'Vycm9yGAYgASgJUgVlcnJvclIHdXNlcl9pZA==');
 
 @$core.Deprecated('Use eventStreamRequestDescriptor instead')
 const EventStreamRequest$json = {
@@ -232,13 +233,14 @@ const RoleChangedEvent$json = {
     {'1': 'added_roles', '3': 3, '4': 3, '5': 9, '10': 'addedRoles'},
     {'1': 'removed_roles', '3': 4, '4': 3, '5': 9, '10': 'removedRoles'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `RoleChangedEvent`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List roleChangedEventDescriptor = $convert.base64Decode(
     'ChBSb2xlQ2hhbmdlZEV2ZW50Eh0KCmFjY291bnRfaWQYASABKAlSCWFjY291bnRJZBIdCgpwcm'
     '9maWxlX2lkGAIgASgJUglwcm9maWxlSWQSHwoLYWRkZWRfcm9sZXMYAyADKAlSCmFkZGVkUm9s'
-    'ZXMSIwoNcmVtb3ZlZF9yb2xlcxgEIAMoCVIMcmVtb3ZlZFJvbGVz');
+    'ZXMSIwoNcmVtb3ZlZF9yb2xlcxgEIAMoCVIMcmVtb3ZlZFJvbGVzUgd1c2VyX2lk');
 
 @$core.Deprecated('Use userBannedEventDescriptor instead')
 const UserBannedEvent$json = {
@@ -249,13 +251,14 @@ const UserBannedEvent$json = {
     {'1': 'reason', '3': 3, '4': 1, '5': 9, '10': 'reason'},
     {'1': 'banned_until', '3': 4, '4': 1, '5': 3, '10': 'bannedUntil'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `UserBannedEvent`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List userBannedEventDescriptor = $convert.base64Decode(
     'Cg9Vc2VyQmFubmVkRXZlbnQSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3VudElkEh0KCnByb2'
     'ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBIWCgZyZWFzb24YAyABKAlSBnJlYXNvbhIhCgxiYW5u'
-    'ZWRfdW50aWwYBCABKANSC2Jhbm5lZFVudGls');
+    'ZWRfdW50aWwYBCABKANSC2Jhbm5lZFVudGlsUgd1c2VyX2lk');
 
 @$core.Deprecated('Use userUnbannedEventDescriptor instead')
 const UserUnbannedEvent$json = {
@@ -264,12 +267,13 @@ const UserUnbannedEvent$json = {
     {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `UserUnbannedEvent`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List userUnbannedEventDescriptor = $convert.base64Decode(
     'ChFVc2VyVW5iYW5uZWRFdmVudBIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SWQSHQoKcH'
-    'JvZmlsZV9pZBgCIAEoCVIJcHJvZmlsZUlk');
+    'JvZmlsZV9pZBgCIAEoCVIJcHJvZmlsZUlkUgd1c2VyX2lk');
 
 @$core.Deprecated('Use defederatedEventDescriptor instead')
 const DefederatedEvent$json = {
@@ -344,12 +348,13 @@ const RoleEntry$json = {
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'role_ids', '3': 3, '4': 3, '5': 9, '10': 'roleIds'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `RoleEntry`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List roleEntryDescriptor = $convert.base64Decode(
     'CglSb2xlRW50cnkSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3VudElkEh0KCnByb2ZpbGVfaW'
-    'QYAiABKAlSCXByb2ZpbGVJZBIZCghyb2xlX2lkcxgDIAMoCVIHcm9sZUlkcw==');
+    'QYAiABKAlSCXByb2ZpbGVJZBIZCghyb2xlX2lkcxgDIAMoCVIHcm9sZUlkc1IHdXNlcl9pZA==');
 
 @$core.Deprecated('Use banEntryDescriptor instead')
 const BanEntry$json = {
@@ -359,12 +364,14 @@ const BanEntry$json = {
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'banned_until', '3': 3, '4': 1, '5': 3, '10': 'bannedUntil'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `BanEntry`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List banEntryDescriptor = $convert.base64Decode(
     'CghCYW5FbnRyeRIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SWQSHQoKcHJvZmlsZV9pZB'
-    'gCIAEoCVIJcHJvZmlsZUlkEiEKDGJhbm5lZF91bnRpbBgDIAEoA1ILYmFubmVkVW50aWw=');
+    'gCIAEoCVIJcHJvZmlsZUlkEiEKDGJhbm5lZF91bnRpbBgDIAEoA1ILYmFubmVkVW50aWxSB3Vz'
+    'ZXJfaWQ=');
 
 @$core.Deprecated('Use notifyUserRequestDescriptor instead')
 const NotifyUserRequest$json = {
@@ -389,6 +396,7 @@ const NotifyUserRequest$json = {
   '8': [
     {'1': '_type_enum'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `NotifyUserRequest`. Decode as a `google.protobuf.DescriptorProto`.
@@ -397,7 +405,7 @@ final $typed_data.Uint8List notifyUserRequestDescriptor = $convert.base64Decode(
     'BhY2VfaWQYAiABKAlSB3NwYWNlSWQSEgoEdHlwZRgDIAEoCVIEdHlwZRIYCgdwcmV2aWV3GAQg'
     'ASgJUgdwcmV2aWV3EhsKCWRlZXBfbGluaxgFIAEoCVIIZGVlcExpbmsSRwoJdHlwZV9lbnVtGA'
     'YgASgOMiUudm9pY2UuczJzLnYxLkZlZGVyYXRpb25QdXNoRXZlbnRUeXBlSABSCHR5cGVFbnVt'
-    'iAEBQgwKCl90eXBlX2VudW0=');
+    'iAEBQgwKCl90eXBlX2VudW1SB3VzZXJfaWQ=');
 
 @$core.Deprecated('Use notifyUserResponseDescriptor instead')
 const NotifyUserResponse$json = {

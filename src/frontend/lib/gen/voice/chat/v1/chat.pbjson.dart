@@ -1199,12 +1199,13 @@ const ChatList$json = {
     },
     {'1': 'next_cursor', '3': 2, '4': 1, '5': 9, '10': 'nextCursor'},
   ],
+  '10': ['chats'],
 };
 
 /// Descriptor for `ChatList`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List chatListDescriptor = $convert.base64Decode(
     'CghDaGF0TGlzdBIxCgVpdGVtcxgBIAMoCzIbLnZvaWNlLmNoYXQudjEuQ2hhdExpc3RJdGVtUg'
-    'VpdGVtcxIfCgtuZXh0X2N1cnNvchgCIAEoCVIKbmV4dEN1cnNvcg==');
+    'VpdGVtcxIfCgtuZXh0X2N1cnNvchgCIAEoCVIKbmV4dEN1cnNvclIFY2hhdHM=');
 
 @$core.Deprecated('Use getChatRequestDescriptor instead')
 const GetChatRequest$json = {

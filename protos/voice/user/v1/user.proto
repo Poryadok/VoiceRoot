@@ -244,6 +244,8 @@ message PrivacyAudience {
 }
 
 message PrivacySettings {
+  reserved 13;
+  reserved "show_online_include_guests";
   string profile_id = 1;
   string preset = 2; // personal | gaming | work; prefer preset_enum when set
   PrivacyAudience show_online = 3;
@@ -383,6 +385,7 @@ message GetPresenceResponse {
   PresenceStatus presence_status = 1;
 }
 message GetBulkPresenceResponse {
+  reserved "bulk_presence_response";
   map<string, PresenceStatus> by_profile_id = 1;
 }
 
