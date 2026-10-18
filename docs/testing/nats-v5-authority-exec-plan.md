@@ -24,11 +24,12 @@ an independent preservation/security reviewer must approve before intake121.
 
 ## Milestones
 
-- [ ] Canonical root RED with production pins and historical contract.
-- [ ] Fixed v5 tuple and exact 10/10, 12/10, 10/14, 12/14 planner cases.
-- [ ] Version-aware actor, execution, recovery and active receipts.
-- [ ] Existing regressions plus negative compatibility/source controls.
-- [ ] Isolated pinned native NATS preservation and interruption proof.
+- [x] Canonical root RED with production pins and historical contract.
+- [x] Fixed v5 tuple and exact 10/10, 12/10, 10/14, 12/14 planner cases.
+- [x] Version-aware actor, execution, recovery and active receipts.
+- [x] Existing focused regressions plus negative compatibility/source controls.
+- [x] Isolated pinned native NATS preservation and interruption proof.
+- [ ] Canonical full preservation gate after historical synthetic fixture correction.
 - [ ] Independent review, portable bundle/restore and accepted handoff121.
 
 ## Detailed Steps
@@ -57,7 +58,21 @@ semantic census plus old /msgs/index.db and consumer o.dat records.
 ## Progress
 
 - [x] Atomic task claim and own WT20 lease; accepted decision read.
-- [ ] RED/GREEN, implementation and proof in progress.
+- [x] Meaningful Linux root pin RED; corrected four-hash compiler/custody/readback/no-op GREEN.
+- [x] Focused 150 tests passed before final source-read TOCTOU check; canonical
+  targeted cases passed afterward. Full canonical 922-test discovery exposed
+  two synthetic one-script fixture failures in the expiry boundary test:
+  it imported CURRENT schema and inadvertently selected v5. Pinning this
+  historical fixture explicitly to v4 preserves every original expiry assertion.
+- [x] Exact `ccde8d01b` Linux Go1.26.5 native fixture passed using repository
+  NATS2.12.12 digest: 45 old consumers, 9 original records, both new UPDATE
+  interruption recoveries, all six subjects, preserved pending notif_voice,
+  current-cut 16 records and repeated no-op. Eight captured changed runtime
+  files match committed Git bytes. No full native repeat needed for a test-only
+  fixture/import and documentation successor.
+- [x] Portable incremental bundle plus real bare restore compared all 15 paths.
+- [ ] Full canonical corrected result and independent preservation/security review.
+- [ ] Accepted ant-to-ant delivery/CI handoff to121.
 
 ## Decisions
 
@@ -74,3 +89,6 @@ CAS/readbacks. The observed three-hash compiler refusal remains a negative test.
 High preservation/security risk. Native isolated proof is separate from hosted
 CI, installed upgrade, DEV/STAGING and appointed final acceptance. Those remain
 with their actual owners and authorization gates.
+Graphify update was bounded-canceled after no progress; final graph regeneration
+remains open. A read-only native process CWD audit found no WT20 update process
+after cancellation; foreign updates were preserved.

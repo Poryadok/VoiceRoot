@@ -118,7 +118,9 @@ class CustodyPublicationBoundaryTests(unittest.TestCase):
     def test_custody_cas_rechecks_after_own_intent_and_default_remains_normal(self):
         import hashlib
         from nats_contract_custody import advance
-        from nats_contract_plan import DECLARATIONS,SCHEMA,MIGRATION_ID,digest
+        # This deliberately synthetic one-script publication exercises the
+        # existing v4 boundary, not v5's fixed four-source migration authority.
+        from nats_contract_plan import V4_DECLARATIONS as DECLARATIONS,V4_SCHEMA as SCHEMA,V4_MIGRATION_ID as MIGRATION_ID,digest
         for expired in (False,True):
             with self.subTest(expired=expired):
                 old='original-script';new='target-script';sha=lambda text:hashlib.sha256(text.encode()).hexdigest()
