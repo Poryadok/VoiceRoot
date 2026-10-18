@@ -31,14 +31,20 @@ CREATE TABLE report_threshold_cases (
     subject_id UUID NOT NULL,
     lifecycle_revision BIGINT NOT NULL CHECK (lifecycle_revision > 0),
     target_profile_id UUID NOT NULL,
+    profile_revision BIGINT NOT NULL CHECK (profile_revision > 0),
+    evaluation_id UUID NOT NULL UNIQUE,
     metric_version TEXT NOT NULL CHECK (metric_version='POTENTIAL_PUBLIC_PROFILE_ACCOUNTS_V1'),
     audience_accounts BIGINT NOT NULL CHECK (audience_accounts > 0),
     threshold_accounts BIGINT NOT NULL CHECK (threshold_accounts >= 10),
     reporter_accounts BIGINT NOT NULL CHECK (reporter_accounts >= threshold_accounts),
     snapshot_id UUID NOT NULL,
     observed_at TIMESTAMPTZ NOT NULL,
+    observation_completed_at TIMESTAMPTZ NOT NULL,
+    context_expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
-    closed_at TIMESTAMPTZ NULL
+    closed_at TIMESTAMPTZ NULL,
+    CHECK (observed_at <= observation_completed_at AND observation_completed_at <= created_at
+           AND created_at < context_expires_at AND context_expires_at <= observed_at + interval '30 seconds')
 );
 CREATE UNIQUE INDEX report_threshold_cases_active_account_idx ON report_threshold_cases(account_id) WHERE closed_at IS NULL;
 CREATE INDEX report_threshold_cases_subject_idx ON report_threshold_cases(subject_id);

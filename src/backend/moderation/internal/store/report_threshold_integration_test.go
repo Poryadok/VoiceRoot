@@ -114,6 +114,18 @@ func TestReportThresholdDistinctAccountsAndAtomicRollback(t *testing.T) {
 	require.Equal(t, 1, logs)
 	require.Equal(t, 1, outbox)
 	require.NoError(t, s.Complete(ctx, claim, obs, testThresholdEvents), "uncertain commit retry must not duplicate effects")
+	changed := obs
+	changed.Audience++
+	require.ErrorContains(t, s.Complete(ctx, claim, changed, testThresholdEvents), "authority conflict")
+	var profileRevision int64
+	var evaluation uuid.UUID
+	var started, completed, expires time.Time
+	require.NoError(t, pool.QueryRow(ctx, `SELECT profile_revision,evaluation_id,observed_at,observation_completed_at,context_expires_at FROM report_threshold_cases`).Scan(&profileRevision, &evaluation, &started, &completed, &expires))
+	require.Equal(t, int64(obs.ProfileRevision), profileRevision)
+	require.Equal(t, obs.EvaluationID, evaluation)
+	require.WithinDuration(t, obs.StartedAt, started, time.Microsecond)
+	require.WithinDuration(t, obs.CompletedAt, completed, time.Microsecond)
+	require.WithinDuration(t, obs.ExpiresAt, expires, time.Microsecond)
 }
 
 func TestReportThresholdConcurrentProfilesCreateOneAccountCase(t *testing.T) {

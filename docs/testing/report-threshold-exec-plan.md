@@ -260,3 +260,12 @@ and JWKS CA trust must include every existing caller/root when composed; no
 secrets, network-policy union or live resources were inferred. Actual composed
 Moderation topology and protected rollout checks remain open with the runtime
 integration, not satisfied by a local render.
+
+The case now freezes evaluation ID, profile revision and the entire authoritative
+observation interval in addition to its subject/lifecycle, metric/count and
+snapshot ID. A replay of a committed evaluation with changed authority facts is
+a conflict. Canonical PostgreSQL/NATS race checks passed again after this schema
+change: six store checks (29.777s) and publisher/configured runtime (15.419s),
+including unchanged-payload retry, changed-payload rejection and persisted
+interval assertions. Affected store/runtime vet passed. Static lint is deferred
+while another real runner holds the shared golangci lock; no bypass was used.

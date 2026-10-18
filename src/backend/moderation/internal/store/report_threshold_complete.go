@@ -51,7 +51,22 @@ func (s *ReportThresholdStore) Complete(ctx context.Context, claim *ReportThresh
 		err := tx.QueryRow(ctx, `SELECT true FROM report_threshold_evaluations WHERE report_id=$1 AND claim_id=$2
 AND completed_at IS NULL AND claim_until>$3 FOR UPDATE`, claim.ReportID, claim.ClaimID, now).Scan(&current)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+			// An ambiguous commit may replay the same evaluation, but cannot
+			// silently bind that committed identity to different authority facts.
+			var same bool
+			err = tx.QueryRow(ctx, `SELECT account_id=$2 AND target_profile_id=$3 AND subject_id=$4
+AND lifecycle_revision=$5 AND profile_revision=$6 AND snapshot_id=$7 AND metric_version=$8
+AND audience_accounts=$9 AND observed_at=$10 AND observation_completed_at=$11 AND context_expires_at=$12
+FROM report_threshold_cases WHERE evaluation_id=$1`, observation.EvaluationID, observation.AccountID,
+				observation.ProfileID, observation.SubjectID, int64(observation.LifecycleRevision), int64(observation.ProfileRevision),
+				observation.SnapshotID, observation.Metric, observation.Audience, observation.StartedAt, observation.CompletedAt, observation.ExpiresAt).Scan(&same)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			if err == nil && !same {
+				return errors.New("report threshold evaluation authority conflict")
+			}
+			return err
 		}
 		if err != nil {
 			return err
@@ -120,9 +135,11 @@ AND (expires_at IS NULL OR expires_at>$2))`, claim.AccountID, now).Scan(&suppres
 		}
 		created := ReportThresholdCase{ID: uuid.New(), SanctionID: uuid.New(), AccountID: claim.AccountID, ProfileID: claim.ProfileID, Audience: observation.Audience, Threshold: threshold, Reporters: int64(len(reporters)), CreatedAt: now}
 		_, err = tx.Exec(ctx, `INSERT INTO report_threshold_cases(id,account_id,subject_id,lifecycle_revision,target_profile_id,
-metric_version,audience_accounts,threshold_accounts,reporter_accounts,snapshot_id,observed_at,created_at)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, created.ID, claim.AccountID, observation.SubjectID, int64(observation.LifecycleRevision), claim.ProfileID,
-			observation.Metric, observation.Audience, threshold, created.Reporters, observation.SnapshotID, observation.StartedAt, now)
+metric_version,audience_accounts,threshold_accounts,reporter_accounts,snapshot_id,observed_at,created_at,
+profile_revision,evaluation_id,observation_completed_at,context_expires_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, created.ID, claim.AccountID, observation.SubjectID, int64(observation.LifecycleRevision), claim.ProfileID,
+			observation.Metric, observation.Audience, threshold, created.Reporters, observation.SnapshotID, observation.StartedAt, now,
+			int64(observation.ProfileRevision), observation.EvaluationID, observation.CompletedAt, observation.ExpiresAt)
 		if err != nil {
 			return err
 		}
