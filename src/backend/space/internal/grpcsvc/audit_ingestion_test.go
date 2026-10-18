@@ -136,7 +136,7 @@ func TestAuditIngestionSignedRPCPersistsOneEffect(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForTest(t, ctx)
 	applySpaceMigration(t, ctx, pool)
-	for _, name := range []string{"000015_audit_ledger.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000028_chat_creation_outcomes.up.sql"} {
+	for _, name := range []string{"000015_audit_ledger.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000028_chat_creation_outcomes.up.sql", "000029_audit_receipt_minimization.up.sql", "000031_composite_audit_reservation.up.sql"} {
 		body, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

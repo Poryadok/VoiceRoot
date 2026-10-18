@@ -19,7 +19,7 @@ import (
 
 func applyAuditIngestionMigration(t *testing.T, st *SpaceStore) {
 	t.Helper()
-	for _, name := range []string{"000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql"} {
+	for _, name := range []string{"000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000031_composite_audit_reservation.up.sql"} {
 		body, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
 		require.NoError(t, err)
 		_, err = st.Pool.Exec(context.Background(), string(body))
@@ -94,6 +94,12 @@ func TestAuditIngestionMigrationRoundTripAndUint64(t *testing.T) {
 	st := auditLedgerStoreFixture(t)
 	applyAuditIngestionMigration(t, st)
 	ctx := context.Background()
+	// Migration31 depends on27 and must be removed before the isolated27
+	// roundtrip; restore it before exercising the current ingestion helper.
+	reservationDown, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000031_composite_audit_reservation.down.sql"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, string(reservationDown))
+	require.NoError(t, err)
 	down, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000027_audit_ingestion.down.sql"))
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, string(down))
@@ -102,6 +108,10 @@ func TestAuditIngestionMigrationRoundTripAndUint64(t *testing.T) {
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, string(up))
 	require.NoError(t, err, "roundtrip must restore original local registry without recursive helper")
+	reservationUp, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000031_composite_audit_reservation.up.sql"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, string(reservationUp))
+	require.NoError(t, err)
 	event := importFixture(t, st)
 	event.Action = "chat_override_set"
 	event.TargetType = "chat"
@@ -255,8 +265,6 @@ func TestAuditIngestionCompensationPreservesReservation(t *testing.T) {
 func TestAuditIngestionFrozenCompositeAndPermanentTerminalFence(t *testing.T) {
 	st, b := compositeStoreFixture(t)
 	ctx := context.Background()
-	applyAuditLedgerMigrationForTest(t, ctx, st)
-	applyAuditIngestionMigration(t, st)
 	_, err := st.CommitChatCreation(ctx, b, codes.OK)
 	require.NoError(t, err)
 	event := spaceaudit.ReplayEvent{AuditEventID: b.AuditEventId, SpaceID: b.SpaceId, ActorProfileID: b.CreatorProfileId, Action: "chat_created", TargetType: "chat", TargetID: b.ChatId, DetailsJSON: "{}", OccurredAt: timestamppb.Now()}
