@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import native_authorize
+from controller import Blocked
 
 
 OP = "a" * 12
@@ -84,7 +85,9 @@ class NativeAuthorizeTests(unittest.TestCase):
                 "operation": OP, "phase": "AWAITING_OFF_NODE", "status": "WAITING",
                 "fence_status": "VERIFIED", "events": [], "target": {"mode": "images-only"},
                 "native_contract": {"request": {"operation": OP}, "binding": {"uid": UID},
-                    "plan": {"contract": "native"}, "plan_envelope": b"envelope",
+                    "plan": {"contract": "native"}, "plan_envelope": {
+                        "path": "native-contract-inputs.json",
+                        "sha256": hashlib.sha256(b"envelope").hexdigest(), "bytes": 8},
                     "runner_image": "runner@sha256:" + "e" * 64},
                 "migrations": {"plan": "captured"},
                 "contract": {"scripts": [{"part": p, "configMapUID": UID,
@@ -105,6 +108,7 @@ class NativeAuthorizeTests(unittest.TestCase):
                     "service": {}, "final_claim": stage.final_claim, "final_pv": stage.final_pv},
             }
             post = PostRuntime(events)
+            (base / "native-contract-inputs.json").write_bytes(b"envelope")
             resolved = state["native_source_binding"]
             def contract_job(*args, **kwargs):
                 events.append("contract-job")
@@ -140,6 +144,32 @@ class NativeAuthorizeTests(unittest.TestCase):
             self.assertEqual(receipt["backup"]["archive_sha256"], "a" * 64)
             self.assertEqual(state["phase"], "PAUSED_APPLY")
             self.assertNotIn("get", api.calls)
+
+    def test_unsupported_target_is_rejected_before_reconstruct_or_api(self):
+        state = {"phase": "AWAITING_OFF_NODE", "status": "WAITING",
+                 "fence_status": "VERIFIED", "target": {"mode": "full"}}
+        with patch("transaction.reconstruct") as reconstruct:
+            with self.assertRaisesRegex(Blocked, "target_mode_unsupported"):
+                native_authorize.authorize(object(), Path("."), state, "a" * 64,
+                    "b" * 64, {}, native_config={"phase_image": "x"})
+        reconstruct.assert_not_called()
+
+    def test_missing_contract_authority_is_rejected_before_reconstruct(self):
+        state = {"phase": "AWAITING_OFF_NODE", "status": "WAITING",
+                 "fence_status": "VERIFIED", "target": {"mode": "images-only"},
+                 "migrations": {"plan": "captured"}}
+        with patch("transaction.reconstruct") as reconstruct:
+            with self.assertRaisesRegex(Blocked, "contract_authority_missing"):
+                native_authorize.authorize(object(), Path("."), state, "a" * 64,
+                    "b" * 64, {}, native_config={"phase_image": "x"})
+        reconstruct.assert_not_called()
+
+    def test_native_api_and_config_must_be_supplied_as_a_pair(self):
+        import bridge_root
+        with self.assertRaisesRegex(Blocked, "native_authority_pair_invalid"):
+            bridge_root.Actions(Path("."), native_api=object())
+        with self.assertRaisesRegex(Blocked, "native_authority_pair_invalid"):
+            bridge_root.Actions(Path("."), native_config={"phase_image": "x"})
 
 
 if __name__ == "__main__":

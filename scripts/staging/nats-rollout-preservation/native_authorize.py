@@ -9,6 +9,8 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import hashlib
+import os
+import stat
 from pathlib import Path
 
 from controller import Blocked, file_sha
@@ -16,6 +18,74 @@ from native_store import verify_archive
 
 
 NAMESPACE = "voice-staging"
+
+
+def _validate_supported_target(state):
+    """Reject unsupported authorities before reading custody or touching an API."""
+    target = state.get("target")
+    if not isinstance(target, dict) or target.get("mode") != "images-only":
+        raise Blocked("rollout_native_target_mode_unsupported")
+    changed = target.get("changed_services")
+    if changed is not None and (not isinstance(changed, list) or not changed
+            or any(not isinstance(value, str) or not value for value in changed)
+            or changed != sorted(set(changed))):
+        raise Blocked("rollout_native_target_components_invalid")
+    if any(state.get(key) is not None for key in
+           ("gis_first_install", "gis_transition", "renderer_authority",
+            "provisional", "repair_parent", "expired_recovery_authority")):
+        raise Blocked("rollout_native_target_component_unsupported")
+    nonnats = state.get("nonnats")
+    if isinstance(nonnats, dict) and nonnats.get("actions"):
+        raise Blocked("rollout_native_nonnats_actions_unsupported")
+    space = state.get("space_preflight")
+    if isinstance(space, dict) and isinstance(space.get("requirement"), dict):
+        if space["requirement"].get("backup_required") is True:
+            raise Blocked("rollout_native_space_backup_unsupported")
+    services = state.get("service_actor_services")
+    authority = state.get("service_actor_authority")
+    if services is not None:
+        if (not isinstance(services, list) or services != sorted(set(services))
+                or not all(isinstance(value, str) and value for value in services)
+                or not isinstance(authority, dict)
+                or authority.get("schema") != "voice-nats-service-actor-authority-v1"
+                or authority.get("roles") != sorted(authority.get("roles", []))):
+            raise Blocked("rollout_native_actor_authority_invalid")
+        if changed is not None and services != changed:
+            raise Blocked("rollout_native_actor_services_changed")
+    if (state.get("nats_contract") is not None
+            or state.get("nats_target_scripts") is not None
+            or state.get("migrations")):
+        if not isinstance(state.get("nats_target_scripts"), dict):
+            raise Blocked("rollout_native_nats_authority_invalid")
+        if state.get("native_contract") is None:
+            raise Blocked("rollout_native_contract_authority_missing")
+
+
+def _read_contract_envelope(base, descriptor):
+    if (not isinstance(descriptor, dict)
+            or set(descriptor) != {"path", "sha256", "bytes"}
+            or descriptor.get("path") != "native-contract-inputs.json"
+            or not isinstance(descriptor.get("sha256"), str)
+            or len(descriptor["sha256"]) != 64
+            or type(descriptor.get("bytes")) is not int
+            or descriptor["bytes"] <= 0):
+        raise Blocked("rollout_native_contract_envelope_invalid")
+    path = Path(base) / descriptor["path"]
+    try:
+        info = path.lstat()
+        if (not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)
+                or info.st_uid != os.geteuid() or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_size != descriptor["bytes"]):
+            raise Blocked("rollout_native_contract_envelope_invalid")
+        raw = path.open("rb", opener=lambda p, flags: os.open(
+            p, flags | os.O_NOFOLLOW)).read()
+    except (OSError, ValueError):
+        raise Blocked("rollout_native_contract_envelope_invalid") from None
+    if (len(raw) != descriptor["bytes"]
+            or hashlib.sha256(raw).hexdigest() != descriptor["sha256"]):
+        raise Blocked("rollout_native_contract_envelope_changed")
+    return raw
 
 
 def _deadline(state, authorization_deadline):
@@ -68,20 +138,21 @@ def _cold_cut(base, state, archive_sha, manifest_sha):
     return cut
 
 
-def _native_contract(state):
+def _native_contract(base, state):
     row = state.get("native_contract")
     if row is None:
         return None
     if (not isinstance(row, dict)
             or set(row) != {"request", "binding", "plan", "plan_envelope", "runner_image"}):
         raise Blocked("rollout_native_contract_authority_invalid")
-    if not isinstance(row["plan_envelope"], bytes):
-        raise Blocked("rollout_native_contract_envelope_invalid")
-    return row
+    envelope = _read_contract_envelope(base, row["plan_envelope"])
+    result = copy.deepcopy(row)
+    result["plan_envelope"] = envelope
+    return result
 
 
-def _run_contract(api, state, journal, revalidate):
-    row = _native_contract(state)
+def _run_contract(api, base, state, journal, revalidate):
+    row = _native_contract(base, state)
     if row is None:
         return None
     import transaction
@@ -197,6 +268,7 @@ def _cas_bootstrap(api, state, journal, revalidate):
 def authorize(api, base, state, off_node_archive_sha, off_node_manifest_sha,
               contract, *, native_config, authorization_deadline=None):
     """Authorize a fenced native operation with one typed API call graph."""
+    _validate_supported_target(state)
     if state.get("phase") != "AWAITING_OFF_NODE" or state.get("status") != "WAITING":
         raise Blocked("rollout_offnode_phase_invalid")
     if state.get("fence_status") != "VERIFIED":
@@ -215,7 +287,7 @@ def authorize(api, base, state, off_node_archive_sha, off_node_manifest_sha,
     def revalidate():
         _source_fence(api, state, stage)
 
-    contract_job = _run_contract(api, state, journal, revalidate)
+    contract_job = _run_contract(api, base, state, journal, revalidate)
     migrations = _run_migrations(api, state, journal, revalidate)
     post = _post_archive_census(api, base, state, stage, native_config, cut, revalidate)
     cas = _cas_bootstrap(api, state, journal, revalidate)

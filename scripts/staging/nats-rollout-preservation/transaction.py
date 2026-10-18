@@ -4,12 +4,14 @@ These entrypoints accept captured immutable code and target inputs only. They
 never allocate a claim or execute bootstrap against existing staging data.
 """
 import copy
+import base64
 import datetime as dt
 import json
 import os
 from pathlib import Path
 import re
 import secrets
+import stat
 import shutil
 import time
 import guard
@@ -29,6 +31,116 @@ from normalize import normalize_target,image_only_documents
 from errors import safe_error
 from nats_migration import apply_contract
 import rollout_census
+
+
+def _native_contract_file(base, relative):
+    path = Path(base) / relative
+    try:
+        info = path.lstat()
+        if (not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)
+                or info.st_uid != os.geteuid() or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size <= 0):
+            raise Blocked('rollout_native_contract_input_invalid')
+        with path.open('rb', opener=lambda p, flags: os.open(
+                p, flags | os.O_NOFOLLOW)) as stream:
+            return stream.read()
+    except (OSError, ValueError):
+        raise Blocked('rollout_native_contract_input_invalid') from None
+
+
+def _native_contract_event(events, state_name):
+    rows = [event for event in events if isinstance(event, dict)
+            and event.get('phase') == 'census' and event.get('state') == state_name]
+    if len(rows) != 1:
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    return rows[0]
+
+
+def _produce_native_contract_authority(base, state, native_config):
+    """Persist the exact source-derived contract envelope before authorization."""
+    if state.get('native_contract') is not None:
+        raise Blocked('rollout_native_contract_authority_reused')
+    if not isinstance(native_config, dict) or not isinstance(native_config.get('runner_image'), str):
+        raise Blocked('rollout_native_contract_runner_image_missing')
+    source = state.get('native_source_binding', {}).get('binding')
+    proof = state.get('native_source_binding', {}).get('proof')
+    if not isinstance(source, dict) or not isinstance(proof, dict):
+        raise Blocked('rollout_native_source_binding_invalid')
+    bound = _native_contract_event(state.get('events', ()), 'PVC_BOUND')
+    inputs = _native_contract_event(state.get('events', ()), 'INPUTS_COMPLETE')
+    execution = _native_contract_event(state.get('events', ()), 'CENSUS_EXECUTION_COMPLETE')
+    bootstrap = _native_contract_file(base, 'inputs/bootstrap.creds')
+    server_conf = _native_contract_file(base, 'server.conf')
+    plan = copy.deepcopy(state.get('nats_contract'))
+    if not isinstance(plan, dict):
+        raise Blocked('rollout_native_contract_plan_missing')
+    plan_bytes = json.dumps(plan, sort_keys=True, separators=(',', ':'),
+        ensure_ascii=False, allow_nan=False).encode('utf-8')
+    nonce = secrets.token_hex(16)
+    attempt = secrets.token_hex(4)
+    request = {'operation': state['operation'], 'nonce': nonce, 'phase': 'contract-migration'}
+    manifest = state.get('cut', {}).get('manifest', {})
+    archive_sha = manifest.get('archive_sha256')
+    archive_bytes = manifest.get('bytes')
+    input_sha = inputs.get('input_bundle_sha256')
+    input_bytes = inputs.get('input_bundle_bytes')
+    if (not isinstance(archive_sha, str) or not isinstance(archive_bytes, int)
+            or not isinstance(input_sha, str) or type(input_bytes) is not int):
+        raise Blocked('rollout_native_contract_census_binding_invalid')
+    envelope = {
+        'schema': 'voice-nats-contract-inputs-v1',
+        'operation': state['operation'], 'nonce': nonce, 'contract_attempt': attempt,
+        'source_pvc_uid': source.get('source_uid'), 'source_pv_uid': source.get('source_pv_uid'),
+        'verification_pvc_uid': bound.get('verification_uid'),
+        'verification_pv_uid': bound.get('verification_pv_uid'),
+        'archive_sha256': archive_sha, 'archive_bytes': archive_bytes,
+        'server_config_sha256': __import__('hashlib').sha256(server_conf).hexdigest(),
+        'plan_sha256': __import__('hashlib').sha256(plan_bytes).hexdigest(), 'plan': plan,
+        'files': {'bootstrap.creds': base64.b64encode(bootstrap).decode('ascii'),
+                  'server.conf': base64.b64encode(server_conf).decode('ascii')},
+    }
+    raw = json.dumps(envelope, sort_keys=True, separators=(',', ':'),
+        ensure_ascii=False, allow_nan=False).encode('utf-8')
+    path = Path(base) / 'native-contract-inputs.json'
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError:
+        raise Blocked('rollout_native_contract_authority_reused') from None
+    except OSError:
+        raise Blocked('rollout_native_contract_input_invalid') from None
+    binding = {
+        'source_claim': source.get('source_claim'), 'source_uid': source.get('source_uid'),
+        'source_pv_name': source.get('source_pv_name'), 'source_pv_uid': source.get('source_pv_uid'),
+        'source_node_name': source.get('source_node_name'), 'source_hostname': proof.get('node_hostname'),
+        'verification_claim': bound.get('verification_claim'), 'verification_uid': bound.get('verification_uid'),
+        'verification_pv_name': bound.get('verification_pv_name'), 'verification_pv_uid': bound.get('verification_pv_uid'),
+        'verification_node_name': bound.get('verification_node_name'),
+        'verification_hostname': bound.get('verification_hostname'),
+        'verification_attempt': bound.get('session_attempt'), 'contract_attempt': attempt,
+        'input_bundle_sha256': input_sha, 'input_bundle_bytes': input_bytes,
+        'archive_sha256': archive_sha, 'archive_bytes': archive_bytes,
+        'plan_sha256': envelope['plan_sha256'], 'plan_bytes': len(plan_bytes),
+        'server_config_sha256': envelope['server_config_sha256'],
+        'bootstrap_creds_sha256': __import__('hashlib').sha256(bootstrap).hexdigest(),
+        'bootstrap_creds_bytes': len(bootstrap), 'server_config_bytes': len(server_conf),
+    }
+    try:
+        import verification_job
+        verification_job.validate_request(request)
+        verification_job.validate_contract_binding(binding)
+    except Exception:
+        raise Blocked('rollout_native_contract_binding_invalid') from None
+    state['native_contract'] = {
+        'request': request, 'binding': binding, 'plan': plan,
+        'plan_envelope': {'path': path.name,
+                          'sha256': __import__('hashlib').sha256(raw).hexdigest(),
+                          'bytes': len(raw)},
+        'runner_image': native_config['runner_image'],
+    }
 
 
 def run_native_contract_job(api, request, binding, *, runner_image, plan,
@@ -726,7 +838,7 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
         if enrollment is not None:state['bootstrap_enrollment']=copy.deepcopy(enrollment)
         if nats_authority is not None:
-            if enrollment is None:raise Blocked('nats_migration_enrollment_missing')
+            if enrollment is None and native_api is None:raise Blocked('nats_migration_enrollment_missing')
             state['nats_contract']=copy.deepcopy(nats_authority['plan'])
             state['nats_contract_binding']=copy.deepcopy(nats_authority['binding'])
             state['nats_target_scripts']=copy.deepcopy(nats_authority['scripts'])
@@ -786,6 +898,8 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             live_catalog=live_catalog)
         save(base/'rollout-before-manifest.json',state['cut']['manifest'])
         state['cut']['manifest_sha256']=file_sha(base/'rollout-before-manifest.json')
+        if native_api is not None and nats_authority is not None:
+            _produce_native_contract_authority(base,state,native_config)
         if state['space_preflight'] is not None:
             state['phase']='SPACE_BACKUP';save(base/'checkpoint.json',state)
             state['space_gate']=space_safeguards.capture(kube,base,state['space_preflight'],operation,

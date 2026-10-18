@@ -38,6 +38,8 @@ def summary(state):
 
 class Actions:
     def __init__(self,code,*,owner_uid=0,native_api=None,native_config=None):
+        if (native_api is None) != (native_config is None):
+            raise Blocked('native_authority_pair_invalid')
         configure_state_owner(owner_uid)
         self.owner_uid=owner_uid
         self.native_api=native_api
