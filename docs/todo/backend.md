@@ -767,7 +767,6 @@ and Voice IDs denied while history remains.
 - [ ] **[Moderation] `GetAutoModStats` semantics weak** — counts `auto_mod_log` rows, not messages scanned; `CheckMessage` does not increment checked counter.
 - [ ] **[Moderation] Spam mute action taxonomy mismatch** — logs `mute` / `mute_permanent` actions; docs/model use `mute` / `shadow_ban`; Messaging only blocks when pattern re-matches.
 - [x] **[Moderation] Appeal review metadata in proto** — `reviewed_at` and nullable `review_notes` round-trip through Review/Get/List responses; pending appeals omit both fields. **T-035**.
-- [ ] **[Moderation] Limited unit coverage** — `automod_unit_test.go` only link-flood + threshold math; no unit tests for sanctions/appeals handlers (integration tests only).
 - [ ] **[Moderation] Federation moderation** — documented in `moderation-service.md`, not implemented (federation deferred per PLAN).
 
 ### User
