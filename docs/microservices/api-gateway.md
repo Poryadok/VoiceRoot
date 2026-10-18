@@ -491,6 +491,28 @@ tree node and follows the Voice cleanup contract. Chat->node creation must retai
 a durable operation record across both calls so retry cannot create a duplicate
 Chat; a failed node link is retried/compensated before success is exposed.
 
+### Space participant moderator mute (BE-273 accepted target; not implemented)
+
+`POST /api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}/participants/{target_profile_id}/mute`
+calls protected Voice `SetVoiceRoomParticipantMute` with a Gateway-derived
+delegated-user principal and canonical path IDs. Required JSON fields:
+`moderator_muted` (presence-aware boolean), `operation_id` (UUID), and
+`expected_moderation_version` (zero only for never-created state). Client body
+actor/account/media identity is never authority. Success is a receipt with
+`operation_id`, `target_profile_id`, `moderator_muted`, `self_is_muted`,
+`moderation_version` and `enforcement_completed_at`; changed state leaves
+`self_is_muted=true`. It does not return a grant or start the target microphone.
+
+Use `400 invalid_argument`, `401 unauthenticated`, generic `404 not_found` for
+undiscoverable/nonmember/absent resources, `403 permission_denied` for explicit
+policy deny or self-target, `409 failed_precondition` for version/state/pending
+conflicts, and `503 unavailable` for unknown authority/media outcome. Pre-decision
+denials cause no effects; post-commit failure preserves the restriction, so the
+client retries the same operation. The 24-hour ledger, version CAS, target
+disclosure and confirmed-cleanup success semantics are specified by
+[Voice](voice-service.md#moderator-mute-accepted-target-be-273). This target is
+not an available endpoint until the coherent runtime and media proof land.
+
 ### Audit read
 
 `GET S/audit-log` → `GetAuditLog`, membership and `SPACE_VIEW_AUDIT_LOG`.

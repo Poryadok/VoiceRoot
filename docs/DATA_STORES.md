@@ -173,6 +173,14 @@ owner, while `MATCH_SQUAD` still requires one.
 Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
 foreign keys to profile/account owners.
 
+BE-273 accepted Space moderator-mute target extends Voice-owned PostgreSQL
+Space admission persistence with per-logical-room/profile desired flag/version,
+operation receipts/pending effects, issued source vectors and exact retired
+media identities. These are durable authority/evidence, not Redis TTL state;
+normal room empty/reopen does not remove a restriction. The schema is not yet
+migrated or activated. See [ownership](DATA_MODEL.md#space-moderator-mute-ownership-be-273-accepted-target)
+and [implementation plan](testing/space-moderator-mute-exec-plan.md).
+
 ### MatchSquad provider state
 
 `voice_match_squad_operations` stores the exact create/teardown operation bytes,
