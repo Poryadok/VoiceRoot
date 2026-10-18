@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -149,4 +150,23 @@ func TestSnapshotAuthorityErrorsHaveStableStatus(t *testing.T) {
 		_, err := (&Server{Engine: &snapshotSpy{err: tc.err}}).GetMatchmakingPartySnapshot(signedContext(t, req), req)
 		require.Equal(t, tc.code, status.Code(err))
 	}
+}
+
+func TestSnapshotDefinitiveSubjectFailureHasTrustedTypedReason(t *testing.T) {
+	for _, tc := range []struct {
+		err    error
+		reason string
+	}{{partysnapshot.ErrStaleSubject, "STALE_PARTY_SUBJECT"}, {partysnapshot.ErrIneligible, "PARTY_SUBJECT_INELIGIBLE"}} {
+		req := validRequest()
+		_, err := (&Server{Engine: &snapshotSpy{err: tc.err}}).GetMatchmakingPartySnapshot(signedContext(t, req), req)
+		details := status.Convert(err).Details()
+		require.Len(t, details, 1)
+		info, ok := details[0].(*errdetails.ErrorInfo)
+		require.True(t, ok)
+		require.Equal(t, "voice.party", info.Domain)
+		require.Equal(t, tc.reason, info.Reason)
+	}
+	req := validRequest()
+	_, err := (&Server{Engine: &snapshotSpy{err: partysnapshot.ErrStaleSubject}}).GetMatchmakingPartySnapshot(context.Background(), req)
+	require.Empty(t, status.Convert(err).Details(), "service authentication failure must never certify user revocation")
 }
