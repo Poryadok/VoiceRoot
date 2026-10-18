@@ -463,3 +463,107 @@ develop integration:15686e2be0d,14459f70b9c,1586fb3b78b,1451fc23b7a,
 authors. No shared stand/deployment/tester appointment, no golden/pin/allowlist
 bypass. Full repository sign-off remains OPEN. Own graph60115 current update
 is pending; do not promote earlier graph successes onto this source.
+
+
+## Reviewed batch 3 checkpoint: source 3a0e00136 (2026-10-18 23:26 UTC)
+
+This addendum supersedes earlier pending statements for these exact inputs.
+Sole writer/integration/CI actor remains Rudeus-121. Main master698/user dirties
+are untouched; all integration uses normal commits/merges and SSH publication.
+No master release, stand deployment, tester appointment or acceptance occurred.
+
+| Accepted source | Independent source gate and qualification |
+| --- | --- |
+| BE238 02571b7a389379b5ccb0ba7fdd75dd48727b904d | 147c23 CLEAR; clean correction only, excludes foreign BE137 proof ancestry |
+| Auth Role floor 226a6b70a09ed7887faf547313761d41eeb982e6 | 209c8 security CLEAR; actual203 handoff; excludes former f04/156 WIP |
+| NATS v5 9368d0efa3e5ba8bce88faaefcd35dca4b1c0c06 | 158c14 CLEAR over197 e4be0888; three CRLF-only corrections, full audit c13 retained |
+| BE265 909090a34743902799306974d6f3ebabe3c02f10 | 208c19 CLEAR overfa1528a7; final Effects snapshot before worker launch |
+| BE041 c14f59c1a43b486d48322d62e7c5baa2816e1253 | 216c11 mandatory ACL CLEAR; actual178e8 handoff, first typed audit chain only |
+
+Order was BE238, clean Auth, NATSv5, BE265, exact Voice013 DOWN composition,
+then BE041. Source2445e81de07681cfd5f1491e4c793aaac747f571 was published.
+Own mechanical successor3a0e00136b74f12b5e9ba6f61dda450877f82b0d regenerates
+only three Dart jetstream_events outputs from unchanged canonical event proto.
+Hosted Flutter failed buf-dart-check before tests because the imported native
+VoiceRosterMembershipChanged tag22 lacked Dart mirrors. Path generation twice
+and then full canonical generation succeeded; full-tree generated parity is
+checked separately. This is not a golden test result or a new wire contract.
+
+Voice013 DOWN commit5cc425b35bc71738d86261c1cf4772c7babd4519 composes exactly
+reviewed Git blob1eea4c0c91847be8bf679041f974dee9d58e4c7a from147 a2e336585.
+Voice013 UP is byte-identical. Under transactional exclusive table locks the
+guard refuses ANY retained outbox row or positive roster version before drop.
+205's independent review and147 actualPG RED-to-GREEN23.592s qualify this
+exact DOWN subscope. No MM020 or full BE012 source was imported. Provenance is
+external batch3/voice013-guard-provenance.json; copying unrelated MM migrations
+or reusing whole-task acceptance is prohibited.
+
+Actual immutable-source canonical Docker builds at2445 all PASS:
+Moderation f685c2138ff54dcbff5dc5b17c7b3b1f96e96066d9e09b0ba540a89cea50c974;
+Voice 331ba3cbf6ee909352d2b1aa832a1f4293eb118186a7a15d1ccafd37abca02b8;
+Space 66628fc64e152fcc48833b3026d343f968c205c15fc707be2717d32900cb8a24;
+Gateway c532e7fb5f556cca0447513dc94b2d380c4860923eb8958e9bc747cdda8a1a8b;
+Auth 6abebf137839b20c08db511e41aa828084a31e7b3db20804d9ad9ed80cb254da.
+IDs are local sha256 images, not registry publication/deployment. Backend tar
+SHA9470a6d87836b939649b92ce054eab2c59a978a2267c2cddb94844e27659c0bb
+and Auth tar SHAe607fb7cda0ef2067b847c001831a7668489c8d61e28d40763fddf60335eb972
+bind actual canonical stdin contexts. Unchanged older images are reused.
+
+Faithful Linux Go1.26.5 targeted race composition at2445: principal33top+53sub,
+Moderation7top+4sub with3 explicitPG skips, Voice startup1top, Space typed
+identity1top PASS; total42top+57sub,0FAIL/race,3SKIP. No PG proof is inferred
+from short. First runner attempts lacked real root deployment fixtures; these
+invalid harness failures and attributed cancellation remain in attempt logs.
+Final complete root/backend layout is tested, runner exit0/cleanup0.
+Native original no-skip source proofs are separately reused within bounds:
+BE238 final1CPU fullgrpcsvc67top PASS63.680s; Auth77Java/9RolemTLS realPGRedis;
+BE26573test/subtest realPG plus Redis; BE04114top20sub realPG/TLS. Foreign BE238
+proof5f0aeee21c41e5af351d7500c417ac945f9f29cc remains NOT merged. E37=A8+U29
+reconciliation and quiescence proof retain uncertain commit/no-retry semantics.
+
+Four formerly failing canonical NATS root tests now actually PASS at2445 in
+network-none Linux Python3.12/PyYAML6.0.3. Fixed v5 binds FOUR accepted source
+files, preserving old v3/v4/auth-v4/enrollment/historical deployed contracts.
+197's pinned NATS2.12.12 native45consumer preservation/crash/noop proof is reused
+only for unchanged modules/plan AST; new validators have separate RED/GREEN80
+tests. Initial root runner import error is preserved as harness failure, not
+product failure. No immutable pin or authority bypass was performed.
+
+Actual API23:20:30.932773UTC confirms remote2445, hosted39175364546:
+33SUCCESS/20SKIPPED/2FAIL/1IN_PROGRESS at that observation. ci-script job
+117816913002 fails F13 duplicate_guarded_owner on the legitimate reviewed
+Voice013 DOWN followup. Develop collector defaults allow_direct_followup=false;
+release collector permits qualified incremental followups. SWARMc21 requests
+bounded Astra applicability/provenance decision with exact source/logs and
+positive/negative requirements. No flag/allowlist was relaxed. Original R22
+excluded-scope180FAIL stays explicit. Flutter117816913099 fails generated Dart
+drift (mechanically repaired above), not executed goldens; baseline golden
+failures remain independent historical gates. Hosted wholeCI is NOT PASS.
+
+Full P3 provider qualification remains OPEN: selfhosted EJECT_ONLY cannot issue
+full FROZEN/PURGED receipts. Native a80 close algorithm is qualified separately
+from A3 publication. Supporting BE012-A3-NATS-AUTHORITY is available: new
+deliver-all matchmaking_voice_roster_v1 must retain backlog/crash windows;
+current fixedv5 deliver-new census is not its authority. Do not repin v5 or
+reuse its native PASS for new A3 canonical subjects/ACL. Role floor is exact
+service:role only, existing Voice method unchanged.167 creator contract requires
+a SEPARATE Auth.GetSpaceSessionEpochFloor service:space and explicit signed
+regular AccountType on Gateway POST/spaces;186/155 coordinate new producers.
+Never widen delivered203 methods or infer creator safety from Redis mirror.
+
+Current owner lease is WT35 bbda42ed7a394d98950d1eec2e743d59,
+holder rudeus-121-be238-integration. Old36 guarded return exit0 is complete;
+future36 contents are not ours. Shared resource protocol was fully reread:
+task ownership is not environment claim, acquire/observe/current fencing and
+protected rollout-to-check window are mandatory for future DEV/STAGING use;
+none occurred here. All native/image commands now terminal, cleanup0. Graphify
+freshness and final bundle/restore/resource closeout are recorded externally
+after this documentation carrier. Existing complete898 bundle and wave2 deltas
+remain immutable; this source requires its own incremental actual bare restore.
+
+Next executable stage: consume exact hosted generated-parity result, resolve
+F13 via actual decision (not a bypass), then scoped source/check continuation.
+Ready accepted BE195e020/219c14 and BE126a475 docs remain queued with exact
+ownership. New WIP publisher branches remain publication-only and retain their
+authors' task/CI custody. All full original TT scopes/activation/acceptance gates
+remain open where not satisfied; no foundation slice silently completes them.
