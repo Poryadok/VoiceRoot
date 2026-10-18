@@ -42,18 +42,21 @@ type AuditLogPage struct {
 // AuditLogQuery is the complete filter and disclosure scope bound into a
 // signed audit cursor. To is exclusive; From is inclusive.
 type AuditLogQuery struct {
-	SpaceID        uuid.UUID
-	ActorProfileID *uuid.UUID
-	Action         *string
-	From           *time.Time
-	To             *time.Time
-	PageSize       int
-	Cursor         string
-	AccessScope    string
+	SpaceID         uuid.UUID
+	ViewerProfileID uuid.UUID
+	ActorProfileID  *uuid.UUID
+	Action          *string
+	From            *time.Time
+	To              *time.Time
+	PageSize        int
+	Cursor          string
+	AccessScope     string
 }
 
 type signedAuditCursorPayload struct {
 	Version     int    `json:"v"`
+	KeyID       string `json:"kid"`
+	IssuedAt    int64  `json:"iat"`
 	BindingHash string `json:"b"`
 	CeilingTime string `json:"ct"`
 	CeilingID   string `json:"ci"`
@@ -63,13 +66,14 @@ type signedAuditCursorPayload struct {
 }
 
 type auditCursorBinding struct {
-	SpaceID        string `json:"space_id"`
-	ActorProfileID string `json:"actor_profile_id,omitempty"`
-	Action         string `json:"action,omitempty"`
-	From           string `json:"from,omitempty"`
-	To             string `json:"to,omitempty"`
-	PageSize       int    `json:"page_size"`
-	AccessScope    string `json:"access_scope"`
+	SpaceID         string `json:"space_id"`
+	ViewerProfileID string `json:"viewer_profile_id"`
+	ActorProfileID  string `json:"actor_profile_id,omitempty"`
+	Action          string `json:"action,omitempty"`
+	From            string `json:"from,omitempty"`
+	To              string `json:"to,omitempty"`
+	PageSize        int    `json:"page_size"`
+	AccessScope     string `json:"access_scope"`
 }
 
 func (s *SpaceStore) loadAuditCursorKey(ctx context.Context) ([]byte, error) {
@@ -91,9 +95,10 @@ func auditQueryBindingHash(query AuditLogQuery) (string, error) {
 		return "", ErrInvalidAuditCursor
 	}
 	binding := auditCursorBinding{
-		SpaceID:     query.SpaceID.String(),
-		PageSize:    query.PageSize,
-		AccessScope: query.AccessScope,
+		SpaceID:         query.SpaceID.String(),
+		ViewerProfileID: query.ViewerProfileID.String(),
+		PageSize:        query.PageSize,
+		AccessScope:     query.AccessScope,
 	}
 	if query.ActorProfileID != nil {
 		if *query.ActorProfileID == uuid.Nil {
@@ -108,15 +113,9 @@ func auditQueryBindingHash(query AuditLogQuery) (string, error) {
 		binding.Action = *query.Action
 	}
 	if query.From != nil {
-		if query.From.IsZero() {
-			return "", ErrInvalidAuditCursor
-		}
 		binding.From = query.From.UTC().Format(time.RFC3339Nano)
 	}
 	if query.To != nil {
-		if query.To.IsZero() {
-			return "", ErrInvalidAuditCursor
-		}
 		binding.To = query.To.UTC().Format(time.RFC3339Nano)
 	}
 	if query.From != nil && query.To != nil && !query.From.Before(*query.To) {
@@ -141,6 +140,13 @@ func encodeSignedAuditCursor(payload signedAuditCursorPayload, key []byte) (stri
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write(raw)
 	return base64.RawURLEncoding.EncodeToString(raw) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+// The singleton database key has a stable, non-secret content identifier. A
+// replacement key invalidates old cursors on every replica without a schema change.
+func auditCursorKeyID(key []byte) string {
+	digest := sha256.Sum256(key)
+	return base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
 func decodeSignedAuditCursor(raw string, key []byte, bindingHash string, now time.Time) (signedAuditCursorPayload, error) {
@@ -168,7 +174,10 @@ func decodeSignedAuditCursor(raw string, key []byte, bindingHash string, now tim
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil || payload.Version != auditCursorVersion || payload.BindingHash != bindingHash {
 		return signedAuditCursorPayload{}, ErrInvalidAuditCursor
 	}
-	if payload.ExpiresAt <= 0 || !now.Before(time.Unix(0, payload.ExpiresAt)) {
+	issuedAt := time.Unix(0, payload.IssuedAt)
+	if payload.KeyID != auditCursorKeyID(key) || payload.IssuedAt <= 0 || issuedAt.After(now) ||
+		payload.ExpiresAt <= 0 || !time.Unix(0, payload.ExpiresAt).Equal(issuedAt.Add(auditCursorTTL)) ||
+		!now.Before(time.Unix(0, payload.ExpiresAt)) {
 		return signedAuditCursorPayload{}, ErrInvalidAuditCursor
 	}
 	return payload, nil
@@ -184,6 +193,17 @@ func parseAuditCursorKey(at, id string) (time.Time, uuid.UUID, error) {
 		return time.Time{}, uuid.Nil, ErrInvalidAuditCursor
 	}
 	return parsedAt.UTC(), parsedID, nil
+}
+
+func auditTimestampBound(at time.Time) time.Time {
+	// PostgreSQL stores microseconds. Both x >= from and x < to require a
+	// ceiling, not pgx's truncation, when the requested instant lies between
+	// representable database values. The cursor still hashes the original time.
+	bound := at.UTC().Truncate(time.Microsecond)
+	if bound.Before(at) {
+		bound = bound.Add(time.Microsecond)
+	}
+	return bound
 }
 
 // ListAuditLogFilteredPage returns a newest-first page with a signed cursor
@@ -210,7 +230,8 @@ func (s *SpaceStore) ListAuditLogFilteredPage(ctx context.Context, query AuditLo
 
 	var ceilingAt, lastAt time.Time
 	var ceilingID, lastID uuid.UUID
-	expiresAt := now.Add(auditCursorTTL)
+	issuedAt := now
+	expiresAt := issuedAt.Add(auditCursorTTL)
 	if query.Cursor != "" {
 		payload, err := decodeSignedAuditCursor(query.Cursor, cursorKey, bindingHash, now)
 		if err != nil {
@@ -225,6 +246,7 @@ func (s *SpaceStore) ListAuditLogFilteredPage(ctx context.Context, query AuditLo
 			return nil, ErrInvalidAuditCursor
 		}
 		expiresAt = time.Unix(0, payload.ExpiresAt).UTC()
+		issuedAt = time.Unix(0, payload.IssuedAt).UTC()
 	}
 
 	args := []any{query.SpaceID}
@@ -240,10 +262,10 @@ func (s *SpaceStore) ListAuditLogFilteredPage(ctx context.Context, query AuditLo
 		where = append(where, "action = "+addArg(*query.Action))
 	}
 	if query.From != nil {
-		where = append(where, "created_at >= "+addArg(query.From.UTC()))
+		where = append(where, "created_at >= "+addArg(auditTimestampBound(*query.From)))
 	}
 	if query.To != nil {
-		where = append(where, "created_at < "+addArg(query.To.UTC()))
+		where = append(where, "created_at < "+addArg(auditTimestampBound(*query.To)))
 	}
 	if !ceilingAt.IsZero() {
 		atArg := addArg(ceilingAt)
@@ -288,6 +310,8 @@ func (s *SpaceStore) ListAuditLogFilteredPage(ctx context.Context, query AuditLo
 	last := result[len(result)-1]
 	next, err := encodeSignedAuditCursor(signedAuditCursorPayload{
 		Version:     auditCursorVersion,
+		KeyID:       auditCursorKeyID(cursorKey),
+		IssuedAt:    issuedAt.UnixNano(),
 		BindingHash: bindingHash,
 		CeilingTime: ceilingAt.Format(time.RFC3339Nano),
 		CeilingID:   ceilingID.String(),
@@ -304,6 +328,13 @@ func (s *SpaceStore) ListAuditLogFilteredPage(ctx context.Context, query AuditLo
 // ListAuditLogSignedPage is the current unfiltered RPC store surface. When a
 // key is not injected by a test, all replicas read the durable database key.
 func (s *SpaceStore) ListAuditLogSignedPage(ctx context.Context, spaceID uuid.UUID, cursor string, limit int, accessScope string, cursorKey []byte) (*AuditLogPage, error) {
+	return s.ListAuditLogQueryPage(ctx, AuditLogQuery{
+		SpaceID: spaceID, PageSize: limit, Cursor: cursor, AccessScope: accessScope,
+	}, cursorKey)
+}
+
+// ListAuditLogQueryPage uses the durable shared key unless a test supplies one.
+func (s *SpaceStore) ListAuditLogQueryPage(ctx context.Context, query AuditLogQuery, cursorKey []byte) (*AuditLogPage, error) {
 	if len(cursorKey) == 0 {
 		var err error
 		cursorKey, err = s.loadAuditCursorKey(ctx)
@@ -311,12 +342,7 @@ func (s *SpaceStore) ListAuditLogSignedPage(ctx context.Context, spaceID uuid.UU
 			return nil, err
 		}
 	}
-	return s.ListAuditLogFilteredPage(ctx, AuditLogQuery{
-		SpaceID:     spaceID,
-		PageSize:    limit,
-		Cursor:      cursor,
-		AccessScope: accessScope,
-	}, cursorKey, time.Now().UTC())
+	return s.ListAuditLogFilteredPage(ctx, query, cursorKey, time.Now().UTC())
 }
 
 // CleanupExpiredAuditLog removes only successfully delivered audit effects

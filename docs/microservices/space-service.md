@@ -129,7 +129,7 @@ service SpaceService {
 | TransferOwnership | ✓ | Disabled | Production still denies before dependencies. Auth proof consume/receipt lookup, Role v2, and the Space protocol-2 journal through terminal evidence, ordinary freeze and the ready-row scan are shipped foundations. Network recovery/orchestration, capability activation, public operation idempotency and the Gateway/Flutter vertical remain open. See § Ownership lifecycle principal transport. |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
-| GetAuditLog | ✓ | Partial | `created_at DESC, id DESC`; 15-minute HMAC-signed snapshot cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG`. Additive actor/action/time proto fields are shipped, but handler filter mapping and REST/Flutter surfaces remain backlog |
+| GetAuditLog | ✓ | ✓ backend gRPC | `created_at DESC, id DESC`; actor/action/from/to filters; 15-minute HMAC-signed snapshot cursor bound to viewer, query and key; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG`. REST/Flutter surfaces remain backlog |
 | AppendAuditEvent | ✓ | ✗ | Protected Role/Chat audit ingestion contract; runtime verifier, idempotent store and producer outboxes remain backlog |
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
@@ -183,7 +183,7 @@ permission subset и Owner lifecycle paths определены в
 `ApplyOwnershipTransfer`/`CompensateOwnershipTransfer` с проверенным
 `operation_id`.
 
-`GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Текущий handler выпускает signed snapshot cursor для unfiltered запроса. Proto уже содержит additive actor/action/time filters, но handler их ещё не передаёт в готовую filter-bound store query. Остальные writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
+`GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Handler передаёт actor/action/time filters в filter-bound store query; каждый cursor связывает authenticated viewer, scope, filters и page size. Остальные writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
 **Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
 handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
@@ -354,11 +354,11 @@ filters are `INVALID_ARGUMENT`; absent means no filter. Timestamps are valid UTC
 instants and, when both are present, require `from < to`. Page size is 1..100,
 default 50. Results are ordered `created_at DESC,id DESC`.
 
-The shipped unfiltered gRPC read uses a 15-minute HMAC cursor bound to `space_id`,
-reader/access scope and page size, with a first-page tuple ceiling; all replicas
-use the database-owned signing key and recheck ACL on every page. The store already
-supports the full filter-bound query. The handler mapping for the new proto fields
-and the complete target cursor envelope remain pending.
+The gRPC read uses a 15-minute HMAC cursor bound to `space_id`, authenticated
+viewer, access scope, normalized filters and page size, with a first-page tuple
+ceiling; all replicas use the database-owned signing key and recheck ACL on every
+page. `kid` is the base64url SHA-256 identifier of that singleton key; replacing
+the key invalidates old cursors. Issue time and expiry stay fixed across pages.
 
 The complete cursor v1 binds `kid`, version, `space_id`, authenticated
 `viewer_profile_id`, scope `space.audit.read.v1`, normalized actor/action/from/to,

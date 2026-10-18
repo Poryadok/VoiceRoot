@@ -3,6 +3,9 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -57,8 +60,36 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 	if limit > 100 {
 		limit = 100
 	}
-	accessScope := caller.String() + "|" + permissions.SpaceViewAuditLog
-	page, err := s.Store.ListAuditLogSignedPage(ctx, spaceID, cursor, limit, accessScope, s.AuditCursorKey)
+	query := store.AuditLogQuery{SpaceID: spaceID, ViewerProfileID: caller,
+		PageSize: limit, Cursor: cursor, AccessScope: "space.audit.read.v1"}
+	if req.ActorProfileId != nil {
+		actor, err := parseUUIDField("actor_profile_id", *req.ActorProfileId)
+		if err != nil || actor == uuid.Nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid actor_profile_id")
+		}
+		query.ActorProfileID = &actor
+	}
+	if req.Action != nil {
+		if strings.TrimSpace(*req.Action) == "" {
+			return nil, status.Error(codes.InvalidArgument, "invalid action")
+		}
+		query.Action = req.Action
+	}
+	if req.From != nil {
+		if req.From.CheckValid() != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid from")
+		}
+		from := req.From.AsTime().UTC()
+		query.From = &from
+	}
+	if req.To != nil {
+		if req.To.CheckValid() != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid to")
+		}
+		to := req.To.AsTime().UTC()
+		query.To = &to
+	}
+	page, err := s.Store.ListAuditLogQueryPage(ctx, query, s.AuditCursorKey)
 	if errors.Is(err, store.ErrInvalidAuditCursor) {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
