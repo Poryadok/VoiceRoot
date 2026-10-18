@@ -19,6 +19,7 @@ trap 'rm -rf "${fixture_root}"' EXIT
 mkdir -p "${fixture_root}/scripts/ci" "${fixture_root}/.github/ci" "${fixture_root}/src/backend/scripts"
 cp "${SOURCE_MANIFEST_TEST}" "${fixture_root}/scripts/ci/e2e-manifest_test.sh"
 cp "${SOURCE_MANIFEST_SCRIPT}" "${fixture_root}/scripts/ci/e2e-manifest.sh"
+cp "${ROOT}/scripts/ci/e2e_manifest.py" "${fixture_root}/scripts/ci/e2e_manifest.py"
 cp "${SOURCE_MANIFEST}" "${fixture_root}/.github/ci/e2e-features.yml"
 cp "${SOURCE_ATTRIBUTES}" "${fixture_root}/.gitattributes"
 

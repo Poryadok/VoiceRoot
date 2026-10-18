@@ -4,6 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+export REAL_PYTHON3="$(command -v python3)"
 SCRIPT="${ROOT}/scripts/ci/compose-a1-multi-account-proof.sh"
 A1_TEST_REGEX='^TestCompose(A1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections|SessionEpochRealtime)|ThreadsDMReply)_live$'
 
@@ -125,6 +126,9 @@ EOF
   cat >"${bin}/python3" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == */scripts/ci/e2e_manifest.py ]]; then
+  exec "${REAL_PYTHON3:?REAL_PYTHON3 required}" "$@"
+fi
 log="${FAKE_LOG:?FAKE_LOG required}"
 printf 'python3' >>"${log}"
 for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
