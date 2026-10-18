@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 OVERLAY = ROOT / "deploy/dev/match-squad-trust-overlay"
@@ -20,7 +21,8 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
 
     def test_service_ports_and_deployment_listeners_are_paired(self):
         expected = {
-            "voice-matchmaking": ("matchmaking", [(8443, "principal-jwks")]),
+            "voice-matchmaking": ("matchmaking", [(8443, "principal-jwks"),
+                                                     (9092, "principal")]),
             "voice-chat": ("chat", [(9092, "match-principal")]),
             "voice-voice": ("voice", [(9094, "match-provider"),
                                         (9095, "match-member")]),
@@ -53,7 +55,29 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
             "voice-matchmaking-client-tls",
         ):
             self.assertIn(value, matchmaking)
-        self.assertIn("name: S2S_JWKS_URLS_JSON\n              $patch: delete", matchmaking)
+        self.assertIn(
+            'name: S2S_JWKS_URLS_JSON\n              value: \'{"gateway":"https://api-dev.comrade.click/.well-known/voice-principal-jwks.json"}\'',
+            matchmaking,
+        )
+
+    def test_matchmaking_signing_secret_is_group_readable_only_to_nonroot_runtime(self):
+        matchmaking = source("voice-matchmaking.runtime.patch.yaml")
+        self.assertRegex(
+            matchmaking,
+            r"(?m)^    spec:\n      securityContext:\n        fsGroup: 65532$",
+        )
+        match = re.search(
+            r"(?ms)^        - name: matchmaking-principal-signing\n          secret:\n(.*?)(?=^        - name:|\Z)",
+            matchmaking,
+        )
+        self.assertIsNotNone(match)
+        volume = match.group(1)
+        self.assertIn("defaultMode: 288", volume)  # 0440
+        self.assertEqual(
+            re.findall(r"(?m)^              - key: (.+)$", volume),
+            ["current.pem", "next.pem"],
+        )
+        self.assertNotIn("defaultMode: 420", volume)  # 0444 would expose key files to all users
         chat = source("voice-chat.runtime.patch.yaml")
         for value in (
             "CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN",
@@ -103,6 +127,53 @@ class MatchSquadRuntimeOverlayTests(unittest.TestCase):
             self.assertIn("name: voice-match-squad-ca", document)
             self.assertIn("mountPath: /etc/voice/match-squad/ca", document)
             self.assertIn("readOnly: true", document)
+
+    def test_dev_complete_match_transport_is_gateway_only_and_purpose_bound(self):
+        matchmaking = source("voice-matchmaking.runtime.patch.yaml")
+        gateway = source("voice-gateway.patch.yaml")
+        service = source("voice-matchmaking.service.patch.yaml")
+
+        for value in (
+            "MATCHMAKING_SPACE_PRINCIPAL_GRPC_LISTEN",
+            "MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE",
+            "MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE",
+            "MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE",
+            "MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR",
+            "MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD",
+            'name: MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD\n              value: ""',
+            'name: S2S_JWKS_URLS_JSON',
+            '{"gateway":"https://api-dev.comrade.click/.well-known/voice-principal-jwks.json"}',
+            "voice-matchmaking-complete-server-tls",
+            "voice-matchmaking-complete-client-ca",
+            "/etc/voice/match-squad/complete-client-ca/ca.crt",
+        ):
+            self.assertIn(value, matchmaking)
+        self.assertNotIn('"space":', matchmaking)
+        self.assertIn(
+            "name: matchmaking-complete-client-ca\n          configMap:\n            name: voice-matchmaking-complete-client-ca",
+            matchmaking,
+        )
+        self.assertIn("name: principal\n      port: 9092\n      targetPort: principal", service)
+        self.assertIn("name: principal\n              containerPort: 9092", matchmaking)
+
+        for value in (
+            "GATEWAY_MATCHMAKING_COMPLETE_GRPC_ADDR",
+            "voice-matchmaking:9092",
+            "GATEWAY_MATCHMAKING_COMPLETE_TLS_CA_FILE",
+            "GATEWAY_MATCHMAKING_COMPLETE_TLS_SERVER_NAME",
+            "voice-matchmaking.voice-dev.svc",
+            "GATEWAY_MATCHMAKING_COMPLETE_CLIENT_CERT_FILE",
+            "GATEWAY_MATCHMAKING_COMPLETE_CLIENT_KEY_FILE",
+            "voice-gateway-matchmaking-complete-client-tls",
+            "/etc/voice/match-squad/complete-client/tls.crt",
+            "/etc/voice/match-squad/complete-client/tls.key",
+        ):
+            self.assertIn(value, gateway)
+        self.assertIn("name: voice-match-squad-ca", gateway)
+        self.assertNotIn("voice-matchmaking-principal-signing", gateway)
+        self.assertIn("name: matchmaking-complete-client-tls", gateway)
+        self.assertIn("secretName: voice-gateway-matchmaking-complete-client-tls", gateway)
+        self.assertIn("name: voice-matchmaking-complete-client-ca", matchmaking)
 
 
 if __name__ == "__main__":

@@ -622,6 +622,27 @@ only Gateway-originated Matchmaking CompleteMatch; it does not configure Space
 principals or alter ordinary listeners. This source template is not a
 deployment or runtime acceptance claim.
 
+The separate `deploy/dev/match-squad-trust-overlay/` consumer keeps this
+opt-in DEV-only and enables only the `gateway` issuer in Matchmaking's
+`S2S_JWKS_URLS_JSON`. Its Matchmaking listener is `voice-matchmaking:9092`;
+the listener server identity is `voice-matchmaking-complete-server-tls`, and
+the listener trusts the public CA bundle `voice-matchmaking-complete-client-ca`
+for the Gateway client certificate. Gateway uses its existing principal
+signing/JWKS publisher, presents the distinct
+`voice-gateway-matchmaking-complete-client-tls` identity, and verifies the
+Matchmaking server with `voice-match-squad-ca`. The Gateway JWKS endpoint is
+the existing public `https://api-dev.comrade.click/.well-known/voice-principal-jwks.json`
+and uses system root certificates. The DEV listener uses the existing
+`voice-app-config/REDIS_ADDR` and an explicitly empty replay password, matching
+the current DEV Redis deployment, which has no configured auth. Redis replay
+checks remain active. If Redis auth is added later, update this service's
+password binding through the reviewed service-specific contract; do not enable
+a password on the shared default user or reuse another listener's credential.
+These names define consumer references only; the PKI operation, exact SANs,
+secret custody and public CA readback must be reviewed and completed
+separately. Voice's 9095 inbound media client trust
+remains `voice-media-ca`; MatchSquad JWKS and mTLS roots are unchanged.
+
 ## MatchSquad principals (staging source contract)
 
 The staging source projects the MatchSquad listeners and their issuer trust;

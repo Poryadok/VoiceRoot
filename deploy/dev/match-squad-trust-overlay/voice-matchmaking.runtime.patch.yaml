@@ -6,11 +6,15 @@ metadata:
 spec:
   template:
     spec:
+      securityContext:
+        fsGroup: 65532
       containers:
         - name: matchmaking
           ports:
             - name: principal-jwks
               containerPort: 8443
+            - name: principal
+              containerPort: 9092
           env:
             - name: MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR
               value: voice-chat:9092
@@ -42,7 +46,22 @@ spec:
             - name: MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE
               value: /etc/voice/principal-jwks/tls/tls.key
             - name: S2S_JWKS_URLS_JSON
-              $patch: delete
+              value: '{"gateway":"https://api-dev.comrade.click/.well-known/voice-principal-jwks.json"}'
+            - name: MATCHMAKING_SPACE_PRINCIPAL_GRPC_LISTEN
+              value: :9092
+            - name: MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE
+              value: /etc/voice/match-squad/complete-server/tls.crt
+            - name: MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE
+              value: /etc/voice/match-squad/complete-server/tls.key
+            - name: MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE
+              value: /etc/voice/match-squad/complete-client-ca/ca.crt
+            - name: MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: REDIS_ADDR
+            - name: MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD
+              value: ""
           volumeMounts:
             - name: match-squad-client
               mountPath: /etc/voice/match-squad/client
@@ -55,6 +74,12 @@ spec:
               readOnly: true
             - name: match-squad-ca
               mountPath: /etc/voice/match-squad/ca
+              readOnly: true
+            - name: matchmaking-complete-server-tls
+              mountPath: /etc/voice/match-squad/complete-server
+              readOnly: true
+            - name: matchmaking-complete-client-ca
+              mountPath: /etc/voice/match-squad/complete-client-ca
               readOnly: true
       volumes:
         - name: match-squad-client
@@ -87,6 +112,21 @@ spec:
         - name: match-squad-ca
           configMap:
             name: voice-match-squad-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: matchmaking-complete-server-tls
+          secret:
+            secretName: voice-matchmaking-complete-server-tls
+            defaultMode: 288
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: matchmaking-complete-client-ca
+          configMap:
+            name: voice-matchmaking-complete-client-ca
             items:
               - key: ca.crt
                 path: ca.crt
