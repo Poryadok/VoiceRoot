@@ -226,6 +226,15 @@ and do not commit it. Refresh and access credentials are kept in mode-0600
 private files while issuing requests; the WebSocket client reads its bearer
 token from a private file rather than a process argument.
 
+For ad-hoc disposable QA fixtures, preserve the origin/environment binding,
+owner-only permissions, symlink rejection and duplicate-key rejection too.
+Persist the intended account identifiers and recoverable credentials privately
+before the first registration/auth request, then save each normal session stage
+atomically. This allows recovery after a parser/assertion failure without losing
+the fixture or repeatedly creating accounts against a shared-IP login limit.
+Reuse the documented normal refresh path; this advice does not authorize account
+mutation outside the selected environment or putting credentials in arguments/logs.
+
 ### LogQL (Explore или Grafana)
 
 Promtail ставит label **`namespace`** из pod metadata; **`request_id`** — только в JSON тела строки (не label). Запрос:
