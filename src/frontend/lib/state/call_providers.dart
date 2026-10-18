@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../backend/livekit_room.dart';
 import '../backend/screen_share_capabilities.dart';
 import '../backend/livekit_url.dart';
+import '../backend/ordinary_voice_identity.dart';
 import '../backend/realtime_client.dart';
 import '../backend/voice_client.dart';
 import '../settings/voice_input_settings.dart';
@@ -779,6 +780,11 @@ class CallController extends StateNotifier<CallState> {
           return;
         }
         final room = _ref.read(liveKitRoomFactoryProvider)();
+        if (room is OrdinaryVoicePresentationRoom) {
+          room.ordinaryVoicePresentation = usesOrdinaryVoicePresentation(
+            session,
+          );
+        }
         room.onAudioPlaybackUnlockNeeded = (needsUnlock) {
           if (!mounted) return;
           state = state.copyWith(needsAudioPlaybackUnlock: needsUnlock);
