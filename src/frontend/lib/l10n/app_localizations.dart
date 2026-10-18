@@ -3500,6 +3500,18 @@ abstract class AppLocalizations {
   /// **'Add members'**
   String get chatGroupAddMembers;
 
+  /// No description provided for @chatGroupMemberAdditionsPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow members to add people'**
+  String get chatGroupMemberAdditionsPermission;
+
+  /// No description provided for @chatGroupPostAsChatPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow publishing as this chat'**
+  String get chatGroupPostAsChatPermission;
+
   /// No description provided for @chatGroupMembersLimitReached.
   ///
   /// In en, this message translates to:

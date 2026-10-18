@@ -173,6 +173,26 @@ func TestMessagingStandaloneChannelAuthority(t *testing.T) {
 	require.NoError(t, err)
 	assertDenied(func() error { _, err := forward(admin, chatChannelRef(target), true, false); return err })
 	assertDenied(func() error { _, err := threadSend(admin, chatChannelRef(target), true); return err })
+	// A separate membership grant authorizes every official transport, including
+	// commentary and thread identity; its revocation affects the next operation.
+	_, err = chatClient.SetChatMemberPostAsChat(withProfileCtx(ctx, account, owner), &chatv1.SetChatMemberPostAsChatRequest{
+		ChatId: target.String(), TargetProfileId: member.String(), Allowed: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, send(member, chatGroupRef(target), true))
+	_, err = threadSend(member, chatDMRef(target), true)
+	require.NoError(t, err)
+	for _, copy := range []bool{false, true} {
+		_, err = forward(member, chatChannelRef(target), true, copy)
+		require.NoError(t, err)
+	}
+	_, err = chatClient.SetChatMemberPostAsChat(withProfileCtx(ctx, account, owner), &chatv1.SetChatMemberPostAsChatRequest{
+		ChatId: target.String(), TargetProfileId: member.String(), Allowed: false,
+	})
+	require.NoError(t, err)
+	assertDenied(func() error { return send(member, chatChannelRef(target), true) })
+	assertDenied(func() error { _, err := threadSend(member, chatChannelRef(target), true); return err })
+	assertDenied(func() error { _, err := forward(member, chatChannelRef(target), true, true); return err })
 	_, err = pool.Exec(ctx, `DELETE FROM chat_members WHERE chat_id=$1 AND profile_id=$2`, target, member)
 	require.NoError(t, err)
 	assertDenied(func() error { _, err := forward(member, chatChannelRef(target), true, false); return err })

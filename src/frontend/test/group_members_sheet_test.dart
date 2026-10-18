@@ -51,7 +51,7 @@ void main() {
         gatewayConfigProvider.overrideWithValue(
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
-        httpClientProvider.overrideWithValue(client),
+        httpClientProvider.overrideWithValue(_PermissionDefaultClient(client)),
         realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
         ...extraOverrides,
       ],
@@ -64,6 +64,93 @@ void main() {
       ),
     );
   }
+
+  testWidgets('authoritative add denial disables the member picker', (
+    tester,
+  ) async {
+    const chatId = 'group-denied-add';
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((_) async => http.Response('{}', 404)),
+        extraOverrides: [
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: const [
+                ChatMember(profileId: 'member-a', role: 'member'),
+              ],
+              permissions: const ChatPermissions(
+                canPostAsChat: false,
+                canAddMembers: false,
+                canManagePermissions: false,
+                memberAdditionsEnabled: false,
+                explicitPostAsChat: false,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    final add = tester.widget<IconButton>(
+      find.byKey(GroupMembersSheet.addMembersKey),
+    );
+    expect(add.onPressed, isNull);
+  });
+
+  testWidgets(
+    'only authoritative managers see separate addition and official controls',
+    (tester) async {
+      const chatId = 'group-grant-controls';
+      await tester.pumpWidget(
+        testApp(
+          home: const GroupMembersSheet(chatId: chatId),
+          client: MockClient((_) async => http.Response('{}', 404)),
+          extraOverrides: [
+            groupMembersManagementProvider(chatId).overrideWith(
+              (ref) => _TestGroupMembersController(
+                ref,
+                chatId,
+                members: const [
+                  ChatMember(
+                    profileId: 'ordinary',
+                    role: 'member',
+                    explicitPostAsChat: true,
+                  ),
+                ],
+                permissions: const ChatPermissions(
+                  canPostAsChat: true,
+                  canAddMembers: true,
+                  canManagePermissions: true,
+                  memberAdditionsEnabled: false,
+                  explicitPostAsChat: false,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(GroupMembersSheet.additionsPolicyKey),
+            )
+            .value,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(GroupMembersSheet.officialGrantKey('ordinary')),
+            )
+            .value,
+        isTrue,
+      );
+    },
+  );
 
   testWidgets(
     'group members sheet uses the Voice list skeleton while loading',
@@ -770,16 +857,33 @@ class _TestGroupMembersController extends GroupMembersManagementController {
     List<ChatMember> members = const <ChatMember>[],
     bool loading = false,
     Object? error,
+    ChatPermissions permissions = const ChatPermissions(
+      canPostAsChat: false,
+      canAddMembers: true,
+      canManagePermissions: false,
+      memberAdditionsEnabled: true,
+      explicitPostAsChat: false,
+    ),
   }) : super() {
     state = GroupMembersManagementState(
       members: members,
       isLoading: loading,
       error: error,
+      permissions: permissions,
     );
   }
 
   void setMembers(List<ChatMember> members) {
-    state = GroupMembersManagementState(members: members);
+    state = GroupMembersManagementState(
+      members: members,
+      permissions: const ChatPermissions(
+        canPostAsChat: false,
+        canAddMembers: true,
+        canManagePermissions: false,
+        memberAdditionsEnabled: true,
+        explicitPostAsChat: false,
+      ),
+    );
   }
 
   @override
@@ -797,6 +901,36 @@ class _NoopRealtimeHub extends RealtimeHub {
 
   @override
   Future<void> disconnect() async {}
+}
+
+// Add the new authority fixture while preserving every old request's exact
+// asynchronous path through its original test client.
+class _PermissionDefaultClient extends http.BaseClient {
+  _PermissionDefaultClient(this.inner);
+  final http.Client inner;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    if (request.url.path.endsWith('/permissions')) {
+      return Future.value(
+        http.StreamedResponse(
+          Stream.value(
+            utf8.encode(
+              jsonEncode({
+                'can_add_members': true,
+                'member_additions_enabled': true,
+              }),
+            ),
+          ),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      );
+    }
+    return inner.send(request);
+  }
+
+  @override
+  void close() => inner.close();
 }
 
 class _FailingLeaveChatActions extends ChatActions {

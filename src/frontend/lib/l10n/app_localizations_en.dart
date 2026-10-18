@@ -1944,6 +1944,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatGroupAddMembers => 'Add members';
 
   @override
+  String get chatGroupMemberAdditionsPermission =>
+      'Allow members to add people';
+
+  @override
+  String get chatGroupPostAsChatPermission => 'Allow publishing as this chat';
+
+  @override
   String get chatGroupMembersLimitReached =>
       'This group has reached its 500-member limit. Create a Space for a larger community.';
 

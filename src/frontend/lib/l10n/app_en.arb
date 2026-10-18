@@ -921,6 +921,8 @@
   "chatGroupRoleOwner": "Owner",
   "chatGroupRoleAdmin": "Admin",
   "chatGroupAddMembers": "Add members",
+  "chatGroupMemberAdditionsPermission": "Allow members to add people",
+  "chatGroupPostAsChatPermission": "Allow publishing as this chat",
   "chatGroupMembersLimitReached": "This group has reached its 500-member limit. Create a Space for a larger community.",
   "chatGroupMemberYou": "{name} (you)",
   "@chatGroupMemberYou": {

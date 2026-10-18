@@ -112,6 +112,11 @@ proof receipts. Runtime configuration is documented in
 
 ### `chat_db` (Chat Service)
 
+Standalone chat management uses `chats.member_additions_enabled` (default true)
+and `chat_members.post_as_chat` (default false). The latter belongs to one
+membership and disappears with its row; rejoin receives no restored grant.
+No cross-database FK or writable copy of Space/Role grants is introduced.
+
 Инвентарь ядра + backlog — [chat-service.md](microservices/chat-service.md) § «Модель данных»; scope matrix — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) §4.4 / §8.
 
 | Таблица | Примечание |

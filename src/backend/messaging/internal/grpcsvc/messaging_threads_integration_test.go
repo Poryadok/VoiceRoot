@@ -24,6 +24,7 @@ func applyThreadMessagingMigrations(t *testing.T, ctx context.Context, pool *pgx
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000024_chat_management_permissions.up.sql")
 	applyBaseMessagingMigrations(t, ctx, pool)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
 }

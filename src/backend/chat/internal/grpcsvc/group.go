@@ -143,6 +143,9 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if row.Type != "group" && row.Type != "channel" {
 		return nil, status.Error(codes.InvalidArgument, "only group and channel chats can be updated")
 	}
+	if req.MemberAdditionsEnabled != nil && (row.SpaceID != nil || row.ManagedByApplicationID != nil) {
+		return nil, status.Error(codes.FailedPrecondition, "ordinary chat permissions unavailable for this scope")
+	}
 	role, err := s.DM.GetMemberRole(ctx, chatID, caller)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())

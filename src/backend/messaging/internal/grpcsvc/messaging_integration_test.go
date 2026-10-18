@@ -88,6 +88,7 @@ func applyChatDBForBufconnChat(t *testing.T, ctx context.Context, pool *pgxpool.
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000013_sticker_packs.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000014_managed_chats.up.sql"))
 	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000018_space_lifecycle.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000024_chat_management_permissions.up.sql")
 }
 
 func withProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {

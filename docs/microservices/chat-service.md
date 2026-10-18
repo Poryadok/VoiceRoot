@@ -3,8 +3,9 @@
 ## Standalone channel publication authority
 
 For a stored `channel` with `space_id IS NULL`, Chat owns the current
-`chat_members` role and `allow_user_main_feed` setting. Only a current `owner`
-or `admin` may publish as the channel (`posted_as_chat=true`). User-identity
+`chat_members` role, membership-scoped official grant and `allow_user_main_feed`
+setting. Current `owner`/`admin` and ordinary members with an explicit current
+`post_as_chat` grant may publish as the channel (`posted_as_chat=true`). User-identity
 thread replies retain the existing thread policy; adding `thread_parent_id`
 never grants an ordinary member the channel's official identity. User-identity
 main-feed publication requires both a known current role (`owner`, `admin` or
@@ -12,8 +13,9 @@ main-feed publication requires both a known current role (`owner`, `admin` or
 denies owner/admin user-identity posts. Standalone owner/admin `UpdateChat`
 controls that setting. No channel promotion API is implied by this contract.
 
-Messaging uses the existing Chat boundary (`ChatGuard.MemberRole`, production
-`GRPCChatGuard`) for Send, Forward and copy-as-new, without a new role store.
+Messaging uses the existing Chat boundary (fresh `GetChatPermissions` via the
+production `GRPCChatGuard`) for official Send, Forward and copy-as-new. MemberRole
+alone never proves an ordinary member's official capability.
 Forward chooses official mode when user main-feed posts are disabled and user
 mode when enabled; commentary uses the same identity. Stored type/scope wins
 over caller `ChatRef.type`. Missing membership, unknown role, missing policy or
@@ -42,10 +44,13 @@ replace it. See [forward contract](../features/forward-messages.md#права-о
 
 ## API (gRPC)
 
-### Chat management permissions (accepted target)
+### Chat management permissions
 
 This target extends the existing standalone owner/admin official-publication
 baseline; it does not invalidate the BE-187 official-thread authorization fix.
+The standalone persistence, handlers, HTTP routes and member-management controls
+implement this contract. The Space authority/admission/navigation vertical below
+remains an accepted target; standalone support does not complete that scope.
 For ordinary human-owned standalone groups and channels Chat owns
 `member_additions_enabled` (default true) and a membership-scoped
 `post_as_chat` grant (default false). Current owner/admin implicitly have both
@@ -61,6 +66,13 @@ setting. `SetChatMemberPostAsChat(chat_id, target_profile_id, allowed)` is an
 idempotent owner/admin operation on a current ordinary member. No actor is
 selected by an untrusted request body. Member-management projections expose
 the explicit grant only to authorized roster readers.
+
+HTTP: `GET /api/v1/chats/{chat_id}/permissions`,
+`PUT /api/v1/chats/{chat_id}/members/{profile_id}/post-as-chat` with
+`{"allowed": boolean}`, and `PATCH /api/v1/chats/{chat_id}` with optional
+`member_additions_enabled`. Route identifiers override body identifiers.
+The roster editor exposes the addition policy and per-member official grant
+separately. Unknown/unavailable capability state disables those controls.
 
 All mutations recheck current actor/target membership and role in the same
 Chat transaction as the write. AddMembers rechecks its caller and toggle in
@@ -96,6 +108,12 @@ Space membership. Distinct Role authority, durable invitation binding and
 Gateway/client continuation are part of the full target; standalone support
 alone is not completion of this requirement.
 
+Rollout must establish a compatible serving set of Chat and Messaging writers
+before exposing these policy mutations: an older Chat writer cannot enforce
+the new addition toggle. Migration defaults preserve the previous enabled-add
+behavior and create no explicit grants. This is an operator qualification gate,
+not evidence of deployment or a permission to deploy.
+
 `CreateChatRequest.request_id` необязателен для совместимости существующих
 клиентов. Канонический UUID связывается с аутентифицированным
 `creator_profile_id`; в той же транзакции Chat сохраняет хэш нормализованных
@@ -125,6 +143,8 @@ service ChatService {
   rpc SetGroupMemberRole(...) returns (...);                              // ✓ standalone groups: admin promotion; owner demotion
   rpc TransferGroupOwnership(...) returns (...);                       // ✓
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);     // ✓
+  rpc GetChatPermissions(...) returns (...);                              // ✓ standalone caller-relative
+  rpc SetChatMemberPostAsChat(...) returns (...);                         // ✓ standalone owner/admin grant
 
   // Список чатов
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse); // ✓ dm+group; space merge; inbox filter
@@ -272,6 +292,7 @@ chats
 ├── threads_enabled (bool, default false; channels default true)
 ├── allow_user_main_feed (bool, default true; channels default false)
 ├── allow_guests (bool, default false — explicit chat-level guest admission)
+├── member_additions_enabled (bool, default true — standalone ordinary-member additions)
 ├── e2e_enabled (bool, default false — DM opt-in E2E)
 ├── created_at
 └── updated_at
@@ -280,6 +301,7 @@ chat_members
 ├── chat_id (UUID, logical ref → chats.id)
 ├── profile_id (UUID, logical ref → user_db.profiles.id; без меж-БД REFERENCES)
 ├── role (owner | admin | member)
+├── post_as_chat (bool, default false — explicit grant for this membership)
 ├── joined_at
 ├── muted_until (nullable)
 ├── is_archived (bool)

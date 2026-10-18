@@ -37,6 +37,11 @@ func (a *channelRoleAuthority) MemberRole(_ context.Context, chatID, profileID u
 	return a.role, a.err
 }
 
+func (a *channelRoleAuthority) CanPostAsChat(ctx context.Context, chatID, profileID uuid.UUID) (bool, error) {
+	role, err := a.MemberRole(ctx, chatID, profileID)
+	return role == "owner" || role == "admin", err
+}
+
 func TestStandaloneChannelPublicationMatrix(t *testing.T) {
 	for _, role := range []string{"owner", "admin", "member", "", "unknown"} {
 		for _, allowUser := range []bool{false, true} {
