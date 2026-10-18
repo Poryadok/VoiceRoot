@@ -341,6 +341,22 @@ docker build -f src/developer-portal/Dockerfile src/developer-portal \
 
 `scripts/staging/render-and-apply.sh` applies the portal manifest when present; ingress host from `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (repo Variable, passed through staging-deploy workflow). Add DNS **A/AAAA** for that host to the staging ingress node. **Production** portal Deployment + Ingress: [`deploy/prod/developer-portal.yaml`](../deploy/prod/developer-portal.yaml) (`voice-prod` namespace; substitute production FQDNs via `VOICE_DEVELOPER_PORTAL_INGRESS_HOST`).
 
+Portal resource requests are `10m` CPU / `32Mi` memory per Pod, with limits of
+`100m` / `64Mi`. These are initial static-Nginx budgets, not measured capacity;
+observe throttling and memory before changing them. Staging keeps one replica;
+production uses two. Both use `RollingUpdate` with `maxUnavailable: 0`,
+`maxSurge: 1`, five seconds of continuous readiness and a 120-second progress
+deadline. A failed readiness probe leaves the old replica serving; a rollout
+deadline reports failure and requires an operator decision, not automatic
+rollback. Reserve capacity for the surge Pod before rollout. Two replicas do
+not guarantee node failure tolerance without suitable cluster placement.
+
+The staging portal retains its HTTP origin entrypoint behind the existing
+HTTPS edge; production uses `websecure` and `voice-origin-tls`. This policy
+does not change DNS, edge TLS mode or certificates. Validate the public HTTPS
+OAuth callback and the actual rollout under the environment's protected window;
+offline manifest checks do not prove either.
+
 ### Flutter web staging
 
 The image build binds fresh `index.html` to a SHA256-named bootstrap, whose
