@@ -43,5 +43,39 @@ class ChatScopeManagedKind extends $pb.ProtobufEnum {
   const ChatScopeManagedKind._(super.value, super.name);
 }
 
+class ChatScopeLifecycleState extends $pb.ProtobufEnum {
+  static const ChatScopeLifecycleState CHAT_SCOPE_LIFECYCLE_STATE_UNSPECIFIED =
+      ChatScopeLifecycleState._(
+          0, _omitEnumNames ? '' : 'CHAT_SCOPE_LIFECYCLE_STATE_UNSPECIFIED');
+  static const ChatScopeLifecycleState CHAT_SCOPE_LIFECYCLE_STATE_LIVE =
+      ChatScopeLifecycleState._(
+          1, _omitEnumNames ? '' : 'CHAT_SCOPE_LIFECYCLE_STATE_LIVE');
+  static const ChatScopeLifecycleState CHAT_SCOPE_LIFECYCLE_STATE_FROZEN =
+      ChatScopeLifecycleState._(
+          2, _omitEnumNames ? '' : 'CHAT_SCOPE_LIFECYCLE_STATE_FROZEN');
+  static const ChatScopeLifecycleState
+      CHAT_SCOPE_LIFECYCLE_STATE_PURGE_DECIDED = ChatScopeLifecycleState._(
+          3, _omitEnumNames ? '' : 'CHAT_SCOPE_LIFECYCLE_STATE_PURGE_DECIDED');
+  static const ChatScopeLifecycleState CHAT_SCOPE_LIFECYCLE_STATE_PURGED =
+      ChatScopeLifecycleState._(
+          4, _omitEnumNames ? '' : 'CHAT_SCOPE_LIFECYCLE_STATE_PURGED');
+
+  static const $core.List<ChatScopeLifecycleState> values =
+      <ChatScopeLifecycleState>[
+    CHAT_SCOPE_LIFECYCLE_STATE_UNSPECIFIED,
+    CHAT_SCOPE_LIFECYCLE_STATE_LIVE,
+    CHAT_SCOPE_LIFECYCLE_STATE_FROZEN,
+    CHAT_SCOPE_LIFECYCLE_STATE_PURGE_DECIDED,
+    CHAT_SCOPE_LIFECYCLE_STATE_PURGED,
+  ];
+
+  static final $core.List<ChatScopeLifecycleState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static ChatScopeLifecycleState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ChatScopeLifecycleState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

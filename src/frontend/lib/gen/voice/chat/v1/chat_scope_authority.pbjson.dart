@@ -33,6 +33,26 @@ final $typed_data.Uint8List chatScopeManagedKindDescriptor = $convert.base64Deco
     'Q09QRV9NQU5BR0VEX0tJTkRfR0FNRV9JTlRFR1JBVElPThACEicKI0NIQVRfU0NPUEVfTUFOQU'
     'dFRF9LSU5EX01BVENIX1NRVUFEEAM=');
 
+@$core.Deprecated('Use chatScopeLifecycleStateDescriptor instead')
+const ChatScopeLifecycleState$json = {
+  '1': 'ChatScopeLifecycleState',
+  '2': [
+    {'1': 'CHAT_SCOPE_LIFECYCLE_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'CHAT_SCOPE_LIFECYCLE_STATE_LIVE', '2': 1},
+    {'1': 'CHAT_SCOPE_LIFECYCLE_STATE_FROZEN', '2': 2},
+    {'1': 'CHAT_SCOPE_LIFECYCLE_STATE_PURGE_DECIDED', '2': 3},
+    {'1': 'CHAT_SCOPE_LIFECYCLE_STATE_PURGED', '2': 4},
+  ],
+};
+
+/// Descriptor for `ChatScopeLifecycleState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List chatScopeLifecycleStateDescriptor = $convert.base64Decode(
+    'ChdDaGF0U2NvcGVMaWZlY3ljbGVTdGF0ZRIqCiZDSEFUX1NDT1BFX0xJRkVDWUNMRV9TVEFURV'
+    '9VTlNQRUNJRklFRBAAEiMKH0NIQVRfU0NPUEVfTElGRUNZQ0xFX1NUQVRFX0xJVkUQARIlCiFD'
+    'SEFUX1NDT1BFX0xJRkVDWUNMRV9TVEFURV9GUk9aRU4QAhIsCihDSEFUX1NDT1BFX0xJRkVDWU'
+    'NMRV9TVEFURV9QVVJHRV9ERUNJREVEEAMSJQohQ0hBVF9TQ09QRV9MSUZFQ1lDTEVfU1RBVEVf'
+    'UFVSR0VEEAQ=');
+
 @$core.Deprecated('Use getSpaceChatScopeAuthorityRequestDescriptor instead')
 const GetSpaceChatScopeAuthorityRequest$json = {
   '1': 'GetSpaceChatScopeAuthorityRequest',
@@ -97,7 +117,7 @@ const GetSpaceChatScopeAuthorityResponse$json = {
       '3': 12,
       '4': 1,
       '5': 14,
-      '6': '.voice.common.v1.LifecycleFenceState',
+      '6': '.voice.chat.v1.ChatScopeLifecycleState',
       '10': 'lifecycleState'
     },
     {
@@ -121,7 +141,7 @@ final $typed_data.Uint8List getSpaceChatScopeAuthorityResponseDescriptor = $conv
     'R5cGUSJgoPYWN0dWFsX3NwYWNlX2lkGAggASgJUg1hY3R1YWxTcGFjZUlkEjQKFmNoYXRfc2Nv'
     'cGVfaW5jYXJuYXRpb24YCSABKAlSFGNoYXRTY29wZUluY2FybmF0aW9uEjYKF2NoYXRfYXV0aG'
     '9yaXR5X3JldmlzaW9uGAogASgEUhVjaGF0QXV0aG9yaXR5UmV2aXNpb24SMQoUbGlmZWN5Y2xl'
-    'X2dlbmVyYXRpb24YCyABKARSE2xpZmVjeWNsZUdlbmVyYXRpb24STQoPbGlmZWN5Y2xlX3N0YX'
-    'RlGAwgASgOMiQudm9pY2UuY29tbW9uLnYxLkxpZmVjeWNsZUZlbmNlU3RhdGVSDmxpZmVjeWNs'
-    'ZVN0YXRlEkYKDG1hbmFnZWRfa2luZBgNIAEoDjIjLnZvaWNlLmNoYXQudjEuQ2hhdFNjb3BlTW'
-    'FuYWdlZEtpbmRSC21hbmFnZWRLaW5k');
+    'X2dlbmVyYXRpb24YCyABKARSE2xpZmVjeWNsZUdlbmVyYXRpb24STwoPbGlmZWN5Y2xlX3N0YX'
+    'RlGAwgASgOMiYudm9pY2UuY2hhdC52MS5DaGF0U2NvcGVMaWZlY3ljbGVTdGF0ZVIObGlmZWN5'
+    'Y2xlU3RhdGUSRgoMbWFuYWdlZF9raW5kGA0gASgOMiMudm9pY2UuY2hhdC52MS5DaGF0U2NvcG'
+    'VNYW5hZ2VkS2luZFILbWFuYWdlZEtpbmQ=');

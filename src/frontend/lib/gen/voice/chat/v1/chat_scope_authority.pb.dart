@@ -15,7 +15,6 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 
-import '../../common/v1/space_lifecycle.pbenum.dart' as $2;
 import 'chat.pbenum.dart' as $1;
 import 'chat_scope_authority.pbenum.dart';
 
@@ -133,7 +132,7 @@ class GetSpaceChatScopeAuthorityResponse extends $pb.GeneratedMessage {
     $core.String? chatScopeIncarnation,
     $fixnum.Int64? chatAuthorityRevision,
     $fixnum.Int64? lifecycleGeneration,
-    $2.LifecycleFenceState? lifecycleState,
+    ChatScopeLifecycleState? lifecycleState,
     ChatScopeManagedKind? managedKind,
   }) {
     final result = create();
@@ -187,8 +186,8 @@ class GetSpaceChatScopeAuthorityResponse extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         11, _omitFieldNames ? '' : 'lifecycleGeneration', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aE<$2.LifecycleFenceState>(12, _omitFieldNames ? '' : 'lifecycleState',
-        enumValues: $2.LifecycleFenceState.values)
+    ..aE<ChatScopeLifecycleState>(12, _omitFieldNames ? '' : 'lifecycleState',
+        enumValues: ChatScopeLifecycleState.values)
     ..aE<ChatScopeManagedKind>(13, _omitFieldNames ? '' : 'managedKind',
         enumValues: ChatScopeManagedKind.values)
     ..hasRequiredFields = false;
@@ -317,9 +316,9 @@ class GetSpaceChatScopeAuthorityResponse extends $pb.GeneratedMessage {
   void clearLifecycleGeneration() => $_clearField(11);
 
   @$pb.TagNumber(12)
-  $2.LifecycleFenceState get lifecycleState => $_getN(11);
+  ChatScopeLifecycleState get lifecycleState => $_getN(11);
   @$pb.TagNumber(12)
-  set lifecycleState($2.LifecycleFenceState value) => $_setField(12, value);
+  set lifecycleState(ChatScopeLifecycleState value) => $_setField(12, value);
   @$pb.TagNumber(12)
   $core.bool hasLifecycleState() => $_has(11);
   @$pb.TagNumber(12)

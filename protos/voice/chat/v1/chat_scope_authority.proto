@@ -3,7 +3,6 @@ syntax = "proto3";
 package voice.chat.v1;
 
 import "voice/chat/v1/chat.proto";
-import "voice/common/v1/space_lifecycle.proto";
 
 option go_package = "voice.app/voice/chat/v1;chatv1";
 
@@ -34,7 +33,7 @@ message GetSpaceChatScopeAuthorityResponse {
   uint64 chat_authority_revision = 10;
   // Independent Chat-owned lifecycle fence, never a membership/Role epoch.
   uint64 lifecycle_generation = 11;
-  voice.common.v1.LifecycleFenceState lifecycle_state = 12;
+  ChatScopeLifecycleState lifecycle_state = 12;
   ChatScopeManagedKind managed_kind = 13;
 }
 
@@ -43,4 +42,12 @@ enum ChatScopeManagedKind {
   CHAT_SCOPE_MANAGED_KIND_ORDINARY = 1;
   CHAT_SCOPE_MANAGED_KIND_GAME_INTEGRATION = 2;
   CHAT_SCOPE_MANAGED_KIND_MATCH_SQUAD = 3;
+}
+
+enum ChatScopeLifecycleState {
+  CHAT_SCOPE_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  CHAT_SCOPE_LIFECYCLE_STATE_LIVE = 1;
+  CHAT_SCOPE_LIFECYCLE_STATE_FROZEN = 2;
+  CHAT_SCOPE_LIFECYCLE_STATE_PURGE_DECIDED = 3;
+  CHAT_SCOPE_LIFECYCLE_STATE_PURGED = 4;
 }
