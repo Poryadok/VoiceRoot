@@ -49,11 +49,13 @@ restore_user_space_addr() {
 
 echo "User/space tier rollout: update images then ordered restart"
 
-bash "${ROOT}/scripts/staging/deploy-changed.sh"
+# Automatic subset selection does not necessarily set this flag in the caller.
+# Keep User/Space image changes inside this ordered tier in either case.
+NEEDS_USER_SPACE_ROLLOUT=true bash "${ROOT}/scripts/staging/deploy-changed.sh"
 
 echo "Tier 2: user before space (break user<->space dial deadlock)"
-kubectl scale deployment/voice-space -n "$NS" --replicas=0
-kubectl wait --for=delete pod -l app=voice-space -n "$NS" --timeout=180s 2>/dev/null || true
+# User's temporary dial override breaks the startup cycle without stopping
+# an otherwise healthy Space deployment or changing its desired replica count.
 set_changed_image user
 patch_user_skip_space
 kubectl rollout restart deployment/voice-user -n "$NS"
@@ -61,7 +63,6 @@ wait_deploy voice-user
 
 echo "Tier 3: space"
 set_changed_image space
-kubectl scale deployment/voice-space -n "$NS" --replicas=1
 wait_deploy voice-space
 restore_user_space_addr
 kubectl rollout restart deployment/voice-user -n "$NS"

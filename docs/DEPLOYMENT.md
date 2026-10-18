@@ -991,6 +991,17 @@ overlap. Gateway waits for required User gRPC before opening HTTP, so its
 staging startup probe allows up to 150 seconds for the configured 120-second
 gRPC readiness deadline before liveness checks begin.
 
+The User/Space subset rollout keeps Space's desired replica count unchanged.
+It defers their changed images to the ordered tier, temporarily starts User
+without its Space dial, waits for User, updates Space only when its image
+changed, then waits for Space before restoring User's normal dial. A User-only
+update therefore does not stop or restart Space. Space image changes still use
+the singleton `Recreate` strategy above; this removes the extra forced
+scale-to-zero cycle and does not promise a zero-downtime Space image upgrade.
+Run `python3 scripts/staging/rollout-user-space-tier_test.py` for the isolated
+recording-kubectl regression, including readiness failure. It never contacts a
+cluster. Full cold-start rollout retains its separate ordered restart procedure.
+
 Staging account migration is not yet approved: the existing anonymous `$G`
 account was observed with 566 consumers, exceeding the issued APP account's
 512-consumer limit. Inventory and classify legacy dynamic consumers and prove
