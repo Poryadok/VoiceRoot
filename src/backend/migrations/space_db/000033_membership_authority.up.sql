@@ -313,12 +313,24 @@ CREATE TRIGGER member_admission_event_guard BEFORE UPDATE OR DELETE ON space_mem
 CREATE TRIGGER member_admission_event_truncate BEFORE TRUNCATE ON space_member_admission_outbox
  FOR EACH STATEMENT EXECUTE FUNCTION space_member_admission_event_guard();
 
+CREATE FUNCTION space_native_member_publication_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ END IF;
+ RAISE EXCEPTION 'native membership provenance is immutable until terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER native_member_publication_guard BEFORE UPDATE OR DELETE ON space_native_member_publications
+ FOR EACH ROW EXECUTE FUNCTION space_native_member_publication_guard();
+CREATE TRIGGER native_member_publication_truncate BEFORE TRUNCATE ON space_native_member_publications
+ FOR EACH STATEMENT EXECUTE FUNCTION space_native_member_publication_guard();
+
 -- Existing databases without the unrelated Federation-source preflight still
 -- get permanent heads. Full production migration order supplies its revision
 -- function; new inputs participate in exactly that same monotonic Space clock.
 DO $$ DECLARE name TEXT; BEGIN
  IF to_regprocedure('space_authority_revision_changed()') IS NOT NULL THEN
-  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications','space_lifecycle_operations','space_lifecycle_participants','space_lifecycle_completions','space_lifecycle_outbox','space_permanent_purge_fences'] LOOP
+  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications','space_lifecycle_operations','space_lifecycle_participants','space_lifecycle_completions','space_lifecycle_outbox','space_permanent_purge_fences','community_bootstrap_operations'] LOOP
    EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION space_authority_revision_changed(''space_id'')','space_authority_revision_'||name,name);
    EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION space_authority_revision_floor_guard()','space_authority_revision_'||name||'_truncate',name);
   END LOOP;

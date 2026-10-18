@@ -22,6 +22,23 @@ func admissionWriter(t *testing.T, st *SpaceStore) memberAdmissionWriter {
 	return w
 }
 
+// Store fixtures simulate an already authenticated Role READY receipt; these
+// tests assert local SQL behavior and do not claim a live Role RPC path.
+func publishAdmissionFixture(t *testing.T, st *SpaceStore, space, owner, profile uuid.UUID) *MembershipRow {
+	t.Helper()
+	ctx := context.Background()
+	invite, err := st.CreateInvite(ctx, CreateInviteInput{SpaceID: space, CreatorProfileID: owner})
+	require.NoError(t, err)
+	i, err := st.PrepareMemberAdmission(ctx, MemberAdmissionInput{OperationID: uuid.New(), SpaceID: space, ProfileID: profile, AccountID: uuid.New(), InviteID: &invite.ID})
+	require.NoError(t, err)
+	role := uuid.New()
+	receipt, err := memberadmission.EnsureReceiptFingerprint(i.EnsureBinding(), role.String())
+	require.NoError(t, err)
+	m, err := st.PublishMemberAdmission(ctx, i.Input.OperationID, role, receipt[:], nil)
+	require.NoError(t, err)
+	return m
+}
+
 func TestMemberAdmissionPreparationIsInvisibleAndPublicationIsAtomic(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)

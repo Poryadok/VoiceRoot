@@ -170,11 +170,16 @@ func readMemberOwnership(ctx context.Context, tx pgx.Tx, space uuid.UUID) (*spac
 	var owner, current *uuid.UUID
 	var state string
 	var pending bool
+	var discordant bool
 	err := tx.QueryRow(ctx, `SELECT h.generation,h.owner_profile_id,h.state,s.owner_profile_id,
 	 EXISTS(SELECT 1 FROM ownership_journal j WHERE j.space_id=h.space_id AND j.state NOT IN ('completed','aborted'))
-	 OR EXISTS(SELECT 1 FROM community_owner_authority a WHERE a.space_id=h.space_id AND a.status<>'active')
-	 FROM space_membership_ownership_heads h LEFT JOIN spaces s ON s.id=h.space_id WHERE h.space_id=$1`, space).Scan(&generation, &owner, &state, &current, &pending)
+	 OR EXISTS(SELECT 1 FROM community_owner_authority a WHERE a.space_id=h.space_id AND a.status<>'active'),
+	 EXISTS(SELECT 1 FROM community_owner_authority a WHERE a.space_id=h.space_id AND a.status='active' AND a.owner_profile_id IS DISTINCT FROM s.owner_profile_id)
+	 FROM space_membership_ownership_heads h LEFT JOIN spaces s ON s.id=h.space_id WHERE h.space_id=$1`, space).Scan(&generation, &owner, &state, &current, &pending, &discordant)
 	if err != nil || generation == 0 || generation > math.MaxInt64 {
+		return nil, ErrMemberAuthorityUnavailable
+	}
+	if discordant {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	if state == "RETIRED" && owner == nil && current == nil {
@@ -278,7 +283,8 @@ func readOrdinaryMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile 
 		}
 		var raw, digest []byte
 		var nativeState string
-		if err = tx.QueryRow(ctx, `SELECT binding_bytes,binding_sha256,state FROM space_native_member_publications WHERE operation_id=$1 AND space_id=$2 AND profile_id=$3 AND generation=$4 AND kind=$5`, operation, space, profile, r.HeadGeneration, kind).Scan(&raw, &digest, &nativeState); err != nil || nativeState != "PUBLISHED" || !bytes.Equal(digest, native) {
+		var nativePublishedAt time.Time
+		if err = tx.QueryRow(ctx, `SELECT binding_bytes,binding_sha256,state,published_at FROM space_native_member_publications WHERE operation_id=$1 AND space_id=$2 AND profile_id=$3 AND generation=$4 AND kind=$5`, operation, space, profile, r.HeadGeneration, kind).Scan(&raw, &digest, &nativeState, &nativePublishedAt); err != nil || nativeState != "PUBLISHED" || !bytes.Equal(digest, native) {
 			return nil, ErrMemberAuthorityUnavailable
 		}
 		message := &spacev1.NativeMembershipPublicationBinding{}
@@ -289,8 +295,19 @@ func readOrdinaryMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile 
 		if err != nil || !bytes.Equal(canonical, raw) {
 			return nil, ErrMemberAuthorityUnavailable
 		}
-		expected := sha256.Sum256(append([]byte("voice.space.native-membership-publication.v1\x00"), raw...))
+		expected := sha256.Sum256(append([]byte(nativeMemberPublicationDomain), raw...))
 		if !bytes.Equal(expected[:], native) || message.GetProtocolVersion() != 1 || message.GetSpaceId() != space.String() || message.GetProfileId() != profile.String() || message.GetPublicationOperationId() != operation.String() || message.GetOrdinaryGeneration() != r.HeadGeneration || int32(message.GetKind()) != kind {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+		// Native producer paths are activated individually with their own durable
+		// witness. Unimplemented creator/recovery/Bot evidence is not a proof.
+		if kind != 4 {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+		if err := validateCommunityBootstrapNativeProof(ctx, tx, message); err != nil {
+			return nil, err
+		}
+		if !message.PublishedAt.AsTime().Equal(nativePublishedAt) {
 			return nil, ErrMemberAuthorityUnavailable
 		}
 		r.NativePublication = &spacev1.MemberAdmissionNativePublicationProof{Kind: r.PublicationKind, OperationId: operation.String(), BindingSha256: native}

@@ -69,6 +69,7 @@ func TestMemberAuthorityCommunityContinuityAndExpiredReplay(t *testing.T) {
 	pool := startSpacePostgresForStoreTest(t, ctx)
 	applySpaceMigrationForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
+	applyMemberAuthorityIfPresent(t, st)
 	app, env, profile := uuid.New(), uuid.New(), uuid.New()
 	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{
 		OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env,
@@ -80,7 +81,6 @@ func TestMemberAuthorityCommunityContinuityAndExpiredReplay(t *testing.T) {
 		SnapshotSHA256: []byte("11111111111111111111111111111111"), LeaseExpiresAt: time.Now().Add(time.Minute), ProfileIDs: []uuid.UUID{profile}}
 	_, err = st.ApplyCommunityRoster(ctx, in)
 	require.NoError(t, err)
-	applyMemberAuthorityIfPresent(t, st)
 	var generation, floor int64
 	var episode uuid.UUID
 	var state string
@@ -128,6 +128,7 @@ func TestMemberAuthorityRosterWaitRechecksExpiredEpisode(t *testing.T) {
 	pool := startSpacePostgresForStoreTest(t, ctx)
 	applySpaceMigrationForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
+	applyMemberAuthorityIfPresent(t, st)
 	app, env, profile := uuid.New(), uuid.New(), uuid.New()
 	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{
 		OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env,
@@ -139,7 +140,6 @@ func TestMemberAuthorityRosterWaitRechecksExpiredEpisode(t *testing.T) {
 		SnapshotSHA256: []byte("11111111111111111111111111111111"), LeaseExpiresAt: time.Now().Add(time.Minute), ProfileIDs: []uuid.UUID{profile}}
 	_, err = st.ApplyCommunityRoster(ctx, in)
 	require.NoError(t, err)
-	applyMemberAuthorityIfPresent(t, st)
 	var before uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx, `SELECT episode_id FROM space_community_member_heads WHERE space_id=$1 AND profile_id=$2`, space.ID, profile).Scan(&before))
 	barrier, err := pool.Begin(ctx)

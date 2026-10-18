@@ -105,8 +105,14 @@ func (s *SpaceGRPC) CreateCommunityBootstrap(ctx context.Context, req *spacev1.C
 	}
 	// BootstrapSpaceRoles is an idempotent Role-owned operation. Replays repeat
 	// it so a lost response after the Space transaction can recover the owner baseline.
-	if err := s.bootstrapSpaceRoles(ctx, row.ID, ownerProfileID); err != nil {
-		return nil, status.Error(codes.Unavailable, "community owner roles are unavailable")
+	current, err := s.Store.IsCommunityBootstrapPublicationCurrent(ctx, operationID, row.ID)
+	if err != nil {
+		return nil, mapSpaceStoreError(err)
+	}
+	if current {
+		if err := s.bootstrapSpaceRoles(ctx, row.ID, ownerProfileID); err != nil {
+			return nil, status.Error(codes.Unavailable, "community owner roles are unavailable")
+		}
 	}
 	if created && s.SpaceEvents != nil {
 		if err := s.SpaceEvents.PublishSpaceCreated(ctx, row.ID.String(), row.OwnerProfileID.String()); err != nil {

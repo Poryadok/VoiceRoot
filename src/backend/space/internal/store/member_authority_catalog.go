@@ -16,6 +16,7 @@ import (
 func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	tables := append([]string{}, spaceAuthorityCatalog.Tables...)
 	tables = append(tables, "schema_migrations", "space_entry_policies", "space_ordinary_member_heads", "space_community_member_heads", "space_member_admission_intents", "space_native_member_publications", "space_membership_ownership_heads", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_permanent_purge_fences", "space_member_admission_outbox", "space_member_role_cleanup")
+	tables = append(tables, "community_bootstrap_operations")
 	names := make([]string, 0, len(tables))
 	for _, table := range tables {
 		names = append(names, pgx.Identifier{"public", table}.Sanitize())
@@ -38,7 +39,7 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		return ErrMemberAuthorityUnavailable
 	}
 	triggers := append([]authoritysource.CatalogTrigger{}, spaceAuthorityCatalog.Triggers...)
-	for _, table := range []string{"space_ordinary_member_heads", "space_community_member_heads", "space_entry_policies", "space_member_admission_intents", "space_membership_ownership_heads", "space_native_member_publications", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_permanent_purge_fences"} {
+	for _, table := range []string{"space_ordinary_member_heads", "space_community_member_heads", "space_entry_policies", "space_member_admission_intents", "space_membership_ownership_heads", "space_native_member_publications", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_permanent_purge_fences", "community_bootstrap_operations"} {
 		triggers = append(triggers, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table, Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"}, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table + "_truncate", Function: "space_authority_revision_floor_guard", Type: 34})
 	}
 	triggers = append(triggers,
@@ -55,6 +56,8 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		authoritysource.CatalogTrigger{Table: "space_membership_ownership_heads", Name: "membership_ownership_head_truncate", Function: "space_membership_ownership_head_guard", Type: 34},
 		authoritysource.CatalogTrigger{Table: "space_member_admission_outbox", Name: "member_admission_event_guard", Function: "space_member_admission_event_guard", Type: 27},
 		authoritysource.CatalogTrigger{Table: "space_member_admission_outbox", Name: "member_admission_event_truncate", Function: "space_member_admission_event_guard", Type: 34},
+		authoritysource.CatalogTrigger{Table: "space_native_member_publications", Name: "native_member_publication_guard", Function: "space_native_member_publication_guard", Type: 27},
+		authoritysource.CatalogTrigger{Table: "space_native_member_publications", Name: "native_member_publication_truncate", Function: "space_native_member_publication_guard", Type: 34},
 	)
 	for _, trigger := range triggers {
 		arguments := []byte{}

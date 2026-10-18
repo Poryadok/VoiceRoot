@@ -143,6 +143,7 @@ SELECT $1,gen_random_uuid() FROM generate_series(1,101)`, capped.ID)
 	})
 
 	t.Run("effective roster preserves eligibility and manual membership", func(t *testing.T) {
+		applyMemberAuthorityIfPresent(t, st)
 		owner := uuid.MustParse("00000000-0000-0000-0000-000000000900")
 		community, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{
 			OperationID: uuid.New(), ApplicationID: uuid.New(), EnvironmentID: uuid.New(),
@@ -156,7 +157,8 @@ SELECT $1,gen_random_uuid() FROM generate_series(1,101)`, capped.ID)
 		revoked := uuid.MustParse("00000000-0000-0000-0000-000000000400")
 		_, err = pool.Exec(ctx, `UPDATE space_members SET joined_at=$2 WHERE space_id=$1`, community.ID, joined)
 		require.NoError(t, err)
-		_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id,joined_at) VALUES($1,$2,$3)`, community.ID, manual, joined.Add(time.Hour))
+		publishAdmissionFixture(t, st, community.ID, owner, manual)
+		_, err = pool.Exec(ctx, `UPDATE space_members SET joined_at=$3 WHERE space_id=$1 AND profile_id=$2`, community.ID, manual, joined.Add(time.Hour))
 		require.NoError(t, err)
 		_, err = st.ApplyCommunityRoster(ctx, CommunityRosterInput{
 			OperationID: uuid.New(), ApplicationID: applicationID, EnvironmentID: environmentID,

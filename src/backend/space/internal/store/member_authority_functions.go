@@ -13,4 +13,5 @@ var memberAuthorityFunctions = []authoritysource.CatalogFunction{
 	{Name: "space_community_owner_episode_changed", Arguments: 0, ReturnType: "trigger", BodySHA256: "8519c2323273a7d9750d01baf55c8fe4fa431c2dfb71a08183af4234770eef97"},
 	{Name: "space_membership_terminal_cleanup", Arguments: 0, ReturnType: "trigger", BodySHA256: "98f5f7bb949c65b078f914d61fb848817ac2d2866b90b232d59bf9ca79902a32"},
 	{Name: "space_member_admission_event_guard", Arguments: 0, ReturnType: "trigger", BodySHA256: "d5f42f4a50453c5c3f04c78cb9a5734c0ec3b1062b8175248e975fcc3568232e"},
+	{Name: "space_native_member_publication_guard", Arguments: 0, ReturnType: "trigger", BodySHA256: "032faf0d8e0b171f164515d4a557f2fd4a2e182316f8489e741d895c4d556260"},
 }

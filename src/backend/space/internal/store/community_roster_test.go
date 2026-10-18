@@ -17,14 +17,14 @@ func TestCommunityRosterProjectionIsGenerationAndLeaseFenced(t *testing.T) {
 	pool := startSpacePostgresForStoreTest(t, ctx)
 	applySpaceMigrationForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
+	applyMemberAuthorityIfPresent(t, st)
 	applicationID, environmentID, ownerAccountID, ownerProfileID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: applicationID,
 		EnvironmentID: environmentID, OwnerAccountID: ownerAccountID, OwnerProfileID: ownerProfileID,
 		CorporationKey: "corp-test", TemplateID: "guild-default"})
 	require.NoError(t, err)
 	one, two, manual := uuid.New(), uuid.New(), uuid.New()
-	_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, space.ID, manual)
-	require.NoError(t, err)
+	publishAdmissionFixture(t, st, space.ID, ownerProfileID, manual)
 	first := CommunityRosterInput{OperationID: uuid.New(), ApplicationID: applicationID, EnvironmentID: environmentID,
 		CorporationKey: "corp-test", SpaceID: space.ID, OwnerGeneration: 1, SourceRevision: 1,
 		SnapshotSHA256: []byte("11111111111111111111111111111111"), LeaseExpiresAt: time.Now().Add(time.Minute), ProfileIDs: []uuid.UUID{one}}

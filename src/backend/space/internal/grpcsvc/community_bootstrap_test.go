@@ -2,6 +2,8 @@ package grpcsvc
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +20,16 @@ func TestCreateCommunityBootstrapIsPrivateOwnerBoundAndReplaySafe(t *testing.T) 
 	ctx := context.Background()
 	pool := startSpacePostgresForTest(t, ctx)
 	applySpaceMigration(t, ctx, pool)
+	for _, name := range []string{"000028_chat_creation_outcomes.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000024_authority_revision.up.sql", "000030_entry_policy.up.sql"} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(raw))
+		require.NoError(t, err)
+	}
+	nativeMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000033_membership_authority.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(nativeMigration))
+	require.NoError(t, err)
 	ownerProfile := uuid.New()
 	ownerAccount := uuid.New()
 	serviceCtx := authctx.WithVerifiedServiceIdentity(ctx, authctx.ServiceIdentityGameIntegration)
