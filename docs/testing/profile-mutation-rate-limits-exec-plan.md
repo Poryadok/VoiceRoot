@@ -42,12 +42,13 @@ Actual caller cancellation remains typed, before any database access.
 
 ## Milestones
 
-- [ ] Meaningful existing-handler RED for absent limiter before closed database.
-- [ ] Atomic Redis admission plus fail-closed handler/production wiring.
-- [ ] Multi-client concurrency, window, TTL, account/operation and error tests.
-- [ ] Existing fixtures explicitly supply their private real miniredis limiter.
-- [ ] Focused PostgreSQL cycle proves denied requests leave data unchanged.
-- [ ] User short suite, race/vet/lint, independent review and portable delivery.
+- [x] Meaningful existing-handler RED for absent limiter before closed database.
+- [x] Atomic Redis admission plus fail-closed handler/production wiring.
+- [x] Multi-client concurrency, window, TTL, account/operation and error tests.
+- [x] Existing fixtures explicitly supply their private real miniredis limiter.
+- [x] Focused PostgreSQL cycle proves denied requests leave data unchanged.
+- [x] User short suite and focused race/vet/lint.
+- [ ] Independent review and portable delivery to integrator121.
 
 ## Detailed Steps
 
@@ -75,7 +76,23 @@ hosted exact-head CI, deployed behavior and final acceptance remain distinct.
 
 - [x] Canon, current handlers/constructors, Redis wiring and ownership inspected.
 - [x] Ordinary quota choice and failure policy recorded in TT BE-220 c1.
-- [ ] RED/GREEN and verification evidence recorded below after execution.
+- [x] RED at `2c3befdfb8a5d37c6174f9f4384fbb712c5135ad`: both real
+  handlers returned Internal from the closed database rather than Unavailable.
+- [x] Linux Go1.26.5 source `83758e486dd761e45da7024bcf67c1a6ec374fba`:
+  full User short suite 244 PASS test/subtest events, 100 explicit short skips,
+  0 failures; limiter race 4 PASS/0 skip; User vet PASS.
+- [x] Actual PostgreSQL16 fixture: shared two-service create/archive cycle and
+  denial/outage no-write/no-event assertions PASS, 0 skip.
+- [x] Actual Redis8.10.2 source Lua: 64 concurrent calls admitted exactly 10,
+  denied 54; separate delete budget, denial TTL and corrupt-type rejection PASS.
+- [x] Pinned golangci2.6.1 rebuilt inside Linux Go1.26.5: 0 issues. Stock
+  image built with Go1.25.3 rejects this module before analysis; not a PASS.
+
+Developer evidence is in TT BE-220 c2/c3 and portable attachments. The first
+short run lacked root Compose in the source archive; corrected rerun passed.
+The first race run had one admission error with a 100ms test dial timeout;
+the fixture now allows 1s and logs errors, preserving all concurrency assertions.
+No deployed result, hosted CI or final acceptance is inferred from these checks.
 
 ## Risks And Follow-Ups
 
