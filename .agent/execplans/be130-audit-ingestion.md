@@ -26,7 +26,8 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 
 - [x] Freeze accepted c3/c5 behavior in owning canon and shared codec fixtures.
 - [x] Shared codec/validation/replay hash passes meaningful acceptance cases.
-- [ ] Same-transaction global ID reservation, audit/outbox effect and replay proof.
+- [x] Same-transaction global ID reservation and audit/outbox implementation;
+  actual PostgreSQL replay/concurrency proof remains pending.
 - [x] Signed Role/Chat-only listener, body validation and no legacy fallback.
 - [ ] Independent security/concurrency review and exact-head hosted checks/PR.
 
@@ -86,13 +87,15 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 
 ## Risks And Follow-Ups
 
-Accepted composite decision BE-A2-COMPOSITE-CHAT-NODE c4/c5 adds a concrete
-integration gate: author18's migration 000028 and transaction helper must validate
-the persisted COMMITTED binding during freeze/purge and the permanent terminal
-Space fence. Ingestion already takes the shared lifecycle lock before receipt
-lookup/insertion, including fresh collision resolution; the new helper is still
-pending. This checkpoint must not be treated as a completed production ingress
-until that gate is implemented and proved. Ordinary replay c3/c5 is unchanged.
+Accepted composite decision BE-A2-COMPOSITE-CHAT-NODE c4/c5 is integrated from
+author18's coherent immutable6678fee dependency (protocol86f48e6 and sharedcodec
+ancestor). Migration000028 and checkAuditIngressLifecycle now validate the exact
+persisted COMMITTED binding during freeze/purge and permanent terminal Space
+fence before both receipt lookups, including fresh collision resolution. A new
+PostgreSQL test covers changed binding, frozen original drain and a concurrent
+terminal fence blocking even receipted retries. Full Space short424 and vet pass;
+real PostgreSQL proof and independent review remain pending. Ordinary replay
+c3/c5 is unchanged. This is source integration, not P3 activation or deployment.
 
 Security/concurrency/migration change requires independent review. Current GitHub
 outage blocks remote delivery/checks but not local development; do not duplicate

@@ -319,10 +319,13 @@ default to `30s`/`2m`/`5s`; invalid values fail startup. Redis is required at
 startup and each credential's JTI is consumed atomically until expiry plus skew;
 Redis failure or an unusable JWKS fails closed. These settings describe source
 capability and do not establish deployment or completed PostgreSQL verification.
-The accepted composite freeze/purge binding and permanent-fence integration is
-tracked with BE-A2-COMPOSITE-CHAT-NODE c4/c5 and remains a delivery gate for this
-ingress checkpoint; the listener must not be treated as production-complete
-without that transaction guard and its concurrency proof.
+The accepted composite freeze/purge guard from BE-A2-COMPOSITE-CHAT-NODE c4/c5
+checks its persisted COMMITTED audit/Space/Chat/creator binding under the shared
+Space lifecycle transaction lock. A permanent PURGED fence rejects late delivery
+before even an existing receipt can acknowledge success. Current interactive ACL
+is not rerun for an already committed fact. The same guard runs after a uniqueness
+collision rollback in the fresh receipt transaction. Real PostgreSQL concurrency
+proof and independent review remain delivery gates; this does not activate P3.
 
 Exact replay of the same `audit_event_id` and canonical payload returns the empty
 success response; the same ID with any changed field is `ALREADY_EXISTS`.

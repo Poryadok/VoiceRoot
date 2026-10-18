@@ -65,6 +65,7 @@ jobs:
             TestAuditIngestionConcurrentExactAndConflict \
             TestAuditIngestionInvalidAndFailedEffectsReserveNothing \
             TestAuditIngestionCompensationPreservesReservation \
+            TestAuditIngestionFrozenCompositeAndPermanentTerminalFence \
             TestAuditIngestionMigrationRoundTripAndUint64 \
             TestAuditIngestionLocalExternalCollisionRaceAndRetainedLocalFence; do
             grep -Eq -- "^--- PASS: ${test_name}([[:space:]]|$)" "$TEST_LOG"

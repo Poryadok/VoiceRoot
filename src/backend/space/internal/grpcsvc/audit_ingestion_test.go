@@ -114,7 +114,7 @@ func TestAuditIngestionSignedRPCValidationAndErrorMapping(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
 		code codes.Code
-	}{{store.ErrAuditEventConflict, codes.AlreadyExists}, {errors.New("private database address"), codes.Unavailable}} {
+	}{{store.ErrAuditEventConflict, codes.AlreadyExists}, {store.ErrCompositeConflict, codes.AlreadyExists}, {store.ErrLifecycleFrozen, codes.FailedPrecondition}, {store.ErrCompositeResultExpired, codes.FailedPrecondition}, {errors.New("private database address"), codes.Unavailable}} {
 		spy.err = tc.err
 		err = call("role", makeRequest())
 		require.Equal(t, tc.code, status.Code(err))
@@ -136,7 +136,7 @@ func TestAuditIngestionSignedRPCPersistsOneEffect(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForTest(t, ctx)
 	applySpaceMigration(t, ctx, pool)
-	for _, name := range []string{"000015_audit_ledger.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql"} {
+	for _, name := range []string{"000015_audit_ledger.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000028_chat_creation_outcomes.up.sql"} {
 		body, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

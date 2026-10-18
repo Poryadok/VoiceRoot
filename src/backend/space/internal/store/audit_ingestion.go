@@ -37,11 +37,9 @@ func (s *SpaceStore) ImportAuditEvent(ctx context.Context, producer string, even
 		return fmt.Errorf("begin audit ingestion: %w", err)
 	}
 	defer rollbackLifecycleTx(ctx, tx)
-	if err := lockLifecycleSpace(ctx, tx, spaceID); err != nil {
+	if err := checkAuditIngressLifecycle(ctx, tx, producer, event); err != nil {
 		return fmt.Errorf("lock audit lifecycle: %w", err)
 	}
-	// Composite freeze/purge admission is added here by the accepted c5 integration
-	// against its persisted outcome schema, before even an exact receipt replay.
 	if found, err := s.matchAuditReceipt(ctx, tx, id, spaceID, producer, digest[:]); found || err != nil {
 		return err
 	}
@@ -62,7 +60,7 @@ func (s *SpaceStore) ImportAuditEvent(ctx context.Context, producer string, even
 				return fmt.Errorf("begin audit collision read: %w", beginErr)
 			}
 			defer rollbackLifecycleTx(ctx, readTx)
-			if lockErr := lockLifecycleSpace(ctx, readTx, spaceID); lockErr != nil {
+			if lockErr := checkAuditIngressLifecycle(ctx, readTx, producer, event); lockErr != nil {
 				return fmt.Errorf("lock audit collision lifecycle: %w", lockErr)
 			}
 			found, receiptErr := s.matchAuditReceipt(ctx, readTx, id, spaceID, producer, digest[:])

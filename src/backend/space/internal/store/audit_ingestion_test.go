@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"voice/backend/pkg/spaceaudit"
 )
@@ -249,4 +250,50 @@ func TestAuditIngestionCompensationPreservesReservation(t *testing.T) {
 	assertImportCounts(t, st, id.String(), 0, 0, 1)
 	event := spaceaudit.ReplayEvent{AuditEventID: id.String(), SpaceID: space.ID.String(), ActorProfileID: previous.String(), Action: "role_created", TargetType: "role", TargetID: uuid.NewString(), DetailsJSON: "{}", OccurredAt: timestamppb.Now()}
 	require.ErrorIs(t, st.ImportAuditEvent(ctx, "role", event), ErrAuditEventConflict)
+}
+
+func TestAuditIngestionFrozenCompositeAndPermanentTerminalFence(t *testing.T) {
+	st, b := compositeStoreFixture(t)
+	ctx := context.Background()
+	applyAuditLedgerMigrationForTest(t, ctx, st)
+	applyAuditIngestionMigration(t, st)
+	_, err := st.CommitChatCreation(ctx, b, codes.OK)
+	require.NoError(t, err)
+	event := spaceaudit.ReplayEvent{AuditEventID: b.AuditEventId, SpaceID: b.SpaceId, ActorProfileID: b.CreatorProfileId, Action: "chat_created", TargetType: "chat", TargetID: b.ChatId, DetailsJSON: "{}", OccurredAt: timestamppb.Now()}
+	changed := event
+	changed.SpaceID = uuid.NewString()
+	require.ErrorIs(t, st.ImportAuditEvent(ctx, "chat", changed), ErrCompositeConflict, "global composite ID reserves its original Space")
+	changed = event
+	changed.ActorProfileID = uuid.NewString()
+	require.ErrorIs(t, st.ImportAuditEvent(ctx, "chat", changed), ErrCompositeConflict, "reserved composite IDs bind original actor even live")
+	_, err = st.Pool.Exec(ctx, `INSERT INTO space_lifecycle_aggregates(space_id,deletion_operation_id,phase,generation) VALUES($1,$2,'SCHEDULED',1)`, b.SpaceId, uuid.New())
+	require.NoError(t, err)
+	unreserved := event
+	unreserved.AuditEventID = uuid.NewString()
+	require.ErrorIs(t, st.ImportAuditEvent(ctx, "chat", unreserved), ErrLifecycleFrozen)
+	assertImportCounts(t, st, unreserved.AuditEventID, 0, 0, 0)
+	require.NoError(t, st.ImportAuditEvent(ctx, "chat", event), "original COMMITTED fact drains while frozen")
+	require.NoError(t, st.ImportAuditEvent(ctx, "chat", event), "fresh credential exact replay while frozen")
+	assertImportCounts(t, st, event.AuditEventID, 1, 1, 1)
+	blocker, err := st.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer rollbackLifecycleTx(ctx, blocker)
+	require.NoError(t, lockLifecycleSpace(ctx, blocker, uuid.MustParse(b.SpaceId)))
+	_, err = blocker.Exec(ctx, `INSERT INTO space_permanent_purge_fences(space_id,deletion_operation_id,purge_generation,purged_at) VALUES($1,$2,1,clock_timestamp())`, b.SpaceId, uuid.New())
+	require.NoError(t, err)
+	result := make(chan error, 1)
+	go func() { result <- st.ImportAuditEvent(ctx, "chat", event) }()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND wait_event='advisory')`).Scan(&waiting)
+		return err == nil && waiting
+	}, 5*time.Second, 20*time.Millisecond, "ingestion reaches actual lifecycle lock before terminal commit")
+	require.NoError(t, blocker.Commit(ctx))
+	select {
+	case err = <-result:
+		require.ErrorIs(t, err, ErrLifecycleFrozen, "terminal fence wins even an already-receipted retry")
+	case <-time.After(5 * time.Second):
+		t.Fatal("ingestion did not finish after terminal commit")
+	}
+	assertImportCounts(t, st, event.AuditEventID, 1, 1, 1)
 }

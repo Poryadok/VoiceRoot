@@ -37,8 +37,11 @@ func (s *AuditIngestionGRPC) AppendAuditEvent(ctx context.Context, req *spacev1.
 		return nil, status.Error(codes.Unavailable, "audit storage unavailable")
 	}
 	if err := s.Store.ImportAuditEvent(ctx, producer, event); err != nil {
-		if errors.Is(err, store.ErrAuditEventConflict) {
+		if errors.Is(err, store.ErrAuditEventConflict) || errors.Is(err, store.ErrCompositeConflict) {
 			return nil, status.Error(codes.AlreadyExists, "audit event ID already reserved")
+		}
+		if errors.Is(err, store.ErrLifecycleFrozen) || errors.Is(err, store.ErrCompositeResultExpired) {
+			return nil, status.Error(codes.FailedPrecondition, "audit lifecycle admission refused")
 		}
 		if errors.Is(err, spaceaudit.ErrInvalidEvent) || errors.Is(err, spaceaudit.ErrInvalidDetails) {
 			return nil, status.Error(codes.InvalidArgument, "invalid audit event")

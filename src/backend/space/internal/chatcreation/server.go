@@ -12,7 +12,7 @@ import (
 	"voice/backend/pkg/principal"
 )
 
-// Store errors are classified by the concrete adapter; authentication and
+// OutcomeStore errors are classified by the concrete adapter; authentication and
 // external admission failures never manufacture a stored terminal outcome.
 type OutcomeStore interface {
 	GetChatCreationOutcome(context.Context, uuid.UUID, uuid.UUID) (*spacev1.SpaceChatCreationOutcome, error)
