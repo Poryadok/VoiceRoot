@@ -55,6 +55,29 @@ class PreservationTest(unittest.TestCase):
         with patch.object(preserve,'isolated_census',return_value=changed):
             with self.assertRaisesRegex(preserve.Blocked,'populated_census_changed'):
                 preserve.verify_post_apply(self.runtime,self.source,cut,self.fence)
+
+    def test_rootless_post_apply_uses_the_native_census_adapter(self):
+        cut=self.capture();calls=[]
+        class NativeRuntime:
+            rootless=True
+            base=self.base
+            def no_operation_containers(self,**_kwargs):pass
+            def archive_selected_store(self,path):
+                Path(path).write_bytes(b'native archive')
+                return copy.deepcopy(cut['manifest'])
+            def capture_census(self,archive,manifest,label,*,validate=None):
+                calls.append((Path(archive).name,label))
+                if validate is not None:validate()
+                return copy.deepcopy(self_row)
+        self_row=copy.deepcopy(self.row)
+        runtime=NativeRuntime()
+        runtime.base=self.base
+        with patch.object(preserve,'verify_archive',return_value=True), \
+             patch.object(preserve,'native_inventory',return_value={'same':True}), \
+             patch.object(preserve,'isolated_census',side_effect=AssertionError('Docker fallback')):
+            result=preserve.verify_post_apply(runtime,None,cut,self.fence)
+        self.assertEqual(calls,[('rollout-after.tar','rollout-after')])
+        self.assertTrue(result['census_verified'])
     def test_cut_digest_tamper_blocks_resume(self):
         cut=self.capture();cut['census']['consumers'][0]['num_pending']=0
         with patch.object(preserve,'isolated_census',return_value=copy.deepcopy(self.row)):

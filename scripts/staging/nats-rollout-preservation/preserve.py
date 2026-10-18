@@ -494,7 +494,13 @@ def verify_post_apply(runtime, source, cut, verify_fence):
         raise Blocked('rollout_native_store_changed')
     verify_fence()
     catalog=native_catalog(runtime,archive,manifest,verify_fence)
-    recovery={};row=isolated_census(runtime,archive,manifest,'rollout-after',recovery)
+    recovery={}
+    if getattr(runtime,'rootless',False) is True:
+        capture=getattr(runtime,'capture_census',None)
+        if not callable(capture):raise Blocked('rollout_rootless_census_unavailable')
+        row=capture(archive,manifest,'rollout-after',validate=verify_fence)
+    else:
+        row=isolated_census(runtime,archive,manifest,'rollout-after',recovery)
     verify_catalog(catalog,row)
     compared,observations=recovered_census(cut['census'],row,recovery,cut['manifest'])
     if canonical(cut['census'])!=cut['census_sha256'] or semantic(compared)!=semantic(cut['census']):
