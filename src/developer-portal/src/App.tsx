@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { OAuthCallback } from './OAuthCallback';
 import { apiBase, apiFetch, oauthClientId, oauthDisabled } from './oauth/api';
 import { callbackRedirectUri } from './oauth/callback';
@@ -34,10 +35,14 @@ function extractBots(body: Record<string, unknown>): BotSummary[] {
 }
 
 export function App() {
-  if (window.location.pathname === '/callback') {
-    return <OAuthCallback />;
-  }
-  return <Portal />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/callback" caseSensitive element={<OAuthCallback />} />
+        <Route path="*" element={<Portal />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 function Portal() {
