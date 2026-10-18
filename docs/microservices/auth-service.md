@@ -805,7 +805,9 @@ pending targets. Provider outage сохраняет последнее verified 
 - TOTP секреты: AES-256-GCM шифрование at rest; `AUTH_TOTP_ENCRYPTION_KEY` обязателен при `auth.persistence=jdbc` без `auth.totp.test-bypass` (иначе Auth не стартует; `DEFAULT_DEV_KEY` только memory/dev bypass)
 - Refresh token: только хэш в БД, оригинал — только клиенту
 - Нет SMS 2FA (v1) — только TOTP
-- IP logging для аудита
+- Ordinary Auth observations are not an audit ledger; BE211-OBS-v1 uses unknown
+  login IP and never logs raw IP/device/account data. Verified client-IP
+  propagation requires its own protected contract before activation.
 
 ### T056-P1: session epoch
 
