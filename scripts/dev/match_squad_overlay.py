@@ -99,6 +99,15 @@ def rendered_hash(target, obj):
     return object_hash(projection)
 
 
+def _normalized_env_item(item):
+    """Normalize only Kubernetes' omitted empty EnvVar.value representation."""
+    normalized = copy.deepcopy(item)
+    if (isinstance(normalized, dict) and type(normalized.get("value")) is str and
+            normalized["value"] == "" and "valueFrom" not in normalized):
+        del normalized["value"]
+    return normalized
+
+
 def observed_render_hash(target, obj):
     """Normalize API defaults and EnvVar empty-literal serialization only."""
     if target.kind == "Deployment":
@@ -110,12 +119,13 @@ def observed_render_hash(target, obj):
             for port in container.get("ports", []):
                 port.setdefault("protocol", "TCP")
             for env in container.get("env", []):
-                if (isinstance(env, dict) and type(env.get("value")) is str and
-                        env["value"] == "" and "valueFrom" not in env):
-                    # Kubernetes serializes EnvVar.value with omitempty. Its
-                    # readback may omit this explicit empty literal; only that
-                    # exact field is equivalent, and only without valueFrom.
-                    del env["value"]
+                # Kubernetes serializes EnvVar.value with omitempty. Its
+                # readback may omit this explicit empty literal; only that
+                # exact field is equivalent, and only without valueFrom.
+                normalized = _normalized_env_item(env)
+                if normalized != env:
+                    env.clear()
+                    env.update(normalized)
         for volume in pod_spec.get("volumes", []):
             source = volume.get("configMap") or volume.get("secret")
             if source is not None:
@@ -227,7 +237,12 @@ def _append_or_merge(old_list, new_list, path, identity_field, parent_exists=Tru
         identity = _list_identity(old_item, identity_field)
         if identity in removed:
             continue
-        if new_by_id[identity] != old_item:
+        old_comparison = old_item
+        new_comparison = new_by_id[identity]
+        if identity_field == "env":
+            old_comparison = _normalized_env_item(old_item)
+            new_comparison = _normalized_env_item(new_by_id[identity])
+        if new_comparison != old_comparison:
             raise OverlayError("overlay would modify an existing list item")
     additions = []
     for new_item in new_list:
