@@ -1,11 +1,10 @@
 syntax = "proto3";
 
-import "voice/story/v1/report_target.proto";
-
 package voice.story.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
+import "voice/story/v1/report_target.proto";
 
 option go_package = "voice.app/voice/story/v1;storyv1";
 

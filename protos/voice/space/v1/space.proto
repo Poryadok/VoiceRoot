@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-import "voice/space/v1/report_target.proto";
-
 package voice.space.v1;
 
 import "google/protobuf/timestamp.proto";
@@ -9,6 +7,7 @@ import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/file/v1/file.proto";
+import "voice/space/v1/report_target.proto";
 
 option go_package = "voice.app/voice/space/v1;spacev1";
 

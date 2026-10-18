@@ -50,3 +50,43 @@ func (s *ReportStore) PurgeReportAccountLinksTx(ctx context.Context, tx pgx.Tx, 
 	_, err = tx.Exec(ctx, `DELETE FROM reports WHERE id=ANY($1::uuid[])`, ids)
 	return err
 }
+
+// PurgeReportSubjectsTx also works after restore when the raw account mapping
+// is absent. The lifecycle owner holds each supplied subject lock and has
+// inserted its opaque terminal fence in this transaction before this callback.
+func (s *ReportStore) PurgeReportSubjectsTx(ctx context.Context, tx pgx.Tx, subjects []uuid.UUID) error {
+	if tx == nil || len(subjects) == 0 {
+		return errors.New("verified subject purge transaction required")
+	}
+	for _, id := range subjects {
+		if id == uuid.Nil {
+			return errors.New("invalid purge subject")
+		}
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM reports WHERE reporter_subject_id=ANY($1::uuid[]) OR validated_target_subject_id=ANY($1::uuid[]) ORDER BY id FOR UPDATE`, subjects)
+	if err != nil {
+		return err
+	}
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	if _, err = tx.Exec(ctx, `UPDATE sanctions SET report_id=NULL,reason='TARGET_DELETED',updated_at=now() WHERE report_id=ANY($1::uuid[])`, ids); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `DELETE FROM reports WHERE id=ANY($1::uuid[])`, ids)
+	return err
+}

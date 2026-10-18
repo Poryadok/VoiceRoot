@@ -8,8 +8,10 @@ services:
       USER_REPORT_TARGETS_TLS_CERT_FILE: "/run/report-targets/user.crt"
       USER_REPORT_TARGETS_TLS_KEY_FILE: "/run/report-targets/user.key"
       USER_REPORT_TARGETS_CLIENT_CA_FILE: "/run/report-targets/ca.crt"
-      USER_REPORT_TARGETS_MODERATION_JWKS_URL: "https://moderation:8447/.well-known/jwks.json"
+      USER_REPORT_TARGETS_MODERATION_JWKS_URL: "https://voice-moderation-authority:8443/internal/principals/jwks"
       USER_REPORT_TARGETS_JWKS_CA_FILE: "/run/report-targets/ca.crt"
+      USER_REPORT_TARGETS_JWKS_CLIENT_CERT_FILE: "/run/report-targets/user-jwks-client.crt"
+      USER_REPORT_TARGETS_JWKS_CLIENT_KEY_FILE: "/run/report-targets/user-jwks-client.key"
       USER_REPORT_TARGETS_REPLAY_REDIS_ADDR: "redis:6379"
     volumes:
       - ${REPORT_TARGETS_FIXTURE_DIR:?generate a local report targets fixture first}:/run/report-targets:ro
@@ -20,8 +22,10 @@ services:
       MESSAGING_REPORT_TARGETS_TLS_CERT_FILE: "/run/report-targets/messaging.crt"
       MESSAGING_REPORT_TARGETS_TLS_KEY_FILE: "/run/report-targets/messaging.key"
       MESSAGING_REPORT_TARGETS_CLIENT_CA_FILE: "/run/report-targets/ca.crt"
-      MESSAGING_REPORT_TARGETS_MODERATION_JWKS_URL: "https://moderation:8447/.well-known/jwks.json"
+      MESSAGING_REPORT_TARGETS_MODERATION_JWKS_URL: "https://voice-moderation-authority:8443/internal/principals/jwks"
       MESSAGING_REPORT_TARGETS_JWKS_CA_FILE: "/run/report-targets/ca.crt"
+      MESSAGING_REPORT_TARGETS_JWKS_CLIENT_CERT_FILE: "/run/report-targets/messaging-jwks-client.crt"
+      MESSAGING_REPORT_TARGETS_JWKS_CLIENT_KEY_FILE: "/run/report-targets/messaging-jwks-client.key"
       MESSAGING_REPORT_TARGETS_REPLAY_REDIS_ADDR: "redis:6379"
     volumes:
       - ${REPORT_TARGETS_FIXTURE_DIR:?generate a local report targets fixture first}:/run/report-targets:ro
@@ -32,8 +36,10 @@ services:
       SPACE_REPORT_TARGETS_TLS_CERT_FILE: "/run/report-targets/space.crt"
       SPACE_REPORT_TARGETS_TLS_KEY_FILE: "/run/report-targets/space.key"
       SPACE_REPORT_TARGETS_CLIENT_CA_FILE: "/run/report-targets/ca.crt"
-      SPACE_REPORT_TARGETS_MODERATION_JWKS_URL: "https://moderation:8447/.well-known/jwks.json"
+      SPACE_REPORT_TARGETS_MODERATION_JWKS_URL: "https://voice-moderation-authority:8443/internal/principals/jwks"
       SPACE_REPORT_TARGETS_JWKS_CA_FILE: "/run/report-targets/ca.crt"
+      SPACE_REPORT_TARGETS_JWKS_CLIENT_CERT_FILE: "/run/report-targets/space-jwks-client.crt"
+      SPACE_REPORT_TARGETS_JWKS_CLIENT_KEY_FILE: "/run/report-targets/space-jwks-client.key"
       SPACE_REPORT_TARGETS_REPLAY_REDIS_ADDR: "redis:6379"
     volumes:
       - ${REPORT_TARGETS_FIXTURE_DIR:?generate a local report targets fixture first}:/run/report-targets:ro
@@ -44,19 +50,25 @@ services:
       STORY_REPORT_TARGETS_TLS_CERT_FILE: "/run/report-targets/story.crt"
       STORY_REPORT_TARGETS_TLS_KEY_FILE: "/run/report-targets/story.key"
       STORY_REPORT_TARGETS_CLIENT_CA_FILE: "/run/report-targets/ca.crt"
-      STORY_REPORT_TARGETS_MODERATION_JWKS_URL: "https://moderation:8447/.well-known/jwks.json"
+      STORY_REPORT_TARGETS_MODERATION_JWKS_URL: "https://voice-moderation-authority:8443/internal/principals/jwks"
       STORY_REPORT_TARGETS_JWKS_CA_FILE: "/run/report-targets/ca.crt"
+      STORY_REPORT_TARGETS_JWKS_CLIENT_CERT_FILE: "/run/report-targets/story-jwks-client.crt"
+      STORY_REPORT_TARGETS_JWKS_CLIENT_KEY_FILE: "/run/report-targets/story-jwks-client.key"
       STORY_REPORT_TARGETS_REPLAY_REDIS_ADDR: "redis:6379"
     volumes:
       - ${REPORT_TARGETS_FIXTURE_DIR:?generate a local report targets fixture first}:/run/report-targets:ro
   moderation:
+    networks:
+      default:
+        aliases: [voice-moderation-authority]
     user: "0:0"
     environment:
-      MODERATION_REPORT_TARGETS_SIGNING_KEYS_DIR: "/run/report-targets/moderation"
-      MODERATION_REPORT_TARGETS_ACTIVE_KID: "current"
-      MODERATION_REPORT_TARGETS_JWKS_LISTEN: ":8447"
-      MODERATION_REPORT_TARGETS_JWKS_TLS_CERT_FILE: "/run/report-targets/moderation.crt"
-      MODERATION_REPORT_TARGETS_JWKS_TLS_KEY_FILE: "/run/report-targets/moderation.key"
+      MODERATION_PRINCIPAL_SIGNING_KEYS_DIR: "/run/report-targets/moderation"
+      MODERATION_PRINCIPAL_ACTIVE_KID: "current"
+      MODERATION_PRINCIPAL_JWKS_LISTEN: ":8443"
+      MODERATION_PRINCIPAL_TLS_CERT_FILE: "/run/report-targets/moderation.crt"
+      MODERATION_PRINCIPAL_TLS_KEY_FILE: "/run/report-targets/moderation.key"
+      MODERATION_PRINCIPAL_CLIENT_CA_FILE: "/run/report-targets/ca.crt"
       MODERATION_REPORT_TARGETS_TLS_CA_FILE: "/run/report-targets/ca.crt"
       MODERATION_REPORT_TARGETS_CLIENT_CERT_FILE: "/run/report-targets/moderation-client.crt"
       MODERATION_REPORT_TARGETS_CLIENT_KEY_FILE: "/run/report-targets/moderation-client.key"

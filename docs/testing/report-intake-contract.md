@@ -15,13 +15,48 @@ verifies the delegated credential, current epoch and replay admission; raw
 identity metadata and the ordinary listener cannot create an intake.
 
 Every valid non-self request commits a real reports row then returns `202`/OK,
-`CreateReportResponse.report.id` only. Other fields are unset. No lookup, viewer
-ACL, account mapping, automod or publication occurs in that wait chain. Receipt
+`CreateReportResponse.report.id` only. Other fields are unset. No target lookup,
+viewer ACL, target account mapping, automod or publication occurs in that wait chain. Receipt
 ID construction never rereads a worker-mutated row. Owner failure does not alter
 otherwise healthy intake. Store failure returns generic unavailability, never
 success without commit. Input JSON/description/session/self errors remain explicit.
 There is no reporter status endpoint or WS/push outcome callback. A receipt is
 not a capability to read evidence or decide a complaint.
+
+TT BE-137 c11/c12 explicitly refine the requester authority under the delegated
+autonomy decision, without changing target non-disclosure. Before intake SQL,
+Moderation resolves the authenticated reporter's current opaque subject from
+protected Auth. Its account, canonical subject, lifecycle revision and session
+epoch must match the verified Gateway identity; malformed or unavailable Auth
+authority gives uniform generic unavailability for every target type. A valid
+current deleted requester or epoch mismatch cannot submit. No target-dependent
+request runs synchronously. LIVE Auth restriction alone does not create a new
+reporting prohibition.
+
+Migration `000008_report_subject_provenance` adds nullable reporter and validated
+target subject/revision pairs. Fresh intake records the reporter account and
+opaque subject in the same account-then-subject serialized transaction as its
+receipt, using BE-045's `BindSubjectTx` and `RequireLiveSubjectTx`. A permanent
+opaque terminal fence or newer conflicting lifecycle state wins over stale LIVE.
+No raw account tombstone or profile/account UUID inference is introduced.
+
+Validation resolves the persisted reporter subject and any LIVE User target's
+subject outside SQL. It locks all accounts in sorted distinct order, then all
+subjects, then its still-current claimed report row, before activation and the
+BE-046 hook. Reporter soft deletion after acceptance does not retrospectively
+change report eligibility; its verified purge deadline still applies. A known
+terminal reporter or target discovered while the target columns are still NULL
+scrubs pending work instead of attaching erased identity. Auth NOT_FOUND or
+FAILED_PRECONDITION text is never terminal evidence. Unknown authority retries.
+
+The shared boot/restore owner injects `ReportPrivacyAcquire`, which returns a
+generation-bound `ReportPrivacyCheck`. Nil closes intake, validation and dispatch.
+The captured check runs before a transaction and before commit or dispatch, and
+must stay invalid after closure/reopen. It supplements authoritative SQL terminal
+and deadline checks. It does not promise atomicity across Auth, SQL and a broker.
+Actual shared startup/import/recovery wiring remains a separate activation gate.
+Legacy NULL subject provenance needs owner-authorized cleanup/backfill and a
+current recovery cut before admission; existing account evidence is insufficient.
 
 ## Durable state and effects
 
@@ -61,7 +96,7 @@ on intake validation fences. Rollback must preserve admitted work/outbox evidenc
 `report_intake_outbox` keeps unique `(report_id, kind)`, event UUID, fixed subject,
 serialized bytes, next attempt, attempt count, safe failure and delivery time.
 Domain protobuf and analytics protojson retain their existing wire formats. A
-bounded publication attempt locks its report then event; a committed purge wins
+bounded publication attempt locks accounts, subjects, its report, then event; a committed purge wins
 before a later publish. A lost ACK retries identical ID/bytes. Delivery checks
 the deployment-owned JetStream contract and sets `Nats-Msg-Id`; it neither creates
 production streams nor claims network exactly-once semantics.
@@ -74,6 +109,12 @@ their outboxes, detaches linked sanctions and leaves a minimal `TARGET_DELETED`
 reason. It never revokes a sanction or closes an appeal. Failure rolls back the
 owner purge transaction. Unknown legacy profile/account mappings require the
 separate User-owned cleanup authority; UUID equality is never a substitute.
+
+The same terminal transaction invokes `PurgeReportSubjectsTx(ctx, tx, subjects)`
+after the lifecycle owner inserts its opaque fence, including the no-account-
+mapping restore branch. This removes reporter/validated-target subject matches
+and cascading work without guessing the erased account. Effective sanction and
+appeal snapshots remain; participant failure rolls back the entire purge.
 
 ## Reporter transport configuration
 
@@ -139,24 +180,33 @@ hosted CI, deployment and independent acceptance evidence remain distinct.
 
 Each owner uses `<OWNER>_REPORT_TARGETS_` (`USER`, `MESSAGING`, `SPACE`, `STORY`):
 `GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`,
-`MODERATION_JWKS_URL`, `JWKS_CA_FILE`, `REPLAY_REDIS_ADDR`,
+`MODERATION_JWKS_URL`, `JWKS_CA_FILE`, `JWKS_CLIENT_CERT_FILE`,
+`JWKS_CLIENT_KEY_FILE`, `REPLAY_REDIS_ADDR`,
 `REPLAY_REDIS_PASSWORD`. Any present setting enables strict complete startup
 validation. Sole trusted issuer is moderation; adding other JWKS issuers fails.
 The shared principal's existing S2S cache duration settings retain their defaults.
 Replay keys include owner namespace and credential JTI, shared by receiver replicas.
 
-Moderation uses `MODERATION_REPORT_TARGETS_` with `SIGNING_KEYS_DIR`, `ACTIVE_KID`
-(exactly two distinct RSA PKCS8 keys named `<kid>.pem`), `JWKS_LISTEN`,
-`JWKS_TLS_CERT_FILE`, `JWKS_TLS_KEY_FILE`, `TLS_CA_FILE`, `CLIENT_CERT_FILE`,
+Moderation uses `MODERATION_REPORT_TARGETS_` with `TLS_CA_FILE`, `CLIENT_CERT_FILE`,
 `CLIENT_KEY_FILE`, and each owner's `<OWNER>_GRPC_ADDR`/`<OWNER>_TLS_SERVER_NAME`.
-Any setting requires all four clients plus signer/HTTPS JWKS configuration.
+Any setting requires all four clients and the shared canonical Moderation issuer.
+There is no report-specific signer or JWKS publisher. The shared key ring uses
+`MODERATION_PRINCIPAL_SIGNING_KEYS_DIR` and `MODERATION_PRINCIPAL_ACTIVE_KID`,
+with exactly two distinct RSA keys. Shared certificate-only mTLS JWKS uses
+`MODERATION_PRINCIPAL_JWKS_LISTEN` (default `:8443`),
+`MODERATION_PRINCIPAL_TLS_CERT_FILE`, `MODERATION_PRINCIPAL_TLS_KEY_FILE`,
+`MODERATION_PRINCIPAL_CLIENT_CA_FILE`, and exact path `/internal/principals/jwks`.
+Each owner's outbound JWKS client has its own mounted certificate/key and CA;
+missing or partial identity fails startup. JWKS publication has no JWT or public
+domain-readiness dependency, avoiding a reciprocal startup wait.
 No settings disables the worker, preserving accepted PENDING work and ordinary
 listener denial. There is no ordinary-client or automatic gRPC retry fallback.
 `NATS_URL` is required for enabled worker startup; transient stream/publish errors
 remain durable retries. Worker shutdown completes before its transports/pool close.
 BE-046 owns the single VALID hook; without it validation remains manual, without
 the legacy synchronous threshold engine. Migration catalog is scan000005,
-BE045000006, intake000007, BE046000010; duplicate numeric versions are invalid.
+BE045000006, intake000007, report subjects000008, shared boot000009,
+BE046000010; duplicate numeric versions are invalid.
 
 The opt-in local/CI Compose overlay `docker-compose.report-targets.yml` extends
 the existing Phase0 fixture without replacing Gateway signing identity. Generate

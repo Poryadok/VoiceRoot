@@ -7,11 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/moderation/internal/automod"
 )
 
 // ReportStore persists reports and auto-mod audit rows in moderation_db.
 type ReportStore struct {
-	Pool *pgxpool.Pool
+	Pool     *pgxpool.Pool
+	Subjects *automod.Store
+	Privacy  ReportPrivacyAcquire
 }
 
 var errStoreNotConfigured = errors.New("report store is not configured")

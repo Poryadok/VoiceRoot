@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-import "voice/messaging/v1/report_target.proto";
-
 package voice.messaging.v1;
 
 import "google/protobuf/timestamp.proto";
@@ -9,6 +7,7 @@ import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/gameintegration/v1/game_event.proto";
+import "voice/messaging/v1/report_target.proto";
 
 option go_package = "voice.app/voice/messaging/v1;messagingv1";
 

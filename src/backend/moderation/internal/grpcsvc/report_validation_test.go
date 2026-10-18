@@ -25,10 +25,10 @@ func (f validationHookFunc) ReportValidated(ctx context.Context, tx pgx.Tx, fact
 func TestReportValidationDurability(t *testing.T) {
 	pool := reportIntakePool(t)
 	ctx := context.Background()
-	reports := &store.ReportStore{Pool: pool}
+	reports := newReportFixtureStore(pool)
 	insert := func() *store.ReportRow {
 		description := "private evidence"
-		row, err := reports.InsertReport(ctx, uuid.New(), "user", uuid.New(), "spam", &description, `{"private":true}`)
+		row, err := insertReportFixture(t, reports, ctx, uuid.New(), "user", uuid.New(), "spam", &description, `{"private":true}`)
 		require.NoError(t, err)
 		return row
 	}
@@ -47,15 +47,15 @@ func TestReportValidationDurability(t *testing.T) {
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 		_, err = pool.Exec(ctx, `UPDATE reports SET validation_next_at=now()-interval '1 second' WHERE id=$1`, row.ID)
 		require.NoError(t, err)
-		restarted := &store.ReportStore{Pool: pool}
+		restarted := newReportFixtureStore(pool)
 		fresh, err := restarted.ClaimValidation(ctx)
 		require.NoError(t, err)
 		require.NotEqual(t, claim.ClaimID, fresh.ClaimID)
 		require.Equal(t, 2, fresh.Attempts)
-		applied, err := reports.CompleteValidation(ctx, claim, "LIVE", uuid.New(), event(), nil)
+		applied, err := completeReportFixture(t, reports, ctx, claim, "LIVE", uuid.New(), event(), nil)
 		require.NoError(t, err)
 		require.False(t, applied)
-		applied, err = restarted.CompleteValidation(ctx, fresh, "MISSING", uuid.Nil, nil, nil)
+		applied, err = completeReportFixture(t, restarted, ctx, fresh, "MISSING", uuid.Nil, nil, nil)
 		require.NoError(t, err)
 		require.True(t, applied)
 		var state, status, evidence string
@@ -75,12 +75,13 @@ func TestReportValidationDurability(t *testing.T) {
 		hook := validationHookFunc(func(ctx context.Context, tx pgx.Tx, fact store.ValidationFact) error {
 			require.Equal(t, row.ID, fact.ReportID)
 			require.Equal(t, &account, fact.TargetAccountID)
-			require.Nil(t, fact.ReporterAccountID)
+			require.NotNil(t, fact.ReporterAccountID)
+			require.NotNil(t, fact.ReporterSubjectID)
 			_, err := tx.Exec(ctx, `INSERT INTO auto_mod_log(target_profile_id,trigger,action,details) VALUES($1,'hook','test','{}')`, fact.TargetID)
 			require.NoError(t, err)
 			return errors.New("injected threshold enqueue failure")
 		})
-		applied, err := reports.CompleteValidation(ctx, claim, "LIVE", account, events, hook)
+		applied, err := completeReportFixture(t, reports, ctx, claim, "LIVE", account, events, hook)
 		require.Error(t, err)
 		require.False(t, applied)
 		var state string
@@ -91,10 +92,10 @@ func TestReportValidationDurability(t *testing.T) {
 		require.Zero(t, count)
 		require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM report_intake_outbox`).Scan(&count))
 		require.Zero(t, count)
-		applied, err = reports.CompleteValidation(ctx, claim, "LIVE", account, events, nil)
+		applied, err = completeReportFixture(t, reports, ctx, claim, "LIVE", account, events, nil)
 		require.NoError(t, err)
 		require.True(t, applied)
-		applied, err = reports.CompleteValidation(ctx, claim, "LIVE", account, event(), nil)
+		applied, err = completeReportFixture(t, reports, ctx, claim, "LIVE", account, event(), nil)
 		require.NoError(t, err)
 		require.False(t, applied)
 		require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM report_intake_outbox WHERE report_id=$1`, row.ID).Scan(&count))
@@ -109,7 +110,7 @@ func TestReportValidationDurability(t *testing.T) {
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, `DELETE FROM reports WHERE id=$1`, row.ID)
 		require.NoError(t, err)
-		applied, err := reports.CompleteValidation(ctx, claim, "LIVE", uuid.New(), event(), nil)
+		applied, err := completeReportFixture(t, reports, ctx, claim, "LIVE", uuid.New(), event(), nil)
 		require.NoError(t, err)
 		require.False(t, applied)
 		var count int
@@ -120,13 +121,13 @@ func TestReportValidationDurability(t *testing.T) {
 		row := insert()
 		claim, err := reports.ClaimValidation(ctx)
 		require.NoError(t, err)
-		applied, err := reports.CompleteValidation(ctx, claim, "UNSPECIFIED", uuid.Nil, event(), nil)
+		applied, err := completeReportFixture(t, reports, ctx, claim, "UNSPECIFIED", uuid.Nil, event(), nil)
 		require.Error(t, err)
 		require.False(t, applied)
-		applied, err = reports.CompleteValidation(ctx, claim, "LIVE", uuid.Nil, event(), nil)
+		applied, err = completeReportFixture(t, reports, ctx, claim, "LIVE", uuid.Nil, event(), nil)
 		require.Error(t, err)
 		require.False(t, applied)
-		applied, err = reports.CompleteValidation(ctx, claim, "DELETED", uuid.Nil, nil, nil)
+		applied, err = completeReportFixture(t, reports, ctx, claim, "DELETED", uuid.Nil, nil, nil)
 		require.NoError(t, err)
 		require.True(t, applied)
 		var state string
@@ -140,15 +141,15 @@ type reportTargetFunc func(context.Context, uuid.UUID, string, uuid.UUID) (strin
 func TestReportAccountPurgeParticipant(t *testing.T) {
 	pool := reportIntakePool(t)
 	ctx := context.Background()
-	reports := &store.ReportStore{Pool: pool}
+	reports := newReportFixtureStore(pool)
 	account := uuid.New()
 	targetAccount := uuid.New()
-	row, err := reports.InsertVerifiedReport(ctx, uuid.New(), account, "user", uuid.New(), "spam", nil, `{"private":true}`)
+	row, err := insertVerifiedReportFixture(t, reports, ctx, uuid.New(), account, "user", uuid.New(), "spam", nil, `{"private":true}`)
 	require.NoError(t, err)
 	claim, err := reports.ClaimValidation(ctx)
 	require.NoError(t, err)
 	events := []store.IntakeEvent{{ID: uuid.New(), Kind: "domain.report_created", Subject: "moderation.report_created", Payload: []byte("private-domain")}, {ID: uuid.New(), Kind: "analytics.report_created", Subject: "analytics.moderation.report_created", Payload: []byte("private-analytics")}}
-	applied, err := reports.CompleteValidation(ctx, claim, "LIVE", targetAccount, events, nil)
+	applied, err := completeReportFixture(t, reports, ctx, claim, "LIVE", targetAccount, events, nil)
 	require.NoError(t, err)
 	require.True(t, applied)
 	sanctions := &store.SanctionStore{Pool: pool}
@@ -176,7 +177,7 @@ func TestReportAccountPurgeParticipant(t *testing.T) {
 	require.Nil(t, reportID)
 	require.Equal(t, "TARGET_DELETED", reason)
 	require.Nil(t, revoked)
-	applied, err = reports.CompleteValidation(ctx, claim, "LIVE", targetAccount, events, nil)
+	applied, err = completeReportFixture(t, reports, ctx, claim, "LIVE", targetAccount, events, nil)
 	require.NoError(t, err)
 	require.False(t, applied)
 }
@@ -184,14 +185,14 @@ func TestReportAccountPurgeParticipant(t *testing.T) {
 func TestReportValidationConcurrentWorkers(t *testing.T) {
 	pool := reportIntakePool(t)
 	ctx := context.Background()
-	reports := &store.ReportStore{Pool: pool}
+	reports := newReportFixtureStore(pool)
 	_, err := pool.Exec(ctx, `CREATE TABLE validation_hook_calls(report_id UUID PRIMARY KEY)`)
 	require.NoError(t, err)
 	for range 20 {
-		_, err = reports.InsertReport(ctx, uuid.New(), "story", uuid.New(), "spam", nil, `{}`)
+		_, err = insertReportFixture(t, reports, ctx, uuid.New(), "story", uuid.New(), "spam", nil, `{}`)
 		require.NoError(t, err)
 	}
-	worker := &reportintake.Worker{Reports: reports, Targets: reportTargetFunc(func(context.Context, uuid.UUID, string, uuid.UUID) (string, uuid.UUID, error) {
+	worker := &reportintake.Worker{Reports: reports, Subjects: reportFixtureResolver(), Privacy: reportOpenPrivacy, Targets: reportTargetFunc(func(context.Context, uuid.UUID, string, uuid.UUID) (string, uuid.UUID, error) {
 		return "LIVE", uuid.Nil, nil
 	}), Validated: validationHookFunc(func(ctx context.Context, tx pgx.Tx, fact store.ValidationFact) error {
 		_, err := tx.Exec(ctx, `INSERT INTO validation_hook_calls(report_id) VALUES($1)`, fact.ReportID)
@@ -281,17 +282,17 @@ func TestReportIntakeMigrationLegacyProvenance(t *testing.T) {
 	require.Equal(t, "VALID", state)
 	_, err = pool.Exec(ctx, string(down))
 	require.Error(t, err, "unverified historical work must survive rollback attempts")
-	reports := &store.ReportStore{Pool: pool}
+	reports := newReportFixtureStore(pool)
 	claim, err := reports.ClaimValidation(ctx)
 	require.NoError(t, err)
 	require.Equal(t, pending, claim.ReportID)
 	applied, err := reports.CompleteValidation(ctx, claim, "LIVE", uuid.Nil, nil, nil)
-	require.NoError(t, err)
-	require.True(t, applied)
+	require.ErrorIs(t, err, store.ErrReportPrivacy)
+	require.False(t, applied)
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM report_intake_outbox`).Scan(&count))
 	require.Zero(t, count, "revalidated history must not replay already published report-created events")
-	_, err = reports.InsertReport(ctx, uuid.New(), "story", uuid.New(), "spam", nil, `{}`)
+	_, err = insertReportFixture(t, reports, ctx, uuid.New(), "story", uuid.New(), "spam", nil, `{}`)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(down))
 	require.Error(t, err, "new admitted work must survive rollback attempts")
@@ -306,10 +307,10 @@ func (f reportTargetFunc) Resolve(ctx context.Context, id uuid.UUID, kind string
 func TestReportValidationWorkerOutbox(t *testing.T) {
 	pool := reportIntakePool(t)
 	ctx := context.Background()
-	reports := &store.ReportStore{Pool: pool}
-	row, err := reports.InsertReport(ctx, uuid.New(), "story", uuid.New(), "spam", nil, `{}`)
+	reports := newReportFixtureStore(pool)
+	row, err := insertReportFixture(t, reports, ctx, uuid.New(), "story", uuid.New(), "spam", nil, `{}`)
 	require.NoError(t, err)
-	worker := &reportintake.Worker{Reports: reports, Targets: reportTargetFunc(func(_ context.Context, id uuid.UUID, kind string, target uuid.UUID) (string, uuid.UUID, error) {
+	worker := &reportintake.Worker{Reports: reports, Subjects: reportFixtureResolver(), Privacy: reportOpenPrivacy, Targets: reportTargetFunc(func(_ context.Context, id uuid.UUID, kind string, target uuid.UUID) (string, uuid.UUID, error) {
 		require.Equal(t, row.ID, id)
 		require.Equal(t, "story", kind)
 		require.Equal(t, row.TargetID, target)

@@ -61,7 +61,8 @@ func verifiedReportContext(t *testing.T, request proto.Message, profile uuid.UUI
 
 func TestReportOpaqueReceipt(t *testing.T) {
 	pool := reportIntakePool(t)
-	svc := &ModerationGRPC{Reports: &store.ReportStore{Pool: pool}}
+	svc := &ModerationGRPC{Reports: newReportFixtureStore(pool)}
+	configureReportFixture(svc)
 	for _, targetType := range []string{"user", "message", "space", "story"} {
 		t.Run(targetType, func(t *testing.T) {
 			description := "Private complaint"
@@ -85,6 +86,7 @@ func TestReportPendingCannotEnterQueueOrActions(t *testing.T) {
 	ctx := context.Background()
 	reports := &store.ReportStore{Pool: pool}
 	svc := &ModerationGRPC{Reports: reports}
+	configureReportFixture(svc)
 	target := uuid.New()
 	request := &moderationv1.CreateReportRequest{TargetType: "user", TargetId: target.String(), Category: "spam"}
 	response, err := svc.CreateReport(verifiedReportContext(t, request, uuid.New()), request)
@@ -137,7 +139,8 @@ type intakeAuthCounter struct{ calls int }
 
 func TestReportRawIdentityCannotWrite(t *testing.T) {
 	pool := reportIntakePool(t)
-	svc := &ModerationGRPC{Reports: &store.ReportStore{Pool: pool}}
+	svc := &ModerationGRPC{Reports: newReportFixtureStore(pool)}
+	configureReportFixture(svc)
 	req := &moderationv1.CreateReportRequest{TargetType: "user", TargetId: uuid.NewString(), Category: "spam"}
 	raw := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-voice-profile-id", uuid.NewString(), "x-voice-user-id", uuid.NewString()))
 	_, err := svc.CreateReport(raw, req)

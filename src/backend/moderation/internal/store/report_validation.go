@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
+	"voice/backend/moderation/internal/automod"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,13 +14,17 @@ import (
 // ValidationFact is submission and owner provenance, never a threshold decision.
 // A missing reporter account is legacy/unverified evidence and remains manual-only.
 type ValidationFact struct {
-	ReportID          uuid.UUID
-	ReporterProfileID uuid.UUID
-	ReporterAccountID *uuid.UUID
-	TargetType        string
-	TargetID          uuid.UUID
-	TargetAccountID   *uuid.UUID
-	CreatedAt         time.Time
+	ReportID                uuid.UUID
+	ReporterProfileID       uuid.UUID
+	ReporterAccountID       *uuid.UUID
+	TargetType              string
+	TargetID                uuid.UUID
+	TargetAccountID         *uuid.UUID
+	CreatedAt               time.Time
+	ReporterSubjectID       *uuid.UUID
+	ReporterSubjectRevision *int64
+	TargetSubjectID         *uuid.UUID
+	TargetSubjectRevision   *int64
 }
 
 // ReportValidatedHook may enqueue independent threshold work in this transaction.
@@ -33,6 +39,9 @@ type ValidationClaim struct {
 	Attempts          int
 	LegacyPublication bool
 	Category          string
+	ReporterSubject   *automod.Subject
+	TargetSubject     *automod.Subject
+	PrivacyCheck      ReportPrivacyCheck
 }
 
 // ClaimValidation leases durable work. Expired claims can be recovered after restart.
@@ -51,9 +60,9 @@ UPDATE reports r SET validation_claim=$1,validation_claim_until=now()+interval '
  validation_attempts=CASE WHEN validation_attempts<2147483647 THEN validation_attempts+1 ELSE validation_attempts END
 FROM ready WHERE r.id=ready.id
 RETURNING r.id,r.reporter_profile_id,r.reporter_account_id,r.target_type,r.target_id,
- r.created_at,r.validation_attempts,r.validation_publication_legacy,r.category`, claim.ClaimID).Scan(
+ r.created_at,r.validation_attempts,r.validation_publication_legacy,r.category,r.reporter_subject_id,r.reporter_subject_revision`, claim.ClaimID).Scan(
 		&claim.ReportID, &claim.ReporterProfileID, &claim.ReporterAccountID, &claim.TargetType, &claim.TargetID,
-		&claim.CreatedAt, &claim.Attempts, &claim.LegacyPublication, &claim.Category)
+		&claim.CreatedAt, &claim.Attempts, &claim.LegacyPublication, &claim.Category, &claim.ReporterSubjectID, &claim.ReporterSubjectRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +106,18 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	if claim == nil {
 		return false, errors.New("missing validation claim")
 	}
+	if s.Subjects == nil || claim.PrivacyCheck == nil {
+		return false, ErrReportPrivacy
+	}
+	if err := claim.PrivacyCheck(ctx); err != nil {
+		return false, err
+	}
+	if claim.ReporterAccountID == nil || claim.ReporterSubjectID == nil || claim.ReporterSubjectRevision == nil || claim.ReporterSubject == nil || claim.ReporterSubject.AccountID != *claim.ReporterAccountID || claim.ReporterSubject.ID != *claim.ReporterSubjectID || claim.ReporterSubject.Revision < *claim.ReporterSubjectRevision {
+		return false, ErrReportPrivacy
+	}
+	if state == "LIVE" && accountID != uuid.Nil && (claim.TargetSubject == nil || claim.TargetSubject.AccountID != accountID) {
+		return false, ErrReportPrivacy
+	}
 	if state != "LIVE" && state != "MISSING" && state != "DELETED" {
 		return false, errors.New("invalid target decision")
 	}
@@ -111,12 +132,45 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		return false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockReportAccounts(ctx, tx, *claim.ReporterAccountID, accountID); err != nil {
+		return false, err
+	}
+	bindings := []automod.Subject{*claim.ReporterSubject}
+	if claim.TargetSubject != nil {
+		bindings = append(bindings, *claim.TargetSubject)
+	}
+	if len(bindings) == 2 && bindings[0].ID == bindings[1].ID {
+		if bindings[0].AccountID != bindings[1].AccountID || bindings[0].Revision != bindings[1].Revision || bindings[0].State != bindings[1].State {
+			return false, ErrReportPrivacy
+		}
+		bindings = bindings[:1]
+	}
+	sort.Slice(bindings, func(i, j int) bool { return bindings[i].ID.String() < bindings[j].ID.String() })
+	for _, binding := range bindings {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('moderation-subject-lifecycle:' || $1::text,0))`, binding.ID.String()); err != nil {
+			return false, err
+		}
+	}
+	terminal := false
+	for _, binding := range bindings {
+		var ended bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1) OR ($2::timestamptz IS NOT NULL AND $2<=clock_timestamp()) OR EXISTS(SELECT 1 FROM automod_subjects WHERE subject_id=$1 AND purge_at<=clock_timestamp())`, binding.ID, binding.PurgeAt).Scan(&ended); err != nil {
+			return false, err
+		}
+		if ended {
+			terminal = true
+			continue
+		}
+		if err = s.Subjects.BindSubjectTx(ctx, tx, binding); err != nil {
+			return false, err
+		}
+	}
 	var fact ValidationFact
 	var legacy bool
-	err = tx.QueryRow(ctx, `SELECT id,reporter_profile_id,reporter_account_id,target_type,target_id,created_at,validation_publication_legacy
+	err = tx.QueryRow(ctx, `SELECT id,reporter_profile_id,reporter_account_id,target_type,target_id,created_at,validation_publication_legacy,reporter_subject_id,reporter_subject_revision
  FROM reports WHERE id=$1 AND validation_state='PENDING' AND validation_claim=$2
  AND validation_claim_until>now() FOR UPDATE`, claim.ReportID, claim.ClaimID).Scan(
-		&fact.ReportID, &fact.ReporterProfileID, &fact.ReporterAccountID, &fact.TargetType, &fact.TargetID, &fact.CreatedAt, &legacy)
+		&fact.ReportID, &fact.ReporterProfileID, &fact.ReporterAccountID, &fact.TargetType, &fact.TargetID, &fact.CreatedAt, &legacy, &fact.ReporterSubjectID, &fact.ReporterSubjectRevision)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -125,6 +179,36 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	}
 	if fact.TargetType != claim.TargetType || fact.TargetID != claim.TargetID {
 		return false, errors.New("target claim mismatch")
+	}
+	if fact.ReporterAccountID == nil || fact.ReporterSubjectID == nil || fact.ReporterSubjectRevision == nil || *fact.ReporterAccountID != *claim.ReporterAccountID || *fact.ReporterSubjectID != *claim.ReporterSubjectID || *fact.ReporterSubjectRevision != *claim.ReporterSubjectRevision {
+		return false, ErrReportPrivacy
+	}
+	if terminal {
+		// The target account column may still be NULL: the verified late result is
+		// sufficient to scrub this pending row, never to recreate a terminal link.
+		if _, err = tx.Exec(ctx, `DELETE FROM reports WHERE id=$1`, fact.ReportID); err != nil {
+			return false, err
+		}
+		if err = claim.PrivacyCheck(ctx); err != nil {
+			return false, err
+		}
+		return false, tx.Commit(ctx)
+	}
+	// Soft deletion after acceptance does not retrospectively change reporter
+	// eligibility. Its authoritative purge deadline still closes activation.
+	if claim.TargetSubject != nil {
+		if claim.TargetSubject.State != "LIVE" {
+			if _, err = tx.Exec(ctx, `UPDATE reports SET validation_claim=NULL,validation_claim_until=NULL,validation_next_at=now()+interval '1 second',validation_failure_code='SUBJECT_NOT_LIVE' WHERE id=$1`, fact.ReportID); err != nil {
+				return false, err
+			}
+			if err = claim.PrivacyCheck(ctx); err != nil {
+				return false, err
+			}
+			return false, tx.Commit(ctx)
+		}
+		if err = s.Subjects.RequireLiveSubjectTx(ctx, tx, claim.TargetSubject.AccountID, claim.TargetSubject.ID, claim.TargetSubject.Revision); err != nil {
+			return false, err
+		}
 	}
 	if state == "LIVE" && !legacy {
 		kinds := map[string]bool{}
@@ -142,9 +226,11 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	} else {
 		if accountID != uuid.Nil {
 			fact.TargetAccountID = &accountID
+			fact.TargetSubjectID = &claim.TargetSubject.ID
+			fact.TargetSubjectRevision = &claim.TargetSubject.Revision
 		}
 		_, err = tx.Exec(ctx, `UPDATE reports SET validation_state='VALID',validated_target_account_id=$2,
- validation_claim=NULL,validation_claim_until=NULL,validation_failure_code=NULL,updated_at=now() WHERE id=$1`, fact.ReportID, fact.TargetAccountID)
+ validated_target_subject_id=$3,validated_target_subject_revision=$4,validation_claim=NULL,validation_claim_until=NULL,validation_failure_code=NULL,updated_at=now() WHERE id=$1`, fact.ReportID, fact.TargetAccountID, fact.TargetSubjectID, fact.TargetSubjectRevision)
 		if err == nil && hook != nil {
 			err = hook.ReportValidated(ctx, tx, fact)
 		}
@@ -161,6 +247,9 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		}
 	}
 	if err != nil {
+		return false, err
+	}
+	if err = claim.PrivacyCheck(ctx); err != nil {
 		return false, err
 	}
 	if err = tx.Commit(ctx); err != nil {
