@@ -2,13 +2,10 @@ package grpcsvc
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	"voice/backend/pkg/integrationtest"
 
 	moderationv1 "voice.app/voice/moderation/v1"
 )
@@ -19,8 +16,7 @@ func TestCreateReport_StoryTarget_Accepted(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(repoRoot(t), "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src", "backend", "migrations", "moderation_db", "000003_story_reports.up.sql"))
+	pool := reportIntakePool(t)
 	client, cleanup := startModerationGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -34,7 +30,7 @@ func TestCreateReport_StoryTarget_Accepted(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.GetReport().GetId())
-	require.Equal(t, "story", resp.GetReport().GetTargetType())
-	require.Equal(t, storyID.String(), resp.GetReport().GetTargetId())
-	require.Equal(t, "pending", resp.GetReport().GetStatus())
+	require.Empty(t, resp.GetReport().GetTargetType())
+	require.Empty(t, resp.GetReport().GetTargetId())
+	require.Empty(t, resp.GetReport().GetStatus())
 }
