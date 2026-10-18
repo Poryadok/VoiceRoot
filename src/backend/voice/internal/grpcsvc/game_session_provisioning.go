@@ -15,6 +15,7 @@ import (
 	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/gameprincipal"
 	"voice/backend/voice/internal/gameprovision"
+	"voice/backend/voice/internal/ordinarycall"
 	voicestore "voice/backend/voice/internal/store"
 )
 
@@ -52,14 +53,15 @@ type SdkConversionRoomCloser interface {
 
 type GameSessionProvisioningGRPC struct {
 	callsv1.UnimplementedGameSessionProvisioningServiceServer
-	Store      GameSessionProvisioner
-	Roster     GameSessionRosterApplier
-	Closer     GameSessionCloser
-	Fencer     gameprovision.ManagedGameSessionMediaFencer
-	Conversion SdkConversionFenceStore
-	Calls      SdkConversionCallStore
-	CallCloser SdkConversionRoomCloser
-	Now        func() time.Time
+	Store         GameSessionProvisioner
+	Roster        GameSessionRosterApplier
+	Closer        GameSessionCloser
+	Fencer        gameprovision.ManagedGameSessionMediaFencer
+	Conversion    SdkConversionFenceStore
+	Calls         SdkConversionCallStore
+	CallCloser    SdkConversionRoomCloser
+	OrdinaryCalls *ordinarycall.Coordinator
+	Now           func() time.Time
 }
 
 func (s *GameSessionProvisioningGRPC) FenceSdkConversion(ctx context.Context, request *callsv1.FenceSdkConversionRequest) (*callsv1.FenceSdkConversionResponse, error) {
@@ -99,10 +101,23 @@ func (s *GameSessionProvisioningGRPC) FenceSdkConversion(ctx context.Context, re
 	if reservation.Complete {
 		return reservation.Response, nil
 	}
-	if reservation.SourceRoom != "" {
+	if binding := reservation.NativeSource; binding != nil {
+		if s.OrdinaryCalls == nil {
+			return nil, status.Error(codes.Unavailable, "native conversion cleanup unavailable")
+		}
+		if err := s.OrdinaryCalls.QuiesceConversionSource(ctx, ordinarycall.MediaBinding{
+			RoomID: binding.RoomID, RoomOperationID: binding.RoomOperationID, AccountID: binding.AccountID, ProfileID: binding.ProfileID,
+			Generation: binding.Generation, FenceOperationID: binding.FenceOperationID, MediaIdentity: binding.MediaIdentity,
+		}); err != nil {
+			return nil, status.Error(codes.Unavailable, "native conversion cleanup pending")
+		}
+	} else if reservation.SourceRoom != "" {
 		call, lookupErr := s.Calls.GetCall(ctx, reservation.SourceRoom)
 		if lookupErr != nil {
 			return nil, status.Error(codes.Unavailable, "source media fence recovery unavailable")
+		}
+		if call.OrdinaryOperationID != "" {
+			return nil, status.Error(codes.Unavailable, "native source provenance required")
 		}
 		if call.Status != callsv1.CallStatus_CALL_STATUS_ENDED {
 			if _, err := s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, now); err != nil {

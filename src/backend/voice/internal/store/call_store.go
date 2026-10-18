@@ -31,8 +31,8 @@ var (
 	ErrNotScreenSharing                = errors.New("profile is not screen sharing")
 	ErrScreenShareDenied               = errors.New("screen share not permitted")
 	ErrOperationConflict               = errors.New("operation id conflicts with a different request")
-	ErrSpaceMediaStaleGrant = errors.New("space media grant is below the current authority floor")
-	ErrSpaceMediaTransition = errors.New("space media participant transition is in progress")
+	ErrSpaceMediaStaleGrant            = errors.New("space media grant is below the current authority floor")
+	ErrSpaceMediaTransition            = errors.New("space media participant transition is in progress")
 	// ErrMoveContention means the bounded Redis CAS retry budget was exhausted.
 	// It is deliberately distinct from a dependency outage so the transport can
 	// expose the same safe retryable result without leaking Redis details.
@@ -165,31 +165,35 @@ type SpaceMediaEpochProgress struct {
 }
 
 type Call struct {
-	RoomID             string `json:"room_id"`
-	LivekitRoomName    string `json:"livekit_room_name"`
-	ChatID             string `json:"chat_id"`
-	ManagedGameSession bool   `json:"managed_game_session,omitempty"`
+	// Ordinary journal provenance is projection metadata, never authorization.
+	OrdinaryOperationID     string            `json:"ordinary_operation_id,omitempty"`
+	OrdinaryVersion         uint64            `json:"ordinary_version,omitempty"`
+	OrdinaryMediaIdentities map[string]string `json:"ordinary_media_identities,omitempty"`
+	RoomID                  string            `json:"room_id"`
+	LivekitRoomName         string            `json:"livekit_room_name"`
+	ChatID                  string            `json:"chat_id"`
+	ManagedGameSession      bool              `json:"managed_game_session,omitempty"`
 	// MatchSquadMatchID marks a Redis call document as a repairable projection
 	// of an exact current MatchSquad row. It never grants authorization.
-	MatchSquadMatchID        string                      `json:"match_squad_match_id,omitempty"`
-	MatchSquadMemberEpochs   map[string]string           `json:"match_squad_member_epochs,omitempty"`
-	MatchSquadTerminalEpochs map[string]map[string]bool  `json:"match_squad_terminal_epochs,omitempty"`
-	ApplicationID            string                      `json:"application_id,omitempty"`
-	EnvironmentID            string                      `json:"environment_id,omitempty"`
-	SessionID                string                      `json:"session_id,omitempty"`
-	VoiceRoomID              string                      `json:"voice_room_id,omitempty"`
-	SpaceID                  string                      `json:"space_id,omitempty"`
-	SessionKind              callsv1.VoiceSessionKind    `json:"session_kind,omitempty"`
-	InitiatorProfileID       string                      `json:"initiator_profile_id"`
-	CalleeProfileID          string                      `json:"callee_profile_id"`
-	MediaKind                callsv1.CallMediaKind       `json:"media_kind"`
-	Status                   callsv1.CallStatus          `json:"status"`
-	StartedAt                time.Time                   `json:"started_at"`
-	ExpiresAt                time.Time                   `json:"expires_at"`
-	EndedAt                  time.Time                   `json:"ended_at,omitempty"`
-	States                   map[string]ParticipantState `json:"states"`
-	ScreenShares             []ScreenShareEntry          `json:"screen_shares,omitempty"`
-	SpaceMedia         map[string]SpaceMediaParticipant `json:"space_media,omitempty"`
+	MatchSquadMatchID        string                           `json:"match_squad_match_id,omitempty"`
+	MatchSquadMemberEpochs   map[string]string                `json:"match_squad_member_epochs,omitempty"`
+	MatchSquadTerminalEpochs map[string]map[string]bool       `json:"match_squad_terminal_epochs,omitempty"`
+	ApplicationID            string                           `json:"application_id,omitempty"`
+	EnvironmentID            string                           `json:"environment_id,omitempty"`
+	SessionID                string                           `json:"session_id,omitempty"`
+	VoiceRoomID              string                           `json:"voice_room_id,omitempty"`
+	SpaceID                  string                           `json:"space_id,omitempty"`
+	SessionKind              callsv1.VoiceSessionKind         `json:"session_kind,omitempty"`
+	InitiatorProfileID       string                           `json:"initiator_profile_id"`
+	CalleeProfileID          string                           `json:"callee_profile_id"`
+	MediaKind                callsv1.CallMediaKind            `json:"media_kind"`
+	Status                   callsv1.CallStatus               `json:"status"`
+	StartedAt                time.Time                        `json:"started_at"`
+	ExpiresAt                time.Time                        `json:"expires_at"`
+	EndedAt                  time.Time                        `json:"ended_at,omitempty"`
+	States                   map[string]ParticipantState      `json:"states"`
+	ScreenShares             []ScreenShareEntry               `json:"screen_shares,omitempty"`
+	SpaceMedia               map[string]SpaceMediaParticipant `json:"space_media,omitempty"`
 }
 
 // MatchSquadProjectionAuthority must reread the current owned SQL membership

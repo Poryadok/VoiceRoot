@@ -20,6 +20,7 @@ import (
 	"voice/backend/voice/internal/federationmedia"
 	"voice/backend/voice/internal/gameprovision"
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/ordinarycall"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceevents"
 
@@ -73,6 +74,7 @@ type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
 	Calls                    voicestore.CallStore
+	OrdinaryCalls            *ordinarycall.Coordinator
 	ManagedGameSessionRooms  ManagedGameSessionRoomLookup
 	ManagedGameSessionGrants ManagedGameSessionGrantChecker
 	SdkConversionAdmission   SdkConversionAdmissionGuard
@@ -129,7 +131,7 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 	if err := guestguard.RequireRegular(ctx); err != nil {
 		return nil, err
 	}
-	profileID, err := callerProfile(ctx)
+	profileID, err := s.ordinaryCallerProfile(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +177,9 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 	if err := s.ensureCallPrivacy(ctx, profileID, calleeID); err != nil {
 		return nil, err
 	}
+	if s.OrdinaryCalls != nil {
+		return s.startOrdinaryCall(ctx, chatID, profileID, calleeID, media, false)
+	}
 
 	now := s.now()
 	roomID := uuid.NewString()
@@ -214,12 +219,18 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 }
 
 func (s *VoiceGRPC) AcceptCall(ctx context.Context, req *callsv1.AcceptCallRequest) (*callsv1.AcceptCallResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, err := s.ordinaryCallerProfile(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
 		return nil, err
+	}
+	if r, owned, err := s.findOrdinaryRoom(ctx, req.GetRoomId()); owned {
+		if err != nil {
+			return nil, err
+		}
+		return s.acceptOrdinaryCall(ctx, r, profileID)
 	}
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
 	if err != nil {
@@ -254,9 +265,23 @@ func (s *VoiceGRPC) AcceptCall(ctx context.Context, req *callsv1.AcceptCallReque
 }
 
 func (s *VoiceGRPC) DeclineCall(ctx context.Context, req *callsv1.DeclineCallRequest) (*callsv1.DeclineCallResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, err := s.ordinaryCallerProfile(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if r, owned, err := s.findOrdinaryRoom(ctx, req.GetRoomId()); owned {
+		if err != nil {
+			return nil, err
+		}
+		r, err = s.terminateOrdinaryCall(ctx, r, profileID, "decline")
+		if err != nil {
+			return nil, err
+		}
+		call, err := ordinaryCallProjection(r)
+		if err != nil {
+			return nil, ordinaryErr(err)
+		}
+		return &callsv1.DeclineCallResponse{CallSession: callToProto(call)}, nil
 	}
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
 	if err != nil {
@@ -285,7 +310,7 @@ func (s *VoiceGRPC) DeclineCall(ctx context.Context, req *callsv1.DeclineCallReq
 }
 
 func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) (*callsv1.JoinCallResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, err := s.ordinaryCallerProfile(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +319,12 @@ func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) 
 	}
 	if s == nil || s.Calls == nil {
 		return nil, status.Error(codes.FailedPrecondition, "voice persistence not configured")
+	}
+	if r, owned, err := s.findOrdinaryRoom(ctx, req.GetRoomId()); owned {
+		if err != nil {
+			return nil, err
+		}
+		return s.joinOrdinaryCall(ctx, r, profileID)
 	}
 	roomID := strings.TrimSpace(req.GetRoomId())
 	call, err := s.Calls.GetCall(ctx, roomID)
@@ -348,9 +379,19 @@ func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) 
 }
 
 func (s *VoiceGRPC) LeaveCall(ctx context.Context, req *callsv1.LeaveCallRequest) (*callsv1.LeaveCallResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, err := s.ordinaryCallerProfile(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if r, owned, err := s.findOrdinaryRoom(ctx, req.GetRoomId()); owned {
+		if err != nil {
+			return nil, err
+		}
+		_, err = s.terminateOrdinaryCall(ctx, r, profileID, "leave")
+		if err != nil {
+			return nil, err
+		}
+		return &callsv1.LeaveCallResponse{}, nil
 	}
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
 	if err != nil {
@@ -394,9 +435,19 @@ func (s *VoiceGRPC) leaveOpenVoiceSession(ctx context.Context, call voicestore.C
 }
 
 func (s *VoiceGRPC) EndCall(ctx context.Context, req *callsv1.EndCallRequest) (*callsv1.EndCallResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, err := s.ordinaryCallerProfile(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if r, owned, err := s.findOrdinaryRoom(ctx, req.GetRoomId()); owned {
+		if err != nil {
+			return nil, err
+		}
+		_, err = s.terminateOrdinaryCall(ctx, r, profileID, "end")
+		if err != nil {
+			return nil, err
+		}
+		return &callsv1.EndCallResponse{}, nil
 	}
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
 	if err != nil {
@@ -654,6 +705,9 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
 		return nil, err
 	}
+	if s.OrdinaryCalls != nil && call.OrdinaryOperationID != "" {
+		return s.ordinaryJoinToken(ctx, call, profileID)
+	}
 	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
 	if err != nil {
 		return nil, err
@@ -780,7 +834,7 @@ func (s *VoiceGRPC) GetVoiceStates(ctx context.Context, req *callsv1.GetVoiceSta
 }
 
 func (s *VoiceGRPC) GetActiveCall(ctx context.Context, _ *callsv1.GetActiveCallRequest) (*callsv1.GetActiveCallResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, err := s.ordinaryCallerProfile(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -788,6 +842,9 @@ func (s *VoiceGRPC) GetActiveCall(ctx context.Context, _ *callsv1.GetActiveCallR
 	if chatID != "" {
 		if err := s.ensureChatMember(ctx, chatID, profileID); err != nil {
 			return nil, err
+		}
+		if response, owned, err := s.ordinaryActiveCall(ctx, profileID, chatID); owned {
+			return response, err
 		}
 		call, err := s.Calls.GetActiveGroupCallForChat(ctx, chatID)
 		if err != nil {
@@ -797,6 +854,9 @@ func (s *VoiceGRPC) GetActiveCall(ctx context.Context, _ *callsv1.GetActiveCallR
 			return nil, err
 		}
 		return &callsv1.GetActiveCallResponse{CallSession: callToProto(call)}, nil
+	}
+	if response, owned, err := s.ordinaryActiveCall(ctx, profileID, ""); owned {
+		return response, err
 	}
 	call, err := s.Calls.GetActiveCall(ctx, profileID)
 	if err != nil {
@@ -817,6 +877,20 @@ func (s *VoiceGRPC) MarkExpiredCallsMissed(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	for _, call := range expired {
+		// Native expiry elects its winner in PostgreSQL and persists SDK cleanup
+		// plus outbox intents. Never mutate that projection through legacy expiry.
+		if s.OrdinaryCalls != nil && !foreignOrdinaryResource(call) {
+			r, owned, lookupErr := s.findOrdinaryRoom(ctx, call.RoomID)
+			if lookupErr != nil {
+				return 0, lookupErr
+			}
+			if owned {
+				if err := s.OrdinaryCalls.Reconcile(ctx, r.Intent.RoomID); err != nil {
+					return 0, err
+				}
+				continue
+			}
+		}
 		updated, err := s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_MISSED, s.now())
 		if err != nil {
 			return 0, err
@@ -833,6 +907,23 @@ func (s *VoiceGRPC) MarkExpiredCallsMissed(ctx context.Context) (int, error) {
 func (s *VoiceGRPC) requireCall(ctx context.Context, roomID, profileID string) (voicestore.Call, error) {
 	if s == nil || s.Calls == nil {
 		return voicestore.Call{}, status.Error(codes.FailedPrecondition, "voice persistence not configured")
+	}
+	if r, owned, err := s.findOrdinaryRoom(ctx, roomID); owned {
+		if err != nil {
+			return voicestore.Call{}, err
+		}
+		if _, err := s.ordinaryActor(ctx, r, profileID); err != nil {
+			return voicestore.Call{}, err
+		}
+		member := r.Members[profileID]
+		if r.Stage == ordinarycall.StageActive && member.State != ordinarycall.MemberJoined {
+			return voicestore.Call{}, status.Error(codes.PermissionDenied, "not a current ordinary participant")
+		}
+		call, err := s.ordinaryProjectedCall(ctx, r)
+		if err != nil {
+			return voicestore.Call{}, ordinaryErr(err)
+		}
+		return call, nil
 	}
 	call, err := s.Calls.GetCall(ctx, strings.TrimSpace(roomID))
 	if err != nil {
@@ -943,6 +1034,9 @@ func (s *VoiceGRPC) startGroupVoice(ctx context.Context, req *callsv1.StartCallR
 	}
 	if media != callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO && media != callsv1.CallMediaKind_CALL_MEDIA_KIND_VIDEO {
 		return nil, status.Error(codes.InvalidArgument, "unsupported media_kind")
+	}
+	if s.OrdinaryCalls != nil {
+		return s.startOrdinaryCall(ctx, chatID, profileID, "", media, true)
 	}
 
 	now := s.now()

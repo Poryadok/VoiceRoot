@@ -14,6 +14,115 @@ workers ещё не зарегистрированы. Отсутствующий
 базовую схему R22.2 (`000001`). D1 paths явно проверяют наличие `000002`, не
 делая source-disabled readiness зависимой от новой таблицы.
 
+## Ordinary DM/group SDK lifecycle (accepted target; not implemented)
+
+BE106-ORDINARY-SDK-v1 ([decision part 1](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c3),
+[part 2](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c4))
+activates only the ordinary DM/group lifecycle. The existing SDK adapter is
+implemented; ordinary handlers do not yet use the following durable coordinator.
+This target does not register R22, Space watcher/roster, GAME_SESSION, MatchSquad
+or federation paths. Their existing dispatch/ownership guards remain authoritative.
+The resumable implementation plan is
+[BE-106 ExecPlan](../../.agent/execplans/be106-ordinary-lifecycle.md).
+
+### Admission and authority
+
+One ordinary PostgreSQL journal owns immutable operation/room IDs, committed
+membership generations, exact shared account-fence ownership, effects and event
+outbox. Redis is a rebuildable compatibility projection. DM room
+`voice-dm-<room UUID>` is ensured before RINGING; group room
+`voice-group-<room UUID>` before ACTIVE. UUIDs/names are never reused. Ring expiry
+is committed RINGING time plus 30 seconds; Accept requires `now < expires_at`.
+Internal PREPARING is not a new public CallStatus.
+
+Trusted caller/Chat/privacy/account and SDK-conversion prechecks precede mutation.
+Pending admission reserves capacity/account/profile slots durably before external
+effects; those fences cannot expire/reassign while an SDK effect may have run.
+Pending admission is visible as busy to conversion quiescence, but is not logical
+membership and cannot authorize tokens or participant facts. Preserve the existing
+post-reservation SDK-conversion recheck. No database transaction spans network IO.
+Finalization CAS revalidates the same operation/generation, room status/version,
+deadline and exact fence ownership, then commits membership and stable event
+intents together. Ordinary read/token paths consult this authority before Redis;
+pending, closing or unavailable authority fails closed.
+
+The shared serialization protocol is
+[BE106-SDK-CONVERSION-SERIALIZATION-v1](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c10).
+Ordinary transactions lock their room first, then the complete account/profile
+identity union using sorted, deduplicated actual signed PostgreSQL hash keys in
+two-int advisory namespace `0x564F4943`, before mapping/fence writes. Conversion
+locks its operation then the same identity barrier and performs only nonlocking
+native-source reads, never ordinary room row locks. Both use READ COMMITTED;
+ownership reads are separate statements after acquiring the barrier. Pending or
+fenced conversion denies the source profile and every profile of the target
+account. Activated conversion retains only retired source-profile denial. Cleanup
+is always allowed. Immutable receipt provenance binds ordinary cleanup to exact
+room, operation and membership generation. Missing authority is not empty source.
+Space/Game writers need their own participation before global conversion safety
+can be asserted.
+
+The native A3 consumer seam is
+[BE011-SOURCE-SEAM-v1](http://192.168.0.109:30990/?project=voice&task=BE-011#comment-c2).
+Keep a separate roster counter from the all-mutation journal CAS. Each committed
+profile join/leave gets a distinct consecutive roster version and frozen event
+in the same transaction, ordered by UUID bytes within a batch; DM Accept advances
+twice atomically. Ringing, pending/no-op admission, SDK cleanup and retries do not
+advance this counter. Store each admitted actor's own verified session epoch,
+never an epoch reconstructed from Auth floors. A common private reader accepts
+one read-only REPEATABLE READ transaction across native sources and takes no
+locks. Source coverage, Space writer integration and the trusted ordinary
+reconnect producer remain separate activation requirements.
+
+SDK create retry uses the stored intent/name. Before READY wins, uncertainty,
+cancellation, failure or restart chooses ABORTING and compensates that exact name;
+a late create cannot ring, issue tokens or revive it. If READY already won before
+response loss, preserve the accepted call. Public Start has no new idempotency
+field/promise: pending/live repeats retain conflict semantics; GetActiveCall
+recovers an accepted call after response loss. Unjournalled legacy Redis rooms
+need validated explicit adoption or controlled drain, never synthetic identity.
+
+### Termination, recovery and media identities
+
+One room/membership transaction elects termination, denies new admission/token
+issuance, invalidates pending admissions and records committed-member snapshots,
+terminal event intents and exact cleanup ownership. Decline applies only to
+RINGING. Either DM participant may End/Leave; preserve existing group End authority.
+Non-last group Leave removes only self; last Leave versus Join is serialized at
+this same transaction boundary. Failed tentative admissions produce no member
+facts, while committed transitions retain their facts after later projection,
+cleanup, response or NATS failure. The shared fact contract is
+[BE102-COMMITTED-ADMISSION-v1](http://192.168.0.109:30990/?project=voice&task=BE-102#comment-c5).
+
+CloseRoom is required for decline, expiry, DM End/Leave, group End and final Leave;
+NotFound proves absence, timeout/unavailable does not. Keep CLOSING/fences and
+retry on uncertainty, returning UNAVAILABLE/deadline rather than cleanup success.
+Confirmed cleanup precedes exact-generation fence release and required Redis
+projection convergence. Non-final Leave journals LEAVING and removes the stored
+media identity. Public terminal decisions/authorized replay remain recoverable
+after membership projection removal. Stale operations cannot overwrite a winner.
+
+Each real ordinary admission freezes opaque media identity
+`ov:<profile UUID>:<membership UUID>`; refresh retains it, leave/rejoin changes it.
+Public roster/events keep profile IDs and client mapping resolves media identity
+back to the profile. Late old removal cannot eject the newer admission. Space,
+MatchSquad and Game identity formats stay unchanged. Shared account fences use
+ordinary operation/generation CAS without commandeering Space operation IDs.
+
+Persist retry scheduling/worker ownership and use bounded fresh contexts. Restart
+aborts unfinished preparation, resumes cleanup, repairs committed projection and
+outbox, expires ringing by CAS and preserves valid ACTIVE calls. Unknown commit
+results resolve by durable readback, never guessed rollback or TTL takeover.
+Outbox replay retains original event IDs/payload/recipients/order; success means
+the accepted journal/SDK/projection boundary and durable intent, not NATS delivery.
+
+DeleteRoom/RemoveParticipant prove current disconnect, not permanent bearer-token
+revocation. The accepted guarantee is durable application admission denial plus
+confirmed current cleanup, with ongoing reconciliation of retired names/identities
+against stale reconnect/late effects. Compact terminal tombstones are not collected
+solely at JWT expiry; an old bearer may briefly reconnect before ejection. Strict
+deny-before-connect is a separate SFU admission-verifier decision. Source tests,
+handshake and signaling are not two-client real-media acceptance.
+
 ## Ответственность
 
 - DM-звонки (1:1 голос/видео)
