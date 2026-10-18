@@ -59,6 +59,16 @@ tests total, zero skips, Linux Java 25). HTTPS endpoint identification remains
 explicit; this fixture does not claim a separate wrong-host deployment check.
 The own Java runner and JDBC database were removed after exporting Surefire XML.
 
+Subject-only terminal participant checkpoint: both mapped and missing-mapping
+Purge paths originally returned success without invoking the newly registered
+subject participant (real PostgreSQL RED). Both now insert the opaque terminal
+fence and execute the callback inside the same transaction, preserving the
+mapped-account participant order. Participant failure rolls back its mutations
+and the terminal fence; an unknown subject never invents account authority.
+The regression and existing first-bind/purge race tests pass on private Linux
+PostgreSQL. Report-specific participant wiring and complete boot import remain
+part of the coherent activation work.
+
 - [x] Confirm actual TT owner156, fresh base and exclusive lease22.
 - [x] Read c9; ordinary policy choices no longer require a user response.
 - [x] Persist exact owning API/schema and policy contracts before production code.

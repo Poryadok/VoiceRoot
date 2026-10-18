@@ -49,6 +49,9 @@ type Store struct {
 	// All terminal participants run in the account-serialized transaction before
 	// the raw account mapping disappears. A failure cannot commit partial erasure.
 	BeforeTerminalPurge func(context.Context, pgx.Tx, uuid.UUID) error
+	// Subject-only participants also run when a restored account mapping is
+	// absent. They may not infer an account identity from this opaque UUID.
+	BeforeTerminalSubjectPurge func(context.Context, pgx.Tx, uuid.UUID) error
 }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{Pool: pool} }
@@ -433,6 +436,11 @@ func (s *Store) Purge(ctx context.Context, subject uuid.UUID) error {
 		if _, err = tx.Exec(ctx, `INSERT INTO automod_terminal_subjects(subject_id) VALUES($1) ON CONFLICT DO NOTHING`, subject); err != nil {
 			return err
 		}
+		if s.BeforeTerminalSubjectPurge != nil {
+			if err = s.BeforeTerminalSubjectPurge(ctx, tx, subject); err != nil {
+				return err
+			}
+		}
 		return tx.Commit(ctx)
 	}
 	if err != nil {
@@ -447,6 +455,11 @@ func (s *Store) Purge(ctx context.Context, subject uuid.UUID) error {
 		}
 		if s.BeforeTerminalPurge != nil {
 			if err := s.BeforeTerminalPurge(ctx, tx, account); err != nil {
+				return err
+			}
+		}
+		if s.BeforeTerminalSubjectPurge != nil {
+			if err := s.BeforeTerminalSubjectPurge(ctx, tx, subject); err != nil {
 				return err
 			}
 		}
