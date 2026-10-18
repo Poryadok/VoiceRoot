@@ -13,11 +13,21 @@ Linux Docker evidence: codec race tests pass (1.040s), three real-PG producer
 race tests pass (9.937s), and signed private RPC race proof passes (2.628s).
 The latter rejects legacy v1 and nested unknown origin bytes before ingestion;
 the codec rejects unknown fields recursively, incomplete aliases and unsupported
-authority. Buf lint and diff whitespace checks pass. Graphify AST update was
-started for this source; no success receipt yet.
+authority. Buf lint and diff whitespace checks pass. Graphify AST update6697
+produced no output within the bounded operation and was canceled (terminal1);
+no AST success is claimed.
 
-Still open: exact-manifest FROZEN/managed-purge/restore bridge cleanup and zero-link
-proofs, c13 actual sealed terminal authority/startup coordinator, every producer's
+The missing FROZEN cleanup was reproduced as a second privacy RED. Five real-PG
+producer/Space/managed-purge race tests now pass (5.521s): exact manifest cleanup,
+orphan selector, rollback of the fence on cleanup failure, unaffected foreign
+chat, local cleanup before external owner wait, and recovered old-link cleanup
+without rebuilding old links or erasing new post-restore coverage. Cores remain
+countable. Purge completion also cleans and verifies zero links by manifest.
+The local restore helper requires independently recovered lifecycle history and
+never opens a gate itself. Default test schema includes migration31.
+
+Still open: remaining c17 E1-E14 assembled race/restore/receipt proofs and actual
+startup invocation, c13 sealed terminal authority/startup coordinator, every producer's
 verified admission, private delivery/retention, all sanction-writer composition,
 and assembled activation/review/CI. These scoped passes do not certify Space P3
 or full BE-045 readiness.

@@ -159,6 +159,11 @@ FROM messaging_space_chat_manifests WHERE space_id=$1 AND deletion_operation_id=
 	if err != nil {
 		return nil, err
 	}
+	if input.State == commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN {
+		if err = eraseAutoModSpaceCoverageTx(ctx, tx, input.SpaceID, input.DeletionOperationID, manifestGeneration); err != nil {
+			return nil, err
+		}
+	}
 	if _, err = tx.Exec(ctx, `INSERT INTO messaging_space_lifecycle_operations(space_id,deletion_operation_id,generation,request_bytes,request_sha256,receipt_bytes,applied_at,retain_until)
 VALUES($1,$2,$3,$4,$5,$6,$7,$7::timestamptz+interval '30 days')`, input.SpaceID, input.DeletionOperationID, input.Generation, input.RequestBytes, input.RequestSHA256, input.ReceiptBytes, appliedAt); err != nil {
 		return nil, err

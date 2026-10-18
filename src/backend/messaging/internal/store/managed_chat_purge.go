@@ -227,6 +227,11 @@ func (s *MessagesStore) StartManagedChatPurge(ctx context.Context, operationID, 
 	if err := authorizeSpaceManagedPurge(ctx, tx, chatID, operationID); err != nil {
 		return nil, err
 	}
+	// Minimize local origin linkage before any external File/Search wait. The
+	// private account core remains independently deliverable and countable.
+	if _, err := tx.Exec(ctx, `DELETE FROM automod_message_coverage WHERE chat_id=$1`, chatID); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO managed_chat_purge_operations(operation_id,chat_id,purge_after,request_sha256,state) VALUES($1,$2,$3,$4,'PENDING')`, operationID, chatID, purgeAfter.Truncate(time.Microsecond), requestSHA256); err != nil {
 		return nil, err
 	}

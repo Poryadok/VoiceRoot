@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +44,6 @@ func automodSourceDatabase(t *testing.T) *pgxpool.Pool {
 		})
 	}
 	seedMessagingSchema(t, ctx, pool)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000031_async_automod.up.sql"))
 	return pool
 }
 

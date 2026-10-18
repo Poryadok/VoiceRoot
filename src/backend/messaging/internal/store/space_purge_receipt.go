@@ -122,6 +122,11 @@ WHERE space_id=$1 AND deletion_operation_id=$2 AND purge_generation=$3`, spaceID
 	if remaining {
 		return nil, ErrSpacePurgeReceiptBinding
 	}
+	// The chat selector is independent of message existence; orphaned restored
+	// bridge rows must not survive merely because primary/companion is absent.
+	if err = eraseAutoModSpaceCoverageTx(ctx, tx, spaceID, operationID, sourceGeneration); err != nil {
+		return nil, err
+	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('voice.messaging_purge_space_id',$1,true),set_config('voice.messaging_purge_operation_id',$2,true)`, spaceID.String(), operationID.String()); err != nil {
 		return nil, err
 	}

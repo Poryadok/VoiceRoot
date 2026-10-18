@@ -69,6 +69,7 @@ CREATE TABLE automod_message_coverage (
   message_id uuid NOT NULL UNIQUE,
   companion_id uuid UNIQUE,
   chat_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CHECK(companion_id IS NULL OR companion_id<>message_id)
 );
 CREATE INDEX automod_message_coverage_chat ON automod_message_coverage(chat_id);
