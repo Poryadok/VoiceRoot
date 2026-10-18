@@ -57,6 +57,9 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
   final owner = creator is DebugCreator
       ? _knownLayoutOwner(creator.element)
       : 'unavailable';
+  final flexPath = creator is DebugCreator
+      ? _chatRoomFlexPath(creator.element)
+      : 'unavailable';
   final flexAxis = renderFlex.direction == Axis.horizontal
       ? 'horizontal'
       : renderFlex.direction == Axis.vertical
@@ -70,29 +73,104 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
       : '${appFrame.group(1)}:${appFrame.group(2)}';
   return 'layout overflow; render=RenderFlex; '
       'geometry=${_renderFlexGeometry(renderFlex)}; '
-      'flexAxis=$flexAxis; creator=$owner; appFrame=$location';
+      'flexAxis=$flexAxis; creator=$owner; flexPath=$flexPath; '
+      'parentConstraints=${_immediateParentConstraints(renderFlex)}; '
+      'appFrame=$location';
 }
 
-String _knownLayoutOwner(Element element) {
-  var owner = 'unavailable';
-  final currentOwner = _fixedLayoutOwner(element.widget);
-  if (currentOwner != null) return currentOwner;
-  element.visitAncestorElements((ancestor) {
-    final ancestorOwner = _fixedLayoutOwner(ancestor.widget);
-    if (ancestorOwner != null) {
-      owner = ancestorOwner;
+String _chatRoomFlexPath(Element flexElement) {
+  if (flexElement.widget is! Flex) return 'unavailable';
+  final flexSlot = _elementSlot(flexElement);
+  if (flexSlot == null) return 'unavailable';
+  final pathFromFlex = <String>[
+    '${_fixedLayoutWidget(flexElement.widget)}$flexSlot',
+  ];
+  var visitedAncestors = 0;
+  var foundChatRoom = false;
+  var complete = true;
+  flexElement.visitAncestorElements((ancestor) {
+    if (visitedAncestors >= 32) {
+      complete = false;
+      return false;
+    }
+    visitedAncestors++;
+    final ancestorSlot = _elementSlot(ancestor);
+    if (ancestorSlot == null) {
+      complete = false;
+      return false;
+    }
+    pathFromFlex.add(
+      '${_fixedLayoutWidget(ancestor.widget)}$ancestorSlot',
+    );
+    if (ancestor.widget is ChatRoomPanel) {
+      foundChatRoom = true;
       return false;
     }
     return true;
   });
+  if (!complete || !foundChatRoom) return 'unavailable';
+  return pathFromFlex.reversed.join('/');
+}
+
+String? _elementSlot(Element element) {
+  final slot = element.slot;
+  if (slot is IndexedSlot<Element?>) {
+    return slot.index >= 0 && slot.index <= 64 ? '[${slot.index}]' : null;
+  }
+  if (slot is int) {
+    return slot >= 0 && slot <= 64 ? '[$slot]' : null;
+  }
+  return slot == null ? '[slot-none]' : null;
+}
+
+String _fixedLayoutWidget(Widget widget) {
+  if (widget is ChatRoomPanel) return 'chatRoomPanel';
+  if (widget is VoiceCompactBanner) return 'voiceCompactBanner';
+  if (widget is ChatListBody) return 'chatListBody';
+  if (widget is VoiceApp) return 'voiceApp';
+  if (widget is Column) return 'column';
+  if (widget is Row) return 'row';
+  if (widget is Flex) return 'flex';
+  if (widget is Expanded) return 'expanded';
+  if (widget is Flexible) return 'flexible';
+  if (widget is Padding) return 'padding';
+  if (widget is SizedBox) return 'sizedBox';
+  if (widget is SafeArea) return 'safeArea';
+  if (widget is Center) return 'center';
+  if (widget is Align) return 'align';
+  if (widget is Container) return 'container';
+  return 'other';
+}
+
+String _immediateParentConstraints(RenderFlex renderFlex) {
+  final parent = renderFlex.parent;
+  if (parent is! RenderBox) return 'unavailable';
+  final constraints = parent.constraints;
+  return 'min=${_boundedDimension(constraints.minWidth)}x'
+      '${_boundedDimension(constraints.minHeight)}; '
+      'max=${_boundedDimension(constraints.maxWidth)}x'
+      '${_boundedDimension(constraints.maxHeight)}';
+}
+
+String _knownLayoutOwner(Element element) {
+  final currentOwner = _fixedComponentOwner(element.widget);
+  if (currentOwner != null) return currentOwner;
+  var owner = 'unavailable';
+  var remainingAncestors = 32;
+  element.visitAncestorElements((ancestor) {
+    remainingAncestors--;
+    final ancestorOwner = _fixedComponentOwner(ancestor.widget);
+    if (ancestorOwner != null) {
+      owner = ancestorOwner;
+      return false;
+    }
+    return remainingAncestors > 0;
+  });
   return owner;
 }
 
-String? _fixedLayoutOwner(Widget widget) {
+String? _fixedComponentOwner(Widget widget) {
   if (widget is VoiceCompactBanner) return 'VoiceCompactBanner';
-  if (widget is Row) return 'Row';
-  if (widget is Column) return 'Column';
-  if (widget is Wrap) return 'Wrap';
   if (widget is ChatRoomPanel) return 'ChatRoomPanel';
   if (widget is ChatListBody) return 'ChatListBody';
   if (widget is VoiceApp) return 'VoiceApp';
@@ -101,14 +179,16 @@ String? _fixedLayoutOwner(Widget widget) {
 
 String _renderFlexGeometry(RenderFlex? renderFlex) {
   if (renderFlex == null) return 'unavailable';
-  String dimension(double value) => value.isFinite
-      ? value.clamp(0.0, 100000.0).toStringAsFixed(1)
-      : 'unbounded';
   final size = renderFlex.size;
   final constraints = renderFlex.constraints;
-  return 'size=${dimension(size.width)}x${dimension(size.height)}; '
-      'max=${dimension(constraints.maxWidth)}x${dimension(constraints.maxHeight)}';
+  return 'size=${_boundedDimension(size.width)}x${_boundedDimension(size.height)}; '
+      'max=${_boundedDimension(constraints.maxWidth)}x'
+      '${_boundedDimension(constraints.maxHeight)}';
 }
+
+String _boundedDimension(double value) => value.isFinite
+    ? value.clamp(0.0, 100000.0).toStringAsFixed(1)
+    : 'unbounded';
 
 void main() {
   testWidgets('keeps one reconnect banner in the visible network context', (

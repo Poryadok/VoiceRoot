@@ -9,12 +9,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:voice_frontend/backend/subscription_client.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
+import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/settings/theme_preference.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/settings/appearance_settings_screen.dart';
+import 'package:voice_frontend/ui/settings/app_icon_settings_screen.dart';
+import 'package:voice_frontend/ui/settings/chat_themes_settings_screen.dart';
 import 'package:voice_frontend/ui/settings/settings_sheet.dart';
 import 'package:voice_frontend/ui/core/voice_bottom_sheet.dart';
 
@@ -189,12 +196,14 @@ void main() {
     tester,
   ) async {
     final captureTheme = await _loadCaptureTheme(tester);
-    final container = ProviderContainer(
-      overrides: voiceAppTestOverrides(
-        client: MockClient((_) async => http.Response('', 404)),
-      ),
-    );
+    final unexpectedRequests = <String>[];
+    final client = _noNetworkClient(unexpectedRequests);
+    final container = _appearanceContainer(client);
     addTearDown(container.dispose);
+    addTearDown(client.close);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
 
     for (final size in [const Size(1280, 800), const Size(390, 844)]) {
       tester.view.physicalSize = size;
@@ -211,6 +220,16 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+      _expectPlusDestinations(tester);
+      for (final key in [
+        AppearanceSettingsScreen.chatThemesKey,
+        AppearanceSettingsScreen.appIconKey,
+      ]) {
+        final rect = tester.getRect(find.byKey(key));
+        expect(rect.left, greaterThanOrEqualTo(24));
+        expect(rect.right, lessThanOrEqualTo(size.width - 24));
+        expect(rect.bottom, lessThanOrEqualTo(size.height));
+      }
       await _captureAppearance(
         tester,
         'appearance-${size.width > size.height ? 'h' : 'v'}.png',
@@ -218,10 +237,94 @@ void main() {
       await tester.tap(find.byKey(AppearanceSettingsScreen.backKey));
       await tester.pumpAndSettle();
     }
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    expect(unexpectedRequests, isEmpty);
   });
+
+  for (final locale in [const Locale('en'), const Locale('ru')]) {
+    for (final isPlus in [false, true]) {
+      testWidgets('Plus destinations stay accessible and keyboard-operable '
+          'for ${isPlus ? 'Plus' : 'free'} viewers in ${locale.languageCode}', (
+        tester,
+      ) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          final unexpectedRequests = <String>[];
+          final client = _noNetworkClient(unexpectedRequests);
+          final container = _appearanceContainer(client, isPlus: isPlus);
+          addTearDown(container.dispose);
+          addTearDown(client.close);
+          container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+          await tester.pumpWidget(_settingsLauncher(container, locale: locale));
+          await _openAppearance(tester);
+          _expectPlusDestinations(tester);
+
+          final l10n = AppLocalizations.of(
+            tester.element(find.byKey(AppearanceSettingsScreen.screenKey)),
+          )!;
+          for (final entry in [
+            (
+              AppearanceSettingsScreen.chatThemesKey,
+              l10n.settingsChatThemes,
+              ChatThemesSettingsScreen.screenKey,
+              const Key('chat_themes_back'),
+            ),
+            (
+              AppearanceSettingsScreen.appIconKey,
+              l10n.appIconTitle,
+              AppIconSettingsScreen.screenKey,
+              const Key('app_icon_back'),
+            ),
+          ]) {
+            final tile = find.byKey(entry.$1);
+            await tester.ensureVisible(tile);
+            await tester.pumpAndSettle();
+            final label = tester.getSemantics(tile).label;
+            expect(label, contains(entry.$2));
+            expect(label, contains(l10n.chatThemesPlusLabel));
+            final title = find.descendant(
+              of: tile,
+              matching: find.text(entry.$2),
+            );
+            final focus = Focus.of(tester.element(title));
+            focus.requestFocus();
+            await tester.pump();
+            expect(focus.hasFocus, isTrue);
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+            expect(find.byKey(entry.$3), findsOneWidget);
+            if (entry.$3 == ChatThemesSettingsScreen.screenKey) {
+              expect(
+                tester
+                    .widget<ChatThemesSettingsScreen>(
+                      find.byType(ChatThemesSettingsScreen),
+                    )
+                    .chatId,
+                'chat-a',
+              );
+              expect(
+                find.text(l10n.chatThemesPlusNotice),
+                isPlus ? findsNothing : findsOneWidget,
+              );
+            }
+            await tester.tap(find.byKey(entry.$4));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(AppearanceSettingsScreen.screenKey),
+              findsOneWidget,
+            );
+          }
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+          expect(unexpectedRequests, isEmpty);
+        } finally {
+          semantics.dispose();
+        }
+      });
+    }
+  }
 
   test(
     'System uses the platform brightness when resolving the app theme',
@@ -263,12 +366,14 @@ Widget _settingsLauncher(
   ProviderContainer container, {
   ThemeData? theme,
   FocusNode? openerFocus,
+  Locale? locale,
 }) => UncontrolledProviderScope(
   container: container,
   child: RepaintBoundary(
     key: _captureBoundaryKey,
     child: MaterialApp(
       theme: theme ?? voiceTestTheme(),
+      locale: locale,
       debugShowCheckedModeBanner: false,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -287,6 +392,60 @@ Widget _settingsLauncher(
       ),
     ),
   ),
+);
+
+void _expectPlusDestinations(WidgetTester tester) {
+  expect(find.text('Voice Plus'), findsOneWidget);
+  for (final key in [
+    AppearanceSettingsScreen.chatThemesKey,
+    AppearanceSettingsScreen.appIconKey,
+  ]) {
+    final tile = find.byKey(key);
+    expect(tile, findsOneWidget);
+    final star = find.descendant(of: tile, matching: find.byIcon(Icons.star));
+    expect(star, findsOneWidget);
+    expect(tester.widget<Icon>(star).icon!.fontFamily, 'MaterialIcons');
+    expect(find.descendant(of: tile, matching: find.text('★')), findsNothing);
+    expect(
+      find.descendant(of: tile, matching: find.byIcon(Icons.chevron_right)),
+      findsOneWidget,
+    );
+    expect(tester.widget<ListTile>(tile).onTap, isNotNull);
+  }
+}
+
+MockClient _noNetworkClient(List<String> requests) =>
+    MockClient((request) async {
+      requests.add('${request.method} ${request.url}');
+      return http.Response('', 500);
+    });
+
+ProviderContainer _appearanceContainer(
+  http.Client client, {
+  bool isPlus = false,
+}) => ProviderContainer(
+  overrides: [
+    ...voiceAppTestOverrides(client: client),
+    activeProfileProvider.overrideWith((ref) async => _appearanceProfile),
+    profileProvider.overrideWith((ref, id) async => _appearanceProfile),
+    subscriptionProvider.overrideWith((ref) async => isPlus ? _plus : null),
+  ],
+);
+
+const _appearanceProfile = VoiceProfile(
+  id: 'prof-test',
+  accountId: 'acc-test',
+  username: 'voiceuser',
+  discriminator: '4242',
+  displayName: 'Voice User',
+  isPrimary: true,
+);
+const _plus = VoiceSubscription(
+  id: 'subscription-1',
+  accountId: 'acc-test',
+  plan: 'premium',
+  billingPeriod: 'month',
+  status: 'active',
 );
 
 Future<ThemeData?> _loadCaptureTheme(WidgetTester tester) async {

@@ -460,6 +460,48 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Был(а) только что';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count минуты назад',
+      many: 'Был(а) $count минут назад',
+      few: 'Был(а) $count минуты назад',
+      one: 'Был(а) $count минуту назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count часа назад',
+      many: 'Был(а) $count часов назад',
+      few: 'Был(а) $count часа назад',
+      one: 'Был(а) $count час назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Был(а) $count дня назад',
+      many: 'Был(а) $count дней назад',
+      few: 'Был(а) $count дня назад',
+      one: 'Был(а) $count день назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Неизвестно';
 
   @override
@@ -957,6 +999,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileMessage => 'Написать';
 
   @override
+  String get profileDetailTitle => 'Профиль';
+
+  @override
+  String get profileMoreActions => 'Ещё';
+
+  @override
+  String get profileOpenAvatar => 'Открыть аватар на весь экран';
+
+  @override
+  String get profileAvatarUnavailable => 'Аватар недоступен';
+
+  @override
+  String get profileCommonSpaces => 'Общие пространства';
+
+  @override
+  String get profileCommonSpacesLoadError =>
+      'Не удалось загрузить общие пространства';
+
+  @override
   String get profileEditTitle => 'Редактировать профиль';
 
   @override
@@ -1201,6 +1262,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatThreadLoadError => 'Не удалось загрузить тред';
 
   @override
+  String get chatThreadRepliesUnavailable =>
+      'Ответы в этой беседе недоступны. Черновик сохранён; уберите адресата ответа, чтобы отправить обычное сообщение.';
+
+  @override
   String get chatChannelMainFeedBlocked => 'Пишите в тред или от имени канала';
 
   @override
@@ -1247,6 +1312,19 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatPinnedTypeMusic => 'Музыка';
+
+  @override
+  String get chatMusicInvalidFile =>
+      'Выберите непустой аудиофайл до 10 МБ. Данные шифрования входят в лимит.';
+
+  @override
+  String get chatMusicPlay => 'Воспроизвести музыку';
+
+  @override
+  String get chatMusicPause => 'Приостановить музыку';
+
+  @override
+  String get chatMusicSeek => 'Позиция воспроизведения';
 
   @override
   String get chatPinnedTypeVideoMessage => 'Видеосообщение';
@@ -2453,6 +2531,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get securitySessionsManage => 'Управление сессиями';
 
   @override
+  String get securityLinkedDevicesManage =>
+      'Управление связанными устройствами';
+
+  @override
   String get securitySessionsCurrentDevice => 'Это устройство';
 
   @override
@@ -2799,6 +2881,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileBlockConfirmTitle => 'Заблокировать пользователя?';
 
   @override
+  String get profileRemoveFriendConfirmTitle => 'Удалить из друзей?';
+
+  @override
+  String get profileRemoveFriendConfirmMessage =>
+      'Удалить этого пользователя из списка друзей?';
+
+  @override
   String get profileBlockConfirmMessage => 'Он не сможет писать вам сообщения.';
 
   @override
@@ -2873,7 +2962,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String guestConvertVerificationSubtitle(Object email) {
-    return 'Введите код, отправленный на $email. Гостевой доступ сохранится до подтверждения.';
+    return 'Введите код подтверждения для $email. Гостевой доступ сохранится до подтверждения.';
   }
 
   @override
@@ -3087,6 +3176,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get matchSquadLeaveError => 'Не удалось выйти из матч-отряда';
 
   @override
+  String get matchSquadRosterTitle => 'Ваш отряд';
+
+  @override
   String get matchRatingTitle => 'Оцените тиммейтов';
 
   @override
@@ -3140,7 +3232,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get matchHistoryEntry => 'Match history';
 
   @override
-  String get matchHistoryLoadError => 'Could not load match history';
+  String get matchHistoryLoadError => 'Не удалось загрузить историю матчей';
 
   @override
   String get matchHistoryEmpty => 'No match squads yet';
@@ -3549,6 +3641,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deepLinkResourceNotFound => 'Не найдено';
 
   @override
+  String get deepLinkAccessDeniedDescription =>
+      'У вас нет разрешения открыть эту ссылку. Возможно, она предназначена для другого профиля.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'Ссылка недоступна или больше не действует.';
+
+  @override
   String get deepLinkReturnHome => 'На главную';
 
   @override
@@ -3592,4 +3692,12 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get profileNotInContactsWarning =>
       'Не в контактах · сообщения могут быть небезопасны';
+
+  @override
+  String contactProfilePlayingGame(String title) {
+    return 'Играет в $title';
+  }
+
+  @override
+  String get matchSquadOpenChat => 'Открыть чат';
 }

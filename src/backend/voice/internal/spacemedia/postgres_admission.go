@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,9 +15,33 @@ import (
 	"voice/backend/voice/internal/store"
 )
 
-var ErrAdmissionUnavailable = errors.New("Space media admission unavailable")
-var ErrAdmissionConflict = errors.New("Space media admission conflicts with current state")
-var ErrRoomHeadPending = errors.New("Space voice room incarnation is pending recovery")
+var ErrAdmissionUnavailable = errors.New("space media admission unavailable")
+var ErrAdmissionConflict = errors.New("space media admission conflicts with current state")
+var ErrRoomHeadPending = errors.New("space voice room incarnation is pending recovery")
+
+func logSpaceMediaAdmissionCommitFailure(ctx context.Context, logger *slog.Logger, err error) {
+	if err == nil {
+		return
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.ErrorContext(ctx, "space_media_admission_commit_failed",
+		slog.String("failure_class", spaceMediaAdmissionCommitFailureClass(err)))
+}
+
+func spaceMediaAdmissionCommitFailureClass(err error) string {
+	switch {
+	case errors.Is(err, ErrRoomHeadPending):
+		return "room_head_pending"
+	case errors.Is(err, ErrAdmissionConflict):
+		return "admission_conflict"
+	case errors.Is(err, ErrAdmissionUnavailable):
+		return "admission_unavailable"
+	default:
+		return "store_error"
+	}
+}
 
 type AdmissionState = string
 
@@ -356,7 +381,10 @@ WHERE operation_id=$1 AND generation=$2 AND account_id=$3 AND profile_id=$4 AND 
 	return tx.Commit(ctx)
 }
 
-func (s *PostgresAdmissionStore) MarkCommitted(ctx context.Context, operationID uuid.UUID, generation string) error {
+func (s *PostgresAdmissionStore) MarkCommitted(ctx context.Context, operationID uuid.UUID, generation string) (err error) {
+	defer func() {
+		logSpaceMediaAdmissionCommitFailure(ctx, slog.Default(), err)
+	}()
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}

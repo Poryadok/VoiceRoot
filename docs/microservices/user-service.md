@@ -270,7 +270,7 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 |------|--------|
 | 1 | Upsert session hash; EXPIRE 5 min |
 | 2 | SET `last_seen` key = now unix; EXPIRE 30 d |
-| 3 | If status enum changed → publish `user.presence_changed` with `old_status`, `new_status`; for the first live observation `old_status` is empty and `new_status` is the canonical current status. Same-enum heartbeats still complete steps 1–2 but publish nothing. |
+| 3 | If the status enum or game title changed → publish `user.presence_changed` with `old_status`, `new_status`; for the first live observation `old_status` is empty and `new_status` is the canonical current status. A game-only change uses the same current status in both fields, including when the title is cleared. Other same-enum heartbeats still complete steps 1–2 but publish nothing. |
 | 4 | Realtime fan-out `presence_update` to friends/subscribers **after** privacy filter (spec) |
 
 **`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer is outside its allowed audience), `GetPresence` / `GetBulkPresence` **omit** `last_seen` timestamp (live online independently respects `show_online`). Self may read it; viewerless calls, missing privacy rows and audience dependency errors fail closed. Invisible is shown as offline to others and never leaks a hidden timestamp. Header «был(а)…» in DM — [presence.md](../features/presence.md). Durable PostgreSQL `last_seen_at` remains separate — [todo/backend.md](../todo/backend.md).
@@ -343,7 +343,7 @@ sequence, поэтому первый новый provider update не проиг
 | `user.settings_changed` | profile_id, changed_keys                   |
 | `user.verified`         | profile_id, verification_type              |
 
-**`user.presence_changed`:** the event is published for an enum transition in `UpdatePresence` (`user/internal/userevents/jetstream.go`): its first observation uses an empty `old_status`, and a same-enum heartbeat updates Redis activity but emits nothing. The legacy `status` value remains the current status for existing consumers, and the JetStream payload carries additive `old_status` / `new_status` fields.
+**`user.presence_changed`:** the event is published for a status enum transition or game-title change in `UpdatePresence` (`user/internal/userevents/jetstream.go`): its first observation uses an empty `old_status`; a game-only update uses equal `old_status` / `new_status` so consumers can refresh the viewer-filtered snapshot. The legacy `status` value remains the current status for existing consumers, and the JetStream payload carries additive `old_status` / `new_status` fields.
 
 ## Зависимости
 

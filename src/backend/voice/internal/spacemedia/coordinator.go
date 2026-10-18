@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -23,10 +24,10 @@ const (
 	reconcilePasses   = 3
 )
 
-var ErrReconciliationPending = errors.New("Space media authority changed during reconciliation")
+var ErrReconciliationPending = errors.New("space media authority changed during reconciliation")
 
 type AccessResolver interface {
-	ResolveVoiceRoomAccess(context.Context, string, string) (grpcsvc.CanonicalVoiceRoomAccess, error)
+	ResolveVoiceRoomAccess(context.Context, string, string, string) (grpcsvc.CanonicalVoiceRoomAccess, error)
 }
 
 type GrantResolver interface {
@@ -54,6 +55,12 @@ type AdmissionRecoveryStore interface {
 
 type SessionEpochChecker interface {
 	RequireCurrent(context.Context, string, int64) error
+	CurrentFloor(context.Context, string) (int64, error)
+}
+
+type accountFloorResult struct {
+	epoch int64
+	err   error
 }
 
 type Store interface {
@@ -125,10 +132,19 @@ func (c *Coordinator) Observe(ctx context.Context, notice AuthorityNotice) error
 // observed watermark restarts the scan; watermarks advance only after the
 // complete stable pass succeeds.
 func (c *Coordinator) ReconcileSpace(ctx context.Context, spaceID string) error {
+	return c.reconcileSpace(ctx, spaceID, make(map[string]accountFloorResult))
+}
+
+func (c *Coordinator) reconcileSpace(ctx context.Context, spaceID string, accountFloors map[string]accountFloorResult) error {
 	if c == nil || c.Store == nil || c.Access == nil || c.Grants == nil || c.Media == nil || !canonicalID(spaceID) {
 		return store.ErrInvalidState
 	}
 	for pass := 0; pass < reconcilePasses; pass++ {
+		if pass > 0 {
+			// Discard all values, including those read for earlier Spaces in a
+			// full sweep, when a watermark change requires fresh authority.
+			clear(accountFloors)
+		}
 		before, err := c.Store.GetSpaceMediaEpochProgress(ctx, spaceID)
 		if err != nil {
 			return err
@@ -152,7 +168,7 @@ func (c *Coordinator) ReconcileSpace(ctx context.Context, spaceID string) error 
 				if !canonicalID(profileID) || participant.ProfileID != profileID || participant.Identity == "" || participant.Generation == "" {
 					return fmt.Errorf("invalid indexed Space media participant")
 				}
-				if err := c.reconcileParticipant(ctx, call, participant); err != nil {
+				if err := c.reconcileParticipant(ctx, call, participant, accountFloors); err != nil {
 					return err
 				}
 			}
@@ -323,7 +339,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	if err := c.Admissions.ConfirmRoomHeadOpen(ctx, admission); err != nil {
 		return err
 	}
-	access, err := c.Access.ResolveVoiceRoomAccess(ctx, admission.VoiceRoomID, admission.ProfileID.String())
+	access, err := c.Access.ResolveVoiceRoomAccess(ctx, admission.SpaceID.String(), admission.VoiceRoomID, admission.ProfileID.String())
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -405,7 +421,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	return c.Admissions.MarkProjectionApplied(ctx, admission.OperationID, admission.Generation)
 }
 
-func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant) error {
+func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant, accountFloors map[string]accountFloorResult) error {
 	// A revocation begun for this immutable LiveKit incarnation must finish even
 	// if authority has since been restored. Rejoin receives a new generation.
 	if participant.Revoking {
@@ -417,17 +433,34 @@ func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call,
 			return ErrAdmissionConflict
 		}
 	}
-	if c.SessionEpochChecker == nil || participant.AccountID == "" || participant.Issued.SessionEpoch == 0 {
+	if c.SessionEpochChecker == nil {
+		return status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
+	}
+	if !canonicalID(participant.AccountID) || participant.Issued.SessionEpoch == 0 {
 		return c.eject(ctx, call, participant)
 	}
-	if err := c.SessionEpochChecker.RequireCurrent(ctx, participant.AccountID, int64(participant.Issued.SessionEpoch)); err != nil {
-		if status.Code(err) == codes.Unauthenticated || status.Code(err) == codes.NotFound {
+	if participant.Issued.SessionEpoch > math.MaxInt64 {
+		return status.Error(codes.Unavailable, "invalid persisted Auth session epoch")
+	}
+	floor, found := accountFloors[participant.AccountID]
+	if !found {
+		floor.epoch, floor.err = c.SessionEpochChecker.CurrentFloor(ctx, participant.AccountID)
+		accountFloors[participant.AccountID] = floor
+	}
+	if floor.err != nil {
+		if status.Code(floor.err) == codes.Unauthenticated || status.Code(floor.err) == codes.NotFound {
 			return c.eject(ctx, call, participant)
 		}
-		return err
+		return floor.err
+	}
+	if floor.epoch <= 0 {
+		return status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
+	}
+	if participant.Issued.SessionEpoch < uint64(floor.epoch) {
+		return c.eject(ctx, call, participant)
 	}
 
-	access, accessErr := c.Access.ResolveVoiceRoomAccess(ctx, call.VoiceRoomID, participant.ProfileID)
+	access, accessErr := c.Access.ResolveVoiceRoomAccess(ctx, call.SpaceID, call.VoiceRoomID, participant.ProfileID)
 	if accessErr != nil && status.Code(accessErr) != codes.NotFound {
 		return accessErr
 	}
@@ -533,7 +566,18 @@ func (c *Coordinator) ReconcileAll(ctx context.Context) error {
 	}
 	c.reconcileMu.Lock()
 	defer c.reconcileMu.Unlock()
-	c.setReady(false)
+	// Retain established readiness across a successful periodic refresh; each RPC
+	// still checks current authority and journal state. Startup stays closed, and
+	// a failed refresh closes serving below.
+	if !c.ready {
+		c.setReady(false)
+	}
+	converged := false
+	defer func() {
+		if !converged && c.ready {
+			c.setReady(false)
+		}
+	}()
 	if err := c.reconcileAdmissions(ctx); err != nil {
 		return err
 	}
@@ -541,12 +585,18 @@ func (c *Coordinator) ReconcileAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Profiles in different Spaces may share an account and carry different
+	// epochs. Cache the authority value, never a profile decision, for this sweep.
+	accountFloors := make(map[string]accountFloorResult)
 	for _, spaceID := range spaces {
-		if err := c.ReconcileSpace(ctx, spaceID); err != nil {
+		if err := c.reconcileSpace(ctx, spaceID, accountFloors); err != nil {
 			return err
 		}
 	}
-	c.setReady(true)
+	if !c.ready {
+		c.setReady(true)
+	}
+	converged = true
 	return nil
 }
 

@@ -1,5 +1,5 @@
 # Voice application services (full app stack). Image placeholders substituted by render-and-apply.sh.
-# Services: auth, social, user, chat, messaging, file, matchmaking, search, notification, realtime, space, role, voice, gateway
+# Services: auth, social, user, chat, messaging, file, matchmaking, search, notification, realtime, space, role, voice, gameintegration, gateway
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -22,16 +22,25 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
     spec:
+      securityContext: {fsGroup: 65532}
       containers:
         - name: auth
+          # Group-readable Secret projections keep private keys off world access.
           image: __IMAGE_REGISTRY__/auth:__IMAGE_TAG__
-          ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: grpc}]
+          ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: grpc}, {containerPort: 9091, name: principal}, {containerPort: 9092, name: session-floor}]
           env:
             - {name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://voice-postgres:5432/auth_db"}
             - {name: SPRING_DATASOURCE_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
             - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
             - {name: AUTH_FLYWAY_ENABLED, value: "false"}
-            - {name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"}
+            # Certificate-only store; changeit is public integrity metadata, not a secret.
+            - {name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0 -Djavax.net.ssl.trustStore=/etc/voice/media/trust/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12"}
+            - {name: AUTH_PRINCIPAL_GRPC_PORT, value: "9091"}
+            - {name: AUTH_SESSION_FLOOR_GRPC_PORT, value: "9092"}
+            - {name: AUTH_GRPC_TLS_CERT_FILE, value: /etc/voice/media/server/tls.crt}
+            - {name: AUTH_GRPC_TLS_KEY_FILE, value: /etc/voice/media/server/tls.key}
+            - {name: AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"gateway":"https://__GATEWAY_INGRESS_HOST__/.well-known/voice-principal-jwks.json","space":"https://voice-space:8443/internal/v1/principal/jwks.json","voice":"https://voice-voice:8443/internal/v1/principal/jwks.json"}'}
             - {name: SPRING_DATA_REDIS_HOST, value: voice-redis}
             - {name: SPRING_DATA_REDIS_PORT, value: "6379"}
             - {name: AUTH_JWT_PRIVATE_KEY_LOCATION, value: "file:/run/jwt.pem"}
@@ -50,11 +59,14 @@ spec:
             - {name: ACCOUNT_DELETE_TOKEN_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ACCOUNT_DELETE_TOKEN_SECRET}}}
           volumeMounts:
             - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
+            - {name: media-server, mountPath: /etc/voice/media/server, readOnly: true}
+            - {name: media-ca, mountPath: /etc/voice/media/ca, readOnly: true}
+            - {name: media-trust, mountPath: /etc/voice/media/trust, readOnly: true}
           startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10, failureThreshold: 60}
           readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/auth.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -63,6 +75,12 @@ spec:
       volumes:
         - name: jwt-key
           secret: {secretName: voice-app-secrets, items: [{key: AUTH_JWT_PRIVATE_KEY, path: jwt.pem}]}
+        - name: media-server
+          secret: {secretName: voice-auth-media-server-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-ca
+          secret: {secretName: voice-media-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}]}
+        - name: media-trust
+          secret: {secretName: voice-media-jvm-trust, defaultMode: 0440, items: [{key: truststore.p12, path: truststore.p12}]}
         - name: nats-leaf-config
           configMap: {name: voice-nats-leaf-config}
         - name: nats-service-creds
@@ -77,7 +95,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-auth}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal, port: 9091}, {name: session-floor, port: 9092}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -124,7 +142,7 @@ spec:
             - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/social.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -218,7 +236,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/user.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -265,19 +283,30 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext: {fsGroup: 65532}
       containers:
         - name: role
           image: __IMAGE_REGISTRY__/role:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}, {containerPort: 9091}]
           env:
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ROLE_DATABASE_URL}}}
             - {name: ROLE_GRPC_LISTEN, value: ":9090"}
+            - {name: ROLE_PRINCIPAL_GRPC_LISTEN, value: ":9091"}
+            - {name: ROLE_PRINCIPAL_TLS_CERT_FILE, value: /etc/voice/media/server/tls.crt}
+            - {name: ROLE_PRINCIPAL_TLS_KEY_FILE, value: /etc/voice/media/server/tls.key}
+            - {name: ROLE_PRINCIPAL_CLIENT_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: ROLE_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"space":"https://voice-space:8443/internal/v1/principal/jwks.json","gameintegration":"https://voice-gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice-voice:8443/internal/v1/principal/jwks.json"}'}
+            - {name: S2S_JWKS_CA_FILE, value: /etc/voice/media/ca/ca.crt}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: media-server, mountPath: /etc/voice/media/server, readOnly: true}
+            - {name: media-ca, mountPath: /etc/voice/media/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/role.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -290,6 +319,10 @@ spec:
           secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: role.creds, path: role.creds}]}
         - name: nats-hub-tls
           secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
+        - name: media-server
+          secret: {secretName: voice-role-media-server-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-ca
+          secret: {secretName: voice-media-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -298,7 +331,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-role}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal, port: 9091}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -328,6 +361,7 @@ spec:
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
             - {name: SPACE_GRPC_LISTEN, value: ":9090"}
+            - {name: SPACE_VOICE_S2S_TOKEN, valueFrom: {secretKeyRef: {name: voice-media-resolver, key: token}}}
             - {name: SPACE_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
             - {name: SPACE_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
             - {name: SPACE_PRINCIPAL_GRPC_LISTEN, value: ":9091"}
@@ -344,7 +378,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/space.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -400,11 +434,24 @@ spec:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
             - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
             - {name: CHAT_GRPC_LISTEN, value: ":9090"}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN, value: ":9092"}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE, value: /etc/voice/match-squad/server/tls.crt}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE, value: /etc/voice/match-squad/server/tls.key}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL, value: https://voice-matchmaking.voice-staging.svc:8443/internal/v1/principal/jwks.json}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE, value: /etc/voice/principal-jwks/ca/ca.crt}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: voice-match-squad-replay, key: password}}}
           envFrom: [{configMapRef: {name: voice-app-config}}]
+          volumeMounts:
+            - {name: match-squad-server, mountPath: /etc/voice/match-squad/server, readOnly: true}
+            - {name: media-ca, mountPath: /etc/voice/media/ca, readOnly: true}
+            - {name: matchmaking-principal-jwks-ca, mountPath: /etc/voice/principal-jwks/ca, readOnly: true}
+            - {name: chat-match-squad-replay, mountPath: /etc/voice/match-squad/replay, readOnly: true}
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/chat.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -417,6 +464,14 @@ spec:
           secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: chat.creds, path: chat.creds}]}
         - name: nats-hub-tls
           secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
+        - name: match-squad-server
+          secret: {secretName: voice-chat-match-squad-server-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-ca
+          secret: {secretName: voice-media-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}]}
+        - name: matchmaking-principal-jwks-ca
+          secret: {secretName: voice-matchmaking-principal-jwks-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}]}
+        - name: chat-match-squad-replay
+          secret: {secretName: voice-match-squad-replay, defaultMode: 0440, items: [{key: password, path: password}]}
 ---
 apiVersion: v1
 kind: Service
@@ -425,7 +480,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-chat}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: match-squad-principal, port: 9092}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -475,7 +530,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/file-principal/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/file.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -538,7 +593,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/messaging.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -579,10 +634,11 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext: {fsGroup: 65532}
       containers:
         - name: voice
           image: __IMAGE_REGISTRY__/voice:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}, {containerPort: 9093}, {containerPort: 9094}, {containerPort: 9095}]
           env:
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
             - name: VOICE_DATABASE_URL
@@ -591,10 +647,60 @@ spec:
                   name: voice-app-secrets
                   key: VOICE_DATABASE_URL
             - {name: VOICE_GRPC_LISTEN, value: ":9090"}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN, value: ":9094"}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE, value: /etc/voice/match-squad/server/tls.crt}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE, value: /etc/voice/match-squad/server/tls.key}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL, value: https://voice-matchmaking.voice-staging.svc:8443/internal/v1/principal/jwks.json}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE, value: /etc/voice/principal-jwks/ca/ca.crt}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: voice-match-squad-replay, key: password}}}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_GRPC_LISTEN, value: ":9095"}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_CERT_FILE, value: /etc/voice/match-squad/server/tls.crt}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_KEY_FILE, value: /etc/voice/match-squad/server/tls.key}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_CLIENT_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_URL, value: https://__GATEWAY_INGRESS_HOST__/.well-known/voice-principal-jwks.json}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_CA_FILE, value: /etc/voice/media/ca/jwks-ca.crt}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: voice-match-squad-member-replay, key: password}}}
+            - {name: SPACE_VOICE_S2S_TOKEN, valueFrom: {secretKeyRef: {name: voice-media-resolver, key: token}}}
+            - {name: VOICE_PRINCIPAL_PRIVATE_KEY_FILE, value: /etc/voice/media/keys/current.pem}
+            - {name: VOICE_PRINCIPAL_KID, value: current}
+            - {name: VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE, value: /etc/voice/media/keys/next.pem}
+            - {name: VOICE_PRINCIPAL_NEXT_KID, value: next}
+            - {name: VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE, value: /etc/voice/media/jwks/tls.crt}
+            - {name: VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE, value: /etc/voice/media/jwks/tls.key}
+            - {name: VOICE_PRINCIPAL_JWKS_LISTEN_ADDR, value: ":8443"}
+            - {name: VOICE_USER_PRINCIPAL_GRPC_LISTEN, value: ":9093"}
+            - {name: VOICE_USER_PRINCIPAL_TLS_CERT_FILE, value: /etc/voice/media/server/tls.crt}
+            - {name: VOICE_USER_PRINCIPAL_TLS_KEY_FILE, value: /etc/voice/media/server/tls.key}
+            - {name: VOICE_USER_PRINCIPAL_CLIENT_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: VOICE_USER_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: VOICE_ROLE_GRPC_ADDR, value: "voice-role:9091"}
+            - {name: VOICE_ROLE_TLS_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: VOICE_ROLE_CLIENT_CERT_FILE, value: /etc/voice/media/client/tls.crt}
+            - {name: VOICE_ROLE_CLIENT_KEY_FILE, value: /etc/voice/media/client/tls.key}
+            - {name: VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR, value: "voice-auth:9092"}
+            - {name: VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME, value: voice-auth}
+            - {name: VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: VOICE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE, value: /etc/voice/media/client/tls.crt}
+            - {name: VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE, value: /etc/voice/media/client/tls.key}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"gateway":"https://__GATEWAY_INGRESS_HOST__/.well-known/voice-principal-jwks.json"}'}
+            - {name: S2S_JWKS_CA_FILE, value: /etc/voice/media/ca/jwks-ca.crt}
+            - {name: S2S_JWKS_CLIENT_CERT_FILE, value: /etc/voice/media/client/tls.crt}
+            - {name: S2S_JWKS_CLIENT_KEY_FILE, value: /etc/voice/media/client/tls.key}
             - {name: VOICE_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - {name: LIVEKIT_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LIVEKIT_URL}}}
             - {name: LIVEKIT_API_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: LIVEKIT_API_KEY}}}
             - {name: LIVEKIT_API_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: LIVEKIT_API_SECRET}}}
+          volumeMounts:
+            - {name: media-signing, mountPath: /etc/voice/media/keys, readOnly: true}
+            - {name: media-jwks, mountPath: /etc/voice/media/jwks, readOnly: true}
+            - {name: media-server, mountPath: /etc/voice/media/server, readOnly: true}
+            - {name: media-client, mountPath: /etc/voice/media/client, readOnly: true}
+            - {name: media-ca, mountPath: /etc/voice/media/ca, readOnly: true}
+            - {name: match-squad-server, mountPath: /etc/voice/match-squad/server, readOnly: true}
+            - {name: matchmaking-principal-jwks-ca, mountPath: /etc/voice/principal-jwks/ca, readOnly: true}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe:
             httpGet:
@@ -603,7 +709,7 @@ spec:
             periodSeconds: 5
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/voice.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -616,6 +722,20 @@ spec:
           secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: voice.creds, path: voice.creds}]}
         - name: nats-hub-tls
           secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
+        - name: media-signing
+          secret: {secretName: voice-voice-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: media-jwks
+          secret: {secretName: voice-voice-media-jwks-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-server
+          secret: {secretName: voice-voice-media-server-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-client
+          secret: {secretName: voice-voice-media-client-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-ca
+          secret: {secretName: voice-media-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}, {key: jwks-ca.crt, path: jwks-ca.crt}]}
+        - name: match-squad-server
+          secret: {secretName: voice-voice-match-squad-server-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: matchmaking-principal-jwks-ca
+          secret: {secretName: voice-matchmaking-principal-jwks-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -624,7 +744,65 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-voice}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-jwks, port: 8443}, {name: user-principal, port: 9093}, {name: match-squad-principal, port: 9094}, {name: match-squad-member, port: 9095}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gameintegration
+  namespace: voice-staging
+  labels: {app: voice-gameintegration}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-gameintegration}
+  template:
+    metadata:
+      labels: {app: voice-gameintegration}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext: {fsGroup: 65532}
+      containers:
+        - name: gameintegration
+          image: __IMAGE_REGISTRY__/gameintegration:__IMAGE_TAG__
+          ports: [{containerPort: 8080, name: http}, {containerPort: 8443, name: principal-jwks}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: GAME_INTEGRATION_DATABASE_URL}}}
+            - {name: GAME_INTEGRATION_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: GAME_INTEGRATION_JWKS_URL, value: "http://voice-auth:8080/api/v1/auth/.well-known/jwks.json"}
+            - {name: GAME_INTEGRATION_JWT_ISSUER, value: "voice-auth"}
+            - {name: GAME_INTEGRATION_JWT_AUDIENCE, value: "voice-client"}
+            - {name: GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE, value: /etc/voice/principal/keys/current.pem}
+            - {name: GAME_INTEGRATION_PRINCIPAL_KID, value: current}
+            - {name: GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE, value: /etc/voice/principal/keys/next.pem}
+            - {name: GAME_INTEGRATION_PRINCIPAL_NEXT_KID, value: next}
+            - {name: GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE, value: /etc/voice/principal/tls/tls.crt}
+            - {name: GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE, value: /etc/voice/principal/tls/tls.key}
+            - {name: GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR, value: ":8443"}
+            - {name: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64}}}
+            - {name: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
+          volumeMounts:
+            - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
+            - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
+      volumes:
+        - name: principal-signing
+          secret: {secretName: voice-gameintegration-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: principal-tls
+          secret: {secretName: voice-gameintegration-jwks-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-gameintegration
+  namespace: voice-staging
+spec:
+  selector: {app: voice-gameintegration}
+  ports: [{name: http, port: 8080}, {name: principal-jwks, port: 8443}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -649,17 +827,40 @@ spec:
       containers:
         - name: matchmaking
           image: __IMAGE_REGISTRY__/matchmaking:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443, name: principal-jwks}]
           env:
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MATCHMAKING_DATABASE_URL}}}
             - {name: MATCHMAKING_GRPC_LISTEN, value: ":9090"}
             - {name: MATCHMAKING_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR, value: "voice-chat:9092"}
+            - {name: MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR, value: "voice-voice:9094"}
+            - {name: MATCHMAKING_MATCH_SQUAD_CHAT_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: MATCHMAKING_MATCH_SQUAD_VOICE_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: MATCHMAKING_MATCH_SQUAD_CLIENT_CERT_FILE, value: /etc/voice/match-squad/client/tls.crt}
+            - {name: MATCHMAKING_MATCH_SQUAD_CLIENT_KEY_FILE, value: /etc/voice/match-squad/client/tls.key}
+            - {name: MATCHMAKING_MATCH_SQUAD_CHAT_SERVER_NAME, value: voice-chat}
+            - {name: MATCHMAKING_MATCH_SQUAD_VOICE_SERVER_NAME, value: voice-voice}
+            - {name: MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR, value: /etc/voice/principal/keys}
+            - {name: MATCHMAKING_PRINCIPAL_ACTIVE_KID, valueFrom: {secretKeyRef: {name: voice-matchmaking-principal-signing, key: active-kid}}}
+            - {name: MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR, value: ":8443"}
+            - {name: MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE, value: /etc/voice/principal-jwks/tls/tls.crt}
+            - {name: MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE, value: /etc/voice/principal-jwks/tls/tls.key}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"gateway":"https://__GATEWAY_INGRESS_HOST__/.well-known/voice-principal-jwks.json","space":"https://voice-space:8443/internal/v1/principal/jwks.json"}'}
+            - {name: S2S_JWKS_CA_FILE, value: /etc/voice/media/ca/jwks-ca.crt}
+            - {name: S2S_JWKS_REFRESH_AFTER, value: 30s}
+            - {name: S2S_JWKS_HARD_EXPIRY, value: 2m}
+            - {name: S2S_UNKNOWN_KID_COOLDOWN, value: 5s}
           envFrom: [{configMapRef: {name: voice-app-config}}]
+          volumeMounts:
+            - {name: match-squad-client, mountPath: /etc/voice/match-squad/client, readOnly: true}
+            - {name: media-ca, mountPath: /etc/voice/media/ca, readOnly: true}
+            - {name: matchmaking-principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
+            - {name: matchmaking-principal-jwks-tls, mountPath: /etc/voice/principal-jwks/tls, readOnly: true}
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/matchmaking.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -672,6 +873,14 @@ spec:
           secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: matchmaking.creds, path: matchmaking.creds}]}
         - name: nats-hub-tls
           secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
+        - name: match-squad-client
+          secret: {secretName: voice-matchmaking-client-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-ca
+          secret: {secretName: voice-media-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}, {key: jwks-ca.crt, path: jwks-ca.crt}]}
+        - name: matchmaking-principal-signing
+          secret: {secretName: voice-matchmaking-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: matchmaking-principal-jwks-tls
+          secret: {secretName: voice-matchmaking-principal-jwks-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
 ---
 apiVersion: v1
 kind: Service
@@ -680,7 +889,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-matchmaking}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-jwks, port: 8443}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -725,7 +934,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/search-projection/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/search.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -794,12 +1003,14 @@ spec:
             - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
             - {name: CHAT_GRPC_ADDR, value: "voice-chat:9090"}
             - {name: MESSAGING_GRPC_ADDR, value: "voice-messaging:9090"}
+            - {name: GAME_INTEGRATION_CONSENT_URL, value: "http://voice-gameintegration:8080"}
+            - {name: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64}}}
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/notification.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -850,12 +1061,14 @@ spec:
             - {name: REALTIME_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - name: REALTIME_INSTANCE_ID
               value: realtime-1
+            - {name: GAME_INTEGRATION_CONSENT_URL, value: "http://voice-gameintegration:8080"}
+            - {name: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64, valueFrom: {secretKeyRef: {name: voice-gameintegration-workload-credentials, key: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64}}}
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/realtime.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -917,7 +1130,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/bot.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -970,7 +1183,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/subscription.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -1023,7 +1236,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/moderation.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -1076,7 +1289,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/story.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
@@ -1132,7 +1345,7 @@ spec:
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
-          args: ["-c", "/etc/nats/leaf.conf"]
+          args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/analytics.creds"}]
           volumeMounts:
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}

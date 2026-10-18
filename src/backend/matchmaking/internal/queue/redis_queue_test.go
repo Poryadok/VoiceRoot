@@ -86,6 +86,38 @@ func TestRedisQueue_ReleaseLockWhenMissing(t *testing.T) {
 	require.NoError(t, q.ReleaseLock(ctx, uuid.New(), uuid.New()))
 }
 
+func TestRedisQueue_RecoveryFencesDelayedQueueOperations(t *testing.T) {
+	t.Parallel()
+	q, cleanup := newTestQueue(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	profileID, sessionID, gameID := uuid.New(), uuid.New(), uuid.New()
+	recovery := SearchRecovery{
+		GameID: gameID, Mode: "5v5 Ranked", Region: "eu", SessionID: sessionID,
+		ProfileID: profileID, CreatedAt: time.Now().UTC(), Generation: 2,
+	}
+
+	require.NoError(t, q.RecoverSearch(ctx, recovery))
+	owner, err := q.Client.Get(ctx, q.lockKey(profileID)).Result()
+	require.NoError(t, err)
+	require.Equal(t, sessionID.String(), owner)
+	require.NoError(t, q.DequeueScopedGeneration(ctx, nil, gameID, recovery.Mode, recovery.Region, sessionID, 1))
+	depth, err := q.QueueDepth(ctx, gameID, recovery.Mode, recovery.Region)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), depth, "a delayed older dequeue must preserve the newer queue projection")
+
+	recovery.Generation = 3
+	require.NoError(t, q.RecoverRelease(ctx, recovery))
+	depth, err = q.QueueDepth(ctx, gameID, recovery.Mode, recovery.Region)
+	require.NoError(t, err)
+	require.Zero(t, depth)
+	_, err = q.Client.Get(ctx, q.lockKey(profileID)).Result()
+	require.ErrorIs(t, err, redis.Nil)
+
+	recovery.Generation = 2
+	require.ErrorIs(t, q.RecoverSearch(ctx, recovery), ErrQueueGeneration)
+}
+
 func TestRedisQueue_Ping(t *testing.T) {
 	t.Parallel()
 	q, cleanup := newTestQueue(t)

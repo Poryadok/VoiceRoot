@@ -52,6 +52,9 @@ class SocialPanel extends ConsumerStatefulWidget {
   static Key requestDeclineKey(String profileId) =>
       Key('social_request_decline_$profileId');
 
+  static Key requestCancelKey(String profileId) =>
+      Key('social_request_cancel_$profileId');
+
   static Key requestActionProgressKey(String profileId) =>
       Key('social_request_action_progress_$profileId');
 
@@ -618,18 +621,125 @@ class _RequestsTab extends ConsumerWidget {
                 ),
               ),
               ...outgoing.map(
-                (request) => _ProfileIdTile(
+                (request) => _OutgoingRequestTile(
+                  key: ValueKey('$requestActorKey:out:${request.profileId}'),
                   profileId: request.profileId,
-                  subtitle: request.isDeclined
-                      ? l10n.socialRequestDeclined
-                      : l10n.socialRequestPending,
-                  onTap: () => onOpenProfile(request.profileId),
+                  declined: request.isDeclined,
+                  canMutate: requestActor != null && !profileSwitchInProgress,
+                  onOpenProfile: onOpenProfile,
+                  onCancel: () =>
+                      actions.cancelFriendInvitation(request.profileId),
                 ),
               ),
             ],
           ],
         );
       },
+    );
+  }
+}
+
+class _OutgoingRequestTile extends ConsumerStatefulWidget {
+  const _OutgoingRequestTile({
+    super.key,
+    required this.profileId,
+    required this.declined,
+    required this.canMutate,
+    required this.onOpenProfile,
+    required this.onCancel,
+  });
+
+  final String profileId;
+  final bool declined;
+  final bool canMutate;
+  final void Function(String) onOpenProfile;
+  final Future<String?> Function() onCancel;
+
+  @override
+  ConsumerState<_OutgoingRequestTile> createState() =>
+      _OutgoingRequestTileState();
+}
+
+class _OutgoingRequestTileState extends ConsumerState<_OutgoingRequestTile> {
+  bool _busy = false;
+
+  Future<void> _cancel() async {
+    if (_busy || widget.declined || !widget.canMutate) return;
+    final controller = ref.read(authControllerProvider.notifier);
+    final actor = controller.gatewayRequestIdentity;
+    final generation = controller.sessionInstallGeneration;
+    final auth = ref.read(authorizationHeaderProvider);
+    if (actor == null || ref.read(profileSwitchInProgressProvider)) return;
+    setState(() => _busy = true);
+    String? error;
+    var threw = false;
+    try {
+      error = await widget.onCancel();
+    } catch (_) {
+      error = 'action_failed';
+      threw = true;
+    }
+    if (!mounted) return;
+    final current = ref.read(authControllerProvider.notifier);
+    if (!identical(current, controller) ||
+        current.gatewayRequestIdentity != actor ||
+        current.sessionInstallGeneration != generation ||
+        ref.read(authorizationHeaderProvider) != auth ||
+        ref.read(profileSwitchInProgressProvider)) {
+      return;
+    }
+    setState(() => _busy = false);
+    if (threw) ref.invalidate(friendRequestsProvider);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            socialActionErrorMessage(AppLocalizations.of(context)!, error),
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final profileAsync = ref.watch(profileProvider(widget.profileId));
+    final profile = profileAsync.valueOrNull;
+    final subtitle = widget.declined
+        ? l10n.socialRequestDeclined
+        : l10n.socialRequestPending;
+    final trailing = widget.declined
+        ? null
+        : IconButton(
+            key: SocialPanel.requestCancelKey(widget.profileId),
+            tooltip: l10n.commonCancel,
+            onPressed: _busy || !widget.canMutate ? null : _cancel,
+            icon: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.close),
+          );
+    if (profile == null) {
+      return ListTile(
+        title: Text(
+          profileAsync.isLoading
+              ? l10n.commonLoading
+              : l10n.socialProfileUnavailable,
+        ),
+        subtitle: Text(subtitle),
+        trailing: trailing,
+      );
+    }
+    return _ProfileListTile(
+      profile: profile,
+      presence: ref.watch(presenceProvider(widget.profileId)),
+      subtitle: subtitle,
+      onTap: () => widget.onOpenProfile(widget.profileId),
+      trailing: trailing,
     );
   }
 }
@@ -774,10 +884,44 @@ class _IncomingRequestTileState extends ConsumerState<_IncomingRequestTile> {
     final profileId = widget.profileId;
     final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          key: SocialPanel.requestAcceptKey(profileId),
+          tooltip: l10n.socialAcceptRequest,
+          icon: Icon(Icons.check, semanticLabel: l10n.socialAcceptRequest),
+          onPressed: _busy || !widget.canMutate
+              ? null
+              : () => _runAction(widget.onAccept),
+        ),
+        IconButton(
+          key: SocialPanel.requestDeclineKey(profileId),
+          tooltip: l10n.socialDeclineRequest,
+          icon: Icon(Icons.close, semanticLabel: l10n.socialDeclineRequest),
+          onPressed: _busy || !widget.canMutate
+              ? null
+              : () => _runAction(widget.onDecline),
+        ),
+        if (_busy)
+          SizedBox(
+            key: SocialPanel.requestActionProgressKey(profileId),
+            width: 18,
+            height: 18,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          ),
+      ],
+    );
 
     return profileAsync.when(
-      loading: () => ListTile(title: Text(l10n.commonLoading)),
-      error: (e, st) => ListTile(title: Text(profileId)),
+      loading: () => ListTile(
+        title: Text(l10n.commonLoading),
+        trailing: actions,
+      ),
+      error: (e, st) => ListTile(
+        title: Text(l10n.socialProfileUnavailable),
+        trailing: actions,
+      ),
       data: (profile) => ListTile(
         leading: CircleAvatar(
           child: Text(
@@ -786,35 +930,16 @@ class _IncomingRequestTileState extends ConsumerState<_IncomingRequestTile> {
                 : '?',
           ),
         ),
-        title: Text(profile?.displayName ?? profileId),
-        subtitle: profile != null ? Text(profile.handle) : null,
-        onTap: () => widget.onOpenProfile(profileId),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              key: SocialPanel.requestAcceptKey(profileId),
-              icon: const Icon(Icons.check),
-              onPressed: _busy || !widget.canMutate
-                  ? null
-                  : () => _runAction(widget.onAccept),
-            ),
-            IconButton(
-              key: SocialPanel.requestDeclineKey(profileId),
-              icon: const Icon(Icons.close),
-              onPressed: _busy || !widget.canMutate
-                  ? null
-                  : () => _runAction(widget.onDecline),
-            ),
-            if (_busy)
-              SizedBox(
-                key: SocialPanel.requestActionProgressKey(profileId),
-                width: 18,
-                height: 18,
-                child: const CircularProgressIndicator(strokeWidth: 2),
-              ),
-          ],
+        title: Text(
+          (profile?.displayName.isNotEmpty ?? false)
+              ? profile!.displayName
+              : l10n.socialProfileUnavailable,
         ),
+        subtitle: profile != null && profile.username.isNotEmpty
+            ? Text(profile.handle)
+            : null,
+        onTap: () => widget.onOpenProfile(profileId),
+        trailing: actions,
       ),
     );
   }

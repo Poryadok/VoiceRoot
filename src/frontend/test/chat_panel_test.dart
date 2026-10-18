@@ -1787,6 +1787,146 @@ void main() {
     expect(mainFolderIds, contains('folder-prior'));
   });
 
+  for (final action in ['accept', 'decline']) {
+    testWidgets(
+      'successful $action reconciles a request after Back and reopen',
+      (tester) async {
+        final mutationResponse = Completer<http.Response>();
+        final mutationStarted = Completer<void>();
+        final handledRequests = <String>{};
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              ...voiceThemeTestOverrides(),
+              profileAccentStorageProvider.overrideWithValue(
+                testProfileAccentStorage,
+              ),
+              authSessionStorageProvider.overrideWithValue(
+                InMemoryAuthSessionStorage(),
+              ),
+              authControllerProvider.overrideWith(authenticatedAuthController),
+              gatewayConfigProvider.overrideWithValue(
+                const GatewayConfig(baseUrl: 'http://api.test'),
+              ),
+              httpClientProvider.overrideWithValue(
+                MockClient((req) async {
+                  if (req.method == 'POST' &&
+                      req.url.path.endsWith('/$action-request')) {
+                    mutationStarted.complete();
+                    final response = await mutationResponse.future;
+                    if (response.statusCode == 200) {
+                      handledRequests.add(req.url.path.split('/')[4]);
+                    }
+                    return response;
+                  }
+                  if (req.url.path == '/api/v1/chats') {
+                    final inbox = req.url.queryParameters['inbox'] ?? 'main';
+                    final items =
+                        inbox == 'requests' &&
+                            !handledRequests.contains('chat-req')
+                        ? [
+                            {
+                              'chat': {
+                                'id': 'chat-req',
+                                'type': 'CHAT_TYPE_DM',
+                                'creator_profile_id': 'profile-stranger',
+                              },
+                              'last_message_preview': 'Hi',
+                              'unread_count': 0,
+                            },
+                          ]
+                        : <Map<String, Object?>>[];
+                    return http.Response(
+                      jsonEncode({
+                        'chat_list': {'items': items},
+                      }),
+                      200,
+                    );
+                  }
+                  return http.Response('{}', 404);
+                }),
+              ),
+              realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+            ],
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              locale: const Locale('en'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Consumer(
+                builder: (context, ref, child) {
+                  ref.watch(messageRequestsSummaryProvider);
+                  return Scaffold(
+                    body: Column(
+                      children: [
+                        TextButton(
+                          key: const Key('test_open_message_requests'),
+                          onPressed: () => selectChatFolder(
+                            ref,
+                            kVirtualMessageRequestsFolderId,
+                          ),
+                          child: const Text('Open requests'),
+                        ),
+                        const Expanded(child: ChatListPanel()),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ChatListPanel)),
+        );
+
+        await tester.tap(find.byKey(const Key('test_open_message_requests')));
+        // The in-flight request keeps its busy indicator animating until the
+        // delayed response is completed, so only pump the navigation frame.
+        await tester.pump();
+        expect(
+          find.text(action == 'accept' ? 'Accept' : 'Decline'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text(action == 'accept' ? 'Accept' : 'Decline'));
+        await tester.pump();
+        await mutationStarted.future;
+
+        await tester.tap(find.byTooltip('Back to chats'));
+        await tester.pumpAndSettle();
+        expect(container.read(chatInboxProvider), 'main');
+
+        await tester.tap(find.byKey(const Key('test_open_message_requests')));
+        // The pending mutation keeps its busy indicator animating, so pump only
+        // the navigation frame while the controlled response is unresolved.
+        await tester.pump();
+        expect(
+          find.text(action == 'accept' ? 'Accept' : 'Decline'),
+          findsOneWidget,
+        );
+
+        mutationResponse.complete(http.Response('{}', 200));
+        await tester.pumpAndSettle();
+
+        expect(handledRequests, contains('chat-req'));
+        expect(find.text('Accept'), findsNothing);
+        expect(find.text('Decline'), findsNothing);
+        expect(container.read(chatListControllerProvider).items, isEmpty);
+        expect(container.read(chatInboxProvider), 'requests');
+        expect(
+          container.read(selectedChatFolderIdProvider),
+          kVirtualMessageRequestsFolderId,
+        );
+        expect(
+          container.read(messageRequestsSummaryProvider).value?.pendingCount,
+          0,
+        );
+      },
+    );
+  }
+
   testWidgets('ChatRoomPanel renders markdown message content', (tester) async {
     await tester.pumpWidget(
       chatTestApp(

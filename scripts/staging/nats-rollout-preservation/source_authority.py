@@ -1,5 +1,6 @@
 """Passive root source capture for the fixed Voice repository and CI workflow."""
 import hashlib
+from contextlib import contextmanager
 import gzip
 import io
 import json
@@ -23,12 +24,47 @@ MAX_SOURCE = 4 * 1024 ** 3
 MAX_ARCHIVE = 2 * 1024 ** 3
 MAX_FILE = 512 * 1024 ** 2
 MAX_ITEMS = 100000
+MAX_API_PAGE_SIZE = 20
+MAX_API_ITEMS = 10000
+MAX_API_PAGES = (MAX_API_ITEMS + MAX_API_PAGE_SIZE - 1) // MAX_API_PAGE_SIZE
+SOURCE_CACHE_DIR = Path('/var/lib/voice-nats-preservation/installed/source-archives')
 IMAGE_NAMES = frozenset(('analytics', 'bot', 'chat', 'file', 'gateway', 'matchmaking', 'messaging',
     'moderation', 'notification', 'realtime', 'role', 'search', 'social', 'space', 'story', 'subscription',
-    'user', 'voice', 'auth', 'web', 'developer-portal', 'admin', 'nats-hub-config-renderer'))
+    'user', 'voice', 'auth', 'web', 'developer-portal', 'admin', 'gameintegration', 'nats-hub-config-renderer'))
+_DIAGNOSTIC_PHASES = frozenset((
+    'source-preflight', 'repository-pin', 'source-equivalence', 'source-ci', 'source-tree',
+    'source-archive', 'stack-lock-artifact', 'stack-lock-read', 'stack-lock-parse',
+    'master-recheck', 'master-ref', 'source-capture',
+    'registry-token', 'registry-index', 'registry-platform-manifest', 'registry-config', 'registry-image',
+    *('registry-image-' + name for name in IMAGE_NAMES),
+))
 
 class SourceError(ValueError):
-    pass
+    def __init__(self, message='source_authority_rejected', *, phase=None, code='validation_rejected', failure_class='SourceError', http_status=None):
+        super().__init__(message)
+        self.phase = phase if isinstance(phase, str) and phase in _DIAGNOSTIC_PHASES else 'unknown'
+        self.code = code if code in ('validation_rejected', 'transport_rejected', 'response_schema_invalid', 'archive_rejected', 'http_error', 'http_status', 'network_error') else 'internal_error'
+        self.failure_class = failure_class if failure_class in ('SourceError', 'CustodyError', 'KeyError', 'TypeError', 'ValueError', 'OSError', 'BadZipFile', 'HTTPError', 'HTTPResponse', 'URLError', 'TimeoutError', 'Other') else 'Other'
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+
+
+def _source_diagnostic(error, phase):
+    if isinstance(error, SourceError):
+        return SourceError(phase=error.phase if error.phase != 'unknown' else phase, code=error.code,
+            failure_class=error.failure_class, http_status=error.http_status)
+    if isinstance(error, transport.CustodyError):
+        return SourceError(phase=phase, code='transport_rejected', failure_class='CustodyError')
+    if isinstance(error, KeyError):
+        return SourceError(phase=phase, code='response_schema_invalid', failure_class='KeyError')
+    if isinstance(error, TypeError):
+        return SourceError(phase=phase, code='response_schema_invalid', failure_class='TypeError')
+    if isinstance(error, ValueError):
+        return SourceError(phase=phase, code='response_schema_invalid', failure_class='ValueError')
+    if isinstance(error, OSError):
+        return SourceError(phase=phase, code='transport_rejected', failure_class='OSError')
+    if isinstance(error, zipfile.BadZipFile):
+        return SourceError(phase=phase, code='archive_rejected', failure_class='BadZipFile')
+    return SourceError(phase=phase, code='internal_error', failure_class='Other')
 
 
 def _fail():
@@ -91,13 +127,13 @@ def _head(headers, sha, deadline):
 
 def _pages(url, field, headers, deadline):
     result, total, identifiers = [], None, set()
-    for page in range(1, 101):
-        body = _get(url + '?per_page=100&page=' + str(page), headers, deadline)
+    for page in range(1, MAX_API_PAGES + 1):
+        body = _get(url + '?per_page=' + str(MAX_API_PAGE_SIZE) + '&page=' + str(page), headers, deadline)
         observed = body['total_count']
-        if type(observed) is not int or not 0 <= observed <= 10000 or total is not None and observed != total: _fail()
+        if type(observed) is not int or not 0 <= observed <= MAX_API_ITEMS or total is not None and observed != total: _fail()
         total = observed
         rows = body[field]
-        if not isinstance(rows, list) or len(rows) > 100: _fail()
+        if not isinstance(rows, list) or len(rows) > MAX_API_PAGE_SIZE: _fail()
         for row in rows:
             if type(row['id']) is not int or row['id'] in identifiers: _fail()
             identifiers.add(row['id']); result.append(row)
@@ -162,6 +198,48 @@ def _ci(headers, run_id, sha, repo, deadline):
     return run, required
 
 
+def _provisional_ci(headers, run_id, sha, repo, deadline):
+    """Explicit staging only: exact immutable images, no known failed job."""
+    run = _get(API + '/actions/runs/' + str(run_id), headers, deadline)
+    if (run['id'] != run_id or run['workflow_id'] != WORKFLOW or run['head_sha'] != sha
+            or run['head_branch'] != 'master' or run['event'] != 'push'
+            or run['repository']['full_name'] != REPO or run['head_repository']['full_name'] != REPO
+            or run['repository']['id'] != repo['id'] or run['head_repository']['id'] != repo['id']
+            or run['path'].split('@', 1)[0] != '.github/workflows/ci.yml'
+            or run['status'] not in ('in_progress', 'completed')
+            or run['status'] == 'in_progress' and run['conclusion'] is not None
+            or run['status'] == 'completed' and run['conclusion'] != 'success'): _fail()
+    attempt = run['run_attempt']
+    if type(attempt) is not int or attempt <= 0: _fail()
+    jobs = _pages(API + '/actions/runs/' + str(run_id) + '/attempts/' + str(attempt) + '/jobs', 'jobs', headers, deadline)
+    named = {}
+    for job in jobs:
+        name = job['name']
+        if (job['run_id'] != run_id or job['head_sha'] != sha or job.get('run_attempt') != attempt
+                or not isinstance(name, str) or not name or name in named
+                or job['status'] not in ('queued', 'in_progress', 'completed')): _fail()
+        if job['status'] == 'completed':
+            if job['conclusion'] not in ('success', 'skipped'): _fail()
+        elif job['conclusion'] is not None or run['status'] == 'completed': _fail()
+        named[name] = job
+    lock = named.get('staging-stack-lock'); gate = named.get('ci-gate')
+    if lock is None or lock['status'] != 'completed' or lock['conclusion'] != 'success': _fail()
+    # GitHub does not list a dependency-blocked job until it is scheduled.
+    if gate is None and run['status']!='in_progress': _fail()
+    if gate is not None and gate['status'] == 'completed' and gate['conclusion'] != 'success': _fail()
+    return run, {'staging-stack-lock': lock, 'ci-gate': gate}
+
+
+def revalidate_ci(token, authority, *, final=False):
+    """Never choose a new run or attempt when revalidating bound admission."""
+    headers = _headers(token); deadline = time.monotonic() + 60
+    repo = _head(headers, authority['source_sha'], deadline)
+    check = _provisional_ci if authority.get('provisional_staging') is True and not final else _ci
+    run, _ = check(headers, authority['run_id'], authority['source_sha'], repo, deadline)
+    if run['run_attempt'] != authority['run_attempt']: _fail()
+    return run
+
+
 def _path(value):
     if not isinstance(value, str) or '\\' in value or '\x00' in value or ':' in value: _fail()
     path = PurePosixPath(value)
@@ -199,7 +277,41 @@ class _TarReader:
         return self.tell()
 
 
-def _capture_tar(archive, destination, tree, sha, deadline):
+@contextmanager
+def cached_archive(sha):
+    """Passive fixed-SHA bytes; all authority still comes from the live API."""
+    if not isinstance(sha,str) or not re.fullmatch(r'[a-f0-9]{40}',sha):_fail()
+    name=sha+'.tar.gz'
+    parent=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    fd=None
+    def identity(row):
+        return (row.st_dev,row.st_ino,row.st_mode,row.st_uid,row.st_gid,row.st_nlink,
+                row.st_size,row.st_mtime_ns,row.st_ctime_ns)
+    try:
+        for component in SOURCE_CACHE_DIR.parts[1:]:
+            try:child=os.open(component,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+            except FileNotFoundError:
+                yield None;return
+            row=os.fstat(child)
+            if row.st_uid!=0 or row.st_mode&0o022:
+                os.close(child);_fail()
+            os.close(parent);parent=child
+        try:fd=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+        except FileNotFoundError:
+            yield None;return
+        before=os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid!=0 or before.st_mode&0o022
+            or before.st_nlink!=1 or not 1<=before.st_size<=MAX_ARCHIVE
+            or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before)):_fail()
+        with os.fdopen(fd,'rb',closefd=False) as archive:
+            yield archive
+        if identity(os.fstat(fd))!=identity(before) or identity(os.stat(name,dir_fd=parent,follow_symlinks=False))!=identity(before):_fail()
+    finally:
+        if fd is not None:os.close(fd)
+        os.close(parent)
+
+
+def _capture_tar(archive, destination, tree, sha, deadline,*,cached=False):
     expected, total, tree_paths = {}, 0, set()
     if tree['truncated'] is not False or len(tree['tree']) > MAX_ITEMS: _fail()
     for row in tree['tree']:
@@ -211,7 +323,8 @@ def _capture_tar(archive, destination, tree, sha, deadline):
         if type(row['size']) is not int or not 0 <= row['size'] <= MAX_FILE or not re.fullmatch(r'[a-f0-9]{40}', row['sha']): _fail()
         expected[row['path']] = row; total += row['size']
     if not expected or total > MAX_SOURCE or shutil.disk_usage(destination).free < total + transport.CHUNK: _fail()
-    prefix, seen, hashes, items = 'Poryadok-VoiceRoot-' + sha[:7], set(), {}, 0
+    prefix = 'VoiceRoot-'+sha if cached else 'Poryadok-VoiceRoot-'+sha[:7]
+    seen, hashes, items = set(), {}, 0
     archive_names = set()
     archive.seek(0)
     with gzip.GzipFile(fileobj=archive) as expanded, tarfile.open(fileobj=_TarReader(expanded, deadline), mode='r:') as tar:
@@ -228,7 +341,8 @@ def _capture_tar(archive, destination, tree, sha, deadline):
                 continue
             if not member.isfile() or member.issparse() or not relative or relative in seen or relative not in expected: _fail()
             row = expected[relative]
-            if member.size != row['size']: _fail()
+            if (member.size != row['size']
+                or bool(member.mode&0o111)!=(row['mode']=='100755')): _fail()
             seen.add(relative)
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -317,26 +431,77 @@ def same_image_content(actual, target, deadline):
     return a['manifest_image']==b['manifest_image'] and a['config_sha256']==b['config_sha256']
 
 
-def capture_source(token, run_id, source_sha, destination):
-    """Capture current master passive bytes; resolve authorized same-CI tags.
+def _path_tree_sha(headers, commit_sha, path, deadline, *, expected_type):
+    commit = _get(API + '/git/commits/' + commit_sha, headers, deadline)
+    if commit.get('sha') != commit_sha or not re.fullmatch(r'[a-f0-9]{40}', commit.get('tree', {}).get('sha', '')): _fail()
+    tree_sha = commit['tree']['sha']
+    parts = path.split('/')
+    for index, part in enumerate(parts):
+        tree = _get(API + '/git/trees/' + tree_sha, headers, deadline)
+        if tree.get('sha') != tree_sha or tree.get('truncated') is not False or not isinstance(tree.get('tree'), list): _fail()
+        matches = [row for row in tree['tree'] if isinstance(row, dict) and row.get('path') == part]
+        if len(matches) != 1: _fail()
+        row = matches[0]
+        final = index == len(parts) - 1
+        if (not re.fullmatch(r'[a-f0-9]{40}', str(row.get('sha', '')))
+            or row.get('type') != (expected_type if final else 'tree')): _fail()
+        tree_sha = row['sha']
+    return tree_sha
 
-    Digests are independently resolved at capture, not recorded by the CI tag
-    artifact. Trust assumes authorized project GHCR package publishers. No
-    caller image map, metadata URL or downloaded source code is executed.
-    """
+
+def _equivalent_master_source(headers, source_sha, master_sha, deadline):
+    if not re.fullmatch(r'[a-f0-9]{40}', source_sha) or not re.fullmatch(r'[a-f0-9]{40}', master_sha): _fail()
+    comparison = _get(API + '/compare/' + source_sha + '...' + master_sha, headers, deadline)
+    status = comparison.get('status')
+    ahead_by = comparison.get('ahead_by')
+    if (comparison.get('base_commit', {}).get('sha') != source_sha
+        or comparison.get('merge_base_commit', {}).get('sha') != source_sha
+        or type(ahead_by) is not int or ahead_by < 0
+        or source_sha == master_sha and (status != 'identical' or ahead_by != 0)
+        or source_sha != master_sha and (status != 'ahead' or ahead_by <= 0)): _fail()
+    paths = ('src/backend', '.github/workflows/ci.yml',
+        'scripts/ci/backend-docker-context.txt', 'scripts/ci/staging-image-catalog.json')
+    bindings = {}
+    for path in paths:
+        expected_type = 'tree' if path == 'src/backend' else 'blob'
+        source = _path_tree_sha(headers, source_sha, path, deadline, expected_type=expected_type)
+        current = _path_tree_sha(headers, master_sha, path, deadline, expected_type=expected_type)
+        if source != current: _fail()
+        bindings[path] = {'git_object_sha1': source}
+    return {'current_master_sha_before': master_sha, 'equivalent_inputs': bindings,
+        'source_is_ancestor': True}
+
+
+def _capture_source_at_master(token, run_id, source_sha, destination, master_sha, *, provisional_staging=False):
+    phase = 'source-preflight'
     try:
         if type(run_id) is not int or run_id <= 0 or not isinstance(source_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', source_sha): _fail()
         destination = _destination(destination); headers = _headers(token); deadline = time.monotonic() + 600
-        repo = _head(headers, source_sha, deadline)
-        run, jobs = _ci(headers, run_id, source_sha, repo, deadline)
+        phase = 'repository-pin'
+        repo = _head(headers, master_sha, deadline)
+        if type(provisional_staging) is not bool: _fail()
+        equivalence = None
+        if master_sha != source_sha:
+            if provisional_staging: _fail()
+            phase = 'source-equivalence'
+            equivalence = _equivalent_master_source(headers, source_sha, master_sha, deadline)
+        phase = 'source-ci'
+        run, jobs = (_provisional_ci if provisional_staging else _ci)(headers, run_id, source_sha, repo, deadline)
+        phase = 'source-tree'
         commit = _get(API + '/git/commits/' + source_sha, headers, deadline)
         if commit['sha'] != source_sha or not re.fullmatch(r'[a-f0-9]{40}', commit['tree']['sha']): _fail()
         tree = _get(API + '/git/trees/' + commit['tree']['sha'] + '?recursive=1', headers, deadline)
         if tree['sha'] != commit['tree']['sha']: _fail()
         if shutil.disk_usage(tempfile.gettempdir()).free < MAX_ARCHIVE: _fail()
-        with tempfile.TemporaryFile() as archive:
-            _fetch(API + '/tarball/' + source_sha, headers, MAX_ARCHIVE, deadline, target=archive)
-            files = _capture_tar(archive, destination, tree, source_sha, deadline)
+        phase = 'source-archive'
+        with cached_archive(source_sha) as cached:
+            if cached is not None:
+                files = _capture_tar(cached,destination,tree,source_sha,deadline,cached=True)
+            else:
+                with tempfile.TemporaryFile() as archive:
+                    _fetch(API + '/tarball/' + source_sha, headers, MAX_ARCHIVE, deadline, target=archive)
+                    files = _capture_tar(archive, destination, tree, source_sha, deadline)
+        phase = 'stack-lock-artifact'
         artifacts = _pages(API + '/actions/runs/' + str(run_id) + '/artifacts', 'artifacts', headers, deadline)
         candidates = [artifact for artifact in artifacts if artifact['name'] == 'staging-stack-lock']
         if len(candidates) != 1 or type(candidates[0]['id']) is not int: _fail()
@@ -348,6 +513,7 @@ def capture_source(token, run_id, source_sha, destination):
                 or workflow['head_repository_id'] != repo['id']
                 or not transport._timestamp(job['started_at']) <= transport._timestamp(artifact['created_at']) <= transport._timestamp(job['completed_at'])
                 or transport._timestamp(artifact['expires_at']) <= transport.datetime.now(transport.timezone.utc)): _fail()
+        phase = 'stack-lock-read'
         with tempfile.TemporaryFile() as archive:
             count, _ = _fetch(API + '/actions/artifacts/' + str(artifact_id) + '/zip', headers, 4 * 1024 ** 2, deadline, target=archive)
             if type(artifact.get('size_in_bytes')) is not int or count != artifact['size_in_bytes']: _fail()
@@ -357,13 +523,55 @@ def capture_source(token, run_id, source_sha, destination):
                 if len(members) != 1 or members[0].filename != 'stack.lock.yaml' or members[0].is_dir() or members[0].file_size > 1024 * 1024: _fail()
                 if stat.S_IFMT(members[0].external_attr >> 16) not in (0, stat.S_IFREG) or members[0].flag_bits & 1: _fail()
                 lock = zipped.read(members[0])
+        phase = 'stack-lock-parse'
         tags = _lock(lock, source_sha, destination)
-        images = {name: _resolve_image(name, tag, deadline) for name, tag in sorted(tags.items())}
-        _head(headers, source_sha, deadline)
-        return {'schema': 'voice-source-authority-v1', 'repository': REPO, 'source_sha': source_sha,
+        images = {}
+        for name, tag in sorted(tags.items()):
+            phase = 'registry-image-' + name
+            images[name] = _resolve_image(name, tag, deadline)
+        phase = 'master-recheck'
+        _head(headers, master_sha, deadline)
+        if equivalence is not None:
+            equivalence['current_master_sha_after'] = master_sha
+        result = {'schema': 'voice-source-authority-v1', 'repository': REPO, 'source_sha': source_sha,
             'workflow_id': WORKFLOW, 'run_id': run_id, 'run_attempt': run['run_attempt'], 'tree_sha': tree['sha'],
             'source_files': dict(sorted(files.items())), 'images': images, 'lock_artifact_id': artifact_id,
             'lock_sha256': hashlib.sha256(lock).hexdigest(), 'image_provenance': 'independently resolved trusted CI tag',
             'verified': True}
+        if equivalence is not None:
+            result['source_equivalence'] = equivalence
+        if provisional_staging:
+            result['provisional_staging'] = True
+            revalidate_ci(token, result)
+        return result
+    except Exception as error:
+        raise _source_diagnostic(error, phase) from None
+
+
+def capture_source(token, run_id, source_sha, destination, *, provisional_staging=False):
+    """Capture only the currently pinned master source and its canonical CI."""
+    return _capture_source_at_master(token, run_id, source_sha, destination, source_sha,
+        provisional_staging=provisional_staging)
+
+
+def capture_equivalent_master_source(token, run_id, source_sha, destination):
+    """Capture a successful historical master CI only when current build inputs match.
+
+    The source must be an actual ancestor of the pinned current master. The full
+    backend tree and the CI workflow/context/catalog that select its build must
+    be byte-identical. The current master ref is pinned before and after capture.
+    """
+    phase = 'master-ref'
+    try:
+        headers = _headers(token)
+        deadline = time.monotonic() + 60
+        ref = _get(API + '/git/ref/heads/master', headers, deadline)
+        master_sha = ref.get('object', {}).get('sha') if ref.get('ref') == 'refs/heads/master' else None
+        if not isinstance(master_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', master_sha): _fail()
+        phase = 'source-capture'
+        return _capture_source_at_master(token, run_id, source_sha, destination, master_sha,
+            provisional_staging=False)
+    except SourceError:
+        raise
     except Exception:
-        raise SourceError('source_authority_rejected') from None
+        raise SourceError(phase=phase) from None

@@ -12,6 +12,7 @@ import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/space_permissions.dart';
 import 'package:voice_frontend/e2e/e2e_message_service.dart';
@@ -21,6 +22,8 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/e2e_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/message_cache_providers.dart';
+import 'package:voice_frontend/state/presence_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/shell/three_column_shell.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -37,6 +40,717 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final scheduledEnabled in [false, true]) {
+    testWidgets('scheduled list request follows capability=$scheduledEnabled', (
+      tester,
+    ) async {
+      final scheduledRequests = <Uri>[];
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: scheduledEnabled,
+            ),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path == '/api/v1/messages/scheduled') {
+                scheduledRequests.add(request.url);
+                return http.Response('{}', 500);
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          presenceProvider.overrideWith((ref, profileId) => null),
+          selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+          chatListControllerProvider.overrideWith(_DmChatListController.new),
+          chatRoomControllerProvider('chat-abc').overrideWith(
+            (ref) => _SingleMessageRoomController(ref, 'chat-abc'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(scheduledRequests, hasLength(scheduledEnabled ? 1 : 0));
+      if (!scheduledEnabled) {
+        expect(
+          container
+              .read(chatRoomControllerProvider('chat-abc'))
+              .scheduledMessagesError,
+          isNull,
+        );
+      }
+    });
+  }
+
+  for (final threadsEnabled in [false, true]) {
+    testWidgets('Reply action follows threads_enabled=$threadsEnabled', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          presenceProvider.overrideWith((ref, profileId) => null),
+          selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+          chatListControllerProvider.overrideWith(
+            (ref) =>
+                _SpaceChatListController(ref, threadsEnabled: threadsEnabled),
+          ),
+          chatRoomControllerProvider('chat-abc').overrideWith(
+            (ref) => _SingleMessageRoomController(ref, 'chat-abc'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      container
+              .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
+              .state =
+          'chat-abc-message';
+      await tester.pumpAndSettle();
+
+      final replyAction = find.text(
+        AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!.chatMessageReply,
+      );
+      expect(replyAction, threadsEnabled ? findsOneWidget : findsNothing);
+    });
+  }
+
+  testWidgets('disabled thread failure explains recovery and keeps the draft', (
+    tester,
+  ) async {
+    final harness = _ImmediateRetryHarness(
+      threadsEnabled: true,
+      send: (_, _) async => http.Response(
+        jsonEncode({
+          'error': 'failed_precondition',
+          'message': 'threads are disabled for this chat',
+        }),
+        412,
+      ),
+    );
+    addTearDown(harness.container.dispose);
+    await harness.pump(tester);
+
+    await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Keep my draft');
+    harness.container.read(chatReplyTargetProvider('chat-abc').notifier).state =
+        _retryReply;
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ChatRoomPanel)),
+    )!;
+    expect(find.text(l10n.chatThreadRepliesUnavailable), findsOneWidget);
+    expect(harness.composer(tester).text, 'Keep my draft');
+    await tester.tap(find.byKey(ChatRoomPanel.replyTargetCancelKey));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.chatThreadRepliesUnavailable), findsNothing);
+    expect(harness.composer(tester).text, 'Keep my draft');
+    expect(harness.container.read(chatReplyTargetProvider('chat-abc')), isNull);
+  });
+
+  for (final locale in ['en', 'ru']) {
+    testWidgets(
+      'immediate text failure in $locale retries the same wire attempt',
+      (tester) async {
+        final harness = _ImmediateRetryHarness(threadsEnabled: true);
+        addTearDown(harness.container.dispose);
+        harness.room.state = harness.room.state.copyWith(
+          messages: const [_preexistingRetryHistory],
+        );
+        harness.container
+                .read(chatReplyTargetProvider('chat-abc').notifier)
+                .state =
+            _retryReply;
+        await harness.pump(tester, locale: locale);
+        expect(harness.room.state.messages.map((message) => message.id), [
+          'history-before-retry',
+        ]);
+        expectMessagePlainText(tester, 'Existing visible history');
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!;
+        await tester.enterText(
+          find.byKey(ChatRoomPanel.inputKey),
+          'Retry draft',
+        );
+        await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+        await tester.pumpAndSettle();
+
+        expect(harness.bodies, hasLength(1), reason: 'no automatic resend');
+        expect(harness.room.state.messages.map((message) => message.id), [
+          'history-before-retry',
+        ]);
+        expectMessagePlainText(tester, 'Existing visible history');
+        expect(find.textContaining(_sendDiagnostic), findsNothing);
+        expect(find.text(l10n.commonActionFailed), findsWidgets);
+        expect(harness.composer(tester).text, 'Retry draft');
+        expect(
+          harness.container.read(chatReplyTargetProvider('chat-abc')),
+          _retryReply,
+        );
+        final original =
+            jsonDecode(harness.bodies.single) as Map<String, dynamic>;
+        expect(
+          original['client_message_id'],
+          matches(
+            RegExp(
+              r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            ),
+          ),
+        );
+        expect(original['thread_parent_id'], 'reply-1');
+
+        final auth = harness.container.read(authControllerProvider.notifier);
+        auth.state = const AuthState(
+          session: AuthSession(
+            accessToken: 'renewed-access',
+            refreshToken: 'renewed-refresh',
+            accountId: 'acc-test',
+            activeProfileId: 'prof-test',
+            expiresInSeconds: 900,
+          ),
+        );
+        await tester.pump();
+        expect(find.byKey(ChatRoomPanel.sendRetryKey), findsOneWidget);
+
+        final historyLoads = harness.room.historyLoads;
+        await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+        await tester.pumpAndSettle();
+        expect(harness.bodies, hasLength(2));
+        expect(harness.bodies.last, harness.bodies.first);
+        expect(harness.authorizations, [
+          'Bearer test-access',
+          'Bearer renewed-access',
+        ]);
+        expect(
+          harness.room.historyLoads,
+          historyLoads,
+          reason: 'Retry is not history reload',
+        );
+        expect(harness.composer(tester).text, isEmpty);
+        expect(
+          harness.container.read(chatReplyTargetProvider('chat-abc')),
+          isNull,
+        );
+        expect(
+          harness.room.state.messages.map((m) => m.id),
+          unorderedEquals(['history-before-retry', 'accepted-1']),
+        );
+        expectMessagePlainText(tester, 'Existing visible history');
+        expectMessagePlainText(tester, 'Accepted text');
+        expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+      },
+    );
+  }
+
+  for (final change in ['chat', 'profile', 'account', 'logout', 'relogin']) {
+    testWidgets(
+      'captured text Retry is inert after $change change and return',
+      (tester) async {
+        final harness = _ImmediateRetryHarness();
+        addTearDown(harness.container.dispose);
+        await harness.pump(tester);
+        await tester.enterText(
+          find.byKey(ChatRoomPanel.inputKey),
+          'Private A draft',
+        );
+        await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+        await tester.pumpAndSettle();
+        final retry = tester
+            .widget<TextButton>(find.byKey(ChatRoomPanel.sendRetryKey))
+            .onPressed!;
+        final auth = harness.container.read(authControllerProvider.notifier);
+        final originalSession = auth.state.session!;
+        if (change == 'chat') {
+          harness.container.read(selectedChatIdProvider.notifier).state =
+              'other-chat';
+        } else if (change == 'relogin') {
+          (auth as _ImmediateAuthController).installSameActorSession();
+        } else {
+          auth.state = AuthState(
+            session: change == 'logout'
+                ? null
+                : AuthSession(
+                    accessToken: 'other-access',
+                    refreshToken: 'other-refresh',
+                    accountId: change == 'account'
+                        ? 'other-account'
+                        : originalSession.accountId,
+                    activeProfileId: change == 'profile'
+                        ? 'other-profile'
+                        : originalSession.activeProfileId,
+                    expiresInSeconds: 900,
+                  ),
+          );
+        }
+        await tester.pump();
+        if (change == 'chat') {
+          harness.container.read(selectedChatIdProvider.notifier).state =
+              'chat-abc';
+        } else {
+          auth.state = AuthState(session: originalSession);
+        }
+        await tester.pump();
+        retry();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 30));
+        expect(harness.bodies, hasLength(1));
+        expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+        expect(harness.room.state.errorMessage, isNull);
+        expect(find.textContaining(_sendDiagnostic), findsNothing);
+      },
+    );
+  }
+
+  testWidgets(
+    'token renewal fences an old response while allowing the same explicit Retry',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      final harness = _ImmediateRetryHarness(
+        threadsEnabled: true,
+        send: (_, attempt) async =>
+            attempt == 1 ? pending.future : _successfulSendResponse(),
+      );
+      addTearDown(harness.container.dispose);
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Pending text',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pump();
+      harness.container
+          .read(authControllerProvider.notifier)
+          .state = const AuthState(
+        session: AuthSession(
+          accessToken: 'renewed-access',
+          refreshToken: 'renewed-refresh',
+          accountId: 'acc-test',
+          activeProfileId: 'prof-test',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pump();
+      pending.complete(_successfulSendResponse());
+      await tester.pumpAndSettle();
+      expect(harness.room.state.messages, isEmpty);
+      expect(harness.bodies, hasLength(1));
+      expect(harness.composer(tester).text, 'Pending text');
+      await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(2));
+      expect(harness.bodies.last, harness.bodies.first);
+      expect(harness.authorizations.last, 'Bearer renewed-access');
+      expect(harness.room.state.messages.map((m) => m.id), ['accepted-1']);
+      expect(harness.composer(tester).text, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'captured text Retry cannot replay a replacement attachment attempt',
+    (tester) async {
+      final harness = _ImmediateRetryHarness(
+        send: (_, attempt) async =>
+            attempt <= 2 ? _failedSendResponse() : _successfulSendResponse(),
+      );
+      addTearDown(harness.container.dispose);
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Original text',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      final retry = tester
+          .widget<TextButton>(find.byKey(ChatRoomPanel.sendRetryKey))
+          .onPressed!;
+      expect(
+        await harness.room.sendMessage(
+          'Attachment caption',
+          attachments: const [
+            MessageAttachment(fileId: 'file-1', type: 'document'),
+          ],
+        ),
+        isNotNull,
+      );
+      await tester.pumpAndSettle();
+      retry();
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(2));
+      expect(harness.composer(tester).text, 'Original text');
+      expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+      expect(harness.room.canRetryFailedMessage, isTrue);
+      expect(await harness.room.retryFailedMessage(), isNull);
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(3));
+      expect(harness.bodies.last, harness.bodies[1]);
+      expect(harness.bodies.last, isNot(harness.bodies.first));
+    },
+  );
+
+  for (final sameValue in [false, true]) {
+    final historyError = sameValue ? _sendDiagnostic : 'permission_denied';
+    testWidgets(
+      'text Retry preserves unrelated history error with ${sameValue ? 'same' : 'different'} text',
+      (tester) async {
+        final harness = _ImmediateRetryHarness();
+        addTearDown(harness.container.dispose);
+        await harness.pump(tester);
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!;
+        await tester.enterText(
+          find.byKey(ChatRoomPanel.inputKey),
+          'Failed text',
+        );
+        await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+        await tester.pumpAndSettle();
+        harness.room.state = harness.room.state.copyWith(
+          errorMessage: historyError,
+        );
+        await tester.pumpAndSettle();
+        final historyLabel = sameValue
+            ? l10n.chatRoomLoadError
+            : l10n.chatRoomPermissionDenied;
+        expect(find.text(historyLabel), findsOneWidget);
+        expect(find.text(l10n.commonActionFailed), findsOneWidget);
+        await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+        await tester.pumpAndSettle();
+        expect(harness.room.state.errorMessage, historyError);
+        expect(find.text(historyLabel), findsOneWidget);
+        expect(find.textContaining(_sendDiagnostic), findsNothing);
+        expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+        expect(harness.bodies, hasLength(2));
+        expect(harness.bodies.last, harness.bodies.first);
+      },
+    );
+  }
+
+  testWidgets(
+    'text Retry is single-flight and preserves a newer draft and reply',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      final harness = _ImmediateRetryHarness(
+        threadsEnabled: true,
+        send: (_, attempt) async =>
+            attempt == 1 ? _failedSendResponse() : pending.future,
+      );
+      addTearDown(harness.container.dispose);
+      harness.container
+              .read(chatReplyTargetProvider('chat-abc').notifier)
+              .state =
+          _retryReply;
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Original text',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Newer text');
+      const newerReply = VoiceMessage(
+        id: 'reply-2',
+        chatId: 'chat-abc',
+        senderProfileId: 'peer-1',
+        content: 'New reply',
+      );
+      harness.container
+              .read(chatReplyTargetProvider('chat-abc').notifier)
+              .state =
+          newerReply;
+      await tester.pump();
+      expect(
+        harness.container.read(chatReplyTargetProvider('chat-abc')),
+        newerReply,
+      );
+      final retry = tester
+          .widget<TextButton>(find.byKey(ChatRoomPanel.sendRetryKey))
+          .onPressed!;
+      retry();
+      retry();
+      await tester.pump();
+      expect(harness.bodies, hasLength(2));
+      expect(harness.bodies.last, harness.bodies.first);
+      pending.complete(_successfulSendResponse());
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(2));
+      expect(harness.composer(tester).text, 'Newer text');
+      expect(
+        harness.container.read(chatReplyTargetProvider('chat-abc')),
+        newerReply,
+      );
+    },
+  );
+
+  testWidgets(
+    'text Retry blocks a retained reply after threads are disabled',
+    (tester) async {
+      final harness = _ImmediateRetryHarness(threadsEnabled: true);
+      addTearDown(harness.container.dispose);
+      harness.container
+              .read(chatReplyTargetProvider('chat-abc').notifier)
+              .state =
+          _retryReply;
+      await harness.pump(tester);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Retained reply body',
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(1));
+
+      harness.container.read(chatListControllerProvider.notifier).state =
+          ChatListState(
+            profileId: 'prof-test',
+            items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-abc',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'prof-test',
+                  threadsEnabled: false,
+                ),
+                dmPeerProfileId: 'peer-1',
+              ),
+            ],
+          );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+      await tester.pumpAndSettle();
+
+      expect(harness.bodies, hasLength(1));
+      expect(harness.composer(tester).text, 'Retained reply body');
+      expect(
+        harness.container.read(chatReplyTargetProvider('chat-abc')),
+        _retryReply,
+      );
+      expect(
+        find.text(AppLocalizations.of(
+          tester.element(find.byType(ChatRoomPanel)),
+        )!.chatThreadRepliesUnavailable),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('late successful text send cannot clear another profile draft', (
+    tester,
+  ) async {
+    final pending = Completer<http.Response>();
+    final harness = _ImmediateRetryHarness(send: (_, _) => pending.future);
+    addTearDown(harness.container.dispose);
+    await harness.pump(tester);
+    await tester.enterText(
+      find.byKey(ChatRoomPanel.inputKey),
+      'Private A text',
+    );
+    await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+    await tester.pump();
+    final auth = harness.container.read(authControllerProvider.notifier);
+    auth.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'profile-b',
+        refreshToken: 'refresh-b',
+        accountId: 'acc-test',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(ChatRoomPanel.inputKey),
+      'Private B text',
+    );
+    pending.complete(_successfulSendResponse());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(harness.composer(tester).text, 'Private B text');
+    expect(harness.room.state.messages, isEmpty);
+    expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+  });
+
+  test(
+    'immediate encrypted retry preserves payload, mentions and UUID after token renewal',
+    () async {
+      final harness = _ImmediateRetryHarness(encrypted: true);
+      addTearDown(() async {
+        await pumpEventQueue();
+        harness.container.dispose();
+      });
+      final room = harness.room;
+      final mentions = <MessageMention>[
+        const MessageMention(type: 'user', targetId: 'peer-1'),
+      ];
+      expect(
+        await room.sendMessage(
+          'Encrypted retry',
+          mentions: mentions,
+          threadParentId: 'reply-1',
+        ),
+        isNotNull,
+      );
+      mentions.clear();
+      final auth = harness.container.read(authControllerProvider.notifier);
+      auth.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'renewed-access',
+          refreshToken: 'renewed-refresh',
+          accountId: 'acc-test',
+          activeProfileId: 'prof-test',
+          expiresInSeconds: 900,
+        ),
+      );
+      expect(await room.retryFailedMessage(), isNull);
+      expect(harness.encryptionCalls, 1);
+      expect(harness.bodies, hasLength(2));
+      expect(harness.bodies.last, harness.bodies.first);
+      expect(harness.authorizations, [
+        'Bearer test-access',
+        'Bearer renewed-access',
+      ]);
+      final body = jsonDecode(harness.bodies.first) as Map<String, dynamic>;
+      expect(body['content'], 'wire-ciphertext-1');
+      expect(body['is_e2e'], isTrue);
+      expect(body['thread_parent_id'], 'reply-1');
+      expect(jsonDecode(body['mentions_json'] as String), [
+        {'type': 'user', 'target_id': 'peer-1'},
+      ]);
+      expect(room.state.messages.map((m) => m.id), ['accepted-1']);
+    },
+  );
+
+  test(
+    'leaving a pending text send releases busy state before returning to chat',
+    () async {
+      final pending = Completer<http.Response>();
+      final harness = _ImmediateRetryHarness(
+        send: (_, attempt) async =>
+            attempt == 1 ? pending.future : _successfulSendResponse(),
+      );
+      addTearDown(() async {
+        await pumpEventQueue();
+        harness.container.dispose();
+      });
+      final room = harness.room;
+      final first = room.sendMessage('Old pending text');
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.bodies, hasLength(1));
+      expect(room.state.isSending, isTrue);
+      harness.container.read(selectedChatIdProvider.notifier).state =
+          'other-chat';
+      expect(room.state.isSending, isFalse);
+      expect(room.canRetryFailedMessage, isFalse);
+      expect(room.state.errorMessage, isNull);
+      harness.container.read(selectedChatIdProvider.notifier).state =
+          'chat-abc';
+      expect(await room.sendMessage('New text after returning'), isNull);
+      pending.complete(_successfulSendResponse());
+      expect(await first, kChatActionStaleContext);
+      expect(harness.bodies, hasLength(2));
+      expect(room.state.isSending, isFalse);
+      expect(room.state.messages.map((m) => m.id), ['accepted-1']);
+    },
+  );
+
+  for (final historyError in ['history-error', _sendDiagnostic]) {
+    test(
+      'chat invalidation preserves unrelated history error with ${historyError == _sendDiagnostic ? 'same' : 'different'} text',
+      () async {
+        final harness = _ImmediateRetryHarness();
+        addTearDown(harness.container.dispose);
+        expect(await harness.room.sendMessage('Failed text'), isNotNull);
+        harness.room.state = harness.room.state.copyWith(
+          errorMessage: historyError,
+        );
+        harness.container.read(selectedChatIdProvider.notifier).state =
+            'other-chat';
+        expect(harness.room.state.errorMessage, historyError);
+        expect(harness.room.canRetryFailedMessage, isFalse);
+      },
+    );
+
+    test(
+      'new login invalidation preserves unrelated history error with ${historyError == _sendDiagnostic ? 'same' : 'different'} text',
+      () async {
+        final harness = _ImmediateRetryHarness();
+        addTearDown(harness.container.dispose);
+        expect(await harness.room.sendMessage('Failed text'), isNotNull);
+        harness.room.state = harness.room.state.copyWith(
+          errorMessage: historyError,
+        );
+        (harness.container.read(authControllerProvider.notifier)
+                as _ImmediateAuthController)
+            .installSameActorSession();
+        expect(harness.room.state.errorMessage, historyError);
+        expect(harness.room.canRetryFailedMessage, isFalse);
+      },
+    );
+  }
+
+  test(
+    'immediate failed attempt is released after controller disposal',
+    () async {
+      final harness = _ImmediateRetryHarness();
+      final room = harness.room;
+      expect(await room.sendMessage('Private text'), isNotNull);
+      harness.container.dispose();
+      expect(await room.retryFailedMessage(), kChatActionStaleContext);
+      expect(harness.bodies, hasLength(1));
+    },
+  );
+
   testWidgets(
     'space message moderation has no delete affordance while permission is unresolved or denied',
     (tester) async {
@@ -68,9 +782,9 @@ void main() {
           chatRoomControllerProvider('chat-abc').overrideWith(
             (ref) => _SingleMessageRoomController(ref, 'chat-abc'),
           ),
-          spacePermissionProvider(query).overrideWith(
-            (ref) => moderationPermission.future,
-          ),
+          spacePermissionProvider(
+            query,
+          ).overrideWith((ref) => moderationPermission.future),
         ],
       );
       addTearDown(container.dispose);
@@ -90,8 +804,9 @@ void main() {
       await tester.pumpAndSettle();
 
       container
-          .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
-          .state = 'chat-abc-message';
+              .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
+              .state =
+          'chat-abc-message';
       await tester.pumpAndSettle();
 
       final checkingPermission = find.ancestor(
@@ -118,9 +833,7 @@ void main() {
       expect(unavailableModeration, findsOneWidget);
       expect(tester.widget<ListTile>(unavailableModeration).onTap, isNull);
       expect(
-        find.byTooltip(
-          'Message moderation is unavailable.',
-        ),
+        find.byTooltip('Message moderation is unavailable.'),
         findsOneWidget,
       );
     },
@@ -180,8 +893,9 @@ void main() {
       await tester.pumpAndSettle();
 
       container
-          .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
-          .state = 'chat-abc-message';
+              .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
+              .state =
+          'chat-abc-message';
       await tester.pumpAndSettle();
 
       final deleteForEveryone = find.ancestor(
@@ -224,12 +938,12 @@ void main() {
           chatListControllerProvider.overrideWith(
             _UnreadTwoChatListController.new,
           ),
-          chatRoomControllerProvider('chat-a').overrideWith(
-            (ref) => _SingleMessageRoomController(ref, 'chat-a'),
-          ),
-          chatRoomControllerProvider('chat-b').overrideWith(
-            (ref) => _SingleMessageRoomController(ref, 'chat-b'),
-          ),
+          chatRoomControllerProvider(
+            'chat-a',
+          ).overrideWith((ref) => _SingleMessageRoomController(ref, 'chat-a')),
+          chatRoomControllerProvider(
+            'chat-b',
+          ).overrideWith((ref) => _SingleMessageRoomController(ref, 'chat-b')),
         ],
       );
       addTearDown(container.dispose);
@@ -337,8 +1051,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
 
       expect(container.read(selectedChatIdProvider), 'chat-b');
-      expect(tester.element(find.byKey(ThreeColumnShell.navActiveRail)),
-          same(navigationElement));
+      expect(
+        tester.element(find.byKey(ThreeColumnShell.navActiveRail)),
+        same(navigationElement),
+      );
       expect(find.byKey(ChatListBody.tileKey('chat-a')), findsOneWidget);
       expect(find.byKey(ChatListBody.tileKey('chat-b')), findsOneWidget);
       expect(
@@ -426,7 +1142,9 @@ void main() {
             MockClient((req) async {
               if (req.url.path == '/api/v1/messages') {
                 return http.Response(
-                  jsonEncode({'message_list': {'messages': []}}),
+                  jsonEncode({
+                    'message_list': {'messages': []},
+                  }),
                   200,
                 );
               }
@@ -437,9 +1155,9 @@ void main() {
             }),
           ),
           realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
-          chatRoomControllerProvider('chat-abc').overrideWith(
-            (ref) => _EmptyRoomController(ref, 'chat-abc'),
-          ),
+          chatRoomControllerProvider(
+            'chat-abc',
+          ).overrideWith((ref) => _EmptyRoomController(ref, 'chat-abc')),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -491,22 +1209,24 @@ void main() {
             }),
           ),
           realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
-          chatListControllerProvider.overrideWith(_BlockedDmChatListController.new),
-          chatListProvider.overrideWith(
-            (ref) async => const ChatListData(items: [
-              ChatListItem(
-                chat: VoiceChat(
-                  id: 'chat-abc',
-                  type: 'CHAT_TYPE_DM',
-                  creatorProfileId: 'prof-test',
-                ),
-                dmPeerProfileId: 'peer-1',
-              ),
-            ]),
+          chatListControllerProvider.overrideWith(
+            _BlockedDmChatListController.new,
           ),
-          chatRoomControllerProvider(
-            'chat-abc',
-          ).overrideWith((ref) {
+          chatListProvider.overrideWith(
+            (ref) async => const ChatListData(
+              items: [
+                ChatListItem(
+                  chat: VoiceChat(
+                    id: 'chat-abc',
+                    type: 'CHAT_TYPE_DM',
+                    creatorProfileId: 'prof-test',
+                  ),
+                  dmPeerProfileId: 'peer-1',
+                ),
+              ],
+            ),
+          ),
+          chatRoomControllerProvider('chat-abc').overrideWith((ref) {
             room = _EmptyRoomController(ref, 'chat-abc');
             return room;
           }),
@@ -572,7 +1292,10 @@ void main() {
             ),
             authControllerProvider.overrideWith(authenticatedAuthController),
             gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
+              const GatewayConfig(
+                baseUrl: 'http://api.test',
+                scheduledMessagesEnabled: true,
+              ),
             ),
             httpClientProvider.overrideWithValue(
               MockClient((request) async {
@@ -628,8 +1351,7 @@ void main() {
           chatListBeforeLongPress.profileId == activeProfileBeforeLongPress &&
           chatListBeforeLongPress.items.any(
             (item) =>
-                item.chatId == 'chat-abc' &&
-                item.chat.type == 'CHAT_TYPE_DM',
+                item.chatId == 'chat-abc' && item.chat.type == 'CHAT_TYPE_DM',
           );
       expect(
         dmReadyBeforeLongPress,
@@ -642,35 +1364,44 @@ void main() {
       final dmItem = chatListBeforeLongPress.items.single;
       final invalidMenuStates = <ChatListState>[
         const ChatListState(profileId: null),
-        const ChatListState(profileId: 'other-profile', items: [
-          ChatListItem(
-            chat: VoiceChat(
-              id: 'chat-abc',
-              type: 'CHAT_TYPE_DM',
-              creatorProfileId: 'prof-test',
+        const ChatListState(
+          profileId: 'other-profile',
+          items: [
+            ChatListItem(
+              chat: VoiceChat(
+                id: 'chat-abc',
+                type: 'CHAT_TYPE_DM',
+                creatorProfileId: 'prof-test',
+              ),
+              dmPeerProfileId: 'peer-1',
             ),
-            dmPeerProfileId: 'peer-1',
-          ),
-        ]),
+          ],
+        ),
         const ChatListState(profileId: 'prof-test'),
-        const ChatListState(profileId: 'prof-test', items: [
-          ChatListItem(
-            chat: VoiceChat(
-              id: 'chat-abc',
-              type: 'CHAT_TYPE_GROUP',
-              creatorProfileId: 'prof-test',
+        const ChatListState(
+          profileId: 'prof-test',
+          items: [
+            ChatListItem(
+              chat: VoiceChat(
+                id: 'chat-abc',
+                type: 'CHAT_TYPE_GROUP',
+                creatorProfileId: 'prof-test',
+              ),
             ),
-          ),
-        ]),
-        const ChatListState(profileId: 'prof-test', items: [
-          ChatListItem(
-            chat: VoiceChat(
-              id: 'chat-abc',
-              type: 'CHAT_TYPE_CHANNEL',
-              creatorProfileId: 'prof-test',
+          ],
+        ),
+        const ChatListState(
+          profileId: 'prof-test',
+          items: [
+            ChatListItem(
+              chat: VoiceChat(
+                id: 'chat-abc',
+                type: 'CHAT_TYPE_CHANNEL',
+                creatorProfileId: 'prof-test',
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ];
       for (final invalidState in invalidMenuStates) {
         chatListController.state = invalidState;
@@ -696,12 +1427,11 @@ void main() {
           menuListAfterLongPress.profileId == activeProfileBeforeLongPress &&
           menuListAfterLongPress.items.any(
             (item) =>
-                item.chatId == 'chat-abc' &&
-                item.chat.type == 'CHAT_TYPE_DM',
+                item.chatId == 'chat-abc' && item.chat.type == 'CHAT_TYPE_DM',
           );
       expect(selectedChatIsDm, isTrue);
       await tester.tap(find.text('Send when online'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(room.scheduledAttempts, hasLength(1));
       expect(room.state.isSending, isTrue);
@@ -766,7 +1496,10 @@ void main() {
           return auth = authenticatedAuthController(ref);
         }),
         gatewayConfigProvider.overrideWithValue(
-          const GatewayConfig(baseUrl: 'http://api.test'),
+          const GatewayConfig(
+            baseUrl: 'http://api.test',
+            scheduledMessagesEnabled: true,
+          ),
         ),
         httpClientProvider.overrideWithValue(
           MockClient((request) async {
@@ -874,7 +1607,10 @@ void main() {
           ),
           authControllerProvider.overrideWith(authenticatedAuthController),
           gatewayConfigProvider.overrideWithValue(
-            const GatewayConfig(baseUrl: 'http://api.test'),
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: true,
+            ),
           ),
           httpClientProvider.overrideWithValue(client),
           isDeviceOfflineProvider.overrideWith((ref) => false),
@@ -945,7 +1681,10 @@ void main() {
           ),
           authControllerProvider.overrideWith(authenticatedAuthController),
           gatewayConfigProvider.overrideWithValue(
-            const GatewayConfig(baseUrl: 'http://api.test'),
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: true,
+            ),
           ),
           httpClientProvider.overrideWithValue(
             MockClient((request) async {
@@ -1037,7 +1776,10 @@ void main() {
           ),
           authControllerProvider.overrideWith(authenticatedAuthController),
           gatewayConfigProvider.overrideWithValue(
-            const GatewayConfig(baseUrl: 'http://api.test'),
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              scheduledMessagesEnabled: true,
+            ),
           ),
           httpClientProvider.overrideWithValue(
             MockClient((request) async {
@@ -1069,6 +1811,187 @@ void main() {
   );
 }
 
+const _sendDiagnostic = 'private-upstream-stack-for-text-send';
+const _retryReply = VoiceMessage(
+  id: 'reply-1',
+  chatId: 'chat-abc',
+  senderProfileId: 'peer-1',
+  content: 'Original reply',
+);
+const _preexistingRetryHistory = VoiceMessage(
+  id: 'history-before-retry',
+  chatId: 'chat-abc',
+  senderProfileId: 'peer-1',
+  content: 'Existing visible history',
+);
+
+http.Response _failedSendResponse() =>
+    http.Response(jsonEncode({'error': _sendDiagnostic}), 503);
+
+http.Response _successfulSendResponse() => http.Response(
+  jsonEncode({
+    'message': {
+      'id': 'accepted-1',
+      'chat': {'id': 'chat-abc'},
+      'sender_profile_id': 'prof-test',
+      'content': 'Accepted text',
+    },
+  }),
+  200,
+);
+
+class _ImmediateRetryHarness {
+  _ImmediateRetryHarness({
+    Future<http.Response> Function(http.Request, int)? send,
+    bool encrypted = false,
+    bool threadsEnabled = false,
+  }) {
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v1/messages/send') {
+        bodies.add(request.body);
+        authorizations.add(request.headers['authorization']);
+        return send == null
+            ? bodies.length == 1
+                  ? _failedSendResponse()
+                  : _successfulSendResponse()
+            : send(request, bodies.length);
+      }
+      return http.Response(
+        '{}',
+        request.url.path == '/api/v1/messages/read' ? 200 : 404,
+      );
+    });
+    container = ProviderContainer(
+      overrides: [
+        ...voiceThemeTestOverrides(),
+        profileAccentStorageProvider.overrideWithValue(
+          testProfileAccentStorage,
+        ),
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
+        guestCredentialsStorageProvider.overrideWithValue(
+          InMemoryGuestCredentialsStorage(),
+        ),
+        authControllerProvider.overrideWith(_ImmediateAuthController.new),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(client),
+        messageCacheStoreProvider.overrideWithValue(
+          InMemoryMessageCacheStore(),
+        ),
+        presenceProvider.overrideWith((ref, profileId) => null),
+        realtimeAutoConnectProvider.overrideWithValue(false),
+        realtimeEventProvider.overrideWith(
+          (ref) => const Stream<RealtimeFrame>.empty(),
+        ),
+        realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+        isDeviceOfflineProvider.overrideWith((ref) => false),
+        selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+        chatListControllerProvider.overrideWith(
+          threadsEnabled
+              ? (ref) => _DmChatListController(ref, threadsEnabled: true)
+              : _DmChatListController.new,
+        ),
+        chatE2eEnabledProvider('chat-abc').overrideWith((ref) => encrypted),
+        e2eMessageServiceProvider.overrideWithValue(
+          _CountingE2eMessageService(() => ++encryptionCalls),
+        ),
+        chatRoomControllerProvider(
+          'chat-abc',
+        ).overrideWith((ref) => _ImmediateRoomController(ref, 'chat-abc')),
+      ],
+    );
+    container.listen(chatRoomControllerProvider('chat-abc'), (_, _) {});
+  }
+
+  late final ProviderContainer container;
+  final bodies = <String>[];
+  final authorizations = <String?>[];
+  var encryptionCalls = 0;
+  _ImmediateRoomController get room =>
+      container.read(chatRoomControllerProvider('chat-abc').notifier)
+          as _ImmediateRoomController;
+
+  Future<void> pump(WidgetTester tester, {String locale = 'en'}) async {
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: Locale(locale),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  TextEditingController composer(WidgetTester tester) => tester
+      .widget<TextField>(
+        find.descendant(
+          of: find.byKey(ChatRoomPanel.inputKey),
+          matching: find.byType(TextField),
+        ),
+      )
+      .controller!;
+}
+
+class _ImmediateRoomController extends ChatRoomController {
+  _ImmediateRoomController(super.ref, super.chatId) : super() {
+    state = const ChatRoomState(messages: [], historyProfileId: 'prof-test');
+  }
+  var historyLoads = 0;
+  @override
+  Future<void> loadInitial() async {
+    historyLoads++;
+  }
+
+  @override
+  Future<void> loadScheduledMessages({bool loadMore = false}) async {}
+}
+
+/// Models the existing public install-generation distinction: a token refresh
+/// does not increment it, while a new installed same-actor login does.
+class _ImmediateAuthController extends AuthController {
+  _ImmediateAuthController(Ref ref)
+    : super(
+        authClient: ref.watch(voiceAuthClientProvider),
+        storage: ref.watch(authSessionStorageProvider),
+        guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
+      ) {
+    state = const AuthState(
+      session: AuthSession(
+        accessToken: 'test-access',
+        refreshToken: 'test-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'prof-test',
+        expiresInSeconds: 900,
+      ),
+    );
+  }
+
+  var _installedGeneration = 0;
+  @override
+  int get sessionInstallGeneration => _installedGeneration;
+
+  void installSameActorSession() {
+    _installedGeneration++;
+    state = const AuthState(
+      session: AuthSession(
+        accessToken: 'new-login-access',
+        refreshToken: 'new-login-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'prof-test',
+        expiresInSeconds: 900,
+      ),
+    );
+  }
+}
+
 class _EmptyRoomController extends ChatRoomController {
   _EmptyRoomController(super.ref, super.chatId) : super() {
     state = const ChatRoomState(messages: []);
@@ -1079,8 +2002,8 @@ class _EmptyRoomController extends ChatRoomController {
 }
 
 class _DmChatListController extends ChatListController {
-  _DmChatListController(super.ref) : super() {
-    state = const ChatListState(
+  _DmChatListController(super.ref, {bool threadsEnabled = false}) : super() {
+    state = ChatListState(
       profileId: 'prof-test',
       items: [
         ChatListItem(
@@ -1088,6 +2011,7 @@ class _DmChatListController extends ChatListController {
             id: 'chat-abc',
             type: 'CHAT_TYPE_DM',
             creatorProfileId: 'prof-test',
+            threadsEnabled: threadsEnabled,
           ),
           dmPeerProfileId: 'peer-1',
         ),
@@ -1190,8 +2114,8 @@ class _BlockedDmChatListController extends ChatListController {
 }
 
 class _SpaceChatListController extends ChatListController {
-  _SpaceChatListController(super.ref) : super() {
-    state = const ChatListState(
+  _SpaceChatListController(super.ref, {this.threadsEnabled = false}) : super() {
+    state = ChatListState(
       profileId: 'prof-test',
       items: [
         ChatListItem(
@@ -1200,11 +2124,14 @@ class _SpaceChatListController extends ChatListController {
             type: 'CHAT_TYPE_GROUP',
             creatorProfileId: 'owner',
             spaceId: 'space-1',
+            threadsEnabled: threadsEnabled,
           ),
         ),
       ],
     );
   }
+
+  final bool threadsEnabled;
 
   @override
   Future<void> loadInitial() async {}
@@ -1273,16 +2200,27 @@ class _SingleMessageRoomController extends ChatRoomController {
 
 class _TwoChatListController extends ChatListController {
   _TwoChatListController(super.ref) : super() {
-    state = ChatListState(profileId: 'prof-test', items: [
-      ChatListItem(chat: VoiceChat(
-        id: 'chat-a', type: 'CHAT_TYPE_GROUP', name: 'Chat A',
-        creatorProfileId: 'prof-test',
-      )),
-      ChatListItem(chat: VoiceChat(
-        id: 'chat-b', type: 'CHAT_TYPE_GROUP', name: 'Chat B',
-        creatorProfileId: 'prof-test',
-      )),
-    ]);
+    state = ChatListState(
+      profileId: 'prof-test',
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-a',
+            type: 'CHAT_TYPE_GROUP',
+            name: 'Chat A',
+            creatorProfileId: 'prof-test',
+          ),
+        ),
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-b',
+            type: 'CHAT_TYPE_GROUP',
+            name: 'Chat B',
+            creatorProfileId: 'prof-test',
+          ),
+        ),
+      ],
+    );
   }
 
   @override

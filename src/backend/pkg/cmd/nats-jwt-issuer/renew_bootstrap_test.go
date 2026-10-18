@@ -45,8 +45,30 @@ func TestRenewBootstrapPreservesIdentitySeedAndAllOtherClaims(t *testing.T) {
 	newToken, _ := jwt.ParseDecoratedJWT(out)
 	before, _ := jwt.DecodeUserClaims(oldToken)
 	after, _ := jwt.DecodeUserClaims(newToken)
-	if len(after.Pub.Allow) != len(before.Pub.Allow)+4 {
-		t.Fatal("exact permission delta missing")
+	added := map[string]bool{}
+	oldAllow := map[string]bool{}
+	for _, subject := range before.Pub.Allow {
+		oldAllow[subject] = true
+	}
+	for _, subject := range after.Pub.Allow {
+		if !oldAllow[subject] {
+			added[subject] = true
+		}
+	}
+	want := map[string]bool{
+		"$JS.API.STREAM.UPDATE.chat_events": true, "$JS.API.STREAM.UPDATE.social_events": true,
+		"$JS.API.STREAM.UPDATE.role_events":                                 true,
+		"$JS.API.CONSUMER.INFO.social_events.rt_realtime1_friend_removed":   true,
+		"$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed": true,
+		"$JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat":          true,
+		"$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat":        true,
+		"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role":          true,
+		"$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role":        true,
+		"$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata":        true,
+		"$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata":      true,
+	}
+	if !reflect.DeepEqual(added, want) || len(after.Pub.Allow) != len(before.Pub.Allow)+len(want) {
+		t.Fatalf("permission delta changed: got %v", added)
 	}
 	after.Pub = before.Pub
 	after.ID = before.ID
@@ -99,6 +121,29 @@ func TestRenewBootstrapDenyPreservedAsVeto(t *testing.T) {
 	old, _ = jwt.FormatUserConfig(token, seed)
 	if _, e := renewExistingBootstrap(old, at, ot, signer, actor, account); e == nil {
 		t.Fatal("deny bypassed")
+	}
+}
+
+func TestRenewBootstrapNewConsumersRemainVetoedByExactDenies(t *testing.T) {
+	denies := []string{
+		"$JS.API.STREAM.UPDATE.role_events",
+		"$JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat",
+		"$JS.API.CONSUMER.CREATE.chat_events.>",
+		"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role",
+		"$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role",
+		"$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata",
+		"$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata",
+	}
+	for _, deny := range denies {
+		old, at, ot, signer, actor, account, u, ap, _ := renewalFixture(t)
+		u.Pub.Deny = []string{deny}
+		token, _ := u.Encode(ap)
+		key, _ := jwt.ParseDecoratedUserNKey(old)
+		seed, _ := key.Seed()
+		old, _ = jwt.FormatUserConfig(token, seed)
+		if _, err := renewExistingBootstrap(old, at, ot, signer, actor, account); err == nil {
+			t.Fatalf("deny %q bypassed", deny)
+		}
 	}
 }
 

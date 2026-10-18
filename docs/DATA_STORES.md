@@ -14,12 +14,12 @@
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
-| Chat Service         | `chat_db`         | —                         | NATS JetStream (publish); transactional `chat.deleted` outbox |
-| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; JetStream dispatcher retries exact bytes until positive PubAck |
+| Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | NATS JetStream (publish); transactional `chat.deleted` outbox |
+| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | Social principal replay   | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
-| Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror | LiveKit |
+| Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
 | File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации       |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
@@ -36,7 +36,8 @@
 
 ### Game Integration Service (`game_integration_db`): T05 ownership target
 
-This inventory describes the target owner boundary; it is not a shipment claim.
+The service owns this database boundary. Internal DEV/STAGE deployment is
+supported; production activation remains deferred.
 The current migrations implement registry/security, credentials, installations,
 and registry operations. Session/resource mappings and managed grants remain
 future GIS-owned records under T30/T31 and later community work.
@@ -116,12 +117,15 @@ proof receipts. Runtime configuration is documented in
 | Таблица | Примечание |
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
-| `chat_create_requests` | Migration `000021`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
+| `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
 | `stickers` | Rows per asset; `file_id` → File `intent=sticker` |
 | `profile_installed_packs` | Per-profile install + composer rail `sort_order` |
+| `chat_match_squad_operations` | One permanent match-owned row binds creation and teardown operation/receipt IDs and request/manifest hashes. Full request/receipt protobuf bytes remain retained while the aggregate teardown-completion trigger is unresolved; permanent operation digests/fences must remain. Migration DOWN refuses while pending, replay-required, or fence evidence exists. |
+
+The Chat MatchSquad replay guard uses `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` with Redis `SET NX` and expiry bounded by token expiry. Its create/teardown request and receipt bytes currently remain durable; the provider has no aggregate teardown-completion signal, so no local compaction clock is applied. The compact terminal fence remains permanent.
 | `chat_deleted_event_outbox` | Migration `000021`; immutable exact P3 `chat.deleted` envelope bytes and stable event ID. Pending/uncertain rows retry without expiry; confirmed rows are removable only after the joined parent PURGE receipt retention horizon. Parent receipt/manifest cleanup remains separate. |
 
 Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging_db`** (`messages.content_type`). Do not duplicate catalog DDL outside Chat Service docs.
@@ -169,6 +173,19 @@ owner, while `MATCH_SQUAD` still requires one.
 Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
 foreign keys to profile/account owners.
 
+### MatchSquad provider state
+
+`voice_match_squad_operations` stores the exact create/teardown operation bytes,
+receipts and bindings, with pending/active/closing/closed state and permanent
+operation/match/resource/receipt fences. `voice_room_instances` remains the
+canonical current room resource row. The Redis `call:<room UUID>` and
+`session:<profile UUID>` keys are disposable room and participant projections;
+LiveKit names the room `match-squad-<room UUID>`. Teardown records DB `closing`,
+projects terminal Redis state and closes LiveKit, then commits DB `closed` and
+its receipt. Full request/receipt bytes remain retained while the aggregate
+teardown-completion signal is unresolved; the provider applies no local purge
+clock. Pending evidence and permanent fences are not aged out.
+
 The source-disabled A3 schema extension adds immutable room kind/purpose and
 match creation bindings to `voice_room_instances`, plus verified account/session
 epoch, lifecycle state and bounded reconnect interval to `voice_room_memberships`.
@@ -186,9 +203,9 @@ or profile IDs. This is storage evidence, not an activated party snapshot source
 
 ## Подсчёт логических PostgreSQL БД
 
-**17** current service PostgreSQL databases are listed above; **16** are provisioned in staging.
-The staging manifests still include legacy `gateway_db` and lack `game_integration_db`; the local
-Compose initializer also carries the planned `federation_db` scaffold. The game sprint in
+**17** current service PostgreSQL databases are listed above; **17** are provisioned in staging.
+The staging manifests also retain the legacy `gateway_db`; local Compose carries the planned
+`federation_db` scaffold, which remains deferred. The game sprint in
 [PLAN](PLAN.md) includes implementing its new authority store and deployment;
 the old deferred-runtime description is superseded.
 

@@ -30,7 +30,7 @@ case "${MODE}" in
     ;;
   app-only)
     bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
-    bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
+    VOICE_ENABLE_GAME_INTEGRATION_DB=false bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
     bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
     bash "${ROOT}/scripts/staging/rollout-subset.sh"
     bash "${ROOT}/scripts/storage/apply-minio-cors.sh"

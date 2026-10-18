@@ -1,5 +1,60 @@
 # Окружения и выкат
 
+## Explicit provisional staging (implementation contract)
+
+An explicit master `workflow_dispatch` may opt into `provisional_staging=true`
+for a nonreset `images-only` deployment while that exact master push CI attempt
+is still pending. A successful exact `staging-stack-lock`, independently resolved
+immutable images, and no observed failed/cancelled job remain prerequisites.
+Automatic workflow calls and ordinary deployments retain the strict CI gate.
+The flag is bound by the bridge request, checkpoint and apply authorization;
+changing runner environment variables cannot change an admitted operation.
+
+Successful preservation and restart in this mode mean
+`PROVISIONAL_READY / POST_RESTART / RELEASED`, not release acceptance. Explicit
+same-operation acceptance must prove the original CI attempt now passes the
+ordinary gate and recheck the exact live target, images, marker and storage.
+It does not reapply or restart workloads. Pending or failed acceptance leaves
+the durable operation unchanged. Safe reports distinguish provisional runtime
+readiness from final acceptance; a green provisional workflow is not CI PASS.
+
+If candidate CI fails or master advances, an explicit repair-forward transaction
+may name that exact released provisional parent. It captures the actual current
+state, takes a fresh protected backup and uses fresh source/custody/apply
+authority. Only one child may claim a parent; linked history is preserved and
+the child must cover every image service selected by its unaccepted parent;
+the parent is superseded only after verified child completion. A failed child
+keeps the chain unresolved. Final acceptance requires healthy workloads and
+unchanged preserved non-NATS resources. Repair admission permits an unhealthy
+application only when its released marker, exact specs/images, identities,
+preserved resources and storage remain bound; fresh transaction guards still apply.
+This exception cannot admit a fenced, BLOCKED or
+UNKNOWN operation, bypass another active operation, restore old data, or turn
+failed CI into PASS. Existing recovery rules handle those other states.
+GitHub may omit the dependency-blocked `ci-gate` from the job inventory; this
+counts as pending only for an in-progress exact CI attempt. Final acceptance
+always requires the actual successful gate. A partial fence failure remains
+truthfully BLOCKED and requires existing operator recovery; this mode does not
+introduce automatic recovery from arbitrary runtime failures.
+
+When correlating a protected finish with GitHub, use its journal request's
+`report_run_id` for the deployment workflow run. `source_authority.run_id`
+identifies the CI provenance run; checkpoint `context` has no `run_id`.
+A completed prepare report describes that request's observed snapshot, not the
+operation's current finish progress. Read the finish request report or a fresh
+status report and bind its operation, source and helper before judging acceptance.
+
+Before diagnosis or acceptance, read [Release evidence and recovery
+lessons](RELEASE_EVIDENCE.md): source/run binding, safe diagnostics, immutable
+failure history and independent preservation checks.
+
+Mixed `images-only` selection may include backend services and frontends in one
+preservation transaction. The compiler includes only the selected live frontend
+Deployments alongside the backend manifests and binds their canonical source
+files. Exact container/image inventory checks remain mandatory; image-only
+normalization preserves captured live templates, annotations, environment and
+sidecars while replacing only the authorized image pins.
+
 Согласуется со стеком в [MICROSERVICES.md](MICROSERVICES.md) и [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (k3s / Kubernetes, ClusterDNS). Политика релизов, canary и откат — [OPERATIONS.md](OPERATIONS.md).
 
 ---
@@ -9,16 +64,24 @@
 | Окружение      | Назначение                     | Инфраструктура                                                                                                                                               |
 |----------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **local**      | Разработка одного разработчика | Docker Compose: infra (Postgres, Redis, NATS JetStream) или **полный core стенд** — `make compose-app-up` / `--profile app` ([README.md](../README.md), [PLAN.md](PLAN.md)). Порты: `GATEWAY_PORT` (рекомендуется **18080**), `WEB_PORT` (**9080**), `POSTGRES_PORT`, `REDIS_PORT`, `NATS_PORT`, `NATS_HTTP_PORT`. Object storage: **MinIO** (compose, `--profile app`) или Cloudflare R2 через `*_R2_*` в `.env`; staging/prod по умолчанию используют MinIO, внешний S3 provider опционален ([OBJECT_STORAGE.md](OBJECT_STORAGE.md)). |
-| **staging**    | Интеграция, регрессия, демо    | **k3s** (лёгкий Kubernetes), версии близки к prod.                                                                                                           |
+| **dev**        | WIP, интеграция изменений      | Namespace `voice-dev` на существующем k3s; отдельные базы, PVC, ключи, квоты и NetworkPolicy. |
+| **staging**    | Проверка выбранной сборки, регрессия, демо | Namespace `voice-staging`; обновляется выбранным проверяемым набором образов. |
 | **production** | Пользователи                   | **Kubernetes** 1.35 (self-managed или managed: Yandex Managed Kubernetes, Hetzner и т.д.).                                                                   |
 
-Облачный **dev**-кластер не используем. При необходимости общего dev-окружения — кластер по тому же шаблону, что staging.
+Общий dev работает на том же сервере, что staging, с независимыми данными.
+Полное описание стенда, доступ, тестовая почта, обновление и восстановление:
+[DEV_SERVER.md](DEV_SERVER.md). Низкоуровневые инструменты создания и ручного
+обновления: [scripts/dev/README.md](../scripts/dev/README.md).
+На 2026-10-16 `STAGING_DEPLOY_ENABLED=false`: WIP не должен автоматически заменять
+проверяемую staging-сборку. Staging остаётся названием предпродакшен-проверки;
+наличие стенда само по себе не означает, что установленная версия стабильна.
 
 ### Postgres / Redis versions (compose ↔ k8s)
 
 Compose (`docker-compose.yml`) and in-cluster infra (`deploy/staging/infra.yaml`, `deploy/prod/infra.yaml`) both use **PostgreSQL 16** and **Redis 7**. Decision and upgrade policy: [ADR 001](adr/001-compose-postgres-redis-versions.md).
 
-**Namespace** в Kubernetes: по умолчанию `voice-staging`, `voice-prod`; иные имена — только если зафиксированы в репозитории инфраструктуры или Helm-чартах.
+**Namespace** в Kubernetes: `voice-dev`, `voice-staging`, `voice-prod`. Dev обновляется
+отдельным инструментом; staging/prod pipeline не переназначается на dev.
 
 ---
 
@@ -29,12 +92,14 @@ Compose (`docker-compose.yml`) and in-cluster infra (`deploy/staging/infra.yaml`
         → PR → CI (lint, test, build image)
         → merge в master
         → образы в registry (GHCR или выбранный registry)
-        → автоматический деплой на staging
+        → проверка WIP на dev; выбор сборки для staging
+        → защищённый деплой на staging (автоматический только при явно включённой переменной)
         → проверка / ручной регресс
         → прод: тег релиза + workflow с approval (или ручной выкат) → production
 ```
 
-- **Staging**: на push в `master` CI **собирает только изменённые** образы (`build_services` из path filter), **promote** остальных с предыдущего SHA (`promote-ghcr-images.sh`), публикует immutable тег `:<git_sha>` (без `:latest`). Артефакт **`stack.lock.yaml`** фиксирует теги всех 23 образов. Деплой: job **`deploy-staging`** в CI (`workflow_call` → [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml)) при `STAGING_DEPLOY_ENABLED=true`; режимы `DEPLOY_MODE=full|app-only|images-only` в [`render-and-apply.sh`](../scripts/staging/render-and-apply.sh). Ручной выкат — **Staging deploy** с обязательным git SHA. Для проверки загруженного Secret без кластера укажите `validate_app_secret_only=true`. При неполном Secret отдельный `mail_only=true` обновляет только `AUTH_RESEND_API_KEY` и `AUTH_RESEND_FROM` существующего `voice-app-secrets`, затем перезапускает только `voice-auth`; он не применяет полный Secret и не запускает остальные сервисы. Эти режимы взаимоисключающие.
+- **Staging**: на push в `master` CI **собирает только изменённые** образы (`build_services` из path filter), **promote** остальных с предыдущего SHA (`promote-ghcr-images.sh`), публикует immutable тег `:<git_sha>` (без `:latest`). Артефакт **`stack.lock.yaml`** фиксирует теги всех 23 образов. Деплой: job **`deploy-staging`** в CI (`workflow_call` → [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml)) при `STAGING_DEPLOY_ENABLED=true`; режимы `DEPLOY_MODE=full|app-only|images-only` в [`render-and-apply.sh`](../scripts/staging/render-and-apply.sh). Ручной выкат — **Staging deploy** с обязательным git SHA. Для проверки загруженного Secret без кластера укажите `validate_app_secret_only=true`.
+- **Mail configuration changes**: mail_only=true is disabled and fails before source acquisition, staging credentials, Kubernetes access or mutation. Upload a complete staging app Secret and dispatch the normal protected **Staging deploy** with deploy_mode=full or app-only and mail_only=false. This route uses the same cold NATS preservation gate as other application deployments. The offline validate_app_secret_only=true mode remains available for Secret validation.
 - Ручной **Staging deploy** не применяет observability namespace даже при `VOICE_APPLY_OBSERVABILITY=true`; автоматический `workflow_call` сохраняет настройку. Для observability есть отдельный workflow **Staging observability deploy**.
 - Both staging deployment and its pre-deploy diagnostic acquire repository source from the public GitHub API tarball endpoint pinned to the requested full commit SHA. The runner verifies the API commit/tree and archive tree before replacing its workspace. It requires HTTPS access to `api.github.com` and `codeload.github.com`; Git transport to `github.com` is diagnostic only. The archive request is unauthenticated.
 - The staging archive transfer is bounded to 600 seconds and 100 MiB, with a 5-second connection deadline and failure if transfer speed stays below 1 KiB/s for 30 seconds. A progressing archive may exceed two minutes; completed bytes still require the exact requested commit/tree verification before workspace replacement. The NATS diagnostic job shares this download step and has a 15-minute total ceiling to include download and its remaining bounded checks.
@@ -78,6 +143,7 @@ export VOICE_IMAGE_REGISTRY=ghcr.io/<owner>/<repo>
 | Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` (selective push на `master`; unchanged — promote с предыдущего SHA). |
 | Образ developer-portal | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/developer-portal:<git_sha>` (job `developer-portal`; build-args из `VOICE_GATEWAY_INGRESS_HOST`). |
 | Образ web (Flutter SPA) | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/web:<git_sha>` (job `web`; build-args `VOICE_API_BASE_URL`, `VOICE_LIVEKIT_URL`). |
+| Образ web для DEV | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/dev-web:<git_sha>` (job `web`; build-args `https://api-dev.comrade.click` и `wss://livekit-dev.comrade.click`; публикация на master для frontend-изменений и изменений publisher workflow). Artifact `dev-web-image-<sha>` содержит source SHA и immutable manifest digest. DEV image не входит в `staging-stack-lock.yaml`. |
 | Образ admin | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/admin:<git_sha>` (job `admin`; PKCE OAuth `voice-admin`, без staff token в bundle). |
 | Variable **`VOICE_DEVELOPER_PORTAL_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Developer Portal (Ingress host, OAuth callback origin). Подставляется в [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml) при деплое. По умолчанию — из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (`scripts/staging/load-staging-domains.sh`). |
 | Variable **`VOICE_WEB_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Flutter web SPA (Ingress host). Подставляется в [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml) при деплое. По умолчанию — `app.comrade.click` из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults). |
@@ -132,7 +198,7 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 
 **Проверка деплоя из GitHub после настройки секрета:** в репозитории **Actions** → workflow **Staging deploy** → **Run workflow** (обязательно укажите тег образа — git SHA из зелёного CI run; default `latest` убран). Убедитесь, что job завершает шаг **Apply staging manifests** без ошибок `kubectl`.
 
-**Теги образов и автодеплой:** auto-deploy после CI на `master` использует **`head_sha`** CI run. Job **`staging-stack-lock`** публикует `stack.lock.yaml` (built vs promoted per image); **Staging deploy** скачивает lock при `workflow_call` и `verify-staging-images.sh` проверяет манифесты из lock или полного [`staging-image-catalog.json`](../scripts/ci/staging-image-catalog.json). Job **`staging-images-push`** может быть **skipped** при frontend-only change — достаточно **`staging-images-promote`** + frontend jobs. `scripts/staging/verify-staging-images.sh` не использует `:latest`.
+**Image tags and auto-deploy:** auto-deploy after CI on `master` uses the CI run's **`head_sha`**. Job **`staging-stack-lock`** publishes `stack.lock.yaml` (built or promoted images); before kubectl setup, **Staging deploy** verifies that every image in the full [`staging-image-catalog.json`](../scripts/ci/staging-image-catalog.json), plus the NATS hub renderer, has a manifest at the exact requested SHA. Manual deploys verify the same complete catalog against their requested SHA. CI-only changes do not publish a stack lock or enter auto-deploy because they do not publish a complete set of SHA-tagged images. `scripts/staging/verify-staging-images.sh` never uses `:latest`.
 
 **Sanity после изменений CI:** один раз **Actions → CI → Run workflow** → profile **`full`** (все тиры, все сервисы). Список required checks для branch protection — [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
@@ -276,6 +342,38 @@ docker build -f src/developer-portal/Dockerfile src/developer-portal \
 `scripts/staging/render-and-apply.sh` applies the portal manifest when present; ingress host from `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (repo Variable, passed through staging-deploy workflow). Add DNS **A/AAAA** for that host to the staging ingress node. **Production** portal Deployment + Ingress: [`deploy/prod/developer-portal.yaml`](../deploy/prod/developer-portal.yaml) (`voice-prod` namespace; substitute production FQDNs via `VOICE_DEVELOPER_PORTAL_INGRESS_HOST`).
 
 ### Flutter web staging
+
+The image build binds fresh `index.html` to a SHA256-named bootstrap, whose
+generated `mainJsPath` points to SHA256-named main JavaScript. Both stay in the
+web root, preserving relative renderer/resource paths. The original files remain
+for legacy references. Flutter 3.41's cleanup-only service worker and Firebase
+messaging worker remain unchanged; a caching worker with a resource map is
+rejected by the postprocessor until explicitly integrated.
+
+Nginx sends `Cache-Control: no-store` for mutable entry points, manifests and
+other unversioned resources. Only the two content-addressed JavaScript filename
+forms receive immutable caching; a missing hashed asset returns 404, not SPA HTML.
+`web-asset-manifest.json` (`voice-web-assets-v1`) records each bootstrap/main path,
+SHA256 and byte count. Public acceptance must follow the fresh HTML reference and
+compare complete decoded bytes with the manifest and deployed image. HTTP 200 or
+the legacy `/main.dart.js` alone does not prove current-release delivery.
+
+For release acceptance, first retain the exact deployed image/Pod manifest and
+asset hashes. Fetch public HTML and manifest with normal TLS verification; reject
+a stale manifest against those retained pins. Require the HTML script reference
+to equal `manifest.bootstrap.path`, then verify its complete decoded byte count
+and SHA256. Parse its generated build configuration and require `mainJsPath` to
+equal `manifest.main.path`; fetch that path and verify its complete decoded byte
+count and SHA256. Reject incomplete transfers, HTML fallbacks and mismatched
+references even when every HTTP status is 200. This sequence is independent of
+the ordinary rollout's Kubernetes readiness result.
+
+Previously cached entry points can require an independently authorized cache
+invalidation; new origin headers do not rewrite existing edge cache entries.
+The October 16 incident demonstrated both stale canonical asset HITs and a
+current-size cache MISS that still stalled in transfer. Content addressing fixes
+release identity, not that separate network delivery failure; no DNS or TLS
+weakening is part of this contract.
 
 Deployment + Ingress: [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml). **CI** (job `web` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes `ghcr.io/<owner>/<repo>/web:<git_sha>` on push to `master` with build-args:
 
@@ -463,7 +561,20 @@ GIS/Voice's `/internal/v1/principal/jwks.json`; the issuer keys must be exactly
 `space`, `gameintegration`, and `voice`. Keep each signing private key mounted
 only into its issuer. Phase0's GIS and Voice signer settings are
 `GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE` / `GAME_INTEGRATION_PRINCIPAL_KID`
-and `VOICE_PRINCIPAL_PRIVATE_KEY_FILE` / `VOICE_PRINCIPAL_KID`.
+and `VOICE_PRINCIPAL_PRIVATE_KEY_FILE` / `VOICE_PRINCIPAL_KID`. Staging provisions
+GIS's current/next private signing keys and its own HTTPS server certificate as
+separate operator-managed Secrets. Role trusts only the GIS public JWKS endpoint
+at `https://voice-gameintegration:8443/internal/v1/principal/jwks.json`; the
+server certificate must have SAN `voice-gameintegration` and chain to the
+configured media CA. Do not reuse Voice or Gateway key material.
+
+For the documented T58 consent resolver, GIS, Notification, and Realtime each
+receive only the workload key they use from a separate `voice-gameintegration-workload-credentials`
+Secret. The two keys must be distinct random 32-byte values, provisioned through
+the environment's secret manager; missing/malformed proof configuration remains
+fail-closed. Staging uses the internal `http://voice-gameintegration:8080`
+endpoint. This does not enable external push providers or GIS session-owner
+routes.
 
 Space signs both Role and Auth ownership calls with a fresh `service:space`
 principal bound to the exact full RPC, deterministic protobuf request hash and
@@ -489,6 +600,78 @@ principal runtime absent, ordinary health/service calls can remain available,
 but ownership transfer stays unavailable. A configured Space Role integration
 with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
+
+## Matchmaking CompleteMatch principal (opt-in template)
+
+`deploy/templates/matchmaking-complete-principal-patch.yaml` is an operator-
+rendered strategic-merge overlay for the Gateway and Matchmaking Deployments.
+It is deliberately excluded from staging and production apply profiles. The
+Gateway uses its own two-key signing Secret and a distinct client TLS
+certificate; Matchmaking uses a separate server certificate, trusts only the
+Gateway client CA, and fetches only the Gateway public keys over the fixed
+HTTPS JWKS route `/.well-known/voice-principal-jwks.json`. Configure the JWKS
+HTTPS host and CA to match the existing Gateway ingress certificate. Redis
+replay storage uses the existing app Redis address and an operator-provisioned
+password Secret.
+
+Before rendering, replace every `REPLACE_WITH_*` and `REPLACE_WITH_GATEWAY_HTTPS_HOST`
+placeholder with operator-owned references and confirm certificate SANs,
+issuer key overlap, Redis ACL, and ingress routing. Do not put key material in
+the overlay or enable it by adding it to an active base. The overlay enables
+only Gateway-originated Matchmaking CompleteMatch; it does not configure Space
+principals or alter ordinary listeners. This source template is not a
+deployment or runtime acceptance claim.
+
+The separate `deploy/dev/match-squad-trust-overlay/` consumer keeps this
+opt-in DEV-only and enables only the `gateway` issuer in Matchmaking's
+`S2S_JWKS_URLS_JSON`. Its Matchmaking listener is `voice-matchmaking:9092`;
+the listener server identity is `voice-matchmaking-complete-server-tls`, and
+the listener trusts the public CA bundle `voice-matchmaking-complete-client-ca`
+for the Gateway client certificate. Gateway uses its existing principal
+signing/JWKS publisher, presents the distinct
+`voice-gateway-matchmaking-complete-client-tls` identity, and verifies the
+Matchmaking server with `voice-match-squad-ca`. The Gateway JWKS endpoint is
+the existing public `https://api-dev.comrade.click/.well-known/voice-principal-jwks.json`
+and uses system root certificates. The DEV listener uses the existing
+`voice-app-config/REDIS_ADDR` and an explicitly empty replay password, matching
+the current DEV Redis deployment, which has no configured auth. Redis replay
+checks remain active. If Redis auth is added later, update this service's
+password binding through the reviewed service-specific contract; do not enable
+a password on the shared default user or reuse another listener's credential.
+These names define consumer references only; the PKI operation, exact SANs,
+secret custody and public CA readback must be reviewed and completed
+separately. Voice's 9095 inbound media client trust
+remains `voice-media-ca`; MatchSquad JWKS and mTLS roots are unchanged.
+
+## MatchSquad principals (staging source contract)
+
+The staging source projects the MatchSquad listeners and their issuer trust;
+it does not create or rotate these credentials. Before an operator applies the
+manifest, provision the following Secrets in `voice-staging` from the
+environment's approved CA and secret-management process:
+
+| Secret | Required keys | Use |
+|---|---|---|
+| `voice-matchmaking-principal-signing` | `current.pem`, `next.pem`, `active-kid` | Matchmaking issuer key pair and active key ID. |
+| `voice-matchmaking-principal-jwks-tls` | `tls.crt`, `tls.key` | Matchmaking HTTPS JWKS server identity; SAN `voice-matchmaking.voice-staging.svc`. |
+| `voice-matchmaking-principal-jwks-ca` | `ca.crt` | Public CA trust for Chat and Voice JWKS clients; this is a separate Secret from the gRPC media CA. |
+| `voice-matchmaking-client-tls` | `tls.crt`, `tls.key` | Matchmaking mTLS client identity for Chat and Voice. |
+| `voice-chat-match-squad-server-tls`, `voice-voice-match-squad-server-tls` | `tls.crt`, `tls.key` | Chat and Voice mTLS server identities. |
+| `voice-match-squad-replay`, `voice-match-squad-member-replay` | `password` | Dedicated Redis replay-store credentials. |
+
+All Secret mounts are read-only. The JWKS URL is
+`https://voice-matchmaking.voice-staging.svc:8443/internal/v1/principal/jwks.json`;
+the certificate and CA must come from the staging trust profile and must not
+reuse DEV certificate or CA bytes. The HTTPS endpoint serves the public
+current/next key set only. gRPC client/server certificates remain separate
+and use the existing media mTLS CA. Matchmaking's publisher is all-or-none:
+the key directory, active ID, listen address, and TLS certificate/key paths
+must all be present and valid, or the service fails closed at startup.
+
+The Compose media profile uses a generated disposable test certificate with
+the `voice-matchmaking` network alias and exercises the same route. These
+source contracts do not claim that staging Secrets have been provisioned or
+that a staging rollout has been accepted.
 
 ## Notification-to-User routing-presence principal
 
@@ -738,6 +921,16 @@ routes. Before switching active key, publish current+next keys, wait the
 credential hard expiry, then retain the retired public key for at least 35 s.
 
 ## NATS JWT and leaf activation
+
+For ordinary non-reset staging releases and rollback, follow the
+[NATS preservation runbook](../scripts/staging/nats-rollout-preservation/README.md).
+It covers the exact installed-helper transition, operation-closure and journal
+prerequisites, current source/native proof gates, and fresh-cut rollback. The
+reset and root-rotation procedures below are separately authorized maintenance
+exceptions; they are not recovery shortcuts for a blocked preservation rollout.
+For permission failures with existing credentials, use the runbook's
+[grant drift and prepare-failure diagnosis](../scripts/staging/nats-rollout-preservation/README.md#grant-drift-and-prepare-failure-diagnosis)
+before retrying or changing enrollment.
 
 The reviewed grants and issuer contract are in
 [`deploy/nats/README.md`](../deploy/nats/README.md) and
@@ -1041,6 +1234,95 @@ Source bootstrap43/deployed42durable compatibility remains an explicit
 pre-fence backend release prerequisite; the runtime inventory itself is dynamic.
 
 
+## NATS operation checkpoints and reset boundaries
+
+Ordinary rollout and rollback remain **nonreset** and follow the [preservation runbook](../scripts/staging/nats-rollout-preservation/README.md). A disposable reset is a separate maintenance operation within an explicitly established environment and data-loss scope. That authorization remains valid for reviewed continuations of the same operation; recheck its source, resource identities and saved phase instead of repeatedly requesting the same permission. Do not infer namespace clean-install, production reset or root-rotation authority from a NATS-only reset scope.
+
+Record what the operation actually reached:
+
+| Checkpoint | What its evidence establishes |
+| --- | --- |
+| Prepare/build/capture | Exact source and input checks, or a finite preparation failure. Use the matching request journal/response and checkpoint; a workflow label or `COMPLETE` journal alone does not establish a fence or apply. |
+| Fence | Writers are stopped under the recorded ownership and resource identities. A fenced operation can still be blocked before contract migration or apply. |
+| Native contract/migration | The retained native records and complete account census meet the operation's checks and planned contract changes. Backup upload or isolated restore alone does not establish this phase passed. |
+| Apply | The recorded paused apply and required migrations reached their actual outcomes. This is distinct from application restart/readiness. |
+| Readiness and application acceptance | Temporary maintenance changes have been reverted; intended workloads are ready on their verified target templates and selected image/source/stack-lock identity; smoke and authenticated application evidence establish the claimed behavior. CI or a ready broker alone is insufficient. |
+
+The `/msgs/` preservation boundary includes `index.db`. Retention expiry can change message count, first sequence and subject counts while payload block files remain byte-identical. This is real record loss. Do not exclude the index, rewrite timestamps, adopt a changed post-migration archive as the original cut, or turn the failed preservation operation into PASS. Retain its checkpoint, journals and archives. Follow the [explicit-reset boundary](../scripts/staging/nats-rollout-preservation/README.md#explicit-reset-after-retained-records-expire) only when that maintenance scope is already authorized.
+
+For the reviewed root adapter, retain both `FOWNER` and `FSETID` capabilities where the scoped store-custody procedure needs them: setting mode `2770` can otherwise produce `0770`. Verify the resulting owner, group and setgid mode; do not weaken the custody check or compensate with broad writable mounts/capabilities. Preserve the adapter's reviewed read-only boundaries and exact writable scope. After a failed allocation, inspect the saved phase and bound PVC/PV identity; use only the reviewed continuation that recognizes that state, not a repeated allocation or baseline replay.
+
+When restoring applications, reuse the existing owned User→Space startup choreography described under [NATS JWT and leaf activation](#nats-jwt-and-leaf-activation): temporarily clear only User's operation-owned `SPACE_GRPC_ADDR`, wait for User and then Space, restore the exact original User template, and verify restored User plus all required workload readiness. Recognize only the operation's own interrupted empty override; refuse foreign changes and retain cleanup on failure. Do not change Services, remove dependency checks, or waive readiness to break the cycle.
+
+A terminal reset closure is **not deployment acceptance**. Preserve its original failed FULL, reset authority, completed authorization journals, receipt and old-store evidence. Retirement/idle inventory must authenticate the exact terminal reset admission before classifying its authorization journal as settled; never delete history or treat every `STARTED` journal as abandoned. The reset receipt retains `deployment_pass=false` and `rollback_eligible=false`.
+
+After independent terminal-reset readback, install the reviewed helper successor through its existing exact-predecessor upgrade path. Verify all installed manifest members/code binding, terminal receipt and parsed active-contract equality. Compare canonical JSON mappings for semantic equality and record raw-file hashes separately. Only after installation/readback succeeds, start the existing `voice-nats-preservation.path` and `.timer` units; these trigger the existing service. Do not start the triggers against the predecessor helper or substitute a new scheduler. These systemd units are separate from Codex recurring automation.
+
+To accept the new build after reset, create recent application message/file data, run an ordinary nonreset FULL with its required source/image/stack-lock gates, then verify the same data after fresh login and again after a deliberate restart with recorded workload identity/readiness. Bind the final FULL checkpoint to its adopted target templates, not the old rollback templates. A rollout restart changes its restart annotation: record the exact owned annotation and require all other template fields and images to remain unchanged. Prove replacement through Pod owner chains and old/new UIDs. The empty baseline proves baseline creation, not application quality or preservation of later writes.
+
+Failures before bridge submission and in the captured workflow entry also emit
+a fixed safe error code to stderr and the Job Summary. The always-run collector
+uploads these as `voice-deployment-boundary-failure-v1` records alongside root
+reports. These records are runner observations, not root attestations: operation
+state and side effects remain unknown, and recovery is never authorized. A
+source mismatch before submission has no root request nonce. Match its run ID,
+attempt and source SHA; do not invent a checkpoint or replay prepare to obtain
+a report. Unknown exception text is never exported. Collection failure preserves
+the original nonzero deployment result and prints report-unavailable explicitly.
+
+The rollout bridge publishes the versioned `voice-deployment-report-v1` projection
+under `installed/responses/<request-nonce>.report.json`. Each atomic root-owned
+`root:pmd` mode `0440` report is bound to one request nonce, run ID/attempt and
+source SHA. Reports remain on the host with the existing request journal (no
+automatic deletion); CI artifacts retain them for 30 days. Root-private journals,
+checkpoints, command output and credentials remain private.
+
+An agent can read an exact existing report without a GitHub token or a running
+bridge service:
+
+```sh
+python3 /var/lib/voice-nats-preservation/installed/code/nats-rollout-preservation/bridge_client.py report REQUEST_NONCE
+```
+
+The client `collect-reports` command reads the current job's retained request
+index in `RUNNER_TEMP`, verifies run/attempt/source identity and exports bounded
+JSON. Staging CI runs collection and artifact upload with `always()` and
+`continue-on-error`; diagnostic failure cannot replace the original deployment
+result. Missing/invalid reports print `NATS_DEPLOYMENT_REPORT=UNAVAILABLE`.
+Cancellation or a host outage can prevent upload; the last host report remains
+the durable record. A report's `updated_at` is Unix UTC seconds: check its age
+before treating a `STARTED` record as current progress.
+
+The schema contains only request identity/status, operation identity/status/error,
+helper binding digest, timestamp, finite stage/current action/last completed
+action, stable error code, command exit/timeout/cause and finite effect states.
+`UNKNOWN` means evidence is absent; `PRESENT` means a receipt is recorded, not
+that a new verification has occurred. Maintenance, fencing, original broker
+orderly exit, finalizer removal, cut, preservation, apply, restart and release
+are reported separately. Request failure is distinct from operation failure.
+`recovery_authorized` is always false; no report authorizes a retry or weakens
+preservation guards. An application permission violation is distinct from an
+OS permission error; arbitrary stderr and exception text are never exported.
+The original failure action is captured before safety cleanup; later commands
+cannot overwrite that exception's finite action/exit/cause.
+
+For historical failures, root can use the same reviewed module from captured
+source before upgrading the installed helper:
+
+```sh
+python3 CAPTURED_CODE/nats-rollout-preservation/deployment_report.py --export-historical REQUEST_NONCE OPERATION
+```
+
+This validates the exact retained journal/operation binding, reads the checkpoint
+under the existing operation lock and writes only its sanitized report. It does
+not replay prepare, modify checkpoints or authorization, or mutate workloads.
+Historical current-exception causes remain `unknown`; a checkpoint's older
+`operation_error` is not the current request error. Independent installation,
+agent readback and an ordinary rollout remain acceptance requirements for
+`CI-A1-DEPLOY-DIAGNOSTICS`; isolated failure tests do not prove live deployment.
+
+For application smoke, use the existing truthful smoke `User-Agent` consistently for API/object/WebSocket transport where applicable. Pace login attempts against the existing five-attempts-per-IP/15-minute limit and honor rate-limit responses; shared runner attempts count against the same budget. See [testing guidance](TESTING.md) and [authentication limits](features/auth-and-contacts.md#сессии-и-безопасность). Do not spoof a browser, rotate identities to evade limits, or weaken WAF/auth/rate-limit policy to obtain a passing smoke.
+
 ## Production host inotify prerequisite
 
 Before installing the rollout-preservation root bridge in **production**, ensure
@@ -1069,3 +1351,47 @@ This is a **production prerequisite to apply during production provisioning**,
 not evidence that the production host has already been changed. Host recovery
 and enablement precede the populated version-transition and fresh-rollback proof;
 automatic staging deployment remains disabled until that proof succeeds.
+
+### Compiler rejection before an operation exists
+
+A failed images-only prepare at `target-build` with the fixed cause
+`rollout_compile_image_inventory_changed` remains a failed request. It must not
+be marked COMPLETE/PASS or replayed. If it blocks an idle helper upgrade, root
+may append a separately reviewed `voice-compiler-inventory-rejection-v1` receipt
+using `operator_retirement.attest_compiler_inventory_rejection(path, sha256)`
+from reviewed captured code. The private reviewed document binds the exact nonce,
+original journal/response/public-report hashes and sizes, historical helper
+binding, retained source/build tree hashes and unchanged historical abandonment
+receipt hash. This is not an automatic disposition of arbitrary failed requests.
+
+Admission requires the exact rejected images-only request and matching safe
+report, no operation directory, and a build directory containing only
+`parameters.json`. Root custody and retained bytes are checked again during the
+helper swap. A separate receipt excludes only that verified nonce from the old
+pending inventory; the old receipt and original evidence remain unchanged.
+Existing operations, unknown causes, partial target output or evidence drift
+still block. No workload, NATS, source authority, or recovery permission is granted.
+
+The reviewed private JSON has exactly these fields:
+`schema`, `nonce`, `disposition` (`ABANDONED_PRECHECKPOINT`),
+`deployment_pass` (false), `recovery_authorized` (false), `helper_binding`,
+`old_receipt_sha256`, `files` (journal/response/report, each with sha256 and bytes),
+`source_tree`, and `build_tree` (each with files, bytes, sha256 using the retained
+prepare-tree census). The helper binding is the historical report's binding,
+not the replacement helper. It is not an arbitrary source/tree cleanup request.
+
+After independent review and root capture of the new helper, root uses the
+existing adapter with the verified captured helper on the Python import path:
+
+```python
+import operator_retirement
+operator_retirement.attest_compiler_inventory_rejection(
+    "/root/REVIEWED_PRIVATE_DOCUMENT.json", "REVIEWED_DOCUMENT_SHA256")
+```
+
+This one-shot call requires empty inbox/processing under the operation lock and
+creates `installed/compiler-inventory-rejection-<nonce>.json` exclusively. An
+existing destination is an error, not permission to replace or retry a receipt.
+The replacement installer must contain this verifier before the ordinary guarded
+idle upgrade can use it. Preserve the earlier rejected upgrade and failure
+evidence; revalidate current terminal state and queue custody before activation.

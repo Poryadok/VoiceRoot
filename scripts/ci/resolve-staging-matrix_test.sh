@@ -27,6 +27,7 @@ assert_not_contains() {
 run_matrix() {
   local out
   out="$(mktemp)"
+  ci_only_change=""
   GITHUB_OUTPUT="${out}" FILTER_JSON="${FILTER_JSON:-}" GO_SERVICES_JSON="${GO_SERVICES_JSON:-[]}" \
     FORCE_FULL="${FORCE_FULL:-}" FILTER_CODE="${FILTER_CODE:-true}" \
     BASE_SHA="${BASE_SHA:-deadbeef}" HEAD_SHA="${HEAD_SHA:-cafebabe}" \
@@ -36,6 +37,7 @@ run_matrix() {
   promote_services="$(grep '^promote_services=' "${out}" | head -1 | cut -d= -f2-)"
   needs_full_rollout="$(grep '^needs_full_rollout=' "${out}" | head -1 | cut -d= -f2-)"
   needs_user_space_rollout="$(grep '^needs_user_space_rollout=' "${out}" | head -1 | cut -d= -f2-)"
+  ci_only_change="$(grep '^ci_only_change=' "${out}" | head -1 | cut -d= -f2-)"
   promote_from_sha="$(grep '^promote_from_sha=' "${out}" | head -1 | cut -d= -f2-)"
   run_admin="$(grep '^run_admin=' "${out}" | head -1 | cut -d= -f2-)"
   rm -f "${out}"
@@ -86,6 +88,7 @@ echo "== CI-only config has no deployment matrix or rollout =="
 FILTER_JSON='{"code":"true","ci_global":"true"}' GO_SERVICES_JSON='["analytics","chat","controlledgame"]' run_matrix
 [[ "${build_services}" == "[]" ]] || fail "CI-only change must not build deployment images"
 [[ "${promote_services}" == "[]" ]] || fail "CI-only change must not promote deployment images"
+[[ "${ci_only_change}" == "true" ]] || fail "CI-only change must expose its no-publication classification"
 [[ "${needs_full_rollout}" == "false" ]] || fail "CI-only change must not set full rollout"
 [[ "${needs_user_space_rollout}" == "false" ]] || fail "CI-only change must not set application rollout"
 
@@ -101,16 +104,23 @@ run_matrix
 first_build="${build_services}"
 first_promote="${promote_services}"
 first_rollout="${needs_user_space_rollout}"
+first_ci_only_change="${ci_only_change}"
 run_matrix
 [[ "${build_services}" == "${first_build}" ]] || fail "idempotent build_services mismatch"
 [[ "${promote_services}" == "${first_promote}" ]] || fail "idempotent promote_services mismatch"
 [[ "${needs_user_space_rollout}" == "${first_rollout}" ]] || fail "idempotent rollout mismatch"
+[[ "${ci_only_change}" == "${first_ci_only_change}" ]] || fail "idempotent CI-only classification mismatch"
 unset FILTER_JSON GO_SERVICES_JSON
 
 echo "== FORCE_FULL builds all =="
 FORCE_FULL=true GO_SERVICES_JSON='[]' run_matrix
 count="$(echo "${build_services}" | jq 'length')"
-[[ "${count}" -eq 22 ]] || fail "expected 22 release image services, got ${count}"
+[[ "${count}" -eq 23 ]] || fail "expected 23 staging image services, got ${count}"
+assert_contains "${build_services}" gameintegration
+prod_count="$(jq '[.images[] | select((.environments // ["dev", "staging", "prod"]) | index("prod"))] | length' "${ROOT}/scripts/ci/staging-image-catalog.json")"
+[[ "${prod_count}" -eq 22 ]] || fail "expected 22 production image services, got ${prod_count}"
+gis_environments="$(jq -c '.images[] | select(.name == "gameintegration") | .environments' "${ROOT}/scripts/ci/staging-image-catalog.json")"
+[[ "${gis_environments}" == '["dev","staging"]' ]] || fail "GIS must remain excluded from production, got ${gis_environments}"
 
 echo "== staging_infra sets needs_full_rollout =="
 FILTER_JSON='{"code":"true","staging_infra":"true"}' GO_SERVICES_JSON='[]' run_matrix

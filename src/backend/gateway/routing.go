@@ -23,6 +23,7 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 
 	namespace := restNamespace(r.URL.Path)
 	if !isPublicRESTNamespace(namespace) {
+		traceMatchFoundTransport("rest-namespace-not-public")
 		http.NotFound(w, r)
 		return
 	}
@@ -109,12 +110,17 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if g.config.transcoder != nil && g.config.transcoder.serveNamespace(w, r, namespace) {
-		return
+	if g.config.transcoder != nil {
+		traceMatchFoundTransport("rest-transcoder-dispatch")
+		if g.config.transcoder.serveNamespace(w, r, namespace) {
+			return
+		}
+		traceMatchFoundTransport("rest-transcoder-unhandled")
 	}
 
 	upstream, ok := g.config.restUpstreams[namespace]
 	if !ok {
+		traceMatchFoundTransport("rest-upstream-missing")
 		http.NotFound(w, r)
 		return
 	}

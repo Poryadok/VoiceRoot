@@ -71,6 +71,84 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_realtime_dual_leaf_monitor_ports(self):
+        obj = decoder((SOURCE / 'deploy/templates/nats-realtime-acl-proof.yaml').read_bytes())
+        regular, proof = obj['spec']['template']['spec']['initContainers']
+        self.assertEqual(regular['args'], ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222'])
+        self.assertIn("s/^listen: 127.0.0.1:4222$/listen: 127.0.0.1:4223/", proof['args'][0])
+        self.assertIn('exec nats-server -c /tmp/leaf-proof.conf -a 127.0.0.1 -m 8223', proof['args'][0])
+
+    def test_rendered_leaf_monitoring_contract(self):
+        kube, params = self.canonical_fixture()
+        plan = source_plan.compile_plan(SOURCE, params, decoder, kube)
+        leaves = {}
+        for descriptor in (o for check in plan['checks'] for o in check['objects']):
+            if descriptor['kind'] != 'Deployment': continue
+            obj = descriptor['desired']
+            spec = obj['spec']['template']['spec']
+            for c in spec.get('initContainers', []) + spec.get('containers', []):
+                if c['name'] == 'nats-leaf': leaves[descriptor['name']] = c
+        self.assertEqual(set(leaves), {'voice-' + s for s in (
+            'analytics', 'auth', 'bot', 'chat', 'file', 'matchmaking', 'messaging',
+            'moderation', 'notification', 'realtime', 'role', 'search', 'social',
+            'space', 'story', 'subscription', 'user', 'voice')})
+        for leaf in leaves.values():
+            self.assertEqual(leaf['args'], ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222'])
+
+    def test_invalid_rendered_leaf_monitoring_rejected(self):
+        for change in ('missing-monitor', 'public-host', 'duplicate-port', 'config-mount', 'missing-leaf'):
+            with self.subTest(change=change):
+                kube, params = self.canonical_fixture()
+                def invalid(raw):
+                    obj = decoder(raw)
+                    if obj['kind'] == 'Deployment' and obj['metadata']['name'] == 'voice-analytics':
+                        spec = obj['spec']['template']['spec']
+                        entries = spec.get('initContainers', []) + spec['containers']
+                        leaf = next(c for c in entries if c['name'] == 'nats-leaf')
+                        leaf['args'] = ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222']
+                        if change == 'missing-monitor': leaf['args'] = ['-c', '/etc/nats/leaf.conf']
+                        if change == 'public-host': leaf['args'][3] = '0.0.0.0'
+                        if change == 'duplicate-port': leaf['args'] += ['-m', '8223']
+                        if change == 'config-mount': leaf['volumeMounts'] = []
+                        if change == 'missing-leaf': leaf['name'] = 'other-leaf'
+                    return obj
+                with self.assertRaisesRegex(nonnats_plan.PlanError, 'canonical_leaf_monitor_invalid'):
+                    source_plan.compile_plan(SOURCE, params, invalid, kube)
+
+    def test_rendered_gateway_requires_strict_delegated_identity(self):
+        kube, params = self.canonical_fixture()
+        plan = source_plan.compile_plan(SOURCE, params, decoder, kube)
+        gateway = next(o for r in plan['checks'] for o in r['objects']
+                       if o['kind'] == 'Deployment' and o['name'] == 'voice-gateway')
+        container = gateway['desired']['spec']['template']['spec']['containers'][0]
+        env = {e['name']: e for e in container['env']}
+        self.assertEqual(env['GATEWAY_SESSION_EPOCH_STRICT'],
+                         {'name': 'GATEWAY_SESSION_EPOCH_STRICT', 'value': 'true'})
+        self.assertEqual(env['GATEWAY_REDIS_ADDR']['valueFrom']['configMapKeyRef'],
+                         {'name': 'voice-app-config', 'key': 'REDIS_ADDR'})
+        self.assertEqual(env['GATEWAY_PRINCIPAL_ACTIVE_KID']['valueFrom']['secretKeyRef'],
+                         {'name': 'voice-gateway-principal-signing', 'key': 'active-kid'})
+
+    def test_invalid_rendered_gateway_delegation_is_rejected(self):
+        for field in ('GATEWAY_SESSION_EPOCH_STRICT', 'GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR',
+                      'GATEWAY_PRINCIPAL_ACTIVE_KID', 'GATEWAY_REDIS_ADDR', 'false-strict', 'signer-volume'):
+            with self.subTest(field=field):
+                kube, params = self.canonical_fixture()
+                def invalid(raw):
+                    obj = decoder(raw)
+                    if obj['kind'] == 'Deployment' and obj['metadata']['name'] == 'voice-gateway':
+                        spec = obj['spec']['template']['spec']
+                        env = spec['containers'][0]['env']
+                        env[:] = [e for e in env if e['name'] != field]
+                        if field == 'false-strict':
+                            env[:] = [e for e in env if e['name'] != 'GATEWAY_SESSION_EPOCH_STRICT']
+                            env.append({'name': 'GATEWAY_SESSION_EPOCH_STRICT', 'value': 'false'})
+                        if field == 'signer-volume':
+                            spec['volumes'] = [v for v in spec['volumes'] if v['name'] != 'media-signing']
+                    return obj
+                with self.assertRaisesRegex(nonnats_plan.PlanError, 'canonical_gateway_delegated_config_invalid'):
+                    source_plan.compile_plan(SOURCE, params, invalid, kube)
+
     def canonical_fixture(self, mode='app-only'):
         kube, params = fixture()
         params.update(mode=mode, gateway_host='voice.comrade.click', livekit_host='livekit.comrade.click', web_host='app.comrade.click',

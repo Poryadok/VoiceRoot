@@ -102,6 +102,60 @@ migration operator require their separate reviewed implementation before this
 stage's backend rollout can proceed. Application-user policy changes remain
 independent prerequisites for each affected target service.
 
+### Bounded Role, Space, Voice and Messaging grant transition
+
+`nats-jwt-issuer --renew-existing-service PRIVATE_PIPE_FD` is an explicit
+Linux-root operator mode, separate from fresh issuance and bootstrap renewal.
+Its stdin is one bounded JSON document with schema
+`voice-nats-existing-service-renewal-v1`, `old_creds`, `account_jwt`,
+`operator_jwt`, `signer_seed`, `actor_sha256`, `account_sha256`, `service`,
+`publish`, `subscribe`, and `no_response`. The target grant must come from the
+reviewed `acl-intent.yaml`; private credentials travel only through stdin and
+the inherited result pipe. Arguments, environment, stdout and stderr never
+carry private material. Ordinary deployment does not invoke this mode.
+
+The only permitted additions are `role.voice_policy_invalidated` for Role,
+`space.voice_room_access_invalidated` for Space, the exact INFO and ACK subjects
+for `chat_events/voice_space_media_chat` and
+`role_events/voice_space_media_role` for Voice, and
+`$JS.API.CONSUMER.INFO.file_events.messaging_music_metadata` plus
+`$JS.ACK.file_events.messaging_music_metadata.>` for Messaging. The target
+publish set must equal the original set plus the service-specific additions,
+and subscription authority must match unchanged. Messaging retains its existing
+owned `_INBOX.voice.messaging.>` subscription, which covers the Music inbox;
+renewal adds no inbox grant. Messaging receives no consumer CREATE permission,
+arbitrary Music publication, or `file.processed` publish permission. Concrete
+source inboxes already covered by the same existing owned
+`_INBOX.voice.<service>.>` tail do not require extra JWT entries; the original
+subscription claims remain intact. Missing inbox coverage or any subscription
+deny overlap vetoes renewal. A concrete deny inside an ACK tail vetoes renewal,
+as does a wildcard deny. Other services, wrong actor names, signer changes,
+scoped signers, unsupported effective claims, expired/revoked actors and
+unrelated grant changes are refused. Existing identity, user seed, account,
+deny lists, expiry and all other signed fields remain unchanged; only publish
+additions and signing issuance metadata may change. An already-current
+credential is returned intact.
+
+For retained staging generation `r20260930a4`, the separately reviewed human-root
+operator must capture the immutable service Secret and operator/marker bindings,
+back up the original Secret privately, and verify all 19 signed actor chains.
+Verify prospective exact ACL compatibility and isolated broker authentication
+before mutation. Under the existing operation lock with no active rollout,
+stop each affected service (Role, Space, Voice and/or Messaging) whose signed
+grant is stale, and observe its Pods gone. Replace only the exact generation
+Secret using Kubernetes delete UID/resourceVersion preconditions, then create it
+under the same name with all original metadata and every unaffected credential
+byte unchanged. Verify readback and fresh signed/broker proofs before restoring
+the affected replica counts. The read-only existing-service actor preflight
+binds each selected `voice-<service>` deployment, credential Secret key and
+mounted identity to this ACL before preservation; it never issues credentials
+or writes a Secret. A missing or stale grant remains a hard preflight failure
+until the human-root issuer renewal and guarded Secret update are completed. A
+concurrent object/spec change is a veto; an ambiguous failure requires
+private-journal recovery, never a blind retry. Keep the original backup until
+the new FULL deployment and current-service proof complete. No operator/account
+JWT, hub, PVC or bootstrap Secret changes are part of this transition.
+
 ## Per-service leaf topology
 
 [`leaf-sidecar.template.yaml`](leaf-sidecar.template.yaml) documents the

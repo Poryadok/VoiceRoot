@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-provision-gameintegration-runtime-role
+  namespace: __K_NAMESPACE__
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: voice-provision-gameintegration-runtime-role}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      initContainers:
+        - name: wait-postgres
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
+          command: ["/bin/sh", "-ec", "until pg_isready -h voice-postgres -p 5432 -U \"${POSTGRES_USER}\"; do sleep 2; done"]
+          env:
+            - name: POSTGRES_USER
+              valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+      containers:
+        - name: provision
+          image: docker.io/library/postgres@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
+          command: ["/bin/sh", "-ec", "exec psql -v ON_ERROR_STOP=1 -h voice-postgres -p 5432 -U \"${POSTGRES_USER}\" -d postgres -f /provision/provision.sql"]
+          env:
+            - name: POSTGRES_USER
+              valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}
+            - name: GAME_INTEGRATION_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: voice-app-secrets, key: GAME_INTEGRATION_DB_PASSWORD}}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          volumeMounts:
+            - {name: provisioner, mountPath: /provision, readOnly: true}
+      volumes:
+        - name: provisioner
+          configMap: {name: voice-gameintegration-runtime-role-sql}

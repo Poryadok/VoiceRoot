@@ -101,7 +101,7 @@ data:
 
     stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
     stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
-    stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored space.voice_room_access_invalidated
+    stream chat_events chat.created chat.updated chat.deleted chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored space.voice_room_access_invalidated
     stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
     stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
     stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
@@ -132,6 +132,7 @@ data:
     consumer social_events chat_friend_accepted social.friend_accepted _INBOX.voice.chat.chat_friend_accepted all chat_friend_accepted
     consumer message_events messaging_delivery_ack message.delivery_ack _INBOX.voice.messaging.messaging_delivery_ack all messaging_delivery_ack
     consumer user_events messaging_receipt_privacy user.settings_changed _INBOX.voice.messaging.messaging_receipt_privacy all messaging_receipt_privacy
+    consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata
     consumer message_events bot_message_events message.sent _INBOX.voice.bot.bot_message_events all ''
     consumer_filters story_events matchmaking_story_lfp_v2 _INBOX.voice.matchmaking.matchmaking_story_lfp_v2 all story.lfp_created story.lfp_response
     consumer_filters subscription_events space_subscription_entitlement _INBOX.voice.space.space_subscription_entitlement new subscription.space_pro_started subscription.space_pro_expired

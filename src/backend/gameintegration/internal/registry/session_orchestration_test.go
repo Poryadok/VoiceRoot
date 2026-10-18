@@ -643,6 +643,7 @@ func TestSessionOrchestratorNoOwnerStageRequiresCurrentLease(t *testing.T) {
 	})
 	require.NoError(t, err)
 	advanceSessionUntil(t, ctx, orchestrator, principal, party.OperationID, "active")
+	parentChatCallBaseline := len(owners.calls["chat_create"]) + len(owners.calls["chat_roster"])
 	child, err := orchestrator.CreateSession(ctx, principal, CreateSessionInput{
 		OperationID: uuid.New(), Kind: "match", ExternalKey: "lease-no-owner-child", ParentPartyKey: "lease-no-owner-party",
 		RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
@@ -668,7 +669,8 @@ func TestSessionOrchestratorNoOwnerStageRequiresCurrentLease(t *testing.T) {
 	var sessionStage string
 	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT stage FROM gis_sessions WHERE id=$1`, child.SessionID).Scan(&sessionStage))
 	require.Equal(t, "accepted", sessionStage)
-	require.Empty(t, owners.calls["chat_create"], "children do not make their own owner Chat calls")
+	require.Equal(t, parentChatCallBaseline, len(owners.calls["chat_create"])+len(owners.calls["chat_roster"]),
+		"a stale child lease must not add owner Chat calls beyond its active parent")
 }
 
 func TestSessionOrchestratorDoesNotPersistTerminalReceiptAfterLeaseTakeover(t *testing.T) {

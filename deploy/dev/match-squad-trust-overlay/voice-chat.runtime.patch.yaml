@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-chat
+  namespace: voice-dev
+spec:
+  template:
+    spec:
+      securityContext:
+        fsGroup: 65532
+      containers:
+        - name: chat
+          ports:
+            - name: match-principal
+              containerPort: 9092
+          env:
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN
+              value: :9092
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE
+              value: /etc/voice/match-squad/server/tls.crt
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE
+              value: /etc/voice/match-squad/server/tls.key
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE
+              value: /etc/voice/match-squad/ca/ca.crt
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL
+              value: https://voice-matchmaking.voice-dev.svc:8443/internal/v1/principal/jwks.json
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE
+              value: /etc/voice/principal-jwks/ca/ca.crt
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: REDIS_ADDR
+            - name: CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-match-squad-replay
+                  key: password
+          volumeMounts:
+            - name: match-squad-server
+              mountPath: /etc/voice/match-squad/server
+              readOnly: true
+            - name: matchmaking-principal-jwks-ca
+              mountPath: /etc/voice/principal-jwks/ca
+              readOnly: true
+            - name: chat-match-squad-replay
+              mountPath: /etc/voice/match-squad/replay
+              readOnly: true
+            - name: match-squad-ca
+              mountPath: /etc/voice/match-squad/ca
+              readOnly: true
+      volumes:
+        - name: match-squad-server
+          secret:
+            secretName: voice-chat-match-squad-server-tls
+            defaultMode: 288
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: matchmaking-principal-jwks-ca
+          secret:
+            secretName: voice-matchmaking-principal-jwks-ca
+            defaultMode: 288
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: chat-match-squad-replay
+          secret:
+            secretName: voice-match-squad-replay
+            defaultMode: 288
+            items:
+              - key: password
+                path: password
+        - name: match-squad-ca
+          configMap:
+            name: voice-match-squad-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

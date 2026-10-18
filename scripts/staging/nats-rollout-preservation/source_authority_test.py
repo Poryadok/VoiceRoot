@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -17,6 +18,181 @@ TREE = 'b' * 40
 
 
 class SourceTests(unittest.TestCase):
+    def test_equivalent_master_requires_ancestor_and_identical_bounded_build_inputs(self):
+        source, current = 'a' * 40, 'b' * 40
+        tree_root = '1' * 40
+        entries = {
+            'root': {'src': ('tree', '2' * 40), '.github': ('tree', '3' * 40), 'scripts': ('tree', '4' * 40)},
+            'src': {'backend': ('tree', '5' * 40)},
+            '.github': {'workflows': ('tree', '6' * 40)},
+            'workflows': {'ci.yml': ('blob', '7' * 40)},
+            'scripts': {'ci': ('tree', '8' * 40)},
+            'ci': {'backend-docker-context.txt': ('blob', '9' * 40),
+                'staging-image-catalog.json': ('blob', 'c' * 40)},
+        }
+
+        active_commit = source
+        drift = None
+
+        def api(url, _headers, _deadline):
+            nonlocal active_commit
+            if '/compare/' in url:
+                # GitHub's compare response has base_commit and merge_base_commit,
+                # but no head_commit; the requested head is separately pinned by ref.
+                return {'base_commit': {'sha': source},
+                    'merge_base_commit': {'sha': source}, 'status': 'ahead', 'ahead_by': 3}
+            if '/git/commits/' in url:
+                sha = url.rsplit('/', 1)[-1]
+                active_commit = sha
+                return {'sha': sha, 'tree': {'sha': tree_root}}
+            tree_sha = url.rsplit('/', 1)[-1]
+            reverse = {'2' * 40: 'src', '3' * 40: '.github', '4' * 40: 'scripts',
+                '6' * 40: 'workflows', '8' * 40: 'ci'}
+            if tree_sha == tree_root:
+                values = entries['root']
+            else:
+                values = entries[reverse[tree_sha]]
+            if active_commit == current:
+                if drift == 'src/backend' and tree_sha == '2' * 40:
+                    values = {'backend': ('tree', 'f' * 40)}
+                elif drift == '.github/workflows/ci.yml' and tree_sha == '6' * 40:
+                    values = {'ci.yml': ('blob', 'f' * 40)}
+                elif drift == 'scripts/ci/backend-docker-context.txt' and tree_sha == '8' * 40:
+                    values = {'backend-docker-context.txt': ('blob', 'f' * 40),
+                        'staging-image-catalog.json': ('blob', 'c' * 40)}
+                elif drift == 'scripts/ci/staging-image-catalog.json' and tree_sha == '8' * 40:
+                    values = {'backend-docker-context.txt': ('blob', '9' * 40),
+                        'staging-image-catalog.json': ('blob', 'f' * 40)}
+            return {'sha': tree_sha, 'truncated': False,
+                'tree': [{'path': name, 'type': kind, 'sha': digest}
+                    for name, (kind, digest) in values.items()]}
+
+        with patch.object(module, '_get', side_effect=api):
+            result = module._equivalent_master_source({}, source, current, 1)
+        self.assertEqual(result['current_master_sha_before'], current)
+        self.assertTrue(result['source_is_ancestor'])
+        self.assertEqual(result['equivalent_inputs']['src/backend']['git_object_sha1'], '5' * 40)
+
+        for drift_path in ('src/backend', '.github/workflows/ci.yml',
+            'scripts/ci/backend-docker-context.txt', 'scripts/ci/staging-image-catalog.json'):
+            with self.subTest(drift=drift_path):
+                drift = drift_path
+                with patch.object(module, '_get', side_effect=api), self.assertRaises(module.SourceError):
+                    module._equivalent_master_source({}, source, current, 1)
+        drift = None
+
+    def test_equivalent_master_rejects_diverged_or_descendant_sources(self):
+        source, current = 'a' * 40, 'b' * 40
+        for status, merge_base in (('diverged', 'c' * 40), ('behind', source), ('ahead', 'c' * 40)):
+            with self.subTest(status=status, merge_base=merge_base):
+                compare = {'base_commit': {'sha': source},
+                    'merge_base_commit': {'sha': merge_base}, 'status': status, 'ahead_by': 2}
+                with patch.object(module, '_get', return_value=compare), self.assertRaises(module.SourceError):
+                    module._equivalent_master_source({}, source, current, 1)
+
+    def test_closed_image_authority_matches_catalog_including_gameintegration(self):
+        catalog=json.loads((SOURCE/'scripts/ci/staging-image-catalog.json').read_text())
+        names={row['name'] for row in catalog['images']}
+        self.assertIn('gameintegration',names)
+        self.assertEqual(names|{'nats-hub-config-renderer'},module.IMAGE_NAMES)
+        with self.assertRaises(module.SourceError):
+            module._resolve_image('not-a-catalog-image',SHA,1)
+
+    def test_api_pagination_keeps_full_item_limit_with_small_pages(self):
+        requests = []
+
+        def page(url, headers, deadline):
+            requests.append(url)
+            self.assertIn('?per_page=20&page=', url)
+            number = int(url.rsplit('page=', 1)[1])
+            first = (number - 1) * 20
+            return {'total_count': 10000, 'jobs': [{'id': item} for item in range(first + 1, first + 21)]}
+
+        with patch.object(module, '_get', side_effect=page):
+            rows = module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        self.assertEqual(len(rows), 10000)
+        self.assertEqual(len(requests), 500)
+        self.assertEqual(rows[0]['id'], 1)
+        self.assertEqual(rows[-1]['id'], 10000)
+
+    def test_api_pagination_rejects_over_limit_and_inconsistent_pages(self):
+        with patch.object(module, '_get', return_value={'total_count': 10001, 'jobs': []}):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        responses = [
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+            {'total_count': 3, 'jobs': [{'id': 2}]},
+        ]
+        with patch.object(module, '_get', side_effect=responses):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+        responses = [
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+            {'total_count': 2, 'jobs': [{'id': 1}]},
+        ]
+        with patch.object(module, '_get', side_effect=responses):
+            with self.assertRaises(module.SourceError):
+                module._pages('https://api.github.com/jobs', 'jobs', {}, 1)
+
+    def test_cached_archive_runs_complete_capture_without_remote_tarball(self):
+        private=tempfile.TemporaryDirectory(dir='/home/pmd');self.addCleanup(private.cleanup)
+        cache=Path(private.name)/'source-archives';cache.mkdir(mode=0o750)
+        # Shared cache uses the exact full-SHA codeload root.
+        buffer=io.BytesIO()
+        with tarfile.open(fileobj=buffer,mode='w:gz') as archive:
+            for path,content in self.files.items():
+                member=tarfile.TarInfo('VoiceRoot-'+SHA+'/'+path)
+                member.size=len(content);member.mode=0o664
+                archive.addfile(member,io.BytesIO(content))
+        cached=cache/(SHA+'.tar.gz');cached.write_bytes(buffer.getvalue());cached.chmod(0o440)
+        calls=[]
+        def fetch(url,*args,**kwargs):
+            calls.append(url)
+            if url.endswith('/tarball/'+SHA):raise AssertionError('cache must avoid archive network')
+            return self.fetch(url,*args,**kwargs)
+        with patch.object(module,'SOURCE_CACHE_DIR',cache,create=True),patch.object(module,'_fetch',fetch):
+            result=module.capture_source('private-token',123,SHA,self.destination)
+        self.assertTrue(result['verified']);self.assertEqual(result['tree_sha'],TREE)
+        self.assertTrue(any('/git/trees/' in url for url in calls))
+        self.assertTrue(any('/actions/artifacts/99/zip' in url for url in calls))
+        self.assertTrue(any('/manifests/' in url for url in calls))
+
+    def test_archive_executable_mode_mismatch_is_rejected(self):
+        tree=self.tree();tree['tree'][0]['mode']='100755'
+        with patch.object(self,'tree',return_value=tree),self.assertRaises(module.SourceError):
+            self.capture()
+
+    def test_cache_custody_rejects_invalid_present_and_changed_held_bytes(self):
+        with tempfile.TemporaryDirectory(dir='/home/pmd') as td:
+            root=Path(td);root.chmod(0o750)
+            cache=root/'cache';cache.mkdir(mode=0o750)
+            path=cache/(SHA+'.tar.gz')
+            with patch.object(module,'SOURCE_CACHE_DIR',cache):
+                for drift in ('writable','hardlink','symlink','directory'):
+                    with self.subTest(drift=drift):
+                        path.write_bytes(b'archive');path.chmod(0o440)
+                        if drift=='writable':path.chmod(0o660)
+                        elif drift=='hardlink':os.link(path,root/'linked')
+                        elif drift=='symlink':path.unlink();path.symlink_to(root/'missing')
+                        else:path.unlink();path.mkdir()
+                        with self.assertRaises((module.SourceError,OSError)):
+                            with module.cached_archive(SHA):pass
+                        if path.is_dir():path.rmdir()
+                        else:path.unlink()
+                        if (root/'linked').exists():(root/'linked').unlink()
+                path.write_bytes(b'archive');path.chmod(0o440)
+                with self.assertRaises(module.SourceError):
+                    with module.cached_archive(SHA) as held:
+                        self.assertEqual(held.read(),b'archive')
+                        path.chmod(0o600)
+                        path.write_bytes(b'changed')
+                path.unlink();cache.rmdir();cache.symlink_to(root)
+                with self.assertRaises(OSError):
+                    with module.cached_archive(SHA):pass
+
     def test_immutable_runtime_index_and_child_require_same_content_chain(self):
         prefix=module.REGISTRY+'/auth@sha256:'
         actual=prefix+'a'*64; target=prefix+'b'*64
@@ -103,8 +279,11 @@ class SourceTests(unittest.TestCase):
             self.master_calls+=1
             data={'ref':'refs/heads/master','object':{'type':'commit','sha':'d'*40 if self.master_moved and self.master_calls>1 else SHA}}
         elif url.endswith('/actions/runs/123'): data=self.run
-        elif '/jobs?' in url: data={'total_count':len(self.jobs),'jobs':self.jobs}
-        elif url.endswith('/actions/runs/123/artifacts?per_page=100&page=1'): data={'total_count':1,'artifacts':[self.artifact]}
+        elif '/jobs?' in url:
+            query=dict(part.split('=',1) for part in url.split('?',1)[1].split('&'))
+            page=int(query['page']);per_page=int(query['per_page']);start=(page-1)*per_page
+            data={'total_count':len(self.jobs),'jobs':self.jobs[start:start+per_page]}
+        elif url.endswith('/actions/runs/123/artifacts?per_page=20&page=1'): data={'total_count':1,'artifacts':[self.artifact]}
         elif url.endswith('/actions/artifacts/99'):
             data=copy.deepcopy(self.artifact)
             buffer=io.BytesIO()

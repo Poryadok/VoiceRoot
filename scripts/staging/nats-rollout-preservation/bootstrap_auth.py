@@ -14,7 +14,7 @@ from docker_runtime import DockerRuntime,NATS_IMAGE
 from scenario import ready
 import guard
 
-def prove(credentials,operator,unchanged):
+def prove(credentials,operator,unchanged,required_get_streams=None):
     unchanged()
     with tempfile.TemporaryDirectory(prefix='bootstrap-auth-',dir=guard.ROOT) as td:
         base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
@@ -47,12 +47,25 @@ def prove(credentials,operator,unchanged):
             tree=runtime.monitor_jsz(broker)
             if tree['messages']!=0 or tree['streams']!=len(stream_subjects) or tree['consumers']!=len(DECLARATIONS):raise Blocked('bootstrap_auth_scratch_not_empty')
             if [a['id'] for a in tree['account_details'] if a.get('stream_detail')]!=[tokens['account.public']]:raise Blocked('bootstrap_auth_account_not_exact')
+            get_proof=None
+            if required_get_streams is not None:
+                from rollout_census import census,semantic
+                class Captured:
+                    def __init__(self,row):self.row=row
+                    def monitor_jsz(self,broker):return self.row
+                before_get=census(Captured(tree),'scratch',tokens['account.public'])
+                get_proof=actor.prove_get_permissions(required_get_streams)
+                after=runtime.monitor_jsz(broker)
+                if semantic(census(Captured(after),'scratch',tokens['account.public']))!=semantic(before_get):
+                    raise Blocked('bootstrap_auth_get_scratch_changed')
             runtime.stop(broker);unchanged()
             legacy=next(row['config'] for row in normalized_consumers if row['stream']=='social_events')
-            return {'verified':True,'server_image':NATS_IMAGE,'account_sha256':ACCOUNT_SHA,
+            result={'schema':'voice-bootstrap-auth-v4','verified':True,'server_image':NATS_IMAGE,'account_sha256':ACCOUNT_SHA,
                 'reply_prefix':'_INBOX.voice.bootstrap.reply','normalized_consumer':legacy,
                 'normalized_consumer_sha256':digest(legacy),'normalized_consumers':normalized_consumers,
                 'normalized_consumers_sha256':digest(normalized_consumers)}
+            if get_proof is not None:result['get_permissions']=get_proof
+            return result
         finally:
             for name in reversed(list(runtime.owned)):
                 row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])

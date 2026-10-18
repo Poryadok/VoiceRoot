@@ -3,22 +3,33 @@ package spacemedia
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/store"
 )
 
 type fakeAccess struct {
-	byProfile map[string]grpcsvc.CanonicalVoiceRoomAccess
+	byProfile     map[string]grpcsvc.CanonicalVoiceRoomAccess
+	beforeResolve func()
 }
 
-func (f fakeAccess) ResolveVoiceRoomAccess(_ context.Context, _, profileID string) (grpcsvc.CanonicalVoiceRoomAccess, error) {
-	return f.byProfile[profileID], nil
+func (f fakeAccess) ResolveVoiceRoomAccess(_ context.Context, expectedSpaceID, _, profileID string) (grpcsvc.CanonicalVoiceRoomAccess, error) {
+	if f.beforeResolve != nil {
+		f.beforeResolve()
+	}
+	access, ok := f.byProfile[profileID]
+	if !ok || access.SpaceID != expectedSpaceID {
+		return grpcsvc.CanonicalVoiceRoomAccess{}, status.Error(codes.NotFound, "voice room is not bound to expected Space")
+	}
+	return access, nil
 }
 
 type fakeGrants struct {
@@ -37,6 +48,8 @@ type fakeMedia struct {
 type currentEpochChecker struct{ err error }
 
 func (c currentEpochChecker) RequireCurrent(context.Context, string, int64) error { return c.err }
+
+func (c currentEpochChecker) CurrentFloor(context.Context, string) (int64, error) { return 1, c.err }
 
 type fakeAdmissionRecovery struct {
 	released        int
@@ -416,6 +429,37 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	require.NoError(t, c.ReconcileAll(ctx))
 	require.Equal(t, []bool{false, true}, readiness)
 	require.Equal(t, 1, admissions.confirmCalls, "the committed participant must be confirmed before readiness opens")
+
+	readiness = nil
+	accessStarted := make(chan struct{})
+	continueAccess := make(chan struct{})
+	var accessOnce sync.Once
+	var continueOnce sync.Once
+	resumeAccess := func() { continueOnce.Do(func() { close(continueAccess) }) }
+	defer resumeAccess()
+	c.Access = fakeAccess{
+		byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+		},
+		beforeResolve: func() {
+			accessOnce.Do(func() {
+				close(accessStarted)
+				<-continueAccess
+			})
+		},
+	}
+	reconcileDone := make(chan error, 1)
+	go func() { reconcileDone <- c.ReconcileAll(ctx) }()
+	select {
+	case <-accessStarted:
+	case <-time.After(time.Second):
+		t.Fatal("periodic reconciliation did not reach the authoritative access check")
+	}
+	require.True(t, c.ready, "serving must remain ready during a successful periodic sweep")
+	resumeAccess()
+	require.NoError(t, <-reconcileDone)
+	require.Empty(t, readiness, "a successful periodic sweep must not close serving during reconciliation")
+	require.True(t, c.ready)
 
 	readiness = nil
 	media.err = errors.New("authority-driven ejection did not complete")

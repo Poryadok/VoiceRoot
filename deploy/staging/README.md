@@ -2,12 +2,15 @@
 
 Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legacy; use the full stack for product smoke.
 
+The Voice media startup contract requires the dedicated [media principal credentials and trust projection](media-principal.md) before ordinary FULL/app-only preparation. Missing keys are a preflight failure; do not disable the application guards to deploy.
+
 ## Prerequisites
 
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
 2. GHCR images built by CI on `master` for changed services; unchanged images promoted from previous SHA (tag `:<git_sha>` only — no `:latest` in CI)
 3. Secrets from [secret.example.yaml](secret.example.yaml) → `secret.yaml` (do not commit)
-4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for all Go-owned databases: `bot_db`, `chat_db`, `file_db`, `matchmaking_db`, `messaging_db`, `moderation_db`, `notification_db`, `role_db`, `search_db`, `social_db`, `space_db`, `story_db`, `subscription_db`, `user_db`, `voice_db`)
+4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for all Go-owned databases, including GIS `game_integration_db`)
+5. Provision the operator-managed GIS secrets before migration: the restricted `gameintegration_runtime` password and matching `GAME_INTEGRATION_DATABASE_URL` in `voice-app-secrets`, distinct current/next GIS signing keys, a `voice-gameintegration` server certificate signed by `voice-media-ca`, and two distinct 32-byte T58 workload keys in `voice-gameintegration-workload-credentials`. Use the external secret manager; example files contain placeholders only.
 
 ## Image tag and GHCR pull
 
@@ -38,7 +41,7 @@ export STAGING_KUBECONFIG=~/.kube/config   # or use CI secret
 scripts/staging/render-and-apply.sh
 ```
 
-The deployment order is database first: `apply-migrate-jobs.sh` applies each Go-owned database's SQL directory through a ConfigMap and a `voice-migrate-<service>-db` Job before application rollouts. Jobs are skipped when the completed Job and stored SQL content hash still match. The migration Jobs consume the corresponding database URL through a `voice-app-secrets` Secret reference; the URLs are not rendered into Job manifests or logs.
+The deployment order is database first: `apply-migrate-jobs.sh` applies each Go-owned database's SQL directory through a ConfigMap and a `voice-migrate-<service>-db` Job before application rollouts. GIS is explicit: its existing restricted runtime role is provisioned from `docker/postgres/provision-gameintegration-runtime-role.sql` before migration, then `game_integration_db` is migrated using the existing privileged Postgres identity. The Job receives that identity through the `POSTGRES_PASSWORD` SecretRef and builds its encoded DSN inside the container; the restricted runtime URL is never used for DDL, and neither password nor DSN is embedded in the Job manifest or logged. Jobs are skipped when the completed Job and stored SQL content hash still match. An existing staging `voice-app-secrets` without both GIS runtime keys fails before the GIS migration starts.
 
 For Voice specifically, create `voice_db` and apply `voice_db/000001_room_lifecycle` through ConfigMap `voice-voice-db-migrations` and Job `voice-migrate-voice-db`. Run this migration before Deployment `voice-voice`. Voice reads `VOICE_DATABASE_URL` from `voice-app-secrets`; the Voice migration Job reads `POSTGRES_PASSWORD` from the same Secret and constructs its DSN inside the container without printing it.
 
@@ -61,7 +64,8 @@ scripts/staging/smoke-staging.sh
 | `namespace.yaml` | `voice-staging` namespace |
 | `domains.defaults` | Staging public FQDNs (single file to edit on domain rotation) |
 | `configmap-app.yaml` | Shared env (GRPC upstreams, NATS, Redis); OAuth URLs templated at apply |
-| `secret.example.yaml` | Template for R2, JWT, FCM, APNs |
+| `secret.example.yaml` | Template for DB, R2, JWT, FCM, APNs and GIS's restricted runtime DSN |
+| `gameintegration-workload-credentials.example.yaml` | Placeholder-only template for separately managed T58 Notification/Realtime keys |
 | `infra.yaml` | Postgres, Redis, NATS, LiveKit, ClamAV |
 | `services.yaml` | All application microservices |
 | `gateway-deployment.yaml` | API Gateway + Service |

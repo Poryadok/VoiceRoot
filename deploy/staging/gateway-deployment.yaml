@@ -21,6 +21,7 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext: {fsGroup: 65532}
       containers:
         - name: gateway
           image: IMAGE_PLACEHOLDER
@@ -28,8 +29,21 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - {name: GATEWAY_SESSION_EPOCH_STRICT, value: "true"}
             - name: LISTEN_ADDR
               value: ":8080"
+            - {name: GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR, value: /etc/voice/media/keys}
+            - {name: GATEWAY_PRINCIPAL_ACTIVE_KID, valueFrom: {secretKeyRef: {name: voice-gateway-principal-signing, key: active-kid}}}
+            - {name: GATEWAY_VOICE_USER_GRPC_ADDR, value: "voice-voice:9093"}
+            - {name: GATEWAY_VOICE_USER_TLS_SERVER_NAME, value: voice-voice}
+            - {name: GATEWAY_VOICE_USER_TLS_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: GATEWAY_VOICE_USER_CLIENT_CERT_FILE, value: /etc/voice/media/client/tls.crt}
+            - {name: GATEWAY_VOICE_USER_CLIENT_KEY_FILE, value: /etc/voice/media/client/tls.key}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_GRPC_ADDR, value: "voice-voice:9095"}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_TLS_CA_FILE, value: /etc/voice/media/ca/ca.crt}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_TLS_SERVER_NAME, value: voice-voice}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_CERT_FILE, value: /etc/voice/media/client/tls.crt}
+            - {name: GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_KEY_FILE, value: /etc/voice/media/client/tls.key}
             - name: GATEWAY_REDIS_ADDR
               valueFrom:
                 configMapKeyRef:
@@ -49,6 +63,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: voice-app-config
+          volumeMounts:
+            - {name: media-signing, mountPath: /etc/voice/media/keys, readOnly: true}
+            - {name: media-client, mountPath: /etc/voice/media/client, readOnly: true}
+            - {name: media-ca, mountPath: /etc/voice/media/ca, readOnly: true}
           # Gateway waits for required User gRPC before binding HTTP; staging's
           # 120s dial deadline must fit before liveness probing begins.
           startupProbe:
@@ -69,6 +87,13 @@ spec:
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
+      volumes:
+        - name: media-signing
+          secret: {secretName: voice-gateway-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: media-client
+          secret: {secretName: voice-gateway-media-client-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: media-ca
+          secret: {secretName: voice-media-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service

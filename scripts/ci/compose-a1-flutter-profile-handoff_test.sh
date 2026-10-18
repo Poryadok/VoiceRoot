@@ -118,6 +118,7 @@ if [[ "${1:-}" == inspect ]]; then
   exit 0
 fi
 if [[ "${1:-}" == compose ]]; then
+  printf 'env_PHASE0_FIXTURE_DIR=%s\n' "${PHASE0_FIXTURE_DIR:-}" >>"${log}"
   line="$*"
   previous=''
   for arg in "$@"; do
@@ -136,7 +137,22 @@ if [[ "${1:-}" == compose ]]; then
 fi
 exit 0
 EOF
-  cat >"${bin}/curl" <<'EOF'
+cat >"${bin}/python3" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${FAKE_LOG:?FAKE_LOG required}"
+printf 'python3' >>"${log}"
+for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
+printf '\n' >>"${log}"
+printf 'fixture_uid=%s\n' "${PHASE0_MATCHSQUAD_FIXTURE_UID:-}" >>"${log}"
+if [[ "${1:-}" == */generate-phase0-fixture.py ]]; then
+  if [[ "${FAKE_FIXTURE_RC:-0}" != 0 ]]; then exit "$FAKE_FIXTURE_RC"; fi
+  mkdir -p "${2:?fixture destination required}"
+elif [[ "${1:-}" == */restore-phase0-fixture-owner.py ]]; then
+  :
+fi
+EOF
+cat >"${bin}/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 log="${FAKE_LOG:?FAKE_LOG required}"
@@ -201,7 +217,7 @@ cat >"${bin}/sleep" <<'EOF'
 if [[ "${FAKE_REAL_SLEEP:-}" == true ]]; then exec /bin/sleep "$@"; fi
 exit 0
 EOF
-  chmod +x "${bin}/bash" "${bin}/docker" "${bin}/curl" "${bin}/flutter" "${bin}/make" "${bin}/sleep"
+  chmod +x "${bin}/bash" "${bin}/docker" "${bin}/python3" "${bin}/curl" "${bin}/flutter" "${bin}/make" "${bin}/sleep"
 }
 
 new_case() {
@@ -300,8 +316,11 @@ unset FAKE_MANIFEST_RESULT
 
 echo '== config/up/health and exactly four constrained Flutter tests =='
 case_dir="$(new_case happy)"
-FAKE_REAL_SLEEP=true FAKE_HEALTH_MODE=delayed run_runner "$case_dir"
+FAKE_REAL_SLEEP=true FAKE_HEALTH_MODE=delayed PHASE0_FIXTURE_DIR=hostile run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
+assert_contains "${case_dir}/commands.log" '^env_PHASE0_FIXTURE_DIR=.*/phase0-fixture$'
+assert_not_contains "${case_dir}/commands.log" '^env_PHASE0_FIXTURE_DIR=hostile$'
+[[ -d "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'fixture must remain while Compose project is retained'
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <config> <--quiet>'
 assert_contains "${case_dir}/commands.log" "^make <-C> <${ROOT}> <flutter-windows-prefetch-sqlite3> <flutter-linux-prefetch-sqlite3>$"
 first_command="$(head -n 1 "${case_dir}/commands.log")"
@@ -344,13 +363,17 @@ assert_eq "$(cat "${case_dir}/visibility-count")" 1
 flutter_count="$(grep -c '^flutter ' "${case_dir}/commands.log" || true)"
 assert_eq "$flutter_count" 0
 
-echo '== every Compose path is absolute and env file is empty =='
+echo '== every Compose path is absolute and disposable media fixture is wired =='
 compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"
 env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_dir="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_file="$(sed -n 's/.* <-f> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 assert_abs "$env_file"; assert_abs "$compose_dir"; assert_abs "$compose_file"
-assert_contains "${case_dir}/commands.log" 'env_size=0'
+assert_contains "${case_dir}/commands.log" 'env_size=[1-9][0-9]*'
+assert_contains "${case_dir}/commands.log" 'python3 .*<.*scripts/dev/generate-phase0-fixture.py>'
+assert_contains "${case_dir}/commands.log" '^fixture_uid=65532$'
+assert_contains "${case_dir}/commands.log" 'docker <compose> .*<-f> <.*docker-compose.voice-space-media.yml>'
+assert_contains "${case_dir}/commands.log" '^env_PHASE0_FIXTURE_DIR=.*/phase0-fixture$'
 assert_contains "${case_dir}/commands.log" 'compose.*<--project-name> <voice-a1-flutter-handoff-[a-z0-9-]+>'
 project_count="$(grep '^docker <compose> ' "${case_dir}/commands.log" | sed -n 's/.* <--project-name> <\([^>]*\)>.*/\1/p' | sort -u | wc -l | tr -d '[:space:]')"
 assert_eq "$project_count" 1
@@ -367,6 +390,8 @@ assert_not_contains "${case_dir}/commands.log" 'compose.*<down>'
 case_dir="$(new_case cleanup)"
 VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
+assert_contains "${case_dir}/commands.log" 'restore-phase0-fixture-owner.py'
+[[ -z "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'fixture must be removed after opted-in Compose cleanup'
 assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
 assert_not_contains "${case_dir}/commands.log" '--volumes|<-v>|volume prune|system prune'
 cleanup_line="$(grep '^docker <compose> ' "${case_dir}/commands.log" | grep '<down>' | tail -1)"
@@ -391,5 +416,18 @@ while IFS= read -r compose_identity_line; do
   assert_eq "$identity_compose_file" "$cleanup_compose_file"
   assert_eq "$identity_profile" "$cleanup_profile"
 done < <(grep '^docker <compose> ' "${case_dir}/commands.log")
+
+case_dir="$(new_case cleanup-down-failure)"
+FAKE_DOWN_RC=47 VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 0
+[[ -d "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'fixture must remain when opted-in Compose cleanup fails'
+assert_contains "${case_dir}/stderr" 'cleanup failed.*fixture retained'
+
+echo '== fixture generation failure removes the unowned temporary directory =='
+case_dir="$(new_case fixture-failure)"
+FAKE_FIXTURE_RC=17 run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 17
+assert_not_contains "${case_dir}/commands.log" '<config>'
+assert_not_contains "${case_dir}/commands.log" '<up>'
 
 echo 'All compose-a1-flutter-profile-handoff tests passed.'

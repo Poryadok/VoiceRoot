@@ -890,6 +890,30 @@ abstract class AppLocalizations {
   /// **'Last seen {dateTime}'**
   String socialPresenceLastSeen(String dateTime);
 
+  /// No description provided for @socialPresenceLastSeenJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen just now'**
+  String get socialPresenceLastSeenJustNow;
+
+  /// No description provided for @socialPresenceLastSeenMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} minute ago} other{Last seen {count} minutes ago}}'**
+  String socialPresenceLastSeenMinutes(int count);
+
+  /// No description provided for @socialPresenceLastSeenHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} hour ago} other{Last seen {count} hours ago}}'**
+  String socialPresenceLastSeenHours(int count);
+
+  /// No description provided for @socialPresenceLastSeenDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Last seen {count} day ago} other{Last seen {count} days ago}}'**
+  String socialPresenceLastSeenDays(int count);
+
   /// No description provided for @socialPresenceUnknown.
   ///
   /// In en, this message translates to:
@@ -1778,6 +1802,42 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get profileMessage;
 
+  /// No description provided for @profileDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get profileDetailTitle;
+
+  /// No description provided for @profileMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get profileMoreActions;
+
+  /// No description provided for @profileOpenAvatar.
+  ///
+  /// In en, this message translates to:
+  /// **'Open fullscreen avatar'**
+  String get profileOpenAvatar;
+
+  /// No description provided for @profileAvatarUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar unavailable'**
+  String get profileAvatarUnavailable;
+
+  /// No description provided for @profileCommonSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Common spaces'**
+  String get profileCommonSpaces;
+
+  /// No description provided for @profileCommonSpacesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load common spaces'**
+  String get profileCommonSpacesLoadError;
+
   /// No description provided for @profileEditTitle.
   ///
   /// In en, this message translates to:
@@ -2210,6 +2270,12 @@ abstract class AppLocalizations {
   /// **'Could not load thread'**
   String get chatThreadLoadError;
 
+  /// No description provided for @chatThreadRepliesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Replies are unavailable in this chat. Your draft is still here; remove the reply target to send it as a regular message.'**
+  String get chatThreadRepliesUnavailable;
+
   /// No description provided for @chatChannelMainFeedBlocked.
   ///
   /// In en, this message translates to:
@@ -2305,6 +2371,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Music'**
   String get chatPinnedTypeMusic;
+
+  /// No description provided for @chatMusicInvalidFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a non-empty audio file up to 10 MB. Encryption overhead counts toward the limit.'**
+  String get chatMusicInvalidFile;
+
+  /// No description provided for @chatMusicPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play music'**
+  String get chatMusicPlay;
+
+  /// No description provided for @chatMusicPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause music'**
+  String get chatMusicPause;
+
+  /// No description provided for @chatMusicSeek.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback position'**
+  String get chatMusicSeek;
 
   /// No description provided for @chatPinnedTypeVideoMessage.
   ///
@@ -4424,6 +4514,12 @@ abstract class AppLocalizations {
   /// **'Manage sessions'**
   String get securitySessionsManage;
 
+  /// No description provided for @securityLinkedDevicesManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage linked devices'**
+  String get securityLinkedDevicesManage;
+
   /// No description provided for @securitySessionsCurrentDevice.
   ///
   /// In en, this message translates to:
@@ -5078,6 +5174,18 @@ abstract class AppLocalizations {
   /// **'Block this user?'**
   String get profileBlockConfirmTitle;
 
+  /// No description provided for @profileRemoveFriendConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this friend?'**
+  String get profileRemoveFriendConfirmTitle;
+
+  /// No description provided for @profileRemoveFriendConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this user from your friends list?'**
+  String get profileRemoveFriendConfirmMessage;
+
   /// No description provided for @profileBlockConfirmMessage.
   ///
   /// In en, this message translates to:
@@ -5219,7 +5327,7 @@ abstract class AppLocalizations {
   /// No description provided for @guestConvertVerificationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter the code sent to {email}. Your guest access stays active until it is verified.'**
+  /// **'Enter the verification code for {email}. Your guest access stays active until it is verified.'**
   String guestConvertVerificationSubtitle(Object email);
 
   /// No description provided for @guestConvertCodeLabel.
@@ -5617,6 +5725,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not leave match squad'**
   String get matchSquadLeaveError;
+
+  /// No description provided for @matchSquadRosterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your squad'**
+  String get matchSquadRosterTitle;
 
   /// No description provided for @matchRatingTitle.
   ///
@@ -6440,6 +6554,18 @@ abstract class AppLocalizations {
   /// **'Not found'**
   String get deepLinkResourceNotFound;
 
+  /// No description provided for @deepLinkAccessDeniedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'You do not have permission to open this link. It may be intended for another profile.'**
+  String get deepLinkAccessDeniedDescription;
+
+  /// No description provided for @deepLinkResourceNotFoundDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'This link is unavailable or no longer valid.'**
+  String get deepLinkResourceNotFoundDescription;
+
   /// No description provided for @deepLinkReturnHome.
   ///
   /// In en, this message translates to:
@@ -6517,6 +6643,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not in contacts · messages may be unsafe'**
   String get profileNotInContactsWarning;
+
+  /// No description provided for @contactProfilePlayingGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing {title}'**
+  String contactProfilePlayingGame(String title);
+
+  /// No description provided for @matchSquadOpenChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Open chat'**
+  String get matchSquadOpenChat;
 }
 
 class _AppLocalizationsDelegate

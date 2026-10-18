@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/privacy"
@@ -143,11 +144,11 @@ func TestScheduledMessageDispatchPresenceUsesCurrentDMPrivacyAndExactOnline(t *t
 		t.Cleanup(func() {
 			req, svc.Blocks, svc.Presence, svc.Privacy, svc.SocialGraph = oldRequest, oldBlocks, oldPresence, oldPrivacy, oldSocial
 		})
-		requestCopy := *req
+		requestCopy := proto.Clone(req).(*userv1.GetScheduledMessageDispatchPresenceRequest)
 		requestCopy.ChatType = chatv1.ChatType_CHAT_TYPE_GROUP
 		requestCopy.Mode = userv1.ScheduledMessageDispatchMode_SCHEDULED_MESSAGE_DISPATCH_MODE_AT
 		requestCopy.RecipientProfileId = nil
-		req = &requestCopy
+		req = requestCopy
 		svc.Blocks, svc.Presence, svc.Privacy, svc.SocialGraph = nil, nil, nil, nil
 		resp, callErr := svc.scheduledMessageDispatchPresence(ctx, req)
 		require.NoError(t, callErr)
@@ -212,9 +213,9 @@ func TestScheduledMessageDispatchPresenceUsesCurrentDMPrivacyAndExactOnline(t *t
 	})
 
 	t.Run("changed sender binding is rejected", func(t *testing.T) {
-		wrong := *req
+		wrong := proto.Clone(req).(*userv1.GetScheduledMessageDispatchPresenceRequest)
 		wrong.SenderAccountId = uuid.NewString()
-		_, callErr := svc.scheduledMessageDispatchPresence(ctx, &wrong)
+		_, callErr := svc.scheduledMessageDispatchPresence(ctx, wrong)
 		require.Equal(t, codes.PermissionDenied, status.Code(callErr))
 	})
 }

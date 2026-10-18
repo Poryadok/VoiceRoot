@@ -309,6 +309,9 @@ func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) 
 		}
 		return nil, storeErr(err)
 	}
+	if call.MatchSquadMatchID != "" {
+		return nil, status.Error(codes.FailedPrecondition, "MatchSquad lifecycle is owned by matchmaking")
+	}
 	if call.IsGroupVoice() {
 		if call.ManagedGameSession {
 			if err := s.ensureManagedGameSessionMember(ctx, call, profileID); err != nil {
@@ -352,6 +355,9 @@ func (s *VoiceGRPC) LeaveCall(ctx context.Context, req *callsv1.LeaveCallRequest
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
 	if err != nil {
 		return nil, err
+	}
+	if call.MatchSquadMatchID != "" {
+		return nil, status.Error(codes.FailedPrecondition, "MatchSquad lifecycle is owned by matchmaking")
 	}
 	if call.IsGroupVoice() {
 		return s.leaveOpenVoiceSession(ctx, call, profileID)
@@ -398,6 +404,9 @@ func (s *VoiceGRPC) EndCall(ctx context.Context, req *callsv1.EndCallRequest) (*
 	}
 	if call.ManagedGameSession {
 		return nil, status.Error(codes.FailedPrecondition, "managed game session lifecycle is owned by GIS")
+	}
+	if call.MatchSquadMatchID != "" {
+		return nil, status.Error(codes.FailedPrecondition, "MatchSquad lifecycle is owned by matchmaking")
 	}
 	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
 	if err != nil {
@@ -545,6 +554,9 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 			return nil, err
 		}
 	}
+	if call.MatchSquadMatchID != "" {
+		return nil, status.Error(codes.FailedPrecondition, "MatchSquad membership authority is owned by matchmaking")
+	}
 	if callHasSpaceMediaMarker(call) {
 		if !validSpaceMediaCallBinding(call) {
 			return nil, status.Error(codes.FailedPrecondition, "stored Space media call binding is incomplete")
@@ -558,7 +570,7 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
 			return nil, err
 		}
-		access, accessErr := s.resolveCanonicalVoiceRoomAccess(ctx, call.VoiceRoomID, profileID)
+		access, accessErr := s.resolveCanonicalVoiceRoomAccess(ctx, call.SpaceID, call.VoiceRoomID, profileID)
 		if accessErr != nil {
 			return nil, accessErr
 		}
@@ -825,6 +837,9 @@ func (s *VoiceGRPC) requireCall(ctx context.Context, roomID, profileID string) (
 	call, err := s.Calls.GetCall(ctx, strings.TrimSpace(roomID))
 	if err != nil {
 		return voicestore.Call{}, storeErr(err)
+	}
+	if call.MatchSquadMatchID != "" {
+		return voicestore.Call{}, status.Error(codes.FailedPrecondition, "MatchSquad membership authority is owned by matchmaking")
 	}
 	if !call.IsParticipant(profileID) {
 		return voicestore.Call{}, status.Error(codes.PermissionDenied, "not a call participant")

@@ -36,6 +36,28 @@ SECRET_CONTRACTS = {
         'voice-principal-ca': {'ca.crt'},
         **{'voice-' + service + '-principal-tls': {'tls.crt', 'tls.key'}
            for service in ('social', 'user', 'space', 'file', 'user-file', 'search')},
+        'voice-media-ca': {'ca.crt', 'jwks-ca.crt'},
+        'voice-media-jvm-trust': {'truststore.p12'},
+        'voice-media-resolver': {'token'},
+        'voice-voice-principal-signing': {'current.pem', 'next.pem'},
+        'voice-matchmaking-principal-signing': {'current.pem', 'next.pem', 'active-kid'},
+        'voice-matchmaking-principal-jwks-tls': {'tls.crt', 'tls.key'},
+        'voice-matchmaking-principal-jwks-ca': {'ca.crt'},
+        'voice-matchmaking-client-tls': {'tls.crt', 'tls.key'},
+        'voice-chat-match-squad-server-tls': {'tls.crt', 'tls.key'},
+        'voice-voice-match-squad-server-tls': {'tls.crt', 'tls.key'},
+        'voice-match-squad-replay': {'password'},
+        'voice-match-squad-member-replay': {'password'},
+        'voice-gameintegration-workload-credentials': {
+            'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64',
+            'GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64',
+        },
+        'voice-gameintegration-principal-signing': {'current.pem', 'next.pem'},
+        'voice-gameintegration-jwks-tls': {'tls.crt', 'tls.key'},
+        'voice-gateway-principal-signing': {'current.pem', 'next.pem', 'active-kid'},
+        **{'voice-' + name + '-tls': {'tls.crt', 'tls.key'} for name in
+           ('auth-media-server', 'role-media-server', 'voice-media-server',
+            'voice-media-jwks', 'voice-media-client', 'gateway-media-client')},
     },
 }
 
@@ -59,29 +81,37 @@ def semantic(obj):
     # kubectl's bookkeeping is not desired application configuration.
     annotations = result['metadata'].get('annotations', {})
     annotations.pop('kubectl.kubernetes.io/last-applied-configuration', None)
+    # The Deployment controller advances this after a Pod template change;
+    # client-side normalization cannot predict its runtime value.
+    if result.get('kind') == 'Deployment':
+        annotations.pop('deployment.kubernetes.io/revision', None)
     if not annotations:
         result['metadata'].pop('annotations', None)
     return result
 
 
 def _secret(obj, desired):
-    if set(desired) - {'required_keys', 'min_lengths', 'predicates', 'type'}:
+    if set(desired) - {'required_keys', 'min_lengths', 'predicates', 'type', 'binary_keys'}:
         _fail('secret_predicate_invalid')
     keys = desired.get('required_keys')
     lengths = desired.get('min_lengths', {})
     predicates = desired.get('predicates', {})
+    binary = desired.get('binary_keys', [])
     if (not isinstance(keys, list) or not keys or any(not isinstance(k, str) or not k for k in keys)
             or len(set(keys)) != len(keys) or not isinstance(lengths, dict)
             or any(k not in keys or type(v) is not int or v < 1 for k, v in lengths.items())
             or not isinstance(predicates, dict) or set(predicates) - {'auth_mail'}
-            or any(v is not True for v in predicates.values())):
+            or any(v is not True for v in predicates.values())
+            or not isinstance(binary,list) or binary not in ([],['truststore.p12'])
+            or any(k not in keys for k in binary)):
         _fail('secret_predicate_invalid')
     if 'type' in desired and obj.get('type', 'Opaque') != desired['type']:
         _fail('secret_type_mismatch')
     values = {}
     try:
         for key in keys:
-            value = base64.b64decode(obj['data'][key], validate=True).decode('utf-8')
+            raw = base64.b64decode(obj['data'][key], validate=True)
+            value = raw if key in binary else raw.decode('utf-8')
             if not value.strip() or len(value) < lengths.get(key, 1):
                 _fail('required_secret_key_invalid')
             values[key] = value

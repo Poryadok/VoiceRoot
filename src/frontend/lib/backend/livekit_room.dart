@@ -2,26 +2,71 @@ import 'dart:async';
 
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
-final RegExp _canonicalProfileUuid = RegExp(
-  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-);
+abstract interface class MatchSquadVoiceLiveKitRoom
+    implements VoiceLiveKitRoom {
+  String? resolveRemoteParticipantIdentity(String profileId);
+  bool matchesLocalParticipantIdentity(String profileId, String? mediaEpoch);
+}
+
+/// Returns the one current-room MatchSquad identity belonging to [profileId].
+/// Multiple epochs or malformed identities are intentionally unresolved.
+String? resolveMatchSquadRemoteIdentity(
+  String profileId,
+  Iterable<String> participantIdentities,
+) {
+  if (!_isCanonicalNonzeroUuid(profileId)) return null;
+  final matches = participantIdentities
+      .where((identity) => _matchSquadIdentityProfile(identity) == profileId)
+      .toList(growable: false);
+  return matches.length == 1 ? matches.single : null;
+}
+
+String? _matchSquadIdentityProfile(String identity) {
+  final parts = identity.split(':');
+  if (parts.length != 3 ||
+      parts[0] != 'ms' ||
+      !_isCanonicalNonzeroUuid(parts[1]) ||
+      !_isCanonicalNonzeroUuid(parts[2])) {
+    return null;
+  }
+  return parts[1];
+}
+
+String? _matchSquadIdentity(String profileId, String? mediaEpoch) {
+  if (!_isCanonicalNonzeroUuid(profileId) ||
+      mediaEpoch == null ||
+      !_isCanonicalNonzeroUuid(mediaEpoch)) {
+    return null;
+  }
+  return 'ms:$profileId:$mediaEpoch';
+}
+
+bool _isCanonicalNonzeroUuid(String value) =>
+    RegExp(r'^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$').hasMatch(value) &&
+    value != '00000000-0000-0000-0000-000000000000';
+
+bool matchesMatchSquadLocalIdentity(
+  String profileId,
+  String? mediaEpoch,
+  String? sdkIdentity,
+) {
+  final expected = _matchSquadIdentity(profileId, mediaEpoch);
+  return expected != null && sdkIdentity == expected;
+}
+
 final RegExp _spaceMediaParticipantIdentity = RegExp(
   r'^profile:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):media:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$',
 );
-const String _nilUuid = '00000000-0000-0000-0000-000000000000';
-
-bool _isCanonicalProfileUuid(String value) =>
-    value != _nilUuid && _canonicalProfileUuid.hasMatch(value);
 
 String? _profileIdFromLiveKitIdentity(String identity) {
-  if (_isCanonicalProfileUuid(identity)) return identity;
+  if (_isCanonicalNonzeroUuid(identity)) return identity;
 
   final match = _spaceMediaParticipantIdentity.firstMatch(identity);
   if (match == null) return null;
   final profileId = match.group(1)!;
   final generationId = match.group(2)!;
-  if (!_isCanonicalProfileUuid(profileId) ||
-      !_isCanonicalProfileUuid(generationId)) {
+  if (!_isCanonicalNonzeroUuid(profileId) ||
+      !_isCanonicalNonzeroUuid(generationId)) {
     return null;
   }
   return profileId;
@@ -65,7 +110,7 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> disconnect();
 }
 
-class LiveKitVoiceRoom implements VoiceLiveKitRoom {
+class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
   LiveKitVoiceRoom({livekit.Room? room}) : _room = room ?? livekit.Room();
 
   static const Duration _connectTimeout = Duration(seconds: 20);
@@ -137,6 +182,12 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
   void _setupListener() {
     _listener?.dispose();
     _listener = _room.createListener()
+      ..on<livekit.ParticipantConnectedEvent>((event) {
+        _notifyTracksChanged();
+      })
+      ..on<livekit.ParticipantDisconnectedEvent>((event) {
+        _notifyTracksChanged();
+      })
       ..on<livekit.AudioPlaybackStatusChanged>((event) {
         if (!_room.canPlaybackAudio) {
           onAudioPlaybackUnlockNeeded?.call(true);
@@ -221,7 +272,7 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     // by muting non-commander remotes while broadcast is active (spec: client ducking).
     final muteOthers = enabled && duckedVolume < 1.0;
     final commanderProfileId =
-        commanderIdentity != null && _isCanonicalProfileUuid(commanderIdentity)
+        commanderIdentity != null && _isCanonicalNonzeroUuid(commanderIdentity)
         ? commanderIdentity
         : null;
     for (final participant in _room.remoteParticipants.values) {
@@ -236,6 +287,24 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
         await _setRemoteAudioTrackAudible(track, audible: audible);
       }
     }
+  }
+
+  @override
+  String? resolveRemoteParticipantIdentity(String profileId) =>
+      resolveMatchSquadRemoteIdentity(
+        profileId,
+        _room.remoteParticipants.values.map(
+          (participant) => participant.identity,
+        ),
+      );
+
+  @override
+  bool matchesLocalParticipantIdentity(String profileId, String? mediaEpoch) {
+    return matchesMatchSquadLocalIdentity(
+      profileId,
+      mediaEpoch,
+      _room.localParticipant?.identity,
+    );
   }
 
   Future<void> _applyRemoteSpeakerMuted(bool muted) async {
@@ -367,7 +436,7 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     String? participantIdentity,
   }) {
     if (participantIdentity != null &&
-        !_isCanonicalProfileUuid(participantIdentity)) {
+        !_isCanonicalNonzeroUuid(participantIdentity)) {
       return const [];
     }
     final tracks = <livekit.RemoteVideoTrack>[];

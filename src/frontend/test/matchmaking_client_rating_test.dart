@@ -10,10 +10,12 @@ import 'package:voice_frontend/backend/matchmaking_client.dart';
 void main() {
   test('completeMatch posts leave to gateway', () async {
     String? path;
+    String? body;
     final client = VoiceMatchmakingClient(
       gateway: GatewayHttpClient(
         httpClient: MockClient((request) async {
           path = request.url.path;
+          body = request.body;
           return http.Response(
             jsonEncode({
               'match': {
@@ -35,8 +37,10 @@ void main() {
     final result = await client.completeMatch(
       authorization: 'Bearer t',
       matchId: 'match-1',
+      operationId: '10000000-0000-4000-8000-000000000001',
     );
     expect(path, '/api/v1/matchmaking/matches/match-1/complete');
+    expect(body, contains('"operationId":"10000000-0000-4000-8000-000000000001"'));
     expect(result, isA<MatchmakingApiOk<MatchData>>());
     final match = (result as MatchmakingApiOk<MatchData>).data;
     expect(match.status, 'completed');

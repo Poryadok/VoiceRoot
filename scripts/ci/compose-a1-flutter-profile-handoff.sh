@@ -79,7 +79,8 @@ tmp_parent="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
 state_dir="$(mktemp -d "${tmp_parent}/voice-a1-flutter-profile-handoff.XXXXXXXX")"
 state_dir="$(cd "$state_dir" && pwd -P)"
 compose_env="${state_dir}/compose-empty.env"
-: >"$compose_env"
+phase0_fixture_dir="${state_dir}/phase0-fixture"
+compose_started=false
 
 compose() {
   docker compose \
@@ -87,22 +88,42 @@ compose() {
     --project-name "$project" \
     --project-directory "$ROOT" \
     -f "$COMPOSE_FILE_PATH" \
+    -f "${ROOT}/docker-compose.voice-space-media.yml" \
     --profile app \
     "$@"
 }
 
 cleanup() {
   local status=$?
-  if [[ "${VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:-false}" == "true" ]]; then
-    compose down --remove-orphans || true
+  local compose_down_succeeded=true
+  if [[ "${VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:-false}" == "true" && "$compose_started" == "true" ]]; then
+    compose down --remove-orphans || compose_down_succeeded=false
   fi
-  case "$state_dir" in
-    "$tmp_parent"/voice-a1-flutter-profile-handoff.*) rm -rf -- "$state_dir" ;;
-    *) echo "refusing unsafe state cleanup path: $state_dir" >&2; status=1 ;;
-  esac
+  if [[ "$compose_down_succeeded" == "false" ]]; then
+    echo "Compose cleanup failed; disposable fixture retained at $state_dir" >&2
+  elif [[ "${VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:-false}" == "true" || "$compose_started" == "false" ]]; then
+    case "$state_dir" in
+      "$tmp_parent"/voice-a1-flutter-profile-handoff.*)
+        if [[ "${PHASE0_MATCHSQUAD_FIXTURE_UID:-}" == "65532" && -d "$phase0_fixture_dir" ]] && \
+          ! python3 "${ROOT}/scripts/dev/restore-phase0-fixture-owner.py" "$phase0_fixture_dir"; then
+          echo "could not restore fixture ownership; retaining $state_dir" >&2
+          status=1
+          return "$status"
+        fi
+        rm -rf -- "$state_dir" ;;
+      *) echo "refusing unsafe state cleanup path: $state_dir" >&2; status=1 ;;
+    esac
+  else
+    echo "disposable fixture retained with Compose project at $state_dir" >&2
+  fi
   return "$status"
 }
 trap cleanup EXIT
+
+export PHASE0_MATCHSQUAD_FIXTURE_UID=65532
+python3 "${ROOT}/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
+printf 'PHASE0_FIXTURE_DIR=%s\n' "$phase0_fixture_dir" >"$compose_env"
+export PHASE0_FIXTURE_DIR="$phase0_fixture_dir"
 
 export COMPOSE_PROJECT_NAME="$project"
 unset COMPOSE_PROFILES COMPOSE_FILE COMPOSE_ENV_FILES \
@@ -214,6 +235,7 @@ export GATEWAY_RATE_LIMIT_RULES_JSON='{"Auth":{"limit":0,"window":"15m"},"OTP":{
 
 echo "A1 Flutter profile-handoff project=${project} gateway=${VOICE_API_BASE_URL} tests=${flutter_tests[*]}"
 compose config --quiet
+compose_started=true
 compose up -d --build
 wait_healthy realtime
 wait_healthy gateway

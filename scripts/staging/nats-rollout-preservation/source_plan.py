@@ -72,6 +72,8 @@ class _Source:
 
     def secret(self, row, name, keys, predicates=None, secret_type=None):
         desired = {'required_keys': sorted(keys)}
+        if name == 'voice-media-jvm-trust' and 'truststore.p12' in keys:
+            desired['binary_keys'] = ['truststore.p12']
         if predicates:
             desired['predicates'] = predicates
         if secret_type:
@@ -81,6 +83,8 @@ class _Source:
         for existing in self.rows[row]['objects']:
             if existing['kind'] == 'Secret' and existing['name'] == name:
                 existing['desired']['required_keys'] = sorted(set(existing['desired']['required_keys']) | set(keys))
+                if 'binary_keys' in desired:
+                    existing['desired']['binary_keys'] = desired['binary_keys']
                 existing['desired'].setdefault('predicates', {}).update(predicates or {})
                 return live
         self.rows[row]['objects'].append({'kind': 'Secret', 'name': name, 'namespace': NS, 'desired': desired})
@@ -211,12 +215,77 @@ def _ingress(builder, app_secret, row='ingress'):
             builder.add(row, obj, action=True)
 
 
+def _gateway_delegated_config(obj):
+    """Validate the canonical staging delegation prerequisites before planning writes."""
+    if obj['metadata']['name'] != 'voice-gateway':
+        return
+    spec = obj['spec']['template']['spec']
+    containers = [c for c in spec['containers'] if c['name'] == 'gateway']
+    if len(containers) != 1:
+        _fail('canonical_gateway_delegated_config_invalid')
+    container = containers[0]
+    entries = container.get('env', [])
+    env = {e['name']: e for e in entries}
+    required = {
+        'GATEWAY_SESSION_EPOCH_STRICT': {'value': 'true'},
+        'GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR': {'value': '/etc/voice/media/keys'},
+        'GATEWAY_PRINCIPAL_ACTIVE_KID': {'valueFrom': {'secretKeyRef':
+            {'name': 'voice-gateway-principal-signing', 'key': 'active-kid'}}},
+        'GATEWAY_REDIS_ADDR': {'valueFrom': {'configMapKeyRef':
+            {'name': 'voice-app-config', 'key': 'REDIS_ADDR'}}},
+    }
+    mounts = [m for m in container.get('volumeMounts', []) if m.get('mountPath') == '/etc/voice/media/keys']
+    volumes = [v for v in spec.get('volumes', []) if len(mounts) == 1 and v.get('name') == mounts[0].get('name')]
+    if (len(env) != len(entries) or any(env.get(k) != dict(name=k, **v) for k, v in required.items())
+            or len(mounts) != 1 or mounts[0].get('readOnly') is not True or len(volumes) != 1):
+        _fail('canonical_gateway_delegated_config_invalid')
+    secret = volumes[0].get('secret', {})
+    if (secret.get('secretName') != 'voice-gateway-principal-signing' or secret.get('optional', False)
+            or secret.get('items') != [{'key': 'current.pem', 'path': 'current.pem'}, {'key': 'next.pem', 'path': 'next.pem'}]):
+        _fail('canonical_gateway_delegated_config_invalid')
+
+
+def _leaf_monitor_config(obj):
+    # These staging roles use the shared leaf config; monitor only inside the Pod.
+    roles = {'analytics', 'auth', 'bot', 'chat', 'file', 'matchmaking', 'messaging',
+             'moderation', 'notification', 'realtime', 'role', 'search', 'social',
+             'space', 'story', 'subscription', 'user', 'voice'}
+    if obj['metadata']['name'].removeprefix('voice-') not in roles:
+        return
+    spec = obj['spec']['template']['spec']
+    leaves = [c for c in spec.get('initContainers', []) + spec.get('containers', []) if c['name'] == 'nats-leaf']
+    if len(leaves) != 1:
+        _fail('canonical_leaf_monitor_invalid')
+    leaf = leaves[0]
+    mounts = [m for m in leaf.get('volumeMounts', []) if m.get('mountPath') == '/etc/nats/leaf.conf']
+    volumes = [v for v in spec.get('volumes', []) if len(mounts) == 1 and v.get('name') == mounts[0].get('name')]
+    if (leaf.get('command') or leaf.get('args') != ['-c', '/etc/nats/leaf.conf', '-a', '127.0.0.1', '-m', '8222']
+            or len(mounts) != 1 or mounts[0].get('subPath') != 'leaf.conf' or mounts[0].get('readOnly') is not True
+            or len(volumes) != 1 or volumes[0].get('configMap') != {'name': 'voice-nats-leaf-config'}):
+        _fail('canonical_leaf_monitor_invalid')
+
+
 def _application(builder):
     p = builder.p
     apps = []
+    gis_objects = []
     for path in APP_SOURCES:
         for obj in builder.documents(path, 'app-restart'):
+            if p.get('gis_first_install') is True and (obj.get('kind'), obj.get('metadata', {}).get('name')) in {
+                ('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration')
+            }:
+                # The finite first-install owns these two absent identities via
+                # create-only calls after the protected database phase. Never
+                # let the ordinary source planner turn absence into apply.
+                if obj.get('kind') == 'Deployment':
+                    _gateway_delegated_config(obj)
+                    _leaf_monitor_config(obj)
+                    _pin_images(obj, p)
+                gis_objects.append(obj)
+                continue
             if obj['kind'] == 'Deployment':
+                _gateway_delegated_config(obj)
+                _leaf_monitor_config(obj)
                 spec = obj['spec']['template']['spec']
                 pull = p.get('image_pull_secret', '')
                 if pull:
@@ -224,6 +293,17 @@ def _application(builder):
                 _pin_images(obj, p)
                 apps.append(obj)
             builder.add('app-restart', obj, action=True)
+    if p.get('gis_first_install') is True:
+        if p.get('mode') not in ('full', 'app-only'):
+            _fail('gis_first_install_mode_invalid')
+        identities = {(obj.get('kind'), obj.get('metadata', {}).get('name')) for obj in gis_objects}
+        expected = {('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration')}
+        if identities != expected or len(gis_objects) != 2:
+            _fail('gis_first_install_source_pair_invalid')
+        # A bounded namespace list gives authoritative presence/absence without
+        # parsing kubectl's human error text for a 404 signal.
+        require_gis_absent(builder.kube)
+        builder.gis_first_install_objects = gis_objects
     for obj in apps:
         service = obj['metadata']['name'].removeprefix('voice-')
         if service in ('file', 'user'):
@@ -393,12 +473,33 @@ def compile_plan(source, parameters, decoder, kube):
                 _fail('unsupported_enabled_observability_reconciliation')
             b.skip('observability')
         plan = {'schema': guard.SCHEMA, 'mode': p['mode'], 'checks': [b.rows[row] for row in selected], 'actions': b.actions}
+        if p.get('gis_first_install') is True:
+            plan['gis_first_install'] = {'objects': copy.deepcopy(getattr(b, 'gis_first_install_objects', []))}
         guard.preflight(kube, plan, p['mode'])
         return plan
     except PlanError:
         raise
     except Exception:
         _fail('canonical_plan_invalid')
+
+
+def require_gis_absent(kube):
+    """Require bounded, authoritative absence for the only supported pair."""
+    expected = {('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration')}
+    try:
+        response = kube.run(['get', 'services,deployments', '-o', 'json'])
+        items = response.get('items') if isinstance(response, dict) and set(response) == {'apiVersion', 'items', 'kind', 'metadata'} else None
+        if not isinstance(items, list) or len(items) > 2048:
+            _fail('gis_first_install_live_inventory_invalid')
+        found = {(row.get('kind'), row.get('metadata', {}).get('name')) for row in items
+                 if isinstance(row, dict) and isinstance(row.get('metadata'), dict)}
+    except PlanError:
+        raise
+    except Exception:
+        _fail('gis_first_install_live_read_failed')
+    if found & expected:
+        _fail('gis_first_install_identity_present')
+    return True
 
 
 def _pin_images(obj, parameters):

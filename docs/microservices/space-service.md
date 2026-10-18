@@ -125,6 +125,15 @@ service SpaceService {
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
+`ListMembers` retains current-member authorization and returns the existing member
+list with an opaque `next_cursor` (empty on the last page). Ordering is
+`joined_at ASC, profile_id ASC`; continuation uses both fields. Page size defaults
+to 50 and is capped at 100. Previously issued UUID-only cursors remain accepted
+when their boundary resolves in the same eligible Space roster; an unresolvable
+or malformed cursor returns `INVALID_ARGUMENT`, rather than a false complete
+empty result. Newly issued tuple cursors do not require the boundary row to remain
+present. Pagination does not create a roster snapshot or bypass eligibility checks.
+
 ### Migration runbook -- fail-closed guest admission
 
 `000016_allow_guests_fail_closed` is a forward-only security correction. It sets
@@ -218,8 +227,8 @@ does not invent one.
 | Space | `member_banned`, `member_unbanned` | `account`; the affected account | shipped |
 | Space | `category_created`, `category_updated`, `category_deleted` | `category`; the category ID | pending |
 | Space | `voice_room_created`, `voice_room_updated`, `voice_room_deleted` | `voice_room`; the room ID | pending |
-| Space | `tree_node_upserted`, `tree_node_removed` | `tree_node`; the node ID | pending |
-| Space | `tree_reordered` | `space`; the same `space_id` | pending |
+| Space | `tree_node_upserted`, `tree_node_removed` | `tree_node`; the node ID | shipped |
+| Space | `tree_reordered` | `space`; the same `space_id` | shipped |
 | Role | `role_created`, `role_updated`, `role_deleted`, `default_join_role_set` | `role`; the role ID | pending protected producer |
 | Role | `roles_reordered` | `space`; the same `space_id` | pending protected producer |
 | Role | `role_assigned`, `role_revoked` | `profile`; the affected profile; details bind the role | pending protected producer |

@@ -22,7 +22,8 @@ on:
         default: auto
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Nightly/manual checks must not cancel the push run authorizing a release.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -48,6 +49,8 @@ jobs:
     outputs:
       global: ${{ steps.filter.outputs.global }}
       ci_global: ${{ steps.filter.outputs.ci_global }}
+      match_squad_overlay: ${{ steps.filter.outputs.match_squad_overlay }}
+      dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
       a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}
       protos: ${{ steps.filter.outputs.protos }}
@@ -71,6 +74,7 @@ jobs:
       all_services: ${{ steps.stagingmatrix.outputs.all_services }}
       needs_full_rollout: ${{ steps.stagingmatrix.outputs.needs_full_rollout }}
       needs_user_space_rollout: ${{ steps.stagingmatrix.outputs.needs_user_space_rollout }}
+      ci_only_change: ${{ steps.stagingmatrix.outputs.ci_only_change }}
       run_auth: ${{ steps.stagingmatrix.outputs.run_auth }}
       run_web: ${{ steps.stagingmatrix.outputs.run_web }}
       run_admin: ${{ steps.stagingmatrix.outputs.run_admin }}
@@ -125,7 +129,7 @@ jobs:
   protobuf:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.protos == 'true' ||
@@ -168,7 +172,7 @@ jobs:
   compose-config:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.compose == 'true' ||
@@ -224,7 +228,7 @@ jobs:
   ci-script-tests:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (
@@ -249,6 +253,7 @@ jobs:
         run: |
           base_sha="$(bash scripts/ci/resolve-voice-r22-base.sh)"
           echo "VOICE_R22_BASE_SHA=${base_sha}" >> "${GITHUB_ENV}"
+          echo "VOICE_CI_PUSH_BEFORE_SHA=${VOICE_CI_PUSH_BEFORE_SHA}" >> "${GITHUB_ENV}"
       - name: CI script regression tests
         run: make ci-script-tests
       - uses: actions/setup-go@v5
@@ -258,10 +263,29 @@ jobs:
         working-directory: scripts/staging/nats-leaf-routing-test
         run: go test -count=1 -timeout=90s ./...
 
+  match-squad-overlay:
+    needs: changes
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.match_squad_overlay == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: MatchSquad DEV overlay contracts
+        run: python3 -B -m unittest scripts.dev.match_squad_overlay_test scripts.dev.match_squad_runtime_overlay_test
+
   flutter:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
@@ -300,10 +324,75 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: Set up Node for Music decoder browser check
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Capture Music inline controls
+        working-directory: src/frontend
+        env:
+          VOICE_MUSIC_CAPTURE_DIR: ${{ runner.temp }}/music-capture
+        run: timeout 180s flutter test --no-pub --reporter expanded --concurrency=1 test/music_attachment_player_test.dart
+      - name: Retain Music inline controls
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: music-controls-${{ github.run_id }}
+          path: ${{ runner.temp }}/music-capture/*.png
+          if-no-files-found: error
+      - name: Install FFmpeg for Music probe fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+      - name: Verify Music codecs and E2E local playback in Chrome
+        timeout-minutes: 10
+        run: timeout 540s bash scripts/ci/music-playback-web.sh
+      - name: Retain Music decoder result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: music-playback-${{ github.run_id }}
+          path: src/frontend/build/web/music-playback-result.json
+          if-no-files-found: warn
+      - name: Retain hosted Music dependency resolution
+        if: >-
+          always() &&
+          (github.head_ref == 'feature/attach-menu-music' ||
+           github.ref == 'refs/heads/feature/attach-menu-music')
+        uses: actions/upload-artifact@v4
+        with:
+          name: music-dependency-lock-${{ github.run_id }}
+          path: src/frontend/pubspec.lock
+          if-no-files-found: error
       - name: AppIcon Chrome favicon DOM regression
         if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
         working-directory: src/frontend
         run: flutter test --no-pub --platform chrome --reporter expanded --concurrency=1 test/app_shell_icon_web_test.dart
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Help real Chrome external handoff (H/V)
+        id: help_browser_handoff
+        timeout-minutes: 8
+        env:
+          CHROME_BIN: google-chrome
+          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          cd src/frontend
+          flutter build web --release --no-pub --no-web-resources-cdn \
+            --target test/fixtures/settings_help_web_launcher_smoke.dart \
+            --output build/help-launcher-web
+          cd ../..
+          node scripts/ci/settings-help-browser-handoff.mjs \
+            src/frontend/build/help-launcher-web "$RUNNER_TEMP/settings-help-browser"
+      - name: Upload Help real browser handoff evidence
+        if: always() && steps.help_browser_handoff.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: settings-help-browser-${{ github.run_id }}
+          path: ${{ runner.temp }}/settings-help-browser
+          if-no-files-found: error
+          retention-days: 14
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
         id: network_offline_capture
         if: >-
@@ -349,6 +438,22 @@ jobs:
             ${{ runner.temp }}/network-offline-captures/network-offline-light-v.png
           if-no-files-found: error
           retention-days: 7
+      - name: Capture Appearance horizontal and vertical views
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/ui-appearance-plus-affordance'
+        working-directory: src/frontend
+        env:
+          VOICE_APPEARANCE_CAPTURE_DIR: ${{ runner.temp }}/appearance-capture
+        run: timeout 300s flutter test --no-pub --reporter expanded --concurrency=1 test/appearance_settings_screen_test.dart
+      - name: Upload Appearance reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/ui-appearance-plus-affordance'
+        uses: actions/upload-artifact@v6
+        with:
+          name: appearance-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/appearance-capture/appearance-h.png
+            ${{ runner.temp }}/appearance-capture/appearance-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Capture Channel Settings horizontal and vertical views
         if: github.event_name == 'pull_request' && github.head_ref == 'codex/channel-policy-settings'
         working-directory: src/frontend
@@ -365,6 +470,173 @@ jobs:
             ${{ runner.temp }}/channel-settings-capture/channel-settings-narrow.png
           if-no-files-found: warn
           retention-days: 1
+      - name: Capture AttachMenu and CreateGroup horizontal and vertical views
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/ui-attach-group-reference'
+        working-directory: src/frontend
+        env:
+          VOICE_ATTACH_GROUP_CAPTURE_DIR: ${{ runner.temp }}/attach-group-capture
+        run: timeout 300s flutter test --no-pub --reporter expanded --concurrency=1 test/attach_group_reference_capture_test.dart
+      - name: Upload AttachMenu and CreateGroup reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/ui-attach-group-reference'
+        uses: actions/upload-artifact@v6
+        with:
+          name: attach-group-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/attach-group-capture/attach-menu-h.png
+            ${{ runner.temp }}/attach-group-capture/attach-menu-v.png
+            ${{ runner.temp }}/attach-group-capture/create-group-h.png
+            ${{ runner.temp }}/attach-group-capture/create-group-v.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Capture Slash composer horizontal and vertical views
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/slash-responsive-geometry'
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_SLASH_COMPOSER_CAPTURE_DIR: ${{ runner.temp }}/slash-composer-capture
+        run: |
+          flutter test --no-pub --reporter expanded --concurrency=1 test/chat_room_panel_slash_command_test.dart
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/menu-h.png"
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/menu-v.png"
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/options-h.png"
+          test -s "$VOICE_SLASH_COMPOSER_CAPTURE_DIR/options-v.png"
+      - name: Upload Slash composer reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/slash-responsive-geometry'
+        uses: actions/upload-artifact@v6
+        with:
+          name: slash-composer-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/slash-composer-capture/menu-h.png
+            ${{ runner.temp }}/slash-composer-capture/menu-v.png
+            ${{ runner.temp }}/slash-composer-capture/options-h.png
+            ${{ runner.temp }}/slash-composer-capture/options-v.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Capture Friends pending and DM request shell states in H/V
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/contact-requests-panel-acceptance'
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_CONTACT_REQUESTS_CAPTURE_DIR: ${{ runner.temp }}/contact-requests-capture
+        run: flutter test --no-pub --reporter expanded --concurrency=1 test/contact_requests_capture_test.dart test/message_requests_shell_test.dart
+      - name: Upload Friends pending and DM request shell reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/contact-requests-panel-acceptance'
+        uses: actions/upload-artifact@v6
+        with:
+          name: contact-requests-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-populated-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-populated-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-busy-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-busy-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-empty-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-empty-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-loading-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-loading-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-error-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-error-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-ru-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-ru-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-error-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-error-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-missing-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-missing-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-loading-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-profile-loading-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-wide.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-narrow.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-drawer-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-busy-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-busy-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-error-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-error-v.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-final-h.png
+            ${{ runner.temp }}/contact-requests-capture/contact-requests-shell-final-v.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Capture ContactProfile controls and fullscreen avatar in H/V
+        if: >-
+          github.event_name == 'pull_request' &&
+          (github.head_ref == 'codex/contact-profile-controls' ||
+           github.head_ref == 'codex/contact-profile-banner' ||
+           github.head_ref == 'codex/contact-profile-close-controls' ||
+           github.head_ref == 'codex/contact-profile-communication-actions' ||
+           github.head_ref == 'codex/contact-profile-favorite-band' ||
+             github.head_ref == 'codex/contact-profile-header-title' ||
+             github.head_ref == 'codex/contact-profile-game-presence')
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_CONTACT_PROFILE_CAPTURE_DIR: ${{ runner.temp }}/contact-profile-capture
+        run: flutter test --no-pub --reporter expanded --concurrency=1 test/contact_common_spaces_test.dart test/contact_profile_controls_test.dart
+      - name: Upload ContactProfile and fullscreen avatar reference captures
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          (github.head_ref == 'codex/contact-profile-controls' ||
+           github.head_ref == 'codex/contact-profile-banner' ||
+           github.head_ref == 'codex/contact-profile-close-controls' ||
+           github.head_ref == 'codex/contact-profile-communication-actions' ||
+           github.head_ref == 'codex/contact-profile-favorite-band' ||
+             github.head_ref == 'codex/contact-profile-header-title' ||
+             github.head_ref == 'codex/contact-profile-game-presence')
+        uses: actions/upload-artifact@v6
+        with:
+          name: contact-profile-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/contact-profile-capture/contact-profile-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-game-*.png
+            ${{ runner.temp }}/contact-profile-capture/contact-profile-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-avatar-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-avatar-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-populated-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-populated-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-absent-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-absent-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-failed-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-banner-failed-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-loading-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-loading-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-error-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-error-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-unavailable-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-dismiss-unavailable-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-communication-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-communication-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-communication-narrow.png
+            ${{ runner.temp }}/contact-profile-capture/contact-communication-large-text.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-off-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-off-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-on-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-favorite-on-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-en-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-en-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-ru-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-title-ru-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-menu-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-header-menu-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-en-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-en-v.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-ru-h.png
+            ${{ runner.temp }}/contact-profile-capture/contact-last-seen-ru-v.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Capture Deep Links error reference views
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/deep-link-error-reference'
+        timeout-minutes: 5
+        working-directory: src/frontend
+        env:
+          VOICE_DEEPLINK_CAPTURE_DIR: ${{ runner.temp }}/deep-link-error-capture
+        run: timeout 300s flutter test --no-pub --reporter expanded --concurrency=1 test/deep_link_navigation_widget_test.dart
+      - name: Upload Deep Links error reference captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'fix/deep-link-error-reference'
+        uses: actions/upload-artifact@v6
+        with:
+          name: deep-link-error-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/deep-link-error-capture/deep-link-error-h.png
+            ${{ runner.temp }}/deep-link-error-capture/deep-link-error-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6
@@ -395,7 +667,7 @@ jobs:
   golangci:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
@@ -440,7 +712,7 @@ jobs:
   backend-go-pkg:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_pkg == 'true' ||
        needs.changes.outputs.global == 'true' ||
@@ -462,7 +734,7 @@ jobs:
   nats-hub-config-renderer-image:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
         (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.compose == 'true')) ||
@@ -507,7 +779,7 @@ jobs:
   minio-server-image-publish:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
@@ -545,7 +817,7 @@ jobs:
   backend-go:
     needs: [changes, backend-go-pkg]
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.backend-go-pkg.result != 'failure' &&
       needs.backend-go-pkg.result != 'cancelled' &&
@@ -604,7 +876,7 @@ jobs:
   backend-go-integration-pr:
     needs: [changes, backend-go-pkg]
     if: >-
-      always() &&
+      !cancelled() &&
       github.event_name == 'pull_request' &&
       needs.changes.result == 'success' &&
       needs.backend-go-pkg.result != 'failure' &&
@@ -633,7 +905,7 @@ jobs:
   staging-images-push:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
@@ -684,7 +956,7 @@ jobs:
   staging-images-promote:
     needs: [changes, staging-images-push]
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.staging-images-push.result != 'failure' &&
       github.event_name == 'push' &&
@@ -735,7 +1007,8 @@ jobs:
       needs.nats-hub-config-renderer-image.result != 'cancelled' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
-      needs.changes.outputs.code == 'true'
+      needs.changes.outputs.code == 'true' &&
+      needs.changes.outputs.ci_only_change != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -746,6 +1019,8 @@ jobs:
           git diff --exit-code scripts/ci/staging-go-services.txt
       - name: Check staging-image-catalog drift
         run: bash scripts/ci/check-image-catalog-drift.sh
+      - name: Reject unexpected image-catalog environment exceptions
+        run: python3 scripts/ci/check-image-catalog-drift_test.py
       - name: Render stack lock
         env:
           BUILT_SERVICES: ${{ needs.changes.outputs.build_services }}
@@ -767,7 +1042,7 @@ jobs:
   backend-auth:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_auth == 'true' ||
@@ -843,7 +1118,7 @@ jobs:
   developer-portal:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_developer_portal == 'true' ||
@@ -942,7 +1217,7 @@ jobs:
   web:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_web == 'true' ||
@@ -988,7 +1263,8 @@ jobs:
       - name: Log in to GHCR
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
-          needs.changes.outputs.run_web == 'true'
+          (needs.changes.outputs.run_web == 'true' ||
+           needs.changes.outputs.dev_web_publish == 'true')
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -997,7 +1273,8 @@ jobs:
       - name: Image base (lowercase)
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
-          needs.changes.outputs.run_web == 'true'
+          (needs.changes.outputs.run_web == 'true' ||
+           needs.changes.outputs.dev_web_publish == 'true')
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build web image (PR verify)
@@ -1027,11 +1304,78 @@ jobs:
           tags: ${{ steps.image.outputs.base }}/web:${{ github.sha }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max,ignore-error=true
+      - name: Build DEV web image (PR verify)
+        if: >-
+          github.event_name == 'pull_request' &&
+          (needs.changes.outputs.frontend == 'true' ||
+           needs.changes.outputs.dev_web_publish == 'true')
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/frontend
+          file: ./src/frontend/Dockerfile
+          push: false
+          build-args: |
+            VOICE_API_BASE_URL=https://api-dev.comrade.click
+            VOICE_LIVEKIT_URL=wss://livekit-dev.comrade.click
+          cache-from: type=gha,scope=dev-web
+          cache-to: type=gha,scope=dev-web,mode=max,ignore-error=true
+      - name: Build and push DEV web image
+        id: build-dev-web
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          (needs.changes.outputs.run_web == 'true' ||
+           needs.changes.outputs.dev_web_publish == 'true')
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/frontend
+          file: ./src/frontend/Dockerfile
+          push: true
+          build-args: |
+            VOICE_API_BASE_URL=https://api-dev.comrade.click
+            VOICE_LIVEKIT_URL=wss://livekit-dev.comrade.click
+          tags: ${{ steps.image.outputs.base }}/dev-web:${{ github.sha }}
+          cache-from: type=gha,scope=dev-web
+          cache-to: type=gha,scope=dev-web,mode=max,ignore-error=true
+      - name: Write DEV web image receipt
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          (needs.changes.outputs.run_web == 'true' ||
+           needs.changes.outputs.dev_web_publish == 'true')
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          BUILDX_DIGEST: ${{ steps.build-dev-web.outputs.digest }}
+          IMAGE_REF: ${{ steps.image.outputs.base }}/dev-web@${{ steps.build-dev-web.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          receipt = {
+              "source_sha": os.environ["SOURCE_SHA"],
+              "image": os.environ["IMAGE_REF"],
+              "buildx_digest": os.environ["BUILDX_DIGEST"],
+              "voice_api_base_url": "https://api-dev.comrade.click",
+              "voice_livekit_url": "wss://livekit-dev.comrade.click",
+          }
+          with open("dev-web-image.json", "w", encoding="utf-8") as output:
+              json.dump(receipt, output, indent=2, sort_keys=True)
+              output.write("\n")
+          PY
+      - uses: actions/upload-artifact@v6
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          (needs.changes.outputs.run_web == 'true' ||
+           needs.changes.outputs.dev_web_publish == 'true')
+        with:
+          name: dev-web-image-${{ github.sha }}
+          path: dev-web-image.json
+          if-no-files-found: error
+          retention-days: 14
 
   admin:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_admin == 'true' ||
@@ -1131,7 +1475,7 @@ jobs:
   flutter-android-smoke:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
@@ -1162,7 +1506,7 @@ jobs:
   flutter-web-integration:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
@@ -1189,7 +1533,7 @@ jobs:
   flutter-device-driver:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
@@ -1218,7 +1562,7 @@ jobs:
   flutter-ios:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
@@ -1244,7 +1588,7 @@ jobs:
     name: Key-backup golden (${{ matrix.platform }})
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
@@ -1352,7 +1696,7 @@ jobs:
   flutter-windows:
     needs: [changes, flutter]
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
         needs.changes.outputs.windows_desktop == 'true') ||
@@ -1394,9 +1738,11 @@ jobs:
     needs:
       - changes
       - ci-skip-gate
+      - compose-e2e
       - protobuf
       - compose-config
       - ci-script-tests
+      - match-squad-overlay
       - flutter
       - flutter-device-driver
       - flutter-windows
@@ -1409,6 +1755,15 @@ jobs:
       - backend-auth
       - developer-portal
       - admin
+      - flutter-key-backup-goldens
+      - flutter-android-smoke
+      - flutter-web-integration
+      - flutter-ios
+      - a1-e2e
+      - a1-flutter-profile-handoff
+      - a1-attachment-restart-proof
+      - analytics-clickhouse-integration
+      - grafana-analytics-smoke
     if: >-
       always() &&
       (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) &&
@@ -1433,9 +1788,45 @@ jobs:
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
           GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
+          RUN_MATCH_SQUAD_OVERLAY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.changes.outputs.match_squad_overlay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) }}
+          RUN_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true') }}
+          RUN_FLUTTER_ANDROID_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
+          RUN_FLUTTER_WEB_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
+          RUN_FLUTTER_IOS: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
+          RUN_A1_E2E: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && needs.changes.outputs.a1_e2e == 'true' }}
+          RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true') }}
+          RUN_GRAFANA_ANALYTICS_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.compose == 'true' }}
+          RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.compose == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
+          JOB_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.flutter-key-backup-goldens.result }}
+          JOB_FLUTTER_ANDROID_SMOKE: ${{ needs.flutter-android-smoke.result }}
+          JOB_FLUTTER_WEB_INTEGRATION: ${{ needs.flutter-web-integration.result }}
+          JOB_FLUTTER_IOS: ${{ needs.flutter-ios.result }}
+          JOB_A1_E2E: ${{ needs.a1-e2e.result }}
+          JOB_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.a1-flutter-profile-handoff.result }}
+          JOB_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.a1-attachment-restart-proof.result }}
+          JOB_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ needs.analytics-clickhouse-integration.result }}
+          JOB_GRAFANA_ANALYTICS_SMOKE: ${{ needs.grafana-analytics-smoke.result }}
+          RUN_COMPOSE_E2E: >-
+            ${{
+              (github.event_name == 'pull_request' &&
+               (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) ||
+              (github.event_name == 'push' &&
+               github.ref == 'refs/heads/master' &&
+               needs.changes.outputs.code == 'true' &&
+               (needs.changes.outputs.compose == 'true' ||
+                needs.changes.outputs.frontend == 'true' ||
+                needs.changes.outputs.global == 'true' ||
+                needs.changes.outputs.ci_global == 'true' ||
+                needs.changes.outputs.admin == 'true' ||
+                needs.changes.outputs.developer-portal == 'true'))
+            }}
           JOB_PROTOBUF: ${{ needs.protobuf.result }}
+          JOB_COMPOSE_E2E: ${{ needs.compose-e2e.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
+          JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
@@ -1453,7 +1844,7 @@ jobs:
   compose-e2e:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
@@ -1518,11 +1909,25 @@ jobs:
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
       - name: Generate disposable media principal and TLS fixture
+        env:
+          PHASE0_MATCHSQUAD_FIXTURE_UID: "65532"
         run: |
           echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
           python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
       - name: Start app stack
-        run: COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build
+        run: |
+          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --build; then
+            :
+          else
+            startup_status=$?
+            python scripts/ci/t31-startup-diagnostics.py \
+            --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
+            --startup-status "$startup_status" \
+            --service voice \
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
+            cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
+            exit "$startup_status"
+          fi
       - name: Wait for gateway health
         run: |
           for i in $(seq 1 72); do
@@ -1531,7 +1936,12 @@ jobs:
             fi
             sleep 5
           done
-          docker compose ps
+          python scripts/ci/t31-startup-diagnostics.py \
+            --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
+            --startup-status 1 \
+            --service voice \
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
+          cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
           exit 1
       - uses: actions/setup-go@v5
         with:
@@ -1543,19 +1953,61 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Install LiveKit native dependencies for the media proof
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
       - name: Compose E2E smoke (all features)
+        id: compose_e2e_smoke
         env:
           VOICE_RUN_LIVE_COMPOSE: "true"
           VOICE_API_BASE_URL: http://127.0.0.1:18080
         run: |
           bash scripts/ci/compose-e2e-smoke.sh
           cd src/backend/gateway
-          CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^TestComposeSpaceVoiceRoomBidirectionalAudio_live$' ./...
+          CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^(TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*|TestRequestComposeJoinToken.*)$' ./...
+      - name: Collect sanitized Auth session-floor diagnostics
+        id: auth_session_floor_diagnostics
+        if: failure() && steps.compose_e2e_smoke.outcome == 'failure'
+        run: |
+          python3 scripts/ci/auth_session_floor_diagnostics.py \
+            --output "$RUNNER_TEMP/voice-auth-session-floor-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json" \
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app
+      - name: Upload sanitized Auth session-floor diagnostics
+        uses: actions/upload-artifact@v6
+        if: always() && steps.auth_session_floor_diagnostics.outcome == 'success'
+        with:
+          name: auth-session-floor-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-auth-session-floor-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Restore and remove disposable Phase0 fixture ownership
+        if: always()
+        run: |
+          if [[ -d "$RUNNER_TEMP/voice-space-media-phase0" ]]; then
+            python scripts/dev/restore-phase0-fixture-owner.py "$RUNNER_TEMP/voice-space-media-phase0"
+            rm -rf -- "$RUNNER_TEMP/voice-space-media-phase0"
+          fi
+      - name: Collect sanitized Space media admission diagnostics
+        id: space_media_admission_diagnostics
+        if: failure() && steps.compose_e2e_smoke.outcome == 'failure'
+        run: |
+          python3 scripts/ci/space_media_admission_diagnostics.py \
+            --output "$RUNNER_TEMP/voice-space-media-admission-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json" \
+            --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app
+      - name: Upload sanitized Space media admission diagnostics
+        uses: actions/upload-artifact@v6
+        if: always() && steps.space_media_admission_diagnostics.outcome == 'success'
+        with:
+          name: space-media-admission-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-space-media-admission-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/record.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   a1-e2e:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
@@ -1601,7 +2053,7 @@ jobs:
   a1-flutter-profile-handoff:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
@@ -1654,7 +2106,7 @@ jobs:
   minio-mc-image-publish:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
@@ -1691,7 +2143,7 @@ jobs:
   a1-attachment-restart-proof:
     needs: changes
     if: >-
-      always() &&
+      !cancelled() &&
       (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
@@ -1912,6 +2364,7 @@ jobs:
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true' &&
+      needs.changes.outputs.ci_only_change != 'true' &&
       vars.STAGING_DEPLOY_ENABLED == 'true' &&
       needs.staging-stack-lock.result == 'success'
     permissions:

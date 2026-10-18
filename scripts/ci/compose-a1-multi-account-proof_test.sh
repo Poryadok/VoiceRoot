@@ -103,6 +103,7 @@ if [[ "${1:-}" == ps ]]; then
 fi
 if [[ "${1:-}" == inspect ]]; then echo healthy; exit 0; fi
 if [[ "${1:-}" == compose ]]; then
+  printf 'env_PHASE0_FIXTURE_DIR=%s\n' "${PHASE0_FIXTURE_DIR:-}" >>"${log}"
   line="$*"
   previous=''
   for arg in "$@"; do
@@ -121,7 +122,22 @@ if [[ "${1:-}" == compose ]]; then
 fi
 exit 0
 EOF
-  cat >"${bin}/go" <<'EOF'
+  cat >"${bin}/python3" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${FAKE_LOG:?FAKE_LOG required}"
+printf 'python3' >>"${log}"
+for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
+printf '\n' >>"${log}"
+printf 'fixture_uid=%s\n' "${PHASE0_MATCHSQUAD_FIXTURE_UID:-}" >>"${log}"
+if [[ "${1:-}" == */generate-phase0-fixture.py ]]; then
+  if [[ "${FAKE_FIXTURE_RC:-0}" != 0 ]]; then exit "$FAKE_FIXTURE_RC"; fi
+  mkdir -p "${2:?fixture destination required}"
+elif [[ "${1:-}" == */restore-phase0-fixture-owner.py ]]; then
+  :
+fi
+EOF
+cat >"${bin}/go" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 log="${FAKE_LOG:?FAKE_LOG required}"
@@ -143,7 +159,7 @@ EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod +x "${bin}/docker" "${bin}/go" "${bin}/curl" "${bin}/sleep"
+  chmod +x "${bin}/docker" "${bin}/python3" "${bin}/go" "${bin}/curl" "${bin}/sleep"
 }
 
 new_case() {
@@ -234,8 +250,11 @@ done
 
 echo '== config/up/health and exact Go regex =='
 case_dir="$(new_case happy)"
-VOICE_A1_SESSION_EPOCH_ISOLATED=hostile run_runner "$case_dir"
+PHASE0_FIXTURE_DIR=hostile VOICE_A1_SESSION_EPOCH_ISOLATED=hostile run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
+assert_contains "${case_dir}/commands.log" '^env_PHASE0_FIXTURE_DIR=.*/phase0-fixture$'
+assert_not_contains "${case_dir}/commands.log" '^env_PHASE0_FIXTURE_DIR=hostile$'
+[[ -d "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'fixture must remain while Compose project is retained'
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <config> <--quiet>'
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <up> <-d> <--build>'
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <gateway>'
@@ -253,13 +272,17 @@ go_epoch_line="$(grep '^go .*env_VOICE_A1_SESSION_EPOCH_ISOLATED=' "${case_dir}/
 assert_contains <(printf '%s\n' "$go_epoch_line") 'env_VOICE_A1_SESSION_EPOCH_ISOLATED=true$'
 assert_isolated_make_target
 
-echo '== every compose path is absolute and env file is zero-byte =='
+echo '== every Compose path is absolute and disposable media fixture is wired =='
 compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"
 env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_dir="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_file="$(sed -n 's/.* <-f> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 assert_abs "$env_file"; assert_abs "$compose_dir"; assert_abs "$compose_file"
-assert_contains "${case_dir}/commands.log" 'env_size=0'
+assert_contains "${case_dir}/commands.log" 'env_size=[1-9][0-9]*'
+assert_contains "${case_dir}/commands.log" 'python3 .*<.*scripts/dev/generate-phase0-fixture.py>'
+assert_contains "${case_dir}/commands.log" '^fixture_uid=65532$'
+assert_contains "${case_dir}/commands.log" 'docker <compose> .*<-f> <.*docker-compose.voice-space-media.yml>'
+assert_contains "${case_dir}/commands.log" '^env_PHASE0_FIXTURE_DIR=.*/phase0-fixture$'
 assert_contains "${case_dir}/commands.log" 'compose.*<--project-name> <voice-a1-multi-[a-z0-9-]+>'
 project_count="$(grep '^docker <compose> ' "${case_dir}/commands.log" | sed -n 's/.* <--project-name> <\([^>]*\)>.*/\1/p' | sort -u | wc -l | tr -d '[:space:]')"
 assert_eq "$project_count" 1
@@ -284,8 +307,23 @@ logs_line="$(grep -n 'compose.*<logs>' "${case_dir}/commands.log" | head -1 | cu
 case_dir="$(new_case cleanup)"
 VOICE_A1_SESSION_EPOCH_ISOLATED=hostile VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
+assert_contains "${case_dir}/commands.log" 'restore-phase0-fixture-owner.py'
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <down> <--remove-orphans>'
+[[ -z "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'fixture must be removed after opted-in Compose cleanup'
 assert_not_contains "${case_dir}/commands.log" '--volumes|<-v>|volume prune|system prune'
 assert_not_contains "${case_dir}/commands.log" '^env_VOICE_A1_SESSION_EPOCH_ISOLATED=.+$'
+
+case_dir="$(new_case cleanup-down-failure)"
+FAKE_DOWN_RC=47 VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 0
+[[ -d "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'fixture must remain when opted-in Compose cleanup fails'
+assert_contains "${case_dir}/stderr" 'cleanup failed.*fixture retained'
+
+echo '== fixture generation failure removes the unowned temporary directory =='
+case_dir="$(new_case fixture-failure)"
+FAKE_FIXTURE_RC=17 run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 17
+assert_not_contains "${case_dir}/commands.log" '<config>'
+assert_not_contains "${case_dir}/commands.log" '<up>'
 
 echo 'All compose-a1-multi-account-proof tests passed.'

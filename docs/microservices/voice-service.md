@@ -50,6 +50,31 @@ is a migration path and cannot race over the revisioned projection after
 activation. Snapshot/replay tests are specified in
 [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
 
+### Trust dependency diagnostics
+
+Voice emits `voice_trust_dependency_failure` before its existing fail-closed
+error mapping discards dependency detail. `stage` identifies `jwks_request`,
+`jwks_status`, `jwks_body`, `jwks_parse`, `jwks_keys`, `replay_write`, or the Auth
+floor boundary (`auth_floor`, `auth_floor_call`, `auth_floor_sign`,
+`auth_floor_response`). `cause` is a closed label such as `timeout`,
+`tls_unknown_authority`, `tls_hostname`, `tls_certificate`, `dns`,
+`connection_refused`, `connection_reset`, or a bounded gRPC status class;
+`duration_ms` measures that dependency attempt. `http_status` preserves only
+100–599 for a non-success JWKS response and is zero for other failures or an
+invalid status. Logs exclude raw error text,
+URLs, credentials, account/profile IDs, request bodies and key material.
+
+The two-second dependency budgets, TLS verification, replay checks and fresh
+Auth session-floor authority remain unchanged. A cold Go JWKS request can fail
+while a later warm-cache request passes; neither a successful BusyBox GET nor
+one successful audio attempt proves the original failure's cause or stable
+post-restart acceptance. The 2026-10-15 initial and post-restart audio failures
+both reached Voice and returned generic verifier `Unavailable` after 2000 ms,
+with a successful audio attempt between them. Those historical logs do not
+distinguish JWKS, replay Redis and Auth-floor failures. Preserve all outcomes;
+use the dependency event from a subsequent controlled acceptance attempt to
+identify the failing stage before changing trust or transport configuration.
+
 ## API (gRPC)
 
 Источник истины: [protos/voice/calls/v1/calls.proto](../../protos/voice/calls/v1/calls.proto) (`VoiceService`). Важные ответы: **`GetJoinTokenResponse`** — поля `jwt` и `expires_at` (`google.protobuf.Timestamp`, UTC); **`GetVoiceStatesResponse`** — `repeated VoiceParticipantState participants` (без промежуточной обёртки-списка).
@@ -370,14 +395,60 @@ BE255 implementation slice добавляет Space-room join/leave admission, �
 LiveKit grant, durable Space/Role invalidation delivery и Voice reconciliation
 с точным удалением LiveKit incarnation. Каждый подписанный Voice-user RPC до
 вызова handler сверяет epoch делегированного principal с текущим Auth floor;
-epoch также сохраняется в grant. Это не завершает Phase-0: Voice пока не
-проверяет текущий Auth epoch для уже подключённых участников или LiveKit-only
-reconnect, поэтому eligibility повторного подключения после его смены остается
-release gate. SLA удаления 2 s p95 / 5 s max остается ограниченным потерей
+epoch также сохраняется в grant.
+
+Active Space-media reconciliation reads the current signed Auth floor once per
+account in each full `ReconcileAll` sweep across Spaces, then compares every
+profile's own issued session epoch independently. Standalone `ReconcileSpace`
+calls start their own fresh pass. A Space watermark restart discards all shared
+floor values before retrying; a new sweep retains no previous values.
+Retries retain the existing per-Space bound and do not rescan completed Spaces;
+the shared floor values do not form an atomic cross-Space snapshot.
+Unavailable, missing, or nonpositive authority leaves
+reconciliation incomplete and the invalidation unacknowledged; stale epochs or
+an authoritative missing account retain exact-incarnation ejection. Admission
+recovery and signed Voice-user RPCs retain their fresh authority checks.
+
+This does not complete Phase-0: LiveKit-only reconnect eligibility after an
+Auth epoch change remains a release gate. SLA удаления 2 s p95 / 5 s max остается ограниченным потерей
 membership/Role rights и не распространяется на Auth-only epoch change. Roster projection,
 move handlers, Redis v2 encoding и replay deadline bridge semantics (D2/D3)
 также остаются отдельными gates. Hosted Linux proof относится только к явно
 выбранному BE255 media consumer и не означает завершение R22.3/BE255 целиком.
+
+The private Space lifecycle listener opts in only through
+`VOICE_SPACE_LIFECYCLE_PRINCIPAL_*` settings. Shared `S2S_JWKS_*` settings alone
+do not enable it; they also serve the separate user-principal listener. Any
+lifecycle-specific setting, including an empty value, still requires complete
+lifecycle TLS, replay, and trusted JWKS configuration or startup fails. When both
+listeners are enabled, their listen addresses must differ. The combined local/CI
+fixtures retain lifecycle port 9092 and use user-principal port 9093, with
+Gateway's matching private upstream; neither port is published to the host.
+
+Space media admission resolves Role-owned room grants only through Role's
+private mTLS listener, using the Voice workload signer and a fresh
+request-bound principal for each `ResolveVoiceRoomGrants` call. The request
+binds the canonical Space, room, and profile IDs; Role's returned policy epoch
+is retained with the media grant. `VOICE_ROLE_GRPC_ADDR` and its complete
+`VOICE_ROLE_TLS_*` client tuple enable this consumer independently of GIS
+provisioning. Incomplete settings fail startup; there is no ordinary-listener
+fallback.
+
+The user-principal listener validates local TLS configuration and replay Redis
+before startup, but starts with an empty Gateway JWKS cache. Gateway waits for
+this listener before serving its own key endpoint, so requiring an initial key
+fetch would deadlock their startup. Listener readiness does not assert that
+Gateway keys are already available: protected RPC verification fetches a complete
+valid key set before accepting any principal and returns `UNAVAILABLE` during a
+key endpoint outage. Invalid keys still deny access. Background refresh, the
+issuer-wide unknown-key cooldown, hard expiry, replay prevention and Auth epoch
+checks retain the shared Phase-0 rules.
+
+Account-wide Voice reservation and transfer checks take the caller account and
+profile from the verified delegated principal on this listener, then compare
+against User's profile ownership. Legacy identity headers cannot override or
+repair an invalid delegated identity. The existing legacy call listener retains
+its metadata-based identity path when no verified principal is present.
 
 **Public surface.** Gateway exposes Space room actions under
 `/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,
@@ -490,3 +561,76 @@ terminally fences Space room/session/grant rows and Redis keys. It binds the
 root manifest without inventing chat-owned work. Full request/receipt bytes
 retain 30 days from this participant's completion; the compact max-generation
 `PURGED` fence is permanent.
+# MatchSquad room provider
+
+Voice exposes the typed `MatchSquadVoiceService` only on its dedicated protected
+listener. `VOICE_MATCH_SQUAD_PRINCIPAL_*` is disabled only when every variable
+in that namespace is absent. Partial configuration, missing Voice lifecycle
+schema, unavailable JWKS or replay Redis, invalid TLS material, and listener
+startup failure prevent the capability from starting. The listener uses
+mutual TLS and accepts only the exact create and teardown methods with a
+request-bound `service:matchmaking` principal. It also accepts the exact
+`CompactMatchSquadRoom` method for that same principal; no ordinary listener
+exposes it.
+
+`voice_room_instances` owns the current MatchSquad resource and its
+`active`/`closing`/`closed` state. `voice_match_squad_operations` binds the
+creation and teardown operation IDs to exact request and receipt bytes, the
+Matchmaking receipt, participant manifest, and permanent replay/terminal
+fences. A repeated operation with matching bytes returns its stored receipt;
+changed bytes conflict. The resource is never reopened after teardown begins.
+
+Redis call records and LiveKit rooms are repairable effects using the same
+room UUID and deterministic `match-squad-<room UUID>` LiveKit name. A Redis
+MatchSquad marker is a projection label only. It does not authenticate a
+caller or grant membership, and ordinary call join, media-token, leave, and
+end operations reject marked rooms. Redis profile indexes are not authority;
+projection repair cannot replace a conflicting active profile lock or an
+open divergent call document. Teardown commits its completed receipt only
+after the database resource is closed and Redis/LiveKit effects are confirmed
+or absent.
+
+Delegated self-membership is available only on the separate
+`MatchSquadMemberService` listener configured by
+`VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_*`. It accepts only Join, GetJoinToken, and
+Leave with a Gateway delegated-user principal bound to the exact method,
+request ID, and request hash. The listener requires mutual TLS, HTTPS JWKS,
+replay protection, and a current Auth `auth:session:min_epoch:<account>` value.
+Voice rechecks that session and the User-owned profile-to-account mapping
+around durable admission decisions; forwarded profile or session metadata is
+not authority.
+
+The stored creation roster is only eligibility. A verified actor separately
+acquires one current `voice_room_memberships` generation; Voice never fills
+the active membership projection from the whole roster. MatchSquad command
+receipts, generation-bound effects, and each issued token expiry are retained
+in `voice_match_squad_member_operations`,
+`voice_match_squad_member_effects`, and
+`voice_match_squad_member_grants`. Redis `call:<room UUID>` and
+`session:<profile UUID>` records and the LiveKit room are projections of that
+same durable room and member generation.
+
+GetJoinToken requires the exact current JOINED generation and records its
+expiry before returning a token capped at 60 seconds and the actor's remaining
+validity. Self Leave removes only that actor's projections and stays LEAVING
+until the latest bearer expires and both effects are confirmed; a DB-clock
+repair then marks that generation LEFT and releases its account fence. This
+member completion does not delete the room or complete Matchmaking's aggregate.
+Aggregate teardown separately closes admission, waits for grants and pending
+effects to drain, confirms final LiveKit room absence, and only then stores
+the terminal teardown receipt.
+
+Full operation bytes remain stored until Matchmaking's durable teardown
+aggregate is complete and its PostgreSQL authority clock reaches
+`aggregate_completed_at + 30 days`. Matchmaking then sends one immutable
+protected compaction command binding the aggregate, match, room, creation and
+teardown receipts, request hashes, manifest, and both authority timestamps.
+Voice checks that binding against its own closed, effects-confirmed database
+resource and commits the exact command and stable compact receipt in one SQL
+transaction while clearing only the full create/teardown payload bytes. Voice
+does not infer eligibility from its own clock or perform Redis/LiveKit effects
+during compaction. The compact command/receipt and permanent ownership,
+operation, resource, and digest fences remain; matching compact-command replay
+returns the exact stored receipt, while old create/teardown replay gets a
+terminal precondition instead of recreating or fabricating historic receipts.
+The migration refuses DOWN while any operation or permanent fence remains.

@@ -234,6 +234,10 @@ func TestFinishDailyChatCreateRequestAttempt_releasesOnlyAfterAllDefiniteRejecti
 	count, err := st.DailyChatCreateCount(ctx, row.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+	_, admitted, replayed, err = st.ReserveDailyChatCreateForRequest(ctx, row.ID, requestID, hash)
+	require.NoError(t, err)
+	require.False(t, admitted)
+	require.True(t, replayed, "a same-hash retry registers another active attempt without reserving quota again")
 
 	_, err = otherRepository.FinishDailyChatCreateRequestAttempt(ctx, row.ID, requestID, store.BotChatCreateAttemptSucceeded)
 	require.NoError(t, err)

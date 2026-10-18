@@ -160,7 +160,7 @@ for attempt in $(seq 1 30); do
   fi
   sleep 2
 done
-bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
+VOICE_ENABLE_GAME_INTEGRATION_DB=false bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
 bash "${ROOT}/scripts/staging/sync-postgres-password.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
 
@@ -169,6 +169,6 @@ if ! kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=18
   exit 1
 fi
 bash "${ROOT}/scripts/prod/apply-clickhouse-init.sh"
-bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
+VOICE_ENABLE_GAME_INTEGRATION_DB=false bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
 
 echo "Production infra apply complete."

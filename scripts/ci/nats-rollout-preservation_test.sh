@@ -9,17 +9,22 @@ docker run --rm --network none --entrypoint tar \
   golang@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c \
   -C /usr/local -cf - go | docker run --rm -i --pids-limit 128 --memory 2g \
   --mount "type=bind,source=${ROOT},target=/work,readonly" \
-  -e PYTHONPATH=/tmp/repo/scripts/staging/nats-known-baseline \
+  -e PYTHONPATH=/tmp/repo/scripts/dev:/tmp/repo/scripts/staging/nats-known-baseline:/tmp/repo/scripts/staging/nats-rollout-preservation \
   python@sha256:1b668429b3511ab407d8e00648891631b0b1a4d7e15e3ca70f38ab5b91ad4ab4 \
   sh -eu -c '
     tar -xf - -C /usr/local
     export PATH=/usr/local/go/bin:$PATH GOMAXPROCS=2 GOFLAGS=-p=2
     mkdir -p /tmp/repo/src/backend/auth/src/main/resources/db /tmp/repo/docker/clickhouse /etc/systemd/system
+    mkdir -m 700 /fixture
+    export TMPDIR=/fixture
     cp -R /work/scripts /work/deploy /work/.github /tmp/repo/
+    cp /work/docker-compose.voice-space-media.yml /tmp/repo/
     cp -R /work/src/backend/migrations /tmp/repo/src/backend/
     cp -R /work/src/backend/auth/src/main/resources/db/migration /tmp/repo/src/backend/auth/src/main/resources/db/
     cp -R /work/docker/clickhouse/init /tmp/repo/docker/clickhouse/
-    apk add --no-cache bash openssl >/dev/null
+    mkdir -p /tmp/repo/docker/postgres
+    cp /work/docker/postgres/provision-gameintegration-runtime-role.sql /work/docker/postgres/verify-gameintegration-runtime-role.sql /tmp/repo/docker/postgres/
+    apk add --no-cache bash git jq openssl >/dev/null
     ln -s /usr/local/bin/python3 /usr/bin/python3
     python -m pip install --quiet --root-user-action=ignore --disable-pip-version-check PyYAML==6.0.3
     cd /tmp/repo/scripts/staging/nats-rollout-preservation

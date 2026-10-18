@@ -30,6 +30,9 @@ import (
 	"voice/backend/voice/internal/gameprovision"
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/matchsquad"
+	"voice/backend/voice/internal/matchsquadmemberprincipal"
+	"voice/backend/voice/internal/matchsquadprincipal"
 	"voice/backend/voice/internal/principalgrpc"
 	"voice/backend/voice/internal/principaljwks"
 	"voice/backend/voice/internal/rolegrant"
@@ -137,7 +140,7 @@ func main() {
 			return spaceLifecycleStore.CheckSchema(ctx)
 		}
 	}
-	if gamePrincipalEnabled != roleGrantEnabled {
+	if gamePrincipalEnabled && !roleGrantEnabled {
 		log.Fatal("Voice managed game-session admission requires both GIS provisioning and Role grant checker configuration")
 	}
 	if (roleGrantEnabled || userPrincipalEnabled) && !principalJWKSEnabled {
@@ -153,7 +156,7 @@ func main() {
 		}
 	}
 	var userPrincipalRuntime *voiceuserprincipalruntime.Runtime
-	var sessionEpochChecker grpcsvc.CurrentSessionEpochChecker
+	var sessionEpochChecker *sessionfloor.Client
 	if userPrincipalEnabled {
 		epochClient, epochConn, clientErr := authFloorConfig.Dial(voiceIssuer)
 		if clientErr != nil {
@@ -168,12 +171,14 @@ func main() {
 		defer func() { _ = userPrincipalRuntime.Close() }()
 	}
 	var callStore voicestore.CallStore
+	var callProjectionRedis *redis.Client
 	callStoreDurable := false
 	if redisAddr := strings.TrimSpace(os.Getenv("VOICE_REDIS_ADDR")); redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{
 			Addr:     redisAddr,
 			Password: strings.TrimSpace(os.Getenv("VOICE_REDIS_PASSWORD")),
 		})
+		callProjectionRedis = rdb
 		defer func() { _ = rdb.Close() }()
 		callStore = voicestore.NewRedisCallStore(rdb, strings.TrimSpace(os.Getenv("VOICE_REDIS_PREFIX")))
 		callStoreDurable = true
@@ -181,11 +186,60 @@ func main() {
 		callStore = voicestore.NewMemoryCallStore()
 		logger.Warn("VOICE_REDIS_ADDR not set; using in-memory call store")
 	}
+	matchSquadConfig, matchSquadEnabled, err := matchsquadprincipal.LoadFromEnv(os.LookupEnv)
+	if err != nil {
+		log.Fatalf("voice MatchSquad principal configuration: %v", err)
+	}
+	matchSquadMemberConfig, matchSquadMemberEnabled, err := matchsquadmemberprincipal.LoadFromEnv(os.LookupEnv)
+	if err != nil {
+		log.Fatalf("voice MatchSquad member principal configuration: %v", err)
+	}
+	if matchSquadEnabled != matchSquadMemberEnabled {
+		log.Fatal("Voice MatchSquad provisioning and delegated member listeners must be enabled together")
+	}
+	var matchSquadRuntime *matchsquadprincipal.Runtime
+	var matchSquadMemberRuntime *matchsquadmemberprincipal.Runtime
+	var matchSquadController *matchsquad.Service
+	var matchSquadServer *grpc.Server
+	var matchSquadListener net.Listener
+	var matchSquadMemberServer *grpc.Server
+	var matchSquadMemberListener net.Listener
+	if matchSquadEnabled {
+		if !lifecycleEnabled || lifecyclePool == nil || callProjectionRedis == nil {
+			log.Fatal("Voice MatchSquad requires the Voice lifecycle database and durable Redis projection")
+		}
+		matchSquadRuntime, err = matchsquadprincipal.New(runCtx, matchSquadConfig)
+		if err != nil {
+			log.Fatalf("voice MatchSquad principal runtime: %v", err)
+		}
+		defer func() { _ = matchSquadRuntime.Close() }()
+		matchSquadController = &matchsquad.Service{
+			Pool: lifecyclePool, Calls: callStore,
+			Effects: livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")), strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET"))),
+			Now:     time.Now,
+		}
+		if err := matchSquadController.CheckSchema(runCtx); err != nil {
+			log.Fatalf("voice MatchSquad database schema: %v", err)
+		}
+		matchSquadListener, err = net.Listen("tcp", matchSquadConfig.ListenerAddr)
+		if err != nil {
+			log.Fatalf("voice MatchSquad listener: %v", err)
+		}
+		matchSquadServer = grpc.NewServer(matchSquadRuntime.ServerOptions()...)
+		callsv1.RegisterMatchSquadVoiceServiceServer(matchSquadServer, &grpcsvc.MatchSquadVoiceGRPC{Controller: matchSquadController})
+		go func() {
+			logger.Info("MatchSquad protected listener started", slog.String("addr", matchSquadConfig.ListenerAddr))
+			if serveErr := matchSquadServer.Serve(matchSquadListener); serveErr != nil {
+				logger.Error("MatchSquad protected listener stopped", slog.String("error", serveErr.Error()))
+			}
+		}()
+	}
 	var gamePrincipalRuntime *gameprincipal.Runtime
 	var gameProvisionServer *grpc.Server
 	var gameProvisionListener net.Listener
 	var managedGameSessionRooms grpcsvc.ManagedGameSessionRoomLookup
 	var managedGameSessionGrants grpcsvc.ManagedGameSessionGrantChecker
+	var voiceRoomGrantResolver s2s.VoiceRoomGrantResolver
 	var conversionAdmission grpcsvc.SdkConversionAdmissionGuard
 	var accountVoiceFences gameprovision.AccountVoiceFenceStore = gameprovision.UnavailableAccountVoiceFenceStore{}
 	var accountVoiceProfiles grpcsvc.AccountVoiceProfileResolver
@@ -195,7 +249,10 @@ func main() {
 			log.Fatalf("voice Role grant checker: %v", clientErr)
 		}
 		defer func() { _ = roleConn.Close() }()
-		managedGameSessionGrants = checker
+		voiceRoomGrantResolver = checker
+		if gamePrincipalEnabled {
+			managedGameSessionGrants = checker
+		}
 	}
 	if gamePrincipalEnabled {
 		gamePrincipalRuntime, err = gameprincipal.New(runCtx, gamePrincipalConfig)
@@ -306,7 +363,6 @@ func main() {
 	var voiceRoomAccessResolver grpcsvc.AuthoritativeVoiceRoomAccessResolver
 	var spacePro grpcsvc.SpaceProLookup
 	var rolePerms grpcsvc.RolePermissionChecker
-	var voiceRoomGrantResolver s2s.VoiceRoomGrantResolver
 	if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 		uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
@@ -352,7 +408,61 @@ func main() {
 		defer func() { _ = rconn.Close() }()
 		roleClient := rolev1.NewRoleServiceClient(rconn)
 		rolePerms = s2s.NewGRPCRolePermissions(roleClient)
-		voiceRoomGrantResolver = s2s.NewGRPCVoiceRoomGrantResolver(roleClient)
+	}
+	if matchSquadMemberEnabled {
+		if matchSquadController == nil || lifecyclePool == nil || accountVoiceProfiles == nil {
+			log.Fatal("Voice MatchSquad member admission requires the MatchSquad provider, lifecycle database, and User profile resolver")
+		}
+		if err := gameprovision.ApplyAccountVoiceFenceSchema(runCtx, lifecyclePool); err != nil {
+			log.Fatalf("voice MatchSquad account fence schema: %v", err)
+		}
+		accountVoiceFences = gameprovision.NewPostgresAccountVoiceFenceStore(lifecyclePool)
+		matchSquadMemberRuntime, err = matchsquadmemberprincipal.New(runCtx, matchSquadMemberConfig)
+		if err != nil {
+			log.Fatalf("voice MatchSquad member principal runtime: %v", err)
+		}
+		defer func() { _ = matchSquadMemberRuntime.Close() }()
+		memberMedia := livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")), strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")))
+		memberService := &matchsquad.MatchSquadMemberService{
+			Pool: lifecyclePool, Calls: callStore, Fences: accountVoiceFences, Profiles: accountVoiceProfiles,
+			Principal: matchSquadMemberRuntime, Tokens: livekit.NewHS256TokenIssuer(
+				strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
+				strings.TrimSpace(os.Getenv("LIVEKIT_URL")), 60*time.Second,
+			),
+			RoomEffect: memberMedia, Now: time.Now,
+		}
+		if err := memberService.CheckSchema(runCtx); err != nil {
+			log.Fatalf("voice MatchSquad member database schema: %v", err)
+		}
+		matchSquadController.Members = memberService
+		matchSquadMemberListener, err = net.Listen("tcp", matchSquadMemberConfig.ListenerAddr)
+		if err != nil {
+			log.Fatalf("voice MatchSquad member listener: %v", err)
+		}
+		matchSquadMemberServer = grpc.NewServer(matchSquadMemberRuntime.ServerOptions()...)
+		callsv1.RegisterMatchSquadMemberServiceServer(matchSquadMemberServer, &grpcsvc.MatchSquadMemberGRPC{Controller: memberService})
+		go func() {
+			logger.Info("MatchSquad delegated member listener started", slog.String("addr", matchSquadMemberConfig.ListenerAddr))
+			if serveErr := matchSquadMemberServer.Serve(matchSquadMemberListener); serveErr != nil {
+				logger.Error("MatchSquad member listener stopped", slog.String("error", serveErr.Error()))
+			}
+		}()
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					repairCtx, cancel := context.WithTimeout(runCtx, 4*time.Second)
+					if err := memberService.RepairExpiredLeaves(repairCtx, 64); err != nil {
+						logger.Warn("expired MatchSquad leave repair failed", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
+			}
+		}()
 	}
 
 	tokenTTL := time.Hour
@@ -579,6 +689,18 @@ func main() {
 		}
 		if gameProvisionListener != nil {
 			_ = gameProvisionListener.Close()
+		}
+		if matchSquadServer != nil {
+			matchSquadServer.GracefulStop()
+		}
+		if matchSquadListener != nil {
+			_ = matchSquadListener.Close()
+		}
+		if matchSquadMemberServer != nil {
+			matchSquadMemberServer.GracefulStop()
+		}
+		if matchSquadMemberListener != nil {
+			_ = matchSquadMemberListener.Close()
 		}
 	}
 }

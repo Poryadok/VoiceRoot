@@ -117,6 +117,13 @@ func main() {
 	mux.Handle("/internal/v1/bindings/challenges", &httpapi.InternalBindingChallengeCreateHandler{
 		Verifier: httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey, Now: time.Now,
 			Nonces: httpapi.RedisNonceStore{Client: redisClient}}, Store: applications})
+	mux.Handle("/internal/v1/notification-consents/", &httpapi.InternalAppNotificationConsentHandler{
+		PushVerifier: httpapi.WorkloadVerifier{Key: cfg.NotificationWorkloadKey, Principal: "notification", Now: time.Now,
+			Nonces: httpapi.RedisNonceStore{Client: redisClient}},
+		InAppVerifier: httpapi.WorkloadVerifier{Key: cfg.RealtimeWorkloadKey, Principal: "realtime", Now: time.Now,
+			Nonces: httpapi.RedisNonceStore{Client: redisClient}},
+		Authority: applications,
+	})
 	permitHandler := httpapi.NewInternalExecutionPermitHandler(httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey,
 		Now: time.Now, Nonces: httpapi.RedisNonceStore{Client: redisClient}}, applications, applications)
 	mux.Handle("/internal/v1/game-integrations/bindings/", permitHandler)

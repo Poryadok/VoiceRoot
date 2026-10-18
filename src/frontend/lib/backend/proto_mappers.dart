@@ -387,6 +387,7 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     discriminator: profile.discriminator,
     displayName: profile.displayName,
     avatarUrl: profile.hasAvatarUrl() ? emptyToNull(profile.avatarUrl) : null,
+    bannerUrl: profile.hasBannerUrl() ? emptyToNull(profile.bannerUrl) : null,
     bio: profile.hasBio() ? emptyToNull(profile.bio) : null,
     customStatus: profile.hasCustomStatus()
         ? emptyToNull(profile.customStatus)
@@ -463,6 +464,7 @@ VoicePresence voicePresenceFromProto(user_pb.PresenceStatus status) {
     profileId: status.profileId,
     // Empty status = offline / unknown; do not invent "invisible" (presence.md).
     status: status.status,
+    gameTitle: status.hasGameTitle() ? emptyToNull(status.gameTitle) : null,
     customStatus: status.hasCustomStatus()
         ? emptyToNull(status.customStatus)
         : null,
@@ -566,6 +568,7 @@ FileMetadataData fileMetadataFromProto(file_pb.FileMetadata meta) {
         : null,
     sizeBytes: meta.hasSizeBytes() ? meta.sizeBytes.toInt() : null,
     isE2e: meta.isE2e,
+    isMusic: meta.intent == file_pb.UploadIntent.UPLOAD_INTENT_MUSIC,
     expiresAt: meta.hasExpiresAt() ? meta.expiresAt.toDateTime() : null,
   );
 }
@@ -581,12 +584,16 @@ file_pb.RequestUploadRequest requestUploadToProto({
   String? chatId,
   ChatType chatType = ChatType.CHAT_TYPE_DM,
   bool isE2e = false,
+  bool music = false,
   String? storyId,
 }) {
   final request = file_pb.RequestUploadRequest(
     originalName: originalName,
     mimeType: mimeType,
     sizeBytes: Int64(sizeBytes),
+    intent: music
+        ? file_pb.UploadIntent.UPLOAD_INTENT_MUSIC
+        : file_pb.UploadIntent.UPLOAD_INTENT_UNSPECIFIED,
     contextChat: chatId == null || chatId.isEmpty
         ? null
         : chatRefToProto(chatId, type: chatType),

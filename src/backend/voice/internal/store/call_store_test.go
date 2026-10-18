@@ -68,6 +68,135 @@ func TestCallStore_groupVoiceJoinIsIdempotent(t *testing.T) {
 	require.Len(t, call.States, 2)
 }
 
+func TestCallStore_MatchSquadRosterDoesNotCreateMembershipOrReserveProfile(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	_, err := s.CreateCall(ctx, Call{
+		RoomID: "ordinary-existing", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "roster-profile", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	match, err := s.CreateCall(ctx, Call{
+		RoomID: "match-empty", ChatID: "match-chat", MatchSquadMatchID: "match-1",
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "roster-profile", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err, "a manifest profile is not an active participant during provisioning")
+	require.Empty(t, match.States)
+	require.False(t, match.IsParticipant("roster-profile"))
+	_, err = s.AddParticipant(ctx, match.RoomID, "roster-profile", MaxGroupVoiceParticipants)
+	require.ErrorIs(t, err, ErrActiveCall, "actual membership still enforces one active Voice session")
+	_, err = s.GetActiveCall(ctx, "roster-profile")
+	require.NoError(t, err)
+	current, err := s.GetCall(ctx, match.RoomID)
+	require.NoError(t, err)
+	require.Empty(t, current.States)
+	_, err = s.CreateCall(ctx, Call{
+		RoomID: match.RoomID, MatchSquadMatchID: "match-1", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "other", Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.ErrorIs(t, err, ErrInvalidState, "a duplicate MatchSquad resource cannot overwrite its projection")
+	_, err = s.CreateCall(ctx, Call{
+		RoomID: "match-prepopulated", MatchSquadMatchID: "match-2",
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "other", States: map[string]ParticipantState{"other": {ProfileID: "other"}},
+	})
+	require.ErrorIs(t, err, ErrInvalidState, "the marker cannot bypass profile admission")
+}
+
+func TestCallStore_MatchSquadRemovalIsOwnerScopedAndKeepsEmptyRoomActive(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	match, err := s.CreateCall(ctx, Call{
+		RoomID: "match-remove", MatchSquadMatchID: "match-owner",
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "member", Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	_, err = s.AddParticipant(ctx, match.RoomID, "member", MaxGroupVoiceParticipants)
+	require.NoError(t, err)
+	_, err = s.RemoveMatchSquadParticipant(ctx, match.RoomID, "other-match", "member")
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged)
+	left, err := s.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-owner", "member")
+	require.NoError(t, err)
+	require.Empty(t, left.States)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, left.Status)
+	_, err = s.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-owner", "member")
+	require.NoError(t, err, "projection absence is an idempotent removal replay")
+	current, err := s.GetCall(ctx, match.RoomID)
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, current.Status)
+}
+
+func TestMemoryCallStore_MatchSquadEpochFenceRejectsLateOldEffects(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	room, match, profile := "match-epoch", "match-owner", "profile-a"
+	epoch1, epoch2 := "epoch-1", "epoch-2"
+	_, err := s.CreateCall(ctx, Call{
+		RoomID: room, MatchSquadMatchID: match,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: profile, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	currentEpoch := epoch1
+	authority := func(_ context.Context) error {
+		if currentEpoch != epoch1 {
+			return ErrMatchSquadProjectionDiverged
+		}
+		return nil
+	}
+	_, err = s.AddMatchSquadParticipant(ctx, room, match, profile, epoch1, MaxGroupVoiceParticipants, authority)
+	require.NoError(t, err)
+	_, err = s.RemoveMatchSquadParticipantEpoch(ctx, room, match, profile, epoch1)
+	require.NoError(t, err)
+	currentEpoch = epoch2
+	_, err = s.AddMatchSquadParticipant(ctx, room, match, profile, epoch2, MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.NoError(t, err, "a freshly DB-authorized epoch can replace a drained terminal projection")
+	_, err = s.RemoveMatchSquadParticipantEpoch(ctx, room, match, profile, epoch1)
+	require.NoError(t, err, "a delayed old removal is an idempotent stale no-op")
+	_, err = s.AddMatchSquadParticipant(ctx, room, match, profile, epoch1, MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged, "a stale add must revalidate current DB epoch")
+	current, err := s.GetCall(ctx, room)
+	require.NoError(t, err)
+	require.Equal(t, epoch2, current.MatchSquadMemberEpochs[profile], "a stale Eold add cannot replace current Enew")
+	require.True(t, current.IsParticipant(profile), "a stale Eold add cannot remove the current participant")
+	_, err = s.RemoveMatchSquadParticipantEpoch(ctx, room, match, profile, epoch2)
+	require.NoError(t, err)
+	_, err = s.AddMatchSquadParticipant(ctx, room, match, profile, epoch1, MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged, "terminal history must survive a later generation's completion")
+
+	current, err = s.GetCall(ctx, room)
+	require.NoError(t, err)
+	require.Empty(t, current.MatchSquadMemberEpochs[profile], "a completed leave clears the active media epoch")
+	require.NotContains(t, current.States, profile)
+	require.True(t, current.MatchSquadTerminalEpochs[profile][epoch1])
+	require.True(t, current.MatchSquadTerminalEpochs[profile][epoch2])
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, current.Status)
+}
+
+func TestMemoryCallStore_MatchSquadEpochAuthorityIsRequiredForAdd(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	room, match, profile := "match-epoch-no-auth", "match-owner", "profile-a"
+	_, err := s.CreateCall(ctx, Call{RoomID: room, MatchSquadMatchID: match,
+		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE})
+	require.NoError(t, err)
+	_, err = s.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-1", MaxGroupVoiceParticipants, nil)
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged)
+	current, err := s.GetCall(ctx, room)
+	require.NoError(t, err)
+	require.Empty(t, current.States)
+	require.Empty(t, current.MatchSquadMemberEpochs)
+}
+
 // TestCallStore_oneActiveVoicePerProfileUntilLeave characterizes the documented
 // Voice Service invariant: a profile, rather than a device connection, can
 // occupy only one active voice session.  A successful leave frees that profile

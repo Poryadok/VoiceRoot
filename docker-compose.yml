@@ -672,18 +672,16 @@ services:
     volumes:
       - matchmaking_principal_tls:/etc/voice/principal/tls:ro
       - social_principal_ca:/etc/voice/principal/ca:ro
+    # Its HTTPS principal publisher starts before main waits for Chat, Voice,
+    # and Space gRPC readiness. Chat/Voice consume this JWKS during startup;
+    # Space transitively waits for Chat, so keep it out of this graph to avoid
+    # a boot cycle. The application still waits for Space before serving.
     depends_on:
       postgres:
         condition: service_healthy
       compose-db-init:
         condition: service_completed_successfully
       redis:
-        condition: service_healthy
-      chat:
-        condition: service_healthy
-      voice:
-        condition: service_healthy
-      space:
         condition: service_healthy
       user:
         condition: service_healthy
@@ -784,6 +782,7 @@ services:
       NOTIFICATION_GRPC_LISTEN: :9090
       NOTIFICATION_REDIS_ADDR: redis:6379
       NOTIFICATION_RECORD_PUSHES: "true"
+      NOTIFICATION_DEBUG_HTTP_ENABLED: "true"
       NATS_URL: nats://nats:4222
       USER_GRPC_ADDR: user:9090
       CHAT_GRPC_ADDR: chat:9090
@@ -1093,6 +1092,7 @@ services:
       GAME_INTEGRATION_CONSENT_URL: http://gameintegration:8080
       GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64:-cmVhbHRpbWUtd29ya2xvYWQta2V5LTEyMzQ1Njc4OTA=}
       REALTIME_CHAT_GRPC_ADDR: chat:9090
+      REALTIME_MESSAGING_GRPC_ADDR: messaging:9090
       REALTIME_USER_GRPC_ADDR: user:9090
       REALTIME_SOCIAL_GRPC_ADDR: social:9090
     depends_on:
@@ -1105,6 +1105,8 @@ services:
       auth:
         condition: service_healthy
       chat:
+        condition: service_healthy
+      messaging:
         condition: service_healthy
       user:
         condition: service_healthy

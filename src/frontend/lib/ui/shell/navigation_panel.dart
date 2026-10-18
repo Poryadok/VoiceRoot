@@ -5,11 +5,13 @@ import '../../l10n/app_localizations.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
 import '../social/social_panel.dart';
 import '../space/space_rail.dart';
 import '../search/global_search_panel.dart';
 import '../onboarding/onboarding_anchor_keys.dart';
 import 'chat_list_body.dart';
+import 'chat_rail_sections.dart';
 
 /// Left navigation column: chats, spaces, and inline social.
 class NavigationPanel extends ConsumerWidget {
@@ -115,59 +117,59 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
 
     return ColoredBox(
       color: voice.muted,
-      child: KeyedSubtree(
-        key: OnboardingAnchorKeys.spaces,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const GlobalSearchPanel(compact: true),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-              child: SegmentedButton<NavigationSection>(
-                style: SegmentedButton.styleFrom(
-                  textStyle: Theme.of(context).textTheme.labelSmall,
-                  visualDensity: VisualDensity.compact,
-                ),
-                segments: [
-                  ButtonSegment(
-                    value: NavigationSection.chats,
-                    label: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(l10n.chatListTitle),
-                    ),
-                    icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                  ),
-                  ButtonSegment(
-                    value: NavigationSection.social,
-                    label: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(l10n.socialTabFriends),
-                    ),
-                    icon: Badge(
-                      isLabelVisible: socialBadge > 0,
-                      label: Text(
-                        socialBadge > 9 ? '9+' : '$socialBadge',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      child: const Icon(Icons.people_outline, size: 18),
-                    ),
-                  ),
-                ],
-                selected: {section},
-                onSelectionChanged: (next) =>
-                    shellNav.setNavigationSection(next.single),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GlobalSearchPanel(key: OnboardingAnchorKeys.spaces, compact: true),
+          if (section == NavigationSection.chats &&
+              !VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width))
+            const ChatRailFoldersSection(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: SegmentedButton<NavigationSection>(
+              style: SegmentedButton.styleFrom(
+                textStyle: Theme.of(context).textTheme.labelSmall,
+                visualDensity: VisualDensity.compact,
               ),
+              segments: [
+                ButtonSegment(
+                  value: NavigationSection.chats,
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(l10n.chatListTitle),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                ),
+                ButtonSegment(
+                  value: NavigationSection.social,
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(l10n.socialTabFriends),
+                  ),
+                  icon: Badge(
+                    isLabelVisible: socialBadge > 0,
+                    label: Text(
+                      socialBadge > 9 ? '9+' : '$socialBadge',
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                    child: const Icon(Icons.people_outline, size: 18),
+                  ),
+                ),
+              ],
+              selected: {section},
+              onSelectionChanged: (next) =>
+                  shellNav.setNavigationSection(next.single),
             ),
-            Expanded(
-              child: section == NavigationSection.chats
-                  ? ChatListBody(
-                      statusBanner: widget.statusBanner,
-                      statusBannerAtListEnd: widget.statusBannerAtListEnd,
-                    )
-                  : const SocialPanel(),
-            ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: section == NavigationSection.chats
+                ? ChatListBody(
+                    statusBanner: widget.statusBanner,
+                    statusBannerAtListEnd: widget.statusBannerAtListEnd,
+                  )
+                : const SocialPanel(),
+          ),
+        ],
       ),
     );
   }

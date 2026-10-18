@@ -34,18 +34,54 @@ def operation_path(raw):
     return base
 
 
+def public_code_sha(path):
+    """Hash public captured code as the runner, without root-only O_NOATIME."""
+    path=Path(path)
+    fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,
+        s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    parent_before=path.parent.lstat()
+    parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    try:
+        if (not stat.S_ISDIR(parent_before.st_mode) or parent_before.st_uid!=0
+            or parent_before.st_mode&0o022
+            or fingerprint(parent_before)!=fingerprint(os.fstat(parent))):
+            raise Blocked('rollout_code_custody_invalid')
+        before=os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+        fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+        try:
+            opened=os.fstat(fd)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0
+                or opened.st_mode&0o022 or opened.st_nlink!=1
+                or not 0<=opened.st_size<=16<<20 or fingerprint(before)!=fingerprint(opened)):
+                raise Blocked('rollout_code_custody_invalid')
+            digest=hashlib.sha256();count=0
+            while chunk:=os.read(fd,1<<20):
+                count+=len(chunk)
+                if count>opened.st_size:raise Blocked('rollout_captured_code_changed')
+                digest.update(chunk)
+            if (count!=opened.st_size or fingerprint(opened)!=fingerprint(os.fstat(fd))
+                or fingerprint(opened)!=fingerprint(os.stat(path.name,dir_fd=parent,follow_symlinks=False))
+                or fingerprint(parent_before)!=fingerprint(os.fstat(parent))
+                or fingerprint(parent_before)!=fingerprint(path.parent.lstat())):
+                raise Blocked('rollout_captured_code_changed')
+            return digest.hexdigest()
+        finally:os.close(fd)
+    finally:os.close(parent)
+
+
 def code_binding(code):
     manifest=json.loads(public_read(code/'capture-manifest.json'))
-    if not isinstance(manifest,dict) or not 1<=len(manifest)<=64:raise Blocked('rollout_code_manifest_invalid')
+    if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not guard.SHA.fullmatch(wanted):raise Blocked('rollout_code_manifest_invalid')
         path=code/p
         for parent in (path,*path.parents):
-            s=parent.lstat()
+            try:s=parent.lstat()
+            except FileNotFoundError:raise Blocked('rollout_code_custody_invalid') from None
             if s.st_uid!=0 or s.st_mode&0o022 or stat.S_ISLNK(s.st_mode):raise Blocked('rollout_code_custody_invalid')
             if parent==code:break
-        if file_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')
+        if public_code_sha(path)!=wanted:raise Blocked('rollout_captured_code_changed')
     return manifest
 
 
@@ -79,8 +115,14 @@ def target_input(path,wanted):
         if len(raw)!=s.st_size or hashlib.sha256(raw).hexdigest()!=wanted:raise Blocked('rollout_target_input_changed')
         value=json.loads(raw,object_pairs_hook=guard.object_pairs)
     finally:os.close(fd)
-    if set(value)!={'target','manifests','contract','migrations','nonnats'} or not isinstance(value['manifests'],list) or not 1<=len(value['manifests'])<=128:
+    allowed={'target','manifests','contract','migrations','nonnats','gis_first_install'}
+    if not {'target','manifests','contract','migrations','nonnats'}<=set(value) or set(value)-allowed or not isinstance(value['manifests'],list) or not 1<=len(value['manifests'])<=128:
         raise Blocked('rollout_target_input_shape_invalid')
+    if 'gis_first_install' in value:
+        # This legacy root CLI accepts a runner-created file plus its own hash.
+        # GIS creation is admitted only by bridge_root's source/CI/lock-bound
+        # compiler path, never by a caller-supplied target document.
+        raise Blocked('gis_first_install_protected_bridge_required')
     if digest(value['manifests'])!=value['target']['manifest_sha256']:
         raise Blocked('rollout_target_manifest_digest_invalid')
     migrations.validate_plan(value['migrations'],value['target']['mode'])
@@ -90,6 +132,12 @@ def target_input(path,wanted):
         raise Blocked('rollout_target_nonnats_digest_invalid')
     try:nonnats_plan._validate(value['nonnats'],value['target']['mode'])
     except nonnats_plan.PlanError:raise Blocked('rollout_target_nonnats_plan_invalid') from None
+    if 'gis_first_install' in value:
+        import gis_first_install
+        if (value['target']['mode'] not in ('full','app-only')
+            or value['target'].get('gis_first_install_sha256')!=digest(value['gis_first_install'])):
+            raise Blocked('gis_first_install_target_binding_invalid')
+        gis_first_install.validate_source_plan(value['gis_first_install'])
     # Exactly the deployed named INFO contract is supported; never interpret a
     # different/new bootstrap contract as an authorization to reseed the store.
     known=json.loads(public_read(Path(__file__).resolve().parents[1]/'nats-known-baseline'/'deployed-contract.json'))
@@ -162,7 +210,7 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
         base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
@@ -180,7 +228,10 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
         (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority)
+        lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
+        gis_first_install=(None if 'gis_first_install' not in value else
+            __import__('gis_first_install').bind_operation(value['gis_first_install'],op,value['target']))
+        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None else None),gis_transition=gis_transition,**lifecycle_args)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)

@@ -12,6 +12,8 @@ service SocialService {
   rpc SendFriendInvitation(SendFriendInvitationRequest) returns (SendFriendInvitationResponse);
   rpc AcceptFriendInvitation(AcceptFriendInvitationRequest) returns (AcceptFriendInvitationResponse);
   rpc DeclineFriendInvitation(DeclineFriendInvitationRequest) returns (DeclineFriendInvitationResponse);
+  // Sender cancels only its own pending invitation.
+  rpc CancelFriendInvitation(CancelFriendInvitationRequest) returns (CancelFriendInvitationResponse);
   rpc RemoveFriend(RemoveFriendRequest) returns (RemoveFriendResponse);
   rpc ListFriends(ListFriendsRequest) returns (ListFriendsResponse);
   rpc ListFriendRequests(ListFriendRequestsRequest) returns (ListFriendRequestsResponse);
@@ -250,3 +252,9 @@ message ListBlockedResponse {
 message GetFriendsOfFriendsResponse {
   ProfileIdList profile_id_list = 1;
 }
+
+message CancelFriendInvitationRequest {
+  string target_profile_id = 1;
+}
+
+message CancelFriendInvitationResponse {}

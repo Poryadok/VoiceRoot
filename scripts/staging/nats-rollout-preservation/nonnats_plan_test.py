@@ -30,6 +30,29 @@ class Fake:
         return copy.deepcopy(self.objects[(kind.lower(), name)])
 
 class PlanTests(unittest.TestCase):
+    def test_deployment_controller_revision_is_not_desired_configuration(self):
+        desired = {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': 'voice-auth'},
+                   'spec': {'replicas': 0, 'template': {'metadata': {'annotations': {'app.example/config': 'pinned'}},
+                            'spec': {'containers': [{'name': 'auth', 'image': 'example/auth@sha256:123'}]}}}}
+        live = copy.deepcopy(desired)
+        live['metadata']['annotations'] = {'deployment.kubernetes.io/revision': '42',
+                                         'kubectl.kubernetes.io/last-applied-configuration': 'bookkeeping'}
+        original = copy.deepcopy(live)
+        self.assertEqual(subject.semantic(live), subject.semantic(desired))
+        self.assertEqual(live, original)
+        for mutate in (
+            lambda obj: obj['metadata']['annotations'].update({'app.example/owner': 'changed'}),
+            lambda obj: obj['spec']['template']['metadata']['annotations'].update({'deployment.kubernetes.io/revision': '42'}),
+            lambda obj: obj['spec']['template']['spec']['containers'][0].update(image='other'),
+            lambda obj: obj['spec'].update(replicas=1),
+        ):
+            changed = copy.deepcopy(live); mutate(changed)
+            self.assertNotEqual(subject.semantic(changed), subject.semantic(desired))
+        for kind in ('Service', 'ConfigMap', 'StatefulSet'):
+            target = copy.deepcopy(desired); target['kind'] = kind
+            current = copy.deepcopy(live); current['kind'] = kind
+            self.assertNotEqual(subject.semantic(current), subject.semantic(target))
+
     def test_private_semantic_hash_rejects_forgery_without_serializing_data(self):
         kube, plan = fixture()
         obj = kube.objects[('configmap', 'voice-app-config')]
@@ -77,6 +100,33 @@ class PlanTests(unittest.TestCase):
             next(row for row in plan['checks'] if row['id'] == row_id)['objects'] = copy.deepcopy(plan['checks'][1]['objects'])
             with self.subTest(row_id=row_id):
                 with self.assertRaises(subject.PlanError): subject.preflight(kube, plan, 'full')
+
+    def test_principal_secrets_require_both_gis_workload_keys(self):
+        kube, plan = self.full_fixture()
+        row = next(row for row in plan['checks'] if row['id'] == 'principal-secrets')
+        expected = {
+            'voice-gameintegration-workload-credentials': {
+                'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64',
+                'GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64',
+            },
+            'voice-gameintegration-principal-signing': {'current.pem', 'next.pem'},
+            'voice-gameintegration-jwks-tls': {'tls.crt', 'tls.key'},
+        }
+        actual = {obj['name']: set(obj['desired']['required_keys'])
+                  for obj in row['objects'] if obj['name'] in expected}
+        self.assertEqual(actual, expected)
+        for secret_name, missing_key in (
+            ('voice-gameintegration-workload-credentials', 'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64'),
+            ('voice-gameintegration-principal-signing', 'next.pem'),
+            ('voice-gameintegration-jwks-tls', 'tls.key'),
+        ):
+            with self.subTest(secret_name=secret_name):
+                candidate_kube, candidate = self.full_fixture()
+                candidate_row = next(item for item in candidate['checks'] if item['id'] == 'principal-secrets')
+                secret = next(obj for obj in candidate_row['objects'] if obj['name'] == secret_name)
+                secret['desired']['required_keys'].remove(missing_key)
+                with self.assertRaises(subject.PlanError):
+                    subject.preflight(candidate_kube, candidate, 'full')
 
     def test_bounded_action_binds_baseline_and_rejects_nats_action(self):
         kube, plan = self.full_fixture()

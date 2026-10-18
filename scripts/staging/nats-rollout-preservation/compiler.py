@@ -39,6 +39,63 @@ def compatible_bootstrap(source,contract,decoder,target_scripts=None):
         paths.append(relative)
     return paths
 
+
+def isolate_gis_first_install(rows, plan, producer):
+    """Defer every existing-resource action; this phase creates only the GIS pair."""
+    import nonnats_plan
+    expected={('Service','voice-gameintegration'),('Deployment','voice-gameintegration')}
+    pair=[row for row in rows if (row.get('kind'),row.get('metadata',{}).get('name')) in expected]
+    if (len(pair)!=2 or {(row['kind'],row['metadata']['name']) for row in pair}!=expected
+        or len(rows)<2):
+        raise Blocked('gis_first_install_manifest_scope_invalid')
+    if not isinstance(plan,dict) or not isinstance(plan.get('actions'),list) or not isinstance(plan.get('checks'),list):
+        raise Blocked('gis_first_install_plan_scope_invalid')
+    actions={row['id']:row for row in plan['actions'] if isinstance(row,dict) and isinstance(row.get('id'),str)}
+    if len(actions)!=len(plan['actions']):raise Blocked('gis_first_install_plan_scope_invalid')
+    for check in plan['checks']:
+        if not isinstance(check,dict) or not isinstance(check.get('objects'),list):
+            raise Blocked('gis_first_install_plan_scope_invalid')
+        disposition=check.get('disposition')
+        for descriptor in check['objects']:
+            effective=descriptor.get('disposition',disposition)
+            if effective!='action':continue
+            action=actions.get(descriptor.get('action_id'))
+            if action is None:
+                raise Blocked('gis_first_install_deferred_action_invalid')
+            manifest=action.get('manifest')
+            identity=(descriptor.get('kind'),descriptor.get('name'))
+            if (not isinstance(manifest,dict)
+                or identity!=(manifest.get('kind'),manifest.get('metadata',{}).get('name'))
+                or action.get('row')!=check.get('id')
+                or descriptor.get('desired')!=nonnats_plan.semantic(manifest)
+                or identity in expected):
+                raise Blocked('gis_first_install_deferred_action_invalid')
+            try:
+                current=producer.get(*identity)
+                desired=nonnats_plan.semantic(current)
+            except Exception:raise Blocked('gis_first_install_deferred_resource_unavailable') from None
+            descriptor['desired']=desired
+            descriptor.pop('action_id',None)
+            descriptor['disposition']='preserve'
+        if disposition=='action':check['disposition']='preserve'
+    plan['actions']=[]
+    return pair,plan
+
+def exclude_gis_first_install_from_generic_apply(pack):
+    """Keep the create-only GIS pair out of kubectl apply after source validation."""
+    source_plan=pack.get('gis_first_install')
+    if source_plan is None:return pack
+    expected={('Service','voice-gameintegration'),('Deployment','voice-gameintegration')}
+    manifests=pack.get('manifests')
+    if (not isinstance(manifests,list) or len(manifests)!=2
+        or {(row.get('kind'),row.get('metadata',{}).get('name')) for row in manifests}!=expected
+        or pack.get('target',{}).get('manifest_sha256')!=digest(manifests)
+        or pack.get('target',{}).get('gis_first_install_sha256')!=digest(source_plan)):
+        raise Blocked('gis_first_install_generic_apply_binding_invalid')
+    pack['manifests']=[]
+    pack['target']['manifest_sha256']=digest([])
+    return pack
+
 def rendered_source(source,parameters,decoder):
     generation=parameters['generation'];claim=parameters['dataPVC']
     if not re.fullmatch(r'r[0-9]{8}[a-z0-9]{1,8}',generation) or not re.fullmatch(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{0,8}',claim):
@@ -58,6 +115,15 @@ def rendered_source(source,parameters,decoder):
         path=Path(source)/relative
         if path.is_symlink() or not path.is_file() or path.stat().st_size>2<<20:raise Blocked('rollout_compile_manifest_invalid')
         text=path.read_bytes().decode('utf-8')
+        if '__GATEWAY_INGRESS_HOST__' in text:
+            host=parameters.get('gateway_host')
+            if host is None:
+                defaults=(Path(source)/'deploy/staging/domains.defaults').read_text(encoding='utf-8')
+                match=re.search(r'^VOICE_GATEWAY_INGRESS_HOST=([a-zA-Z0-9.-]+)$',defaults,re.M)
+                host=match.group(1) if match else ''
+            if not isinstance(host,str) or not re.fullmatch(r'[a-zA-Z0-9.-]+',host):
+                raise Blocked('rollout_compile_gateway_jwks_host_invalid')
+            text=text.replace('__GATEWAY_INGRESS_HOST__',host)
         for key,value in replacements.items():text=text.replace(key,value)
         if re.search(r'__[A-Z0-9_]+__|IMAGE_PLACEHOLDER',text):raise Blocked('rollout_compile_placeholder_unresolved')
         # One object per invocation: kubectl printers do not guarantee one
@@ -82,23 +148,25 @@ class ProducerKube:
         values=self.run(['get','secret',name,'-o',"jsonpath-as-json={.metadata['uid','resourceVersion']}"])
         return dict(zip(('uid','resourceVersion'),values))
 
-def main(args):
+def main(args,*,producer=None):
     if len(args)!=3:raise Blocked('rollout_compile_arguments_invalid')
     source=Path(args[0]).resolve(strict=True);parameter_path=Path(args[1]);output=Path(args[2])
     if parameter_path.is_symlink() or not parameter_path.is_file() or not 1<=parameter_path.stat().st_size<=65536:
         raise Blocked('rollout_compile_parameters_invalid')
     p=json.loads(parameter_path.read_bytes(),object_pairs_hook=guard.object_pairs)
     required={'registry','tag','mode','changed_services','images','contract','enrolled','generation','dataPVC','s3_signing_endpoint'}
-    optional={'gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host',
+    optional={'gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gis_first_install',
         'gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability',
         'minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','bootstrap_target_scripts'}
     if not required<=set(p) or set(p)-required-optional:
         raise Blocked('rollout_compile_parameters_invalid')
+    if 'gis_first_install' in p and (p['gis_first_install'] is not True or p['mode'] not in ('full','app-only')):
+        raise Blocked('gis_first_install_admission_invalid')
     if not re.fullmatch(r'[a-z0-9][a-z0-9./_-]{1,253}',p['registry']) or not re.fullmatch(r'[a-f0-9]{40}',p['tag']):
         raise Blocked('rollout_compile_version_invalid')
     scope={**p,'template_hashes':{'voice-'+name:None for name in p['changed_services']}}
     frontend_only=guard.frontend_image_only(scope)
-    producer=ProducerKube()
+    producer=ProducerKube() if producer is None else producer
     if frontend_only:
         bootstrap_paths=[]
         rows=[producer.get('Deployment','voice-'+name) for name in sorted(set(p['changed_services']))]
@@ -107,8 +175,18 @@ def main(args):
         bootstrap_paths=compatible_bootstrap(source,p['contract'],decode_yaml,p.get('bootstrap_target_scripts'))
         rows=rendered_source(source,p,decode_yaml)
         source_paths=SOURCE_MANIFESTS
+        if p['mode']=='images-only':
+            # Backend manifests do not contain frontend Deployments. Preserve
+            # selected live frontend templates just as the frontend-only path.
+            fronts=sorted(set(p['changed_services'])&{'web','admin','developer-portal'})
+            rows.extend(producer.get('Deployment','voice-'+name) for name in fronts)
+            source_paths=(*source_paths,*(
+                'deploy/staging/'+({'web':'flutter-web'}.get(name,name))+'.yaml' for name in fronts))
     import source_plan
     plan=source_plan.compile_plan(source,p,decode_yaml,producer)
+    gis_first_install=plan.pop('gis_first_install',None)
+    if gis_first_install is not None:
+        rows,plan=isolate_gis_first_install(rows,plan,producer)
     if frontend_only and plan['actions']:raise Blocked('rollout_frontend_auxiliary_action_forbidden')
     for action in plan['actions']:
         wanted=action['manifest'];key=(wanted['kind'],wanted['metadata']['name'])
@@ -116,7 +194,9 @@ def main(args):
     changed=set(p['changed_services'])
     if p['mode']=='images-only':rows=[r for r in rows if r.get('kind')=='Deployment' and r.get('metadata',{}).get('name','').removeprefix('voice-') in changed]
     selected_images=p['images']
-    if p['mode']!='images-only':
+    if gis_first_install is not None:
+        selected_images={'voice-gameintegration/gameintegration':p['images'].get('voice-gameintegration/gameintegration','')}
+    elif p['mode']!='images-only':
         keys={r['metadata']['name']+'/'+c['name'] for r in rows if r.get('kind')=='Deployment' for c in r['spec']['template']['spec'].get('initContainers',[])+r['spec']['template']['spec']['containers']}
         preserved={}
         for check in plan['checks']:
@@ -129,6 +209,20 @@ def main(args):
     pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
                         (*source_paths,*bootstrap_paths,'deploy/nats/acl-intent.yaml'))
     pack['nonnats']=plan;pack['target']['nonnats_sha256']=digest(plan)
+    if gis_first_install is not None:
+        if set(gis_first_install)!= {'objects'} or not isinstance(gis_first_install['objects'],list) or len(gis_first_install['objects'])!=2:
+            raise Blocked('gis_first_install_source_pair_invalid')
+        gis_plan={'schema':'voice-gis-first-install-source-v1','objects':gis_first_install['objects']}
+        pack['gis_first_install']=gis_plan
+        pack['target']['gis_first_install_sha256']=digest(gis_plan)
+        deployment=next((obj for obj in gis_plan['objects'] if obj.get('kind')=='Deployment'),None)
+        containers=(deployment or {}).get('spec',{}).get('template',{}).get('spec',{}).get('containers',[])
+        game=[container for container in containers if container.get('name')=='gameintegration']
+        image=p['images'].get('voice-gameintegration/gameintegration')
+        if (len(game)!=1 or not isinstance(image,str) or not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image)
+            or game[0].get('image')!=image):
+            raise Blocked('gis_first_install_image_binding_invalid')
+        pack=exclude_gis_first_install_from_generic_apply(pack)
     for row in plan['checks']:
         for binding in row.get('sources',[]):
             relative=binding['path'];path=source/relative

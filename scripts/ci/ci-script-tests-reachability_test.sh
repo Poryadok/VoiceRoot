@@ -70,6 +70,11 @@ echo "${deploy_block}" | grep -Fq "needs.staging-stack-lock.result == 'success'"
   || fail "staging deployment must retain the successful stack-lock gate"
 echo "${deploy_block}" | grep -Fq '      - staging-stack-lock' \
   || fail "staging deployment must depend on the stack-lock job"
+echo "${deploy_block}" | grep -Fq "needs.changes.outputs.ci_only_change != 'true'" \
+  || fail "CI-only changes must never enter automatic staging deploy"
+lock_block="$(sed -n '/^  staging-stack-lock:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+echo "${lock_block}" | grep -Fq "needs.changes.outputs.ci_only_change != 'true'" \
+  || fail "CI-only changes must not publish a deployable stack lock"
 ! grep -Fq 'github.event.pull_request.draft' "${WORKFLOW}" \
   || fail "draft PRs must use the same path-filtered CI selection"
 changes_block="$(sed -n '/^  changes:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
@@ -79,6 +84,43 @@ echo "${changes_block}" | grep -Fq 'uses: dorny/paths-filter@v4' \
   || fail "feature-base PRs must use the existing path-filtered job selection"
 echo "${changes_block}" | grep -Fq 'filters: .github/ci/path-filters.yml' \
   || fail "feature-base PRs must use the repository path filter definitions"
+grep -Fq 'ci_only_change: ${{ steps.stagingmatrix.outputs.ci_only_change }}' "${WORKFLOW}" \
+  || fail "changes must expose the CI-only no-publication classification"
+grep -Fq 'dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}' "${WORKFLOW}" \
+  || fail "changes must expose the narrow DEV web publisher selector"
+grep -Fq 'dev_web_publish:' "${ROOT}/.github/ci/path-filters.yml" \
+  || fail "DEV web publisher changes must have a dedicated path selector"
+dev_web_filter_block="$(sed -n '/^dev_web_publish:$/,/^[[:alnum:]_-]*:$/p' "${ROOT}/.github/ci/path-filters.yml")"
+echo "${dev_web_filter_block}" | grep -Fq '  - .github/workflows/ci.yml' \
+  || fail "DEV web publisher selector must include its workflow contract"
+echo "${dev_web_filter_block}" | grep -Fq '  - .github/ci/path-filters.yml' \
+  || fail "DEV web publisher selector must include its own filter definition"
+! echo "${dev_web_filter_block}" | grep -Fq '  - **' \
+  || fail "DEV web publisher selector must remain narrow"
+web_block="$(sed -n '/^  web:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+echo "${web_block}" | grep -Fq 'Build and push DEV web image' \
+  || fail "master web job must publish the DEV-configured frontend"
+echo "${web_block}" | grep -Fq 'tags: ${{ steps.image.outputs.base }}/dev-web:${{ github.sha }}' \
+  || fail "DEV web image must use an immutable source-SHA tag"
+echo "${web_block}" | grep -Fq 'VOICE_API_BASE_URL=https://api-dev.comrade.click' \
+  || fail "DEV web image must target the documented DEV API"
+echo "${web_block}" | grep -Fq 'VOICE_LIVEKIT_URL=wss://livekit-dev.comrade.click' \
+  || fail "DEV web image must target the documented DEV LiveKit endpoint"
+echo "${web_block}" | grep -Fq 'dev-web@${{ steps.build-dev-web.outputs.digest }}' \
+  || fail "DEV web receipt must bind the source-SHA tag to Buildx manifest digest"
+echo "${web_block}" | grep -Fq 'tags: ${{ steps.image.outputs.base }}/web:${{ github.sha }}' \
+  || fail "staging web image publication must remain unchanged"
+
+staging_deploy_workflow="${ROOT}/.github/workflows/staging-deploy.yml"
+image_verify_line="$(grep -n '^      - name: Verify every exact staging image before cluster access$' "${staging_deploy_workflow}" | cut -d: -f1)"
+kubectl_setup_line="$(grep -n '^      - uses: azure/setup-kubectl@v5$' "${staging_deploy_workflow}" | head -n1 | cut -d: -f1)"
+[[ -n "${image_verify_line}" && -n "${kubectl_setup_line}" && "${image_verify_line}" -lt "${kubectl_setup_line}" ]] \
+  || fail "staging image manifests must be verified before kubectl setup or cluster access"
+grep -A7 '^      - name: Verify every exact staging image before cluster access$' "${staging_deploy_workflow}" \
+  | grep -Fq 'VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot' \
+  || fail "staging image preflight must use the trusted registry"
+grep -Fq 'VOICE_IMAGE_TAG: ${{ inputs.image_tag }}' "${staging_deploy_workflow}" \
+  || fail "all staging deploys must verify the exact requested image tag"
 
 integration_pr_block="$(sed -n '/^  backend-go-integration-pr:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 backend_go_block="$(sed -n '/^  backend-go:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
@@ -158,6 +200,8 @@ echo "${windows_job_block}" | grep -Fq "github.event_name == 'workflow_dispatch'
 echo "${windows_job_block}" | grep -Fq "needs.changes.outputs.run_flutter_tier2 == 'true'" \
   || fail "Windows desktop build must preserve its master/manual tier-2 predicate"
 gate_block="$(sed -n '/^  ci-gate:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+echo "${gate_block}" | grep -Eq '^      - compose-e2e$' \
+  || fail "ci-gate must wait for compose-e2e to finish"
 echo "${gate_block}" | grep -Eq '^      - ci-script-tests$' \
   || fail "ci-gate must require ci-script-tests"
 grep -Fq 'check_if "${GLOBAL}" ci-script-tests' "${REQUIRED_JOBS}" \
@@ -170,6 +214,48 @@ echo "${gate_block}" | grep -Fq 'JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.
   || fail "ci-gate must receive the Windows job result"
 grep -Fq 'check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows' "${REQUIRED_JOBS}" \
   || fail "ci-gate must require Windows only when its job selector is true"
+echo "${gate_block}" | grep -Fq 'JOB_COMPOSE_E2E: ${{ needs.compose-e2e.result }}' \
+  || fail "ci-gate must receive the compose-e2e result"
+echo "${gate_block}" | grep -Fq 'RUN_COMPOSE_E2E:' \
+  || fail "ci-gate must receive whether compose-e2e is scheduled"
+compose_gate_env_block="$(printf '%s\n' "${gate_block}" | sed -n '/RUN_COMPOSE_E2E:/,/JOB_PROTOBUF:/p')"
+[[ -n "${compose_gate_env_block}" ]] || fail "ci-gate compose-e2e selector must be a complete expression"
+grep -Fq 'require_job compose-e2e "${compose_result}"' "${REQUIRED_JOBS}" \
+  || fail "ci-gate must require Compose success when its selector is true"
+
+run_compose_required_check() {
+  local code="$1" scheduled="$2" result="$3"
+  if RUN_COMPOSE_E2E="${scheduled}" JOB_COMPOSE_E2E="${result}" \
+    bash "${REQUIRED_JOBS}" pull_request "${code}" auto >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+run_compose_required_check true false skipped \
+  || fail "ci-gate must allow the intentional compose-e2e path skip"
+run_compose_required_check false false skipped \
+  || fail "ci-gate must allow a docs-only intentional Compose skip"
+run_compose_required_check true false success \
+  || fail "ci-gate must tolerate an unneeded but successful compose-e2e run"
+run_compose_required_check true true success \
+  || fail "ci-gate must accept a successful scheduled compose-e2e run"
+if run_compose_required_check true true skipped; then
+  fail "ci-gate must reject an unexpectedly skipped scheduled compose-e2e run"
+fi
+if run_compose_required_check true true failure; then
+  fail "ci-gate must reject a failed scheduled compose-e2e run"
+fi
+if run_compose_required_check true false failure; then
+  fail "ci-gate must reject any failed compose-e2e run, including an unexpected run"
+fi
+run_compose_required_check false true success \
+  || fail "ci-gate must check Compose when a PR global policy path schedules it despite code=false"
+if run_compose_required_check false true skipped; then
+  fail "ci-gate must reject a skipped PR global Compose run even when code=false"
+fi
+if run_compose_required_check false true failure; then
+  fail "ci-gate must reject a failed PR global Compose run even when code=false"
+fi
 
 echo "== Windows path-filter restricted-pattern model (not dorny equivalence) =="
 python - "${PATH_FILTERS}" <<'PY'
@@ -200,6 +286,26 @@ PY
 
 compose_e2e_block="$(sed -n '/^  compose-e2e:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 [[ -n "${compose_e2e_block}" ]] || fail "CI workflow must define a compose-e2e job"
+printf '%s\n' "${compose_e2e_block}" | grep -Fq -- "TestComposeSpaceVoiceRoomBidirectionalAudio_live|TestRequestComposeSpaceVoiceRoomJoin.*|TestRequestComposeJoinToken.*" \
+  || fail "compose-e2e must run the live bidirectional test and bounded Space media readiness helper regressions"
+for selector in \
+  "github.event_name == 'pull_request'" \
+  "github.event_name == 'push'" \
+  "github.ref == 'refs/heads/master'" \
+  "needs.changes.outputs.code == 'true'" \
+  "needs.changes.outputs.compose == 'true'" \
+  "needs.changes.outputs.frontend == 'true'" \
+  "needs.changes.outputs.global == 'true'" \
+  "needs.changes.outputs.ci_global == 'true'" \
+  "needs.changes.outputs.admin == 'true'" \
+  "needs.changes.outputs.developer-portal == 'true'"; do
+  printf '%s\n' "${compose_e2e_block}" | grep -Fq -- "${selector}" \
+    || fail "compose-e2e scheduling predicate is missing ${selector}"
+  printf '%s\n' "${compose_gate_env_block}" | grep -Fq -- "${selector}" \
+    || fail "ci-gate compose-e2e selector must stay aligned with ${selector}"
+done
+echo "${compose_e2e_block}" | grep -Eq '^    needs: changes$' \
+  || fail "compose-e2e must depend only on changes, keeping the ci-gate DAG acyclic"
 compose_env_block="$(printf '%s\n' "${compose_e2e_block}" | sed -n '/^      - name: Prepare compose env$/, /^      - name: Start compose infra$/p')"
 [[ -n "${compose_env_block}" ]] || fail "compose-e2e must prepare its Compose environment"
 for required in \

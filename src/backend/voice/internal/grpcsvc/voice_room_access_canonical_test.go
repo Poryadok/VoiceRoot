@@ -19,14 +19,16 @@ import (
 )
 
 type canonicalAccessResolver struct {
-	result CanonicalVoiceRoomAccess
-	err    error
-	calls  []canonicalAccessCall
+	result           CanonicalVoiceRoomAccess
+	err              error
+	calls            []canonicalAccessCall
+	expectedSpaceIDs []string
 }
 type canonicalAccessCall struct{ voiceRoomID, profileID string }
 
-func (r *canonicalAccessResolver) ResolveVoiceRoomAccess(_ context.Context, roomID, profileID string) (CanonicalVoiceRoomAccess, error) {
+func (r *canonicalAccessResolver) ResolveVoiceRoomAccess(_ context.Context, expectedSpaceID, roomID, profileID string) (CanonicalVoiceRoomAccess, error) {
 	r.calls = append(r.calls, canonicalAccessCall{roomID, profileID})
+	r.expectedSpaceIDs = append(r.expectedSpaceIDs, expectedSpaceID)
 	return r.result, r.err
 }
 
@@ -84,7 +86,16 @@ func TestJoinVoiceRoom_RequiresMatchingCanonicalSpaceAssertion(t *testing.T) {
 			svc.Roles, svc.SpaceMembers = roles, legacy
 			response, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: voiceRoomID, Space: &spacev1.SpaceRef{Id: tc.assertion}})
 			require.Equal(t, tc.want, status.Code(err))
-			require.Equal(t, []canonicalAccessCall{{voiceRoomID, profileID}}, resolver.calls)
+			wantResolverCalls := []canonicalAccessCall{{voiceRoomID, profileID}}
+			if tc.want == codes.OK {
+				wantResolverCalls = append(wantResolverCalls, canonicalAccessCall{voiceRoomID, profileID})
+			}
+			require.Equal(t, wantResolverCalls, resolver.calls)
+			wantExpectedSpaces := []string{tc.assertion}
+			if tc.want == codes.OK {
+				wantExpectedSpaces = append(wantExpectedSpaces, canonicalSpaceID)
+			}
+			require.Equal(t, wantExpectedSpaces, resolver.expectedSpaceIDs)
 			require.Zero(t, legacy.calls)
 			if tc.want != codes.OK {
 				require.Nil(t, response)
@@ -101,6 +112,20 @@ func TestJoinVoiceRoom_RequiresMatchingCanonicalSpaceAssertion(t *testing.T) {
 			require.Equal(t, canonicalSpaceID, call.SpaceID)
 		})
 	}
+}
+
+func TestResolveCanonicalVoiceRoomAccess_RequiresExpectedSpace(t *testing.T) {
+	canonicalSpaceID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	svc := newTestVoiceService(time.Now(), &recordingEvents{})
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true}}
+	svc.VoiceRoomAccessResolver = resolver
+
+	access, err := svc.resolveCanonicalVoiceRoomAccess(t.Context(), "", voiceRoomID, profileID)
+
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, CanonicalVoiceRoomAccess{}, access)
+	require.Equal(t, []canonicalAccessCall{{voiceRoomID, profileID}}, resolver.calls)
+	require.Equal(t, []string{""}, resolver.expectedSpaceIDs)
 }
 
 func TestJoinVoiceRoom_CanonicalResolverFailuresHaveNoSideEffects(t *testing.T) {
@@ -239,13 +264,16 @@ func TestGetJoinToken_SpaceMediaDoesNotUseLegacyIssuerOrMintBeforeReadiness(t *t
 			response, err := svc.GetJoinToken(ctx, request)
 			require.Equal(t, tc.want, status.Code(err))
 			require.Equal(t, []canonicalAccessCall{{room, profile}}, resolver.calls)
+			require.Equal(t, []string{tc.stored}, resolver.expectedSpaceIDs)
 			require.Zero(t, legacy.calls)
 			if tc.name == "media readiness absent" {
-				require.Equal(t, "canonical", tc.access.SpaceID)
+				require.Equal(t, canonical, tc.access.SpaceID)
 				requireVoiceRoleCheck(t, roles.joinChecks, canonical, profile, room)
+				requireVoiceRoleCheck(t, roles.speakChecks, canonical, profile, room)
+			} else {
+				require.Empty(t, roles.speakChecks)
 			}
 			require.Nil(t, response)
-			require.Empty(t, roles.speakChecks)
 			require.Zero(t, tokens.joinCalls)
 		})
 	}
@@ -323,7 +351,8 @@ func TestGetJoinToken_CanonicalNotFoundDoesNotMint(t *testing.T) {
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 	resolver := &canonicalAccessResolver{err: status.Error(codes.NotFound, "room")}
 	roles, tokens, legacy := &canonicalRolePermissions{}, &canonicalTokenIssuer{}, &poisonLegacySpaceMembers{}
-	svc.VoiceRoomAccessResolver, svc.Roles, svc.Tokens, svc.SpaceMembers = resolver, roles, tokens, legacy
+	configureReadySpaceMediaFixture(svc, resolver)
+	svc.Roles, svc.Tokens, svc.SpaceMembers = roles, tokens, legacy
 	call, err := svc.Calls.CreateCall(t.Context(), voicestore.Call{
 		RoomID:             uuid.NewString(),
 		LivekitRoomName:    "voice-room-" + voiceRoomID,
@@ -337,7 +366,10 @@ func TestGetJoinToken_CanonicalNotFoundDoesNotMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	response, err := svc.GetJoinToken(voiceTestCtx(profileID), &callsv1.GetJoinTokenRequest{RoomId: call.RoomID})
+	request := &callsv1.GetJoinTokenRequest{RoomId: call.RoomID}
+	accountID := uuid.NewString()
+	ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, accountID, profileID, 9)
+	response, err := svc.GetJoinToken(ctx, request)
 	require.Nil(t, response)
 	require.Equal(t, codes.NotFound, status.Code(err))
 	require.Equal(t, []canonicalAccessCall{{voiceRoomID, profileID}}, resolver.calls)

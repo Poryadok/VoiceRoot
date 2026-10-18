@@ -123,6 +123,26 @@ class FileScanOutcome extends $pb.ProtobufEnum {
   const FileScanOutcome._(super.value, super.name);
 }
 
+/// Implemented upload processing intents. Other documented intents remain
+/// unimplemented; unspecified retains the existing MIME-based behavior.
+class UploadIntent extends $pb.ProtobufEnum {
+  static const UploadIntent UPLOAD_INTENT_UNSPECIFIED =
+      UploadIntent._(0, _omitEnumNames ? '' : 'UPLOAD_INTENT_UNSPECIFIED');
+  static const UploadIntent UPLOAD_INTENT_MUSIC =
+      UploadIntent._(6, _omitEnumNames ? '' : 'UPLOAD_INTENT_MUSIC');
+
+  static const $core.List<UploadIntent> values = <UploadIntent>[
+    UPLOAD_INTENT_UNSPECIFIED,
+    UPLOAD_INTENT_MUSIC,
+  ];
+
+  static final $core.Map<$core.int, UploadIntent> _byValue =
+      $pb.ProtobufEnum.initByValue(values);
+  static UploadIntent? valueOf($core.int value) => _byValue[value];
+
+  const UploadIntent._(super.value, super.name);
+}
+
 /// Selects the stored representation for a presigned file URL.
 class FileURLVariant extends $pb.ProtobufEnum {
   /// Backward-compatible default: converted representation when present, otherwise r2_key.

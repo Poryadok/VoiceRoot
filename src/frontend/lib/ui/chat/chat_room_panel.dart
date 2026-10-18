@@ -14,6 +14,7 @@ import '../../e2e/e2e_file_crypto.dart';
 import '../../backend/files_client.dart';
 import '../../backend/mention_parser.dart';
 import '../../backend/messages_client.dart';
+import '../../backend/gateway_http.dart';
 import '../../backend/proto_mappers.dart' show protoTimestampToDateTime;
 import '../../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
 import '../../gen/voice/messaging/v1/messaging.pbenum.dart' as messaging_enums;
@@ -58,6 +59,9 @@ import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
 import 'chat_composer_text_field.dart';
 import 'composer_panels.dart';
+import 'music_format.dart';
+import 'music_attachment_player.dart';
+import 'music_playback.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
@@ -91,6 +95,8 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   );
   static const Key inputKey = Key('chat_room_input');
   static const Key sendKey = Key('chat_room_send');
+  static const Key sendRetryKey = Key('chat_room_send_retry');
+  static const Key replyTargetCancelKey = Key('chat_room_reply_target_cancel');
   static const Key attachKey = Key('chat_room_attach');
   static const Key attachmentUploadFailureKey = Key(
     'chat_attachment_upload_failure',
@@ -138,6 +144,28 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
 }
 
 typedef ChatAttachmentPicker = Future<ChatAttachmentFile?> Function();
+
+class _TextSendAttempt {
+  _TextSendAttempt({
+    required this.chatId,
+    required this.identity,
+    required this.sessionInstallGeneration,
+    required this.generation,
+    required this.content,
+    required List<MessageMention> mentions,
+    required this.replyTarget,
+    required this.draftKey,
+  }) : mentions = List.unmodifiable(mentions);
+
+  final String chatId;
+  final GatewayRequestIdentity identity;
+  final int sessionInstallGeneration;
+  final int generation;
+  final String content;
+  final List<MessageMention> mentions;
+  final VoiceMessage? replyTarget;
+  final ChatDraftKey? draftKey;
+}
 
 class _ScheduledSendAttempt {
   const _ScheduledSendAttempt({
@@ -271,6 +299,7 @@ class _PendingAttachmentUpload {
     required this.isE2e,
     required this.e2eKeyWire,
     required this.imagesOnly,
+    required this.music,
   });
 
   final ChatAttachmentFile file;
@@ -282,6 +311,7 @@ class _PendingAttachmentUpload {
   final bool isE2e;
   final String? e2eKeyWire;
   final bool imagesOnly;
+  final bool music;
 
   _PendingAttachmentUpload withAuthorization(String value) =>
       _PendingAttachmentUpload(
@@ -294,11 +324,13 @@ class _PendingAttachmentUpload {
         isE2e: isE2e,
         e2eKeyWire: e2eKeyWire,
         imagesOnly: imagesOnly,
+        music: music,
       );
 }
 
 class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composer = TextEditingController();
+  final _slashComposerAnchor = GlobalKey();
   final _composerFocus = FocusNode();
   final _selectedMessageFocus = FocusNode(
     debugLabel: 'chat-room-selected-message',
@@ -334,6 +366,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _highlightedMessageId = null as String?;
   var _liveMessageAnnouncement = '';
   ChatDraftKey? _draftKey;
+  _TextSendAttempt? _pendingTextSend;
+  int? _pendingTextSendControllerGeneration;
+  var _textSendGeneration = 0;
+  var _textSendInFlight = false;
+  var _textSendFailed = false;
   final _inChatSearchController = TextEditingController();
 
   @override
@@ -344,6 +381,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   @override
   void dispose() {
+    _cancelTextSend();
     _pinnedJumpGeneration++;
     _attachmentOperation++;
     _scheduledAttemptSubmissionGeneration++;
@@ -365,6 +403,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _cancelTextSend();
       _chatInfoSearchHandoffGeneration++;
       _inChatSearchOpen = false;
       _inChatSearchController.clear();
@@ -390,6 +429,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   String _roomErrorText(AppLocalizations l10n, String raw) {
+    if (raw.toLowerCase().contains('threads are disabled for this chat')) {
+      return l10n.chatThreadRepliesUnavailable;
+    }
     return chatRoomErrorMessage(l10n, raw);
   }
 
@@ -540,7 +582,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
+    final scheduledMessagesEnabled = ref
+        .watch(gatewayConfigProvider)
+        .scheduledMessagesEnabled;
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      final textAttempt = _pendingTextSend;
+      if (textAttempt != null && !_isTextSendActorCurrent(textAttempt)) {
+        setState(_cancelTextSend);
+      }
       final changed =
           previous?.activeProfileId != next.activeProfileId ||
           previous?.session?.accessToken != next.session?.accessToken;
@@ -554,7 +603,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         });
       }
       _scheduledMessagesRequested = false;
-      if (next.activeProfileId != null &&
+      if (scheduledMessagesEnabled &&
+          next.activeProfileId != null &&
           ref.read(selectedChatIdProvider) == widget.chatId) {
         _scheduledMessagesRequested = true;
         unawaited(
@@ -564,8 +614,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         );
       }
     });
-    ref.listen<String?>(selectedChatIdProvider, (_, next) {
-      if (next != widget.chatId || _scheduledMessagesRequested) return;
+    ref.listen<String?>(selectedChatIdProvider, (previous, next) {
+      if (previous != next && next != widget.chatId) {
+        setState(_cancelTextSend);
+      }
+      if (!scheduledMessagesEnabled ||
+          next != widget.chatId ||
+          _scheduledMessagesRequested) {
+        return;
+      }
       _scheduledMessagesRequested = true;
       unawaited(
         ref
@@ -573,7 +630,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             .loadScheduledMessages(),
       );
     });
-    if (!_scheduledMessagesRequested &&
+    if (scheduledMessagesEnabled &&
+        !_scheduledMessagesRequested &&
         activeId != null &&
         ref.read(selectedChatIdProvider) == widget.chatId) {
       _scheduledMessagesRequested = true;
@@ -606,6 +664,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       ref.watch(chatDraftProvider(draftKey));
     }
     final controllerRoom = ref.watch(chatRoomControllerProvider(widget.chatId));
+    final textSendFailed =
+        _pendingTextSend?.replyTarget != null &&
+            !_threadsEnabledForCurrentChat() ||
+        (_textSendFailed &&
+            _pendingTextSendControllerGeneration ==
+                ref
+                    .read(chatRoomControllerProvider(widget.chatId).notifier)
+                    .immediateSendGeneration);
+    final textSendOwnsRoomError =
+        textSendFailed &&
+        ref
+            .read(chatRoomControllerProvider(widget.chatId).notifier)
+            .failedMessageOwnsRoomError;
     final historyBelongsToActiveProfile =
         controllerRoom.historyProfileId == activeId;
     final room = historyBelongsToActiveProfile
@@ -636,9 +707,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     String? spaceId;
     var slowModeSeconds = 0;
     var isGroup = false;
+    final chatListState = ref.watch(chatListControllerProvider);
+    final listBelongsToViewer =
+        activeId != null && chatListState.profileId == activeId;
     VoiceChat? chatMeta;
     ChatListItem? chatListItem;
-    for (final item in ref.watch(chatListControllerProvider).items) {
+    for (final item
+        in listBelongsToViewer ? chatListState.items : const <ChatListItem>[]) {
       if (item.chatId == widget.chatId) {
         chatMeta = item.chat;
         chatListItem = item;
@@ -653,6 +728,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     final replyTarget = ref.watch(chatReplyTargetProvider(widget.chatId));
     final activeThreadId = ref.watch(chatActiveThreadProvider(widget.chatId));
+    final threadsEnabled = chatMeta?.threadsEnabled == true;
     final ephemeralMessages = ref.watch(
       ephemeralMessagesProvider(widget.chatId),
     );
@@ -665,12 +741,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         isOffline ||
         room.isDmPeerDeleted ||
         (blockChannelMainFeed && replyTarget == null);
-    final chatListState = ref.watch(chatListControllerProvider);
     final roomBelongsToViewer =
         activeId != null && room.historyProfileId == activeId;
-    final listBelongsToViewer =
-        activeId != null && chatListState.profileId == activeId;
-    final peerId = isGroup
+    final chatMetadataAvailable = chatMeta != null;
+    final peerId = !chatMetadataAvailable || isGroup
         ? null
         : resolveDmPeerForChatId(
             chatId: widget.chatId,
@@ -711,9 +785,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final shortId = widget.chatId.length <= 8
         ? widget.chatId
         : widget.chatId.substring(0, 8);
-    final title = isGroup
+    final title = !chatMetadataAvailable
+        ? l10n.chatRoomTitle(shortId)
+        : isGroup
         ? (groupName ?? l10n.chatRoomTitle(shortId))
-        : (peerName ?? groupName ?? l10n.socialProfileUnavailable);
+        : (peerName ?? l10n.socialProfileUnavailable);
     final peerIsPremium =
         peerId != null && ref.watch(profilePremiumBadgeProvider(peerId));
     final voice = VoiceColors.of(context);
@@ -787,18 +863,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         },
         icon: Icon(_inChatSearchOpen ? Icons.close : Icons.search),
       ),
-      IconButton(
-        key: ChatRoomPanel.chatInfoKey,
-        tooltip: l10n.chatInfoOpen,
-        onPressed: () => openChatInfoPanel(
-          context,
-          ref,
-          chatId: widget.chatId,
-          groupName: groupName,
-          isGroup: isGroup,
+      if (chatMetadataAvailable)
+        IconButton(
+          key: ChatRoomPanel.chatInfoKey,
+          tooltip: l10n.chatInfoOpen,
+          onPressed: () => openChatInfoPanel(
+            context,
+            ref,
+            chatId: widget.chatId,
+            groupName: groupName,
+            isGroup: isGroup,
+          ),
+          icon: const Icon(Icons.info_outline),
         ),
-        icon: const Icon(Icons.info_outline),
-      ),
       if (pinnedMessages.isNotEmpty && _pinnedBarHidden)
         IconButton(
           key: ChatRoomPanel.pinnedMessagesHeaderKey,
@@ -1332,7 +1409,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         : room.messages.isEmpty &&
                               ephemeralMessages.isEmpty &&
                               !room.isLoading
-                        ? room.errorMessage != null
+                        ? room.errorMessage != null && !textSendOwnsRoomError
                               ? VoiceStatePanel(
                                   title: _roomErrorText(
                                     l10n,
@@ -1421,7 +1498,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ],
                 ),
               ),
-              if (room.errorMessage != null && room.messages.isNotEmpty)
+              if (room.errorMessage != null &&
+                  room.messages.isNotEmpty &&
+                  !textSendOwnsRoomError)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
@@ -1444,21 +1523,20 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       ),
                     ),
                     trailing: IconButton(
+                      key: ChatRoomPanel.replyTargetCancelKey,
                       icon: const Icon(Icons.close, size: 18),
-                      onPressed: () {
-                        ref
-                                .read(
-                                  chatReplyTargetProvider(
-                                    widget.chatId,
-                                  ).notifier,
-                                )
-                                .state =
-                            null;
-                      },
+                      onPressed: _cancelReplyTarget,
                     ),
                   ),
                 ),
-              _buildScheduledMessagesSection(room, l10n),
+              if (scheduledMessagesEnabled)
+                _buildScheduledMessagesSection(room, l10n),
+              if (textSendFailed && _pendingTextSend != null)
+                _buildTextSendFailure(
+                  l10n,
+                  room.isSending || composerBlocked,
+                  _pendingTextSend!,
+                ),
               if (_attachmentUploadFailure case final failure?)
                 Padding(
                   key: ChatRoomPanel.attachmentUploadFailureKey,
@@ -1526,6 +1604,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         ),
                       ),
                       Expanded(
+                        key: _slashComposerAnchor,
                         child: ChatComposerTextField(
                           key: ChatRoomPanel.inputKey,
                           controller: _composer,
@@ -1564,7 +1643,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               );
                             }
                           },
-                          onSend: room.isSending || composerBlocked
+                          onSend:
+                              room.isSending ||
+                                  _textSendInFlight ||
+                                  composerBlocked
                               ? null
                               : _send,
                           readOnly: composerBlocked,
@@ -1596,16 +1678,20 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       const SizedBox(width: 4),
                       VoiceSendButton(
                         key: ChatRoomPanel.sendKey,
-                        onPressed: room.isSending || composerBlocked
+                        onPressed:
+                            room.isSending ||
+                                _textSendInFlight ||
+                                composerBlocked
                             ? null
                             : _send,
                         onLongPress:
                             room.isSending ||
                                 _uploadingAttachment ||
-                                composerBlocked
+                                composerBlocked ||
+                                !scheduledMessagesEnabled
                             ? null
                             : _openScheduledSendMenu,
-                        isLoading: room.isSending,
+                        isLoading: room.isSending || _textSendInFlight,
                         tooltip: l10n.chatSendMessage,
                       ),
                     ],
@@ -1615,7 +1701,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             ],
           ),
         ),
-        if (activeThreadId != null)
+        if (activeThreadId != null && threadsEnabled)
           SizedBox(
             width: 320,
             child: ThreadSidePanel(
@@ -1628,16 +1714,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       .map((m) => m.content)
                       .firstOrNull ??
                   '',
-              onClose: () {
-                ref
-                        .read(chatActiveThreadProvider(widget.chatId).notifier)
-                        .state =
-                    null;
-                ref
-                        .read(chatReplyTargetProvider(widget.chatId).notifier)
-                        .state =
-                    null;
-              },
+              onClose: _cancelReplyTarget,
             ),
           ),
       ],
@@ -1652,6 +1729,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
     await showSlashCommandMenu(
       context: context,
+      anchorContext: _slashComposerAnchor.currentContext,
       ref: ref,
       chatId: widget.chatId,
       filter: filter,
@@ -1718,7 +1796,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   Future<void> _openScheduledSendMenu() async {
     final chatId = widget.chatId;
-    if (_composer.text.trim().isEmpty ||
+    if (!ref.read(gatewayConfigProvider).scheduledMessagesEnabled ||
+        _composer.text.trim().isEmpty ||
         _isDmPeerDeleted() ||
         !_isCurrentChat(chatId)) {
       return;
@@ -2226,6 +2305,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   Future<void> _send() async {
+    if (_textSendInFlight) return;
     if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
       return;
     }
@@ -2240,69 +2320,176 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       return;
     }
     final text = _composer.text;
+    if (text.trim().isEmpty) return;
+    final authController = ref.read(authControllerProvider.notifier);
+    final identity = authController.gatewayRequestIdentity;
+    if (identity == null) return;
     ref.read(realtimeHubProvider).typingStop(widget.chatId);
-    final memberIds = ref
-        .read(groupMembersProvider(widget.chatId))
-        .maybeWhen(
-          data: (data) => data.members.map((m) => m.profileId),
-          orElse: () => const <String>[],
-        );
-    final handleToProfileId = <String, String>{};
-    for (final id in memberIds) {
-      final profile = ref.read(profileProvider(id)).valueOrNull;
-      final handle = profile?.handle;
-      if (handle != null && handle.isNotEmpty) {
-        handleToProfileId[handle] = id;
-      }
-    }
-    final mentions = parseMentionsFromContent(
-      text,
-      memberProfileIds: memberIds,
-      handleToProfileId: handleToProfileId,
+    final attempt = _TextSendAttempt(
+      chatId: widget.chatId,
+      identity: identity,
+      sessionInstallGeneration: authController.sessionInstallGeneration,
+      generation: ++_textSendGeneration,
+      content: text,
+      mentions: _mentionsForComposer(text),
+      replyTarget: ref.read(chatReplyTargetProvider(widget.chatId)),
+      draftKey: _draftKey,
     );
-    final chatType = ref
-        .read(chatListProvider)
-        .valueOrNull
-        ?.items
-        .where((item) => item.chatId == widget.chatId)
-        .map((item) => item.chat.type)
-        .firstOrNull;
-    final isDm = chatType == 'CHAT_TYPE_DM';
-    final filteredMentions = isDm
-        ? mentions.where((m) => m.type == 'user').toList()
-        : mentions;
-    final replyTarget = ref.read(chatReplyTargetProvider(widget.chatId));
-    final err = await ref
+    _pendingTextSend = attempt;
+    _pendingTextSendControllerGeneration = null;
+    await _submitTextSend(attempt);
+  }
+
+  void _cancelTextSend() {
+    _textSendGeneration++;
+    _pendingTextSend = null;
+    _pendingTextSendControllerGeneration = null;
+    _textSendInFlight = false;
+    _textSendFailed = false;
+  }
+
+  void _cancelReplyTarget() {
+    final target = ref.read(chatReplyTargetProvider(widget.chatId));
+    ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
+    ref.read(chatActiveThreadProvider(widget.chatId).notifier).state = null;
+    final attempt = _pendingTextSend;
+    if (attempt?.replyTarget?.id == target?.id && _textSendFailed) {
+      ref
+          .read(chatRoomControllerProvider(widget.chatId).notifier)
+          .discardFailedMessage();
+      setState(_cancelTextSend);
+    }
+  }
+
+  bool _isTextSendActorCurrent(_TextSendAttempt attempt) =>
+      mounted &&
+      ref.read(authControllerProvider.notifier).gatewayRequestIdentity ==
+          attempt.identity &&
+      ref.read(authControllerProvider.notifier).sessionInstallGeneration ==
+          attempt.sessionInstallGeneration;
+
+  bool _isCurrentTextSend(_TextSendAttempt attempt) {
+    if (!_isTextSendActorCurrent(attempt)) return false;
+    final selected = ref.read(selectedChatIdProvider);
+    return widget.chatId == attempt.chatId &&
+        (selected == null || selected == attempt.chatId) &&
+        _textSendGeneration == attempt.generation;
+  }
+
+  Widget _buildTextSendFailure(
+    AppLocalizations l10n,
+    bool blocked,
+    _TextSendAttempt attempt,
+  ) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    child: Row(
+      children: [
+        Expanded(child: Text(_textSendFailureMessage(l10n))),
+        TextButton(
+          key: ChatRoomPanel.sendRetryKey,
+          onPressed: blocked || _textSendInFlight
+              ? null
+              : () => unawaited(_submitTextSend(attempt, retry: true)),
+          child: Text(l10n.commonRetry),
+        ),
+      ],
+    ),
+  );
+
+  String _textSendFailureMessage(AppLocalizations l10n) {
+    if (_pendingTextSend?.replyTarget != null &&
+        !_threadsEnabledForCurrentChat()) {
+      return l10n.chatThreadRepliesUnavailable;
+    }
+    final raw = ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
-        .sendMessage(
-          text,
-          mentions: filteredMentions,
-          threadParentId: replyTarget?.id,
-        );
-    if (!mounted) return;
+        .failedMessageError;
+    final mapped = raw == null ? null : _roomErrorText(l10n, raw);
+    return mapped == null || mapped == l10n.chatRoomLoadError
+        ? commonActionErrorMessage(l10n)
+        : mapped;
+  }
+
+  Future<void> _submitTextSend(
+    _TextSendAttempt attempt, {
+    bool retry = false,
+  }) async {
+    if (_textSendInFlight ||
+        !identical(_pendingTextSend, attempt) ||
+        !_isCurrentTextSend(attempt)) {
+      return;
+    }
+    final controller = ref.read(
+      chatRoomControllerProvider(attempt.chatId).notifier,
+    );
+    if (attempt.replyTarget != null && !_threadsEnabledForCurrentChat()) {
+      setState(() {
+        _textSendInFlight = false;
+        _textSendFailed = true;
+        _pendingTextSendControllerGeneration =
+            controller.immediateSendGeneration;
+      });
+      return;
+    }
+    setState(() {
+      _textSendInFlight = true;
+      _textSendFailed = false;
+    });
+    final Future<String?> submission;
+    if (retry) {
+      submission = controller.retryFailedMessage(
+        expectedGeneration: _pendingTextSendControllerGeneration,
+      );
+    } else {
+      submission = controller.sendMessage(
+        attempt.content,
+        mentions: attempt.mentions,
+        threadParentId: attempt.replyTarget?.id,
+      );
+      _pendingTextSendControllerGeneration = controller.immediateSendGeneration;
+    }
+    final err = await submission;
+    if (!mounted || !_isCurrentTextSend(attempt)) return;
+    setState(() {
+      _textSendInFlight = false;
+      _textSendFailed =
+          err != null &&
+          controller.canRetryFailedMessage &&
+          _pendingTextSendControllerGeneration ==
+              controller.immediateSendGeneration;
+      if (err == null || (err == kChatActionStaleContext && !_textSendFailed)) {
+        _pendingTextSend = null;
+      }
+    });
     if (err == kChatOfflineBlockedError) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppLocalizations.of(context)!.chatOfflineSendBlocked),
         ),
       );
     } else if (err == null) {
-      _composer.clear();
-      final key = _draftKey;
-      if (key != null) {
-        await ref.read(chatDraftProvider(key).notifier).clear();
+      if (_composer.text == attempt.content) {
+        _composer.clear();
+        final key = attempt.draftKey;
+        if (key != null) {
+          unawaited(ref.read(chatDraftProvider(key).notifier).clear());
+        }
       }
-      if (replyTarget != null) {
-        ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
+      if (attempt.replyTarget != null &&
+          ref.read(chatReplyTargetProvider(attempt.chatId))?.id ==
+              attempt.replyTarget!.id) {
+        ref.read(chatReplyTargetProvider(attempt.chatId).notifier).state = null;
       }
     }
-    _refocusComposer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isCurrentTextSend(attempt)) _composerFocus.requestFocus();
+    });
   }
 
   Future<void> _openAttachMenu() async {
     final action = await showComposerAttachMenu(
       context,
+      anchorContext: _attachFocus.context,
       onDismiss: () => _attachFocus.requestFocus(),
     );
     if (!mounted || action == null) return;
@@ -2311,20 +2498,36 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     await _attachAndSend(
       imagesOnly: action == ComposerAttachAction.photoOrVideo,
+      music: action == ComposerAttachAction.music,
     );
   }
 
-  Future<void> _attachAndSend({bool imagesOnly = false}) async {
+  Future<void> _attachAndSend({
+    bool imagesOnly = false,
+    bool music = false,
+  }) async {
     final chatId = widget.chatId;
     if (_isDmPeerDeleted()) {
       return;
     }
     final picker =
         widget.attachmentPicker ??
-        () => _defaultPickChatAttachment(imagesOnly: imagesOnly);
-    final picked = await picker();
+        () => _defaultPickChatAttachment(imagesOnly: imagesOnly, music: music);
+    final ChatAttachmentFile? picked;
+    try {
+      picked = await picker();
+    } on _MusicFileRejected {
+      if (_isCurrentChat(chatId)) _showMusicFileRejected();
+      return;
+    }
     if (picked == null || !_isCurrentChat(chatId)) return;
     final mimeType = _attachmentMimeType(picked.contentType, picked.name);
+    if (music &&
+        (!mimeType.startsWith('audio/') ||
+            !hasSupportedMusicSignature(picked.bytes))) {
+      _showMusicFileRejected();
+      return;
+    }
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     final operation = ++_attachmentOperation;
@@ -2361,6 +2564,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         if (!_isCurrentAttachmentOperation(operation, chatId)) return;
       }
       if (!_isCurrentAttachmentOperation(operation, chatId)) return;
+      if (music && uploadBytes.length > 10 * 1024 * 1024) {
+        _showMusicFileRejected();
+        return;
+      }
       await _runAttachmentUpload(
         _PendingAttachmentUpload(
           file: picked,
@@ -2372,6 +2579,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           isE2e: isE2eChat,
           e2eKeyWire: e2eKeyWire,
           imagesOnly: imagesOnly,
+          music: music,
         ),
         operation,
       );
@@ -2382,6 +2590,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
   }
 
+  void _showMusicFileRejected() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.chatMusicInvalidFile),
+      ),
+    );
+  }
+
   Future<void> _runAttachmentUpload(
     _PendingAttachmentUpload attempt,
     int operation,
@@ -2389,12 +2605,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final files = ref.read(voiceFilesClientProvider);
     final ticket = await files.requestUpload(
       authorization: attempt.authorization,
-      originalName: attempt.file.name,
+      originalName: attempt.music && attempt.isE2e
+          ? 'encrypted-audio'
+          : attempt.file.name,
       mimeType: attempt.mimeType,
       sizeBytes: attempt.bytes.length,
       chatId: attempt.chatId,
       chatType: attempt.chatType,
       isE2e: attempt.isE2e,
+      music: attempt.music,
     );
     if (!_isCurrentAttachmentOperation(operation, attempt.chatId)) return;
     if (ticket case FilesApiFailure()) {
@@ -2444,7 +2663,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           attachments: [
             MessageAttachment(
               fileId: metadata.fileId,
-              type: metadata.fileType,
+              type: attempt.music ? 'music' : metadata.fileType,
               name: metadata.originalName,
               sizeBytes: metadata.sizeBytes,
               e2eKeyWire: attempt.e2eKeyWire,
@@ -2521,11 +2740,22 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
     });
-    unawaited(_attachAndSend(imagesOnly: imagesOnly));
+    unawaited(_attachAndSend(imagesOnly: imagesOnly, music: pending.music));
   }
 
   bool _isCurrentChat(String chatId) =>
       mounted && widget.chatId == chatId && !_isDmPeerDeleted();
+
+  bool _threadsEnabledForCurrentChat() {
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    final list = ref.read(chatListControllerProvider);
+    if (profileId == null || list.profileId != profileId) return false;
+    return list.items
+            .where((item) => item.chatId == widget.chatId)
+            .map((item) => item.chat.threadsEnabled)
+            .firstOrNull ==
+        true;
+  }
 
   bool _isCurrentAttachmentOperation(int operation, String chatId) =>
       operation == _attachmentOperation && _isCurrentChat(chatId);
@@ -2543,6 +2773,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted;
 
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
+    final threadsEnabled = _threadsEnabledForCurrentChat();
     String? spaceId;
     var canUseSpaceMessageModeration = false;
     for (final item in ref.read(chatListControllerProvider).items) {
@@ -2569,11 +2800,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     title: Text(sheetL10n.chatMessageAddReaction),
                     onTap: () => Navigator.of(context).pop('react'),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.reply_outlined),
-                    title: Text(sheetL10n.chatMessageReply),
-                    onTap: () => Navigator.of(context).pop('reply'),
-                  ),
+                  if (threadsEnabled)
+                    ListTile(
+                      leading: const Icon(Icons.reply_outlined),
+                      title: Text(sheetL10n.chatMessageReply),
+                      onTap: () => Navigator.of(context).pop('reply'),
+                    ),
                   if (!ref
                       .read(chatRoomControllerProvider(widget.chatId))
                       .isDmPeerDeleted)
@@ -2697,6 +2929,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         );
       }
     } else if (action == 'reply') {
+      if (!_threadsEnabledForCurrentChat()) return;
       ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = message;
       ref.read(chatActiveThreadProvider(widget.chatId).notifier).state =
           message.id;
@@ -3056,6 +3289,7 @@ class _DeliveryTick extends StatelessWidget {
 
 Future<ChatAttachmentFile?> _defaultPickChatAttachment({
   bool imagesOnly = false,
+  bool music = false,
 }) async {
   final XFile? file;
   if (imagesOnly) {
@@ -3067,16 +3301,36 @@ Future<ChatAttachmentFile?> _defaultPickChatAttachment({
         ),
       ],
     );
+  } else if (music) {
+    file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'audio',
+          extensions: ['mp3', 'ogg', 'flac', 'wav'],
+          mimeTypes: ['audio/*'],
+        ),
+      ],
+    );
   } else {
     file = await openFile();
   }
   if (file == null) return null;
+  if (music) {
+    final length = await file.length();
+    if (length <= 0 || length > 10 * 1024 * 1024) {
+      throw const _MusicFileRejected();
+    }
+  }
   final bytes = await file.readAsBytes();
   return ChatAttachmentFile(
     bytes: bytes,
     contentType: _attachmentMimeType(file.mimeType, file.name),
     name: file.name,
   );
+}
+
+class _MusicFileRejected implements Exception {
+  const _MusicFileRejected();
 }
 
 String _attachmentMimeType(String? mimeType, String name) {
@@ -3099,6 +3353,12 @@ String _contentTypeFromName(String name) {
   if (lower.endsWith('.mp4')) return 'video/mp4';
   if (lower.endsWith('.mov')) return 'video/quicktime';
   if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.m4a')) return 'audio/mp4';
+  if (lower.endsWith('.aac')) return 'audio/aac';
+  if (lower.endsWith('.ogg')) return 'audio/ogg';
+  if (lower.endsWith('.flac')) return 'audio/flac';
+  if (lower.endsWith('.wav')) return 'audio/wav';
   return 'application/octet-stream';
 }
 
@@ -3209,6 +3469,85 @@ class _AttachmentPreview extends ConsumerWidget {
             ),
           ),
         ),
+      );
+    }
+    if (attachment.isMusic) {
+      if (!metadata.isLoading &&
+          (metadata.hasError || metadata.valueOrNull?.status != 'ready')) {
+        return Text(AppLocalizations.of(context)!.chatAttachmentDownloadFailed);
+      }
+      final viewer = ref.watch(authControllerProvider);
+      final switching = ref.watch(profileSwitchInProgressProvider);
+      final controller = ref.read(authControllerProvider.notifier);
+      final generation = controller.sessionInstallGeneration;
+      final session = viewer.session;
+      final profile = viewer.activeProfileId;
+      if (session == null || profile == null || switching) {
+        return Text(AppLocalizations.of(context)!.chatAttachmentDownloadFailed);
+      }
+      bool viewerIsCurrent() =>
+          context.mounted &&
+          identical(ref.read(authControllerProvider.notifier), controller) &&
+          controller.sessionInstallGeneration == generation &&
+          !ref.read(profileSwitchInProgressProvider) &&
+          ref.read(authControllerProvider).session?.accountId ==
+              session.accountId &&
+          ref.read(authControllerProvider).activeProfileId == profile;
+      return MusicAttachmentPlayer(
+        key: ValueKey((attachment.fileId, profile, generation, controller)),
+        attachment: attachment,
+        createPlayback: ref.watch(musicPlaybackFactoryProvider),
+        loadBytes: () async {
+          final auth = ref.read(authorizationHeaderProvider);
+          if (auth == null || !viewerIsCurrent()) {
+            throw const FormatException('music_access_missing');
+          }
+          final files = ref.read(voiceFilesClientProvider);
+          final metadata = await files.getFileMetadata(
+            authorization: auth,
+            fileId: attachment.fileId,
+          );
+          if (!viewerIsCurrent() ||
+              metadata is! FilesApiOk<FileMetadataData> ||
+              metadata.data.status != 'ready' ||
+              metadata.data.fileType != 'audio' ||
+              !metadata.data.isMusic ||
+              metadata.data.isE2e != attachment.isE2eEncrypted ||
+              metadata.data.sizeBytes == null ||
+              metadata.data.sizeBytes! > musicMaxStoredBytes) {
+            throw const FormatException('music_file_unavailable');
+          }
+          final downloaded = await files.fetchFileBytes(
+            authorization: auth,
+            fileId: attachment.fileId,
+            maxBytes: musicMaxStoredBytes,
+          );
+          if (downloaded is! FilesApiOk<Uint8List>) {
+            throw const FormatException('music_download_unavailable');
+          }
+          if (!viewerIsCurrent()) {
+            downloaded.data.fillRange(0, downloaded.data.length, 0);
+            throw const FormatException('music_load_cancelled');
+          }
+          if (!attachment.isE2eEncrypted) return downloaded.data;
+          try {
+            final plaintext = await const E2eFileCrypto().decryptBytes(
+              ciphertext: downloaded.data,
+              keyWire: attachment.e2eKeyWire!,
+              messageService: ref.read(e2eMessageServiceProvider),
+              localProfileId: profile,
+              peerProfileId: senderProfileId,
+              authorization: auth,
+            );
+            if (!viewerIsCurrent()) {
+              plaintext.fillRange(0, plaintext.length, 0);
+              throw const FormatException('music_load_cancelled');
+            }
+            return plaintext;
+          } finally {
+            downloaded.data.fillRange(0, downloaded.data.length, 0);
+          }
+        },
       );
     }
     if (attachment.isImage) {

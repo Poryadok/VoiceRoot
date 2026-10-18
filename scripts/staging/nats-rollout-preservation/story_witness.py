@@ -15,19 +15,26 @@ def digest(value,length=64):
 
 def validate(row):
     """Structural evidence checks only. Root promotion is a separate authority."""
-    fields(row,'schema repository service platform content component database publisher fixture tools review_sha256')
-    if (row['schema']!='voice-story-current4-actual-witness-v1' or row['repository']!='Poryadok/VoiceRoot'
+    automatic=isinstance(row,dict) and row.get('schema')=='voice-story-current4-automatic-witness-v1'
+    fields(row,'schema repository service platform content component database fixture tools '+('execution' if automatic else 'publisher review_sha256'))
+    if (row['schema'] not in ('voice-story-current4-actual-witness-v1','voice-story-current4-automatic-witness-v1') or row['repository']!='Poryadok/VoiceRoot'
         or row['service']!='story' or row['platform']!='linux/amd64'):fail()
     content=row['content'];fields(content,'child_sha256 config_sha256 binary_sha256 build_source_sha')
     for key in ('child_sha256','config_sha256','binary_sha256'):digest(content[key])
-    digest(content['build_source_sha'],40)
+    if not automatic or content['build_source_sha'] is not None:digest(content['build_source_sha'],40)
     component=row['component'];fields(component,'source_sha manifest_sha256')
-    digest(component['source_sha'],40);digest(component['manifest_sha256'])
-    publisher=row['publisher'];fields(publisher,'workflow run_id job_id source_sha catalog_sha256')
-    if (publisher['workflow']!='.github/workflows/ci.yml'
-        or any(type(publisher[k]) is not int or not 0<publisher[k]<2**63 for k in ('run_id','job_id'))
-        or component['source_sha']!=content['build_source_sha'] or publisher['source_sha']!=content['build_source_sha']):fail()
-    digest(publisher['catalog_sha256'])
+    if not automatic or component['source_sha'] is not None:digest(component['source_sha'],40)
+    digest(component['manifest_sha256'])
+    if automatic:
+        if component['source_sha']!=content['build_source_sha'] or component['manifest_sha256']!=content['child_sha256']:fail()
+        execution=row['execution'];fields(execution,'helper_binding_sha256 caller_sha256 fixture_sha256')
+        for value in execution.values():digest(value)
+    else:
+        publisher=row['publisher'];fields(publisher,'workflow run_id job_id source_sha catalog_sha256')
+        if (publisher['workflow']!='.github/workflows/ci.yml'
+            or any(type(publisher[k]) is not int or not 0<publisher[k]<2**63 for k in ('run_id','job_id'))
+            or component['source_sha']!=content['build_source_sha'] or publisher['source_sha']!=content['build_source_sha']):fail()
+        digest(publisher['catalog_sha256'])
     database=row['database'];fields(database,'name version dirty up_sha256 catalog_before_sha256 catalog_after_sha256')
     # The schema is deliberately fixed to the reviewed current4 compatibility gate.
     import actor_root
@@ -43,10 +50,10 @@ def validate(row):
         or type(fixture['row_count']) is not int or fixture['row_count']!=1
         or fixture['missing_profile_code']!='Unauthenticated' or fixture['cleanup_verified'] is not True):fail()
     tools=row['tools'];fields(tools,'postgres caller')
-    for key,prefix in (('postgres','docker.io/library/postgres@sha256:'),('caller','golang:1.26-alpine@sha256:')):
+    for key,prefix in (('postgres','docker.io/library/postgres@sha256:'),('caller','ghcr.io/poryadok/voiceroot/story@sha256:' if automatic else 'golang:1.26-alpine@sha256:')):
         if not isinstance(tools[key],str) or not tools[key].startswith(prefix):fail()
         digest(tools[key][len(prefix):])
-    digest(row['review_sha256'])
+    if not automatic:digest(row['review_sha256'])
     return copy.deepcopy(row)
 
 LIMIT=1<<20
@@ -104,7 +111,7 @@ def _lookup(child,config):
     row=validate(parsed(raw));content=row['content']
     if (content['child_sha256'],content['config_sha256'])!=(child,config):fail()
     if read(base/'selector.json')!=raw_selector:fail()
-    return {'schema':'voice-story-root-witness-authority-v1','registry_revision':selected['revision'],
+    return {'schema':'voice-story-root-automatic-witness-authority-v1' if row['schema']=='voice-story-current4-automatic-witness-v1' else 'voice-story-root-witness-authority-v1','registry_revision':selected['revision'],
         'witness_sha256':entry['witness_sha256'],'component_manifest_sha256':row['component']['manifest_sha256'],
         'component_source_sha':content['build_source_sha'],
         'schema_sha256':hashlib.sha256(json.dumps(row['database'],sort_keys=True,separators=(',',':')).encode()).hexdigest()}
@@ -112,6 +119,23 @@ def _lookup(child,config):
 def lookup(child,config):
     try:return _lookup(child,config)
     except (OSError,TypeError,KeyError,ValueError):fail()
+
+def ensure_content(child,config,prove,unchanged):
+    """Locked pre-fence admission: only genuinely missing content runs a fixture."""
+    digest(child);digest(config)
+    path=guard.ROOT/'installed'/'story-witnesses'/'selector.json'
+    try:selected=selector(parsed(read(path)))
+    except FileNotFoundError:selected=None
+    if selected is not None and child+':'+config in selected['entries']:
+        return lookup(child,config) # revoked/corrupt/conflicting authority never reproves
+    unchanged()
+    row=validate(prove())
+    if (row['schema']!='voice-story-current4-automatic-witness-v1'
+        or (row['content']['child_sha256'],row['content']['config_sha256'])!=(child,config)):fail()
+    unchanged()
+    raw=encoded(row)
+    promote_locked(raw,hashlib.sha256(raw).hexdigest(),unchanged)
+    return lookup(child,config)
 
 def approve_content(content,captured=None):
     """Both Story preflight and fresh rollback use this exact authority."""
@@ -121,7 +145,17 @@ def approve_content(content,captured=None):
         if captured is not None:fail()
         return None
     current=lookup(content[0],content[1])
-    if content[2]!=current['component_source_sha'] or captured is not None and captured!=current:fail()
+    if content[2]!=current['component_source_sha']:fail()
+    if captured is not None and captured!=current:
+        # Fresh lookup already rejects revoked/changed evidence. Adding another
+        # independently proven automatic image cannot revoke this exact record.
+        comparable=copy.deepcopy(current)
+        if (current['schema']!='voice-story-root-automatic-witness-authority-v1'
+            or not isinstance(captured,dict) or type(captured.get('registry_revision')) is not int
+            or not 0<captured['registry_revision']<=current['registry_revision']):fail()
+        comparable['registry_revision']=captured['registry_revision']
+        if comparable!=captured:fail()
+        return copy.deepcopy(captured)
     return current
 
 def registry_snapshot():

@@ -1,0 +1,101 @@
+{
+  "consumer": {
+    "ack_floor": {
+      "consumer_seq": 0,
+      "stream_seq": 0
+    },
+    "config_sha256": "ed0ed1165096064a9ad53a29b5b34748469208ea9df48ceac45d6a645b8600c3",
+    "created": "2026-10-09T13:07:09.412465321Z",
+    "delivered": {
+      "consumer_seq": 1,
+      "stream_seq": 1
+    },
+    "durable": "",
+    "inactive_threshold": 300000000000,
+    "name": "rollout_extra_ephemeral",
+    "num_ack_pending": 1,
+    "num_pending": 2,
+    "num_redelivered": 0,
+    "observations": {
+      "delivered_last_active": "2026-10-09T13:07:09.413443577Z",
+      "num_waiting": 0,
+      "ts": "2026-10-09T13:07:09.505921346Z"
+    },
+    "stream": "rollout_extra"
+  },
+  "identity": "rollout_extra/rollout_extra_ephemeral",
+  "provenance": {
+    "container_id": "dfd059992eeff055627cbe13a1f3473b3b57c4afd5d05127533404491644b227",
+    "finished_at": "2026-10-09T13:07:10.960412+00:00",
+    "server_image": "nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb",
+    "source_pins": {
+      "fixture_base_helper_source": "a84458b0af27283f8f2b94a8d7f6aa3e9ff7eff9d19a11fd209800af33abcbef",
+      "helper_adapted_source": "5e4ac40452a9d546a498fe39982e217331f1ed62ef504cb9e7f07aff732d895b",
+      "helper_binary": "0dcf72800c5734a0a8b475c9c11033e2d1c3175df7d5a71706607d897b799be5",
+      "kernel_binary": "99e6d33527d7b9763580acd46446a8496644892a19725efaaaf6ab1ae208b740",
+      "scripts\\staging\\nats-known-baseline\\census.go": "473ba2a019a9ff2f958007b3b6a781bbf66bb475e9ecf2f04eb0e68be78e1b8f",
+      "scripts\\staging\\nats-known-baseline\\controller.py": "dd9fee1b93309b38cfb8023787142a2cd5ea3dd925100744fcc2a6b66beb629f",
+      "scripts\\staging\\nats-known-baseline\\fixture.go": "d98f817833ecc87cd234c569ec1fa8a8e88131377c9bc3120c04fc57b37723a6",
+      "scripts\\staging\\nats-known-baseline\\main.go": "749a9bb687aec77409815b6ce7554025c56724186056de9f012426cfe9e38075",
+      "scripts\\staging\\nats-known-baseline\\testdata\\deployed-bootstrap-20261004\\analytics-chat-bootstrap.sh": "556040d71737c912213dbb52658bd7bf8dd0a61e4f11c3f13505471b01dd4c60",
+      "scripts\\staging\\nats-known-baseline\\testdata\\deployed-bootstrap-20261004\\notification-bootstrap.sh": "1cc7ef5cbcf5bbcbc05ce46c49a9b811dc71afbd02879988ef390897fb9da26c",
+      "scripts\\staging\\nats-known-baseline\\testdata\\deployed-bootstrap-20261004\\realtime-bootstrap.sh": "a22a6739aa9cbcf27a2f3680e6dbe29c82ebe2769f9eb3c202e5783ac02740fa",
+      "scripts\\staging\\nats-known-baseline\\testdata\\deployed-bootstrap-20261004\\search-bootstrap.sh": "2ac580d2afb2f111d4fef2b97a54e96ddf4135e44ad66eb3cc000a795a34b4b3",
+      "scripts\\staging\\nats-rollout-preservation\\native_store.py": "3f9b177ecbcec7463801ba3ed44724c3068696482804d4d586696a305da813c0",
+      "scripts\\staging\\nats-rollout-preservation\\preserve.py": "f2a35d1e0b3b4156d96251183f18cb591268f0f7edf0e42e77db92d6ed4ee557",
+      "scripts\\staging\\nats-rollout-preservation\\rollout_census.py": "343723cf43789f5313e132c27ca220c2423dbf2470bbadde588f6ce5cbfde31f"
+    },
+    "started_at": "2026-10-09T13:07:10.377535+00:00"
+  },
+  "source_sha256": {
+    "before-native-bytes.json": "f043b166308d5e119c4f515f6bf799b10c0bfe144b1c7d53485d46f594bb096b",
+    "after-native-bytes.json": "b18375253c5c3933053859ae0d457ae70c0bfc82e5c95896d5eb5b65bef3f742",
+    "before-census.json": "514b63e5f5b0cffcecb6f2994b434845afd0a3fe52620c3ceba099f7a01686f8",
+    "recovery-provenance.json": "31ba4c5d74ea4c9a073a4480ae8bb961a4b8886df93e2796f372767dc6b9bb3d",
+    "checksum-proof.json": "8b10e955b15714976579b9deafe28e08665e65eef6fb10d5b3e717f2e05261e8",
+    "source-contract.json": "376320066e4f3c749dd5dc26c55eed1039f3edef33fa458baa6d823b1c65b514"
+  },
+  "checksum_proof": {
+    "server_sources": {
+      "jetstream.go": {
+        "url": "https://raw.githubusercontent.com/nats-io/nats-server/v2.12.12/server/jetstream.go",
+        "sha256": "ee573db6efd02b926fb62acae3255a882cf8c19de4d8ce282b8855056db1bec6",
+        "bytes": 97040
+      },
+      "consumer.go": {
+        "url": "https://raw.githubusercontent.com/nats-io/nats-server/v2.12.12/server/consumer.go",
+        "sha256": "4602a16e5ef5be26b8274f9ca737445d4bc38573baf9bee0f14f60350e04d83c",
+        "bytes": 191262
+      },
+      "filestore.go": {
+        "url": "https://raw.githubusercontent.com/nats-io/nats-server/v2.12.12/server/filestore.go",
+        "sha256": "6b156a0b3282ce09adc9e794163f2cd781cd5c5475d6c5ad7ff650f11661ee2d",
+        "bytes": 341271
+      }
+    },
+    "checksum_source_sha256": "736cbac9380d052d883948338dc6f36080b18d60ec1cc98eae550ca84f587b2c",
+    "checksum_binary_sha256": "6a3c92120b833233d132f4dbb668c5f88faf902053fb0e33d57bd8801df05c09",
+    "checks": [
+      {
+        "actual": "e55a86fc233a2fd4",
+        "equal": true,
+        "expected": "e55a86fc233a2fd4",
+        "identity": "rollout_extra/rollout_extra_ephemeral"
+      },
+      {
+        "actual": "4d0516dd2e611f7f",
+        "equal": true,
+        "expected": "4d0516dd2e611f7f",
+        "identity": "rollout_extra/rollout_extra_ephemeral"
+      }
+    ]
+  },
+  "before": {
+    "meta.inf": "eyJDcmVhdGVkIjoiMjAyNi0xMC0wOVQxMzowNzowOS40MTI0NjUzMjFaIiwiTmFtZSI6InJvbGxvdXRfZXh0cmFfZXBoZW1lcmFsIiwibmFtZSI6InJvbGxvdXRfZXh0cmFfZXBoZW1lcmFsIiwiZGVsaXZlcl9wb2xpY3kiOiJhbGwiLCJhY2tfcG9saWN5IjoiZXhwbGljaXQiLCJhY2tfd2FpdCI6MzAwMDAwMDAwMDAwLCJtYXhfZGVsaXZlciI6LTEsInJlcGxheV9wb2xpY3kiOiJpbnN0YW50IiwibWF4X3dhaXRpbmciOjUxMiwibWF4X2Fja19wZW5kaW5nIjoxMDAwLCJpbmFjdGl2ZV90aHJlc2hvbGQiOjMwMDAwMDAwMDAwMCwibnVtX3JlcGxpY2FzIjowLCJtZXRhZGF0YSI6eyJfbmF0cy5yZXEubGV2ZWwiOiIwIn19",
+    "meta.sum": "ZTU1YTg2ZmMyMzNhMmZkNA=="
+  },
+  "after": {
+    "meta.inf": "eyJDcmVhdGVkIjoiMDAwMS0wMS0wMVQwMDowMDowMFoiLCJOYW1lIjoiIiwibmFtZSI6InJvbGxvdXRfZXh0cmFfZXBoZW1lcmFsIiwiZGVsaXZlcl9wb2xpY3kiOiJhbGwiLCJhY2tfcG9saWN5IjoiZXhwbGljaXQiLCJhY2tfd2FpdCI6MzAwMDAwMDAwMDAwLCJtYXhfZGVsaXZlciI6LTEsInJlcGxheV9wb2xpY3kiOiJpbnN0YW50IiwibWF4X3dhaXRpbmciOjUxMiwibWF4X2Fja19wZW5kaW5nIjoxMDAwLCJpbmFjdGl2ZV90aHJlc2hvbGQiOjMwMDAwMDAwMDAwMCwibnVtX3JlcGxpY2FzIjowLCJtZXRhZGF0YSI6eyJfbmF0cy5yZXEubGV2ZWwiOiIwIn19",
+    "meta.sum": "NGQwNTE2ZGQyZTYxMWY3Zg=="
+  }
+}

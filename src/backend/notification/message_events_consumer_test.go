@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -74,6 +78,12 @@ func (p *failOnceMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, er
 	return false, nil
 }
 
+type offlineMessagePresence struct{}
+
+func (offlineMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
 func (p *failOnMessagePolicyCall) LoadPolicy(ctx context.Context, profileID uuid.UUID, chatID string, typ delivery.NotificationType, at time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
 	if p.calls.Add(1) == p.failAt {
 		return delivery.SettingsSnapshot{}, delivery.QuietHoursSnapshot{}, p.err
@@ -107,6 +117,28 @@ type recordingGameChatScope struct {
 	gameScoped        bool
 	allowed           bool
 	calls             int
+}
+
+// ordinaryGameChatScope models the authenticated GIS answer for an ordinary
+// chat: it is not game-scoped, and no game consent is required for delivery.
+type ordinaryGameChatScope struct{}
+
+func (ordinaryGameChatScope) ResolveGamePushChat(context.Context, uuid.UUID, uuid.UUID, string) (bool, bool, error) {
+	return false, true, nil
+}
+
+type unavailableGameChatScope struct {
+	calls    atomic.Int32
+	attempts chan struct{}
+}
+
+func (s *unavailableGameChatScope) ResolveGamePushChat(context.Context, uuid.UUID, uuid.UUID, string) (bool, bool, error) {
+	s.calls.Add(1)
+	select {
+	case s.attempts <- struct{}{}:
+	default:
+	}
+	return false, false, errors.New("GIS chat scope authority unavailable")
 }
 
 func (r *recordingGameChatScope) ResolveGamePushChat(_ context.Context, profileID, chatID uuid.UUID, category string) (bool, bool, error) {
@@ -167,7 +199,7 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	senderID := uuid.NewString()
 	recipientID := uuid.NewString()
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-	pusher := &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}
+	pusher := &dispatch.MessagePusher{Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore()}
 	env := &eventsv1.MessageStreamEvent{
 		Payload: &eventsv1.MessageStreamEvent_MessageSent{
 			MessageSent: &eventsv1.MessageSent{
@@ -187,11 +219,12 @@ func TestRouteMessageNotificationPolicyFailureRetriesAllRecipientsBeforeSending(
 	policyErr := errors.New("recipient policy unavailable")
 	policy := &failOnMessagePolicyCall{failAt: 2, err: policyErr}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
 		}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy, GameChatScope: ordinaryGameChatScope{},
 	}
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
 	members := stubChatMembers{rows: []chatmembers.Member{
@@ -220,11 +253,12 @@ func TestRouteMessageNotificationDoesNotReloadPoliciesDuringDispatch(t *testing.
 	policyErr := errors.New("unexpected second policy read")
 	policy := &failOnMessagePolicyCall{failAt: 3, err: policyErr}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
 		}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy, GameChatScope: ordinaryGameChatScope{},
 	}
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
 	members := stubChatMembers{rows: []chatmembers.Member{
@@ -252,7 +286,7 @@ func TestRouteMessageNotificationPresenceOutageDoesNotBecomeOfflinePushAndRetrie
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
 			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
 		}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: presence, Grouping: grouping.NewMemoryStore(),
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: presence, Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
 	members := stubChatMembers{rows: []chatmembers.Member{
@@ -279,7 +313,7 @@ func TestRouteMessageNotificationCarriesGameScopeAndUsesPrivatePushCopy(t *testi
 	consent := &recordingGameConsent{allowed: true}
 	pusher := &dispatch.MessagePusher{
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), GameConsent: consent, GameBlocks: noGameBlock{},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore(), GameConsent: consent, GameBlocks: noGameBlock{},
 	}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting},
 		stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, pusher, pushenrich.NoopResolver{},
@@ -344,8 +378,9 @@ func assertChatScopePush(t *testing.T, category, chatID, senderID, recipientID s
 	recorder := &recordingMessageFCM{}
 	scope := &recordingGameChatScope{gameScoped: true, allowed: false}
 	pusher := &dispatch.MessagePusher{
-		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientUUID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: recorder}, GameChatScope: scope, GameBlocks: noGameBlock{}, Grouping: grouping.NewMemoryStore(),
+		Presence: offlineMessagePresence{},
+		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientUUID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher:   &dispatch.PushDispatcher{FCM: recorder}, GameChatScope: scope, GameBlocks: noGameBlock{}, Grouping: grouping.NewMemoryStore(),
 	}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, members, pusher, pushenrich.NoopResolver{}, event)
 	require.NoError(t, err)
@@ -361,6 +396,7 @@ func TestRouteQueuedGameMessageSuppressesPushAfterOptOutForEveryDevice(t *testin
 	recorder := &recordingMessageFCM{}
 	consent := &recordingGameConsent{allowed: true}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {
 				{Token: "device-one", PushService: "fcm"},
@@ -410,6 +446,7 @@ func TestMessageEventsJetStreamRedeliveryRechecksQueuedGameConsentAndSuppressesE
 	recorder := &recordingMessageFCM{}
 	consent := &retryThenOptedOutConsent{redeliveryHit: make(chan struct{}, 1), release: make(chan struct{})}
 	pusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {
 			{Token: "device-one", PushService: "fcm"}, {Token: "device-two", PushService: "fcm"},
 		}}},
@@ -454,6 +491,144 @@ func TestMessageEventsJetStreamRedeliveryRechecksQueuedGameConsentAndSuppressesE
 	}
 }
 
+func TestMessageEventsJetStreamNakRestartRecoversOrdinaryScopeWithoutDebugCapture(t *testing.T) {
+	server, err := natsserver.NewServer(&natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1})
+	require.NoError(t, err)
+	go server.Start()
+	defer server.Shutdown()
+	require.True(t, server.ReadyForConnections(10*time.Second))
+
+	provisioner, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	defer provisioner.Close()
+	js, err := provisioner.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: jsStreamMessageEvents, Subjects: []string{jsSubjectMessageEvents}})
+	require.NoError(t, err)
+	durable := consumer.SharedDurable("message")
+	created, err := js.AddConsumer(jsStreamMessageEvents, &nats.ConsumerConfig{
+		Durable: durable, FilterSubject: jsSubjectMessageEvents,
+		DeliverSubject: "_INBOX.voice.notification.message", AckPolicy: nats.AckExplicitPolicy,
+		DeliverPolicy: nats.DeliverNewPolicy, AckWait: 250 * time.Millisecond,
+	})
+	require.NoError(t, err)
+
+	senderID, recipientID := uuid.New(), uuid.New()
+	members := stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}
+	tokens := messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+		recipientID: {{Token: "ordinary-retry-device", PushService: "fcm"}},
+	}}
+	failedAuthority := &unavailableGameChatScope{attempts: make(chan struct{}, 8)}
+	failedDeliveries := make(chan notificationRestartPush, 2)
+	failedPusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{}, Tokens: tokens, Grouping: grouping.NewMemoryStore(),
+		GameChatScope: failedAuthority,
+		Pusher:        &dispatch.PushDispatcher{FCM: notificationRestartFCM{sent: failedDeliveries}},
+	}
+
+	start := func(pusher *dispatch.MessagePusher) (context.CancelFunc, <-chan error, *notificationConsumerReadiness) {
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		readiness := newNotificationConsumerReadiness("message")
+		done := make(chan error, 1)
+		go func() {
+			done <- runMessageEventsConsumer(withNotificationConsumerReadiness(ctx, readiness, "message"), server.ClientURL(), &store.DeviceTokenStore{}, members, pusher, pushenrich.NoopResolver{}, nil)
+		}()
+		require.Eventually(t, readiness.ready, 5*time.Second, 10*time.Millisecond, "message durable binds before publication")
+		return cancel, done, readiness
+	}
+	stop := func(cancel context.CancelFunc, done <-chan error) {
+		t.Helper()
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("message consumer did not stop after cancellation")
+		}
+	}
+
+	firstCancel, firstDone, _ := start(failedPusher)
+	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+	encoded, err := proto.Marshal(event)
+	require.NoError(t, err)
+	published, err := js.Publish("message.sent", encoded)
+	require.NoError(t, err)
+	for attempt := 0; attempt < 2; attempt++ {
+		select {
+		case <-failedAuthority.attempts:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("GIS authority failure did not NAK and redeliver the message (attempt %d)", attempt+1)
+		}
+	}
+	stop(firstCancel, firstDone)
+	waitNotificationConsumerPushBound(t, js, jsStreamMessageEvents, durable, false)
+	var pendingState string
+	pendingObserved := assert.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		if infoErr != nil {
+			pendingState = fmt.Sprintf("consumer info error type=%T", infoErr)
+			return false
+		}
+		pendingState = fmt.Sprintf("push_bound=%t num_pending=%d num_ack_pending=%d redelivered=%d delivered_stream=%d ack_floor_stream=%d published_stream=%d same_durable=%t",
+			info.PushBound, info.NumPending, info.NumAckPending, info.NumRedelivered, info.Delivered.Stream,
+			info.AckFloor.Stream, published.Sequence, info.Created.Equal(created.Created))
+		knownEventUnacked := (info.NumPending == 1 && info.NumAckPending == 0) ||
+			(info.NumPending == 0 && info.NumAckPending == 1)
+		return !info.PushBound && knownEventUnacked && info.NumRedelivered >= 1 &&
+			info.Delivered.Stream >= published.Sequence && info.AckFloor.Stream < published.Sequence &&
+			info.Created.Equal(created.Created)
+	}, 5*time.Second, 20*time.Millisecond)
+	if !pendingObserved {
+		t.Fatalf("failed authority leaves the NAKed event unacknowledged on the same unbound durable; last observation: %s", pendingState)
+	}
+	select {
+	case got := <-failedDeliveries:
+		t.Fatalf("authority failure must not send a preview before recovery: %#v", got)
+	default:
+	}
+
+	ordinaryAuthority := &recordingGameChatScope{gameScoped: false, allowed: true}
+	deliveries := make(chan notificationRestartPush, 2)
+	var sender fcm.Sender = notificationRestartFCM{sent: deliveries}
+	sender = maybeRecordFCMSender(sender, false)
+	recoveredPusher := &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{}, Tokens: tokens, Grouping: grouping.NewMemoryStore(),
+		GameChatScope: ordinaryAuthority, Pusher: &dispatch.PushDispatcher{FCM: sender},
+	}
+	secondCancel, secondDone, _ := start(recoveredPusher)
+	select {
+	case got := <-deliveries:
+		require.Equal(t, recipientID, got.profileID)
+		require.Equal(t, "new_message", got.payload.Data["type"])
+	case <-time.After(5 * time.Second):
+		t.Fatal("recovered authenticated ordinary scope did not deliver the pending message")
+	}
+	require.Equal(t, 1, ordinaryAuthority.calls, "the successful retry uses the current ordinary GIS scope result")
+	require.False(t, ordinaryAuthority.gameScoped, "ordinary control is explicitly unmapped from a game")
+	require.True(t, ordinaryAuthority.allowed, "ordinary control is an authenticated authority response, not missing GIS")
+	require.Equal(t, recipientID, ordinaryAuthority.profileID)
+	require.Equal(t, event.GetMessageSent().GetChatId(), ordinaryAuthority.chatID.String())
+	require.Equal(t, "game_activity", ordinaryAuthority.category)
+	require.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0 &&
+			info.AckFloor.Stream >= published.Sequence && info.Created.Equal(created.Created)
+	}, 5*time.Second, 20*time.Millisecond, "recovered delivery ACKs the redelivered event and drains the durable")
+	select {
+	case duplicate := <-deliveries:
+		t.Fatalf("redelivered event produced more than one FCM attempt: %#v", duplicate)
+	default:
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/debug/recorded-pushes?profile_id="+recipientID.String(), nil)
+	response := httptest.NewRecorder()
+	notificationHTTPHandlerWithReadinessAndDebug(serviceName, nil, false).ServeHTTP(response, request)
+	require.Equal(t, http.StatusNotFound, response.Code, "disabled private capture keeps the debug route absent")
+	stop(secondCancel, secondDone)
+}
+
 func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T) {
 	options := &natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1}
 	server, err := natsserver.NewServer(options)
@@ -480,8 +655,9 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	senderID, recipientID := uuid.New(), uuid.New()
 	deliveries := make(chan push.Payload, 2)
 	pusher := &dispatch.MessagePusher{
-		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
-		Pusher: &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(),
+		Presence: offlineMessagePresence{},
+		Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher:   &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}
 	members := stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}
 
@@ -519,12 +695,38 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	}}
 	encoded, err := proto.Marshal(event)
 	require.NoError(t, err)
-	_, err = js.Publish(jsSubjectMessageEvents[:len(jsSubjectMessageEvents)-1]+"sent", encoded)
+	publishAck, err := js.Publish(jsSubjectMessageEvents[:len(jsSubjectMessageEvents)-1]+"sent", encoded)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	var (
+		queryAttempts    int
+		queryErrorClass        = "not observed"
+		lastPending      int64 = -1
+		lastAckPending   int64 = -1
+		lastRedelivered  int64 = -1
+		lastDeliveredSeq uint64
+		lastAckFloorSeq  uint64
+	)
+	pendingObserved := assert.Eventually(t, func() bool {
+		queryAttempts++
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		if infoErr != nil {
+			queryErrorClass = fmt.Sprintf("%T", infoErr)
+			lastPending, lastAckPending, lastRedelivered = -1, -1, -1
+			lastDeliveredSeq, lastAckFloorSeq = 0, 0
+			return false
+		}
+		queryErrorClass = "none"
+		lastPending = int64(info.NumPending)
+		lastAckPending = int64(info.NumAckPending)
+		lastRedelivered = int64(info.NumRedelivered)
+		lastDeliveredSeq = info.Delivered.Stream
+		lastAckFloorSeq = info.AckFloor.Stream
 		return infoErr == nil && info.NumPending == 1 && info.NumAckPending == 0
 	}, 5*time.Second, 20*time.Millisecond, "published event remains pending on the durable while the consumer is stopped")
+	if !pendingObserved {
+		t.Fatalf("published event pending observation failed: query_attempts=%d query_error_class=%q pending=%d ack_pending=%d redelivered=%d delivered_stream_seq=%d ack_floor_stream_seq=%d published_stream_seq=%d",
+			queryAttempts, queryErrorClass, lastPending, lastAckPending, lastRedelivered, lastDeliveredSeq, lastAckFloorSeq, publishAck.Sequence)
+	}
 
 	secondCtx, stopSecond := context.WithCancel(context.Background())
 	secondReadiness := newNotificationConsumerReadiness("message")
@@ -590,7 +792,7 @@ func TestRouteMessageNotification_MentionAdded(t *testing.T) {
 	senderID := uuid.NewString()
 	mentionedID := uuid.NewString()
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-	pusher := &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}
+	pusher := &dispatch.MessagePusher{Presence: offlineMessagePresence{}, Grouping: grouping.NewMemoryStore()}
 	env := &eventsv1.MessageStreamEvent{
 		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
 			MentionAdded: &eventsv1.MentionAdded{
@@ -610,11 +812,12 @@ func TestRouteMessageNotification_SendSilentMarksPushWithoutSuppressingIt(t *tes
 	recipientID := uuid.New()
 	recorder := &recordingMessageFCM{}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
 		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-		Grouping: grouping.NewMemoryStore(),
+		Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
 		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(), SendSilent: true},
 	}})
@@ -629,11 +832,12 @@ func TestRouteMessageNotification_SilentMentionDoesNotIntroduceAudiblePush(t *te
 	recipientID := uuid.New()
 	recorder := &recordingMessageFCM{}
 	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Presence: offlineMessagePresence{},
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 		}},
 		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-		Grouping: grouping.NewMemoryStore(),
+		Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 	}, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{
 		MentionAdded: &eventsv1.MentionAdded{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(), MentionedProfileIds: []string{recipientID.String()}, SendSilent: true},
 	}})
@@ -693,11 +897,12 @@ func TestRouteMessageNotification_ArchivedRecipientGetsNoPush(t *testing.T) {
 				},
 			}}
 			err := routeMessageNotification(context.Background(), handler, stubChatMembers{rows: members}, &dispatch.MessagePusher{
+				Presence: offlineMessagePresence{},
 				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 					recipientID: {{Token: "recipient-token", PushService: "fcm"}},
 				}},
 				Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-				Grouping: grouping.NewMemoryStore(),
+				Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 			}, pushenrich.NoopResolver{}, env)
 
 			require.NoError(t, err)
@@ -733,11 +938,12 @@ func TestRouteMessageNotification_ArchivedReplyAndMentionSuppressNotificationDel
 			recipientID := uuid.NewString()
 			recorder := &recordingMessageFCM{}
 			pusher := &dispatch.MessagePusher{
+				Presence: offlineMessagePresence{},
 				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 					uuid.MustParse(recipientID): {{Token: "recipient-token", PushService: "fcm"}},
 				}},
 				Pusher:   &dispatch.PushDispatcher{FCM: recorder},
-				Grouping: grouping.NewMemoryStore(),
+				Grouping: grouping.NewMemoryStore(), GameChatScope: ordinaryGameChatScope{},
 			}
 			members := stubChatMembers{rows: []chatmembers.Member{
 				{ProfileID: senderID, InboxBucket: "main"},

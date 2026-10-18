@@ -21,6 +21,7 @@ from scenario import fixture, staging_baseline, recover_staging_baseline
 from stage_runtime import Kube, Staging, HUB, MARKER, LEAVES, pv_storage_path
 
 ROOT=Path('/var/lib/voice-nats-preservation')
+MAX_CHECKPOINT_BYTES=128<<20
 CURRENT={'namespace_uid':'ac7abaf3-241f-483f-ac33-71086e4dfd32',
          'marker_uid':'cbafb90c-6974-4642-86d6-09b2eef1c843',
          'generation':'r20260930a4',
@@ -92,6 +93,10 @@ def private_json(path,*,limit=2<<20):
     finally: os.close(fd)
 
 
+def checkpoint_json(path):
+    return private_json(path,limit=MAX_CHECKPOINT_BYTES)
+
+
 def save(path, row,*,limit=2<<20):
     if type(limit) is not int or not 0<limit<=128<<20:raise Blocked('journal_limit_invalid')
     raw=json.dumps(row,sort_keys=True,indent=2).encode()+b'\n'
@@ -104,6 +109,10 @@ def save(path, row,*,limit=2<<20):
     directory=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
     try: os.fsync(directory)
     finally: os.close(directory)
+
+
+def save_checkpoint(path,row):
+    return save(path,row,limit=MAX_CHECKPOINT_BYTES)
 
 
 def public_read(path,limit=256<<10):
@@ -128,7 +137,7 @@ def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=N
         from bootstrap_selection import select
         selected['bootstrap']=select(kube,bootstrap_enrollment,generation)
     secrets={role:kube.get('secret',name) for role,name in selected.items()}
-    inputs=base/'inputs'; inputs.mkdir(mode=0o750); os.chown(inputs,0,65532)
+    inputs=base/'inputs'; inputs.mkdir(mode=0o750); os.chown(inputs,0,65532); inputs.chmod(0o750)
     provenance={}
     tls='voice-nats-hub-tls-'+generation
     metadata=kube.secret_meta(tls)
@@ -194,8 +203,8 @@ def prepare(code):
             for key in ('final_claim','final_pv'):
                 if hasattr(staging,key):state[key]=getattr(staging,key)
             if hasattr(staging,'final_path'):state['final_path']=str(staging.final_path)
-        state['journal'].append(row); save(base/'checkpoint.json',state)
-    def phase(name): state['phase']=name; save(base/'checkpoint.json',state)
+        state['journal'].append(row); save_checkpoint(base/'checkpoint.json',state)
+    def phase(name): state['phase']=name; save_checkpoint(base/'checkpoint.json',state)
     runtime=DockerRuntime(base,operation)
     print('KNOWN_NATS_OPERATION='+str(base),flush=True)
     try:
@@ -213,7 +222,7 @@ def prepare(code):
         revalidate_inputs(kube,contract,state['provenance']); staging.preflight()
         phase('FENCE_STAGE')
         staging.fence()
-        state['stage_fenced']=True;state['fence_status']='VERIFIED';save(base/'checkpoint.json',state)
+        state['stage_fenced']=True;state['fence_status']='VERIFIED';save_checkpoint(base/'checkpoint.json',state)
         phase('NEW_FINAL_BASELINE')
         store=staging.new_claim(dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d'))
         phase('STAGING_BACKUP_RESTORE'); state['staging_backup']=staging_baseline(runtime,store)
@@ -227,7 +236,7 @@ def prepare(code):
     except Exception as error:
         observe_refence(state,staging)
         state['status']='BLOCKED'; state['error']=str(error) if isinstance(error,Blocked) and re.fullmatch(r'[a-z_]{1,80}',str(error)) else 'root_operation_phase_failed'
-        save(base/'checkpoint.json',state)
+        save_checkpoint(base/'checkpoint.json',state)
         raise Blocked('root_operation_phase_failed') from None
     finally:
         for name in reversed(runtime.owned):
@@ -236,7 +245,7 @@ def prepare(code):
 
 def resume(code, base, hashes):
     if base.parent!=ROOT or not re.fullmatch(r'known-baseline-[a-f0-9]{12}',base.name): raise Blocked('checkpoint_path_invalid')
-    state=private_json(base/'checkpoint.json')
+    state=checkpoint_json(base/'checkpoint.json')
     if state['status']!='AWAITING_OFF_NODE_COPY' or dt.datetime.now(dt.timezone.utc)>dt.datetime.fromisoformat(state['expires_at']):
         raise Blocked('checkpoint_state_or_ttl_invalid')
     expected=[state[k]['archive_sha256'] for k in ('fixture_backup','staging_backup')]
@@ -252,35 +261,35 @@ def resume(code, base, hashes):
             'receipt_authority':'human operator supplied both verified off-node SHA256 values',
             'accepted_at':dt.datetime.now(dt.timezone.utc).isoformat(),
             'retention':'retain both verified archives and manifests until explicit owner disposal'}
-    def journal(row): state['journal'].append(row); save(base/'checkpoint.json',state)
+    def journal(row): state['journal'].append(row); save_checkpoint(base/'checkpoint.json',state)
     staging=Staging(kube,state['operation'],state['expected'],journal)
     staging.marker=state['marker']; staging.snapshots=state['snapshots']
     staging.final_claim=state['final_claim']; staging.final_path=Path(state['final_path'])
     staging.final_pv=state['final_pv'];staging.service=state['service']
     verify_store(base,state,staging)
-    state['phase']='RESTART_STAGE'; save(base/'checkpoint.json',state)
+    state['phase']='RESTART_STAGE'; save_checkpoint(base/'checkpoint.json',state)
     try:
         receipt=staging.restart()
         state['restart']=receipt; state['stage_fenced']=False;state['fence_status']='RELEASED'; state['status']='PASS'
-        state['phase']='POST_RESTART'; save(base/'checkpoint.json',state)
+        state['phase']='POST_RESTART'; save_checkpoint(base/'checkpoint.json',state)
         hub=kube.get('deployment',HUB)
         state['post_restart']={'observed_at':dt.datetime.now(dt.timezone.utc).isoformat(),
             'hub_uid':hub['metadata']['uid'],'ready_replicas':hub.get('status',{}).get('readyReplicas',0),
             'active_claim':state['final_claim']['metadata']['name'],
             'closed_backup_messages':0,'current_messages':'UNKNOWN; business clients resumed after closed capture cut',
             'scope':'backup protects closed bootstrap baseline; later records are outside this capture'}
-        save(base/'checkpoint.json',state)
+        save_checkpoint(base/'checkpoint.json',state)
     except Exception:
         state['status']='BLOCKED'; state['error']='restart_failed'
         observe_refence(state,staging)
-        save(base/'checkpoint.json',state)
+        save_checkpoint(base/'checkpoint.json',state)
         raise Blocked('restart_failed') from None
     return state
 
 
 def refresh(code, base):
     if base.parent!=ROOT or not re.fullmatch(r'known-baseline-[a-f0-9]{12}',base.name): raise Blocked('checkpoint_path_invalid')
-    state=private_json(base/'checkpoint.json')
+    state=checkpoint_json(base/'checkpoint.json')
     if state['status']!='AWAITING_OFF_NODE_COPY': raise Blocked('refresh_state_invalid')
     bind_code(code,state)
     kube=Kube(); contract=json.loads(public_read(code/'deployed-contract.json'))
@@ -300,7 +309,7 @@ def refresh(code, base):
         if file_sha(state[key]['archive'])!=state[key]['archive_sha256']: raise Blocked('refresh_archive_changed')
     state['expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
     state['journal'].append({'kind':'custody_ttl_refreshed','stage_fenced':True,'expires_at':state['expires_at']})
-    save(base/'checkpoint.json',state)
+    save_checkpoint(base/'checkpoint.json',state)
     return state
 
 
@@ -312,7 +321,7 @@ def continuation_preflight(code, base, *, baseline=False):
         s=path.lstat()
         if s.st_uid!=0 or s.st_mode&0o022 or not (stat.S_ISDIR(s.st_mode) if directory else stat.S_ISREG(s.st_mode)):
             raise Blocked('fence_continuation_custody_invalid')
-    state=private_json(base/'checkpoint.json')
+    state=checkpoint_json(base/'checkpoint.json')
     if (state.get('schema')!='known-nats-root-checkpoint-v1' or state.get('operation')!='0049430b0dbb' or
         state.get('status')!='BLOCKED' or
         (not baseline and (state.get('phase')!='FENCE_STAGE' or state.get('error')!='command_output_limit' or any(k in state for k in ('final_claim','final_pv','staging_backup')))) or
@@ -361,7 +370,7 @@ def continuation_preflight(code, base, *, baseline=False):
         for key in ('final_claim','final_pv'):
             if hasattr(staging,key):state[key]=getattr(staging,key)
         if hasattr(staging,'final_path'):state['final_path']=str(staging.final_path)
-        state['journal'].append(row);save(base/'checkpoint.json',state)
+        state['journal'].append(row);save_checkpoint(base/'checkpoint.json',state)
     staging=Staging(kube,state['operation'],state['expected'],journal)
     staging.marker=state['marker'];staging.snapshots=state['snapshots'];staging.service=state['service']
     claim=kube.get('pvc',CURRENT['source_claim']);pv=kube.get('pv',claim['spec']['volumeName'])
@@ -394,13 +403,13 @@ def continue_fence(code, base):
         for key in ('final_claim','final_pv'):
             if hasattr(staging,key):state[key]=getattr(staging,key)
         if hasattr(staging,'final_path'):state['final_path']=str(staging.final_path)
-        state['journal'].append(row);save(base/'checkpoint.json',state)
+        state['journal'].append(row);save_checkpoint(base/'checkpoint.json',state)
     staging.save=journal
     state['previous_code_capture']=state['code_capture'];state['code_capture']=current
     state['status']='CONTINUING';state['stage_fenced']=True;state['fence_status']='VERIFIED'
     state['previous_error']=state.pop('error');journal({'kind':'owned_fence_continuation_verified'})
     runtime=DockerRuntime(base,state['operation'])
-    def phase(name):state['phase']=name;save(base/'checkpoint.json',state)
+    def phase(name):state['phase']=name;save_checkpoint(base/'checkpoint.json',state)
     try:
         phase('NEW_FINAL_BASELINE')
         store=staging.new_claim(dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d'))
@@ -413,7 +422,7 @@ def continue_fence(code, base):
     except Exception as error:
         observe_refence(state,staging);state['status']='BLOCKED'
         state['error']=str(error) if isinstance(error,Blocked) and re.fullmatch(r'[a-z_]{1,80}',str(error)) else 'root_operation_phase_failed'
-        save(base/'checkpoint.json',state);raise Blocked('root_operation_phase_failed') from None
+        save_checkpoint(base/'checkpoint.json',state);raise Blocked('root_operation_phase_failed') from None
     finally:
         for name in reversed(runtime.owned):runtime.inspect(name);runtime.run(['rm','-f',name])
 
@@ -429,10 +438,10 @@ def continue_staging_baseline(code, base):
     state['recovery_cut_at']=dt.datetime.now(dt.timezone.utc).isoformat()
     state['journal'].append({'kind':'baseline_recovery_custody_revalidated',
                              'original_created_at':original_created,'recovery_cut_at':state['recovery_cut_at']})
-    save(base/'checkpoint.json',state)
+    save_checkpoint(base/'checkpoint.json',state)
     def journal(row):
         state['marker']=staging.marker;state['snapshots']=staging.snapshots
-        state['journal'].append(row);save(base/'checkpoint.json',state)
+        state['journal'].append(row);save_checkpoint(base/'checkpoint.json',state)
     staging.save=journal
     try:
         # This is a newly observed paused-store cut, never claimed as an old
@@ -453,12 +462,12 @@ def continue_staging_baseline(code, base):
         state['status']='AWAITING_OFF_NODE_COPY';state['phase']='CUSTODY_CHECKPOINT'
         state['stage_fenced']=True;state['fence_status']='VERIFIED'
         state['expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
-        save(base/'checkpoint.json',state)
+        save_checkpoint(base/'checkpoint.json',state)
         return base,state
     except Exception as error:
         observe_refence(state,staging);state['status']='BLOCKED'
         state['error']=operator_error(error)
-        save(base/'checkpoint.json',state)
+        save_checkpoint(base/'checkpoint.json',state)
         raise Blocked(state['error']) from None
     finally:
         for name in reversed(runtime.owned):runtime.inspect(name);runtime.run(['rm','-f',name])
@@ -500,7 +509,7 @@ def main_unlocked(args):
     if len(args)==2 and args[0]=='--status':
         base=Path(args[1])
         if base.parent!=ROOT or not re.fullmatch(r'known-baseline-[a-f0-9]{12}',base.name):raise Blocked('status_path_invalid')
-        state=private_json(base/'checkpoint.json')
+        state=checkpoint_json(base/'checkpoint.json')
         print(json.dumps({k:state[k] for k in ('schema','operation','status','phase','stage_fenced','fence_status','error','expires_at','restart','post_restart') if k in state},sort_keys=True));return
     raise Blocked('root_arguments_invalid')
 

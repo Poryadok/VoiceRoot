@@ -113,6 +113,133 @@ void main() {
     expect(find.text('CS2'), findsOneWidget);
   });
 
+  for (final (language, statusCode) in [
+    ('en', 500),
+    ('ru', 500),
+    ('en', 503),
+    ('ru', 503),
+  ]) {
+    testWidgets(
+      '$language $statusCode autocomplete hides upstream errors and query edit recovers',
+      (tester) async {
+        const secret = 'private upstream autocomplete diagnostic';
+        var calls = 0;
+        var recover = false;
+        Map<String, dynamic>? result;
+        final mock = MockClient((request) async {
+          expect(request.url.path, '/api/v1/bots/autocomplete');
+          expect(request.headers['authorization'], auth);
+          calls++;
+          if (!recover) {
+            return http.Response(
+              jsonEncode({'message': secret}),
+              statusCode,
+              headers: const {'content-type': 'application/json'},
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'choices': [
+                {'name': 'CS2', 'value': 'cs2'},
+              ],
+            }),
+            200,
+            headers: const {'content-type': 'application/json'},
+          );
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              ...voiceThemeTestOverrides(),
+              profileAccentStorageProvider.overrideWithValue(
+                testProfileAccentStorage,
+              ),
+              authorizationHeaderProvider.overrideWithValue(auth),
+              voiceBotsClientProvider.overrideWithValue(
+                VoiceBotsClient(
+                  gateway: gatewayHttpForTest(mock, config: config),
+                ),
+              ),
+              chatTypeForChatProvider(
+                'chat-1',
+              ).overrideWith((_) => 'CHAT_TYPE_CHANNEL'),
+            ],
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              locale: Locale(language),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Consumer(
+                builder: (context, ref, _) => Scaffold(
+                  body: Center(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        result = await showSlashCommandOptionsSheet(
+                          context: context,
+                          ref: ref,
+                          chatId: 'chat-1',
+                          command: command,
+                        );
+                      },
+                      child: const Text('open'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        final field = find.byType(TextField);
+        final l10n = AppLocalizations.of(tester.element(field))!;
+        final safeError = statusCode == 503
+            ? l10n.backendUnavailable
+            : language == 'en'
+            ? 'Could not complete this action.'
+            : 'Не удалось выполнить действие.';
+        await tester.enterText(field, 'broken query');
+        await tester.pump(const Duration(milliseconds: 300));
+        for (var attempt = 0; attempt < 12; attempt++) {
+          await tester.pump(const Duration(milliseconds: 250));
+        }
+        await tester.pumpAndSettle();
+        expect(calls, 12, reason: 'existing failure polling must stay bounded');
+        expect(find.text(safeError), findsOneWidget);
+        expect(find.textContaining(secret), findsNothing);
+        expect(
+          tester.widget<TextField>(field).controller!.text,
+          'broken query',
+        );
+        final run = find.widgetWithText(FilledButton, l10n.slashCommandRun);
+        expect(tester.widget<FilledButton>(run).onPressed, isNotNull);
+
+        recover = true;
+        await tester.enterText(field, 'cs');
+        await tester.pump();
+        expect(find.text(safeError), findsNothing);
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
+        expect(calls, 13);
+        expect(find.text('CS2'), findsOneWidget);
+        expect(find.textContaining(secret), findsNothing);
+        await tester.tap(find.text('CS2'));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(field).controller!.text, 'cs2');
+        await tester.pump(const Duration(seconds: 3));
+        expect(
+          calls,
+          13,
+          reason: 'a selected result must not issue more polls',
+        );
+        await tester.tap(run);
+        await tester.pumpAndSettle();
+        expect(result, {'game': 'cs2'});
+      },
+    );
+  }
+
   testWidgets(
     'stale autocomplete does not retry or update after session switch',
     (tester) async {

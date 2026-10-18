@@ -244,14 +244,14 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 		{
 			name:         "role unavailable fails closed",
 			profileID:    fixtureProfileMember,
-			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")},
-			wantCode:     codes.PermissionDenied,
+			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: status.Error(codes.Unavailable, "Role unavailable")},
+			wantCode:     codes.Unavailable,
 			wantRoleCall: true,
 		},
 		{
 			name:      "role checker missing fails closed",
 			profileID: fixtureProfileMember,
-			wantCode:  codes.PermissionDenied,
+			wantCode:  codes.Unavailable,
 		},
 	}
 
@@ -405,6 +405,26 @@ func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemovePart
 	spaceMembers := f.svc.SpaceMembers.(*mapSpaceMembers)
 	delete(spaceMembers.members[f.spaceID], fixtureProfileMember)
 
+	// Leaving uses the admitted media incarnation, including its revocation
+	// dependency; membership loss must not turn this into legacy roster removal.
+	call, err := f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.voiceRoomID)
+	require.NoError(t, err)
+	participant, ok := call.SpaceMedia[fixtureProfileMember]
+	require.True(t, ok)
+	admissions := &screenShareLeaveAdmission{}
+	f.svc.SpaceMediaAdmissions = admissions
+	calls := f.svc.Calls.(*voicestore.MemoryCallStore)
+	media := &screenShareLeaveMedia{
+		calls: calls, admissions: admissions, roomName: call.LivekitRoomName,
+		roomID: call.RoomID, spaceID: f.spaceID, voiceRoomID: f.voiceRoomID,
+		identity: participant.Identity, participant: participant,
+	}
+	revoker := &screenShareLeaveRevoker{
+		calls: calls, media: media, spaceID: f.spaceID,
+		voiceRoomID: f.voiceRoomID, profileID: fixtureProfileMember,
+	}
+	f.svc.SpaceMediaRevoker = revoker
+
 	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx(fixtureProfileMember), &callsv1.LeaveVoiceRoomRequest{
 		VoiceRoomId: f.voiceRoomID,
 	})
@@ -425,6 +445,14 @@ func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemovePart
 	})
 	require.NoError(t, err)
 	require.Len(t, states.GetParticipants(), 1, "a different profile's leave cannot remove the remaining participant")
+	require.Equal(t, []string{fixtureProfileMember}, revoker.removedProfiles)
+	require.Equal(t, []string{participant.Identity}, media.removedIdentities)
+	require.True(t, media.participantRevoking)
+	require.Equal(t, []uuid.UUID{uuid.MustParse(participant.AdmissionOperationID)}, admissions.beginOperations)
+	require.Equal(t, []string{participant.Generation}, admissions.beginGenerations)
+	require.Len(t, admissions.completed, 1, "an outsider's leave does not start another cleanup")
+	require.Equal(t, participant.AdmissionOperationID, admissions.completed[0].OperationID.String())
+	require.Equal(t, participant.Generation, admissions.completed[0].Generation)
 }
 
 func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *testing.T) {
@@ -433,11 +461,10 @@ func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *tes
 	require.NoError(t, err)
 	call, err := f.svc.Calls.GetCall(t.Context(), joined.GetVoiceSession().GetRoomId())
 	require.NoError(t, err)
-	call, err = f.svc.Calls.AdmitSpaceMediaParticipant(t.Context(), call.RoomID, voicestore.SpaceMediaParticipant{
-		ProfileID: fixtureProfileOwner, Identity: "space-media-owner", Generation: uuid.NewString(),
-		Issued: voicestore.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
-	}, voicestore.MaxSpaceProVoiceParticipants)
-	require.NoError(t, err)
+	participant, ok := call.SpaceMedia[fixtureProfileOwner]
+	require.True(t, ok, "canonical join must provide the exact admitted media target")
+	require.NotEmpty(t, participant.Identity)
+	require.NotEmpty(t, participant.Generation)
 	f.svc.SpaceMediaRevoker = failingSpaceMediaRevoker{err: errors.New("ejection unavailable")}
 
 	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx(fixtureProfileOwner), &callsv1.LeaveVoiceRoomRequest{VoiceRoomId: f.voiceRoomID})
@@ -445,7 +472,8 @@ func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *tes
 	current, err := f.svc.Calls.GetCall(t.Context(), call.RoomID)
 	require.NoError(t, err)
 	require.True(t, current.IsParticipant(fixtureProfileOwner), "failed ejection must not remove the Voice roster entry")
-	require.Equal(t, "space-media-owner", current.SpaceMedia[fixtureProfileOwner].Identity, "failed ejection must retain the exact media target")
+	require.Equal(t, participant.Identity, current.SpaceMedia[fixtureProfileOwner].Identity, "failed ejection must retain the exact media target")
+	require.Equal(t, participant.Generation, current.SpaceMedia[fixtureProfileOwner].Generation)
 }
 
 func TestVoiceGRPCVoiceRoom_max32Participants(t *testing.T) {
@@ -501,17 +529,19 @@ func TestVoiceGRPCVoiceRoom_voiceSpeakDenialBlocksUnmuteButAllowsSelfMute(t *tes
 
 func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker(t *testing.T) {
 	cases := []struct {
-		name  string
-		roles RolePermissionChecker
+		name     string
+		roles    RolePermissionChecker
+		wantCode codes.Code
 	}{
-		{name: "missing"},
-		{name: "unavailable", roles: &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")}},
+		{name: "missing", wantCode: codes.Unavailable},
+		{name: "unavailable", roles: &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")}, wantCode: codes.PermissionDenied},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := startVoiceRoomFixture(t)
-			f.svc.Roles = tc.roles
+			f.svc.Roles = &recordingVoiceRolePermissions{}
 			roomID := f.joinParticipants(t)
+			f.svc.Roles = tc.roles
 			muted := true
 			_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 				RoomId:  roomID,
@@ -524,7 +554,7 @@ func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker
 				RoomId:  roomID,
 				IsMuted: &unmuted,
 			})
-			require.Equal(t, codes.PermissionDenied, status.Code(err))
+			require.Equal(t, tc.wantCode, status.Code(err))
 			require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted(), "failed-closed unmute must not mutate state")
 		})
 	}
@@ -547,7 +577,8 @@ func TestVoiceGRPCVoiceRoom_nonMutePatchDoesNotRequireVoiceSpeak(t *testing.T) {
 }
 
 func TestVoiceGRPCUpdateVoiceState_groupNonMutePatchAllowsMissingRoleChecker(t *testing.T) {
-	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
+	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
+	svc.ChatMembers = &mapChatMembers{members: map[string]map[string]bool{"group-chat-1": {fixtureProfileOwner: true}}}
 	var noRoles RolePermissionChecker
 	svc.Roles = noRoles
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
@@ -574,12 +605,13 @@ func TestVoiceGRPCVoiceRoom_protectedActionsFailClosedWithoutRoleChecker(t *test
 	t.Run("unmute", func(t *testing.T) {
 		f := startVoiceRoomFixture(t)
 		roomID := f.joinParticipants(t)
+		f.svc.Roles = nil
 		muted := true
 		_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &muted})
 		require.NoError(t, err)
 		unmuted := false
 		_, err = f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &unmuted})
-		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		require.Equal(t, codes.Unavailable, status.Code(err))
 		require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted())
 	})
 

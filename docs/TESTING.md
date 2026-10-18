@@ -1,5 +1,9 @@
 # Тестирование
 
+See [Release evidence and recovery lessons](RELEASE_EVIDENCE.md) for executed
+scenario coverage, discriminating negative tests, acceptance-reader testing and
+source-bound visual/runtime evidence.
+
 Договорённости по слоям тестов, стеку и CI. Детали релиза и отката — [OPERATIONS.md](OPERATIONS.md); локальный подъём сервисов — [PLAN.md](PLAN.md) (Docker Compose), [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
@@ -52,6 +56,24 @@
 ---
 
 ## По языкам и компонентам
+
+### Help: реальный browser handoff
+
+Обычный Flutter job CI собирает `test/fixtures/settings_help_web_launcher_smoke.dart`
+и запускает `node scripts/ci/settings-help-browser-handoff.mjs
+src/frontend/build/help-launcher-web <evidence-dir>` из корня (Node.js 24,
+`CHROME_BIN=google-chrome`, `GITHUB_SHA` — полный SHA проверяемого checkout).
+Перед отдельным запуском из `src/frontend` нужны `flutter pub get` и
+`flutter build web --release --no-pub --no-web-resources-cdn --target
+test/fixtures/settings_help_web_launcher_smoke.dart --output build/help-launcher-web`.
+Fixture использует настоящий `HelpSheet` и `url_launcher`; mock HTTP изолирует
+только посторонние backend-запросы. В H/V доверенные pointer clicks проходят
+Settings → Help → README / Issues; проверяются `Page.windowOpen.userGesture`,
+точный URL нового target, ровно одна новая вкладка и сохранение Help без ошибки.
+Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOURCE_SHA`,
+если задан) и SHA checkout (`GITHUB_SHA`), JSON событий/targets,
+версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
+загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
 
 ### Go (сервисы, Gateway, Realtime и др.)
 
@@ -149,7 +171,10 @@ rg "chat_id.*<uuid>" .local/dev.ndjson
 
 ### E2E сценарий: отправка DM
 
-Автоматизация: `scripts/staging/smoke-request-id.sh` (register ×2 → WS → DM → Loki chain assert).
+The script `scripts/staging/smoke-request-id.sh` is the DEV variant described
+below; its email lifecycle uses the DEV-only verification mail fixture and it
+refuses other namespaces. This section's staging procedure remains a manual
+check against already verified staging test accounts.
 
 1. **Войти** (REST login через Gateway) и сохранить access token.
 2. **Открыть WS** к Realtime (`/ws` через Gateway) с тем же JWT — иначе `ws_fanout` не появится у получателя.
@@ -166,6 +191,40 @@ rg "chat_id.*<uuid>" .local/dev.ndjson
 | 5 | `ws_fanout` | `realtime` |
 
 На пути также допустимы `grpc_call` в других Tier-0 сервисах и поля `chat_id`, `message_id`, `event_id` в JSON.
+
+### DEV account and request-id smoke
+
+The automated smoke creates two disposable `voice-qa.test` accounts, checks
+their session-bound `EMAIL_PENDING` state, retrieves each delivered OTP from the
+documented `voice-dev-mail` loopback endpoint, and verifies using the normal
+authenticated Auth route. It then exercises normal password login and refresh,
+creates a DM, sends and reads a message, confirms the receiver's WebSocket
+subscription and matching `message_create` frame, and checks the
+Gateway-to-Realtime Loki chain. No database or administrative account access is
+used. It requires the DEV and observability namespaces, Gateway ingress, and
+`curl`, `kubectl`, `python3`, Node.js 24, `npm`, and `tar` in the Linux execution
+environment. The script fetches `ws` 8.21.0 from the official npm registry into
+its private temporary directory and verifies the published SHA-512 integrity
+before use (`Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==`):
+
+```bash
+VOICE_STAGING_URL=https://api-dev.comrade.click \
+VOICE_STAGING_NAMESPACE=voice-dev \
+VOICE_STAGING_WS_URL=wss://api-dev.comrade.click/ws \
+scripts/staging/smoke-request-id.sh
+```
+
+The DEV mail fixture access is documented in [`scripts/dev/README.md`](../scripts/dev/README.md).
+For repeat runs, `VOICE_SMOKE_SESSION_FILE` may point to an absolute path
+outside the checkout. The script stores the verified account pair and rotated
+refresh tokens there as an owner-only mode-0600 file; subsequent runs use the
+normal Auth refresh endpoint instead of registering or logging in again. The
+fixture is bound to the canonical `https://api-dev.comrade.click` origin and
+`voice-dev` namespace; a fixture from an older unbound schema or another
+environment is rejected before any refresh request. Keep that file private
+and do not commit it. Refresh and access credentials are kept in mode-0600
+private files while issuing requests; the WebSocket client reads its bearer
+token from a private file rather than a process argument.
 
 ### LogQL (Explore или Grafana)
 
@@ -246,6 +305,22 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 ## CI (GitHub Actions)
 
+The `codex/contact-requests-panel-acceptance` PR uses the existing Flutter job to
+run `test/contact_requests_capture_test.dart` and
+`test/message_requests_shell_test.dart` with
+`VOICE_CONTACT_REQUESTS_CAPTURE_DIR` and retain `contact-requests-hv-<run_id>`.
+Eighteen PNGs show the actual `SocialPanel` pending tab: populated, busy,
+empty, loading, load error, Russian populated, and incoming profile lookup
+503/404/loading states in H (1280×800 with
+a 360px panel) and V (390×844). Capture mode loads the shipped token catalog,
+Noto Sans and Material Icons. Nine additional PNGs show the real authenticated
+`VoiceApp` request workspace in H/V, its V drawer, and H/V mutation busy/error/
+final-return states. Those tests exercise the production folder selection and
+request controller paths, keyboard retry, and actor/navigation fencing.
+Friendship Pending (§4.3) remains distinct from stranger-DM requests
+(§1.1b/1.3a); full original DoD and deployment acceptance require the current
+head's actual artifacts and independent review.
+
 Файлы workflow лежат в репозитории; **они начинают выполняться только после** публикации репозитория на GitHub и включения Actions (ветки, secrets для GHCR/staging — [DEPLOYMENT.md](DEPLOYMENT.md)). Локально перед PR — минимум по затронутому коду (таблица выше); полный sign-off: **`make build-all`** + **`make flutter-ci`** (как nightly job **`local-ci-parity`**).
 
 ### Node.js в workflow и фронтовых пакетах
@@ -259,7 +334,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | `actions/setup-node` | `node-version: '24'` |
 | Admin / Developer Portal `package.json` | `"engines": { "node": ">=24.0.0" }` |
 | Docker build (admin, portal) | `FROM node:24-alpine` |
-| Артефакты CI | `actions/upload-artifact@v6`, `actions/download-artifact@v6` (node24) |
+| Артефакты CI | `actions/upload-artifact@v6`, `actions/download-artifact@v7` (node24) |
 
 Self-hosted runner на staging: версия runner **≥ 2.327.1** для node24 actions ([setup-github-runner.sh](../scripts/staging/setup-github-runner.sh)).
 
@@ -302,7 +377,10 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 - **`make compose-migrate-all`** — golang-migrate для Go-owned БД; контейнер migrate подключается к Postgres через `host.docker.internal` (compose publish на хост). При конфликте порта **5432** на хосте задайте `POSTGRES_PORT` в `.env` и `VOICE_MIGRATE_PG_HOST` (например `host.docker.internal`) в окружении перед migrate.
 - **Smoke (tier 2 / master push):** `scripts/ci/compose-e2e-smoke.sh` — один тест на фичу продукта.
 - **Full:** `make compose-e2e-live` или workflow [compose-e2e-live.yml](../.github/workflows/compose-e2e-live.yml).
+- The live MatchFound Compose scenario layers `docker-compose.voice-space-media.yml` over the base stack. On Linux, generate its fixture with `PHASE0_MATCHSQUAD_FIXTURE_UID=65532` so the image's existing nonroot Chat and Matchmaking processes can read only their owner-only provider material; mounts remain read-only. The fixture supplies a disposable Matchmaking signer/JWKS, dedicated mTLS material for Chat and Voice provisioning, and the paired Gateway-to-Voice delegated-member listener required by Voice's fail-closed startup contract. CI proof wrappers restore only these fixture paths to the runner before removing their temporary directory. Production still needs its separately managed Matchmaking signing keys, published JWKS, trust configuration, and certificates.
 - **A1 isolated Flutter proof:** `make compose-a1-flutter-profile-handoff` runs ordered T-055 profile handoff, T-106 soft-delete, T-107 folders/Quick Access persistence, and pending-email logout → fresh login → verification against its own Compose project and ports.
+- On PR/master runs, `ci-gate` requires literal success from each selected acceptance job, including the A1 proofs, Flutter key-backup matrix/platform jobs, and analytics integration/smoke jobs. Their existing path/event selectors remain authoritative; intentionally unselected jobs may skip. CI-only changes still check selected jobs even when the `code` filter is false. Offline selector/result coverage runs with `make verify-required-jobs-test`.
+- T-055 fixture readiness observes the selected fresh DM's Chat `last_message_at` projection before recording the handoff. Messaging preview visibility alone does not prove that Chat's asynchronous ordering projection has settled. The measured two-page/item/cursor/hello-order assertions remain unchanged.
 - Манифест фич: [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
 - Flutter live helper `registerUser` завершает публичный email verification flow через compose-only Resend fixture: `otp/send` → `GET /emails/latest?to=<unique-email>` → `otp/verify`. Compose публикует fixture только на loopback; изолированный runner передаёт его URL через `VOICE_AUTH_MAIL_STUB_URL`. Staging/production сохраняют стандартный endpoint `https://api.resend.com/emails`.
 - A1 session-bound verification proof must register/convert once, obtain the
@@ -311,6 +389,7 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
   persistence before regular routing or bounded `PROMOTION_PENDING` recovery.
 - R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
   E2E и не активируют handlers, coordinator или Redis bridge.
+- F13 analyzes every non-first parent of an ordinary integration merge as a separate source contribution, including octopus merges. Each source needs one unambiguous ancestor base; guarded source tree entries and ownership must survive the merge and final result. An octopus may not invent guarded result paths. The outer master release merge still requires the exact push-before first parent and two-parent shape. This provenance support does not authorize R22 runtime activation.
 
 ### E2E по фичам
 

@@ -1,4 +1,57 @@
 services:
+  matchmaking:
+    expose: ["8443"]
+    environment:
+      MATCHMAKING_MATCH_SQUAD_CHAT_GRPC_ADDR: chat:9092
+      MATCHMAKING_MATCH_SQUAD_VOICE_GRPC_ADDR: voice:9094
+      MATCHMAKING_MATCH_SQUAD_CHAT_CA_FILE: /run/phase0/ca.crt
+      MATCHMAKING_MATCH_SQUAD_VOICE_CA_FILE: /run/phase0/ca.crt
+      MATCHMAKING_MATCH_SQUAD_CLIENT_CERT_FILE: /run/phase0/matchmaking-client.crt
+      MATCHMAKING_MATCH_SQUAD_CLIENT_KEY_FILE: /run/phase0/matchmaking-client.key
+      MATCHMAKING_MATCH_SQUAD_CHAT_SERVER_NAME: chat
+      MATCHMAKING_MATCH_SQUAD_VOICE_SERVER_NAME: voice
+      MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/matchmaking
+      MATCHMAKING_PRINCIPAL_ACTIVE_KID: current
+      MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR: :8443
+      MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/matchmaking-jwks.crt
+      MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/matchmaking-jwks.key
+    networks:
+      default:
+        aliases: [voice-matchmaking]
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/matchmaking:/run/phase0/matchmaking:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-client.crt:/run/phase0/matchmaking-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-client.key:/run/phase0/matchmaking-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-jwks.crt:/run/phase0/matchmaking-jwks.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-jwks.key:/run/phase0/matchmaking-jwks.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+
+  chat:
+    expose: ["9092"]
+    environment:
+      CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN: :9092
+      CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE: /run/phase0/chat-match-squad-grpc.crt
+      CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE: /run/phase0/chat-match-squad-grpc.key
+      CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL: https://voice-matchmaking:8443/internal/v1/principal/jwks.json
+      CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD: ""
+    depends_on:
+      matchmaking:
+        condition: service_started
+      phase0-matchmaking-jwks-readiness:
+        condition: service_completed_successfully
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-match-squad-grpc.crt:/run/phase0/chat-match-squad-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-match-squad-grpc.key:/run/phase0/chat-match-squad-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+
+  space:
+    environment:
+      # Disposable local/CI credential for the existing canonical resolver.
+      SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
+
   auth:
     user: "0:0"
     expose: ["9091", "9092"]
@@ -8,7 +61,7 @@ services:
       AUTH_GRPC_TLS_CERT_FILE: /run/phase0/auth.crt
       AUTH_GRPC_TLS_KEY_FILE: /run/phase0/auth.key
       AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE: /run/phase0/ca.crt
-      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
       JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12
     depends_on:
       phase0-jwks:
@@ -24,11 +77,16 @@ services:
     environment:
       GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
       GATEWAY_PRINCIPAL_ACTIVE_KID: current
-      GATEWAY_VOICE_USER_GRPC_ADDR: voice:9092
+      GATEWAY_VOICE_USER_GRPC_ADDR: voice:9093
       GATEWAY_VOICE_USER_TLS_CA_FILE: /run/phase0/ca.crt
       GATEWAY_VOICE_USER_TLS_SERVER_NAME: voice
       GATEWAY_VOICE_USER_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
       GATEWAY_VOICE_USER_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
+      GATEWAY_MATCH_SQUAD_MEMBER_GRPC_ADDR: voice:9095
+      GATEWAY_MATCH_SQUAD_MEMBER_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_MATCH_SQUAD_MEMBER_TLS_SERVER_NAME: voice
+      GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
     depends_on:
       # Voice loads Gateway's signed-principal JWKS during startup. Do not make
       # Gateway wait for Voice health or the first JWKS request deadlocks.
@@ -42,8 +100,12 @@ services:
 
   voice:
     user: "0:0"
-    expose: ["8443", "9092"]
+    expose: ["8443", "9092", "9093", "9094", "9095"]
     environment:
+      SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
+      # SDK control calls run inside Compose; host media peers use the test
+      # helper's VOICE_LIVEKIT_PUBLIC_URL mapping.
+      LIVEKIT_URL: ws://livekit:7880
       VOICE_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/voice/current.pem
       VOICE_PRINCIPAL_KID: current
       VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE: /run/phase0/voice/next.pem
@@ -55,7 +117,33 @@ services:
       VOICE_USER_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-game-grpc.crt
       VOICE_USER_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
       VOICE_USER_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
-      VOICE_USER_PRINCIPAL_GRPC_LISTEN: :9092
+      # Phase0's separate Space lifecycle listener retains port 9092.
+      VOICE_USER_PRINCIPAL_GRPC_LISTEN: :9093
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN: :9092
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-game-grpc.crt
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN: :9094
+      VOICE_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-match-squad-grpc.crt
+      VOICE_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-match-squad-grpc.key
+      VOICE_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL: https://voice-matchmaking:8443/internal/v1/principal/jwks.json
+      VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD: ""
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_GRPC_LISTEN: :9095
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-match-squad-member-grpc.crt
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-match-squad-member-grpc.key
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/gateway/jwks.json
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_ADDR: redis:6379
+      VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_PASSWORD: ""
+      VOICE_ROLE_GRPC_ADDR: role:9091
+      VOICE_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
+      VOICE_ROLE_CLIENT_CERT_FILE: /run/phase0/voice-client.crt
+      VOICE_ROLE_CLIENT_KEY_FILE: /run/phase0/voice-client.key
       VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
       VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
       VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth
@@ -68,6 +156,12 @@ services:
     depends_on:
       phase0-jwks:
         condition: service_started
+      matchmaking:
+        condition: service_started
+      phase0-matchmaking-jwks-readiness:
+        condition: service_completed_successfully
+      role:
+        condition: service_healthy
       auth:
         condition: service_healthy
     volumes:
@@ -77,8 +171,34 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-jwks.key:/run/phase0/voice-jwks.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-game-grpc.crt:/run/phase0/voice-game-grpc.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-game-grpc.key:/run/phase0/voice-game-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-match-squad-grpc.crt:/run/phase0/voice-match-squad-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-match-squad-grpc.key:/run/phase0/voice-match-squad-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-match-squad-member-grpc.crt:/run/phase0/voice-match-squad-member-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-match-squad-member-grpc.key:/run/phase0/voice-match-squad-member-grpc.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.crt:/run/phase0/voice-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.key:/run/phase0/voice-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
+
+  role:
+    user: "0:0"
+    expose: ["9091"]
+    environment:
+      ROLE_PRINCIPAL_GRPC_LISTEN: :9091
+      ROLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/role.crt
+      ROLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/role.key
+      ROLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      ROLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+    depends_on:
+      redis:
+        condition: service_healthy
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.crt:/run/phase0/role.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.key:/run/phase0/role.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
 
   phase0-jwks:
@@ -86,8 +206,33 @@ services:
     image: nginx:1.28-alpine
     user: "0:0"
     expose: ["8443"]
+    depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
     volumes:
       - ./docker/phase0/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/jwks/matchmaking/jwks.json:/run/phase0/matchmaking/jwks.json:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.crt:/run/phase0/proxy.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      # Media-only Compose keeps Space's base certificate and its issuing CA.
+      # The full Phase0 overlay supplies a nested file mount when it replaces
+      # Space's certificate with the generated fixture certificate instead.
+      - social_principal_ca:/run/phase0/space-ca:ro
+
+  phase0-matchmaking-jwks-readiness:
+    # Chat and Voice synchronously verify Matchmaking's served JWKS at startup.
+    # Gate them on the real producer response instead of a timing delay.
+    profiles: ["app"]
+    image: node:24-alpine
+    user: "65532:65532"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      matchmaking:
+        condition: service_started
+    volumes:
+      - ./scripts/dev/phase0-matchmaking-jwks-readiness.js:/run/phase0/readiness.js:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+    command: ["node", "/run/phase0/readiness.js"]

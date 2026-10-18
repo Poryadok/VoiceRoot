@@ -14,6 +14,14 @@ databases=(
   moderation_db bot_db story_db voice_db
 )
 
+# This initializer is shared by production and internal environments. GIS is
+# internal-only until its production activation contract is approved.
+case "${VOICE_ENABLE_GAME_INTEGRATION_DB:-false}" in
+  true) databases+=(game_integration_db) ;;
+  false) ;;
+  *) echo 'ERROR: VOICE_ENABLE_GAME_INTEGRATION_DB must be true or false' >&2; exit 2 ;;
+esac
+
 for db in "${databases[@]}"; do
   kubectl exec -n "$NS" "$PG_POD" -- \
     psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 \

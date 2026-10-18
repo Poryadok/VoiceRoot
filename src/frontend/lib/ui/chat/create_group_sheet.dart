@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -93,6 +94,7 @@ class CreateGroupSheet extends ConsumerStatefulWidget {
 class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   final _nameController = TextEditingController();
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   final _selected = <String>{};
   var _submitting = false;
   _CreateGroupCreateAttempt? _createAttempt;
@@ -113,7 +115,17 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   void dispose() {
     _nameController.dispose();
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
+  }
+
+  void _removeSelectedMember(String profileId) {
+    if (_submitting || _inviteRetryChatId != null) return;
+    setState(() {
+      _createAttempt = null;
+      _selected.remove(profileId);
+    });
+    _searchFocus.requestFocus();
   }
 
   bool get _canSubmit {
@@ -301,7 +313,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
 
   void _showSafeError(AppLocalizations l10n, String error) {
     final errorMessage = error == 'not_authenticated'
-        ? l10n.chatCreateGroupError(error)
+        ? l10n.chatCreateGroupError(commonActionErrorMessage(l10n))
         : commonActionErrorMessage(l10n);
     ScaffoldMessenger.of(
       context,
@@ -374,6 +386,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
         TextField(
           key: CreateGroupSheet.searchFieldKey,
           controller: _searchController,
+          focusNode: _searchFocus,
           decoration: InputDecoration(
             hintText: l10n.socialSearchHint,
             prefixIcon: const Icon(Icons.search),
@@ -382,6 +395,24 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
           enabled: !_submitting && _inviteRetryChatId == null,
           onChanged: (_) => setState(() {}),
         ),
+        if (_selected.any((id) => id != widget.requiredMemberProfileId)) ...[
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 112),
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final id in _selected)
+                    if (id != widget.requiredMemberProfileId)
+                      _selectedMemberChip(id),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
       ],
     );
     final friendsList = friendsAsync.when(
@@ -682,6 +713,36 @@ Widget _createGroupStatePanel(
 }
 
 extension on _CreateGroupSheetState {
+  Widget _selectedMemberChip(String profileId) {
+    final profile = ref.watch(profileProvider(profileId)).valueOrNull;
+    final label = profile?.displayName ?? profile?.handle ?? profileId;
+    final enabled = !_submitting && _inviteRetryChatId == null;
+    void remove() {
+      _removeSelectedMember(profileId);
+    }
+
+    return CallbackShortcuts(
+      bindings: enabled
+          ? {
+              const SingleActivator(LogicalKeyboardKey.delete): remove,
+              const SingleActivator(LogicalKeyboardKey.backspace): remove,
+            }
+          : const {},
+      child: InputChip(
+        key: Key('create_group_selected_$profileId'),
+        label: Text(label, overflow: TextOverflow.ellipsis),
+        avatar: CircleAvatar(
+          child: Text(label.isNotEmpty ? label[0].toUpperCase() : '?'),
+        ),
+        isEnabled: enabled,
+        onPressed: enabled ? remove : null,
+        deleteButtonTooltipMessage:
+            '${MaterialLocalizations.of(context).deleteButtonTooltip}: $label',
+        onDeleted: enabled ? remove : null,
+      ),
+    );
+  }
+
   Widget _requiredMemberTile(String profileId) {
     final profile = ref.watch(profileProvider(profileId)).valueOrNull;
     final label = profile?.displayName ?? profile?.handle ?? profileId;

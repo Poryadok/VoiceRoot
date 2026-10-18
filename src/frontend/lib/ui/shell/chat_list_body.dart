@@ -78,6 +78,73 @@ class ChatListBody extends ConsumerStatefulWidget {
 
 class _ChatListBodyState extends ConsumerState<ChatListBody> {
   late final ScrollController _scrollController;
+  final _pendingRequestActions = <String>{};
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _requestError;
+
+  String _requestActionKey(String chatId) {
+    final auth = ref.read(authControllerProvider.notifier);
+    final actor = auth.gatewayRequestIdentity;
+    return '${actor?.generation}:${actor?.accountId}:${actor?.profileId}:'
+        '${auth.sessionInstallGeneration}:$chatId';
+  }
+
+  Future<void> _runRequestAction(String chatId, {required bool accept}) async {
+    final auth = ref.read(authControllerProvider.notifier);
+    final actor = auth.gatewayRequestIdentity;
+    final session = ref.read(authControllerProvider).session;
+    final generation = auth.sessionInstallGeneration;
+    final navigation = ref.read(messageRequestsNavigationGenerationProvider);
+    final key = _requestActionKey(chatId);
+    if (actor == null ||
+        session == null ||
+        ref.read(profileSwitchInProgressProvider) ||
+        ref.read(chatInboxProvider) != 'requests' ||
+        _pendingRequestActions.contains(key)) {
+      return;
+    }
+    _requestError?.close();
+    _requestError = null;
+    setState(() => _pendingRequestActions.add(key));
+    String? error;
+    try {
+      final controller = ref.read(chatListControllerProvider.notifier);
+      error = accept
+          ? await controller.acceptRequest(chatId)
+          : await controller.declineRequest(chatId);
+    } catch (_) {
+      error = 'request_action_failed';
+    }
+    if (!mounted) return;
+    setState(() => _pendingRequestActions.remove(key));
+    final currentAuth = ref.read(authControllerProvider.notifier);
+    if (!identical(currentAuth, auth) ||
+        currentAuth.gatewayRequestIdentity != actor ||
+        currentAuth.sessionInstallGeneration != generation ||
+        ref.read(authorizationHeaderProvider) != session.authorizationHeader ||
+        ref.read(profileSwitchInProgressProvider)) {
+      return;
+    }
+    if (error == null) {
+      ref
+          .read(inboxReconcilerProvider.notifier)
+          .removeChat(
+            InboxScope.requests,
+            chatId,
+            expectedProfileId: session.activeProfileId,
+            expectedAuthorization: session.authorizationHeader,
+          );
+    } else if (error != kChatActionStaleContext &&
+        ref.read(chatInboxProvider) == 'requests' &&
+        ref.read(messageRequestsNavigationGenerationProvider) == navigation) {
+      _requestError = ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            chatActionErrorMessage(AppLocalizations.of(context)!, error),
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -277,6 +344,15 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                       icon: inbox == 'requests'
                           ? Icons.mark_email_unread_outlined
                           : Icons.forum_outlined,
+                      actionLabel: inbox == 'requests' ? null : l10n.chatOpenDm,
+                      onAction: inbox == 'requests'
+                          ? null
+                          : () {
+                              shellNav.exitSpace();
+                              shellNav.setNavigationSection(
+                                NavigationSection.social,
+                              );
+                            },
                     ),
                   );
                 }
@@ -407,48 +483,17 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                               null,
                           showDragHandle: reorderIndex != null,
                           dragIndex: reorderIndex,
-                          onAccept: () async {
-                            final session = ref
-                                .read(authControllerProvider)
-                                .session;
-                            if (session == null) return;
-                            final error = await ref
-                                .read(chatListControllerProvider.notifier)
-                                .acceptRequest(item.chatId);
-                            if (!context.mounted) return;
-                            if (error == null) {
-                              ref
-                                  .read(inboxReconcilerProvider.notifier)
-                                  .removeChat(
-                                    InboxScope.requests,
-                                    item.chatId,
-                                    expectedProfileId: session.activeProfileId,
-                                    expectedAuthorization:
-                                        session.authorizationHeader,
-                                  );
-                            }
-                          },
-                          onDecline: () async {
-                            final session = ref
-                                .read(authControllerProvider)
-                                .session;
-                            if (session == null) return;
-                            final error = await ref
-                                .read(chatListControllerProvider.notifier)
-                                .declineRequest(item.chatId);
-                            if (!context.mounted) return;
-                            if (error == null) {
-                              ref
-                                  .read(inboxReconcilerProvider.notifier)
-                                  .removeChat(
-                                    InboxScope.requests,
-                                    item.chatId,
-                                    expectedProfileId: session.activeProfileId,
-                                    expectedAuthorization:
-                                        session.authorizationHeader,
-                                  );
-                            }
-                          },
+                          requestBusy: _pendingRequestActions.contains(
+                            _requestActionKey(item.chatId),
+                          ),
+                          requestCanMutate:
+                              ref.watch(authControllerProvider).session !=
+                                  null &&
+                              !ref.watch(profileSwitchInProgressProvider),
+                          onAccept: () =>
+                              _runRequestAction(item.chatId, accept: true),
+                          onDecline: () =>
+                              _runRequestAction(item.chatId, accept: false),
                         ),
                         onTap: () => selectChat(item.chatId),
                         onLongPress: inbox == 'requests'
@@ -722,24 +767,25 @@ Future<void> _showChatRowActions(
         ),
       );
     case 'mute':
-      final until = DateTime.utc(9999, 12, 31);
-      final err = await controller.muteChat(item.chatId, mutedUntil: until);
-      if (err == null) {
-        ref.read(chatMutedUntilProvider.notifier).update((m) {
-          final next = Map<String, DateTime>.from(m);
-          next[item.chatId] = until;
-          return next;
-        });
-      }
     case 'unmute':
-      final err = await controller.muteChat(item.chatId);
-      if (err == null) {
-        ref.read(chatMutedUntilProvider.notifier).update((m) {
-          final next = Map<String, DateTime>.from(m);
-          next.remove(item.chatId);
-          return next;
-        });
+      final until = action == 'mute' ? DateTime.utc(9999, 12, 31) : null;
+      final err = await controller.muteChat(item.chatId, mutedUntil: until);
+      if (!context.mounted) return;
+      if (err != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(commonActionErrorMessage(l10n))));
+        return;
       }
+      ref.read(chatMutedUntilProvider.notifier).update((m) {
+        final next = Map<String, DateTime>.from(m);
+        if (until == null) {
+          next.remove(item.chatId);
+        } else {
+          next[item.chatId] = until;
+        }
+        return next;
+      });
     case 'archive':
       final err = await controller.archiveChat(
         item.chatId,
@@ -806,6 +852,8 @@ class _ChatListTrailing extends StatelessWidget {
     required this.muted,
     required this.onAccept,
     required this.onDecline,
+    this.requestBusy = false,
+    this.requestCanMutate = true,
     this.showDragHandle = false,
     this.dragIndex,
   });
@@ -819,23 +867,39 @@ class _ChatListTrailing extends StatelessWidget {
   final bool muted;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
+  final bool requestBusy;
+  final bool requestCanMutate;
   final bool showDragHandle;
   final int? dragIndex;
 
   @override
   Widget build(BuildContext context) {
     if (inbox == 'requests') {
-      return Wrap(
-        spacing: 4,
+      return Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          TextButton(
-            onPressed: onAccept,
-            child: Text(l10n.socialAcceptRequest),
+          Wrap(
+            spacing: 4,
+            children: [
+              TextButton(
+                onPressed: requestBusy || !requestCanMutate ? null : onAccept,
+                child: Text(l10n.socialAcceptRequest),
+              ),
+              TextButton(
+                onPressed: requestBusy || !requestCanMutate ? null : onDecline,
+                child: Text(l10n.socialDeclineRequest),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: onDecline,
-            child: Text(l10n.socialDeclineRequest),
-          ),
+          if (requestBusy) ...[
+            const SizedBox(height: 4),
+            SizedBox(
+              key: Key('chat_request_progress_${item.chatId}'),
+              width: 18,
+              height: 18,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ],
         ],
       );
     }

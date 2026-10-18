@@ -51,6 +51,10 @@ func renewBootstrapPipe(input io.Reader, output io.Writer) error {
 	return nil
 }
 func runRenewBootstrapPipe(descriptor string) (err error) {
+	return runPrivateRenewalPipe(descriptor, renewBootstrapPipe)
+}
+
+func runPrivateRenewalPipe(descriptor string, renew func(io.Reader, io.Writer) error) (err error) {
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
 		return renewalFailure()
 	}
@@ -71,5 +75,5 @@ func runRenewBootstrapPipe(descriptor string) (err error) {
 	if e != nil || s.Mode()&os.ModeNamedPipe == 0 {
 		return renewalFailure()
 	}
-	return renewBootstrapPipe(os.Stdin, output)
+	return renew(os.Stdin, output)
 }

@@ -15,12 +15,14 @@ import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/core/verified_badge.dart';
+import 'package:voice_frontend/ui/core/premium_badge.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -28,6 +30,65 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets(
+    'contact profile shows the public Premium marker beside the name with an accessible label',
+    (tester) async {
+      await tester.pumpWidget(
+        _profileDetailTestApp(
+          profileId: 'p-target',
+          client: _profilePresentationClient(
+            verificationType: 'none',
+            verificationBadge: 'premium',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byKey(ProfileDetailSheet.sheetKey));
+      final l10n = AppLocalizations.of(context)!;
+      expect(find.byKey(PremiumBadge.badgeKey), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('^${RegExp.escape(l10n.premiumBadgeLabel)}'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'contact profile uses the current account tier only for its own profile and updates on profile change',
+    (tester) async {
+      await tester.pumpWidget(
+        _profileDetailTestApp(
+          profileId: 'p-own-secondary',
+          currentAccountPremium: true,
+          client: _profilePresentationClient(
+            profileId: 'p-own-secondary',
+            profileAccountId: 'acc-test',
+            verificationType: 'none',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(PremiumBadge.badgeKey), findsOneWidget);
+
+      await tester.pumpWidget(
+        _profileDetailTestApp(
+          profileId: 'p-other-account',
+          currentAccountPremium: true,
+          client: _profilePresentationClient(
+            profileId: 'p-other-account',
+            profileAccountId: 'other-account',
+            verificationType: 'none',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(PremiumBadge.badgeKey), findsNothing);
+    },
+  );
+
   testWidgets(
     'profile detail renders its personal system verification badge and visible status',
     (tester) async {
@@ -950,6 +1011,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byKey(ProfileDetailSheet.blockKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ProfileDetailSheet.blockKey).hitTestable(), findsOneWidget);
     await tester.tap(find.byKey(ProfileDetailSheet.blockKey));
     await tester.pumpAndSettle();
     await tester.tap(
@@ -1224,6 +1288,8 @@ void main() {
 MockClient _profilePresentationClient({
   required String verificationType,
   String profileId = 'p-target',
+  String profileAccountId = 'a-target',
+  String? verificationBadge,
   String? profileCustomStatus,
   String? visibleCustomStatus,
   List<String> contactProfileIds = const [],
@@ -1237,7 +1303,7 @@ MockClient _profilePresentationClient({
         jsonEncode({
           'profile': {
             'id': profileId,
-            'account_id': 'a-target',
+            'account_id': profileAccountId,
             'username': 'target',
             'discriminator': '0001',
             'display_name': 'Target',
@@ -1245,6 +1311,7 @@ MockClient _profilePresentationClient({
             'theme': 'dark',
             'is_primary': true,
             'verification_type': verificationType,
+            'verification_badge': ?verificationBadge,
             'custom_status': ?profileCustomStatus,
           },
         }),
@@ -1258,6 +1325,20 @@ MockClient _profilePresentationClient({
             'profileId': profileId,
             'status': 'online',
             'customStatus': ?visibleCustomStatus,
+          },
+        }),
+        200,
+      );
+    }
+    if (request.url.path == '/api/v1/users/presence/bulk') {
+      return http.Response(
+        jsonEncode({
+          'byProfileId': {
+            profileId: {
+              'profileId': profileId,
+              'status': 'online',
+              'customStatus': ?visibleCustomStatus,
+            },
           },
         }),
         200,
@@ -1306,6 +1387,7 @@ Widget _profileDetailTestApp({
   Key? key,
   ThemeData? theme,
   bool isProfileSwitching = false,
+  bool currentAccountPremium = false,
   void Function(AuthController controller)? onAuthController,
 }) {
   AuthController createAuthController(Ref ref) {
@@ -1323,6 +1405,7 @@ Widget _profileDetailTestApp({
         InMemoryAuthSessionStorage(),
       ),
       authControllerProvider.overrideWith(createAuthController),
+      accountIsPremiumProvider.overrideWithValue(currentAccountPremium),
       profileSwitchInProgressProvider.overrideWith((ref) => isProfileSwitching),
       gatewayConfigProvider.overrideWithValue(
         const GatewayConfig(baseUrl: 'http://api.test'),

@@ -46,6 +46,7 @@ class VoiceProfile {
     required this.discriminator,
     required this.displayName,
     this.avatarUrl,
+    this.bannerUrl,
     this.bio,
     this.customStatus,
     this.isPrimary = false,
@@ -62,6 +63,7 @@ class VoiceProfile {
   final String discriminator;
   final String displayName;
   final String? avatarUrl;
+  final String? bannerUrl;
   final String? bio;
   final String? customStatus;
   final bool isPrimary;
@@ -89,12 +91,14 @@ class VoicePresence {
     required this.profileId,
     required this.status,
     this.customStatus,
+    this.gameTitle,
     this.lastSeen,
   });
 
   final String profileId;
   final String status;
   final String? customStatus;
+  final String? gameTitle;
   final DateTime? lastSeen;
 
   bool get isOnline => status == 'online';

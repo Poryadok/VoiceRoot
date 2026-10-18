@@ -280,10 +280,15 @@ func (s *SpaceGRPC) UpsertTreeNode(ctx context.Context, req *spacev1.UpsertTreeN
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
+	actorID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
 
 	in := store.UpsertTreeNodeInput{
-		SpaceID: spaceID,
-		Kind:    req.GetKind(),
+		SpaceID:        spaceID,
+		ActorProfileID: actorID,
+		Kind:           req.GetKind(),
 	}
 	if req.NodeId != nil && req.GetNodeId() != "" {
 		nid, parseErr := parseUUIDField("node_id", req.GetNodeId())
@@ -356,7 +361,11 @@ func (s *SpaceGRPC) RemoveTreeNode(ctx context.Context, req *spacev1.RemoveTreeN
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
-	if err := s.Store.RemoveTreeNode(ctx, spaceID, nodeID); err != nil {
+	actorID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if err := s.Store.RemoveTreeNodeWithActor(ctx, spaceID, nodeID, actorID); err != nil {
 		if errors.Is(err, store.ErrTreeNodeNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
@@ -382,6 +391,10 @@ func (s *SpaceGRPC) ReorderSpaceTree(ctx context.Context, req *spacev1.ReorderSp
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
+	actorID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
 	ids := make([]uuid.UUID, 0, len(req.GetOrderedNodeIds()))
 	for _, raw := range req.GetOrderedNodeIds() {
 		id, parseErr := parseUUIDField("ordered_node_ids", raw)
@@ -390,7 +403,7 @@ func (s *SpaceGRPC) ReorderSpaceTree(ctx context.Context, req *spacev1.ReorderSp
 		}
 		ids = append(ids, id)
 	}
-	if err := s.Store.ReorderSpaceTree(ctx, spaceID, ids); err != nil {
+	if err := s.Store.ReorderSpaceTreeWithActor(ctx, spaceID, ids, actorID); err != nil {
 		if errors.Is(err, store.ErrInvalidReorder) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}

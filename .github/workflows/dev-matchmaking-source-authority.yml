@@ -1,0 +1,44 @@
+name: DEV Matchmaking source authority
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful canonical master CI run that published the image
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  source-authority:
+    if: github.repository == 'Poryadok/VoiceRoot' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/heads/master
+          persist-credentials: false
+
+      - name: Emit verified Matchmaking source authority
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/matchmaking-source-authority
+          python3 scripts/dev/matchmaking_source_authority.py \
+            "$SOURCE_RUN_ID" tmp/matchmaking-source-authority/source-authority-result.json
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: matchmaking-source-authority
+          path: tmp/matchmaking-source-authority/source-authority-result.json
+          if-no-files-found: error
+          retention-days: 3

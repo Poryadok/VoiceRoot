@@ -13,8 +13,11 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/inbox_reconciler.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
+import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
+import 'package:voice_frontend/ui/shell/navigation_panel.dart';
+import 'package:voice_frontend/ui/social/social_panel.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -168,6 +171,115 @@ void main() {
     expect(find.byKey(ChatListBody.unavailableKey), findsOneWidget);
     expect(find.text('Could not load chats'), findsWidgets);
     expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('empty chat list action opens the existing profile search path', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final semantics = tester.ensureSemantics();
+
+    late InboxReconcilerChatsFake chats;
+    for (final size in [const Size(390, 844), const Size(844, 390)]) {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1;
+      chats = InboxReconcilerChatsFake();
+      for (final inbox in ['main', 'requests', 'archive']) {
+        chats.enqueue(
+          InboxChatPageScript(
+            inbox: inbox,
+            cursor: null,
+            result: const ChatsApiOk(ChatListData(items: [])),
+          ),
+        );
+      }
+      await tester.pumpWidget(_chatListApp(chats: chats));
+      await tester.pumpAndSettle();
+
+      final action = find.widgetWithText(OutlinedButton, 'Message');
+      expect(action, findsOneWidget);
+      expect(find.bySemanticsLabel('Message'), findsOneWidget);
+      final bounds = tester.getRect(action);
+      expect(bounds.left, greaterThanOrEqualTo(0));
+      expect(bounds.top, greaterThanOrEqualTo(0));
+      expect(bounds.right, lessThanOrEqualTo(size.width));
+      expect(bounds.bottom, lessThanOrEqualTo(size.height));
+      expect(tester.takeException(), isNull);
+    }
+
+    tester.view.physicalSize = const Size(520, 844);
+    chats = InboxReconcilerChatsFake();
+    for (final inbox in ['main', 'requests', 'archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    await tester.pumpWidget(
+      _chatListApp(chats: chats, includeNavigationPanel: true),
+    );
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatListBody)),
+    );
+    final activeProfileId = container
+        .read(authControllerProvider)
+        .activeProfileId;
+    expect(activeProfileId, 'prof-test');
+    expect(container.read(navigationSectionProvider), NavigationSection.chats);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Message'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(navigationSectionProvider), NavigationSection.social);
+    expect(container.read(selectedSpaceIdProvider), isNull);
+    expect(find.byKey(SocialPanel.panelKey), findsOneWidget);
+    expect(find.byKey(SocialPanel.searchFieldKey), findsOneWidget);
+    expect(
+      container.read(authControllerProvider).activeProfileId,
+      activeProfileId,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('empty-list load error retry reloads the failed inbox safely', (
+    tester,
+  ) async {
+    final chats = _failedFirstPageScripts()
+      ..enqueue(
+        InboxChatPageScript(
+          inbox: 'main',
+          cursor: null,
+          result: ChatsApiOk(
+            ChatListData(items: [inboxChatItem('recovered-row')]),
+          ),
+        ),
+      );
+    await tester.pumpWidget(_chatListApp(chats: chats));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatListBody.unavailableKey), findsOneWidget);
+    expect(find.text('Could not load chats'), findsOneWidget);
+    expect(find.text('gateway unavailable'), findsNothing);
+    expect(find.text('Try again'), findsOneWidget);
+
+    final callsBeforeRetry = chats.calls.length;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(chats.calls, hasLength(callsBeforeRetry + 1));
+    expect(chats.calls.last.inbox, 'main');
+    expect(chats.calls.last.cursor, isNull);
+    expect(chats.calls.last.authorization, 'Bearer test-access');
+    expect(chats.calls.last.profileId, 'prof-test');
+    expect(chats.unmatchedCalls, isEmpty);
+    expect(find.byKey(ChatListBody.tileKey('recovered-row')), findsOneWidget);
   });
 
   testWidgets('archive keeps cached rows with a partial-page retry state', (
@@ -518,6 +630,10 @@ void main() {
       );
       await tester.pump();
       expect(chats.calls, hasLength(callsBeforeProfileB));
+      // A new account starts from the default inbox. Select Requests explicitly
+      // on account B before verifying that A's late mutation cannot remove it.
+      container.read(chatInboxProvider.notifier).state = 'requests';
+      await tester.pump();
       _acceptCurrentRealtimeHello(container);
       await tester.pump();
       final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
@@ -898,6 +1014,7 @@ Widget _chatListApp({
   String inbox = 'main',
   String? selectedFolderId,
   bool allowLegacyLoadMore = false,
+  bool includeNavigationPanel = false,
 }) {
   return ProviderScope(
     overrides: [
@@ -921,7 +1038,11 @@ Widget _chatListApp({
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: const Scaffold(body: _ReconcilerDrivenChatListBody()),
+      home: Scaffold(
+        body: _ReconcilerDrivenChatListBody(
+          includeNavigationPanel: includeNavigationPanel,
+        ),
+      ),
     ),
   );
 }
@@ -945,7 +1066,9 @@ void _acceptCurrentRealtimeHello(ProviderContainer container) {
 }
 
 class _ReconcilerDrivenChatListBody extends ConsumerStatefulWidget {
-  const _ReconcilerDrivenChatListBody();
+  const _ReconcilerDrivenChatListBody({this.includeNavigationPanel = false});
+
+  final bool includeNavigationPanel;
 
   @override
   ConsumerState<_ReconcilerDrivenChatListBody> createState() =>
@@ -1008,7 +1131,9 @@ class _ReconcilerDrivenChatListBodyState
   @override
   Widget build(BuildContext context) {
     ref.watch(inboxReconcilerProvider);
-    return const ChatListBody(showHeader: false);
+    return widget.includeNavigationPanel
+        ? const NavigationPanel(collapsed: false)
+        : const ChatListBody(showHeader: false);
   }
 }
 

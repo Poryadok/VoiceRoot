@@ -242,6 +242,16 @@ class VoiceFriendsClient {
     );
   }
 
+  Future<FriendsApiResult<void>> cancelFriendInvitation({
+    required String authorization,
+    required String targetProfileId,
+  }) {
+    return _postEmpty(
+      '/api/v1/friends/invitations/${Uri.encodeComponent(targetProfileId)}/cancel',
+      authorization,
+    );
+  }
+
   Future<FriendsApiResult<void>> removeFriend({
     required String authorization,
     required String friendProfileId,

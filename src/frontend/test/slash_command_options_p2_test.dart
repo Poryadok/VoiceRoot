@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/api_errors.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
 import 'package:voice_frontend/backend/files_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
@@ -23,6 +24,7 @@ import 'package:voice_frontend/state/bot_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/theme/voice_colors.dart';
 import 'package:voice_frontend/ui/chat/slash_command_options_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -81,6 +83,7 @@ class _ScriptedFilesClient extends VoiceFilesClient {
     String? chatType,
     String? storyId,
     bool isE2e = false,
+    bool music = false,
   }) async {
     final failure = _failure('ticket');
     if (failure != null) return failure;
@@ -166,6 +169,7 @@ void main() {
     ValueChanged<Map<String, dynamic>?>? onResult,
     StateProvider<String?>? sessionAuthorization,
     FocusNode? openerFocusNode,
+    Locale locale = const Locale('en'),
     List<Override> extraOverrides = const [],
   }) async {
     await tester.pumpWidget(
@@ -187,7 +191,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
-          locale: const Locale('en'),
+          locale: locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Consumer(
@@ -218,6 +222,127 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
   }
+
+  for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+    testWidgets('slash options use a full-height responsive form at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await pumpOptionsSheet(
+        tester,
+        command: _commandWithOptions(const [
+          BotSlashCommandOption(name: 'reason', type: 'string', required: true),
+        ]),
+      );
+      final form = tester.getRect(
+        find
+            .ancestor(of: find.text('/assign'), matching: find.byType(SafeArea))
+            .first,
+      );
+      expect(form.top, 0);
+      expect(form.bottom, size.height);
+      expect(form.width, size.width < 600 ? size.width : 320);
+      expect(form.right, size.width);
+      expect(
+        tester.widget<ModalBarrier>(find.byType(ModalBarrier).last).color,
+        VoiceColors.of(tester.element(find.text('/assign'))).overlay,
+      );
+      if (size.width >= 600) {
+        expect(
+          tester.getRect(find.text('Cancel')).right,
+          lessThan(tester.getRect(find.text('Run command')).left),
+        );
+      }
+      expect(find.byTooltip('Close'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.text('Run command'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'Russian desktop footer stays inside its panel with larger text',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      Map<String, dynamic>? result;
+      await pumpOptionsSheet(
+        tester,
+        locale: const Locale('ru'),
+        command: _commandWithOptions(const [
+          BotSlashCommandOption(name: 'reason', type: 'string', required: true),
+        ]),
+        onResult: (value) => result = value,
+      );
+      final field = find.byType(TextField);
+      await tester.enterText(field, 'reason');
+      await tester.pumpAndSettle();
+      final run = find.byType(FilledButton);
+      final cancel = find.byType(TextButton);
+      final panel = tester.getRect(
+        find
+            .ancestor(of: find.text('/assign'), matching: find.byType(SafeArea))
+            .first,
+      );
+      expect(panel.width, 320);
+      expect(
+        tester.getRect(cancel).left,
+        greaterThanOrEqualTo(panel.left + 16),
+      );
+      expect(tester.getRect(cancel).right, lessThan(tester.getRect(run).left));
+      expect(tester.getRect(run).right, lessThanOrEqualTo(panel.right - 16));
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(panel.bottom));
+      expect(tester.takeException(), isNull);
+      await tester.tap(run);
+      await tester.pumpAndSettle();
+      expect(result, {'reason': 'reason'});
+    },
+  );
+
+  testWidgets(
+    'long mobile options scroll while actions stay above the keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      Map<String, dynamic>? submitted;
+      await pumpOptionsSheet(
+        tester,
+        command: _commandWithOptions([
+          for (var i = 0; i < 14; i++)
+            BotSlashCommandOption(name: 'value$i', type: 'string'),
+        ]),
+        onResult: (result) => submitted = result,
+      );
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+      final run = find.widgetWithText(FilledButton, 'Run command');
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(544));
+      final lastField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'value13',
+      );
+      await tester.ensureVisible(lastField);
+      await tester.pumpAndSettle();
+      await tester.enterText(lastField, 'last value');
+      await tester.pumpAndSettle();
+      expect(tester.getRect(run).bottom, lessThanOrEqualTo(544));
+      expect(tester.takeException(), isNull);
+      await tester.tap(run);
+      await tester.pumpAndSettle();
+      expect(submitted, {'value13': 'last value'});
+    },
+  );
 
   testWidgets(
     'slash options sheet shows user picker for type=user (BOT-B P2)',
@@ -493,6 +618,139 @@ void main() {
       });
     },
   );
+
+  for (final language in ['en', 'ru']) {
+    for (final type in ['user', 'channel', 'role']) {
+      for (final outage in [false, true]) {
+        testWidgets(
+          '$language $type option load error is safe and refresh recovers '
+          '(outage=$outage)',
+          (tester) async {
+            const secret = 'private upstream picker diagnostic';
+            var fail = true;
+            var loads = 0;
+            Object failure() => outage
+                ? const BackendUnavailableException()
+                : Exception(secret);
+            final Override loader = switch (type) {
+              'user' => spaceMembersProvider('space-1').overrideWith((_) async {
+                loads++;
+                if (fail) throw failure();
+                return [
+                  SpaceMemberRosterEntry(
+                    profileId: 'profile-1',
+                    roleNames: const [],
+                    joinedAt: DateTime.utc(2026),
+                    nickname: 'Alice',
+                  ),
+                ];
+              }),
+              'channel' => spaceTreeProvider('space-1').overrideWith((_) async {
+                loads++;
+                if (fail) throw failure();
+                return const SpaceTreeData(
+                  categories: [],
+                  voiceRooms: [],
+                  nodes: [
+                    SpaceTreeNodeData(
+                      id: 'node-1',
+                      spaceId: 'space-1',
+                      kind: 'text_chat',
+                      linkedChatId: 'chat-2',
+                      sortOrder: 0,
+                      displayName: 'general',
+                    ),
+                  ],
+                );
+              }),
+              _ => spaceRolesProvider('space-1').overrideWith((_) async {
+                loads++;
+                if (fail) throw failure();
+                return const [
+                  SpaceRole(id: 'role-1', spaceId: 'space-1', name: 'Admin'),
+                ];
+              }),
+            };
+            Map<String, dynamic>? result;
+            await pumpOptionsSheet(
+              tester,
+              locale: Locale(language),
+              command: _commandWithOptions([
+                BotSlashCommandOption(
+                  name: 'target',
+                  type: type,
+                  required: true,
+                ),
+              ]),
+              onResult: (value) => result = value,
+              extraOverrides: [
+                spaceIdForChatProvider('chat-1').overrideWith((_) => 'space-1'),
+                loader,
+              ],
+            );
+            final sheet = find.byKey(Key('slash_option_${type}_picker_target'));
+            final l10n = AppLocalizations.of(tester.element(sheet))!;
+            final expected = outage
+                ? l10n.backendUnavailable
+                : switch (type) {
+                    'user' =>
+                      language == 'en'
+                          ? 'Could not load members'
+                          : 'Не удалось загрузить участников',
+                    'channel' =>
+                      language == 'en'
+                          ? 'Could not load space tree'
+                          : 'Не удалось загрузить дерево спейса',
+                    _ =>
+                      language == 'en'
+                          ? 'Could not load roles'
+                          : 'Не удалось загрузить роли',
+                  };
+            expect(find.text(expected), findsOneWidget);
+            expect(find.textContaining(secret), findsNothing);
+            expect(find.textContaining('Exception'), findsNothing);
+            final run = find.widgetWithText(FilledButton, l10n.slashCommandRun);
+            expect(tester.widget<FilledButton>(run).onPressed, isNull);
+            expect(loads, 1);
+
+            // Existing space-provider refresh seam; no new picker Retry UI.
+            final container = ProviderScope.containerOf(tester.element(sheet));
+            fail = false;
+            switch (type) {
+              case 'user':
+                container.invalidate(spaceMembersProvider('space-1'));
+              case 'channel':
+                container.invalidate(spaceTreeProvider('space-1'));
+              default:
+                container.invalidate(spaceRolesProvider('space-1'));
+            }
+            await tester.pumpAndSettle();
+            expect(loads, 2);
+            expect(find.text(expected), findsNothing);
+            await tester.tap(find.byType(DropdownButtonFormField<String>));
+            await tester.pumpAndSettle();
+            final choice = switch (type) {
+              'user' => 'Alice',
+              'channel' => 'general',
+              _ => 'Admin',
+            };
+            await tester.tap(find.text(choice).last);
+            await tester.pumpAndSettle();
+            expect(tester.widget<FilledButton>(run).onPressed, isNotNull);
+            await tester.tap(run);
+            await tester.pumpAndSettle();
+            expect(result, {
+              'target': switch (type) {
+                'user' => 'profile-1',
+                'channel' => 'chat-2',
+                _ => 'role-1',
+              },
+            });
+          },
+        );
+      }
+    }
+  }
 
   testWidgets('Run disables if authorization changes while options are open', (
     tester,

@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"testing"
 	chatv1 "voice.app/voice/chat/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -86,12 +87,12 @@ func TestMessagingScheduledPresenceRequiresDedicatedPrincipal(t *testing.T) {
 	_, err = svc.GetScheduledMessageDispatchPresence(principal.WithVerified(context.Background(), valid), req)
 	require.Equal(t, codes.Unavailable, status.Code(err), "a valid principal and body reach the service dependency")
 
-	invalidBody := *req
+	invalidBody := proto.Clone(req).(*userv1.GetScheduledMessageDispatchPresenceRequest)
 	invalidBody.Mode = userv1.ScheduledMessageDispatchMode_SCHEDULED_MESSAGE_DISPATCH_MODE_UNSPECIFIED
-	invalidHash, err := principal.RequestHash(&invalidBody)
+	invalidHash, err := principal.RequestHash(invalidBody)
 	require.NoError(t, err)
 	valid.RequestHash = invalidHash
-	_, err = svc.GetScheduledMessageDispatchPresence(principal.WithVerified(context.Background(), valid), &invalidBody)
+	_, err = svc.GetScheduledMessageDispatchPresence(principal.WithVerified(context.Background(), valid), invalidBody)
 	require.Equal(t, codes.InvalidArgument, status.Code(err), "a valid principal cannot make an open-ended mode valid")
 
 	valid.Issuer, valid.Subject = "notification", "service:notification"

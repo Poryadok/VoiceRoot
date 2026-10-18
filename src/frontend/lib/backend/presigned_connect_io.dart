@@ -36,11 +36,7 @@ Future<GatewayHttpResult<void>> putBytesPreservingHost({
     );
   } catch (e) {
     return GatewayHttpFailure(
-      GatewayApiError(
-        errorCode: 'network_error',
-        message: '$e',
-        statusCode: 0,
-      ),
+      GatewayApiError(errorCode: 'network_error', message: '$e', statusCode: 0),
     );
   } finally {
     client.close(force: true);
@@ -50,14 +46,88 @@ Future<GatewayHttpResult<void>> putBytesPreservingHost({
 Future<GatewayHttpResult<Uint8List>> getBytesPreservingHost({
   required Uri connectUri,
   required String signedHostHeader,
+  int? maxBytes,
 }) async {
+  if (maxBytes != null && (maxBytes <= 0 || maxBytes > 10 * 1024 * 1024)) {
+    return const GatewayHttpFailure(
+      GatewayApiError(
+        errorCode: 'download_size_invalid',
+        message: 'Invalid download limit',
+        statusCode: 0,
+      ),
+    );
+  }
   final client = HttpClient();
   client.userAgent = null;
+  if (maxBytes != null) client.connectionTimeout = const Duration(seconds: 10);
   try {
-    final request = await client.openUrl('GET', connectUri);
+    final opening = client.openUrl('GET', connectUri);
+    final request = await (maxBytes == null
+        ? opening
+        : opening.timeout(const Duration(seconds: 10)));
     request.followRedirects = false;
     request.headers.set(HttpHeaders.hostHeader, signedHostHeader);
-    final response = await request.close();
+    final receiving = request.close();
+    final response = await (maxBytes == null
+        ? receiving
+        : receiving.timeout(const Duration(seconds: 10)));
+    if (maxBytes != null) {
+      if (response.contentLength > maxBytes) {
+        return const GatewayHttpFailure(
+          GatewayApiError(
+            errorCode: 'download_too_large',
+            message: 'Download exceeds limit',
+            statusCode: 0,
+          ),
+        );
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return GatewayHttpFailure(
+          GatewayApiError(
+            errorCode: 'download_failed',
+            message: 'Download failed',
+            statusCode: response.statusCode,
+          ),
+        );
+      }
+      final bytes = BytesBuilder(copy: false);
+      final elapsed = Stopwatch()..start();
+      await for (final chunk in response.timeout(const Duration(seconds: 10))) {
+        if (elapsed.elapsed > const Duration(seconds: 30)) {
+          return const GatewayHttpFailure(
+            GatewayApiError(
+              errorCode: 'download_timeout',
+              message: 'Download timed out',
+              statusCode: 0,
+            ),
+          );
+        }
+        if (bytes.length + chunk.length > maxBytes) {
+          return const GatewayHttpFailure(
+            GatewayApiError(
+              errorCode: 'download_too_large',
+              message: 'Download exceeds limit',
+              statusCode: 0,
+            ),
+          );
+        }
+        bytes.add(chunk);
+      }
+      if ((response.headers.value(HttpHeaders.contentEncodingHeader) ??
+                  'identity') ==
+              'identity' &&
+          response.contentLength >= 0 &&
+          response.contentLength != bytes.length) {
+        return const GatewayHttpFailure(
+          GatewayApiError(
+            errorCode: 'download_incomplete',
+            message: 'Incomplete download',
+            statusCode: 0,
+          ),
+        );
+      }
+      return GatewayHttpOk(bytes.takeBytes());
+    }
     final raw = await response.fold<List<int>>(
       <int>[],
       (prev, chunk) => prev..addAll(chunk),
@@ -76,7 +146,7 @@ Future<GatewayHttpResult<Uint8List>> getBytesPreservingHost({
     return GatewayHttpFailure(
       GatewayApiError(
         errorCode: 'network_error',
-        message: '$e',
+        message: maxBytes == null ? '$e' : 'Download unavailable',
         statusCode: 0,
       ),
     );

@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/authctx"
 	"voice/backend/voice/internal/gameprovision"
 	voicestore "voice/backend/voice/internal/store"
@@ -18,6 +19,19 @@ type accountVoiceReservation struct {
 	profileID uuid.UUID
 	roomID    string
 	created   bool
+}
+
+func accountVoiceCaller(ctx context.Context, authenticatedProfile string) (string, bool) {
+	if verified, ok := principal.FromContext(ctx); ok {
+		// The private listener carries verified authority in context, not legacy
+		// X-Voice metadata. Never fall back to headers when a principal is present.
+		if verified.Kind != "delegated_user" {
+			return "", false
+		}
+		profile, account, _, err := callerVoiceUser(ctx)
+		return account, err == nil && profile == authenticatedProfile
+	}
+	return authctx.AccountID(ctx)
 }
 
 func (s *VoiceGRPC) reserveAccountVoiceProfiles(ctx context.Context, roomID string, profiles []string, authenticatedProfile string) ([]accountVoiceReservation, error) {
@@ -43,7 +57,7 @@ func (s *VoiceGRPC) reserveAccountVoiceProfiles(ctx context.Context, roomID stri
 			return nil, status.Error(codes.Unavailable, "trusted profile account lookup unavailable")
 		}
 		if profile == authenticatedProfile {
-			claimedAccount, ok := authctx.AccountID(ctx)
+			claimedAccount, ok := accountVoiceCaller(ctx, authenticatedProfile)
 			parsedAccount, parseErr := uuid.Parse(claimedAccount)
 			if !ok || parseErr != nil || parsedAccount != accountID {
 				s.releaseAccountVoiceReservations(ctx, reservations)
@@ -130,7 +144,7 @@ func (s *VoiceGRPC) transferAccountVoiceProfile(ctx context.Context, profileID, 
 		return status.Error(codes.Unavailable, "trusted profile account lookup unavailable")
 	}
 	if profileID == authenticatedProfile {
-		claimed, ok := authctx.AccountID(ctx)
+		claimed, ok := accountVoiceCaller(ctx, authenticatedProfile)
 		parsed, parseErr := uuid.Parse(claimed)
 		if !ok || parseErr != nil || parsed != accountID {
 			return status.Error(codes.PermissionDenied, "authenticated account does not own voice profile")

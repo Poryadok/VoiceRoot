@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/file/internal/audioproc"
 	"voice/backend/file/internal/clamav"
 	"voice/backend/file/internal/fileevents"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
@@ -145,12 +146,9 @@ func main() {
 				log.Fatalf("messaging grpc: %v", err)
 			}
 			defer func() { _ = mconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			if err := waitForGRPCReady(waitCtx, mconn); err != nil {
-				waitCancel()
-				log.Fatalf("messaging grpc dial: %v", err)
-			}
-			waitCancel()
+			// Messaging also waits for File at startup; connect without blocking our listener.
+			// The channel reconnects when Messaging becomes available.
+			mconn.Connect()
 			if chatClient != nil {
 				chatGuard = s2s.NewGRPCChatGuard(chatClient, messagingv1.NewMessagingServiceClient(mconn))
 			}
@@ -193,6 +191,11 @@ func main() {
 			eventPub = pub
 		}
 		filesStore := store.NewFilesStore(pool)
+		if musicPub, ok := eventPub.(*fileevents.JetStreamPublisher); ok {
+			musicCtx, stopMusic := context.WithCancel(context.Background())
+			defer stopMusic()
+			jobs.StartMusicEventWorker(musicCtx, filesStore, musicPub, logger)
+		}
 		jobs.StartExpiryWorker(context.Background(), filesStore, deleter, eventPub, logger)
 		jobs.StartReferenceGCWorker(context.Background(), filesStore, deleter, fileReferenceGCIntervalFromEnv(), logger)
 		lis, err := net.Listen("tcp", grpcListen)
@@ -212,6 +215,7 @@ func main() {
 			ChatGuard:                 chatGuard,
 			Reader:                    reader,
 			Processor:                 processor,
+			AudioProcessor:            audioproc.Extractor{},
 			Scanner:                   scanner,
 			Entitlements:              entitlements,
 			Events:                    eventPub,

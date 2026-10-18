@@ -461,6 +461,42 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get socialPresenceLastSeenJustNow => 'Last seen just now';
+
+  @override
+  String socialPresenceLastSeenMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count minutes ago',
+      one: 'Last seen $count minute ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count hours ago',
+      one: 'Last seen $count hour ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String socialPresenceLastSeenDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Last seen $count days ago',
+      one: 'Last seen $count day ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Unknown';
 
   @override
@@ -957,6 +993,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileMessage => 'Message';
 
   @override
+  String get profileDetailTitle => 'Profile';
+
+  @override
+  String get profileMoreActions => 'More actions';
+
+  @override
+  String get profileOpenAvatar => 'Open fullscreen avatar';
+
+  @override
+  String get profileAvatarUnavailable => 'Avatar unavailable';
+
+  @override
+  String get profileCommonSpaces => 'Common spaces';
+
+  @override
+  String get profileCommonSpacesLoadError => 'Could not load common spaces';
+
+  @override
   String get profileEditTitle => 'Edit profile';
 
   @override
@@ -1196,6 +1250,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatThreadLoadError => 'Could not load thread';
 
   @override
+  String get chatThreadRepliesUnavailable =>
+      'Replies are unavailable in this chat. Your draft is still here; remove the reply target to send it as a regular message.';
+
+  @override
   String get chatChannelMainFeedBlocked => 'Post in a thread or as the channel';
 
   @override
@@ -1242,6 +1300,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatPinnedTypeMusic => 'Music';
+
+  @override
+  String get chatMusicInvalidFile =>
+      'Choose a non-empty audio file up to 10 MB. Encryption overhead counts toward the limit.';
+
+  @override
+  String get chatMusicPlay => 'Play music';
+
+  @override
+  String get chatMusicPause => 'Pause music';
+
+  @override
+  String get chatMusicSeek => 'Playback position';
 
   @override
   String get chatPinnedTypeVideoMessage => 'Video message';
@@ -2436,6 +2507,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get securitySessionsManage => 'Manage sessions';
 
   @override
+  String get securityLinkedDevicesManage => 'Manage linked devices';
+
+  @override
   String get securitySessionsCurrentDevice => 'This device';
 
   @override
@@ -2777,6 +2851,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileBlockConfirmTitle => 'Block this user?';
 
   @override
+  String get profileRemoveFriendConfirmTitle => 'Remove this friend?';
+
+  @override
+  String get profileRemoveFriendConfirmMessage =>
+      'Remove this user from your friends list?';
+
+  @override
   String get profileBlockConfirmMessage =>
       'They will not be able to message you.';
 
@@ -2853,7 +2934,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String guestConvertVerificationSubtitle(Object email) {
-    return 'Enter the code sent to $email. Your guest access stays active until it is verified.';
+    return 'Enter the verification code for $email. Your guest access stays active until it is verified.';
   }
 
   @override
@@ -3066,6 +3147,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get matchSquadLeaveError => 'Could not leave match squad';
+
+  @override
+  String get matchSquadRosterTitle => 'Your squad';
 
   @override
   String get matchRatingTitle => 'Rate your teammates';
@@ -3522,6 +3606,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deepLinkResourceNotFound => 'Not found';
 
   @override
+  String get deepLinkAccessDeniedDescription =>
+      'You do not have permission to open this link. It may be intended for another profile.';
+
+  @override
+  String get deepLinkResourceNotFoundDescription =>
+      'This link is unavailable or no longer valid.';
+
+  @override
   String get deepLinkReturnHome => 'Go to Home';
 
   @override
@@ -3565,4 +3657,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get profileNotInContactsWarning =>
       'Not in contacts · messages may be unsafe';
+
+  @override
+  String contactProfilePlayingGame(String title) {
+    return 'Playing $title';
+  }
+
+  @override
+  String get matchSquadOpenChat => 'Open chat';
 }

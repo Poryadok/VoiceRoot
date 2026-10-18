@@ -53,6 +53,14 @@ type secretMetadata struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--renew-existing-service" {
+		if runPrivateRenewalPipe(os.Args[2], renewServicePipe) != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS service renewal refused; no credentials printed")
+			os.Exit(1)
+		}
+		fmt.Println("Existing NATS service renewed through private controller pipe")
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--authenticate-existing-actor" {
 		if authenticateExistingActor() != nil {
 			fmt.Fprintln(os.Stderr, "Existing NATS actor scratch authentication refused")
@@ -77,7 +85,7 @@ func main() {
 		fmt.Println("Existing NATS bootstrap renewed through private controller pipe")
 		return
 	}
-	namespace := flag.String("namespace", "", "voice-staging or voice-prod")
+	namespace := flag.String("namespace", "", "voice-dev, voice-staging or voice-prod")
 	cert := flag.String("tls-cert", "", "TLS certificate PEM with voice-nats SAN")
 	key := flag.String("tls-key", "", "matching TLS private key PEM")
 	ca := flag.String("tls-ca", "", "TLS CA PEM")
@@ -97,7 +105,7 @@ func issue(aclPath, dest, namespace, certPath, keyPath, caPath string) (resultEr
 	if runtime.GOOS != "linux" {
 		return errors.New("issuer requires Linux filesystem permissions")
 	}
-	if namespace != "voice-staging" && namespace != "voice-prod" {
+	if namespace != "voice-dev" && namespace != "voice-staging" && namespace != "voice-prod" {
 		return errors.New("unsupported namespace")
 	}
 	if !filepath.IsAbs(dest) || filepath.Clean(dest) != dest {

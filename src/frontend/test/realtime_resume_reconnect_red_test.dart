@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -71,96 +70,105 @@ void main() {
     expect(harness.connection(1).resumeLastSequences, [42]);
   });
 
-  test(
+  testWidgets(
     'pre-hello failures retain exponential backoff until accepted hello',
-    () {
+    (tester) async {
       late _ResumeReconnectHarness harness;
-      fakeAsync((clock) {
-        final timeline = <String>[];
-        void record(String event) =>
-            timeline.add('t=${clock.elapsed.inMilliseconds}ms $event');
-        void snapshot(String label) => record(
-          '$label connections=${harness.transport.connections.length} '
-          'status=${harness.container.read(realtimeLinkStatusProvider)}',
-        );
+      var elapsed = Duration.zero;
+      final timeline = <String>[];
+      void record(String event) =>
+          timeline.add('t=${elapsed.inMilliseconds}ms $event');
+      void snapshot(String label) => record(
+        '$label connections=${harness.transport.connections.length} '
+        'status=${harness.container.read(realtimeLinkStatusProvider)}',
+      );
 
-        harness = _ResumeReconnectHarness(trace: record);
-        try {
-          unawaited(harness.hub.ensureConnected());
-          clock.flushMicrotasks();
-          snapshot('initial');
-          expect(harness.transport.connections, hasLength(1));
+      Future<void> drainClosedSubscription() async {
+        // Cancelling an already-closed stream can return Dart's root-zone
+        // Future._nullFuture. Drain that continuation without advancing the
+        // fake clock, then flush work it schedules back into the test zone.
+        await tester.runAsync(() async {
+          await Future<void>.delayed(Duration.zero);
+        });
+        await tester.pump();
+      }
 
-          const delays = [1, 2, 4, 8, 16, 30, 30];
-          var elapsedSeconds = 0;
-          for (var attempt = 0; attempt < delays.length; attempt++) {
-            harness
-                .connection(attempt)
-                .events
-                .listen(
-                  (_) {},
-                  onDone: () => record('observer onDone connection=$attempt'),
-                );
-            record('request close connection=$attempt');
-            unawaited(harness.connection(attempt).closeFrames());
-            clock.flushMicrotasks();
-            snapshot('after close connection=$attempt');
+      harness = _ResumeReconnectHarness(trace: record);
+      try {
+        unawaited(harness.hub.ensureConnected());
+        await tester.pump();
+        snapshot('initial');
+        expect(harness.transport.connections, hasLength(1));
 
-            final delay = delays[attempt];
-            record(
-              'expected pending timer attempt=${attempt + 1} '
-              'deadline=${clock.elapsed.inMilliseconds + delay * 1000}ms',
-            );
-            clock.elapse(Duration(seconds: delay - 1));
-            clock.flushMicrotasks();
-            snapshot(
-              'before retry deadline connection=$attempt delay=${delay}s',
-            );
-            expect(
-              harness.transport.connections,
-              hasLength(attempt + 1),
-              reason:
-                  'attempt ${attempt + 1} must wait ${delay}s; '
-                  'timeline: ${timeline.join(' | ')}',
-            );
+        const delays = [1, 2, 4, 8, 16, 30, 30];
+        var elapsedSeconds = 0;
+        for (var attempt = 0; attempt < delays.length; attempt++) {
+          harness
+              .connection(attempt)
+              .events
+              .listen(
+                (_) {},
+                onDone: () => record('observer onDone connection=$attempt'),
+              );
+          record('request close connection=$attempt');
+          unawaited(harness.connection(attempt).closeFrames());
+          await tester.pump();
+          snapshot('after close connection=$attempt');
 
-            clock.elapse(const Duration(seconds: 1));
-            clock.flushMicrotasks();
-            elapsedSeconds += delay;
-            snapshot('at retry deadline expectedAttempt=${attempt + 1}');
-            expect(
-              harness.transport.connections,
-              hasLength(attempt + 2),
-              reason:
-                  'attempt ${attempt + 2} starts at t=$elapsedSeconds; '
-                  'timeline: ${timeline.join(' | ')}',
-            );
-          }
-
-          final recovered = harness.connection(delays.length);
-          recovered.addHello();
-          clock.flushMicrotasks();
-          unawaited(recovered.closeFrames());
-          clock.flushMicrotasks();
-
-          clock.elapse(const Duration(milliseconds: 999));
-          clock.flushMicrotasks();
-          expect(harness.transport.connections, hasLength(delays.length + 1));
-          clock.elapse(const Duration(milliseconds: 1));
-          clock.flushMicrotasks();
+          final delay = delays[attempt];
+          record(
+            'expected pending timer attempt=${attempt + 1} '
+            'deadline=${elapsed.inMilliseconds + delay * 1000}ms',
+          );
+          elapsed += Duration(seconds: delay - 1);
+          await tester.pump(Duration(seconds: delay - 1));
+          snapshot('before retry deadline connection=$attempt delay=${delay}s');
           expect(
             harness.transport.connections,
-            hasLength(delays.length + 2),
-            reason: 'the first disconnect after accepted hello starts at 1s',
+            hasLength(attempt + 1),
+            reason:
+                'attempt ${attempt + 1} must wait ${delay}s; '
+                'timeline: ${timeline.join(' | ')}',
           );
-        } finally {
-          harness.container.dispose();
-          for (final connection in harness.transport.connections) {
-            unawaited(connection.closeFrames());
-          }
-          clock.flushMicrotasks();
+
+          elapsed += const Duration(seconds: 1);
+          await tester.pump(const Duration(seconds: 1));
+          await drainClosedSubscription();
+          elapsedSeconds += delay;
+          snapshot('at retry deadline expectedAttempt=${attempt + 1}');
+          expect(
+            harness.transport.connections,
+            hasLength(attempt + 2),
+            reason:
+                'attempt ${attempt + 2} starts at t=$elapsedSeconds; '
+                'timeline: ${timeline.join(' | ')}',
+          );
         }
-      });
+
+        final recovered = harness.connection(delays.length);
+        recovered.addHello();
+        await tester.pump();
+        unawaited(recovered.closeFrames());
+        await tester.pump();
+
+        elapsed += const Duration(milliseconds: 999);
+        await tester.pump(const Duration(milliseconds: 999));
+        expect(harness.transport.connections, hasLength(delays.length + 1));
+        elapsed += const Duration(milliseconds: 1);
+        await tester.pump(const Duration(milliseconds: 1));
+        await drainClosedSubscription();
+        expect(
+          harness.transport.connections,
+          hasLength(delays.length + 2),
+          reason: 'the first disconnect after accepted hello starts at 1s',
+        );
+      } finally {
+        harness.container.dispose();
+        for (final connection in harness.transport.connections) {
+          unawaited(connection.closeFrames());
+        }
+        await tester.pump();
+      }
     },
   );
 

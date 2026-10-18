@@ -13,6 +13,42 @@ import root_cli
 import bridge_root
 
 class IntegrationTests(unittest.TestCase):
+    def test_installed_first_install_receipt_is_revalidated_then_consumed_by_normal_release(self):
+        import copy,guard,gis_first_install as gis
+        from gis_first_install_test import plan as gis_plan
+        from gis_prerequisite_test import ReadyKube
+        kube=ReadyKube();first=gis_plan()
+        gis.execute(kube,first,lambda _row:None)
+        ready=gis.verify_ready(kube,first,timeout=1,sleep=lambda _delay:None)
+        transition=gis.transition_receipt(first,ready,source_ci=first['source_ci'],
+            custody=first['custody'],target_mode='app-only')
+        original={'operation':first['operation'],'status':'PASS','target':{'mode':'app-only'},
+            'gis_first_install':first,'gis_first_install_transition_receipt':transition,
+            'context':{'expected':{'namespace_uid':transition['namespace_uid'],
+                'source_claim_uid':'00000000-0000-0000-0000-000000000012'}},
+            'target':{'mode':'app-only','manifest_sha256':'9'*64}}
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)/'root';installed=Path(td)/'installed';root.mkdir();installed.mkdir()
+            op=root/('rollout-'+first['operation']);op.mkdir()
+            (op/'checkpoint.json').write_text(json.dumps(original),encoding='utf-8')
+            def read(path):return json.loads(Path(path).read_text(encoding='utf-8'))
+            def save(path,row):Path(path).write_text(json.dumps(row),encoding='utf-8')
+            actions=object.__new__(bridge_root.Actions)
+            with patch.object(bridge_root,'INSTALLED',installed),patch.object(guard,'ROOT',root),\
+                    patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root,'save',side_effect=save):
+                actions._active_release(original)
+                # An unrelated images-only release keeps the receipt available until the
+                # separate full/app-only wiring operation consumes it.
+                actions._active_release({'operation':'c'*12,'context':{'expected':original['context']['expected']},
+                    'target':{'manifest_sha256':'8'*64},'gis_transition':None})
+                self.assertIn('gis_first_install_transition',read(installed/'active-release.json'))
+                binding=actions._previous_gis_transition(kube)
+                self.assertEqual(binding['receipt_sha256'],transition['receipt_sha256'])
+                second={'operation':'b'*12,'context':{'expected':original['context']['expected']},
+                    'target':{'manifest_sha256':'a'*64},'gis_transition':copy.deepcopy(binding)}
+                actions._active_release(second)
+                self.assertNotIn('gis_first_install_transition',read(installed/'active-release.json'))
+
     def test_workflows_use_supported_yaml_aliases_without_merge_keys(self):
         import yaml
         root = Path(__file__).resolve().parents[3]
@@ -76,8 +112,9 @@ class IntegrationTests(unittest.TestCase):
         actions=object.__new__(bridge_root.Actions)
         dispatcher=self.run_fixture(263689731,'workflow_dispatch')
         approved=self.run_fixture(263230665,'push',9001)
-        with patch.object(bridge_root.source_authority,'_get',side_effect=[dispatcher,{'workflow_runs':[approved]}]):
+        with patch.object(bridge_root.source_authority,'_get',side_effect=[dispatcher,{'workflow_runs':[approved]}]) as get:
             source_run,execution=actions._dispatcher({'run_id':9002,'token':'private'})
+        self.assertIn('&head_sha='+dispatcher['head_sha'],get.call_args_list[1].args[0])
         self.assertEqual(source_run,9001);self.assertEqual(execution['dispatcher_run_id'],9002)
         self.assertEqual(execution['head_sha'],'a'*40)
         # A called reusable workflow is the original CI push run, not a

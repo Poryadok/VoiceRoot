@@ -28,30 +28,36 @@ class MessageRequestsFolderRailButton extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     return Tooltip(
-      message: l10n.chatInboxRequests,
-      child: Material(
-        key: keyId,
-        color: selected ? voice.elevated : Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          child: SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  Icons.mark_email_unread_outlined,
-                  size: 20,
-                  color: selected ? voice.profileAccent : voice.textSecondary,
-                ),
-                if (summary.unreadCount > 0)
-                  Positioned(
-                    right: 8,
-                    top: 6,
-                    child: VoiceBadge(count: summary.unreadCount),
+      message: '${l10n.chatInboxRequests} · '
+          '${l10n.chatListUnreadCount(summary.unreadCount)}',
+      child: Semantics(
+        label: l10n.chatInboxRequests,
+        button: true,
+        selected: selected,
+        child: Material(
+          key: keyId,
+          color: selected ? voice.elevated : Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    Icons.mark_email_unread_outlined,
+                    size: 20,
+                    color: selected ? voice.profileAccent : voice.textSecondary,
                   ),
-              ],
+                  if (summary.unreadCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 6,
+                      child: VoiceBadge(count: summary.unreadCount),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

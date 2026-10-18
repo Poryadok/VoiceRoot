@@ -18,6 +18,7 @@ import (
 	authv1 "voice.app/voice/auth/v1"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/principal"
+	"voice/backend/voice/internal/principalgrpc"
 )
 
 const (
@@ -92,24 +93,42 @@ func New(service authv1.AuthServiceClient, issuer *principal.Issuer) *Client {
 // RequireCurrent fails closed unless Auth confirms that the credential's epoch
 // is at least the current durable account epoch and retained floor.
 func (c *Client) RequireCurrent(ctx context.Context, accountID string, sessionEpoch int64) error {
-	if c == nil || c.service == nil || c.issuer == nil || ctx == nil || sessionEpoch <= 0 {
+	if sessionEpoch <= 0 {
 		return status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
+	}
+	floor, err := c.CurrentFloor(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	if sessionEpoch < floor {
+		return status.Error(codes.Unauthenticated, "delegated session epoch is stale")
+	}
+	return nil
+}
+
+// CurrentFloor reads positive Auth authority for one account. It retains no
+// value between calls; bounded reconciliation may reuse it only within a pass.
+func (c *Client) CurrentFloor(ctx context.Context, accountID string) (int64, error) {
+	started := time.Now()
+	if c == nil || c.service == nil || c.issuer == nil || ctx == nil {
+		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
 	parsed, err := uuid.Parse(accountID)
 	if err != nil || parsed.String() != accountID {
-		return status.Error(codes.Unauthenticated, "invalid delegated identity")
+		return 0, status.Error(codes.Unauthenticated, "invalid delegated identity")
 	}
 	request := &authv1.GetVoiceSessionEpochFloorRequest{AccountId: accountID}
 	requestID := uuid.NewString()
 	hash, err := principal.RequestHash(request)
 	if err != nil {
-		return status.Error(codes.InvalidArgument, "invalid Auth floor request")
+		return 0, status.Error(codes.InvalidArgument, "invalid Auth floor request")
 	}
 	token, err := c.issuer.IssueService(principal.ServiceInput{
 		Audience: Audience, RPC: RPC, RequestID: requestID, RequestHash: hash,
 	})
 	if err != nil {
-		return status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
+		principalgrpc.DependencyFailure(ctx, "auth_floor_sign", err, started)
+		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
 	callCtx, cancel := context.WithTimeout(ctx, c.deadline)
 	defer cancel()
@@ -120,18 +139,17 @@ func (c *Client) RequireCurrent(ctx context.Context, accountID string, sessionEp
 	response, err := c.service.GetVoiceSessionEpochFloor(callCtx, request)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return status.Error(codes.Unauthenticated, "delegated account is unavailable")
+			return 0, status.Error(codes.Unauthenticated, "delegated account is unavailable")
 		}
-		return status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
+		principalgrpc.DependencyFailure(ctx, "auth_floor_call", err, started)
+		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
 	floor := response.GetSessionEpochFloor()
 	if floor <= 0 {
-		return status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
+		principalgrpc.DependencyFailure(ctx, "auth_floor_response", nil, started)
+		return 0, status.Error(codes.Unavailable, "Auth session epoch floor unavailable")
 	}
-	if sessionEpoch < floor {
-		return status.Error(codes.Unauthenticated, "delegated session epoch is stale")
-	}
-	return nil
+	return floor, nil
 }
 
 func CanonicalAccountID(value string) bool {

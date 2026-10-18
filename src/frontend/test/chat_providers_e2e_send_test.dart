@@ -25,6 +25,34 @@ import 'support/gateway_test_client.dart' show gatewayHttpForTest;
 /// Batch E2E-A red test: encrypt failure must not fall back to plaintext API send.
 void main() {
   group('ChatRoomController E2E send', () {
+    for (final encrypted in [true, false]) {
+      test('attachment-only Music keeps E2E admission (encrypted=$encrypted)', () async {
+        bool? sentEncrypted;
+        final container = ProviderContainer(overrides: [
+          authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(const GatewayConfig(baseUrl: 'http://api.test')),
+          httpClientProvider.overrideWithValue(MockClient((_) async => http.Response('{}', 404))),
+          voiceMessagesClientProvider.overrideWithValue(_TrackingMessagesClient(
+            onSend: () {}, onEncryption: (value) => sentEncrypted = value,
+          )),
+          realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+          messageCacheStoreProvider.overrideWithValue(InMemoryMessageCacheStore()),
+          isDeviceOfflineProvider.overrideWith((ref) => false),
+          chatListControllerProvider.overrideWith(_E2eEnabledChatListController.new),
+          dmPeerProfileByChatIdProvider.overrideWith((ref) => {'e2e-chat-send': 'peer-b'}),
+          e2eMessageServiceProvider.overrideWithValue(_FailingE2eMessageService()),
+        ]);
+        addTearDown(container.dispose);
+        final sub = container.listen<ChatRoomState>(chatRoomControllerProvider('e2e-chat-send'), (_, _) {}, fireImmediately: true);
+        addTearDown(sub.close);
+        await pumpEventQueue();
+        await container.read(chatRoomControllerProvider('e2e-chat-send').notifier).sendMessage('', attachments: [
+          MessageAttachment(fileId: 'file', type: 'music', e2eKeyWire: encrypted ? 'wrapped-secret' : null),
+        ]);
+        expect(sentEncrypted, encrypted ? isTrue : isNull);
+      });
+    }
     test('encrypt failure returns error and does not call messages API', () async {
       var sendCalled = false;
       final container = ProviderContainer(
@@ -119,7 +147,7 @@ class _FailingE2eMessageService extends E2eMessageService {
 }
 
 class _TrackingMessagesClient extends VoiceMessagesClient {
-  _TrackingMessagesClient({required this.onSend})
+  _TrackingMessagesClient({required this.onSend, this.onEncryption})
     : super(
         gateway: gatewayHttpForTest(
           MockClient((_) async => http.Response('{}', 500)),
@@ -127,6 +155,7 @@ class _TrackingMessagesClient extends VoiceMessagesClient {
       );
 
   final VoidCallback onSend;
+  final void Function(bool)? onEncryption;
 
   @override
   Future<MessagesApiResult<VoiceMessage>> sendMessage({
@@ -140,6 +169,7 @@ class _TrackingMessagesClient extends VoiceMessagesClient {
     bool isE2e = false,
   }) async {
     onSend();
+    onEncryption?.call(isE2e);
     return const MessagesApiFailure(message: 'should not be called');
   }
 }

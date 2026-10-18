@@ -91,11 +91,17 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       const ProfileLanguagePicker(),
                       const SizedBox(height: 24),
-                      ListTile(
-                        key: chatThemesKey,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(l10n.settingsChatThemes),
-                        trailing: const Icon(Icons.chevron_right),
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          l10n.chatThemesPlusLabel,
+                          style: TextStyle(color: colors.textSecondary),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _PlusDestination(
+                        tileKey: chatThemesKey,
+                        title: l10n.settingsChatThemes,
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => ChatThemesSettingsScreen(
@@ -104,11 +110,9 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      ListTile(
-                        key: appIconKey,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(l10n.appIconTitle),
-                        trailing: const Icon(Icons.chevron_right),
+                      _PlusDestination(
+                        tileKey: appIconKey,
+                        title: l10n.appIconTitle,
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => const AppIconSettingsScreen(),
@@ -133,6 +137,41 @@ class AppearanceSettingsScreen extends ConsumerWidget {
         AppThemePreference.dark => l10n.settingsThemeDark,
         AppThemePreference.highContrast => l10n.settingsThemeHighContrast,
       };
+}
+
+class _PlusDestination extends StatelessWidget {
+  const _PlusDestination({
+    required this.tileKey,
+    required this.title,
+    required this.onTap,
+  });
+
+  final Key tileKey;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => MergeSemantics(
+    child: ListTile(
+      key: tileKey,
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.star,
+            size: 18,
+            color: VoiceColors.of(context).profileAccent,
+            semanticLabel: AppLocalizations.of(context)!.chatThemesPlusLabel,
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
+      onTap: onTap,
+    ),
+  );
 }
 
 class _ThemeOption extends StatelessWidget {

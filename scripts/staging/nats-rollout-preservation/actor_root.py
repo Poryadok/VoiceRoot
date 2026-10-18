@@ -6,7 +6,7 @@ import actor_auth,actor_verification
 from bootstrap_root import secret_bytes,hash_bytes,ACCOUNT_SHA
 from controller import Blocked
 
-ROLES={'realtime','space','social','story'}
+ROLES={'realtime','space','social','story','messaging'}
 STORY_IMAGES={
  'ghcr.io/poryadok/voiceroot/story@sha256:8b142297965b3121fc19e0d970b137ad4ff8c8afa2c79eb49e490d59324f3c5f':('900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7','46192e1ca61e898df57a2aac07657e574b9d209d91106dc0e18ef8a735684970','ab957f054b081573447888ed9550323bd413cbbf'),
  'ghcr.io/poryadok/voiceroot/story@sha256:900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7':('900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7','46192e1ca61e898df57a2aac07657e574b9d209d91106dc0e18ef8a735684970','ab957f054b081573447888ed9550323bd413cbbf'),
@@ -91,7 +91,7 @@ def mounted_role(kube,stage,role,secret_name):
     return {'deployment':{k:metadata[k] for k in ('name','uid','namespace')},'container':'nats-leaf','key':key,'path':path,
         'mount_sha256':hash_bytes(json.dumps({'env':{'name':'NATS_CREDS','value':path},'mount':mounts[0],'volume':wanted},sort_keys=True,separators=(',',':')).encode())}
 
-def story_content(image):
+def story_content(image,automatic=None):
     """Immutable alias role chain; component witness is not current CI approval."""
     import source_authority
     if not isinstance(image,str) or not re.fullmatch(r'ghcr\.io/poryadok/voiceroot/story@sha256:[a-f0-9]{64}',image):fail()
@@ -103,7 +103,7 @@ def story_content(image):
     if len(matches)==1:return child,config,matches.pop()
     if matches:fail()
     import story_witness
-    authority=story_witness.lookup(child,config)
+    authority=story_witness.lookup(child,config) if automatic is None else automatic(child,config)
     return child,config,authority['component_source_sha']
 
 def story_schema(kube,source,stage):
@@ -162,7 +162,17 @@ def preflight(kube,source,code,binding,stage,services,decoder):
     candidate=None
     if schema is not None:
         image=stage.old_images.get('voice-story/story')
-        child,config,revision=story_content(image)
+        import story_fixture,story_witness,guard
+        snapshot=stage.snapshots['voice-story'];marker=kube.get('configmap',guard.MARKER)
+        def story_unchanged():
+            current=kube.get('deployment','voice-story')
+            if ({k:current['metadata'].get(k) for k in ('name','namespace','uid')}!={k:snapshot['metadata'].get(k) for k in ('name','namespace','uid')}
+                or current['spec']!=snapshot['spec'] or kube.get('configmap',guard.MARKER)!=marker
+                or story_schema(kube,source,stage)!=schema):fail()
+        def automatic(child,config):
+            return story_witness.ensure_content(child,config,
+                lambda:story_fixture.prove(child,config,source,code,binding,story_unchanged),story_unchanged)
+        child,config,revision=story_content(image,automatic)
         candidate={'schema':'voice-reviewed-story-compatible-pair-v1','image':image,'child_sha256':child,
             'config_sha256':config,'component_source_sha':revision,'schema_sha256':hash_bytes(json.dumps(schema,sort_keys=True,separators=(',',':')).encode())}
         import story_witness
@@ -199,8 +209,39 @@ def preflight(kube,source,code,binding,stage,services,decoder):
     return {'schema':'voice-nats-service-actor-authority-v1','generation':generation,'source_acl_sha256':hash_bytes(raw),
         'roles':roles,'binding':captured,'mounts':mounts,'proofs':proofs,'story_schema':schema,'compatible_story_candidate':candidate}
 
-def revalidate(kube,source,code,binding,stage,services,decoder,previous):
+def revalidate(kube,source,code,binding,stage,services,decoder,previous,*,historical_code=None):
     # Fresh private signed-time/revocation evaluation and actual scratch auth,
     # not a replay of prior booleans. No signing seed or event/ACK operation.
     current=preflight(kube,source,code,binding,stage,services,decoder)
-    if current!=previous:fail()
+    if historical_code is None:
+        if current!=previous:fail()
+        return
+    # Only the adopted V9 recovery may compare historical helper provenance.
+    # Authenticate the preserved code without executing it; all verification
+    # above used the CURRENT helper and current signed credentials.
+    import copy
+    import expired_recovery
+    import root_cli
+    canonical=lambda value:hash_bytes(json.dumps(value,sort_keys=True,separators=(',',':')).encode())
+    old_binding=root_cli.code_binding(Path(historical_code))
+    if canonical(old_binding)!=expired_recovery.V9_BINDING:fail()
+    if current is None and previous is None:return
+    try:
+        old_verifier=old_binding['nats-rollout-preservation/bootstrap-renewer']
+        new_verifier=binding['nats-rollout-preservation/bootstrap-renewer']
+        def actor_hash(authority):
+            return canonical({'binding':authority['binding'],'mount':authority['mounts']['story'],
+                'proof':authority['proofs']['story']})
+        for authority,verifier in ((previous,old_verifier),(current,new_verifier)):
+            if set(authority['proofs'])!=set(authority['roles']):fail()
+            for proof in authority['proofs'].values():
+                if proof['verifier_sha256']!=verifier:fail()
+            candidate=authority['compatible_story_candidate']
+            if candidate is not None and candidate['actor_sha256']!=actor_hash(authority):fail()
+        comparable=copy.deepcopy(previous)
+        for proof in comparable['proofs'].values():proof['verifier_sha256']=new_verifier
+        if comparable['compatible_story_candidate'] is not None:
+            comparable['compatible_story_candidate']['actor_sha256']=actor_hash(comparable)
+    except (KeyError,TypeError,AttributeError,ValueError):
+        fail()
+    if current!=comparable:fail()

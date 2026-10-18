@@ -904,3 +904,26 @@ final $typed_data.Uint8List getFriendsOfFriendsResponseDescriptor =
     $convert.base64Decode(
         'ChtHZXRGcmllbmRzT2ZGcmllbmRzUmVzcG9uc2USRgoPcHJvZmlsZV9pZF9saXN0GAEgASgLMh'
         '4udm9pY2Uuc29jaWFsLnYxLlByb2ZpbGVJZExpc3RSDXByb2ZpbGVJZExpc3Q=');
+
+@$core.Deprecated('Use cancelFriendInvitationRequestDescriptor instead')
+const CancelFriendInvitationRequest$json = {
+  '1': 'CancelFriendInvitationRequest',
+  '2': [
+    {'1': 'target_profile_id', '3': 1, '4': 1, '5': 9, '10': 'targetProfileId'},
+  ],
+};
+
+/// Descriptor for `CancelFriendInvitationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List cancelFriendInvitationRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1DYW5jZWxGcmllbmRJbnZpdGF0aW9uUmVxdWVzdBIqChF0YXJnZXRfcHJvZmlsZV9pZBgBIA'
+        'EoCVIPdGFyZ2V0UHJvZmlsZUlk');
+
+@$core.Deprecated('Use cancelFriendInvitationResponseDescriptor instead')
+const CancelFriendInvitationResponse$json = {
+  '1': 'CancelFriendInvitationResponse',
+};
+
+/// Descriptor for `CancelFriendInvitationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List cancelFriendInvitationResponseDescriptor =
+    $convert.base64Decode('Ch5DYW5jZWxGcmllbmRJbnZpdGF0aW9uUmVzcG9uc2U=');

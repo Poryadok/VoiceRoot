@@ -22,7 +22,17 @@ ci_global:
   - .github/ci/**
   - scripts/ci/**
 
+# The DEV overlay applicator has its own focused required Linux contract job.
+match_squad_overlay:
+  - scripts/dev/match_squad_overlay.py
+  - scripts/dev/match_squad_overlay_test.py
+  - scripts/dev/match_squad_runtime_overlay.py
+  - scripts/dev/match_squad_runtime_overlay_test.py
+  - deploy/dev/match-squad-trust-overlay/**
+
 a1_t106_live:
+  # Retain the existing output name; both targeted live test edits require A1.
+  - src/frontend/test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart
   - src/frontend/test/t106_account_soft_delete_e2e_live_test.dart
 
 a1_e2e:
@@ -70,6 +80,11 @@ frontend:
   - src/frontend/**
   - design/**
   - scripts/design/**
+
+# Workflow/publisher contract changes validate and publish the DEV Flutter image.
+dev_web_publish:
+  - .github/workflows/ci.yml
+  - .github/ci/path-filters.yml
 
 # Changes that alter the built Windows desktop target or bundled app-icon resources.
 windows_desktop:

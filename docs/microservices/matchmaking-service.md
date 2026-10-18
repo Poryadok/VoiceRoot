@@ -216,3 +216,62 @@ delayed work and removes Space queues, sessions, candidates, projections and
 Redis state. The receipt binds the root manifest but owns no Chat page set. Full
 request/receipt bytes retain 30 days from this participant's completion;
 compact `PURGED` fence is permanent.
+
+## Protected Match completion
+
+`CompleteMatch` is exposed through Gateway at
+`POST /api/v1/matchmaking/matches/{match_id}/complete`. Gateway calls the
+dedicated Matchmaking principal listener on `:9092` with a short-lived,
+request-bound `gateway` principal over mTLS. The verifier accepts only the
+configured issuer set and exact Matchmaking method; Space methods remain denied
+when no Space issuer is configured. The protected runtime also requires the
+current Auth session-epoch floor and consumes replay IDs in the configured
+Redis store. The ordinary `:9090` listener does not authorize this RPC.
+
+The principal binds the verified account, profile, session epoch, exact RPC,
+request hash and operation ID. Matchmaking checks participant membership and
+stores completion idempotency by `(actor_profile_id, operation_id)`: an exact
+same-actor replay returns the durable outcome, while a changed request under
+that key conflicts. Provider teardown and aggregate completion remain durable
+separate lifecycle steps; a successful HTTP response is not evidence that
+external Chat or Voice cleanup has completed.
+
+The recovery worker claims each incomplete provider operation independently and
+replays only its persisted request. Every RPC has a fresh 10-second deadline;
+transient failures persist a retry time using 1-second exponential backoff,
+bounded jitter and a 5-minute cap. Durable provider receipts reset the aggregate
+progress clock. Prometheus reports the oldest pending progress age and terminal
+contract-mismatch count: no progress for 15 minutes alerts, while a contract
+mismatch raises an immediate critical alert and is never retried automatically.
+
+### MatchSquad principal JWKS publisher
+
+When MatchSquad principal verification is enabled, Matchmaking also publishes
+the public portion of its current and next RSA signing keys at
+`https://<matchmaking-service>:8443/internal/v1/principal/jwks.json`. The
+listener uses the existing `principal.JWKSHandlerKeys` representation and
+serves only GET over TLS 1.2 or newer. Its server certificate must identify
+the configured service DNS name; its private key and the signing-key directory
+are mounted read-only. The HTTPS JWKS identity is separate from the mTLS
+certificates used by the MatchSquad gRPC listeners.
+
+Configure `MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR`,
+`MATCHMAKING_PRINCIPAL_ACTIVE_KID`,
+`MATCHMAKING_PRINCIPAL_JWKS_LISTEN_ADDR`,
+`MATCHMAKING_PRINCIPAL_JWKS_TLS_CERT_FILE`, and
+`MATCHMAKING_PRINCIPAL_JWKS_TLS_KEY_FILE` as one complete profile. If every
+setting is absent, the publisher stays disabled; any partial or invalid
+profile fails startup. The directory contains the same two distinct RSA
+private-key files used by the issuer, so both key IDs remain available during
+rotation while only the active ID signs new credentials. Consumers configure
+the exact HTTPS URL and a dedicated CA file; they fail closed if TLS trust or
+the JWKS document is unavailable. The endpoint is internal and must not be
+added to public ingress.
+
+When Space or Gateway principal verification is configured, Matchmaking keeps
+this JWKS publisher available while it loads the required initial issuer key
+sets. Only source-availability failures are retried with bounded requests and
+capped backoff. Matchmaking does not open ordinary health or gRPC listeners
+until each configured key set is valid. Invalid TLS trust, redirects, permanent
+HTTP errors, malformed key sets, and invalid configuration remain startup
+errors; cancellation stops the wait.
