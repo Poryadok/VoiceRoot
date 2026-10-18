@@ -76,9 +76,7 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
     directory. Original archive and selected native tree are never written.
     """
     from native_store import verify_archive,archive_closed_store
-    from scenario import ready
     from rollout_census import census
-    from nats_contract_actor import Actor
     from docker_runtime import NATS_IMAGE
     from preserve import native_catalog,verify_catalog,closed_native_states,native_message_files
     if native_only and record_sink is not None:fail()
@@ -90,18 +88,35 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
             or closed_archive==Path(archive)):fail()
     verify_fence()
     if not verify_archive(archive,manifest):fail()
+    native_transport = native_only and callable(getattr(runtime,'closed_copy_preflight',None))
+    if native_only and getattr(runtime,'rootless',False) and not native_transport:
+        fail()
+    if native_transport and closed_archive is not None:
+        # The native caller only needs a census and read-only native-state proof.
+        # This producer has no archive-export action, so never fake that result.
+        fail()
     catalog=native_catalog(runtime,archive,manifest,verify_fence) if native_only else None
-    baseline=set(runtime.owned)
-    parent=Path(tempfile.mkdtemp(prefix=label+'-',dir=runtime.base))
     started=datetime.now(timezone.utc)
     broker=None
-    try:
-        runtime.restore(archive,parent/'store',manifest)
-        broker=runtime.start_broker(label,parent/'store')
-        owned=runtime.inspect(broker)
-        if owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none':fail()
-        ready(runtime,broker)
+    if native_transport:
+        broker=runtime.closed_copy_preflight(archive,manifest,label,verify_fence)
         tree=runtime.monitor_jsz(broker)
+        runtime.verify_closed_copy(broker)
+        owned=None
+        parent=None
+    else:
+        from scenario import ready
+        from nats_contract_actor import Actor
+        baseline=set(runtime.owned)
+        parent=Path(tempfile.mkdtemp(prefix=label+'-',dir=runtime.base))
+    try:
+        if not native_transport:
+            runtime.restore(archive,parent/'store',manifest)
+            broker=runtime.start_broker(label,parent/'store')
+            owned=runtime.inspect(broker)
+            if owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none':fail()
+            ready(runtime,broker)
+            tree=runtime.monitor_jsz(broker)
         class Snapshot:
             def monitor_jsz(self,name):
                 if name!=broker:fail()
@@ -131,8 +146,13 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
                 'storage':'ROOT_IMMUTABLE_RECORD_FILES','streams':streams,'record_proof':records}
         if validate is not None:validate(runtime,broker,tree,row,manifest,records)
         verify_fence()
-        result={'census':row,'recovery':{'server_image':NATS_IMAGE,
-            'container_id':owned['Id'],'started_at':started.isoformat()}}
+        if native_transport:
+            runtime.verify_closed_copy(broker)
+            recovery=runtime.closed_copy_recovery(broker)
+        else:
+            recovery={'server_image':NATS_IMAGE,'container_id':owned['Id'],
+                'started_at':started.isoformat()}
+        result={'census':row,'recovery':recovery}
         if native_only:result.update(native_messages=records,closed_durable_states=states)
         else:result['records']=records
         if ledger is not None:
@@ -163,18 +183,24 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
                 'schema':'voice-private-copy-orderly-exit-v1','container_id':owned['Id'],
                 'server_image':NATS_IMAGE,'started_at':opening,
                 'finished_at':state['FinishedAt'],'exit_code':0})
+        if native_transport:
+            verify_fence()
+            runtime.close_closed_copy(broker)
+            verify_fence()
     finally:
         # Capture failure can leave created but unstarted clients. ID-bound
         # inspect is mandatory before removal and removal is verified.
-        for name in reversed(list(runtime.owned)):
-            if name in baseline:continue
-            cid=runtime.inspect(name)['Id']
-            runtime.run(['rm','-f',cid])
-            if runtime.run(['ps','-a','--filter','id='+cid,'--format','{{.ID}}']):fail()
-            del runtime.owned[name]
-        shutil.rmtree(parent)
+        if not native_transport:
+            for name in reversed(list(runtime.owned)):
+                if name in baseline:continue
+                cid=runtime.inspect(name)['Id']
+                runtime.run(['rm','-f',cid])
+                if runtime.run(['ps','-a','--filter','id='+cid,'--format','{{.ID}}']):fail()
+                del runtime.owned[name]
+            shutil.rmtree(parent)
         verify_fence()
-    result['recovery']['finished_at']=datetime.now(timezone.utc).isoformat()
+    if not native_transport:
+        result['recovery']['finished_at']=datetime.now(timezone.utc).isoformat()
     return result
 
 def failed_startup_interval(state,awaiting):
@@ -211,7 +237,9 @@ def current_inventory(runtime,stage):
     stage.verify_final_storage();runtime.no_operation_containers(running_only=True)
     attempt=Path(tempfile.mkdtemp(prefix='expired-freshness-',dir=runtime.base))
     try:
-        manifest=archive_closed_store(stage.final_path,attempt/'current.tar')
+        archive=attempt/'current.tar'
+        manifest=(runtime.archive_selected_store(archive) if getattr(runtime,'rootless',False)
+            else archive_closed_store(stage.final_path,archive))
         stage.verify_final_storage();runtime.no_operation_containers(running_only=True)
         return digest(native_inventory(manifest))
     finally:shutil.rmtree(attempt)
@@ -243,7 +271,8 @@ def produce(runtime,stage,state,awaiting,slot,checksum,validate):
         or json.loads(raw_manifest)!=cut['manifest']):fail()
     if not verify_archive(original,cut['manifest']):fail()
     current=slot/'rollout-before.tar'
-    manifest=archive_closed_store(stage.final_path,current)
+    manifest=(runtime.archive_selected_store(current) if getattr(runtime,'rootless',False)
+        else archive_closed_store(stage.final_path,current))
     stage.verify_final_storage()
     old=observe_copy(runtime,original,cut['manifest'],'expired-original',stage.verify_final_storage,native_only=True)
     old_row,old_observations=recovered_census(cut['census'],old['census'],old['recovery'],cut['manifest'])

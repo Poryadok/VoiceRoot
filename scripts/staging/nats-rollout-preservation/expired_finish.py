@@ -464,7 +464,9 @@ def observe_post_apply(runtime,stage,state,slot,validate,checksum,startup_interv
         if (canonical(cut['census'])!=cut['census_sha256']
             or not verify_archive(archive,cut['manifest'])):recovery.reject('finish_baseline_changed')
     stage.verify_final_storage();runtime.no_operation_containers(running_only=False)
-    current=slot/'rollout-before.tar';manifest=archive_closed_store(stage.final_path,current)
+    current=slot/'rollout-before.tar'
+    manifest=(runtime.archive_selected_store(current) if getattr(runtime,'rootless',False)
+        else archive_closed_store(stage.final_path,current))
     originals=observe_copy(runtime,original,old['manifest'],'finish-original',stage.verify_final_storage,native_only=True)
     original_row,original_observations=recovered_census(old['census'],originals['census'],originals['recovery'],old['manifest'])
     if semantic(original_row)!=semantic(old['census']):recovery.reject('finish_original_census_changed')

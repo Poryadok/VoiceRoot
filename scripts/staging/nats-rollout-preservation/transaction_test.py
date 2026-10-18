@@ -111,6 +111,7 @@ class TransactionFailureTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)/'rollout-123456abcdef';base.mkdir();(base/'apply-manifests.json').write_text('[]')
             with patch.object(transaction,'save',side_effect=lambda p,row:saved.append(copy.deepcopy(row))),\
+                 patch.object(transaction,'private_json',side_effect=FileNotFoundError),\
                  patch.object(transaction.guard,'frontend_image_only',return_value=False),\
                  patch.object(transaction.RolloutStage,'capture',side_effect=RuntimeError('owned-capture-interrupted')):
                 with self.assertRaisesRegex(RuntimeError,'owned-capture-interrupted'):
@@ -305,7 +306,7 @@ class TransactionFailureTest(unittest.TestCase):
                'events':[],'provenance':{},'cut':{},'context':{}}
         stage=Mock();stage.final_path=Path('/selected-store');stage.current={'replicas':0,'override':False}
         written=[]
-        def reconstruct(kube,state,journal):
+        def reconstruct(kube,state,journal,*,native_api=None):
             stage.save=journal
             return stage
         def interrupted_restart():
@@ -374,6 +375,37 @@ class TransactionFailureTest(unittest.TestCase):
         stage.restart.assert_not_called();stage.verified.assert_not_called()
         self.assertEqual(written[-1]['status'],'BLOCKED')
         self.assertEqual(written[-1]['fence_status'],'VERIFIED')
+
+    def test_native_finish_and_rollback_use_only_typed_preservation_runtime(self):
+        operation='123456abcdef'
+        target={'mode':'images-only'}
+        receipt={'operation':operation,'target':target,
+            'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat()}
+        api=object();config={'phase_image':'runner@sha256:'+'a'*64}
+        runtime=object();baseline={'manifest':{'archive_sha256':'b'*64},'census':{'schema':'fixture'}}
+        for kind,status in (('finish','WAITING'),('rollback','BLOCKED')):
+            with self.subTest(kind=kind):
+                state={'phase':'PAUSED_APPLY','status':status,'operation':operation,
+                    'target':target,'authorization':receipt,'events':[],
+                    'provenance':{},'cut':baseline,'context':{}}
+                stage=Mock();stage.finish_released_marker=None;stage.snapshots={}
+                with patch.object(transaction,'reconstruct',return_value=stage),\
+                     patch.object(transaction,'context',return_value={}),\
+                     patch.object(transaction,'revalidate_inputs'),\
+                     patch.object(transaction,'save'),\
+                     patch.object(transaction,'attach_closed_preservation'),\
+                     patch.object(transaction,'native_preservation_runtime',return_value=runtime) as native_runtime,\
+                     patch.object(transaction,'verify_post_apply',return_value={'verified':True}) as verify,\
+                     patch.object(transaction,'DockerRuntime',side_effect=AssertionError('legacy runtime reached')):
+                    if kind=='finish':
+                        result=transaction.finish(None,Path('/private'),state,receipt,'101',{},
+                            native_api=api,native_config=config)
+                    else:
+                        result=transaction.rollback(None,Path('/private'),state,receipt,'101',{},
+                            native_api=api,native_config=config)
+                native_runtime.assert_called_once_with(Path('/private'),state,stage,api,config,baseline,kind)
+                verify.assert_called_once_with(runtime,None,baseline,stage.verify_final_storage)
+                self.assertEqual(result['status'],'PASS' if kind=='finish' else 'ROLLED_BACK')
 
 if __name__=='__main__':unittest.main()
 
@@ -485,6 +517,7 @@ class FullOriginStoryRollbackTests(unittest.TestCase):
             with ExitStack() as stack:
                 stack.enter_context(patch.object(bridge_root,'INSTALLED',installed))
                 stack.enter_context(patch.object(bridge_root,'Kube',return_value=kube))
+                stack.enter_context(patch.object(transaction,'private_json',side_effect=FileNotFoundError))
                 capture=stack.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
                 stack.enter_context(patch.object(bridge_root.source_authority,'capture_source',
                     return_value={'source_sha':'a'*40,'images':{'story':'ghcr.io/poryadok/voiceroot/story@sha256:'+'e'*64}}))
@@ -517,7 +550,7 @@ class ReadOnlyPrepareFailureTests(unittest.TestCase):
             def failed_capture(kube,operation,journal,names):
                 journal({'kind':'staging_preflight'})
                 raise transaction.Blocked('rollout_old_container_attempt_missing')
-            with patch.object(transaction,'save',side_effect=lambda path,row:saved.append(copy.deepcopy(row))),                 patch.object(transaction.RolloutStage,'capture',side_effect=failed_capture),                 patch.object(transaction.RolloutStage,'fence') as fence,                 patch.object(transaction.RolloutStage,'refence') as refence:
+            with patch.object(transaction,'save',side_effect=lambda path,row:saved.append(copy.deepcopy(row))),                 patch.object(transaction,'private_json',side_effect=FileNotFoundError),                 patch.object(transaction.RolloutStage,'capture',side_effect=failed_capture),                 patch.object(transaction.RolloutStage,'fence') as fence,                 patch.object(transaction.RolloutStage,'refence') as refence:
                 with self.assertRaisesRegex(transaction.Blocked,'rollout_old_container_attempt_missing'):
                     transaction.prepare(None,base,base/'code',{'mode':'full'},{},'669fd496166b',binding,[],{'actions':[]})
             self.assertEqual((saved[-1]['phase'],saved[-1]['status'],saved[-1]['fence_status']),

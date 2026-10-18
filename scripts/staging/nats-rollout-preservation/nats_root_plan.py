@@ -67,14 +67,27 @@ def preflight(kube,source,enrollment,contract,decoder):
 
 def closed_copy_preflight(kube,source,enrollment,contract,decoder,runtime,broker,tree):
     """Root recovery callback: actual owned restored broker snapshot only."""
-    owned=runtime.inspect(broker)
-    if (owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none'
-        or runtime.owned[broker]['id']!=owned['Id']):fail()
+    native_verify=getattr(runtime,'verify_closed_copy',None)
+    if callable(native_verify):
+        # Native authority comes from fresh Job/Pod UID, exact producer template,
+        # pinned imageIDs, closed mount/profile projection, and same-Pod stop
+        # receipt. Helper-reported binary hashes are continuity only.
+        owned=native_verify(broker)
+        if (not isinstance(owned,dict) or set(owned)!={'job_uid','pod_uid','phase_image',
+            'node_name','verification_pvc_uid','verification_pv_uid'}
+            or not isinstance(tree,dict)):
+            fail()
+    else:
+        owned=runtime.inspect(broker)
+        if (owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none'
+            or runtime.owned[broker]['id']!=owned['Id']):fail()
     generation=enrollment['binding']['generation']
     account=secret_bytes(kube.get('secret','voice-nats-operator-'+generation),'account.public').decode().strip()
     if runtime.account_id()!=account:fail()
     result=_from_tree(kube,source,enrollment,contract,decoder,tree)
-    if runtime.inspect(broker)['Id']!=owned['Id']:fail()
+    if callable(native_verify):
+        if native_verify(broker)!=owned:fail()
+    elif runtime.inspect(broker)['Id']!=owned['Id']:fail()
     return result
 
 def _from_tree(kube,source,enrollment,contract,decoder,tree):

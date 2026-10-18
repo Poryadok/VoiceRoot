@@ -512,6 +512,7 @@ class PvcArchiveRuntime:
             'phase': 'archive'}
         self.persist_intent = persist_intent
         self.persist_result = persist_result
+        self.owned = {}
         if verification_pvc_size_bytes is not None and (
             type(verification_pvc_size_bytes) is not int or verification_pvc_size_bytes <= 0
             or verification_pvc_size_bytes > (1 << 63) - 1):
@@ -527,6 +528,284 @@ class PvcArchiveRuntime:
             _fail('archive_runtime_account_unbound')
         return self._account_id
 
+    def closed_copy_preflight(self, archive, manifest, label, verify_fence):
+        """Observe one archive only on a fresh nonpromotable verification PVC."""
+        import closed_copy_stream
+        import kube_json_api
+        import native_store
+        import verification_job
+        if label not in ('expired-original', 'expired-current', 'decrypted-readback',
+            'finish-original', 'finish-applied', 'finish-current'):
+            _fail('closed_copy_label_invalid')
+        if not callable(verify_fence) or native_store.verify_archive(archive, manifest) is not True:
+            _fail('closed_copy_archive_invalid')
+        archive_path = Path(archive)
+        archive_stat = archive_path.lstat()
+        if (self._archive_artifact_relative(archive_path) is None or not stat.S_ISREG(archive_stat.st_mode)
+            or stat.S_ISLNK(archive_stat.st_mode) or archive_stat.st_uid != os.geteuid()
+            or stat.S_IMODE(archive_stat.st_mode) != 0o600 or archive_stat.st_nlink != 1
+            or archive_stat.st_size <= 0):
+            _fail('closed_copy_archive_custody_invalid')
+        archive_bytes = archive_stat.st_size
+        archive_digest = hashlib.sha256()
+        with archive_path.open('rb') as source:
+            while chunk := source.read(1 << 20):
+                archive_digest.update(chunk)
+        after_stat = archive_path.lstat()
+        if (archive_stat.st_ino, archive_stat.st_size, archive_stat.st_mtime_ns,
+            archive_stat.st_ctime_ns) != (after_stat.st_ino, after_stat.st_size,
+                after_stat.st_mtime_ns, after_stat.st_ctime_ns):
+            _fail('closed_copy_archive_changed')
+        archive_sha = archive_digest.hexdigest()
+        manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=False, allow_nan=False).encode('utf-8')
+        config_fd = os.open(self.base / 'server.conf', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            config_stat = os.fstat(config_fd)
+            if (not stat.S_ISREG(config_stat.st_mode) or config_stat.st_uid != os.geteuid()
+                or config_stat.st_gid != os.getegid() or stat.S_IMODE(config_stat.st_mode) != 0o440
+                or config_stat.st_nlink != 1 or not 0 < config_stat.st_size <= 256 << 10):
+                _fail('closed_copy_config_custody_invalid')
+            config = os.read(config_fd, (256 << 10) + 1)
+            config_after = os.fstat(config_fd)
+            if (len(config) != config_stat.st_size or (config_stat.st_dev, config_stat.st_ino,
+                config_stat.st_size, config_stat.st_mtime_ns, config_stat.st_ctime_ns) != (
+                config_after.st_dev, config_after.st_ino, config_after.st_size,
+                config_after.st_mtime_ns, config_after.st_ctime_ns)):
+                _fail('closed_copy_config_changed')
+        finally:
+            os.close(config_fd)
+        config_sha = hashlib.sha256(config).hexdigest()
+        # A repeated invocation for this exact cut resolves to the same
+        # attempt-bound claim and Job. Any prior intent/result is therefore
+        # encountered as an existing object and fails closed; it cannot mint a
+        # new attempt after an unknown outcome.
+        attempt = hashlib.sha256((self.request['nonce'] + ':' + label + ':' + archive_sha).encode()).hexdigest()[:8]
+        nonce = hashlib.sha256((self.request['nonce'] + ':' + label + '-closed-copy').encode()).hexdigest()[:32]
+        request = {'operation': self.operation, 'nonce': nonce, 'phase': 'closed-copy-preflight'}
+        claim = 'voice-nats-verify-' + self.operation + '-' + attempt
+        self.persist_intent({'phase':'closed-copy-preflight','state':'PVC_CREATE_INTENT',
+            'operation':self.operation,'nonce':nonce,'verification_attempt':attempt,
+            'verification_claim':claim,'purpose':'verification','cut':label,
+            'archive_sha256':archive_sha,'archive_bytes':archive_bytes,
+            'server_config_sha256':config_sha,'server_config_bytes':len(config)})
+        self._fresh_source()
+        pvc,pvc_uid,pv,pv_uid,node_name,hostname,sc_identity=self._ensure_verification_claim(
+            claim,attempt,nonce)
+        source_node_name=self.binding['node_name']
+        source_hostname=self.binding['node_hostname']
+        binding=verification_job.validate_closed_copy_binding(request,{
+            'source_claim':self.binding['claim_name'],'source_uid':self.binding['claim_uid'],
+            'source_pv_name':self.binding['pv_name'],'source_pv_uid':self.binding['pv_uid'],
+            'source_node_name':source_node_name,'source_hostname':source_hostname,
+            'verification_claim':claim,'verification_attempt':attempt,'verification_uid':pvc_uid,
+            'verification_pv_name':pv['metadata']['name'],'verification_pv_uid':pv_uid,
+            'verification_node_name':node_name,'verification_hostname':hostname,
+            'archive_sha256':archive_sha,'archive_bytes':archive_bytes,
+            'server_config_sha256':config_sha,'server_config_bytes':len(config)})
+        self.persist_intent({'phase':'closed-copy-preflight','state':'PVC_BOUND',
+            'operation':self.operation,'nonce':nonce,'verification_attempt':attempt,
+            'verification_claim':claim,'verification_uid':pvc_uid,
+            'verification_pv_name':pv['metadata']['name'],'verification_pv_uid':pv_uid,
+            'verification_node_name':node_name,'verification_hostname':hostname,
+            'storage_class':sc_identity})
+        wanted=verification_job.document(request,binding,self.runner_image)
+        job_name=wanted['metadata']['name']
+        template_sha=hashlib.sha256(json.dumps(wanted['spec'],sort_keys=True,
+            separators=(',',':')).encode()).hexdigest()
+        self._fresh_source()
+        self._fresh_verification_storage(claim,pvc_uid,pv_uid,sc_identity,node_name,hostname,attempt)
+        try:
+            self.api.get_job(kube_json_api.NAMESPACE,job_name)
+        except kube_json_api.KubeNotFound:
+            pass
+        else:
+            _fail('closed_copy_job_preexisting')
+        self.persist_intent({'phase':'closed-copy-preflight','state':'JOB_CREATE_INTENT',
+            'operation':self.operation,'nonce':nonce,'verification_attempt':attempt,
+            'job_name':job_name,'template_sha256':template_sha,'verification_uid':pvc_uid})
+        try:
+            job=verification_job.verify_job(self.api.create_job(kube_json_api.NAMESPACE,
+                copy.deepcopy(wanted)),wanted)
+        except Exception:
+            try:
+                job=verification_job.verify_job(self.api.get_job(kube_json_api.NAMESPACE,job_name),wanted)
+            except Exception:
+                _fail('closed_copy_job_create_unknown')
+        job_uid=job['metadata']['uid']
+        self.persist_result({'phase':'closed-copy-preflight','state':'JOB_CREATED',
+            'job_name':job_name,'job_uid':job_uid,'verification_attempt':attempt,
+            'verification_uid':pvc_uid,'template_sha256':template_sha})
+        job,pod=self.api.wait_closed_copy_pod(kube_json_api.NAMESPACE,request,binding,self.runner_image)
+        if job.get('metadata',{}).get('uid')!=job_uid:
+            _fail('closed_copy_job_changed')
+        pod_name,pod_uid=pod['metadata']['name'],pod['metadata']['uid']
+        container_statuses=pod.get('status',{}).get('containerStatuses',[])
+        init_statuses=pod.get('status',{}).get('initContainerStatuses',[])
+        control=next((row for row in container_statuses if row.get('name')=='control'),None)
+        nats=next((row for row in init_statuses if row.get('name')=='nats'),None)
+        if control is None or nats is None:
+            _fail('closed_copy_container_status_invalid')
+        broker=nats.get('containerID')
+        if not isinstance(broker,str) or not broker.startswith('containerd://'):
+            _fail('closed_copy_broker_identity_invalid')
+        identity=closed_copy_stream.identity_from_request(request,binding,pod_uid,job_uid,self.runner_image)
+        archive_binding={'sha256':archive_sha,'bytes':archive_bytes}
+        receipts={}
+
+        def assert_current(*,allow_stopped=False):
+            verify_fence()
+            self._fresh_source()
+            self._fresh_verification_storage(claim,pvc_uid,pv_uid,sc_identity,node_name,hostname,attempt)
+            job_now=verification_job.verify_job(self.api.get_job(kube_json_api.NAMESPACE,job_name),
+                wanted,expected_uid=job_uid)
+            if job_now.get('status',{}).get('failed',0)>0:
+                _fail('closed_copy_job_failed')
+            current=self.api.get_pod(kube_json_api.NAMESPACE,pod_name)
+            verification_job.verify_pod(current,wanted['spec']['template'],job_uid,
+                'closed-copy-preflight',expected_node_name=node_name,expected_uid=pod_uid)
+            for statuses,key,expected_id in ((current.get('status',{}).get('containerStatuses',[]),
+                    'control',control.get('containerID')),
+                (current.get('status',{}).get('initContainerStatuses',[]),'nats',broker)):
+                selected=[value for value in statuses if value.get('name')==key]
+                if len(selected)!=1 or selected[0].get('containerID')!=expected_id or selected[0].get('restartCount')!=0:
+                    _fail('closed_copy_pod_replaced')
+                if key=='nats':
+                    if allow_stopped:
+                        if selected[0].get('state',{}).get('terminated',{}).get('exitCode')!=0:
+                            _fail('closed_copy_broker_stop_unproven')
+                    elif selected[0].get('ready') is not True:
+                        _fail('closed_copy_pod_replaced')
+            verify_fence()
+
+        def action(name, *, config_payload=None, archive_payload=False):
+            assert_current()
+            self.persist_intent({'phase':'closed-copy-preflight','state':'ACTION_INTENT',
+                'action':name,'job_name':job_name,'job_uid':job_uid,'pod_name':pod_name,
+                'pod_uid':pod_uid,'verification_attempt':attempt,'template_sha256':template_sha})
+            try:
+                raw=self.api.exec_pod_closed_copy(kube_json_api.NAMESPACE,job_name,job_uid,
+                    pod_name,pod_uid,request,binding,self.runner_image,name,
+                    config_bytes=config_payload,
+                    archive_path=archive if archive_payload else None,
+                    manifest_bytes=manifest_bytes if archive_payload else None)
+                receipt=closed_copy_stream.receipt(raw,identity=identity,action=name)
+            except Exception:
+                # An interrupted exec is unknown. Only the original Pod's fixed
+                # readback may prove completion; no action is replayed.
+                try:
+                    assert_current()
+                    receipt=self.api.read_closed_copy_receipt(kube_json_api.NAMESPACE,
+                        job_name,job_uid,pod_name,pod_uid,request,binding,self.runner_image,name)
+                except Exception:
+                    _fail('closed_copy_action_unknown')
+            else:
+                assert_current()
+                observed=self.api.read_closed_copy_receipt(kube_json_api.NAMESPACE,
+                    job_name,job_uid,pod_name,pod_uid,request,binding,self.runner_image,name)
+                if receipt!=observed:
+                    _fail('closed_copy_action_readback_mismatch')
+            assert_current(allow_stopped=(name=='broker-stop'))
+            self.persist_result({'phase':'closed-copy-preflight','state':'ACTION_COMPLETE',
+                'action':name,'job_uid':job_uid,'pod_uid':pod_uid,'verification_attempt':attempt,
+                'receipt_sha256':hashlib.sha256(json.dumps(receipt,sort_keys=True,
+                    separators=(',',':')).encode()).hexdigest()})
+            receipts[name]=receipt
+            return receipt
+
+        action('load-config',config_payload=config)
+        loaded=action('receive-archive',archive_payload=True)
+        if loaded.get('manifest_sha256')!=hashlib.sha256(manifest_bytes).hexdigest():
+            _fail('closed_copy_manifest_receipt_mismatch')
+        started=action('broker-start')
+        ready=action('broker-ready')
+        if (any(ready.get(key)!=started.get(key) for key in ('pid','started_at_ns','nats_binary_sha256'))
+            or ready.get('ready_at_ns',0)<started.get('started_at_ns',0)):
+            _fail('closed_copy_broker_changed')
+        read_receipt=action('read-jsz')
+        tree=self.api.read_closed_copy_jsz(kube_json_api.NAMESPACE,job_name,job_uid,
+            pod_name,pod_uid,request,binding,self.runner_image,read_receipt)
+        if (read_receipt.get('pid'),read_receipt.get('started_at_ns'),read_receipt.get('nats_binary_sha256')) != (
+            started.get('pid'),started.get('started_at_ns'),started.get('nats_binary_sha256')):
+            _fail('closed_copy_broker_changed')
+        stopped=action('broker-stop')
+        if (any(stopped.get(key)!=started.get(key) for key in ('pid','started_at_ns','nats_binary_sha256'))
+            or stopped.get('finished_at_ns',0)<ready.get('ready_at_ns',0)
+            or stopped.get('stopped_at_ns',0)<stopped.get('finished_at_ns',0)
+            or stopped.get('exit_code')!=0):
+            _fail('closed_copy_broker_stop_invalid')
+        self._closed_copy_tree=tree
+        self._closed_copy_broker=broker
+        self._closed_copy_process={key:started[key] for key in ('pid','started_at_ns','nats_binary_sha256')}
+        self._closed_copy_receipts=receipts
+        self._closed_copy_phase_image=self.runner_image
+        self._closed_copy_label=label
+        self._closed_copy_job={'name':job_name,'uid':job_uid,'pod_name':pod_name,'pod_uid':pod_uid,
+            'claim':claim,'claim_uid':pvc_uid,'pv_uid':pv_uid,'attempt':attempt,
+            'nonce':nonce,'binding':copy.deepcopy(binding),
+            'control_container_id':control['containerID'],'nats_container_id':broker}
+        return broker
+
+    def monitor_jsz(self, broker):
+        if getattr(self, '_closed_copy_broker', None) != broker:
+            _fail('closed_copy_broker_identity_invalid')
+        return copy.deepcopy(self._closed_copy_tree)
+
+    def verify_closed_copy(self, broker):
+        if getattr(self, '_closed_copy_broker', None) != broker:
+            _fail('closed_copy_broker_identity_invalid')
+        job=self._closed_copy_job
+        request={'operation':self.operation,'nonce':job['nonce'],'phase':'closed-copy-preflight'}
+        binding=job['binding']
+        actual=self.api.verify_closed_copy_pod(NAMESPACE,job['name'],job['uid'],
+            job['pod_name'],job['pod_uid'],request,binding,self._closed_copy_phase_image)
+        if (actual.get('job_uid')!=job['uid'] or actual.get('pod_uid')!=job['pod_uid']
+            or actual.get('phase_image')!=self._closed_copy_phase_image
+            or actual.get('verification_pvc_uid')!=job['claim_uid']
+            or actual.get('verification_pv_uid')!=job['pv_uid']):
+            _fail('closed_copy_identity_changed')
+        observed=self.api.read_closed_copy_receipt(NAMESPACE,job['name'],job['uid'],
+            job['pod_name'],job['pod_uid'],request,binding,self._closed_copy_phase_image,'broker-stop')
+        if observed!=self._closed_copy_receipts.get('broker-stop'):
+            _fail('closed_copy_stop_receipt_changed')
+        return actual
+
+    def closed_copy_recovery(self, broker):
+        from datetime import datetime, timezone
+        from nats_root_plan import NATS_IMAGE
+        self.verify_closed_copy(broker)
+        receipts=self._closed_copy_receipts
+        start=receipts.get('broker-start');stop=receipts.get('broker-stop')
+        if not isinstance(start,dict) or not isinstance(stop,dict):
+            _fail('closed_copy_receipts_incomplete')
+        def stamp(ns):
+            return datetime.fromtimestamp(ns/1_000_000_000,tz=timezone.utc).isoformat()
+        return {'server_image':NATS_IMAGE,
+            'started_at':stamp(start['started_at_ns']),
+            'finished_at':stamp(stop['stopped_at_ns']),
+            'native_runtime':{'schema':'voice-native-closed-copy-runtime-v1',
+                'job_uid':self._closed_copy_job['uid'],'pod_uid':self._closed_copy_job['pod_uid'],
+                'control_container_id':self._closed_copy_job['control_container_id'],
+                'nats_container_id':self._closed_copy_job['nats_container_id'],
+                'phase_image':self._closed_copy_phase_image,
+                'verification_pvc_uid':self._closed_copy_job['claim_uid'],
+                'verification_pv_uid':self._closed_copy_job['pv_uid'],
+                'nats_binary_sha256':self._closed_copy_process['nats_binary_sha256']}}
+
+    def close_closed_copy(self, broker):
+        """Delete only the completed exact Job after all receipts were consumed."""
+        self.verify_closed_copy(broker)
+        job=self._closed_copy_job
+        if self.api.delete_job(NAMESPACE,job['name'],job['uid']) is not True:
+            _fail('closed_copy_job_cleanup_unconfirmed')
+        if self.api.wait_closed_copy_pod_deleted(NAMESPACE,job['pod_name'],
+            job['pod_uid'],job['uid']) is not True:
+            _fail('closed_copy_pod_cleanup_unconfirmed')
+        self.persist_result({'phase':'closed-copy-preflight','state':'JOB_DELETED',
+            'job_name':job['name'],'job_uid':job['uid'],'pod_uid':job['pod_uid'],
+            'verification_attempt':job['attempt'],'verification_uid':job['claim_uid']})
+        return True
+
     def no_operation_containers(self, *, running_only=False):
         rows = self.api.list_operation_jobs(NAMESPACE, self.operation)
         if rows:
@@ -535,12 +814,12 @@ class PvcArchiveRuntime:
     def archive_selected_store(self, artifact):
         import native_store
         target = Path(artifact)
-        if target.parent != self.base or target.name not in ('rollout-before.tar','rollout-after.tar') \
-            or target.exists() or target.is_symlink():
+        relative = self._archive_artifact_relative(target)
+        if relative is None or target.exists() or target.is_symlink():
             _fail('archive_target_invalid')
         archive_request = dict(self.request)
-        if target.name != 'rollout-before.tar':
-            archive_request['nonce'] = hashlib.sha256((self.request['nonce'] + ':' + target.name).encode()).hexdigest()[:32]
+        if relative.as_posix() != 'rollout-before.tar':
+            archive_request['nonce'] = hashlib.sha256((self.request['nonce'] + ':' + relative.as_posix()).encode()).hexdigest()[:32]
         result = run_archive(self.api, archive_request, self.binding, self.runner_image, target,
             persist_intent=self.persist_intent, persist_result=self.persist_result,
             verify_archive=native_store.verify_archive)
@@ -553,6 +832,32 @@ class PvcArchiveRuntime:
         if type(result.get('bytes')) is not int or result['bytes']>capacity_bytes:
             _fail('archive_exceeds_reported_source_capacity')
         return result['manifest']
+
+    def _archive_artifact_relative(self, target):
+        """Allow only fixed archive outputs in this operation's private tree."""
+        try:
+            relative = target.relative_to(self.base)
+        except ValueError:
+            return None
+        parts = relative.parts
+        allowed = (parts in (('rollout-before.tar',), ('rollout-after.tar',))
+            or (len(parts) == 2 and re.fullmatch(r'expired-freshness-[A-Za-z0-9_-]{1,96}', parts[0])
+                and parts[1] == 'current.tar')
+            or (len(parts) == 3 and parts[0] in ('expired-recovery-proofs','expired-finish-proofs')
+                and re.fullmatch(r'[A-Za-z0-9_-]{1,128}', parts[1]) and parts[2] == 'rollout-before.tar'))
+        if not allowed:
+            return None
+        current = self.base
+        for component in parts[:-1]:
+            current = current / component
+            try:
+                info = current.lstat()
+            except OSError:
+                return None
+            if (not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode)
+                or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700):
+                return None
+        return relative
 
     def capture_census(self, archive, manifest, label, *, validate=None):
         """Create a disposable verified scratch claim and run the fixed census ABI."""

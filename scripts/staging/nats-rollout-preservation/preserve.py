@@ -10,6 +10,7 @@ import copy
 import datetime as dt
 import json
 import os
+import re
 import stat
 from pathlib import Path
 import tempfile
@@ -414,7 +415,27 @@ def recovered_census(before,after,recovery,manifest):
         key=old['stream'],old['name'];new=current.get(key)
         if new is None or new.get('created')==old.get('created'):continue
         if old.get('durable') or new.get('durable'):raise Blocked('rollout_durable_creation_changed')
-        if recovery.get('server_image')!=NATS_IMAGE or not recovery.get('container_id'):raise Blocked('rollout_ephemeral_recovery_unbound')
+        native=recovery.get('native_runtime')
+        if recovery.get('server_image')!=NATS_IMAGE:
+            raise Blocked('rollout_ephemeral_recovery_unbound')
+        if native is None:
+            if not recovery.get('container_id'):
+                raise Blocked('rollout_ephemeral_recovery_unbound')
+        else:
+            uid=r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}'
+            if (not isinstance(native,dict) or set(native)!={'schema','job_uid','pod_uid',
+                'control_container_id','nats_container_id','phase_image','verification_pvc_uid',
+                'verification_pv_uid','nats_binary_sha256'}
+                or native.get('schema')!='voice-native-closed-copy-runtime-v1'
+                or any(not isinstance(native.get(key),str) or not re.fullmatch(uid,native[key])
+                    for key in ('job_uid','pod_uid','verification_pvc_uid','verification_pv_uid'))
+                or any(not isinstance(native.get(key),str) or not re.fullmatch(r'containerd://[A-Za-z0-9._-]{8,128}',native[key])
+                    for key in ('control_container_id','nats_container_id'))
+                or not isinstance(native.get('phase_image'),str)
+                or not re.fullmatch(r'[a-z0-9./_-]+@sha256:[a-f0-9]{64}',native['phase_image'])
+                or not isinstance(native.get('nats_binary_sha256'),str)
+                or not re.fullmatch(r'[a-f0-9]{64}',native['nats_binary_sha256'])):
+                raise Blocked('rollout_ephemeral_recovery_unbound')
         start=dt.datetime.fromisoformat(recovery['started_at']);end=dt.datetime.fromisoformat(recovery['finished_at'])
         observed_created=new['created'];created=dt.datetime.fromisoformat(observed_created.replace('Z','+00:00'))
         original_created=dt.datetime.fromisoformat(old['created'].replace('Z','+00:00'))

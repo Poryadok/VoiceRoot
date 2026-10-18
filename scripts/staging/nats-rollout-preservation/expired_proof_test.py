@@ -9,6 +9,34 @@ from unittest.mock import Mock
 sys.path.insert(0,str(Path(__file__).parents[1]/'nats-known-baseline'))
 
 class RecordProofTests(unittest.TestCase):
+    def test_native_current_inventory_uses_typed_archive_without_host_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            calls=[]
+            class Runtime:
+                rootless=True
+                base=Path(folder)
+                def no_operation_containers(self,*,running_only):calls.append(('jobs',running_only))
+                def archive_selected_store(self,path):
+                    path=Path(path)
+                    self.assert_private(path)
+                    calls.append(('archive',path.name))
+                    return {'files':[{'path':'jetstream/store','size':1,'sha256':'a'*64}]}
+                def assert_private(self,path):
+                    if path.parent.parent!=self.base or not path.parent.name.startswith('expired-freshness-'):
+                        raise AssertionError(path)
+            class Stage:
+                def verify_final_storage(self):calls.append(('storage',True))
+                @property
+                def final_path(self):raise AssertionError('native stage must not expose PV host path')
+            expected='b'*64
+            with patch('preserve.native_inventory',return_value={'native':'inventory'}), \
+                 patch('preserved_upload.digest',return_value=expected):
+                result=expired_proof.current_inventory(Runtime(),Stage())
+            self.assertEqual(result,expected)
+            self.assertEqual(calls.count(('archive','current.tar')),1)
+            self.assertEqual(calls.count(('jobs',True)),2)
+            self.assertEqual(calls.count(('storage',True)),2)
+
     def test_native_continuity_rejects_changed_missing_messages_and_complete_pending_state(self):
         from preserve import native_message_files
         manifest={'dirs':['jetstream/account/streams/events/msgs'],

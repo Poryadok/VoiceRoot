@@ -33,6 +33,7 @@ MAX_JSON_RESPONSE = 4 << 20
 MAX_LOG_RESPONSE = 65536
 MAX_ARCHIVE_STREAM_BYTES = 66 << 30
 MAX_CENSUS_MANIFEST_BYTES = 512 << 20
+MAX_CLOSED_COPY_JSZ_STREAM_BYTES = 90 << 20
 MAX_VERIFICATION_INPUT_BYTES = 4 << 20
 VERIFICATION_INPUT_FILES = frozenset(('bootstrap.creds','social.creds','realtime.creds',
     'fixture.json','server.conf'))
@@ -812,6 +813,206 @@ class _KubernetesJSONAPIBase:
             + self._segment(pod_name) + '/exec?' + urlencode(query))
         token = self._operation_token()
         yield from _websocket_exec(self, path, token, max_bytes=max_bytes)
+
+    def _closed_copy_pod(self, namespace, job_name, job_uid, pod_name, pod_uid,
+                         request, binding, phase_image, *, allow_stopped=False):
+        """Re-read and bind one closed-copy Job/Pod before every fixed action."""
+        import verification_job
+        row = verification_job.validate_request(request)
+        storage = verification_job.validate_closed_copy_binding(row, binding)
+        phase_image = verification_job.validate_image(phase_image)
+        if namespace != NAMESPACE or row['phase'] != 'closed-copy-preflight':
+            _fail('closed_copy_identity_invalid')
+        expected_name = verification_job.job_name(row, storage['verification_attempt'])
+        if job_name != expected_name:
+            _fail('closed_copy_job_name_invalid')
+        wanted = verification_job.document(row, storage, phase_image)
+        actual_job = verification_job.verify_job(self.get_job(namespace, job_name), wanted, job_uid)
+        pod = self.get_pod(namespace, pod_name)
+        verified = verification_job.verify_pod(pod, wanted['spec']['template'], job_uid,
+            'closed-copy-preflight', expected_node_name=storage['verification_node_name'],
+            expected_uid=pod_uid)
+        meta = verified['metadata']
+        if meta.get('namespace') != namespace:
+            _fail('closed_copy_pod_namespace_invalid')
+        statuses = verified.get('status', {}).get('containerStatuses')
+        init_statuses = verified.get('status', {}).get('initContainerStatuses')
+        if not isinstance(statuses, list) or not isinstance(init_statuses, list):
+            _fail('closed_copy_container_status_invalid')
+        control = [item for item in statuses if isinstance(item, dict) and item.get('name') == 'control']
+        nats = [item for item in init_statuses if isinstance(item, dict) and item.get('name') == 'nats']
+        if len(control) != 1 or len(nats) != 1:
+            _fail('closed_copy_container_status_invalid')
+        expected_digest = phase_image.split('@sha256:', 1)[1]
+        for status in (control[0], nats[0]):
+            image_id = status.get('imageID')
+            if (not isinstance(image_id, str) or not image_id.endswith('sha256:' + expected_digest)
+                or status.get('restartCount') != 0):
+                _fail('closed_copy_image_identity_invalid')
+        if (not isinstance(control[0].get('containerID'), str)
+            or not control[0]['containerID'].startswith('containerd://')
+            or control[0].get('ready') is not True):
+            _fail('closed_copy_container_not_ready')
+        if allow_stopped:
+            terminated=nats[0].get('state',{}).get('terminated',{})
+            if (nats[0].get('ready') is not False or nats[0].get('restartCount') != 0
+                or not isinstance(nats[0].get('containerID'),str)
+                or terminated.get('exitCode') != 0):
+                _fail('closed_copy_broker_stop_unproven')
+        elif nats[0].get('ready') is not True or nats[0].get('state',{}).get('running') is None:
+            _fail('closed_copy_container_not_ready')
+        return row, storage, wanted, actual_job, verified
+
+    def verify_closed_copy_pod(self, namespace, job_name, job_uid, pod_name, pod_uid,
+                               request, binding, phase_image):
+        """Return fresh source-bound Job/Pod evidence after the broker exited cleanly."""
+        _, storage, _, job, pod = self._closed_copy_pod(namespace, job_name, job_uid,
+            pod_name, pod_uid, request, binding, phase_image, allow_stopped=True)
+        return {'job_uid':job['metadata']['uid'],'pod_uid':pod['metadata']['uid'],
+            'phase_image':phase_image,'node_name':storage['verification_node_name'],
+            'verification_pvc_uid':storage['verification_uid'],
+            'verification_pv_uid':storage['verification_pv_uid']}
+
+    def wait_closed_copy_pod_deleted(self, namespace, pod_name, pod_uid, job_uid, *, timeout=15):
+        """After exact Job deletion, require the original owned Pod UID to disappear."""
+        if (namespace != NAMESPACE or not isinstance(pod_uid,str)
+            or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',pod_uid)
+            or not isinstance(job_uid,str)
+            or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',job_uid)):
+            _fail('closed_copy_delete_identity_invalid')
+        deadline=time.monotonic()+timeout
+        while time.monotonic()<deadline:
+            try:
+                pod=self.get_pod(namespace,pod_name)
+            except KubeNotFound:
+                return True
+            meta=pod.get('metadata',{})
+            if meta.get('uid')!=pod_uid:
+                _fail('closed_copy_pod_replaced_after_delete')
+            owners=meta.get('ownerReferences',[])
+            if (len(owners)!=1 or owners[0].get('kind')!='Job'
+                or owners[0].get('uid')!=job_uid):
+                _fail('closed_copy_pod_owner_changed_after_delete')
+            time.sleep(0.25)
+        _fail('closed_copy_pod_delete_unconfirmed')
+
+    def wait_closed_copy_pod(self, namespace, request, binding, phase_image, *, timeout=120):
+        """Wait for the fixed controller-owned preflight Pod and both pinned containers."""
+        import verification_job
+        row = verification_job.validate_request(request)
+        storage = verification_job.validate_closed_copy_binding(row, binding)
+        wanted = verification_job.document(row, storage, phase_image)
+        if namespace != NAMESPACE or row['phase'] != 'closed-copy-preflight':
+            _fail('closed_copy_identity_invalid')
+        job_name = wanted['metadata']['name']
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            job = verification_job.verify_job(self.get_job(namespace, job_name), wanted)
+            job_uid = job['metadata']['uid']
+            if job.get('status', {}).get('failed', 0) > 0:
+                _fail('closed_copy_job_failed')
+            pod = self.get_job_pod(namespace, job_name)
+            if pod.get('status', {}).get('phase') == 'Running':
+                verification_job.verify_pod(pod, wanted['spec']['template'], job_uid,
+                    'closed-copy-preflight', expected_node_name=storage['verification_node_name'])
+                statuses = pod.get('status', {}).get('containerStatuses', [])
+                init_statuses = pod.get('status', {}).get('initContainerStatuses', [])
+                if (len(statuses) == 1 and statuses[0].get('name') == 'control'
+                    and len(init_statuses) == 1 and init_statuses[0].get('name') == 'nats'
+                    and statuses[0].get('ready') is True and init_statuses[0].get('ready') is True):
+                    return job, pod
+            elif pod.get('status', {}).get('phase') in ('Failed', 'Succeeded'):
+                _fail('closed_copy_pod_not_live')
+            time.sleep(0.5)
+        _fail('closed_copy_pod_wait_timeout')
+
+    def exec_pod_closed_copy(self, namespace, job_name, job_uid, pod_name, pod_uid,
+                             request, binding, phase_image, action, *, config_bytes=None,
+                             archive_path=None, manifest_bytes=None, readback=False):
+        """Execute one fixed closed-copy vector after fresh Job/Pod/image binding."""
+        if namespace != NAMESPACE:
+            _fail('namespace_invalid')
+        try:
+            import verification_job
+            row, storage, wanted, _, _ = self._closed_copy_pod(namespace, job_name, job_uid,
+                pod_name, pod_uid, request, binding, phase_image,
+                allow_stopped=(action == 'broker-stop' and readback))
+            vectors = verification_job.exec_vectors(row, pod_uid, storage, action=action,
+                job_uid=job_uid, phase_image=phase_image)
+        except (ImportError, TypeError, ValueError):
+            _fail('closed_copy_exec_request_invalid')
+        if type(readback) is not bool:
+            _fail('closed_copy_readback_invalid')
+        vector = vectors.get('readback' if readback else 'action')
+        if (row['phase'] != 'closed-copy-preflight' or not isinstance(vector, dict)
+            or set(vector) != {'container', 'command', 'stdin', 'stdout', 'stderr', 'tty'}
+            or vector.get('container') != 'control' or vector.get('stdout') is not True
+            or vector.get('stderr') is not False or vector.get('tty') is not False
+            or not isinstance(vector.get('command'), list) or not vector['command']):
+            _fail('closed_copy_exec_vector_invalid')
+        wants_stdin = action in ('load-config', 'receive-archive')
+        if readback and wants_stdin:
+            _fail('closed_copy_readback_invalid')
+        if vector.get('stdin') is not (wants_stdin and not readback):
+            _fail('closed_copy_exec_vector_invalid')
+        query = [('container', 'control'), ('stdin', 'true' if wants_stdin else 'false'),
+            ('stdout', 'true'), ('stderr', 'false'), ('tty', 'false')]
+        query.extend(('command', item) for item in vector['command'])
+        path = ('/api/v1/namespaces/' + self._segment(namespace) + '/pods/'
+            + self._segment(pod_name) + '/exec?' + urlencode(query))
+        token = self._operation_token()
+        if action == 'load-config' and not readback:
+            if (not isinstance(config_bytes, bytes) or not 0 < len(config_bytes) <= 256 << 10
+                or hashlib.sha256(config_bytes).hexdigest() != storage['server_config_sha256']
+                or len(config_bytes) != storage['server_config_bytes'] or archive_path is not None
+                or manifest_bytes is not None):
+                _fail('closed_copy_config_input_invalid')
+            with tempfile.TemporaryFile() as source:
+                os.fchmod(source.fileno(), 0o600)
+                source.write(config_bytes); source.flush(); os.fsync(source.fileno()); source.seek(0)
+                info = os.fstat(source.fileno())
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                    or info.st_gid != os.getegid() or stat.S_IMODE(info.st_mode) != 0o600
+                    or info.st_nlink != 0 or info.st_size != len(config_bytes)):
+                    _fail('closed_copy_input_custody_invalid')
+                return _websocket_exec_input(self, path, token, source.fileno(), b'',
+                    archive_bytes=len(config_bytes), archive_sha256=storage['server_config_sha256'],
+                    raw_stdin=True, stdout_limit=MAX_LOG_RESPONSE)
+        if action == 'receive-archive' and not readback:
+            if (not isinstance(manifest_bytes, bytes) or not 0 < len(manifest_bytes) <= MAX_CENSUS_MANIFEST_BYTES
+                or not isinstance(archive_path, (str, os.PathLike)) or config_bytes is not None):
+                _fail('closed_copy_archive_input_invalid')
+            _validate_canonical_manifest(manifest_bytes)
+            source = _open_verified_archive(archive_path, storage['archive_bytes'], storage['archive_sha256'])
+            try:
+                return _websocket_exec_input(self, path, token, source, manifest_bytes,
+                    archive_bytes=storage['archive_bytes'], archive_sha256=storage['archive_sha256'])
+            finally:
+                os.close(source)
+        if config_bytes is not None or archive_path is not None or manifest_bytes is not None:
+            _fail('closed_copy_unexpected_input')
+        limit = MAX_CLOSED_COPY_JSZ_STREAM_BYTES if action == 'read-jsz' and readback else MAX_LOG_RESPONSE
+        return b''.join(_websocket_exec(self, path, token, max_bytes=limit))
+
+    def read_closed_copy_receipt(self, namespace, job_name, job_uid, pod_name, pod_uid,
+                                 request, binding, phase_image, action):
+        """Read a fixed action's immutable same-Pod receipt; never rerun it."""
+        import closed_copy_stream
+        raw = self.exec_pod_closed_copy(namespace, job_name, job_uid, pod_name, pod_uid,
+            request, binding, phase_image, action, readback=True)
+        identity = closed_copy_stream.identity_from_request(request, binding, pod_uid,
+            job_uid, phase_image)
+        return closed_copy_stream.receipt(raw, identity=identity, action=action)
+
+    def read_closed_copy_jsz(self, namespace, job_name, job_uid, pod_name, pod_uid,
+                             request, binding, phase_image, read_receipt):
+        """Read the exact bounded JSZ frame stream from its original Pod."""
+        import closed_copy_stream
+        raw = self.exec_pod_closed_copy(namespace, job_name, job_uid, pod_name, pod_uid,
+            request, binding, phase_image, 'read-jsz', readback=True)
+        identity = closed_copy_stream.identity_from_request(request, binding, pod_uid,
+            job_uid, phase_image)
+        return closed_copy_stream.consume_jsz(raw, identity=identity, read_receipt=read_receipt)
 
     def exec_pod_contract_input(self, namespace, pod_name, pod_uid, request, binding, bundle_bytes):
         """Load the one canonical contract plan/credential envelope into its exact Pod."""

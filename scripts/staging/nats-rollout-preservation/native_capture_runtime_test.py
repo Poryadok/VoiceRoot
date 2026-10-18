@@ -267,6 +267,32 @@ class NativeCaptureRuntimeTests(unittest.TestCase):
         archive.write_bytes(b'x'*archive.stat().st_size)
         with self.assertRaises(Exception):reader.verify()
 
+    def test_selected_archive_allows_only_private_expired_proof_destinations(self):
+        if (os.geteuid()!=65532 or os.getegid()!=65532
+            or self.base.parent!=Archive.PRIVATE_ANCHOR):
+            self.skipTest('native private archive proof requires the installed runner anchor')
+        freshness=self.base/'expired-freshness-test'
+        recovery=self.base/'expired-recovery-proofs'/'cut-test'
+        finish=self.base/'expired-finish-proofs'/'cut-test'
+        for directory in (freshness,recovery,finish):
+            directory.mkdir(parents=True,mode=0o700)
+            directory.chmod(0o700)
+        allowed=(self.base/'rollout-before.tar',self.base/'rollout-after.tar',
+            freshness/'current.tar',recovery/'rollout-before.tar',finish/'rollout-before.tar')
+        for path in allowed:
+            self.assertEqual(self.runtime._archive_artifact_relative(path),path.relative_to(self.base))
+        rejected=(self.base/'unrelated.tar',self.base/'expired-freshness-test'/'other.tar',
+            self.base/'expired-recovery-proofs'/'cut-test'/'other.tar',
+            self.base.parent/'outside'/'rollout-before.tar')
+        for path in rejected:
+            with self.subTest(path=path):self.assertIsNone(self.runtime._archive_artifact_relative(path))
+        wrong_mode=self.base/'expired-recovery-proofs'/'loose'
+        wrong_mode.mkdir(mode=0o755);wrong_mode.chmod(0o755)
+        self.assertIsNone(self.runtime._archive_artifact_relative(wrong_mode/'rollout-before.tar'))
+        link=self.base/'expired-freshness-link'
+        link.symlink_to(freshness,target_is_directory=True)
+        self.assertIsNone(self.runtime._archive_artifact_relative(link/'current.tar'))
+
     def test_native_private_archive_reader_rejects_wrong_effective_uid(self):
         if os.geteuid()==65532:
             self.skipTest('wrong-UID negative is exercised by the UID1000 suite')
