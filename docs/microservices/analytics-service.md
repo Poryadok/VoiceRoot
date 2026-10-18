@@ -74,6 +74,11 @@ GET  /api/v1/analytics/export            — CSV/JSON export
 
 ## ClickHouse схема
 
+Имена колонок соответствуют [init DDL](../../docker/clickhouse/init/001_events.sql).
+`user_id_hashed` и `profile_id_hashed` содержат HMAC идентификаторов аккаунта и
+профиля с `ANALYTICS_ID_HASH_KEY`, а не исходные UUID. Если исходный идентификатор
+не задан для события, соответствующее поле остаётся пустым.
+
 ### Raw events table
 ```sql
 CREATE TABLE events (
@@ -81,8 +86,8 @@ CREATE TABLE events (
   event_type String,
   source_service String,
   timestamp DateTime64(3),
-  user_id String,       -- hashed
-  profile_id String,    -- hashed
+  user_id_hashed String DEFAULT '',
+  profile_id_hashed String DEFAULT '',
   properties String,    -- JSON
   session_id Nullable(String),
   platform Nullable(String),
@@ -103,7 +108,7 @@ ENGINE = AggregatingMergeTree()
 ORDER BY (date)
 AS SELECT
   toDate(timestamp) AS date,
-  uniqState(user_id) AS unique_users
+  uniqState(user_id_hashed) AS unique_users
 FROM events
 GROUP BY date;
 
