@@ -73,7 +73,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 - [x] **`VOICE_IMAGE_TAG` required** — fallback `:latest` убран в apply-скриптах; локальный apply без TAG падает; документировано в [`DEPLOYMENT.md`](../DEPLOYMENT.md), [`deploy/staging/env.example`](../../deploy/staging/env.example), [`deploy/prod/env.example`](../../deploy/prod/env.example); аудит [`voice-image-tag-audit.md`](../../.github/ci/voice-image-tag-audit.md) (batch 33a).
 - [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
 - [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
-- [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
+- [ ] **Production User/Space subset runtime proof** — `full` honors explicit `needs_user_space_rollout`, with full-tier precedence/default preserved. Validate readiness and applicable images in an authorized protected production rollout; isolated dispatch checks are not deployment evidence. Single-node `Recreate` remains. — [runbook](../../deploy/prod/README.md#ci)
 
 ### Pipeline bugs
 
@@ -90,7 +90,6 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 - [x] **`VOICE_IMAGE_TAG` required** — см. Common / Manifests (batch 33a).
 - [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
 - [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
-- [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
 - [x] **S2S deps one-hop в `resolve-go-matrix.sh`** — direct `chat`→`file` edge selected; chat-only regression asserts the one-hop closure, without transitive `story`. Promote/build remains only direct paths + gateway ([`resolve-go-matrix.sh`](../../scripts/ci/resolve-go-matrix.sh)).
 
 
