@@ -553,9 +553,11 @@ type UserLoggedIn struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	AccountId      string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	DeviceInfoJson string                 `protobuf:"bytes,2,opt,name=device_info_json,json=deviceInfoJson,proto3" json:"device_info_json,omitempty"`
-	Ip             string                 `protobuf:"bytes,3,opt,name=ip,proto3" json:"ip,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// BE211-OBS-v1: empty means unavailable/unverified. Current Auth producers
+	// deliberately emit empty; never infer IP from device data or Gateway peer.
+	Ip            string `protobuf:"bytes,3,opt,name=ip,proto3" json:"ip,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserLoggedIn) Reset() {

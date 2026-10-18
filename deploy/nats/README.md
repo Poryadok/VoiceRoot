@@ -102,6 +102,37 @@ migration operator require their separate reviewed implementation before this
 stage's backend rollout can proceed. Application-user policy changes remain
 independent prerequisites for each affected target service.
 
+### BE211 ordinary Auth observations: activation prerequisite
+
+The reviewed fresh-generation policy grants Auth exactly `user.registered`,
+`user.logged_in`, `user.logged_out`, and `user.2fa_enabled`. The central
+`user_events` selector and realtime/search/analytics-chat bootstrap contracts
+capture those subjects. Auth has no stream administration or wildcard event
+grant. Canonical JWT/TLS hosted proof requires four `user_events` PubAcks and
+denies neighboring events, stream UPDATE and foreign inbox operations. The Java
+binary-delivery fixture uses the actual Auth allowlists and central selectors.
+
+This source change does not renew retained Auth JWTs or mutate retained streams.
+An older generation missing grants or selectors is an activation veto:
+observation drops are allowed degradation, not delivery proof. All three
+existing-stream bootstrap checks still reject selector drift. Do not replay
+bootstrap, widen to `user.>`, delete/recreate streams, or reset consumers.
+
+Retained activation requires a separately reviewed protected extension of the
+existing same-user service-renewal and additive stream-migration operators;
+current operators deliberately do not admit Auth renewal or `user_events`
+updates. The extension must pin the existing Auth user/APP account and policy,
+preserve every other claim/deny/expiry/limit, add only four exact publish
+subjects, and reject insufficient signer scope. It must validate the complete
+current stream config against a frozen predecessor, add only four selectors in
+place, preserve all other settings and message/consumer state, and journal
+before/after hashes, census and readback for resumable execution. Only a
+separately authorized operator may obtain scoped UPDATE capability and enroll a
+new immutable Auth-only credential generation. Existing credentials/records
+remain retained. Until that implementation and execution evidence exist, fresh
+disposable proof is valid but retained rollout remains open. BE-211 source
+review does not authorize rotation or deployment.
+
 ### Bounded Role, Space, Voice and Messaging grant transition
 
 BE-102 adds exactly `voice.participant_joined` and `voice.participant_left` to the

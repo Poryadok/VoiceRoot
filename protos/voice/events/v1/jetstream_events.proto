@@ -49,6 +49,8 @@ message UserRegistered {
 message UserLoggedIn {
   string account_id = 1;
   string device_info_json = 2;
+  // BE211-OBS-v1: empty means unavailable/unverified. Current Auth producers
+  // deliberately emit empty; never infer IP from device data or Gateway peer.
   string ip = 3;
 }
 

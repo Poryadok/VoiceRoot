@@ -523,6 +523,8 @@ class UserLoggedIn extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearDeviceInfoJson() => $_clearField(2);
 
+  /// BE211-OBS-v1: empty means unavailable/unverified. Current Auth producers
+  /// deliberately emit empty; never infer IP from device data or Gateway peer.
   @$pb.TagNumber(3)
   $core.String get ip => $_getSZ(2);
   @$pb.TagNumber(3)

@@ -98,6 +98,46 @@ class RegistrationSessionEpochJdbcIntegrationTest {
   }
 
   @Test
+  void twoFaObservationFollowsRealJdbcCommitAndDisappearsOnRollback() {
+    var dataSource = dataSource();
+    var jdbc = new NamedParameterJdbcTemplate(dataSource);
+    var accounts = new JdbcAccountRepository(jdbc);
+    var floors = new SwitchableFloors();
+    var tokens = new JdbcRefreshTokenRepository(jdbc);
+    var profiles = org.mockito.Mockito.mock(RecordingProfiles.class);
+    org.mockito.Mockito.when(profiles.ensurePrimaryProfile(org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean()))
+        .thenReturn(UUID.randomUUID().toString());
+    AuthService service = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    var registered = service.register(command("observation-commit@example.test", false));
+    var observations = org.mockito.Mockito.mock(voice.backend.auth.events.AuthObservations.class);
+    service.configureObservations(observations);
+    var outer = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+    outer.executeWithoutResult(status -> {
+      // 2FA confirmation is a complete SQL-owned Auth operation inside this outer transaction.
+      accounts.saveTotpSecret(UUID.fromString(registered.accountId()),
+          new TotpService(jdbcTotpProperties()).encryptSecret("JBSWY3DPEHPK3PXP"), false);
+      String code = String.format("%06d", new com.warrenstrange.googleauth.GoogleAuthenticator()
+          .getTotpPassword("JBSWY3DPEHPK3PXP"));
+      service.verify2FA(registered.accessToken(), code);
+      org.mockito.Mockito.verifyNoInteractions(observations);
+      status.setRollbackOnly();
+    });
+    assertThat(accounts.findById(registered.accountId()).orElseThrow().totpEnabled()).isFalse();
+    org.mockito.Mockito.verifyNoInteractions(observations);
+    outer.executeWithoutResult(status -> {
+      accounts.saveTotpSecret(UUID.fromString(registered.accountId()),
+          new TotpService(jdbcTotpProperties()).encryptSecret("JBSWY3DPEHPK3PXP"), false);
+      String code = String.format("%06d", new com.warrenstrange.googleauth.GoogleAuthenticator()
+          .getTotpPassword("JBSWY3DPEHPK3PXP"));
+      service.verify2FA(registered.accessToken(), code);
+      org.mockito.Mockito.verifyNoInteractions(observations);
+    });
+    org.mockito.Mockito.verify(observations).twoFaEnabled(UUID.fromString(registered.accountId()));
+    assertThat(accounts.findById(registered.accountId()).orElseThrow().totpEnabled()).isTrue();
+  }
+
+  @Test
   void regularFloorFailureRollsBackBeforeUserOrRefresh() {
     RecordingProfiles profiles = new RecordingProfiles(false);
     AuthService service = service(new FailingFloors(), profiles);
