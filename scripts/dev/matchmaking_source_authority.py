@@ -30,6 +30,14 @@ MAX_JOB_LOG = 16 << 20
 SOURCE_SHA = re.compile(r"[a-f0-9]{40}\Z")
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 GHCR_BLOB_REDIRECT_HOST = "pkg-containers.githubusercontent.com"
+REDIRECT_TARGET_CODES = frozenset((
+    "redirect_target_control_invalid", "redirect_target_scheme_invalid",
+    "redirect_target_host_invalid", "redirect_target_authority_invalid",
+    "redirect_target_fragment_invalid", "redirect_target_path_invalid",
+    "redirect_target_digest_invalid", "redirect_target_query_invalid"))
+REDIRECT_DIAGNOSTIC_CODES = REDIRECT_TARGET_CODES | {"redirect_chain_rejected"}
+REDIRECT_HOST_CLASSES = frozenset(("known_cdn", "other"))
+_ACTIVE_REDIRECT_DIAGNOSTIC = None
 _CURRENT_PHASE = "preflight"
 ACCEPT = ", ".join((
     "application/vnd.oci.image.index.v1+json",
@@ -51,7 +59,8 @@ class ReceiptError(RuntimeError):
     """A fixed, non-sensitive failure from the read-only receipt producer."""
 
     def __init__(self, message="matchmaking_source_authority_rejected", *, phase=None,
-            code="validation_rejected", failure_class="ReceiptError", http_status=None):
+            code="validation_rejected", failure_class="ReceiptError", http_status=None,
+            redirect_host_class=None):
         super().__init__(message)
         fixed_phase = phase in (
             "preflight", "run-metadata", "source-capture", "source-preflight", "repository-pin",
@@ -60,25 +69,30 @@ class ReceiptError(RuntimeError):
             "publisher-repository", "publisher-job-metadata", "publisher-job-log",
             "publisher-artifact-metadata", "publisher-artifact-content", "publisher-buildx-validation",
             "receipt-binding", "receipt-write", "registry-token", "registry-index",
-            "registry-platform-manifest", "registry-config", "registry-image")
+            "registry-platform-manifest", "registry-config", "registry-config-redirect-target",
+            "registry-config-redirect-content", "registry-image")
         self.phase = phase if fixed_phase or phase in tuple(
             "registry-image-" + name for name in authority.IMAGE_NAMES) else "unknown"
         self.code = code if code in (
             "validation_rejected", "http_error", "http_status", "network_error",
             "transport_rejected", "response_schema_invalid", "archive_rejected",
             "source_capture_rejected", "publisher_evidence_rejected", "receipt_write_rejected",
-            "internal_error") else "internal_error"
+            "internal_error", *REDIRECT_DIAGNOSTIC_CODES) else "internal_error"
         self.failure_class = failure_class if failure_class in (
             "ReceiptError", "SourceError", "HTTPError", "HTTPResponse", "URLError",
             "TimeoutError", "OSError", "KeyError", "TypeError", "ValueError",
             "BadZipFile", "Other") else "Other"
         self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+        self.redirect_host_class = (redirect_host_class
+            if self.code in REDIRECT_DIAGNOSTIC_CODES and redirect_host_class in REDIRECT_HOST_CLASSES else None)
 
     def safe_record(self):
         record = {"status": "REJECTED", "phase": self.phase, "code": self.code,
             "class": self.failure_class}
         if self.http_status is not None:
             record["http_status"] = self.http_status
+        if self.redirect_host_class is not None:
+            record["redirect_host_class"] = self.redirect_host_class
         return record
 
 
@@ -86,22 +100,46 @@ def _reject():
     raise ReceiptError("matchmaking_source_authority_rejected", phase=_CURRENT_PHASE)
 
 
+def _redirect_host_class(url):
+    try:
+        return "known_cdn" if isinstance(url, str) and urllib.parse.urlsplit(url).hostname == GHCR_BLOB_REDIRECT_HOST else "other"
+    except (TypeError, ValueError):
+        return "other"
+
+
+def _redirect_rejected(code, url, status=307, *, phase="registry-config-redirect-target"):
+    raise ReceiptError(phase=phase, code=code, failure_class="HTTPError", http_status=status,
+        redirect_host_class=_redirect_host_class(url))
+
+
 def _read_redirected_blob(url, digest, *, limit):
+    if not isinstance(url, str) or any(ord(char) < 0x21 or ord(char) == 0x7f for char in url):
+        _redirect_rejected("redirect_target_control_invalid", url)
     try:
         parsed = urllib.parse.urlsplit(url)
-        valid_location = (isinstance(url, str) and not any(ord(char) < 0x21 or ord(char) == 0x7f for char in url)
-            and DIGEST.fullmatch(digest) is not None
-            and parsed.scheme == "https"
-            and parsed.hostname == GHCR_BLOB_REDIRECT_HOST
-            and parsed.port in (None, 443)
-            and parsed.username is None and parsed.password is None
-            and parsed.path == "/ghcr1/blobs/" + digest
-            and bool(parsed.query) and not parsed.fragment)
     except ValueError:
-        valid_location = False
-    if not valid_location:
-        raise ReceiptError(phase=_CURRENT_PHASE, code="http_error",
-            failure_class="HTTPError", http_status=307)
+        _redirect_rejected("redirect_target_authority_invalid", url)
+    if DIGEST.fullmatch(digest) is None:
+        _redirect_rejected("redirect_target_digest_invalid", url)
+    if parsed.scheme != "https":
+        _redirect_rejected("redirect_target_scheme_invalid", url)
+    if parsed.hostname != GHCR_BLOB_REDIRECT_HOST:
+        _redirect_rejected("redirect_target_host_invalid", url)
+    if parsed.username is not None or parsed.password is not None:
+        _redirect_rejected("redirect_target_authority_invalid", url)
+    try:
+        if parsed.port not in (None, 443):
+            _redirect_rejected("redirect_target_authority_invalid", url)
+    except ValueError:
+        _redirect_rejected("redirect_target_authority_invalid", url)
+    if parsed.fragment:
+        _redirect_rejected("redirect_target_fragment_invalid", url)
+    if not parsed.path.startswith("/ghcr1/blobs/"):
+        _redirect_rejected("redirect_target_path_invalid", url)
+    if parsed.path != "/ghcr1/blobs/" + digest:
+        _redirect_rejected("redirect_target_digest_invalid", url)
+    if not parsed.query:
+        _redirect_rejected("redirect_target_query_invalid", url)
     request = urllib.request.Request(url, headers={"Accept": "application/octet-stream"})
     try:
         with _HTTPS.open(request, timeout=30) as response:
@@ -120,6 +158,11 @@ def _read_redirected_blob(url, digest, *, limit):
         raise
     except urllib.error.HTTPError as error:
         status = error.code if type(error.code) is int and 100 <= error.code <= 599 else None
+        if status in (301, 302, 303, 307, 308):
+            location = error.headers.get("Location") if error.headers is not None else ""
+            error.close()
+            _redirect_rejected("redirect_chain_rejected", location or "", status,
+                phase="registry-config-redirect-content")
         raise ReceiptError(phase=_CURRENT_PHASE, code="http_error",
             failure_class="HTTPError", http_status=status) from None
     except urllib.error.URLError:
@@ -434,7 +477,8 @@ def _verify_ci_build_source(source_root):
 
 
 def capture_receipt(run_id, github_token, github_actor, output_path):
-    global _CURRENT_PHASE
+    global _CURRENT_PHASE, _ACTIVE_REDIRECT_DIAGNOSTIC
+    _ACTIVE_REDIRECT_DIAGNOSTIC = None
     _CURRENT_PHASE = "preflight"
     if type(run_id) is not int or run_id <= 0 or not github_token or not github_actor:
         _reject()
@@ -461,13 +505,15 @@ def capture_receipt(run_id, github_token, github_actor, output_path):
     original_resolver = authority._resolve_image
 
     def authenticated_resolver(name, tag, deadline):
-        global _CURRENT_PHASE
+        global _CURRENT_PHASE, _ACTIVE_REDIRECT_DIAGNOSTIC
         if name not in authority.IMAGE_NAMES:
             _reject()
         _CURRENT_PHASE = "registry-image"
         try:
             identity = _image_identity(name, tag, username, github_token, registry_tokens)
         except ReceiptError as error:
+            if error.code in REDIRECT_DIAGNOSTIC_CODES:
+                _ACTIVE_REDIRECT_DIAGNOSTIC = error.safe_record()
             raise authority.SourceError(phase=error.phase or _CURRENT_PHASE,
                 code=error.code, failure_class=error.failure_class,
                 http_status=error.http_status) from None
@@ -518,6 +564,11 @@ def capture_receipt(run_id, github_token, github_actor, output_path):
     except ReceiptError:
         raise
     except authority.SourceError as error:
+        if _ACTIVE_REDIRECT_DIAGNOSTIC is not None:
+            diagnostic = _ACTIVE_REDIRECT_DIAGNOSTIC
+            raise ReceiptError(phase=diagnostic["phase"], code=diagnostic["code"],
+                failure_class="HTTPError", http_status=diagnostic.get("http_status"),
+                redirect_host_class=diagnostic.get("redirect_host_class")) from None
         raise ReceiptError(phase=error.phase or _CURRENT_PHASE,
             code=error.code if error.code in ("validation_rejected", "transport_rejected",
                 "response_schema_invalid", "archive_rejected", "http_error", "http_status",
@@ -530,6 +581,7 @@ def capture_receipt(run_id, github_token, github_actor, output_path):
         raise ReceiptError(phase=_CURRENT_PHASE, code=code, failure_class=failure_class) from None
     finally:
         authority._resolve_image = original_resolver
+        _ACTIVE_REDIRECT_DIAGNOSTIC = None
 
 
 def main(argv=None):
