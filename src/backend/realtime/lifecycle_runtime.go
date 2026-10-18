@@ -132,7 +132,7 @@ func (r *realtimeLifecycleRuntime) Ready(ctx context.Context) error {
 	if !r.serving.Load() {
 		return errors.New("Realtime lifecycle listener unavailable")
 	}
-	if err := r.pool.Ping(ctx); err != nil {
+	if err := r.store.Ready(ctx); err != nil {
 		return err
 	}
 	if err := r.transport.Ready(ctx); err != nil {
@@ -216,8 +216,8 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 		r.Close(closeCtx)
 		return nil, err
 	}
-	var ready bool
-	if err = pool.QueryRow(ctx, `SELECT to_regclass('realtime_manifest_heads') IS NOT NULL AND to_regclass('realtime_manifest_items') IS NOT NULL AND to_regclass('realtime_admissions') IS NOT NULL AND to_regclass('realtime_lifecycle_operations') IS NOT NULL AND to_regclass('realtime_incarnations') IS NOT NULL`).Scan(&ready); err != nil || !ready {
+	r.store = &lifecycle.Store{Pool: pool}
+	if err = r.store.Ready(ctx); err != nil {
 		return failed(errors.New("Realtime lifecycle schema unavailable"))
 	}
 	issuer, public, err := loadRealtimePrincipalIssuerFromEnv()
@@ -250,7 +250,6 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 	if err != nil {
 		return failed(err)
 	}
-	r.store = &lifecycle.Store{Pool: pool}
 	r.incarnation = uuid.New()
 	boot, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	processStart, _ := os.ReadFile("/proc/self/stat")

@@ -44,7 +44,8 @@ membership33 or RoomClose hooks. IDs1-10 retain their meaning.
 - Runtime requires its migrated DB and canonical exactly2 PKCS#8 signer keys.
   Public keys must match independent publication. Chat health observes its
   native schema/listener/verifier/replay; Realtime health additionally requires
-  the protected Chat TLS connection. These are advisory health/transport checks,
+  the protected Chat TLS connection and every actually used metadata column.
+  Readiness performs no synthetic domain mutation. These are advisory checks,
   not proof a particular chat is LIVE or public P3 is globally active.
 - Independent local public JWKS bootstrap has no app health cycle. CA/SAN and
   both documents are checked. Static generation supports a prepublished next
@@ -55,9 +56,9 @@ membership33 or RoomClose hooks. IDs1-10 retain their meaning.
   Canonical store/contract/operation/testing docs describe the boundaries.
 
 Owned Linux Go1.26/PostgreSQL16 `-race` runtime evidence:
-9 Realtime cases (actual hub drain/late scope, protected RPC composition,
+10 Realtime cases (actual hub drain/late scope, protected RPC composition,
 backend loss, exact replay, restart/permanent purge, unknown scope, multipage
-seal, compaction) plus1 native Chat full-catalog case and1 Space34 full-catalog
+seal, compaction, schema readiness) plus1 native Chat full-catalog case and1 Space34 full-catalog
 hard-delete case passed with zero required skips. Additional protected transport
 proof covers issuer/audience/body/replay/mTLS denials, JWKS outage before/after
 hard expiry and recovery, and replay Redis loss. Receipt database timestamp

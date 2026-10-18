@@ -21,6 +21,19 @@ var (
 
 type Store struct{ Pool *pgxpool.Pool }
 
+// Ready observes the actual metadata surface without creating domain records
+// or claiming schema/old-writer/restore qualification for public P3 activation.
+func (s *Store) Ready(ctx context.Context) error {
+	_, err := s.Pool.Exec(ctx, `
+SELECT id,runtime_identity,state,opened_at,closed_at FROM realtime_incarnations LIMIT 0;
+SELECT chat_id,space_id,scope_known,generation,state,operation_id,updated_at FROM realtime_chat_gates LIMIT 0;
+SELECT id,incarnation_id,chat_id,generation,state,admitted_at,settled_at FROM realtime_admissions LIMIT 0;
+SELECT space_id,operation_id,generation,kind,request_bytes,request_sha256,response_bytes,completed_at FROM realtime_lifecycle_operations LIMIT 0;
+SELECT space_id,operation_id,schedule_generation,generation,state,manifest_id,manifest_sha256,item_count,received_pages,received_items,sealed,freeze_complete FROM realtime_manifest_heads LIMIT 0;
+SELECT space_id,operation_id,chat_id FROM realtime_manifest_items LIMIT 0`)
+	return err
+}
+
 func (s *Store) StartClosing(ctx context.Context, id uuid.UUID) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE realtime_incarnations SET state='CLOSING' WHERE id=$1 AND state='OPEN'`, id)
 	return err

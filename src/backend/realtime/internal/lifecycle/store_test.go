@@ -52,6 +52,27 @@ func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	return &Store{Pool: pool}, pool
 }
 
+func TestSchemaReadinessChecksActualGatesWithoutCreatingDomainState(t *testing.T) {
+	s, pool := testStore(t)
+	ctx := context.Background()
+	if err := s.Ready(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var records int
+	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM realtime_incarnations)+(SELECT count(*) FROM realtime_admissions)+(SELECT count(*) FROM realtime_lifecycle_operations)`).Scan(&records); err != nil {
+		t.Fatal(err)
+	}
+	if records != 0 {
+		t.Fatal("readiness manufactured domain state")
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE realtime_chat_gates RENAME TO unavailable_chat_gates`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Ready(ctx); err == nil {
+		t.Fatal("metadata schema loss advertised ready")
+	}
+}
+
 // The regression exercises the decisive cut in TT c2: a process has durable
 // admission, loses its database session, but can still execute a local sink.
 func TestCommittedAdmissionSurvivesBackendLossUntilSinkSettles(t *testing.T) {
