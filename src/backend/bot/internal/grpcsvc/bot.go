@@ -493,21 +493,18 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 		return status.Error(codes.FailedPrecondition, "bot is not in polling mode")
 	}
 	s.touchPresence(ctx, botRow.ID)
-	ids, types, payloads, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
+	ids, _, _, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	for i, id := range ids {
-		evt := &botv1.BotEvent{
-			EventId:     id.String(),
-			EventType:   types[i],
-			PayloadJson: payloads[i],
-			CreatedAt:   timestamppb.Now(),
-		}
-		if err := stream.Send(&botv1.PollEventsResponse{BotEvent: evt}); err != nil {
+	for _, id := range ids {
+		if err := s.Store.DeliverPollingEvent(ctx, botRow.ID, id, func(kind, payload string) error {
+			return stream.Send(&botv1.PollEventsResponse{BotEvent: &botv1.BotEvent{
+				EventId: id.String(), EventType: kind, PayloadJson: payload, CreatedAt: timestamppb.Now(),
+			}})
+		}); err != nil {
 			return err
 		}
-		_ = s.Store.MarkEventDelivered(ctx, id)
 	}
 	return nil
 }

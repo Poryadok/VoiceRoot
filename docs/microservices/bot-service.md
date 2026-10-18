@@ -324,3 +324,18 @@ chat whitelists, bot memberships/projections and deferred deliveries, then
 persists a permanent compact `PURGED` fence. Full request/receipt bytes retain
 30 days from this participant's completion; delayed lower-generation work is a
 no-op.
+
+The message recipient producer, webhook worker and development polling send
+share the participant's Space advisory guard. They acquire all distinct actual
+Space keys in ascending order before bot, whitelist and delivery/event row locks,
+then read lifecycle state in a fresh statement after waiting. A missing local
+head preserves sparse admission; any persisted non-`LIVE` state denies. A changed
+captured whitelist binding rolls back for rediscovery, never adds another Space
+lock after row locks. Installation/uninstallation and whitelist mutations take
+the exclusive guard first. An admitted bounded webhook/stream send holds its
+shared guard through transaction end, so freeze cannot acknowledge its receipt
+until that attempt finishes. Message polling rows persist their validated Space;
+legacy NULL-Space message rows must resolve current whitelist authority and
+cannot bypass a known fence. Terminal canceled work cannot be rearmed by retry
+bookkeeping. This is the message-path protocol; command/deferred authority,
+manifest import, retention and full participant convergence remain target work.
