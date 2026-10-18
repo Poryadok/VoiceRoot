@@ -17,6 +17,36 @@ If GHCR packages are private, create a `docker-registry` secret in `voice-prod` 
 
 Optional: `VOICE_PROD_APPLY_OBSERVABILITY=true` runs observability apply after app tier.
 
+## Shared rollout helpers
+
+[`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh)
+uses the same operational helpers as staging, with the production namespace,
+image selection and manifests supplied by the production wrapper:
+
+| Production path | Shared helper |
+|-----------------|---------------|
+| `full` | [`rollout-app-tier.sh`](../../scripts/staging/rollout-app-tier.sh), after production infra and app manifests |
+| `app-only` | [`apply-migrate-jobs.sh`](../../scripts/staging/apply-migrate-jobs.sh), then production app manifests and [`rollout-subset.sh`](../../scripts/staging/rollout-subset.sh) |
+| `images-only` | [`deploy-changed.sh`](../../scripts/staging/deploy-changed.sh), using `CHANGED_SERVICES` |
+| Optional observability | [`apply-observability.sh`](../../scripts/staging/apply-observability.sh), after the selected apply path |
+| Full infra, missing app Secret with supplied production upload | [`ensure-app-secrets.sh`](../../scripts/staging/ensure-app-secrets.sh), called by [`apply-infra.sh`](../../scripts/prod/apply-infra.sh) |
+
+[`map-prod-env.sh`](../../scripts/prod/map-prod-env.sh) supplies the shared
+helpers' environment names. Nonempty `PROD_APP_SECRETS_YAML_B64`,
+`PROD_APP_SECRETS_YAML` (a local manifest path) and `PROD_STAFF_TOKEN` map to
+their corresponding `STAGING_*` names, replacing any existing values for those
+aliases. Nonempty `VOICE_K8S_NAMESPACE`,
+`VOICE_IMAGE_PULL_SECRET` and `VOICE_APPLY_OBSERVABILITY` take precedence over
+their `VOICE_PROD_*` aliases. Existing cluster app Secrets are preserved by the
+production infra wrapper; it invokes the shared upload helper only when that
+Secret is missing. Keep production credentials separate from staging material.
+
+The entrypoint requires `VOICE_IMAGE_TAG` before invoking any child helper and
+stops when a child helper returns failure. Reusing these helpers does not prove
+a production rollout or smoke passed. Production-specific smoke, immutable
+selective delivery and the `full` mode's User/Space subset choice remain separate
+checks in the [CI inventory](../../docs/todo/ci.md).
+
 ## Apply
 
 Copy [env.example](env.example) and set `VOICE_IMAGE_TAG` (required).
