@@ -11,11 +11,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/postgres"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/story/internal/clients"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
@@ -53,7 +53,7 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := pgxpool.New(ctx, dbURL)
+		pool, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)

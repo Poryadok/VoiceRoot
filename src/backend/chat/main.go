@@ -14,7 +14,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -28,6 +27,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/roleoverrideprincipal"
 	"voice/backend/pkg/runtimeconfig"
@@ -123,7 +123,7 @@ func main() {
 	defer runCancel()
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := pgxpool.New(ctx, dbURL)
+		pool, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
@@ -291,7 +291,7 @@ func main() {
 		var spaceMembers *store.SpaceMembersStore
 		if spaceDB := strings.TrimSpace(os.Getenv("SPACE_DATABASE_URL")); spaceDB != "" {
 			sctx, scancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-			spacePool, serr := pgxpool.New(sctx, spaceDB)
+			spacePool, serr := postgres.NewPool(sctx, spaceDB)
 			scancel()
 			if serr != nil {
 				log.Fatalf("space postgres: %v", serr)

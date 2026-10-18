@@ -31,6 +31,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/spacecommunication"
@@ -335,7 +336,7 @@ func main() {
 			defer gameResourceMappings.Close()
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := pgxpool.New(ctx, dbURL)
+		pool, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
@@ -378,7 +379,7 @@ func main() {
 		var chatMetaPool *pgxpool.Pool
 		if chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL")); chatDB != "" {
 			cctx, ccancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-			cp, err := pgxpool.New(cctx, chatDB)
+			cp, err := postgres.NewPool(cctx, chatDB)
 			ccancel()
 			if err != nil {
 				log.Fatalf("chat postgres: %v", err)
@@ -390,7 +391,7 @@ func main() {
 		var spaceMetaPool *pgxpool.Pool
 		if spaceDB := strings.TrimSpace(os.Getenv("SPACE_DATABASE_URL")); spaceDB != "" {
 			sctx, scancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-			sp, err := pgxpool.New(sctx, spaceDB)
+			sp, err := postgres.NewPool(sctx, spaceDB)
 			scancel()
 			if err != nil {
 				log.Fatalf("space postgres: %v", err)

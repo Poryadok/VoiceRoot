@@ -131,9 +131,28 @@ Shared timeouts for Go HTTP services and Postgres bootstrap. Values are Go `time
 | `HTTP_IDLE_TIMEOUT` | `120s` | `IdleTimeout` |
 | `HTTP_SHUTDOWN_TIMEOUT` | `10s` | Graceful HTTP shutdown deadline |
 | `POSTGRES_CONNECT_TIMEOUT` | `15s` | `pgxpool.New` connect context |
+| `POSTGRES_MAX_CONNS` | `10` | Maximum connections per ordinary Go PostgreSQL pool; positive int32, invalid/empty values use the default |
 | `GRPC_DIAL_TIMEOUT` | `15s` | Upstream gRPC ready wait at startup |
 
 Staging overrides — `deploy/staging/configmap-app.yaml` (`GRPC_DIAL_TIMEOUT` is set; HTTP/Postgres keys are commented for optional tuning).
+
+The active Go PostgreSQL service bootstraps use `pkg/postgres.NewPool`, including
+Chat and Messaging's auxiliary metadata pools. `POSTGRES_MAX_CONNS` overrides
+the connection string's `pool_max_conns`, matching the existing Bot/Voice helper.
+Both application ConfigMaps set the default to `10`; set an explicit
+`POSTGRES_MAX_CONNS` environment entry on an individual Deployment to override
+that service without changing the shared ConfigMap. Compose exposes independent
+`<SERVICE>_POSTGRES_MAX_CONNS` host variables (for example
+`MESSAGING_POSTGRES_MAX_CONNS=6`), each defaulting to `10`.
+
+Budget the sum of pools multiplied by replicas against the PostgreSQL server
+connection limit, leaving capacity for migrations and administration. The limit
+is per pool, not an aggregate per process: Messaging can open three pools and
+Chat two. Space additionally reserves its separate mutation-lock pool of eight
+connections; that serialization budget is unchanged by this setting. Java Auth
+uses its own Hikari configuration. Deferred Federation is not activated or
+retuned by this change. These are initial limits, not measured capacity evidence;
+changing source configuration does not tune an already running deployment.
 
 ### Voice lifecycle database
 

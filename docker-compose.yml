@@ -326,6 +326,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/social_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${SOCIAL_POSTGRES_MAX_CONNS:-10}
       SOCIAL_GRPC_LISTEN: :9090
       SOCIAL_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/principal/keys
       SOCIAL_PRINCIPAL_ACTIVE_KID: current
@@ -371,6 +372,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/user_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${USER_POSTGRES_MAX_CONNS:-10}
       USER_GRPC_ADDR: :9090
       USER_PRINCIPAL_GRPC_LISTEN: :9091
       USER_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
@@ -463,6 +465,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/chat_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${CHAT_POSTGRES_MAX_CONNS:-10}
       SPACE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable
       CHAT_GRPC_LISTEN: :9090
       SOCIAL_GRPC_ADDR: social:9090
@@ -505,6 +508,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/messaging_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${MESSAGING_POSTGRES_MAX_CONNS:-10}
       CHAT_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/chat_db?sslmode=disable
       SPACE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable
       MESSAGING_GRPC_LISTEN: :9090
@@ -586,6 +590,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/file_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${FILE_POSTGRES_MAX_CONNS:-10}
       FILE_GRPC_LISTEN: :9090
       FILE_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/file-principal/keys
       FILE_PRINCIPAL_ACTIVE_KID: current
@@ -652,6 +657,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/matchmaking_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${MATCHMAKING_POSTGRES_MAX_CONNS:-10}
       MATCHMAKING_GRPC_LISTEN: :9090
       MATCHMAKING_SPACE_PRINCIPAL_GRPC_LISTEN: :9092
       MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
@@ -708,6 +714,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/search_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${SEARCH_POSTGRES_MAX_CONNS:-10}
       SEARCH_GRPC_LISTEN: :9090
       NATS_URL: nats://nats:4222
       MESSAGING_GRPC_ADDR: messaging:9090
@@ -779,6 +786,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/notification_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${NOTIFICATION_POSTGRES_MAX_CONNS:-10}
       NOTIFICATION_GRPC_LISTEN: :9090
       NOTIFICATION_REDIS_ADDR: redis:6379
       NOTIFICATION_RECORD_PUSHES: "true"
@@ -827,6 +835,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/subscription_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${SUBSCRIPTION_POSTGRES_MAX_CONNS:-10}
       SUBSCRIPTION_GRPC_LISTEN: :9090
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test-webhook-secret}
       NATS_URL: nats://nats:4222
@@ -859,6 +868,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/moderation_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${MODERATION_POSTGRES_MAX_CONNS:-10}
       MODERATION_GRPC_LISTEN: :9090
       AUTH_GRPC_ADDR: auth:9090
       USER_GRPC_ADDR: user:9090
@@ -918,6 +928,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://gameintegration_runtime:${GAME_INTEGRATION_DB_PASSWORD:-voice-compose-gameintegration-runtime}@postgres:5432/game_integration_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${GAMEINTEGRATION_POSTGRES_MAX_CONNS:-10}
       GAME_INTEGRATION_REDIS_ADDR: redis:6379
       GAME_INTEGRATION_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GAME_INTEGRATION_JWT_ISSUER: voice-auth
@@ -984,6 +995,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/bot_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${BOT_POSTGRES_MAX_CONNS:-10}
       BOT_GRPC_LISTEN: :9090
       BOT_GRPC_GATEWAY_ONLY: "true"
       BOT_ENABLE_DEV_POLLING: "true"
@@ -1027,6 +1039,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/story_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${STORY_POSTGRES_MAX_CONNS:-10}
       STORY_GRPC_LISTEN: :9090
       STORY_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/story-principal/keys
       STORY_PRINCIPAL_ACTIVE_KID: current
@@ -1127,6 +1140,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${SPACE_POSTGRES_MAX_CONNS:-10}
       SPACE_GRPC_LISTEN: :9090
       SPACE_PRINCIPAL_GRPC_LISTEN: :9091
       SPACE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
@@ -1186,6 +1200,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/role_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${ROLE_POSTGRES_MAX_CONNS:-10}
       ROLE_GRPC_LISTEN: :9090
       NATS_URL: nats://nats:4222
     depends_on:
@@ -1212,6 +1227,7 @@ services:
     environment:
       LOG_LEVEL: debug
       VOICE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/voice_db?sslmode=disable
+      POSTGRES_MAX_CONNS: ${VOICE_POSTGRES_MAX_CONNS:-10}
       VOICE_GRPC_LISTEN: :9090
       VOICE_FEDERATED_MEDIA_CONFIG: ${VOICE_FEDERATED_MEDIA_CONFIG:-}
       VOICE_REDIS_ADDR: redis:6379

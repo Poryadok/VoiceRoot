@@ -100,7 +100,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 - [ ] **BOT_WEBHOOK_* retry/backoff** — hardcoded retry/backoff webhook delivery → env.
 - [ ] **NATS_* connect/reconnect** — Realtime: connect/reconnect timeouts в конфиг.
-- [ ] **pgxpool max conns** — лимиты пула Postgres → env/ConfigMap.
+- [ ] **pgxpool deployment capacity proof** — active Go service pools now consume `POSTGRES_MAX_CONNS` (default 10); Compose has per-service overrides and both ConfigMaps publish the default. Real deployed pool/replica capacity remains to be observed; see [OPERATIONS.md](../OPERATIONS.md#runtime-configuration-env).
 - [ ] **BOT_RATE_LIMIT_* / Gateway rate-limit JSON** — staging defaults в ConfigMap (сейчас только dev bypass).
 
 ### Platform sign-off

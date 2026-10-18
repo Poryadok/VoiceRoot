@@ -25,6 +25,7 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
+	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
@@ -171,7 +172,7 @@ func main() {
 	var pool *pgxpool.Pool
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		p, err := pgxpool.New(ctx, dbURL)
+		p, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
