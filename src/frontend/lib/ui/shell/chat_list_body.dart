@@ -125,12 +125,14 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
       return;
     }
     if (error == null) {
-      ref.read(inboxReconcilerProvider.notifier).removeChat(
-        InboxScope.requests,
-        chatId,
-        expectedProfileId: session.activeProfileId,
-        expectedAuthorization: session.authorizationHeader,
-      );
+      ref
+          .read(inboxReconcilerProvider.notifier)
+          .removeChat(
+            InboxScope.requests,
+            chatId,
+            expectedProfileId: session.activeProfileId,
+            expectedAuthorization: session.authorizationHeader,
+          );
     } else if (error != kChatActionStaleContext &&
         ref.read(chatInboxProvider) == 'requests' &&
         ref.read(messageRequestsNavigationGenerationProvider) == navigation) {
@@ -342,6 +344,15 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                       icon: inbox == 'requests'
                           ? Icons.mark_email_unread_outlined
                           : Icons.forum_outlined,
+                      actionLabel: inbox == 'requests' ? null : l10n.chatOpenDm,
+                      onAction: inbox == 'requests'
+                          ? null
+                          : () {
+                              shellNav.exitSpace();
+                              shellNav.setNavigationSection(
+                                NavigationSection.social,
+                              );
+                            },
                     ),
                   );
                 }
@@ -476,10 +487,13 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                             _requestActionKey(item.chatId),
                           ),
                           requestCanMutate:
-                              ref.watch(authControllerProvider).session != null &&
+                              ref.watch(authControllerProvider).session !=
+                                  null &&
                               !ref.watch(profileSwitchInProgressProvider),
-                          onAccept: () => _runRequestAction(item.chatId, accept: true),
-                          onDecline: () => _runRequestAction(item.chatId, accept: false),
+                          onAccept: () =>
+                              _runRequestAction(item.chatId, accept: true),
+                          onDecline: () =>
+                              _runRequestAction(item.chatId, accept: false),
                         ),
                         onTap: () => selectChat(item.chatId),
                         onLongPress: inbox == 'requests'
