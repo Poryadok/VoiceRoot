@@ -13,6 +13,12 @@ TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
 MODE="${DEPLOY_MODE:-full}"
 
+# Reject an invalid/no-op selective request before the first cluster effect.
+python3 "${ROOT}/scripts/prod/production_image_refs.py" \
+  --catalog "${ROOT}/scripts/ci/staging-image-catalog.json" \
+  --registry "${REGISTRY}" --tag "${TAG}" --mode "${MODE}" \
+  --changed-services "${CHANGED_SERVICES:-}" >/dev/null
+
 export VOICE_IMAGE_REGISTRY="${REGISTRY}"
 export VOICE_IMAGE_TAG="${TAG}"
 export VOICE_K8S_NAMESPACE="${NS}"

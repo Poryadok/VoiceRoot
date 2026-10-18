@@ -72,7 +72,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 - [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier`.
 - [x] **`VOICE_IMAGE_TAG` required** — fallback `:latest` убран в apply-скриптах; локальный apply без TAG падает; документировано в [`DEPLOYMENT.md`](../DEPLOYMENT.md), [`deploy/staging/env.example`](../../deploy/staging/env.example), [`deploy/prod/env.example`](../../deploy/prod/env.example); аудит [`voice-image-tag-audit.md`](../../.github/ci/voice-image-tag-audit.md) (batch 33a).
 - [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
-- [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
+- [x] **Production selective scope and verified stack lock** — production gate validates exact complete prod catalog + renderer, immutable tag/registry and distinct images-only scope before effects; successful verification preserves the exact lock artifact. Linux fake-registry/no-cluster regression cases cover incomplete/malformed locks and empty/partial requests.
 - [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
 
 ### Pipeline bugs
@@ -89,7 +89,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 - [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier`.
 - [x] **`VOICE_IMAGE_TAG` required** — см. Common / Manifests (batch 33a).
 - [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
-- [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
+- [x] **Production selective scope and verified stack lock** — production gate validates exact complete prod catalog + renderer, immutable tag/registry and distinct images-only scope before effects; successful verification preserves the exact lock artifact. Linux fake-registry/no-cluster regression cases cover incomplete/malformed locks and empty/partial requests.
 - [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
 - [x] **S2S deps one-hop в `resolve-go-matrix.sh`** — direct `chat`→`file` edge selected; chat-only regression asserts the one-hop closure, without transitive `story`. Promote/build remains only direct paths + gateway ([`resolve-go-matrix.sh`](../../scripts/ci/resolve-go-matrix.sh)).
 
