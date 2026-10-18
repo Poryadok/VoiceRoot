@@ -236,3 +236,44 @@ func TestVoiceRosterResetOutboxFailureRollsBackInboxAndQueueIntent(t *testing.T)
 	require.NoError(t, proto.Unmarshal(replay.Payload, env))
 	require.Equal(t, "VOICE_ROSTER_CHANGED", env.GetSearchCancelled().GetReason())
 }
+
+func TestVoiceRosterInboxConcurrentReplayAndOutOfOrderVersionFork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := rosterResetDB(t)
+	st := &MatchStore{Pool: pool}
+	room := uuid.New()
+	_, members := capturedRosterParty(t, pool, &room, 5, uuid.New(), uuid.New())
+	raw := rosterBytes(t, uuid.New(), room, uuid.New(), 7, true)
+	type outcome struct {
+		result VoiceRosterResetResult
+		err    error
+	}
+	ready := make(chan struct{})
+	results := make(chan outcome, 2)
+	for range 2 {
+		go func() { <-ready; r, e := st.ApplyVoiceRosterEvent(ctx, raw); results <- outcome{r, e} }()
+	}
+	close(ready)
+	total := 0
+	for range 2 {
+		r := <-results
+		require.NoError(t, r.err)
+		require.False(t, r.result.ContractMismatch)
+		total += r.result.CancelledSessions
+	}
+	require.Equal(t, len(members), total)
+	_, later := capturedRosterParty(t, pool, &room, 9, uuid.New())
+	result, err := st.ApplyVoiceRosterEvent(ctx, rosterBytes(t, uuid.New(), room, uuid.New(), 6, false))
+	require.NoError(t, err)
+	require.Zero(t, result.CancelledSessions)
+	result, err = st.ApplyVoiceRosterEvent(ctx, rosterBytes(t, uuid.New(), room, uuid.New(), 7, false))
+	require.NoError(t, err)
+	require.True(t, result.ContractMismatch)
+	require.Equal(t, 1, result.CancelledSessions, "a room/version fork fails closed even for a newer capture")
+	sess, err := (&SessionStore{Pool: pool}).Get(ctx, later[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, SessionStatusCancelled, sess.Status)
+}
