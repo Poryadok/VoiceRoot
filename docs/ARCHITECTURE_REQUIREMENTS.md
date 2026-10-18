@@ -1,5 +1,21 @@
 # Технические требования к архитектуре
 
+## Private asynchronous automod authority (BE-045)
+
+The [accepted BE-045 contract](testing/async-automod-exec-plan.md) requires private
+Messaging transactional evidence and an ordered Moderation account transaction;
+public domain streams carry no raw message evidence, account scope or HMAC digest.
+All authority RPCs use mTLS and exact Phase-0 principal/request binding. Ordinary
+message identity is Gateway delegated-user authority; Bot liability comes only
+from protected Bot owner resolution. Raw metadata is never upgraded to authority.
+
+Auth owns immutable opaque moderation subjects, lifecycle/deletion precedence and
+revision-fenced moderation restrictions. Every manual/automatic clear shares that
+path; old delayed requests cannot clear newer bans or deletion. Message commit
+and asynchronous enforcement remain separate transactions. Local privacy expiry
+and account purge never wait for queue progress/ACK; terminal snapshot import is
+a startup/backup-restore readiness prerequisite, including before replay handling.
+
 Этот файл — единая точка для кросс-сервисных технических решений. Фичи описаны в [features/](features/).
 
 **Операционные цели** (SLO по пользовательским путям, порядок деградации, canary/rollback, миграции БД per service): [OPERATIONS.md](OPERATIONS.md).

@@ -52,7 +52,7 @@ public final class AuthPrincipalVerifier {
       if (!kid.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) throw invalid();
       JsonNode claims = JSON.readTree(decoder.decode(parts[1]));
       String issuer = string(claims, "iss");
-      if (!Set.of("gateway", "space", "voice").contains(issuer)) throw invalid();
+      if (!Set.of("gateway", "space", "voice", "messaging", "moderation").contains(issuer)) throw invalid();
       RSAPublicKey key = keys.resolve(issuer, kid);
       if (key == null || key.getModulus().bitLength() < 2048) throw invalid();
       var signature = Signature.getInstance("SHA256withRSA");
@@ -74,6 +74,14 @@ public final class AuthPrincipalVerifier {
       String subject = string(claims, "sub");
       if (VerifiedPrincipal.SERVICE.equals(kind)) {
         if (!subject.equals("service:" + issuer)) throw invalid();
+        if (AuthPrincipalServerInterceptor.MODERATION_RPCS.contains(rpc)) {
+          for (String field : Set.of("account_id", "profile_id")) {
+            JsonNode value = claims.get(field);
+            if (value != null && (!value.isTextual() || !value.asText().isEmpty())) throw invalid();
+          }
+          JsonNode epoch = claims.get("session_epoch");
+          if (epoch != null && (!epoch.isIntegralNumber() || !epoch.canConvertToLong() || epoch.longValue() != 0)) throw invalid();
+        }
         principal = new VerifiedPrincipal(kind, issuer, null, null, 0);
       } else if (VerifiedPrincipal.DELEGATED_USER.equals(kind)) {
         if (!"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
@@ -102,6 +110,10 @@ public final class AuthPrincipalVerifier {
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC).contains(rpc)
         && principal.kind().equals(VerifiedPrincipal.SERVICE)
         && principal.issuer().equals("space"));
+    allowed = allowed || (AuthPrincipalServerInterceptor.MODERATION_RPCS.contains(rpc)
+        && principal.kind().equals(VerifiedPrincipal.SERVICE)
+        && (principal.issuer().equals("moderation") ||
+            principal.issuer().equals("messaging") && !AuthPrincipalServerInterceptor.MODERATION_RECONCILE_RPC.equals(rpc)));
     if (!allowed) throw Status.PERMISSION_DENIED.withDescription("principal caller not permitted").asRuntimeException();
     try {
       if (!expires.isAfter(clock.instant())) throw invalid();

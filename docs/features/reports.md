@@ -119,6 +119,21 @@ Deletion/restore/erasure use the existing subject lifecycle and terminal fences.
 The [implementation plan](../testing/report-threshold-exec-plan.md) defines
 the exact producer, concurrency and privacy checks. This accepted target does
 not claim its runtime activation, CI, deployment or acceptance.
+### BE-045: committed-message detector
+
+Уточнённый account-scoped контракт BE-045: пять успешно сохранённых сообщений с
+одним нормализованным текстовым паттерном за десять минут либо три ссылки в одном
+сообщении дают один hit. Evidence не переиспользуется: шестое одинаковое сообщение
+не создаёт второй hit, десятое может создать его из пяти новых сообщений. Окно
+повторного hit — тридцать дней по времени источника; mute действует час от момента
+применения. Второй hit создаёт `perm_ban`, а не shadow ban. Профили и принадлежащие
+аккаунту Bots разделяют историю паттерна; Bot owner проверяется у Bot Service.
+Пустой текст и E2E не хешируются, но успешно сохранённые сообщения занимают позиции
+первых десяти после mute; после десятой позиции детектор продолжает работать.
+Обработка асинхронная после commit, без ретроактивного отказа уже сохранённому
+сообщению. Числовая политика взята из решения c2; episode/Bot/retention решения c9
+приняты агентом по последующей делегации пользователя. Полная privacy, expiry,
+rotation и purge семантика — [контракт и ExecPlan](../testing/async-automod-exec-plan.md).
 
 **Ручная модерация:**
 - Глобальные модераторы платформы рассматривают жалобы в очереди
