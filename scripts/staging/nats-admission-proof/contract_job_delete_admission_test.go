@@ -79,8 +79,9 @@ func TestContractJobDeleteUsesExactActorAndUIDPrecondition(t *testing.T) {
 func contractJob(name, phase string) *batchv1.Job {
 	labels := map[string]string{contractOpLabel: testOperation, contractNonceLabel: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", contractPhaseLabel: phase, contractSelectorLabel: name, contractAttemptLabel: "deadbeef"}
 	backoff := int32(0)
+	manualSelector := true
 	return &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}, Spec: batchv1.JobSpec{
-		BackoffLimit: &backoff, Selector: &metav1.LabelSelector{MatchLabels: map[string]string{contractSelectorLabel: name}},
+		BackoffLimit: &backoff, ManualSelector: &manualSelector, Selector: &metav1.LabelSelector{MatchLabels: map[string]string{contractSelectorLabel: name}},
 		Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels}, Spec: corev1.PodSpec{RestartPolicy: corev1.RestartPolicyNever, Containers: []corev1.Container{{Name: "control", Image: "fixture@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}},
 	}}
 }
