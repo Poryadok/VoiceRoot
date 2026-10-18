@@ -224,6 +224,20 @@ class _KubernetesJSONAPIBase:
             _fail('storage_class_invalid')
         return self._request('GET', '/apis/storage.k8s.io/v1/storageclasses/' + self._segment(name))
 
+    def make_native_migration_view(self, request):
+        """Bind the DB migration adapter to one validated immutable request.
+
+        The returned object exposes only the four operations required by
+        ``native_migrations_runtime.apply``.  It cannot create arbitrary
+        Kubernetes resources or escape the request's namespace/name/body set.
+        """
+        try:
+            import native_migrations_runtime
+            checked = native_migrations_runtime._validate_request(request)
+        except Exception:
+            _fail('native_migration_request_invalid')
+        return _NativeMigrationAPIView(self, checked)
+
     def get_namespace(self, name):
         if name != NAMESPACE: _fail('namespace_invalid')
         return self._request('GET', '/api/v1/namespaces/' + self._segment(name))
@@ -1633,6 +1647,277 @@ class KubernetesJSONAPI(_KubernetesJSONAPIBase):
         except OSError:
             scratch.unlink(missing_ok=True)
             _fail('token_refresh_persist_failed')
+
+
+class _NativeMigrationAPIView:
+    """Request-scoped DB migration transport; never a general Kubernetes API."""
+
+    _COLLECTIONS = {
+        'Secret': ('/api/v1/namespaces/', '/secrets'),
+        'ConfigMap': ('/api/v1/namespaces/', '/configmaps'),
+        'Job': ('/apis/batch/v1/namespaces/', '/jobs'),
+    }
+
+    def __init__(self, api, request):
+        self._api = api
+        self._request = copy.deepcopy(request)
+        self._resources = {}
+        self._observed_uids = {}
+        for row in self._request['resources']:
+            kind = row['kind']
+            metadata = row['metadata']
+            key = (kind, NAMESPACE, metadata['name'])
+            if kind not in self._COLLECTIONS or key in self._resources:
+                _fail('native_migration_resource_set_invalid')
+            self._resources[key] = copy.deepcopy(row)
+
+    def _wanted(self, kind, namespace, name):
+        if namespace != NAMESPACE or not isinstance(name, str):
+            _fail('native_migration_resource_scope_invalid')
+        wanted = self._resources.get((kind, namespace, name))
+        if wanted is None:
+            _fail('native_migration_resource_not_authorized')
+        return wanted
+
+    def _path(self, kind, name):
+        prefix, suffix = self._COLLECTIONS[kind]
+        return prefix + self._api._segment(NAMESPACE) + suffix + '/' + self._api._segment(name)
+
+    @staticmethod
+    def _metadata_projection(value):
+        metadata = value.get('metadata')
+        if not isinstance(metadata, dict):
+            _fail('native_migration_metadata_invalid')
+        projected = {key: copy.deepcopy(metadata[key]) for key in
+            ('name', 'namespace', 'labels', 'annotations') if key in metadata}
+        return projected
+
+    def _checked_response(self, actual, wanted):
+        """Validate the API response before handing it to the migration adapter.
+
+        Only Kubernetes 1.34.3's exact documented defaults for this fixed
+        migration Job are removed from a copy.  Unknown fields and any
+        mutation of the submitted spec remain visible to the adapter and fail
+        closed.
+        """
+        if not isinstance(actual, dict) or actual.get('kind') != wanted.get('kind') \
+                or actual.get('apiVersion') != wanted.get('apiVersion'):
+            _fail('native_migration_response_kind_invalid')
+        metadata = actual.get('metadata')
+        expected_metadata = wanted.get('metadata', {})
+        if (not isinstance(metadata, dict) or metadata.get('namespace') != NAMESPACE
+                or metadata.get('name') != expected_metadata.get('name')
+                or not isinstance(metadata.get('uid'), str)
+                or not _UID.fullmatch(metadata['uid'])
+                or self._metadata_projection(actual) != self._metadata_projection(wanted)):
+            _fail('native_migration_response_identity_invalid')
+        projected = copy.deepcopy(actual)
+        if wanted['kind'] == 'Job':
+            self._normalize_job_defaults(projected, wanted, metadata['uid'])
+        # The downstream adapter compares the desired manifest projection.
+        # Keep all actual resource fields here; it must not receive an object
+        # synthesized from the request in place of the server's response.
+        key = (wanted['kind'], NAMESPACE, expected_metadata['name'])
+        previous_uid = self._observed_uids.get(key)
+        if previous_uid is not None and previous_uid != metadata['uid']:
+            _fail('native_migration_resource_uid_changed')
+        self._observed_uids[key] = metadata['uid']
+        return projected
+
+    @staticmethod
+    def _normalize_absent_default(actual, wanted, key, value):
+        if key in wanted:
+            if actual.get(key) != wanted[key]:
+                _fail('native_migration_profile_changed')
+            return
+        if key in actual:
+            if actual[key] != value:
+                _fail('native_migration_default_changed')
+            del actual[key]
+
+    @staticmethod
+    def _normalized_job_labels(actual, wanted, job_uid, job_name):
+        if not isinstance(actual, dict) or not isinstance(wanted, dict):
+            _fail('native_migration_job_template_labels_invalid')
+        generated = {
+            'batch.kubernetes.io/controller-uid': job_uid,
+            'batch.kubernetes.io/job-name': job_name,
+            'controller-uid': job_uid,
+            'job-name': job_name,
+        }
+        if any(actual.get(key) != value for key, value in wanted.items()):
+            _fail('native_migration_job_template_labels_changed')
+        extras = set(actual) - set(wanted)
+        if not extras.issubset(generated) or any(actual.get(key) != generated[key] for key in extras):
+            _fail('native_migration_job_template_labels_changed')
+        if not {'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name'}.issubset(extras):
+            _fail('native_migration_job_template_labels_missing')
+        return {key: value for key, value in actual.items() if key not in generated}
+
+    @classmethod
+    def _normalize_job_defaults(cls, actual, wanted, job_uid):
+        actual_spec = actual.get('spec')
+        wanted_spec = wanted.get('spec')
+        if not isinstance(actual_spec, dict) or not isinstance(wanted_spec, dict):
+            _fail('native_migration_job_spec_invalid')
+
+        # Kubernetes generates a selector for Jobs without manual selectors.
+        selector = actual_spec.get('selector')
+        if 'selector' in wanted_spec:
+            if selector != wanted_spec['selector']:
+                _fail('native_migration_job_selector_changed')
+        elif selector is not None:
+            if selector != {'matchLabels': {'batch.kubernetes.io/controller-uid': job_uid}}:
+                _fail('native_migration_job_selector_changed')
+            del actual_spec['selector']
+
+        for key, value in (
+                ('completionMode', 'NonIndexed'), ('completions', 1),
+                ('manualSelector', False), ('parallelism', 1),
+                ('podReplacementPolicy', 'TerminatingOrFailed'), ('suspend', False)):
+            cls._normalize_absent_default(actual_spec, wanted_spec, key, value)
+
+        actual_template = actual_spec.get('template')
+        wanted_template = wanted_spec.get('template')
+        if not isinstance(actual_template, dict) or not isinstance(wanted_template, dict):
+            _fail('native_migration_job_template_invalid')
+        actual_meta = actual_template.get('metadata')
+        wanted_meta = wanted_template.get('metadata')
+        if not isinstance(actual_meta, dict) or not isinstance(wanted_meta, dict):
+            _fail('native_migration_job_template_metadata_invalid')
+        actual_meta['labels'] = cls._normalized_job_labels(actual_meta.get('labels'),
+            wanted_meta.get('labels'), job_uid, wanted['metadata']['name'])
+
+        actual_pod_spec = actual_template.get('spec')
+        wanted_pod_spec = wanted_template.get('spec')
+        cls._normalize_pod_defaults(actual_pod_spec, wanted_pod_spec)
+
+    @classmethod
+    def _normalize_pod_defaults(cls, actual_pod_spec, wanted_pod_spec):
+        if not isinstance(actual_pod_spec, dict) or not isinstance(wanted_pod_spec, dict):
+            _fail('native_migration_pod_spec_invalid')
+        for key, value in (
+                ('dnsPolicy', 'ClusterFirst'), ('schedulerName', 'default-scheduler'),
+                ('terminationGracePeriodSeconds', 30)):
+            cls._normalize_absent_default(actual_pod_spec, wanted_pod_spec, key, value)
+
+        actual_containers = actual_pod_spec.get('containers')
+        wanted_containers = wanted_pod_spec.get('containers')
+        if (not isinstance(actual_containers, list) or not isinstance(wanted_containers, list)
+                or len(actual_containers) != len(wanted_containers)):
+            _fail('native_migration_container_profile_invalid')
+        for actual_container, wanted_container in zip(actual_containers, wanted_containers):
+            if not isinstance(actual_container, dict) or not isinstance(wanted_container, dict):
+                _fail('native_migration_container_profile_invalid')
+            for key, value in (
+                    ('imagePullPolicy', 'IfNotPresent'),
+                    ('terminationMessagePath', '/dev/termination-log'),
+                    ('terminationMessagePolicy', 'File')):
+                cls._normalize_absent_default(actual_container, wanted_container, key, value)
+            cls._normalize_absent_default(actual_container, wanted_container, 'resources', {})
+
+        actual_volumes = actual_pod_spec.get('volumes', [])
+        wanted_volumes = wanted_pod_spec.get('volumes', [])
+        if not isinstance(actual_volumes, list) or not isinstance(wanted_volumes, list) \
+                or len(actual_volumes) != len(wanted_volumes):
+            _fail('native_migration_volume_profile_invalid')
+        for actual_volume, wanted_volume in zip(actual_volumes, wanted_volumes):
+            if not isinstance(actual_volume, dict) or not isinstance(wanted_volume, dict):
+                _fail('native_migration_volume_profile_invalid')
+            actual_config = actual_volume.get('configMap')
+            wanted_config = wanted_volume.get('configMap')
+            if isinstance(actual_config, dict) and isinstance(wanted_config, dict):
+                cls._normalize_absent_default(actual_config, wanted_config, 'defaultMode', 420)
+
+    def get_resource(self, kind, namespace, name):
+        wanted = self._wanted(kind, namespace, name)
+        try:
+            actual = self._api._request('GET', self._path(kind, name))
+        except KubeNotFound:
+            raise
+        except Exception:
+            _fail('native_migration_read_unknown')
+        return self._checked_response(actual, wanted)
+
+    def create_resource(self, kind, namespace, manifest):
+        if not isinstance(manifest, dict):
+            _fail('native_migration_manifest_invalid')
+        metadata = manifest.get('metadata')
+        name = metadata.get('name') if isinstance(metadata, dict) else None
+        wanted = self._wanted(kind, namespace, name)
+        if manifest != wanted:
+            _fail('native_migration_manifest_not_authorized')
+        prefix, suffix = self._COLLECTIONS[kind]
+        path = prefix + self._api._segment(NAMESPACE) + suffix
+        try:
+            actual = self._api._request('POST', path, copy.deepcopy(wanted))
+        except Exception:
+            # The outer journaled adapter performs one read-only reconciliation
+            # after an ambiguous create.  This view never retries a POST.
+            _fail('native_migration_create_unknown')
+        return self._checked_response(actual, wanted)
+
+    def wait_job(self, namespace, name, uid, timeout_seconds):
+        wanted = self._wanted('Job', namespace, name)
+        if (type(timeout_seconds) is not int or timeout_seconds != 300
+                or not isinstance(uid, str) or not _UID.fullmatch(uid)):
+            _fail('native_migration_wait_scope_invalid')
+        if self._observed_uids.get(('Job', NAMESPACE, name)) != uid:
+            _fail('native_migration_wait_uid_unbound')
+        try:
+            actual = self._api.wait_job(NAMESPACE, name, uid, 300)
+        except Exception:
+            _fail('native_migration_job_wait_unknown')
+        return self._checked_response(actual, wanted)
+
+    def get_job_pod(self, namespace, name, uid):
+        wanted = self._wanted('Job', namespace, name)
+        key = ('Job', NAMESPACE, name)
+        if not isinstance(uid, str) or not _UID.fullmatch(uid) or self._observed_uids.get(key) != uid:
+            _fail('native_migration_pod_job_uid_unbound')
+        # Re-read the exact Job and bind the Pod owner UID, not just its name.
+        job = self.get_resource('Job', namespace, name)
+        if job.get('metadata', {}).get('uid') != uid or job.get('status', {}).get('succeeded') != 1:
+            _fail('native_migration_job_not_complete')
+        labels = urlencode({'labelSelector': 'batch.kubernetes.io/job-name=' + name + ',job-name=' + name})
+        listing = self._api._request('GET', '/api/v1/namespaces/' + self._api._segment(NAMESPACE)
+            + '/pods?' + labels)
+        items = listing.get('items') if isinstance(listing, dict) else None
+        if not isinstance(items, list) or len(items) > 128 or not all(isinstance(item, dict) for item in items):
+            _fail('native_migration_pod_list_invalid')
+        owned = []
+        for pod in items:
+            metadata = pod.get('metadata', {})
+            owners = metadata.get('ownerReferences', [])
+            if not isinstance(owners, list) or len(owners) > 16 or any(not isinstance(owner, dict) for owner in owners):
+                _fail('native_migration_pod_owner_invalid')
+            if (len(owners) == 1 and owners[0].get('apiVersion') == 'batch/v1'
+                    and owners[0].get('kind') == 'Job' and owners[0].get('name') == name
+                    and owners[0].get('uid') == uid and owners[0].get('controller') is True):
+                owned.append(pod)
+        if len(owned) != 1:
+            _fail('native_migration_pod_cardinality_invalid')
+        pod = owned[0]
+        metadata = pod.get('metadata', {})
+        if (pod.get('apiVersion') != 'v1' or pod.get('kind') != 'Pod'
+                or metadata.get('namespace') != NAMESPACE or not isinstance(metadata.get('name'), str)
+                or not isinstance(metadata.get('uid'), str) or not _UID.fullmatch(metadata['uid'])):
+            _fail('native_migration_pod_identity_invalid')
+        expected_labels = wanted['spec']['template']['metadata']['labels']
+        actual_labels = metadata.get('labels')
+        normalized_labels = self._normalized_job_labels(actual_labels, expected_labels, uid, name)
+        if normalized_labels != expected_labels:
+            _fail('native_migration_pod_labels_invalid')
+        if not isinstance(pod.get('spec'), dict):
+            _fail('native_migration_pod_profile_invalid')
+        result = copy.deepcopy(pod)
+        self._normalize_pod_defaults(result['spec'], wanted['spec']['template']['spec'])
+        if result['spec'] != wanted['spec']['template']['spec']:
+            _fail('native_migration_pod_profile_invalid')
+        profile_bytes = json.dumps(wanted['spec']['template']['spec'], sort_keys=True,
+            separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode('utf-8')
+        result['profile_sha256'] = hashlib.sha256(profile_bytes).hexdigest()
+        return result
 
 
 def resolve_source_binding(api, *, operation, expected=None):

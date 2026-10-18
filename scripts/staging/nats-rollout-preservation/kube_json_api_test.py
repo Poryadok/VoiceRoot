@@ -16,6 +16,8 @@ from unittest.mock import Mock, patch
 import kube_json_api as kube
 import census_stream
 import verification_job
+import migrations
+import native_migrations_runtime
 
 
 class ContractReceiptWrapperTests(unittest.TestCase):
@@ -43,6 +45,134 @@ class ContractReceiptWrapperTests(unittest.TestCase):
                 api.read_contract_receipt('voice-staging','voice-job-pod','1'*36,
                     request,binding,'deadbeef','input')
             api.exec_pod_contract.assert_not_called()
+
+
+class NativeMigrationAPIViewTests(unittest.TestCase):
+    OP = 'a' * 12
+    JOB_UID = '11111111-1111-4111-8111-111111111111'
+    POD_UID = '22222222-2222-4222-8222-222222222222'
+
+    @staticmethod
+    def request():
+        import hashlib
+        text = 'CREATE TABLE example (id bigint);\n'
+        row = {'database': 'social', 'image': migrations.IMAGE,
+               'secret_key': 'SOCIAL_DATABASE_URL',
+               'files': {'000001_example.up.sql': text},
+               'hashes': {'000001_example.up.sql': hashlib.sha256(text.encode()).hexdigest()}}
+        return native_migrations_runtime.build_request([row], 'app-only', NativeMigrationAPIViewTests.OP)
+
+    def api(self):
+        return object.__new__(kube.KubernetesJSONAPI)
+
+    def test_view_only_reads_and_creates_exact_request_resources(self):
+        request = self.request()
+        api = self.api()
+        configmap, job = request['resources']
+        created = copy.deepcopy(configmap)
+        created['metadata']['uid'] = self.JOB_UID
+        with patch.object(api, '_request', return_value=created) as transport:
+            view = api.make_native_migration_view(request)
+            observed = view.create_resource('ConfigMap', 'voice-staging', configmap)
+        self.assertEqual(observed['metadata']['uid'], self.JOB_UID)
+        transport.assert_called_once_with('POST', '/api/v1/namespaces/voice-staging/configmaps', configmap)
+        with patch.object(api, '_request', return_value=created):
+            self.assertEqual(view.get_resource('ConfigMap', 'voice-staging', configmap['metadata']['name']), created)
+        with patch.object(api, '_request') as transport, self.assertRaises(kube.KubeAPIError):
+            view.create_resource('Secret', 'voice-staging', {'kind': 'Secret'})
+        transport.assert_not_called()
+        altered = copy.deepcopy(configmap)
+        altered['data']['000001_example.up.sql'] = 'unexpected'
+        with patch.object(api, '_request') as transport, self.assertRaises(kube.KubeAPIError):
+            view.create_resource('ConfigMap', 'voice-staging', altered)
+        transport.assert_not_called()
+        with self.assertRaises(kube.KubeAPIError):
+            view.get_resource('Job', 'other-namespace', job['metadata']['name'])
+
+    def test_request_view_rejects_manifest_image_and_service_account_drift(self):
+        request = self.request()
+        api = self.api()
+        request['resources'][1]['spec']['template']['spec']['containers'][0]['image'] = 'attacker:latest'
+        with patch.object(api, '_request') as transport, self.assertRaises(kube.KubeAPIError):
+            api.make_native_migration_view(request)
+        transport.assert_not_called()
+        request = self.request()
+        request['service_account'] = 'attacker'
+        with self.assertRaises(kube.KubeAPIError):
+            api.make_native_migration_view(request)
+
+    def test_job_wait_and_pod_lookup_are_bound_to_created_uid_and_exact_profile(self):
+        request = self.request()
+        api = self.api()
+        job = copy.deepcopy(request['resources'][1])
+        job['metadata']['uid'] = self.JOB_UID
+        job['status'] = {'succeeded': 1}
+        job['spec']['selector'] = {'matchLabels': {'batch.kubernetes.io/controller-uid': self.JOB_UID}}
+        job['spec'].update(completionMode='NonIndexed', completions=1, manualSelector=False,
+                           parallelism=1, podReplacementPolicy='TerminatingOrFailed', suspend=False)
+        job['spec']['template']['metadata']['labels'] = copy.deepcopy(
+            job['spec']['template']['metadata']['labels'])
+        job['spec']['template']['metadata']['labels'].update({
+            'batch.kubernetes.io/controller-uid': self.JOB_UID,
+            'batch.kubernetes.io/job-name': job['metadata']['name'],
+            'controller-uid': self.JOB_UID,
+            'job-name': job['metadata']['name'],
+        })
+        job['spec']['template']['spec'].update(dnsPolicy='ClusterFirst',
+            schedulerName='default-scheduler', terminationGracePeriodSeconds=30)
+        job['spec']['template']['spec']['containers'][0].update(
+            imagePullPolicy='IfNotPresent', terminationMessagePath='/dev/termination-log',
+            terminationMessagePolicy='File', resources={})
+        job['spec']['template']['spec']['volumes'][0]['configMap']['defaultMode'] = 420
+        pod = {'apiVersion': 'v1', 'kind': 'Pod',
+            'metadata': {'name': job['metadata']['name'] + '-pod', 'namespace': 'voice-staging',
+                'uid': self.POD_UID, 'labels': copy.deepcopy(job['spec']['template']['metadata']['labels']),
+                'ownerReferences': [{'apiVersion': 'batch/v1', 'kind': 'Job',
+                    'name': job['metadata']['name'], 'uid': self.JOB_UID, 'controller': True}]},
+            'spec': copy.deepcopy(job['spec']['template']['spec'])}
+        view = api.make_native_migration_view(request)
+        self.assertEqual(view._metadata_projection(job),
+            view._metadata_projection(request['resources'][1]))
+        with patch.object(api, '_request', return_value=job):
+            view.get_resource('Job', 'voice-staging', job['metadata']['name'])
+        with patch.object(api, 'wait_job', return_value=job) as wait:
+            waited = view.wait_job('voice-staging', job['metadata']['name'], self.JOB_UID, 300)
+            self.assertEqual(waited['metadata']['uid'], self.JOB_UID)
+            self.assertEqual(waited['status'], {'succeeded': 1})
+            self.assertEqual(waited['spec'], request['resources'][1]['spec'])
+        wait.assert_called_once_with('voice-staging', job['metadata']['name'], self.JOB_UID, 300)
+        with self.assertRaises(kube.KubeAPIError):
+            view.wait_job('voice-staging', job['metadata']['name'], self.JOB_UID, 301)
+        with patch.object(api, '_request', side_effect=[job, {'items': [pod]}]):
+            observed = view.get_job_pod('voice-staging', job['metadata']['name'], self.JOB_UID)
+        expected_sha = native_migrations_runtime._digest(request['resources'][1]['spec']['template']['spec'])
+        self.assertEqual(observed['profile_sha256'], expected_sha)
+        bad_pod = copy.deepcopy(pod)
+        bad_pod['metadata']['ownerReferences'][0]['uid'] = self.POD_UID
+        with patch.object(api, '_request', side_effect=[job, {'items': [bad_pod]}]), self.assertRaises(kube.KubeAPIError):
+            view.get_job_pod('voice-staging', job['metadata']['name'], self.JOB_UID)
+        extra_owner = copy.deepcopy(pod)
+        extra_owner['metadata']['ownerReferences'].append({'apiVersion': 'v1', 'kind': 'ConfigMap',
+            'name': 'unrelated', 'uid': self.POD_UID, 'controller': False})
+        with patch.object(api, '_request', side_effect=[job, {'items': [extra_owner]}]), \
+             self.assertRaises(kube.KubeAPIError):
+            view.get_job_pod('voice-staging', job['metadata']['name'], self.JOB_UID)
+
+    def test_default_normalizer_rejects_unreviewed_job_changes(self):
+        request = self.request()
+        api = self.api()
+        view = api.make_native_migration_view(request)
+        wanted = request['resources'][1]
+        actual = copy.deepcopy(wanted)
+        actual['metadata']['uid'] = self.JOB_UID
+        actual['spec']['template']['spec']['hostNetwork'] = True
+        with self.assertRaises(kube.KubeAPIError):
+            view._checked_response(actual, wanted)
+        actual = copy.deepcopy(wanted)
+        actual['metadata']['uid'] = self.JOB_UID
+        actual['spec']['selector'] = {'matchLabels': {'batch.kubernetes.io/controller-uid': '33333333-3333-4333-8333-333333333333'}}
+        with self.assertRaises(kube.KubeAPIError):
+            view._checked_response(actual, wanted)
             with self.assertRaises(kube.KubeAPIError):
                 api.read_contract_receipt('voice-staging','voice-job-pod','1'*36,
                     request,binding,'a1b2c3d4','input',action_index=0)
