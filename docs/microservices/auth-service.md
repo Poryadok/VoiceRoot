@@ -831,6 +831,20 @@ return, fixture capture, NoopMailSender, or CapturingMailSender.
 
 ### T056-P1: session epoch
 
+`AuthService.GetRoleSessionEpochFloor` is a separate Role-only protected RPC
+(`GetRoleSessionEpochFloorRequest.account_id = 1`, response
+`session_epoch_floor = 1`). It reads the same durable account epoch and retained
+Redis floor as `GetVoiceSessionEpochFloor`, returns their positive maximum and
+never creates a new epoch/cache. Missing account returns `NOT_FOUND`; missing,
+invalid or unavailable authority returns `UNAVAILABLE`. Both requests reject
+unknown fields and noncanonical or zero account UUIDs before persistence reads.
+The existing dedicated session-floor listener exposes exactly these two RPCs;
+ordinary and ownership/deletion proof listeners expose neither. Role must use
+its own `service:role` principal, exact full RPC/request hash/request ID and fresh
+JTI, issuer-specific HTTPS JWKS in `S2S_JWKS_URLS_JSON`, and a client certificate
+trusted by `AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE`. Voice keeps its exact
+`service:voice` endpoint and cannot call the Role method (or vice versa).
+
 `accounts.session_epoch` — положительный монотонный durable source of truth
 Auth. Auth атомарно увеличивает его для отзыва всех сессий и никогда не
 уменьшает. Каждый access JWT, выпущенный Auth, содержит положительный integer

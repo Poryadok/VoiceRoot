@@ -52,7 +52,7 @@ public final class AuthPrincipalVerifier {
       if (!kid.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) throw invalid();
       JsonNode claims = JSON.readTree(decoder.decode(parts[1]));
       String issuer = string(claims, "iss");
-      if (!Set.of("gateway", "space", "voice").contains(issuer)) throw invalid();
+      if (!Set.of("gateway", "space", "voice", "role").contains(issuer)) throw invalid();
       RSAPublicKey key = keys.resolve(issuer, kid);
       if (key == null || key.getModulus().bitLength() < 2048) throw invalid();
       var signature = Signature.getInstance("SHA256withRSA");
@@ -92,6 +92,8 @@ public final class AuthPrincipalVerifier {
     }
     boolean allowed = AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("voice")
+        : AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("role")
         : AuthPrincipalServerInterceptor.ISSUE_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.DELEGATED_USER) && principal.issuer().equals("gateway")
         : (AuthPrincipalServerInterceptor.CONSUME_RPC.equals(rpc) || AuthPrincipalServerInterceptor.LOOKUP_RPC.equals(rpc))
