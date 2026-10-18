@@ -17,7 +17,7 @@ func TestVoiceParticipantSubjectsHaveExactStreamAndActorGrants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, subject := range []string{"voice.participant_joined", "voice.participant_left"} {
+	for _, subject := range []string{"voice.participant_joined", "voice.participant_left", "voice.roster_membership_changed"} {
 		if !contains(acl.Services["voice"].Publish, subject) {
 			t.Errorf("Voice cannot publish accepted subject %s", subject)
 		}
@@ -43,7 +43,7 @@ func TestVoiceParticipantSubjectsHaveExactStreamAndActorGrants(t *testing.T) {
 	if err = yaml.Unmarshal(raw, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	want := strings.Fields("voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left")
+	want := strings.Fields("voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left voice.roster_membership_changed")
 	sort.Strings(want)
 	found := false
 	for _, stream := range manifest.Streams {

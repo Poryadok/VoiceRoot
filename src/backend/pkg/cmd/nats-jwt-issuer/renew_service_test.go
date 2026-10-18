@@ -87,7 +87,7 @@ func TestRenewServicePreservesClaimsSeedAndExactGrant(t *testing.T) {
 }
 
 func TestRenewVoiceParticipantGrantPreservesDenyVeto(t *testing.T) {
-	for _, deny := range []string{"voice.participant_joined", "voice.participant_left", "voice.*", "voice.>"} {
+	for _, deny := range []string{"voice.participant_joined", "voice.participant_left", "voice.roster_membership_changed", "voice.*", "voice.>"} {
 		old, at, ot, signer, actor, account, g, u, ap := serviceRenewalFixture(t, "voice")
 		u.Pub.Deny = []string{deny}
 		old = serviceReencode(t, old, u, ap)

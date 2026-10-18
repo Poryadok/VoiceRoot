@@ -143,3 +143,43 @@ func TestSpacePartyRoomCloseSharesCallerTransactionAndOrdersDepartures(t *testin
 	require.ErrorIs(t, st.ConfirmProjection(ctx, first.OperationID, first.Generation), ErrAdmissionConflict)
 	require.ErrorIs(t, st.ConfirmProjection(ctx, second.OperationID, second.Generation), ErrAdmissionConflict)
 }
+
+func TestSpacePartyCreatorDeparturePreservesFinalizedHeadForSurvivor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	st := NewPostgresAdmissionStore(pool)
+	creator := admissionFixture()
+	require.NoError(t, prepareAdmission(ctx, st, &creator))
+	require.NoError(t, st.Fence(ctx, creator))
+	require.NoError(t, st.MarkCommitted(ctx, creator.OperationID, creator.Generation))
+	require.NoError(t, st.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
+	survivor := admissionFixture()
+	survivor.RoomID = creator.RoomID
+	survivor.SpaceID = creator.SpaceID
+	survivor.VoiceRoomID = creator.VoiceRoomID
+	survivor.CreatedRoom = false
+	survivor.Events = survivor.Events[1:]
+	require.NoError(t, prepareAdmission(ctx, st, &survivor))
+	require.NoError(t, st.Fence(ctx, survivor))
+	require.NoError(t, st.MarkCommitted(ctx, survivor.OperationID, survivor.Generation))
+	require.NoError(t, st.MarkProjectionApplied(ctx, survivor.OperationID, survivor.Generation))
+	require.NoError(t, st.BeginRoomLeave(ctx, creator.OperationID, creator.Generation))
+	require.NoError(t, st.CompleteRoomLeave(ctx, creator))
+	require.NoError(t, st.ConfirmProjection(ctx, survivor.OperationID, survivor.Generation))
+	var headState, creatorState, creatorParticipant string
+	var finalized bool
+	var version int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT h.state,h.roster_version,a.state,a.participant_state,a.projection_applied_at IS NOT NULL FROM voice_space_media_room_heads h JOIN voice_space_media_admissions a ON a.operation_id=h.creator_operation_id WHERE h.voice_room_id=$1 AND h.room_generation=$2`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&headState, &version, &creatorState, &creatorParticipant, &finalized))
+	require.Equal(t, "OPEN", headState)
+	require.EqualValues(t, 3, version)
+	require.Equal(t, "COMMITTED", creatorState)
+	require.Equal(t, "ENDED", creatorParticipant)
+	require.True(t, finalized)
+	head, err := st.ClaimRoomHead(ctx, creator.VoiceRoomID, creator.SpaceID.String(), uuid.NewString(), uuid.New(), false)
+	require.NoError(t, err)
+	require.True(t, head.Ready)
+	require.Equal(t, creator.RoomID, head.RoomID)
+}

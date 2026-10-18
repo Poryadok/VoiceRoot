@@ -18,6 +18,7 @@ var serviceRenewSubjects = map[string][]string{
 	"voice": {
 		"voice.participant_joined",
 		"voice.participant_left",
+		"voice.roster_membership_changed",
 		"$JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat",
 		"$JS.ACK.chat_events.voice_space_media_chat.>",
 		"$JS.API.CONSUMER.INFO.role_events.voice_space_media_role",

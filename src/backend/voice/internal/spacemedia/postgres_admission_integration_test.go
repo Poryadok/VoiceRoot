@@ -508,7 +508,7 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads")
 	require.NoError(t, headLock.Commit(ctx))
 	require.NoError(t, <-fenceResult)
 	require.NoError(t, <-leaveResult)
@@ -579,7 +579,7 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads")
 	prepareStarted := make(chan struct{})
 	prepareResult := make(chan error, 1)
 	go func() {

@@ -144,6 +144,12 @@ or an update/readback error fails closed; no stream or consumer is recreated.
 The executable preservation fixture is required in the Linux bootstrap contract
 job, and the real disposable JWT/TLS broker proof remains a delivery gate.
 
+BE-012 adds `voice.roster_membership_changed` for A3 party eligibility facts.
+The same bounded in-place migration accepts either the complete original set or
+the complete BE-102 predecessor and adds only the remaining accepted subjects.
+All other settings, messages and consumer state stay intact. Native writer
+source tests do not authorize retained grant rotation or stand rollout.
+
 These source permissions do not change retained deployed JWTs or authorize
 issuance, Secret replacement or bootstrap replay. Existing-generation rollout
 must first prove the exact new Voice/bootstrap grants under its separately
