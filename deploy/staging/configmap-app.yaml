@@ -15,6 +15,8 @@ data:
   # HTTP_IDLE_TIMEOUT: "120s"
   # HTTP_SHUTDOWN_TIMEOUT: "10s"
   # POSTGRES_CONNECT_TIMEOUT: "15s"
+  # Per-process default; explicit Deployment env overrides this per service.
+  POSTGRES_MAX_CONNS: "10"
   POSTGRES_USER: "voice"
   POSTGRES_HOST: "voice-postgres"
   FEDERATION_KEY_ID: "primary"
@@ -24,7 +26,6 @@ data:
   REDIS_ADDR: "voice-redis:6379"
   # NATS_CONNECT_TIMEOUT: "10s"
   # NATS_RECONNECT_WAIT: "1s"
-  # POSTGRES_MAX_CONNS: "10"
   # BOT_WEBHOOK_TIMEOUT: "3s"
   # BOT_WEBHOOK_DELIVERY_ATTEMPTS: "3"
   # BOT_WEBHOOK_RETRY_BACKOFF_MS: "100"
