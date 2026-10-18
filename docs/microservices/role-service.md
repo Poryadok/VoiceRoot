@@ -7,6 +7,13 @@
 **Язык**: Go
 **БД**: PostgreSQL `role_db`
 
+Accepted audit producer details use the frozen
+[external codec](space-service.md#external-audit-details-codec-v1) and
+[replay identity](space-service.md#durable-external-replay-codec-v1), shared through
+`src/backend/pkg/spaceaudit`. Build actual normalized changes once inside the
+mutation/outbox transaction; retries preserve those bytes. Producer runtime is
+tracked separately by BE-131; this codec contract does not activate its transport.
+
 ## Ответственность
 
 - Предустановленные роли: Owner, Admin, Moderator, Member, Guest
