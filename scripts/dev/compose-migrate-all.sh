@@ -44,7 +44,7 @@ wait_postgres_tcp() {
   local i
   for i in $(seq 1 30); do
     if docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
-      postgres:16-alpine pg_isready -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" >/dev/null 2>&1; then
+      postgres:18-alpine pg_isready -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -71,7 +71,7 @@ provision_gameintegration_runtime_role() {
   PGPASSWORD="${POSTGRES_PASSWORD}" docker run --rm -i "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
     -e PGPASSWORD -e GAME_INTEGRATION_DB_PASSWORD \
     -v "${ROOT}/docker/postgres/provision-gameintegration-runtime-role.sql:/provision.sql:ro" \
-    postgres:16-alpine psql -v ON_ERROR_STOP=1 \
+    postgres:18-alpine psql -v ON_ERROR_STOP=1 \
       -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" \
       -d postgres -f /provision.sql
 }

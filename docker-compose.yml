@@ -1,7 +1,10 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
+      # Preserve the named-volume layout across the PostgreSQL 18 default change.
+      # PostgreSQL 16 data requires an explicit upgrade, never a fresh hidden cluster.
+      PGDATA: /var/lib/postgresql/data
       POSTGRES_USER: ${POSTGRES_USER:-voice}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voice}
       POSTGRES_DB: voice
@@ -17,7 +20,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     ports:
       - "${REDIS_PORT:-6379}:6379"
     command: ["redis-server", "--appendonly", "yes"]
