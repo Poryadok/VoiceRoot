@@ -273,3 +273,13 @@ reconciliation cut. An old in-flight reply is distinguished from actual local
 history loss by comparing CURRENT local revision; neither acknowledges the old
 request or justifies incrementing a restored stale snapshot.
 
+The one Moderation signer loads `MODERATION_PRINCIPAL_SIGNING_KEYS_DIR` and
+`MODERATION_PRINCIPAL_ACTIVE_KID`. All report/evidence/Auth clients receive that
+same issuer instance. Its certificate-only mTLS JWKS route is
+`https://voice-moderation-authority:8443/internal/principals/jwks`, with
+`MODERATION_PRINCIPAL_JWKS_LISTEN` defaulting to `:8443`. The shared publisher uses
+`MODERATION_PRINCIPAL_TLS_CERT_FILE`, `MODERATION_PRINCIPAL_TLS_KEY_FILE` and
+`MODERATION_PRINCIPAL_TLS_CLIENT_CA_FILE`; it starts independently of public
+readiness and serves only the current/next public keys. It never requires the
+JWT, session floor or reciprocal domain RPC which its keys bootstrap.
+

@@ -82,6 +82,14 @@ forward/commentary commits. Three tests passed with the Linux race detector.
 Verified ingress, full producer activation/dispatch, retention and current-boot
 terminal/cursor reconciliation are still open; no completed vertical is claimed.
 
+Moderation issuer transport checkpoint: direct/raw-header entry to the bootstrap
+handler originally returned 200 (RED). The private publisher now requires a
+verified workload certificate, serves only the fixed JWKS path, and has no peer
+RPC/database/public-ready dependency. Actual Linux HTTPS tests passed with the
+current/next keys and denied anonymous clients, wrong CA and wrong hostname;
+partial TLS cannot start a listener. The owned listener closes on cancellation.
+Main P0-P5 integration and private discovery manifests remain open.
+
 - [x] Confirm actual TT owner156, fresh base and exclusive lease22.
 - [x] Read c9; ordinary policy choices no longer require a user response.
 - [x] Persist exact owning API/schema and policy contracts before production code.
