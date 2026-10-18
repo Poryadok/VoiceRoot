@@ -208,6 +208,22 @@ request binding или authorization. Нельзя добавить второй
   headers и downstream не принимает их как authority. S2S callers, которым нужен
   subject для decision/read, передают его как data только после проверки собственной
   service principal.
+- The BE-131 initiating user cutover additionally carries the explicit verified
+  `account_type` in its delegated credential. Its Role/Chat/Bot-admin consumers
+  apply their current guest/account eligibility rules and never infer `regular`
+  from a missing field. Existing unmigrated delegated transports may omit the
+  additive claim; that compatibility does not apply to the new audit-producing
+  mutation slice. The shared codec accepts only empty/`regular`/`guest`/
+  `sdk-account`; the exact receiving surface still owns eligibility.
+- Bot interactive capabilities use the separate signed `bot_actor` kind, not
+  a service JWT or fabricated human session. The issuer is `bot`, subject is
+  `bot:<bot_id>`, with exact audience/RPC/request binding and explicit
+  `actor_profile_id`, `bot_id`, `space_id`, `installation_id`, `bot_scope` plus
+  the same bounded temporal and single-use JTI checks. The closed Role and Chat
+  caller/scope matrix is defined in their owning service contracts. Receivers
+  reject mixed human/service authority, and still enforce current installation,
+  membership, permission, hierarchy and resource scope. A signed capability is
+  not an independent grant to mutate Owner/system roles.
 - Migration идёт сначала через dual-read verifier и audit-only telemetry для legacy
   metadata, затем per-caller cutover, allow-list enforcement и removal legacy path.
   Legacy metadata допустимы исключительно как временный migration input после
