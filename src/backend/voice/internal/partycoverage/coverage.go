@@ -102,19 +102,26 @@ func ReadCoverage(ctx context.Context, tx pgx.Tx, binding RuntimeBinding) (Cover
 }
 
 // CheckRuntimePrivileges rejects owner/superuser and effective write privileges,
-// including inherited grants. The actual runtime factory must call this before
+// including inherited grants and the authenticated backend login's authority.
+// SET ROLE/SESSION AUTHORIZATION cannot hide administrative credentials. The
+// actual runtime factory must call this before
 // admitting any snapshot requests using the installed binding.
 func CheckRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
 	if tx == nil {
 		return ErrUnavailable
 	}
 	var unsafe bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles a WHERE pg_has_role(current_user,a.oid,'MEMBER') AND
+	err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=pg_backend_pid() AND usesysid IS NOT NULL)
+ OR EXISTS(SELECT 1 FROM pg_roles a WHERE
+ (pg_has_role(current_user,a.oid,'MEMBER') OR pg_has_role(session_user,a.oid,'MEMBER')
+ OR pg_has_role((SELECT usesysid FROM pg_stat_activity WHERE pid=pg_backend_pid()),a.oid,'MEMBER')) AND
  (a.rolsuper OR a.rolcreaterole OR a.rolcreatedb OR a.rolreplication OR a.rolbypassrls OR a.rolname IN ('pg_write_server_files','pg_read_server_files','pg_execute_server_program')))
  OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid IN ('voice_party_coverage_receipts'::regclass,'voice_party_coverage_head'::regclass,'voice_party_coverage_operations'::regclass,'voice_party_coverage_steps'::regclass,
  to_regclass('voice_party_resource_components'),to_regclass('voice_party_resource_retirements'),to_regclass('voice_party_resource_component_links'),
  to_regclass('voice_native_owner_works'),to_regclass('voice_native_owner_targets'),to_regclass('voice_native_owner_acceptances'))
- AND EXISTS(SELECT 1 FROM pg_roles a WHERE pg_has_role(current_user,a.oid,'MEMBER') AND
+ AND EXISTS(SELECT 1 FROM pg_roles a WHERE
+ (pg_has_role(current_user,a.oid,'MEMBER') OR pg_has_role(session_user,a.oid,'MEMBER')
+ OR pg_has_role((SELECT usesysid FROM pg_stat_activity WHERE pid=pg_backend_pid()),a.oid,'MEMBER')) AND
  (pg_has_role(a.oid,c.relowner,'MEMBER') OR has_schema_privilege(a.oid,c.relnamespace,'CREATE')
  OR has_table_privilege(a.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
  OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE')

@@ -107,7 +107,10 @@ func (r *ResourceProofReader) checkReader(ctx context.Context, tx pgx.Tx) error 
 	var unsafe bool
 	err := tx.QueryRow(ctx, `SELECT count(*),coalesce(bool_or(c.relkind<>'r' OR c.relowner<>$2::oid
  OR NOT has_table_privilege(current_user,c.oid,'SELECT')
- OR EXISTS(SELECT 1 FROM pg_roles a WHERE pg_has_role(current_user,a.oid,'MEMBER') AND
+ OR NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=pg_backend_pid() AND usesysid IS NOT NULL)
+ OR EXISTS(SELECT 1 FROM pg_roles a WHERE
+ (pg_has_role(current_user,a.oid,'MEMBER') OR pg_has_role(session_user,a.oid,'MEMBER')
+ OR pg_has_role((SELECT usesysid FROM pg_stat_activity WHERE pid=pg_backend_pid()),a.oid,'MEMBER')) AND
  (a.rolsuper OR a.rolcreaterole OR a.rolcreatedb OR a.rolreplication OR a.rolbypassrls
  OR a.rolname IN ('pg_write_server_files','pg_read_server_files','pg_execute_server_program')
  OR pg_has_role(a.oid,c.relowner,'MEMBER') OR has_schema_privilege(a.oid,c.relnamespace,'CREATE')

@@ -116,17 +116,14 @@ func TestCoverageProofRowsAreAppendOnlyAndRuntimeCannotMint(t *testing.T) {
 	require.NoError(t, err)
 	_, err = c.Exec(ctx, "GRANT SELECT ON ALL TABLES IN SCHEMA "+pgx.Identifier{schema}.Sanitize()+" TO "+pgx.Identifier{role}.Sanitize())
 	require.NoError(t, err)
-	tx, err := c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{role}.Sanitize())
+	runtime := loginRoleConnection(t, ctx, c, schema, role)
+	tx, err := runtime.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	require.NoError(t, err)
 	require.NoError(t, CheckRuntimePrivileges(ctx, tx))
 	_, err = ReadCoverage(ctx, tx, b)
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback(ctx))
-	tx, err = c.Begin(ctx)
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{role}.Sanitize())
+	tx, err = runtime.Begin(ctx)
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, "DELETE FROM voice_party_coverage_receipts")
 	require.Error(t, err)
@@ -165,11 +162,10 @@ func TestStartupRejectsCopiedReceiptWithWrongActualDatabaseIdentity(t *testing.T
 	b := fixtureBinding()
 	fixtureActive(t, ctx, c, b)
 	role := restrictedRuntimeRole(t, ctx, c, schema)
-	tx, err := c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	runtime := loginRoleConnection(t, ctx, c, schema, role)
+	tx, err := runtime.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	require.NoError(t, err)
 	defer tx.Rollback(ctx)
-	_, err = tx.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{role}.Sanitize())
-	require.NoError(t, err)
 	require.ErrorIs(t, CheckStartup(ctx, tx, &b), ErrUnavailable, "matching copied head/receipt/config cannot prove the actual connected database identity")
 }
 
@@ -203,12 +199,30 @@ func TestStartupAcceptsRestrictedRuntimeWithObservedDatabaseBinding(t *testing.T
 	b.DatabaseIdentity = identity
 	fixtureActive(t, ctx, c, b)
 	role := restrictedRuntimeRole(t, ctx, c, schema)
-	tx, err = c.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	runtime := loginRoleConnection(t, ctx, c, schema, role)
+	tx, err = runtime.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	require.NoError(t, err)
 	defer tx.Rollback(ctx)
-	_, err = tx.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{role}.Sanitize())
-	require.NoError(t, err)
 	require.NoError(t, CheckStartup(ctx, tx, &b))
+}
+
+func loginRoleConnection(t *testing.T, ctx context.Context, admin *pgx.Conn, schema, role string) *pgx.Conn {
+	t.Helper()
+	_, err := admin.Exec(ctx, "ALTER ROLE "+pgx.Identifier{role}.Sanitize()+" LOGIN PASSWORD 'isolated-test-only'")
+	require.NoError(t, err)
+	cfg := admin.Config().Copy()
+	cfg.User = role
+	cfg.Password = "isolated-test-only"
+	cfg.RuntimeParams["search_path"] = schema
+	delete(cfg.RuntimeParams, "role")
+	c, err := pgx.ConnectConfig(ctx, cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { c.Close(context.Background()) })
+	var session, current string
+	require.NoError(t, c.QueryRow(ctx, `SELECT session_user,current_user`).Scan(&session, &current))
+	require.Equal(t, role, session)
+	require.Equal(t, role, current)
+	return c
 }
 
 func TestReadCoverageUsesSameMVCCCutAndFreshPassDetectsSuspension(t *testing.T) {
