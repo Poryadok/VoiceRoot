@@ -1666,6 +1666,8 @@ class _NativeMigrationAPIView:
         for row in self._request['resources']:
             kind = row['kind']
             metadata = row['metadata']
+            if not set(metadata).issubset({'name', 'namespace', 'labels', 'annotations'}):
+                _fail('native_migration_request_metadata_invalid')
             key = (kind, NAMESPACE, metadata['name'])
             if kind not in self._COLLECTIONS or key in self._resources:
                 _fail('native_migration_resource_set_invalid')
@@ -1692,6 +1694,30 @@ class _NativeMigrationAPIView:
             ('name', 'namespace', 'labels', 'annotations') if key in metadata}
         return projected
 
+    @staticmethod
+    def _validate_server_metadata(actual, wanted):
+        metadata = actual.get('metadata')
+        expected = wanted.get('metadata')
+        if not isinstance(metadata, dict) or not isinstance(expected, dict):
+            _fail('native_migration_metadata_invalid')
+        kind = wanted.get('kind')
+        allowed = set(expected) | {'uid', 'resourceVersion', 'creationTimestamp', 'managedFields'}
+        if kind == 'Job':
+            allowed.add('generation')
+        if not set(metadata).issubset(allowed):
+            _fail('native_migration_metadata_fields_invalid')
+        if (not isinstance(metadata.get('resourceVersion'), str)
+                or not metadata['resourceVersion'] or len(metadata['resourceVersion']) > 128
+                or not isinstance(metadata.get('creationTimestamp'), str)
+                or not metadata['creationTimestamp'] or len(metadata['creationTimestamp']) > 64
+                or not isinstance(metadata.get('managedFields'), list)
+                or len(metadata['managedFields']) > 64
+                or any(not isinstance(row, dict) for row in metadata['managedFields'])):
+            _fail('native_migration_server_metadata_invalid')
+        if kind == 'Job' and (type(metadata.get('generation')) is not int
+                or metadata['generation'] != 1):
+            _fail('native_migration_job_generation_invalid')
+
     def _checked_response(self, actual, wanted):
         """Validate the API response before handing it to the migration adapter.
 
@@ -1703,6 +1729,7 @@ class _NativeMigrationAPIView:
         if not isinstance(actual, dict) or actual.get('kind') != wanted.get('kind') \
                 or actual.get('apiVersion') != wanted.get('apiVersion'):
             _fail('native_migration_response_kind_invalid')
+        self._validate_server_metadata(actual, wanted)
         metadata = actual.get('metadata')
         expected_metadata = wanted.get('metadata', {})
         if (not isinstance(metadata, dict) or metadata.get('namespace') != NAMESPACE
@@ -1766,7 +1793,7 @@ class _NativeMigrationAPIView:
         if 'selector' in wanted_spec:
             if selector != wanted_spec['selector']:
                 _fail('native_migration_job_selector_changed')
-        elif selector is not None:
+        else:
             if selector != {'matchLabels': {'batch.kubernetes.io/controller-uid': job_uid}}:
                 _fail('native_migration_job_selector_changed')
             del actual_spec['selector']
