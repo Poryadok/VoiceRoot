@@ -5,6 +5,8 @@ package searchprincipal
 
 import (
 	"context"
+	"encoding/hex"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,9 +27,11 @@ type Verifier struct {
 
 // Subject is authenticated subject data for the Voice party snapshot request.
 type Subject struct {
-	AccountID    uuid.UUID
-	ProfileID    uuid.UUID
-	SessionEpoch int64
+	SearchOperationID uuid.UUID
+	SearchRequestHash [32]byte
+	AccountID         uuid.UUID
+	ProfileID         uuid.UUID
+	SessionEpoch      int64
 }
 
 type verifiedSearch struct {
@@ -43,11 +47,15 @@ func (v Verifier) Verify(ctx context.Context, request *matchmakingv1.StartSearch
 	deny := func() (context.Context, error) {
 		return nil, status.Error(codes.Unauthenticated, "invalid search principal")
 	}
-	if request == nil || v.KeyResolver == nil || v.ReplayGuard == nil || v.SessionEpochChecker == nil {
+	if request == nil || len(request.ProtoReflect().GetUnknown()) != 0 || v.KeyResolver == nil || v.ReplayGuard == nil || v.SessionEpochChecker == nil {
 		return deny()
 	}
 	transport, err := principal.IncomingMetadata(ctx)
 	if err != nil {
+		return deny()
+	}
+	operationID, err := uuid.Parse(transport.RequestID)
+	if err != nil || operationID == uuid.Nil || operationID.String() != transport.RequestID {
 		return deny()
 	}
 	hash, err := principal.RequestHash(request)
@@ -65,15 +73,21 @@ func (v Verifier) Verify(ctx context.Context, request *matchmakingv1.StartSearch
 		return deny()
 	}
 	accountID, err := uuid.Parse(verified.AccountID)
-	if err != nil || accountID == uuid.Nil {
+	if err != nil || accountID == uuid.Nil || accountID.String() != verified.AccountID {
 		return deny()
 	}
 	profileID, err := uuid.Parse(verified.ProfileID)
-	if err != nil || profileID == uuid.Nil {
+	if err != nil || profileID == uuid.Nil || profileID.String() != verified.ProfileID || verified.SessionEpoch <= 0 {
 		return deny()
 	}
+	rawHash, err := hex.DecodeString(strings.TrimPrefix(verified.RequestHash, "sha256:"))
+	if err != nil || len(rawHash) != 32 || verified.RequestID != operationID.String() {
+		return deny()
+	}
+	var requestHash [32]byte
+	copy(requestHash[:], rawHash)
 	return context.WithValue(ctx, searchContextKey{}, verifiedSearch{
-		subject:     Subject{AccountID: accountID, ProfileID: profileID, SessionEpoch: verified.SessionEpoch},
+		subject:     Subject{SearchOperationID: operationID, SearchRequestHash: requestHash, AccountID: accountID, ProfileID: profileID, SessionEpoch: verified.SessionEpoch},
 		requestHash: hash,
 	}), nil
 }
