@@ -576,6 +576,20 @@ permission subset и Owner lifecycle paths определены в
 
 `GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Handler передаёт actor/action/time filters в filter-bound store query; каждый cursor связывает authenticated viewer, scope, filters и page size. Остальные writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
+The audit read chain consumes `pkg/principal.RequireDelegatedUser` from the
+already verified Gateway delegated context. The shared reader binds canonical
+non-nil account/profile UUIDs, positive session epoch and exact audience, RPC and
+protobuf request hash; it never derives an actor from raw identity metadata.
+For this method the protected lifecycle interceptor preserves the signed
+transport metadata without manufacturing `x-voice-*` headers. The public
+disclosure wrapper, membership checks, explicit profile permission/owner cores
+and cursor viewer all use that typed profile. The ordinary listener still
+rejects audit reads, and missing protected transport has no ordinary fallback.
+Other lifecycle methods retain their explicitly unmigrated verified-first
+projection. The current ordinary Space-to-Role decision transport is a separate
+BE-181 residual; this cutover does not claim its S2S authorization or production
+PKI rollout. See the [BE-041 execution plan](../testing/be041-verified-audit-identity-exec-plan.md).
+
 **Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
 handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
 Role Service fails closed. While Role is intentionally unwired, the shared
