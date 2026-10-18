@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-auth
+  namespace: __K_NAMESPACE__
+spec:
+  template:
+    spec:
+      securityContext: {fsGroup: 65532}
+      containers:
+        - name: auth
+          ports:
+            - {name: report-audience, containerPort: 9465}
+          env:
+            - {name: AUTH_REPORT_AUDIENCE_ENABLED, value: "true"}
+            - {name: AUTH_REPORT_AUDIENCE_GRPC_LISTEN, value: ":9465"}
+            - {name: AUTH_REPORT_AUDIENCE_REPLAY_REDIS_ADDR, value: "voice-redis:6379"}
+            - {name: AUTH_REPORT_AUDIENCE_REPLAY_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: voice-report-threshold-trust, key: redis-password}}}
+            - {name: AUTH_REPORT_AUDIENCE_TLS_CERT_FILE, value: /etc/voice/report-threshold/identity/tls.crt}
+            - {name: AUTH_REPORT_AUDIENCE_TLS_KEY_FILE, value: /etc/voice/report-threshold/identity/tls.key}
+            - {name: AUTH_REPORT_AUDIENCE_CLIENT_CA_FILE, value: /etc/voice/report-threshold/trust/client-ca.pem}
+            - {name: AUTH_REPORT_AUDIENCE_JWKS_CA_FILE, value: /etc/voice/report-threshold/trust/jwks-ca.pem}
+            - {name: S2S_JWKS_URLS_JSON, valueFrom: {configMapKeyRef: {name: voice-report-threshold-authorities, key: AUTH_S2S_JWKS_URLS_JSON}}}
+          volumeMounts:
+            - {name: report-threshold-identity, mountPath: /etc/voice/report-threshold/identity, readOnly: true}
+            - {name: report-threshold-trust, mountPath: /etc/voice/report-threshold/trust, readOnly: true}
+      volumes:
+        - name: report-threshold-identity
+          secret: {secretName: voice-auth-report-audience-tls, defaultMode: 0440}
+        - name: report-threshold-trust
+          secret: {secretName: voice-report-threshold-trust, defaultMode: 0440}

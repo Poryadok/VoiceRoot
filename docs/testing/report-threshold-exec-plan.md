@@ -249,3 +249,14 @@ commit-freshness race check passed (19.897s). Affected Linux User/Moderation
 short suites and vet passed. User static lint reports zero issues; five incoming
 BE-137 lint findings were sent to its author for the next immutable input.
 Buf lint passed. Main integration and independent review remain open.
+
+Dedicated producer activation templates are in
+`deploy/templates/report-threshold-authorities/`. Eight local strategic-merge
+renders against the actual staging and production User/Auth Deployments and
+Services passed: existing images, sidecars, unrelated environment and ports are
+preserved, and new private ports remain ClusterIP services. The exact TLS
+Ingress path serves only User's public current/next JWKS. Shared issuer maps
+and JWKS CA trust must include every existing caller/root when composed; no
+secrets, network-policy union or live resources were inferred. Actual composed
+Moderation topology and protected rollout checks remain open with the runtime
+integration, not satisfied by a local render.
