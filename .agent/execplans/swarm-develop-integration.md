@@ -17,7 +17,7 @@ that incomplete feature slices become complete when merged.
   A1-only admission restriction and explicitly selects `develop` as target.
 - Sole physical develop writer and integration/CI owner: Rudeus-121. Main
   checkout remains on `master`; its pre-existing dirty files are untouched.
-- Integration workspace: `D:/Git/Voice/.treehouse/Voice-451d38/39/Voice`, own
+- Initial integration workspace (returned before review): `D:/Git/Voice/.treehouse/Voice-451d38/39/Voice`, own
   lease `4c53ae84671c0eb1384cc4def6a0ec6f`, holder `rudeus-121-develop`.
 - Initial local/cached remote develop:
   `4d6e26608934b3350be68b71402aae54662eec51`, an ancestor of cached master
@@ -178,6 +178,43 @@ that receipt necessarily names the commit/bundle hashes produced afterward.
 No idle polling or new ordinary claims follow closeout. Resume only on concrete
 independent review authorization/findings or actual external transport recovery.
 Independent review and external transport publication remain explicit gates.
+
+## Authorized review-finding resume
+
+The user authorized one independent reviewer, Rudeus-141. His frozen review of
+318bc1bf6/source6739dcb50 records bounded source CLEAR for sections B-G, and a P1
+in A: legitimate channel commentary carries PostedAsChat/DisplayChatID but the
+store's exact expected companion omitted them. The unchanged existing actual-PG
+channel-forward test failed in2.97s; reviewer evidence is separately attributable
+at D:/Git/Voice/tmp/swarm/rudeus141-review/channel-forward.jsonl and TTc8/c9.
+
+Existing integration custody resumed in a newly acquired own WT20 lease
+ed1d2b69cc7426699a493f97cbe37548, holder rudeus-121-review-fix, physical
+D:/Git/Voice/.treehouse/Voice-451d38/20/Voice. develop318bc1bf6 was reconciled
+before switching; main dirty files and prior immutable bundles remain untouched.
+
+Frozen correction1a6acf259b571a80340d99d11ae8adb5a34c15e1 changes three files:
+the expected companion now includes exact parent PostedAsChat/DisplayChatID;
+reflect.DeepEqual and all other identity/content/metadata checks remain. New
+strict positive/negative attribution unit was RED on channel before the fix,
+then GREEN. Actual API forward18PASS/zero skips covers stored forwarding profile
+and destination display on both rows. Strengthened commentary-denial test PASS
+and asserts zero target messages/outbox. Store compound6PASS/zero skips retains
+rollback and expired-reference reconciliation tests. No equality/assertion was
+relaxed and no activation or new product scope was introduced.
+
+Same reviewer141 independently rechecked exact1a6acf259 CLEAR and ran seven
+top-level targeted PostgreSQL tests PASS/zero skips, including strict compound,
+channel identity/denial zero effects and communication deadline/cancel. His
+evidence is attributable to him, not to integration CI. Own final affected
+short/vet/lint64968 PASS250 tests/243 explicit PostgreSQL skips; these skips do
+not replace the separate actual PostgreSQL proofs. Changed-input Messaging image
+PASS (image06a9a5d888a60284a4b20cea524bdadd07ef0d40a46c3c4df101a16e46627641).
+Graph39388 terminal PASS102405nodes/213489edges after AST696/696, with the existing
+frontend header warning retained. All checks are terminal. Successor bundle/restore,
+packet and guarded lease return must be
+recorded before dormant closeout. Existing golden/NATS/R22/transport and full
+feature runtime gates remain unchanged; no additional reviewer/task/spawn.
 
 ## Decisions
 
