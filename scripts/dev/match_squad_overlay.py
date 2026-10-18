@@ -456,6 +456,32 @@ def _is_exact_matchmaking_fs_group_recovery(target, base, operations):
     }]
 
 
+def _validate_matchmaking_fs_group_recovery_base(target, base, status):
+    if target != RECOVERY_TARGET:
+        return False
+    replicas = base.get("spec", {}).get("replicas", 1)
+    generation = base.get("metadata", {}).get("generation", 0)
+    template = base.get("spec", {}).get("template")
+    if (not isinstance(template, dict) or sha256_bytes(canonical_bytes(template)) !=
+            MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256):
+        raise OverlayError("fsGroup recovery template does not match the pinned projection")
+    if _has_reviewed_matchmaking_listener_opt_in(target, base):
+        raise OverlayError("fsGroup recovery requires the S2S entry to be absent")
+    containers = base.get("spec", {}).get("template", {}).get("spec", {}).get(
+        "containers", [])
+    matches = [container for container in containers
+               if container.get("name") == CONTAINERS[target.name]]
+    if len(matches) != 1 or matches[0].get("image") != QUALIFIED_IMAGES[target.name]:
+        raise OverlayError("fsGroup recovery image projection is not source-qualified")
+    if (replicas <= 0 or status.get("observedGeneration", 0) < generation or
+            status.get("updatedReplicas", 0) < replicas):
+        raise OverlayError("fsGroup recovery requires the current generation and updated replicas")
+    if (status.get("readyReplicas", 0) >= replicas and
+            status.get("availableReplicas", 0) >= replicas):
+        raise OverlayError("fsGroup recovery is only for an unready Matchmaking Deployment")
+    return True
+
+
 def build_object_plan(client, target, base, patch_path):
     validate_target(target, base)
     if base["metadata"]["uid"] != EXPECTED_OBJECT_UIDS[(target.kind, target.name)]:
@@ -468,22 +494,21 @@ def build_object_plan(client, target, base, patch_path):
         updated = status.get("updatedReplicas", 0) >= replicas
         ready = (status.get("readyReplicas", 0) >= replicas and
                  status.get("availableReplicas", 0) >= replicas)
+        fs_group_recovery = _validate_matchmaking_fs_group_recovery_base(
+            target, base, status)
         if not (generation_current and updated and ready):
             possible_recovery = (
                 target.name == "voice-matchmaking" and replicas > 0 and
-                generation_current and updated and (
-                    _has_reviewed_matchmaking_listener_opt_in(target, base) or
-                    sha256_bytes(canonical_bytes(base.get("spec", {}).get(
-                        "template", {}))) == MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256))
-            if not possible_recovery:
+                generation_current and updated and
+                _has_reviewed_matchmaking_listener_opt_in(target, base))
+            if not fs_group_recovery and not possible_recovery:
                 raise OverlayError("Deployment is not ordinarily ready: " + target.name)
             desired = strategic_render(client, target, base, patch_path)
             operations = object_patch(base, desired)
-            recoverable_matchmaking_opt_in = _is_exact_matchmaking_listener_removal(
-                target, base, operations)
-            recoverable_matchmaking_fs_group = _is_exact_matchmaking_fs_group_recovery(
-                target, base, operations)
-            if not (recoverable_matchmaking_opt_in or recoverable_matchmaking_fs_group):
+            if fs_group_recovery:
+                if not _is_exact_matchmaking_fs_group_recovery(target, base, operations):
+                    raise OverlayError("fsGroup recovery projection is not exact")
+            elif not _is_exact_matchmaking_listener_removal(target, base, operations):
                 raise OverlayError("unready Matchmaking recovery projection is not exact")
         containers = base["spec"]["template"]["spec"]["containers"]
         app_container = next(container for container in containers

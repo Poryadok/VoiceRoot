@@ -403,6 +403,50 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                                             "not ordinarily ready|recovery projection"):
                     overlay.build_object_plan(client, target, s2s_base, patch_path)
 
+    def test_fs_group_recovery_rejects_ready_deployment_even_when_projection_is_pinned(self):
+        target = overlay.RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 1, "availableReplicas": 1})
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec["securityContext"] = {}
+        app = next(item for item in pod_spec["containers"]
+                   if item["name"] == overlay.CONTAINERS[target.name])
+        app["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        app["env"] = [item for item in app["env"]
+                      if item["name"] != "S2S_JWKS_URLS_JSON"]
+        fingerprint = overlay.sha256_bytes(overlay.canonical_bytes(base["spec"]["template"]))
+        with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                               fingerprint):
+            with self.assertRaisesRegex(overlay.OverlayError,
+                                        "only for an unready Matchmaking Deployment"):
+                overlay.build_object_plan(overlay.KubectlClient(), target, base, patch_path)
+
+    def test_fs_group_recovery_rejects_ready_template_drift(self):
+        target = overlay.RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
+        base["metadata"]["generation"] = 6
+        base["status"].update({"observedGeneration": 6, "updatedReplicas": 1,
+                               "readyReplicas": 1, "availableReplicas": 1})
+        pod_spec = base["spec"]["template"]["spec"]
+        pod_spec["securityContext"] = {}
+        app = next(item for item in pod_spec["containers"]
+                   if item["name"] == overlay.CONTAINERS[target.name])
+        app["image"] = overlay.QUALIFIED_IMAGES[target.name]
+        app["env"] = [item for item in app["env"]
+                      if item["name"] != "S2S_JWKS_URLS_JSON"]
+        base["spec"]["template"]["metadata"].setdefault("labels", {})["unexpected"] = "drift"
+        with mock.patch.object(overlay, "MATCHMAKING_FS_GROUP_RECOVERY_TEMPLATE_SHA256",
+                               "0" * 64):
+            with self.assertRaisesRegex(overlay.OverlayError,
+                                        "pinned projection"):
+                overlay.build_object_plan(overlay.KubectlClient(), target, base, patch_path)
+
     def test_recovery_cli_plan_is_single_purpose_and_cannot_apply_as_normal_overlay(self):
         target = overlay.RECOVERY_TARGET
         base = copy.deepcopy(sanitized_live_api_fixture()[(target.kind, target.name)])
