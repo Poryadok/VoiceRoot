@@ -9,6 +9,16 @@
 
 ## Ответственность
 
+The additive [ListThreads profile-eligibility source contract](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+requires per-profile transactional eligibility revisions/revocation counters,
+durable negative/tombstone lookup and authoritative state/head validation for
+signed caller `chat`. All deleted/disabled/frozen causes participate; presence
+or switching profiles alone does not revoke another profile. Deleted/archived
+profiles are ineligible viewers while domain data and other viewers' history
+remain intact. This unimplemented target requires a separate protected API; it
+does not widen Auth-only `GetSdkProfileEligibility` or reuse public `GetProfile`.
+Account/session state remains Auth-owned.
+
 - Профили пользователей (аватар, имя, био, баннер, статус)
 - Мульти-профили (2 бесплатно / 5 Premium, независимые контакты и настройки)
 - Переключение активного профиля
