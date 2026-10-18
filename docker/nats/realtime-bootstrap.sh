@@ -28,6 +28,18 @@ stream_with_max_age() {
     else
       actual="$(printf '%s' "$info" | jq -c '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]')"
       expected_config="$(jq -cn --argjson subjects "$expected" --argjson max_age "$max_age" '[ $subjects, "file", "limits", $max_age ]')"
+      if [ "$actual" != "$expected_config" ] && [ "$name" = voice_events ]; then
+        # Only the two accepted participant subjects may be added in place.
+        # Preserve all other config, messages, sequences and consumer state.
+        legacy="$(printf '%s' "$expected" | jq -c '. - ["voice.participant_joined","voice.participant_left"]')"
+        legacy_config="$(jq -cn --argjson subjects "$legacy" --argjson max_age "$max_age" '[ $subjects, "file", "limits", $max_age ]')"
+        [ "$actual" = "$legacy_config" ] || { echo "incompatible configuration for stream $name" >&2; exit 1; }
+        update_config="$(printf '%s' "$info" | jq -c --argjson subjects "$expected" '.config | .subjects = $subjects')"
+        update_result="$(nats --server "$nats_url" req --raw '$JS.API.STREAM.UPDATE.voice_events' "$update_config" 2>&1)" || { echo "$update_result" >&2; exit 1; }
+        if printf '%s' "$update_result" | jq -e '.error' >/dev/null; then echo "$update_result" >&2; exit 1; fi
+        info="$(nats --server "$nats_url" req --raw '$JS.API.STREAM.INFO.voice_events' "" 2>&1)" || { echo "$info" >&2; exit 1; }
+        actual="$(printf '%s' "$info" | jq -c '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]')"
+      fi
       [ "$actual" = "$expected_config" ] || { echo "incompatible configuration for stream $name" >&2; exit 1; }
       return
     fi
@@ -106,7 +118,7 @@ stream story_events story.created story.viewed story.reacted story.expired story
 stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
 stream_with_duplicate_window social_events 86400000000000 social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
 stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed role.voice_policy_invalidated
-stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
+stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left
 stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
 stream analytics_events 'analytics.>'
 stream_with_max_age user_profile_projection 0 user.search_profile_projection

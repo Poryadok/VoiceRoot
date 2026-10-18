@@ -86,6 +86,17 @@ func TestRenewServicePreservesClaimsSeedAndExactGrant(t *testing.T) {
 	}
 }
 
+func TestRenewVoiceParticipantGrantPreservesDenyVeto(t *testing.T) {
+	for _, deny := range []string{"voice.participant_joined", "voice.participant_left", "voice.*", "voice.>"} {
+		old, at, ot, signer, actor, account, g, u, ap := serviceRenewalFixture(t, "voice")
+		u.Pub.Deny = []string{deny}
+		old = serviceReencode(t, old, u, ap)
+		if output, err := renewExistingService(old, at, ot, signer, actor, account, "voice", g); err == nil || len(output) != 0 {
+			t.Fatalf("participant deny %q bypassed", deny)
+		}
+	}
+}
+
 func TestMusicRenewalAddsOnlyInfoAndAckAndRetainsExistingInbox(t *testing.T) {
 	old, at, ot, signer, actor, account, g, u, ap := serviceRenewalFixture(t, "messaging")
 	u.Sub.Allow = []string{"_INBOX.voice.messaging.>"}
