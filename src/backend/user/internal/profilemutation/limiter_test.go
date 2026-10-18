@@ -15,7 +15,7 @@ import (
 
 func testClient(t *testing.T, server *miniredis.Miniredis) *redis.Client {
 	t.Helper()
-	client := redis.NewClient(&redis.Options{Addr: server.Addr(), MaxRetries: -1, DialTimeout: 100 * time.Millisecond})
+	client := redis.NewClient(&redis.Options{Addr: server.Addr(), MaxRetries: -1, DialTimeout: time.Second})
 	t.Cleanup(func() { _ = client.Close() })
 	return client
 }
@@ -37,6 +37,7 @@ func TestLimiterConcurrentReplicasShareAccountBudget(t *testing.T) {
 			}
 			allowed, err := limiter.Allow(context.Background(), account, Create)
 			if err != nil {
+				t.Logf("concurrent admission failed: %v", err)
 				failures.Add(1)
 			} else if allowed {
 				admitted.Add(1)
