@@ -27,6 +27,8 @@ IMAGE = authority.REGISTRY + "/matchmaking"
 MAX_REGISTRY_BODY = 4 << 20
 MAX_BUILDX_ARTIFACT = 32 << 20
 MAX_JOB_LOG = 16 << 20
+MAX_JOB_LOG_LINES = 100_000
+MAX_JOB_LOG_LINE = 64 << 10
 SOURCE_SHA = re.compile(r"[a-f0-9]{40}\Z")
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 GHCR_BLOB_REDIRECT_HOST = "pkg-containers.githubusercontent.com"
@@ -468,37 +470,42 @@ def _published_buildx_artifact(raw):
     try:
         if not isinstance(raw, bytes) or not 1 <= len(raw) <= MAX_JOB_LOG:
             _reject()
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            members = archive.infolist()
-            if not 1 <= len(members) <= 64 or sum(row.file_size for row in members) > MAX_JOB_LOG:
+        if zipfile.is_zipfile(io.BytesIO(raw)):
+            _reject()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            _reject()
+        separators = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"
+        separator_count = sum(text.count(separator) for separator in separators)
+        if separator_count > MAX_JOB_LOG_LINES * 2:
+            _reject()
+        lines = text.splitlines()
+        if (not lines or len(lines) > MAX_JOB_LOG_LINES
+            or any(len(line) > MAX_JOB_LOG_LINE for line in lines)):
+            _reject()
+        if text.count("docker buildx history export") != 1:
+            _reject()
+
+        def one(pattern, *, repeated_same=False):
+            value = None
+            for match in re.finditer(pattern, text):
+                found = match.group(1)
+                if value is None:
+                    value = found
+                elif not repeated_same or found != value:
+                    _reject()
+            if value is None:
                 _reject()
-            matches = []
-            for member in members:
-                mode = (member.external_attr >> 16) & 0o170000
-                if (member.is_dir() or member.file_size > MAX_JOB_LOG
-                    or mode not in (0, 0o100000) or member.flag_bits & 1):
-                    _reject()
-                with archive.open(member) as stream:
-                    body = stream.read(MAX_JOB_LOG + 1)
-                    if len(body) != member.file_size or len(body) > MAX_JOB_LOG or stream.read(1):
-                        _reject()
-                try:
-                    text = body.decode("utf-8")
-                except UnicodeDecodeError:
-                    _reject()
-                if "docker buildx history export" not in text:
-                    continue
-                names = re.findall(r"Poryadok~VoiceRoot~[A-Za-z0-9_-]+\.dockerbuild", text)
-                identifiers = re.findall(r"Artifact successfully finalized \(([0-9]+)\)", text)
-                hashes = re.findall(r"SHA256 hash of uploaded artifact is ([a-f0-9]{64})", text)
-                if len(names) == len(identifiers) == len(hashes) == 1:
-                    matches.append({"id": int(identifiers[0]), "name": names[0],
-                        "digest": "sha256:" + hashes[0]})
-                else:
-                    _reject()
-            if len(matches) != 1 or matches[0]["id"] <= 0:
-                _reject()
-            return matches[0]
+            return value
+
+        name = one(r"(Poryadok~VoiceRoot~[A-Za-z0-9_-]+\.dockerbuild)(?![A-Za-z0-9_.-])",
+            repeated_same=True)
+        artifact_id = int(one(r"Artifact successfully finalized \(([0-9]{1,20})\)"))
+        digest = one(r"SHA256 hash of uploaded artifact is ([a-f0-9]{64})(?![A-Za-z0-9])")
+        if artifact_id <= 0:
+            _reject()
+        return {"id": artifact_id, "name": name, "digest": "sha256:" + digest}
     except ReceiptError:
         raise
     except Exception:

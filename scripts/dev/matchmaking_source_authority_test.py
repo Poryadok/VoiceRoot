@@ -378,28 +378,66 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(saved["selected_images"]["matchmaking"]["config_sha256"], image_config)
 
     def test_publisher_log_binds_exact_buildx_artifact_id_name_and_digest(self):
-        log = """[command]/usr/bin/docker buildx history export --output /tmp/Poryadok~VoiceRoot~KFDCOM.dockerbuild record --finalize
-SHA256 hash of uploaded artifact is 860b2c185444b06430eb7d4eb1cf4b97bf773c1d75b5d05292a3d481d2b244af
-Artifact successfully finalized (12110717476)
+        # Sanitized, real-shape GitHub job-log fixture. The actual 94,931-byte
+        # publisher response repeats the same artifact name three times.
+        log = """\ufeff[command]/usr/bin/docker buildx history export --output /tmp/Poryadok~VoiceRoot~NGMG82.dockerbuild record --finalize
+Poryadok~VoiceRoot~NGMG82.dockerbuild
+Poryadok~VoiceRoot~NGMG82.dockerbuild
+SHA256 hash of uploaded artifact is ed59e1d216e957da41d9c8d7a98f005b7a3c3eff324ddb9c453df022191dd805
+Artifact successfully finalized (12113921386)
 """
-        packed = io.BytesIO()
-        with zipfile.ZipFile(packed, "w") as archive:
-            archive.writestr("3_Post_Build_and_push_matchmaking_image.txt", log)
-        self.assertEqual(receipt._published_buildx_artifact(packed.getvalue()), {
-            "id": 12110717476, "name": "Poryadok~VoiceRoot~KFDCOM.dockerbuild",
-            "digest": "sha256:860b2c185444b06430eb7d4eb1cf4b97bf773c1d75b5d05292a3d481d2b244af"})
+        self.assertEqual(receipt._published_buildx_artifact(log.encode("utf-8")), {
+            "id": 12113921386, "name": "Poryadok~VoiceRoot~NGMG82.dockerbuild",
+            "digest": "sha256:ed59e1d216e957da41d9c8d7a98f005b7a3c3eff324ddb9c453df022191dd805"})
 
     def test_publisher_log_rejects_ambiguous_artifact_finalization(self):
-        log = """docker buildx history export Poryadok~VoiceRoot~KFDCOM.dockerbuild
-SHA256 hash of uploaded artifact is 860b2c185444b06430eb7d4eb1cf4b97bf773c1d75b5d05292a3d481d2b244af
-Artifact successfully finalized (12110717476)
-Artifact successfully finalized (12110880999)
-"""
+        digest = hashlib.sha256(b"buildx test artifact").hexdigest()
+        log = ("docker buildx history export Poryadok~VoiceRoot~KFDCOM.dockerbuild\n"
+            f"SHA256 hash of uploaded artifact is {digest}\n"
+            "Artifact successfully finalized (12110717476)\n"
+            "Artifact successfully finalized (12110880999)\n").encode("utf-8")
+        with self.assertRaises(receipt.ReceiptError):
+            receipt._published_buildx_artifact(log)
+
+    def test_publisher_log_rejects_archive_malformed_and_unbounded_plain_text(self):
+        digest = hashlib.sha256(b"buildx test artifact").hexdigest()
+        source = ("docker buildx history export Poryadok~VoiceRoot~KFDCOM.dockerbuild\n"
+            f"SHA256 hash of uploaded artifact is {digest}\n"
+            "Artifact successfully finalized (12110717476)\n").encode("utf-8")
         packed = io.BytesIO()
         with zipfile.ZipFile(packed, "w") as archive:
-            archive.writestr("post.txt", log)
-        with self.assertRaises(receipt.ReceiptError):
-            receipt._published_buildx_artifact(packed.getvalue())
+            archive.writestr("post.txt", source)
+        malformed = b"\xff" + source
+        truncated = b"docker buildx history export Poryadok~VoiceRoot~KFDCOM.dockerbuild\n"
+        overlong_line = b"x" * (64 * 1024 + 1)
+        too_many_lines = b"\n".join([b"x"] * 100_002)
+        oversized = b"x" * ((16 << 20) + 1)
+        for invalid in (packed.getvalue(), malformed, truncated, overlong_line, too_many_lines, oversized):
+            with self.subTest(size=len(invalid)), self.assertRaises(receipt.ReceiptError):
+                receipt._published_buildx_artifact(invalid)
+
+    def test_publisher_log_rejects_distinct_names_and_duplicate_digest(self):
+        digest = hashlib.sha256(b"buildx test artifact").hexdigest()
+        base = ("docker buildx history export Poryadok~VoiceRoot~KFDCOM.dockerbuild\n"
+            f"SHA256 hash of uploaded artifact is {digest}\n"
+            "Artifact successfully finalized (12110717476)\n")
+        ambiguous_name = base + "Poryadok~VoiceRoot~OTHER.dockerbuild\n"
+        duplicate_digest = base + f"SHA256 hash of uploaded artifact is {digest}\n"
+        duplicate_export = base + "docker buildx history export Poryadok~VoiceRoot~KFDCOM.dockerbuild\n"
+        for invalid in (ambiguous_name, duplicate_digest, duplicate_export):
+            with self.subTest(log=invalid[-64:]), self.assertRaises(receipt.ReceiptError):
+                receipt._published_buildx_artifact(invalid.encode("utf-8"))
+
+    def test_publisher_log_rejects_overlong_artifact_name_and_digest_tokens(self):
+        digest = hashlib.sha256(b"buildx test artifact").hexdigest()
+        name = "Poryadok~VoiceRoot~KFDCOM.dockerbuild"
+        log = (f"docker buildx history export {name}\n"
+            f"SHA256 hash of uploaded artifact is {digest}\n"
+            "Artifact successfully finalized (12110717476)\n")
+        for invalid in (log.replace(name, name + ".extra"),
+                        log.replace(digest, digest + "a")):
+            with self.subTest(log=invalid[-80:]), self.assertRaises(receipt.ReceiptError):
+                receipt._published_buildx_artifact(invalid.encode("utf-8"))
 
     def test_receipt_preserves_complete_v1_map_and_adds_verified_matchmaking_binding(self):
         sha = "a" * 40

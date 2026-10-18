@@ -43,9 +43,96 @@ CONTRACT_BINDING = CENSUS_BINDING | {'contract_attempt': 'a1b2c3d4',
     'plan_sha256': '8' * 64, 'plan_bytes': 16384,
     'server_config_sha256': '9' * 64, 'server_config_bytes': 4096,
     'bootstrap_creds_sha256': '7' * 64, 'bootstrap_creds_bytes': 1024}
+CLOSED_COPY_REQUEST = REQUEST | {'phase': 'closed-copy-preflight'}
+CLOSED_COPY_BINDING = CENSUS_BINDING | {
+    'archive_sha256': 'a' * 64, 'archive_bytes': 8192,
+    'server_config_sha256': '9' * 64, 'server_config_bytes': 4096,
+}
+JOB_UID = '99999999-9999-4999-8999-999999999999'
 
 
 class VerificationJobTests(unittest.TestCase):
+    def test_closed_copy_job_is_attempt_bound_and_scratch_only(self):
+        row = jobs.document(CLOSED_COPY_REQUEST, CLOSED_COPY_BINDING, IMAGE)
+        pod = row['spec']['template']['spec']
+        self.assertEqual(row['metadata']['labels'][jobs.LABEL_PHASE], 'closed-copy-preflight')
+        self.assertEqual(row['metadata']['labels'][jobs.LABEL_VERIFICATION_ATTEMPT], VERIFICATION_ATTEMPT)
+        self.assertEqual(row['metadata']['name'], jobs.job_name(CLOSED_COPY_REQUEST, VERIFICATION_ATTEMPT))
+        self.assertEqual(row['spec']['backoffLimit'], 0)
+        self.assertEqual(row['spec']['podReplacementPolicy'], 'Failed')
+        self.assertEqual(pod['automountServiceAccountToken'], False)
+        self.assertEqual(pod['securityContext'], {
+            'runAsNonRoot': True, 'runAsUser': 65532, 'runAsGroup': 65532,
+            'fsGroup': 65532, 'fsGroupChangePolicy': 'OnRootMismatch',
+            'seccompProfile': {'type': 'RuntimeDefault'}})
+        self.assertNotIn('nodeName', pod)
+        self.assertEqual(len(pod['initContainers']), 1)
+        broker = pod['initContainers'][0]
+        self.assertEqual(broker['name'], 'nats')
+        self.assertEqual(broker['args'], ['--preflight'])
+        self.assertEqual(broker['restartPolicy'], 'Always')
+        self.assertEqual(broker['securityContext']['runAsUser'], 65532)
+        self.assertEqual(broker['securityContext']['capabilities'], {'drop': ['ALL']})
+        self.assertEqual(broker['volumeMounts'], [
+            {'name': 'target', 'mountPath': '/data', 'subPath': 'store'},
+            {'name': 'broker-config', 'mountPath': '/broker-config', 'readOnly': True},
+        ])
+        control = pod['containers'][0]
+        self.assertEqual(control['name'], 'control')
+        self.assertEqual(control['command'], ['/usr/bin/python3', '/voice-nats-runner/phase'])
+        self.assertEqual(control['args'][:1], ['--serve-closed-copy-preflight'])
+        self.assertEqual(control['securityContext']['capabilities'], {'drop': ['ALL']})
+        self.assertEqual({mount['mountPath'] for mount in control['volumeMounts']},
+            {'/verify', '/out', '/broker-config'})
+        volumes = {volume['name']: volume for volume in pod['volumes']}
+        self.assertEqual(set(volumes), {'target', 'output', 'broker-config'})
+        self.assertEqual(volumes['target']['persistentVolumeClaim'],
+            {'claimName': CLOSED_COPY_BINDING['verification_claim']})
+        self.assertNotIn('source', {volume['name'] for volume in pod['volumes']})
+        self.assertFalse(any(mount['name'] == 'source' for container in pod['containers']
+            for mount in container.get('volumeMounts', [])))
+        self.assertNotIn('hostPath', str(pod))
+        self.assertNotIn('secret', str(pod).lower())
+
+    def test_closed_copy_vectors_are_fixed_and_bind_job_and_pod(self):
+        vectors = jobs.exec_vectors(CLOSED_COPY_REQUEST, POD_UID, CLOSED_COPY_BINDING,
+            action=None, job_uid=JOB_UID, phase_image=IMAGE)
+        self.assertEqual(set(vectors), {'actions', 'readbacks'})
+        self.assertEqual(set(vectors['actions']), set(jobs.CLOSED_COPY_ACTIONS))
+        self.assertEqual(set(vectors['readbacks']), set(jobs.CLOSED_COPY_ACTIONS))
+        for action in ('load-config', 'receive-archive'):
+            self.assertTrue(vectors['actions'][action]['stdin'])
+            self.assertFalse(vectors['actions'][action]['tty'])
+            self.assertEqual(vectors['actions'][action]['container'], 'control')
+        for action in ('broker-start', 'broker-ready', 'read-jsz', 'broker-stop'):
+            self.assertFalse(vectors['actions'][action]['stdin'])
+            self.assertFalse(vectors['actions'][action]['tty'])
+            self.assertEqual(vectors['actions'][action]['container'], 'control')
+        common = vectors['actions']['broker-start']['command']
+        for expected in ('--pod-uid', POD_UID, '--job-uid', JOB_UID,
+            '--verification-attempt', VERIFICATION_ATTEMPT,
+            '--source-pvc-uid', CLOSED_COPY_BINDING['source_uid'],
+            '--source-pv-uid', CLOSED_COPY_BINDING['source_pv_uid'],
+            '--verification-pvc-uid', CLOSED_COPY_BINDING['verification_uid'],
+            '--verification-pv-uid', CLOSED_COPY_BINDING['verification_pv_uid'],
+            '--verification-hostname', CLOSED_COPY_BINDING['verification_hostname'],
+            '--phase-image', IMAGE):
+            self.assertIn(expected, common)
+
+    def test_closed_copy_binding_rejects_ambiguous_storage_and_open_actions(self):
+        bad_claim = CLOSED_COPY_BINDING | {'verification_claim': 'voice-nats-verify-' + 'a' * 12}
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'verification_claim_attempt_mismatch'):
+            jobs.document(CLOSED_COPY_REQUEST, bad_claim, IMAGE)
+        bad_source = CLOSED_COPY_BINDING | {'source_uid': CLOSED_COPY_BINDING['verification_uid']}
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'source_verification_same'):
+            jobs.document(CLOSED_COPY_REQUEST, bad_source, IMAGE)
+        bad_size = CLOSED_COPY_BINDING | {'server_config_bytes': 0}
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'closed_copy_config_size_invalid'):
+            jobs.document(CLOSED_COPY_REQUEST, bad_size, IMAGE)
+        with self.assertRaisesRegex(jobs.VerificationJobError, 'closed_copy_action_invalid'):
+            jobs.exec_vectors(CLOSED_COPY_REQUEST, POD_UID, CLOSED_COPY_BINDING,
+                action='exec-shell', job_uid=JOB_UID, phase_image=IMAGE)
+
     def test_contract_binding_requires_attempt_bound_verification_claim(self):
         storage = jobs.validate_contract_binding(CONTRACT_BINDING, CONTRACT_REQUEST['operation'])
         self.assertEqual(storage['verification_attempt'], VERIFICATION_ATTEMPT)
