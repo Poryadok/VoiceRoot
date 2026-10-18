@@ -103,6 +103,23 @@ The required suite fails when its DSN is absent rather than skipping. Containers
 need no host ports or Docker socket for this suite. Ordinary legacy short-test
 skips remain distinct from these runtime cases; never report them as PG proof.
 
+The shared local Space/Realtime JWKS exporter has a separate no-network Linux
+check. From the repository root, build `docker/social-principal` as
+`voice-jwks-bootstrap-test`, then run its Python fixture with the source mounted
+read-only (no host ports):
+
+```sh
+docker run --rm --network none --entrypoint python3 \
+  -e LOCAL_JWKS_BOOTSTRAP_TEST=1 \
+  -v "$PWD/docker/social-principal:/fixture:ro" voice-jwks-bootstrap-test \
+  /fixture/export_jwks_test.py
+```
+
+It checks both issuers reject weak or mathematically unusable private pairs
+before any public generation is written and on reuse of matching public docs.
+Valid distinct pairs and actual nondefault RSA exponents remain accepted. This
+fixture does not qualify deployed keys, network trust or lifecycle readiness.
+
 
 Для узкого exact-SHA доказательства запускается workflow
 [space-tree-proof.yml](../.github/workflows/space-tree-proof.yml). Он выполняет

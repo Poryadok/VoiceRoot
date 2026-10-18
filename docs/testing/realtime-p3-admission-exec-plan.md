@@ -52,6 +52,15 @@ membership33 or RoomClose hooks. IDs1-10 retain their meaning.
   key switch; mismatch/partial old volumes fail closed. Phase0 consumes its
   actual distinct fixture Space issuer. Staging/prod assets are explicit
   external secret/public-document prerequisites, not deployed credentials.
+- Exact-head review227 found one shared exporter P2: matching weak or unusable
+  imported pairs could pass initial export and reuse checks. The correction
+  validates private RSA mathematics and minimum2048-bit modulus for both Space
+  and Realtime before publishing any document. A no-network Linux regression
+  is red on the reviewed source for all8 negative issuer/mode combinations;
+  valid distinct and actual nondefault-exponent positives remain green. Final
+  correction proof:6 methods PASS/0skip in owned network-none Linux, including
+  both-issuer weak/private-mathematics publish/reuse negatives and valid distinct
+  and exponent3 positives. Exact-delta review remains pending.
 - Compose/DEV/staging migration catalogs and deployment templates are wired.
   Canonical store/contract/operation/testing docs describe the boundaries.
 
