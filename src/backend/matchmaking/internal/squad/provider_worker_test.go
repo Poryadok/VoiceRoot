@@ -96,10 +96,15 @@ func TestMatchSquadTeardownAttemptsReceiveFreshTenSecondContext(t *testing.T) {
 		t.Fatal("first attempt context was not canceled")
 	}
 
+	secondStarted := time.Now()
 	second, cancelSecond := matchSquadTeardownAttemptContext(parent)
+	secondCreated := time.Now()
 	defer cancelSecond()
 	secondDeadline, ok := second.Deadline()
-	if !ok || !secondDeadline.After(firstDeadline) {
+	// Sequential calls may observe the same clock tick on Windows. A fresh
+	// timeout must be relative to its own creation, not strictly later than
+	// the previous deadline. Cancellation independence is checked below.
+	if !ok || secondDeadline.Before(secondStarted.Add(10*time.Second)) || secondDeadline.After(secondCreated.Add(10*time.Second)) {
 		t.Fatalf("second attempt did not receive a fresh deadline: first=%v second=%v", firstDeadline, secondDeadline)
 	}
 	if second.Err() != nil {
