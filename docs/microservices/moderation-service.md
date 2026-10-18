@@ -147,6 +147,13 @@ The durable `auto_mod_scan_stats` singleton holds only `messages_checked` and
 Concurrent increments are atomic. Counter storage failure emits a generic
 warning and preserves the existing moderation result/error; the aggregate can
 therefore undercount during failures and is not a billing or audit ledger.
+The business decision is computed before synchronous metric persistence. The
+metric receives a child timeout capped at 50 ms and one quarter of the remaining
+caller deadline, reserving the rest for returning the result; canceled callers
+and metric budgets below 1 ms skip persistence. Counter lock/pool/network stalls
+therefore cannot exhaust the business query's context. There is no background
+worker, queue or per-request goroutine. Lock contention/timeouts and skipped
+short-budget samples can undercount; no retry/backlog is fabricated.
 Stats reads fail on missing/broken storage rather than presenting a fabricated
 zero. `blocked` retains its existing action-log aggregation and time coverage;
 it is not a ratio-compatible counterpart of this since-introduction scan count.

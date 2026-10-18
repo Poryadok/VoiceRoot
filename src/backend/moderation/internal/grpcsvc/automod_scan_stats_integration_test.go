@@ -108,3 +108,51 @@ VALUES ($1, 'spam_pattern', 'mute'), ($1, 'report_threshold', 'shadow_ban')`, uu
 	_, err = client.GetAutoModStats(modCtx, &moderationv1.GetAutoModStatsRequest{})
 	require.Equal(t, codes.Internal, status.Code(err), "a missing singleton must not fabricate zero either")
 }
+
+func TestAutoModScanStats_HeldCounterLockPreservesDecision(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	pool := startModerationPostgresPlatform(t, ctx)
+	client, cleanup := startModerationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+	// Warm the real gRPC connection before measuring lock isolation.
+	_, err := client.GetAutoModStats(withInternalModCtx(ctx, uuid.New()), &moderationv1.GetAutoModStatsRequest{})
+	require.NoError(t, err)
+	for _, lock := range []struct{ name, sql string }{
+		{"row", "SELECT singleton FROM auto_mod_scan_stats WHERE singleton = true FOR UPDATE"},
+		{"table", "LOCK TABLE auto_mod_scan_stats IN ACCESS EXCLUSIVE MODE"},
+	} {
+		t.Run(lock.name, func(t *testing.T) {
+			tx, beginErr := pool.Begin(ctx)
+			require.NoError(t, beginErr)
+			t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+			_, lockErr := tx.Exec(ctx, lock.sql)
+			require.NoError(t, lockErr, "lock must be held before the RPC starts")
+			sender := uuid.New().String()
+			for _, content := range []string{"hello", "http://a http://b http://c"} {
+				callCtx, callCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+				response, callErr := client.CheckMessage(callCtx, &moderationv1.CheckMessageRequest{Content: content, SenderProfileId: sender})
+				require.NoError(t, callErr, "a metric lock must not consume the business RPC deadline")
+				require.NoError(t, callCtx.Err())
+				callCancel()
+				require.Equal(t, content == "hello", response.GetCheckResult().GetAllowed())
+				if content != "hello" {
+					require.Equal(t, "spam_mute", response.GetCheckResult().GetBlockReason())
+				}
+			}
+			var alive int
+			require.NoError(t, tx.QueryRow(ctx, "SELECT 1").Scan(&alive), "both responses must precede lock release")
+		})
+	}
+	checked, _, err := (&store.AutoModStore{Pool: pool}).Stats(ctx)
+	require.NoError(t, err)
+	require.Zero(t, checked, "held-lock attempts cannot fabricate persisted increments")
+	_, err = client.CheckMessage(ctx, &moderationv1.CheckMessageRequest{Content: "recovered"})
+	require.NoError(t, err)
+	checked, _, err = (&store.AutoModStore{Pool: pool}).Stats(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, checked, "persistence resumes after lock release")
+}
