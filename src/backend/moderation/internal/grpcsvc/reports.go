@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -295,64 +293,6 @@ func (s *ModerationGRPC) ResolveReport(ctx context.Context, req *moderationv1.Re
 		_ = s.AuditLog.InsertAudit(ctx, modProfile, "report_resolved", "report", reportID, details)
 	}
 	return &moderationv1.ResolveReportResponse{Report: reportRowToProto(row)}, nil
-}
-
-func (s *ModerationGRPC) reportThreshold() int {
-	audience := s.PlatformAudienceSize
-	if audience <= 0 {
-		audience = 1000
-	}
-	threshold := int(math.Ceil(0.01 * float64(audience)))
-	if threshold < 10 {
-		threshold = 10
-	}
-	return threshold
-}
-
-func (s *ModerationGRPC) maybeAutoShadowBan(ctx context.Context, targetProfileID uuid.UUID) error {
-	count, err := s.Reports.CountReports24h(ctx, targetProfileID)
-	if err != nil {
-		return err
-	}
-	threshold := s.reportThreshold()
-	if count < threshold {
-		return nil
-	}
-	targetAccountID := targetProfileID
-	if s.Users != nil {
-		resolved, err := s.Users.AccountIDForProfile(ctx, targetProfileID)
-		if err != nil {
-			return err
-		}
-		if resolved != uuid.Nil {
-			targetAccountID = resolved
-		}
-	}
-	if s.Sanctions != nil {
-		banned, err := s.Sanctions.IsShadowBanned(ctx, targetAccountID)
-		if err != nil {
-			return err
-		}
-		if banned {
-			return nil
-		}
-	}
-	details := `{"window":"24h","count":` + strconv.Itoa(count) + `,"threshold":` + strconv.Itoa(threshold) + `,"audience_source":"env"}`
-	if err := s.Reports.InsertAutoModLog(ctx, targetProfileID, "report_threshold", "shadow_ban", details); err != nil {
-		return err
-	}
-	if s.Sanctions == nil {
-		return nil
-	}
-	reason := "auto shadow ban: report threshold exceeded"
-	row, err := s.Sanctions.InsertSanction(ctx, targetAccountID, "shadow_ban", reason, nil, autoModIssuerProfileID(), nil)
-	if err != nil {
-		return err
-	}
-	if s.DomainEvents != nil {
-		_ = s.DomainEvents.PublishSanctionApplied(ctx, row.ID.String(), targetAccountID.String(), "shadow_ban")
-	}
-	return nil
 }
 
 // autoModIssuerProfileID is the well-known automod actor for system sanctions.

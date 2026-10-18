@@ -23,7 +23,7 @@ func (s *ReportStore) DeliverIntakeEvent(ctx context.Context, publish func(conte
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var event IntakeEvent
 	var reportID uuid.UUID
 	var attempts int

@@ -2,6 +2,7 @@ package reportintake
 
 import (
 	"context"
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -15,6 +16,19 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/moderation/internal/store"
 )
+
+func TestReportIntakePublisherSurvivesInitialOutage(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := "nats://" + listener.Addr().String()
+	require.NoError(t, listener.Close())
+	publisher, err := NewPublisher(endpoint)
+	require.NoError(t, err, "transient NATS failure must not disable healthy durable intake")
+	defer publisher.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	require.Error(t, publisher.Publish(ctx, store.IntakeEvent{ID: uuid.New(), Kind: "domain.report_created", Subject: "moderation.report_created", Payload: []byte("fixture")}))
+}
 
 func TestReportIntakeRealJetStreamStableEvents(t *testing.T) {
 	url := os.Getenv("REPORT_INTAKE_TEST_NATS_URL")

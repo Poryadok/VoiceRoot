@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "voice/messaging/v1/report_target.proto";
+
 package voice.messaging.v1;
 
 import "google/protobuf/timestamp.proto";
@@ -31,6 +33,8 @@ enum DeleteScope {
 // Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 service MessagingService {
+  // Protected service:moderation only; no viewer/content authority.
+  rpc ResolveReportTarget(ResolveReportTargetRequest) returns (ResolveReportTargetResponse);
   // @voice.security=protected;callers=service:bot
   rpc SendGameEventMessage(SendGameEventMessageRequest) returns (SendGameEventMessageResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);

@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-user
+  namespace: __K_NAMESPACE__
+spec:
+  template:
+    spec:
+      securityContext: {fsGroup: 65532}
+      containers:
+        - name: user
+          ports:
+            - {name: report-context, containerPort: 9466}
+          env:
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_GRPC_LISTEN, value: ":9466"}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_REPLAY_REDIS_ADDR, value: "voice-redis:6379"}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_REPLAY_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: voice-report-threshold-trust, key: redis-password}}}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_TLS_CERT_FILE, value: /etc/voice/report-threshold/identity/tls.crt}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_TLS_KEY_FILE, value: /etc/voice/report-threshold/identity/tls.key}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_CLIENT_CA_FILE, value: /etc/voice/report-threshold/trust/client-ca.pem}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_JWKS_CLIENT_CERT_FILE, value: /etc/voice/report-threshold/identity/tls.crt}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_JWKS_CLIENT_KEY_FILE, value: /etc/voice/report-threshold/identity/tls.key}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_AUTH_ADDR, value: "voice-auth:9465"}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_AUTH_TLS_SERVER_NAME, value: voice-auth}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_AUTH_CA_FILE, value: /etc/voice/report-threshold/trust/service-ca.pem}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_SIGNING_KID, valueFrom: {secretKeyRef: {name: voice-user-report-threshold-signing, key: current-kid}}}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_SIGNING_KEY_FILE, value: /etc/voice/report-threshold/signing/current.pem}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_NEXT_SIGNING_KID, valueFrom: {secretKeyRef: {name: voice-user-report-threshold-signing, key: next-kid}}}
+            - {name: USER_REPORT_THRESHOLD_PRINCIPAL_NEXT_SIGNING_KEY_FILE, value: /etc/voice/report-threshold/signing/next.pem}
+            - {name: S2S_JWKS_URLS_JSON, valueFrom: {configMapKeyRef: {name: voice-report-threshold-authorities, key: USER_S2S_JWKS_URLS_JSON}}}
+            - {name: S2S_JWKS_CA_FILE, value: /etc/voice/report-threshold/trust/jwks-ca.pem}
+          volumeMounts:
+            - {name: report-threshold-identity, mountPath: /etc/voice/report-threshold/identity, readOnly: true}
+            - {name: report-threshold-trust, mountPath: /etc/voice/report-threshold/trust, readOnly: true}
+            - {name: report-threshold-signing, mountPath: /etc/voice/report-threshold/signing, readOnly: true}
+      volumes:
+        - name: report-threshold-identity
+          secret: {secretName: voice-user-report-threshold-tls, defaultMode: 0440}
+        - name: report-threshold-trust
+          secret: {secretName: voice-report-threshold-trust, defaultMode: 0440}
+        - name: report-threshold-signing
+          secret: {secretName: voice-user-report-threshold-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}

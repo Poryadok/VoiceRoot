@@ -69,7 +69,7 @@ new retention exception is permitted.
 ## Ownership and integration seams
 
 - Author158 owns this vertical and its delivery until real integrator121 accepts.
-- BE-137 author144 owns `reports.go`, migration `000005_report_intake`, intake,
+- BE-137 author144 owns `reports.go`, migration `000007_report_intake`, intake,
   validation and its worker. Its agreed `ReportValidated(ctx, pgx.Tx,
   ValidationFact) error` hook runs inside LIVE activation and enqueues user-only
   threshold work transactionally. The fact carries report/profile IDs, nullable
@@ -77,7 +77,7 @@ new retention exception is permitted.
   and original creation time. No revision/subject is guessed.
 - BE-045 author156 owns subject/lifecycle, restriction projection, shared account
   lock and existing sanction/expiry writers. Consume its dedicated
-  `voice.automod.v1.AuthModerationAuthority`, with no new subject namespace or
+  `voice.automod.v1.AuthModerationAuthorityService`, with no new subject namespace or
   duplicate Auth account-status writer.
 - Use separate BE-046 store/worker files and reserved Moderation migration
   `000010_report_threshold`. No edits to authors144/156's mutable shared files
@@ -114,15 +114,15 @@ to live Auth repositories/servers owned by156.
 ## Milestones and TDD sequence
 
 - [x] Read accepted decision and establish concrete source ownership with144/156.
-- [ ] User snapshot RED/GREEN: distinct account candidates, live/deleted/frozen/
+- [x] User snapshot checks: distinct account candidates, live/deleted/frozen/
   guest and exact target revision; real PostgreSQL, no private data exposure.
-- [ ] Auth classifier RED/GREEN: complete positive dispositions, missing/deleted/
+- [x] Auth classifier checks: complete positive dispositions, missing/deleted/
   suspended accounts, batch/input validation and consistent read metadata.
-- [ ] Protected producer transport: exact caller/RPC/body, no legacy exposure,
+- [x] Protected producer transport: exact caller/RPC/body, no legacy exposure,
   stale/replayed/wrong metadata/JWKS/TLS negatives before store access.
-- [ ] User complete classification/recheck/freshness, including multi-batch and
+- [x] User complete classification/recheck/freshness, including multi-batch and
   unknown/partial/timeout tests; no partial denominator.
-- [ ] Moderation integer/window/dedup/cutoff/case transaction and concurrency
+- [x] Moderation integer/window/dedup/cutoff/case transaction and concurrency
   oracles; consume agreed immutable prerequisite heads.
 - [ ] Activate the single VALID hook and threshold worker, remove the legacy
   synchronous environment writer in the agreed integration. A disabled-only
@@ -236,3 +236,36 @@ need a proven owner projection later, not a silently capped count. Dedicated
 producer configuration fails closed. Stale/unknown authority preserves manual
 processing. Activation and source integration must reconcile all three authors'
 new contracts; elapsed time is not authority to overwrite another writer.
+
+2026-10-18 hardening checkpoint: the down migration locks its tables and refuses
+to discard any queued evaluation, cutoff, case, report association or outbox
+evidence. Real PostgreSQL checks prove empty rollback succeeds while admitted
+work survives a refused rollback. Invalid/stale context vectors produce no
+effects; an authoritative zero audience settles manual-only. Further real-PG
+race checks preserve a human shadow sanction's issuer/reason and roll back all
+effects when authority expires during serialization. The earlier complete
+store/runtime/publisher race run passed (33.365s/16.086s), and the added human/
+commit-freshness race check passed (19.897s). Affected Linux User/Moderation
+short suites and vet passed. User static lint reports zero issues; five incoming
+BE-137 lint findings were sent to its author for the next immutable input.
+Buf lint passed. Main integration and independent review remain open.
+
+Dedicated producer activation templates are in
+`deploy/templates/report-threshold-authorities/`. Eight local strategic-merge
+renders against the actual staging and production User/Auth Deployments and
+Services passed: existing images, sidecars, unrelated environment and ports are
+preserved, and new private ports remain ClusterIP services. The exact TLS
+Ingress path serves only User's public current/next JWKS. Shared issuer maps
+and JWKS CA trust must include every existing caller/root when composed; no
+secrets, network-policy union or live resources were inferred. Actual composed
+Moderation topology and protected rollout checks remain open with the runtime
+integration, not satisfied by a local render.
+
+The case now freezes evaluation ID, profile revision and the entire authoritative
+observation interval in addition to its subject/lifecycle, metric/count and
+snapshot ID. A replay of a committed evaluation with changed authority facts is
+a conflict. Canonical PostgreSQL/NATS race checks passed again after this schema
+change: six store checks (29.777s) and publisher/configured runtime (15.419s),
+including unchanged-payload retry, changed-payload rejection and persisted
+interval assertions. Affected store/runtime vet passed. Static lint is deferred
+while another real runner holds the shared golangci lock; no bypass was used.

@@ -475,3 +475,20 @@ Auth publish access to the exact `user.account_deleted` subject and User only
 subscribe/consumer access; the staging and production User migration job has
 applied `000017_account_lifecycle_search_tombstone`; then deploy a canary before
 enabling the consumer. No Compose manifest enables this consumer in PR A.
+
+
+### Protected global report target decision (BE-137)
+
+`ResolveReportTarget` is an additive private RPC on the existing service.
+It accepts `report_id` plus the owner's typed target ID, and returns only
+`common.ReportTargetState` (LIVE/MISSING/DELETED), with no public REST mapping.
+Issuer `moderation`, subject `service:moderation`, exact audience `user`,
+method, deterministic request hash and fresh request ID are mandatory. The
+dedicated mTLS/JWKS/shared-replay listener and domain recheck both enforce this
+authority; ordinary listeners deny it. No reporter identity is forwarded.
+
+User reads the profile row and durable `ACCOUNT_INACTIVE` overlay, then checks its existing synchronous Auth deletion authority before certifying LIVE. An unavailable Auth authority remains unavailable; freezing/suspension alone is not deletion. Only LIVE returns the authoritative account ID.
+
+Configuration and the finite protected transport/SQL/runtime proof route are in
+[report intake contract](../testing/report-intake-contract.md). This decision is
+an admission snapshot; it grants no later content/action permission.

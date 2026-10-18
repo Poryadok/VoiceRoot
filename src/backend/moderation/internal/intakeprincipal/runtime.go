@@ -96,7 +96,7 @@ func New(ctx context.Context, c Config) (*Runtime, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: jwksRoots}
-	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("Gateway JWKS redirects forbidden") }}
+	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return errors.New("gateway JWKS redirects forbidden") }}
 	resolver, err := principal.NewJWKSResolverWithConfig(principal.JWKSResolverConfig{Fetch: func(ctx context.Context, issuer string) ([]byte, error) {
 		if issuer != "gateway" {
 			return nil, errors.New("untrusted intake issuer")
@@ -109,7 +109,7 @@ func New(ctx context.Context, c Config) (*Runtime, error) {
 		if err != nil {
 			return nil, ErrDependencyUnavailable
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
 			return nil, ErrDependencyUnavailable
 		}

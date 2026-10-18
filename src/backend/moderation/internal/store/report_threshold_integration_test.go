@@ -114,6 +114,18 @@ func TestReportThresholdDistinctAccountsAndAtomicRollback(t *testing.T) {
 	require.Equal(t, 1, logs)
 	require.Equal(t, 1, outbox)
 	require.NoError(t, s.Complete(ctx, claim, obs, testThresholdEvents), "uncertain commit retry must not duplicate effects")
+	changed := obs
+	changed.Audience++
+	require.ErrorContains(t, s.Complete(ctx, claim, changed, testThresholdEvents), "authority conflict")
+	var profileRevision int64
+	var evaluation uuid.UUID
+	var started, completed, expires time.Time
+	require.NoError(t, pool.QueryRow(ctx, `SELECT profile_revision,evaluation_id,observed_at,observation_completed_at,context_expires_at FROM report_threshold_cases`).Scan(&profileRevision, &evaluation, &started, &completed, &expires))
+	require.Equal(t, int64(obs.ProfileRevision), profileRevision)
+	require.Equal(t, obs.EvaluationID, evaluation)
+	require.WithinDuration(t, obs.StartedAt, started, time.Microsecond)
+	require.WithinDuration(t, obs.CompletedAt, completed, time.Microsecond)
+	require.WithinDuration(t, obs.ExpiresAt, expires, time.Microsecond)
 }
 
 func TestReportThresholdConcurrentProfilesCreateOneAccountCase(t *testing.T) {
@@ -149,6 +161,60 @@ func TestReportThresholdConcurrentProfilesCreateOneAccountCase(t *testing.T) {
 	require.Equal(t, 1, cases)
 	require.Equal(t, 1, sanctions)
 	require.Equal(t, 1, outbox)
+}
+
+func TestReportThresholdRejectsStaleAuthorityAndPreservesRollbackEvidence(t *testing.T) {
+	pool := thresholdPool(t)
+	s := thresholdStore(pool)
+	ctx := context.Background()
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	down, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../migrations/moderation_db/000010_report_threshold.down.sql"))
+	require.NoError(t, err)
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, string(down))
+	require.NoError(t, err, "empty unused schema can roll back")
+	require.NoError(t, tx.Rollback(ctx))
+	profile, account, subject := uuid.New(), uuid.New(), uuid.New()
+	var trigger uuid.UUID
+	for i := 0; i < 10; i++ {
+		trigger = insertVote(t, pool, profile, account, uuid.New(), time.Minute, "VALID", "pending")
+	}
+	queueVote(t, s, trigger)
+	claim, err := s.Claim(ctx)
+	require.NoError(t, err)
+	for _, mutate := range []func(*store.ReportThresholdObservation){
+		func(o *store.ReportThresholdObservation) {
+			o.StartedAt = time.Now().Add(-31 * time.Second)
+			o.CompletedAt = o.StartedAt
+			o.ExpiresAt = time.Now().Add(-time.Second)
+		},
+		func(o *store.ReportThresholdObservation) { o.AccountID = uuid.New() },
+		func(o *store.ReportThresholdObservation) { o.SubjectID = uuid.Nil },
+		func(o *store.ReportThresholdObservation) { o.ProfileRevision = 0 },
+		func(o *store.ReportThresholdObservation) { o.LifecycleRevision = 0 },
+		func(o *store.ReportThresholdObservation) { o.Metric = "UNKNOWN" },
+		func(o *store.ReportThresholdObservation) { o.Audience = -1 },
+	} {
+		obs := observation(claim, subject, 1000)
+		mutate(&obs)
+		require.Error(t, s.Complete(ctx, claim, obs, testThresholdEvents))
+	}
+	var effects int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM sanctions)+(SELECT count(*) FROM report_threshold_cases)+(SELECT count(*) FROM report_threshold_outbox)+(SELECT count(*) FROM automod_subjects)`).Scan(&effects))
+	require.Zero(t, effects)
+	_, err = pool.Exec(ctx, string(down))
+	require.ErrorContains(t, err, "report threshold evidence prevents rollback")
+	var retained int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM report_threshold_evaluations`).Scan(&retained))
+	require.Equal(t, 1, retained)
+	require.NoError(t, s.Complete(ctx, claim, observation(claim, subject, 0), testThresholdEvents))
+	var outcome string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT outcome FROM report_threshold_evaluations WHERE report_id=$1`, trigger).Scan(&outcome))
+	require.Equal(t, "EMPTY_AUDIENCE", outcome)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM sanctions`).Scan(&effects))
+	require.Zero(t, effects, "authoritative zero is manual, never a default threshold")
 }
 
 func TestReportThresholdCutoffOutboxRetryAndTerminalPurge(t *testing.T) {
@@ -238,4 +304,51 @@ func TestReportThresholdCutoffOutboxRetryAndTerminalPurge(t *testing.T) {
 	require.ErrorIs(t, s.Complete(ctx, claim, observation(claim, subject, 1000), testThresholdEvents), automod.ErrPurged)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM sanctions`).Scan(&active))
 	require.Zero(t, active)
+}
+
+func TestReportThresholdPreservesHumanSanctionAndRechecksCommitFreshness(t *testing.T) {
+	pool := thresholdPool(t)
+	s := thresholdStore(pool)
+	ctx := context.Background()
+	for _, human := range []bool{true, false} {
+		profile, account, subject := uuid.New(), uuid.New(), uuid.New()
+		var trigger uuid.UUID
+		for i := 0; i < 10; i++ {
+			trigger = insertVote(t, pool, profile, account, uuid.New(), time.Minute, "VALID", "pending")
+		}
+		queueVote(t, s, trigger)
+		claim, err := s.Claim(ctx)
+		require.NoError(t, err)
+		obs := observation(claim, subject, 1000)
+		if human {
+			issuer, sanction := uuid.New(), uuid.New()
+			_, err := pool.Exec(ctx, `INSERT INTO sanctions(id,target_account_id,type,reason,issued_by) VALUES($1,$2,'shadow_ban','Human review decision',$3)`, sanction, account, issuer)
+			require.NoError(t, err)
+			require.NoError(t, s.Complete(ctx, claim, obs, func(store.ReportThresholdCase) ([]store.ReportThresholdEvent, error) {
+				t.Fatal("existing shadow ban cannot issue another event")
+				return nil, nil
+			}))
+			var actualIssuer uuid.UUID
+			var actualReason, outcome string
+			require.NoError(t, pool.QueryRow(ctx, `SELECT issued_by,reason FROM sanctions WHERE id=$1`, sanction).Scan(&actualIssuer, &actualReason))
+			require.Equal(t, issuer, actualIssuer)
+			require.Equal(t, "Human review decision", actualReason)
+			require.NoError(t, pool.QueryRow(ctx, `SELECT outcome FROM report_threshold_evaluations WHERE report_id=$1`, trigger).Scan(&outcome))
+			require.Equal(t, "EXISTING_SHADOW_BAN", outcome)
+		} else {
+			obs.ExpiresAt = time.Now().Add(150 * time.Millisecond)
+			require.Error(t, s.Complete(ctx, claim, obs, func(c store.ReportThresholdCase) ([]store.ReportThresholdEvent, error) {
+				time.Sleep(200 * time.Millisecond)
+				return testThresholdEvents(c)
+			}))
+			var effects int
+			require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM sanctions WHERE target_account_id=$1)+(SELECT count(*) FROM report_threshold_cases WHERE account_id=$1)+(SELECT count(*) FROM automod_subjects WHERE account_id=$1)`, account).Scan(&effects))
+			require.Zero(t, effects, "authority expiring during action rolls back every effect")
+			require.NoError(t, s.FinishManual(ctx, claim, "INELIGIBLE_EVIDENCE"))
+		}
+	}
+	var cases, events int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM report_threshold_cases),(SELECT count(*) FROM report_threshold_outbox)`).Scan(&cases, &events))
+	require.Zero(t, cases)
+	require.Zero(t, events)
 }

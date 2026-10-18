@@ -50,7 +50,7 @@ func newReportAuthorityRuntime(ctx context.Context, pool *pgxpool.Pool, options 
 		return nil, nil
 	}
 	if pool == nil {
-		return nil, errors.New("User report authority requires database")
+		return nil, errors.New("user report authority requires database")
 	}
 	values := make(map[string]string, len(fields))
 	for _, field := range fields {
