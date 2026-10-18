@@ -155,6 +155,14 @@ Flutter не потребляют downgrade для выбора и заморо�
 
 ## Зависимости
 
+Production (`VOICE_ENV=production` or `prod`, case-insensitive) requires an
+explicit nonblank `PADDLE_WEBHOOK_SECRET` different from the public
+`test-webhook-secret` fixture. Startup validates this before enabling billing;
+signature verification also fails closed for this misconfiguration. The legacy
+`SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET` variable cannot bypass this production
+requirement. Nonproduction local/test fixtures may use the default key; this is
+not provider delivery or production billing evidence.
+
 - **Paddle** — международные платежи (webhook → subscription events)
 - **CloudPayments** — СНГ платежи (webhook)
 - **User Service** — (через NATS) заморозка excess профилей при downgrade
