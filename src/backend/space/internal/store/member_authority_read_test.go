@@ -32,6 +32,8 @@ func TestMemberAuthorityReadInitialLiveZeroAndMissingAggregateHistory(t *testing
 		require.NoError(t, err)
 	}
 	applyMemberAuthorityIfPresent(t, st)
+	_, err = pool.Exec(ctx, `CREATE TABLE schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(33,false)`)
+	require.NoError(t, err)
 	reader, ok := any(st).(memberAuthorityReader)
 	require.True(t, ok, "native authority must query one owned-DB snapshot rather than reuse a Federation export")
 	req := &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.ID.String(), ProfileId: profile.String()}
@@ -50,6 +52,16 @@ func TestMemberAuthorityReadInitialLiveZeroAndMissingAggregateHistory(t *testing
 	require.NoError(t, err)
 	require.Equal(t, first.GetSpaceAuthorityRevision(), again.GetSpaceAuthorityRevision(), "authority reads are read-only")
 	require.Equal(t, first.GetOrdinary().GetPublishedBinding().String(), again.GetOrdinary().GetPublishedBinding().String())
+	_, err = pool.Exec(ctx, `UPDATE schema_migrations SET version=34`)
+	require.NoError(t, err)
+	_, err = reader.ReadMemberAdmissionAuthority(ctx, req)
+	require.NoError(t, err, "compatible additive participant migration does not invalidate native membership facts")
+	_, err = pool.Exec(ctx, `ALTER TABLE space_ordinary_member_heads DISABLE TRIGGER ordinary_member_head_guard`)
+	require.NoError(t, err)
+	_, err = reader.ReadMemberAdmissionAuthority(ctx, req)
+	require.ErrorIs(t, err, ErrMemberAuthorityUnavailable, "a clean version cannot compensate for weakened owned head guards")
+	_, err = pool.Exec(ctx, `ALTER TABLE space_ordinary_member_heads ENABLE TRIGGER ordinary_member_head_guard`)
+	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `INSERT INTO space_lifecycle_operations(operation_id,account_id,actor_profile_id,space_id,session_epoch,method,
 	 request_sha256,confirmation_name_sha256,proof_digest_sha256,binding_sha256,state)
 	 VALUES($1,$2,$3,$4,1,'DELETE',$5,$5,$5,$5,'SCHEDULE_PENDING')`, uuid.New(), uuid.New(), owner, space.ID, make([]byte, 32))

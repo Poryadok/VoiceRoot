@@ -35,6 +35,7 @@ import (
 	"voice/backend/space/internal/chatcreation"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
+	"voice/backend/space/internal/memberauthorityprincipal"
 	"voice/backend/space/internal/outboxdelivery"
 	"voice/backend/space/internal/s2s"
 	"voice/backend/space/internal/spaceevents"
@@ -105,6 +106,13 @@ func main() {
 	}
 	if auditEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
 		log.Fatal("Space audit listener requires DATABASE_URL")
+	}
+	memberAuthorityConfig, memberAuthorityEnabled, err := memberauthorityprincipal.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Space member authority config: %v", err)
+	}
+	if memberAuthorityEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space member authority requires DATABASE_URL")
 	}
 	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("space")
 	if err != nil {
@@ -285,6 +293,7 @@ func main() {
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
 			chatcreation.OrdinaryUnary(),
 			auditprincipal.OrdinaryUnary(),
+			memberauthorityprincipal.OrdinaryUnary(),
 			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),
 			ordinaryCommunicationUnary(),
@@ -450,6 +459,11 @@ func main() {
 				}
 			}()
 		}
+		stopMemberAuthority, err := startMemberAuthorityServer(runCtx, memberAuthorityConfig, memberAuthorityEnabled, spaceStore, sharedOptions)
+		if err != nil {
+			log.Fatalf("Space member authority startup: %v", err)
+		}
+		defer stopMemberAuthority()
 		stopCommunication, err := startCommunicationServers(runCtx, communicationConfigs, spaceSvc, sharedOptions)
 		if err != nil {
 			log.Fatalf("Space communication authority startup: %v", err)

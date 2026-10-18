@@ -55,6 +55,9 @@ func (s *SpaceStore) ReadMemberAdmissionAuthority(ctx context.Context, req *spac
 	if err = lockLifecycleSpace(ctx, tx, space); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
 	}
+	if err = checkMemberAuthorityCatalog(ctx, tx); err != nil {
+		return nil, ErrMemberAuthorityUnavailable
+	}
 	var sampled time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&sampled); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
