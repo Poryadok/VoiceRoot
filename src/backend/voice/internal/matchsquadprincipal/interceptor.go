@@ -19,6 +19,7 @@ const (
 	CreateMethod    = callsv1.MatchSquadVoiceService_CreateMatchSquadRoom_FullMethodName
 	TeardownMethod  = callsv1.MatchSquadVoiceService_TeardownMatchSquadRoom_FullMethodName
 	CompactMethod   = callsv1.MatchSquadVoiceService_CompactMatchSquadRoom_FullMethodName
+	SnapshotMethod  = callsv1.VoiceService_GetMatchmakingPartySnapshot_FullMethodName
 	trustedIssuer   = "matchmaking"
 	trustedSubject  = "service:matchmaking"
 	trustedAudience = "voice"
@@ -29,7 +30,7 @@ type Verifier interface {
 }
 
 func AllowsMethod(method string) bool {
-	return method == CreateMethod || method == TeardownMethod || method == CompactMethod
+	return method == CreateMethod || method == TeardownMethod || method == CompactMethod || method == SnapshotMethod
 }
 
 func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
@@ -82,6 +83,10 @@ func RequireCompact(ctx context.Context, req *callsv1.CompactMatchSquadRoomReque
 	return requireVerified(ctx, req, CompactMethod, req.GetOperationId())
 }
 
+func RequireSnapshot(ctx context.Context, req *callsv1.GetMatchmakingPartySnapshotRequest) error {
+	return requireVerified(ctx, req, SnapshotMethod, req.GetSearchOperationId())
+}
+
 func requireVerified(ctx context.Context, message proto.Message, method, opID string) error {
 	if message == nil || hasUnknownFields(message.ProtoReflect()) || !AllowsMethod(method) || !canonicalUUID(opID) {
 		return status.Error(codes.InvalidArgument, "invalid MatchSquad request")
@@ -114,6 +119,8 @@ func operationID(message proto.Message) string {
 		return strings.TrimSpace(req.GetTeardownOperationId())
 	case *callsv1.CompactMatchSquadRoomRequest:
 		return strings.TrimSpace(req.GetOperationId())
+	case *callsv1.GetMatchmakingPartySnapshotRequest:
+		return req.GetSearchOperationId()
 	default:
 		return ""
 	}

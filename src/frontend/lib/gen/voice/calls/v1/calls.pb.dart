@@ -7282,6 +7282,217 @@ class PurgeSpaceResponse extends $pb.GeneratedMessage {
   $4.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
 }
 
+/// Matchmaking copies this subject from its verified StartSearch principal.
+/// No client room, member list or party ID is accepted.
+/// @voice.unknown_fields=reject
+/// @voice.hash=deterministic_protobuf_sha256
+class GetMatchmakingPartySnapshotRequest extends $pb.GeneratedMessage {
+  factory GetMatchmakingPartySnapshotRequest({
+    $core.String? searchOperationId,
+    $core.String? initiatorAccountId,
+    $core.String? initiatorProfileId,
+    $fixnum.Int64? initiatorSessionEpoch,
+  }) {
+    final result = create();
+    if (searchOperationId != null) result.searchOperationId = searchOperationId;
+    if (initiatorAccountId != null)
+      result.initiatorAccountId = initiatorAccountId;
+    if (initiatorProfileId != null)
+      result.initiatorProfileId = initiatorProfileId;
+    if (initiatorSessionEpoch != null)
+      result.initiatorSessionEpoch = initiatorSessionEpoch;
+    return result;
+  }
+
+  GetMatchmakingPartySnapshotRequest._();
+
+  factory GetMatchmakingPartySnapshotRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetMatchmakingPartySnapshotRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetMatchmakingPartySnapshotRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'searchOperationId')
+    ..aOS(2, _omitFieldNames ? '' : 'initiatorAccountId')
+    ..aOS(3, _omitFieldNames ? '' : 'initiatorProfileId')
+    ..aInt64(4, _omitFieldNames ? '' : 'initiatorSessionEpoch')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetMatchmakingPartySnapshotRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetMatchmakingPartySnapshotRequest copyWith(
+          void Function(GetMatchmakingPartySnapshotRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetMatchmakingPartySnapshotRequest))
+          as GetMatchmakingPartySnapshotRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetMatchmakingPartySnapshotRequest create() =>
+      GetMatchmakingPartySnapshotRequest._();
+  @$core.override
+  GetMatchmakingPartySnapshotRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetMatchmakingPartySnapshotRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetMatchmakingPartySnapshotRequest>(
+          create);
+  static GetMatchmakingPartySnapshotRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get searchOperationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set searchOperationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSearchOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSearchOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get initiatorAccountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set initiatorAccountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasInitiatorAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearInitiatorAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get initiatorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set initiatorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInitiatorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInitiatorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get initiatorSessionEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set initiatorSessionEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasInitiatorSessionEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearInitiatorSessionEpoch() => $_clearField(4);
+}
+
+class GetMatchmakingPartySnapshotResponse extends $pb.GeneratedMessage {
+  factory GetMatchmakingPartySnapshotResponse({
+    $core.int? protocolVersion,
+    MatchmakingPartySnapshotKind? kind,
+    $core.String? roomId,
+    $fixnum.Int64? rosterVersion,
+    $core.Iterable<$core.String>? memberProfileIds,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (kind != null) result.kind = kind;
+    if (roomId != null) result.roomId = roomId;
+    if (rosterVersion != null) result.rosterVersion = rosterVersion;
+    if (memberProfileIds != null)
+      result.memberProfileIds.addAll(memberProfileIds);
+    return result;
+  }
+
+  GetMatchmakingPartySnapshotResponse._();
+
+  factory GetMatchmakingPartySnapshotResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetMatchmakingPartySnapshotResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetMatchmakingPartySnapshotResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aE<MatchmakingPartySnapshotKind>(2, _omitFieldNames ? '' : 'kind',
+        enumValues: MatchmakingPartySnapshotKind.values)
+    ..aOS(3, _omitFieldNames ? '' : 'roomId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'rosterVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..pPS(5, _omitFieldNames ? '' : 'memberProfileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetMatchmakingPartySnapshotResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetMatchmakingPartySnapshotResponse copyWith(
+          void Function(GetMatchmakingPartySnapshotResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetMatchmakingPartySnapshotResponse))
+          as GetMatchmakingPartySnapshotResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetMatchmakingPartySnapshotResponse create() =>
+      GetMatchmakingPartySnapshotResponse._();
+  @$core.override
+  GetMatchmakingPartySnapshotResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetMatchmakingPartySnapshotResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetMatchmakingPartySnapshotResponse>(create);
+  static GetMatchmakingPartySnapshotResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  MatchmakingPartySnapshotKind get kind => $_getN(1);
+  @$pb.TagNumber(2)
+  set kind(MatchmakingPartySnapshotKind value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasKind() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearKind() => $_clearField(2);
+
+  /// Empty only for genuine SOLO absence.
+  @$pb.TagNumber(3)
+  $core.String get roomId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set roomId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRoomId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRoomId() => $_clearField(3);
+
+  /// Zero only for SOLO; separate from the native private journal revision.
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get rosterVersion => $_getI64(3);
+  @$pb.TagNumber(4)
+  set rosterVersion($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRosterVersion() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRosterVersion() => $_clearField(4);
+
+  /// Unique canonical UUIDs sorted by their 16 unsigned bytes.
+  @$pb.TagNumber(5)
+  $pb.PbList<$core.String> get memberProfileIds => $_getList(4);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =
