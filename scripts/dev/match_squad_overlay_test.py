@@ -1708,5 +1708,44 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         self.assertEqual(client.applied, [])
 
 
+class KubectlRolloutStatusOutputTests(unittest.TestCase):
+    def ready_chat(self):
+        target = overlay._Target("Deployment", "voice-chat", "")
+        current = captured_deployment("voice-chat", "chat", "chat-uid", "17")
+        current["metadata"]["generation"] = 2
+        current["status"] = {"observedGeneration": 2, "updatedReplicas": 1,
+                             "readyReplicas": 1, "availableReplicas": 1}
+        plan = {"name": "voice-chat", "uid": "chat-uid", "patchFile": "unused.yaml",
+                "desiredObservedSha256": overlay.observed_render_hash(target, current)}
+        return current, plan
+
+    def test_wait_deployment_accepts_successful_human_readable_rollout_output(self):
+        current, plan = self.ready_chat()
+        rollout = mock.Mock(returncode=0,
+                            stdout=b'deployment "voice-chat" successfully rolled out\n',
+                            stderr=b"")
+        get = mock.Mock(returncode=0,
+                        stdout=json.dumps(current).encode("utf-8"), stderr=b"")
+        client = overlay.KubectlClient()
+        with mock.patch.object(overlay.subprocess, "run", side_effect=[rollout, get]):
+            client.wait_deployment(plan)
+
+    def test_wait_deployment_still_rejects_nonzero_rollout_exit(self):
+        _, plan = self.ready_chat()
+        failed = mock.Mock(returncode=1, stdout=b"rollout failed\n", stderr=b"private")
+        client = overlay.KubectlClient()
+        with mock.patch.object(overlay.subprocess, "run", return_value=failed):
+            with self.assertRaisesRegex(overlay.OverlayError, "stage=rollout exit=1"):
+                client.wait_deployment(plan)
+
+    def test_wait_deployment_still_rejects_rollout_timeout(self):
+        _, plan = self.ready_chat()
+        client = overlay.KubectlClient()
+        with mock.patch.object(overlay.subprocess, "run",
+                               side_effect=overlay.subprocess.TimeoutExpired("kubectl", 90)):
+            with self.assertRaisesRegex(overlay.OverlayError, "kubectl transport failed"):
+                client.wait_deployment(plan)
+
+
 if __name__ == "__main__":
     unittest.main()
