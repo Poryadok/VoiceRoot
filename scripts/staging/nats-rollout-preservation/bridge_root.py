@@ -500,6 +500,19 @@ class Actions:
                 # A revised helper cannot route preserved output through the old binding.
                 if (base/'cipher-upload').exists():raise Blocked('preserved_upload_explicit_authorization_required')
                 receipt=github_custody.verify_artifact(request['token'],state['cipher_binding'],base/'rollout-backup.cms',request['artifact_id'])
+            if self.native_api is not None:
+                # Native authorization owns its complete typed call graph.  Keep
+                # this branch before legacy restore/actor checks: those helpers
+                # construct Kube/Docker authorities and are forbidden for the
+                # UID-65532 runner.
+                state['custody']=receipt
+                native_receipt=transaction.authorize_native(
+                    self.native_api,base,state,
+                    state['cut']['manifest']['archive_sha256'],
+                    state['cut']['manifest_sha256'],state['contract'],
+                    native_config=self.native_config)
+                return summary(state)|{'authorization':str(base/'apply-authorization.json'),
+                    'native':native_receipt.get('native',{})}
             # Dedicated readback/actor/deadline rejection leaves the captured
             # checkpoint byte-for-byte intact, so a failed proof is not custody.
             if upload_record is None:

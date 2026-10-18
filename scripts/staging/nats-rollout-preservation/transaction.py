@@ -507,7 +507,7 @@ def native_preservation_runtime(base,state,stage,native_api,native_config,cut,ph
     """
     if native_api is None or not isinstance(native_config,dict):
         raise Blocked('rollout_native_authority_missing')
-    if phase not in ('finish','rollback'):
+    if phase not in ('authorize','finish','rollback'):
         raise Blocked('rollout_native_preservation_phase_invalid')
     expected=state.get('native_source_binding')
     if not isinstance(expected,dict):
@@ -1029,6 +1029,14 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
                     state['status']='ROLLED_BACK';state['phase']='GIS_FIRST_INSTALL_ROLLED_BACK'
             except Exception:pass
         state['context']=context(stage);save(Path(base)/'checkpoint.json',state);raise
+
+
+def authorize_native(native_api,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,native_config,authorization_deadline=None):
+    """Explicit rootless authorization entry; never reaches legacy Kube/Docker code."""
+    import native_authorize
+    return native_authorize.authorize(native_api,base,state,off_node_archive_sha,
+        off_node_manifest_sha,contract,native_config=native_config,
+        authorization_deadline=authorization_deadline)
 
 
 def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None,
