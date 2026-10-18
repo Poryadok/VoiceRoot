@@ -1358,6 +1358,18 @@ not expand the ownership-proof implementation or reuse its tokens/receipts.
 
 ## P3 Space lifecycle coordinator (accepted target; not implemented)
 
+Full deletion activation must preflight the complete participant capability
+manifest before `SCHEDULE_PENDING` or Auth consume. Voice currently declares
+`EJECT_ONLY`; see [Voice P3](voice-service.md#p3-space-lifecycle-participant-target).
+Its restrictive native barrier/exact drain is local progress, not a completed
+freeze receipt: self-hosted original/refreshed credentials lack durable provider
+retirement proof. Keep Voice outstanding and do not start the seven-day schedule,
+restore LIVE or bypass revocation through purge. A capability downgrade preserves
+already committed restrictive intent and exact retry targets; no compensating
+LIVE or weaker success grade is authorized. A future provider path requires
+operation-bound coverage/retirement proof and qualified current/historical issuer
+coverage; a boolean setting or empty roster does not satisfy this prerequisite.
+
 Space owns the aggregate and durable participant ledger. States are `LIVE`,
 `SCHEDULE_PENDING`, `FREEZE_PENDING`, `SCHEDULED`, `RESTORE_DECIDED`,
 `PURGE_DECIDED`, `PURGING`, `PURGED`; generations are positive and monotonic.

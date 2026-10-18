@@ -3,6 +3,7 @@ package spacemedia
 import (
 	"context"
 	"testing"
+	"voice/backend/voice/internal/spacegatetest"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -89,7 +90,7 @@ func floorPassFixture(t *testing.T, participants ...floorParticipant) (*Coordina
 	}
 	call.SpaceMedia = snapshot
 	media := &fakeMedia{}
-	c := &Coordinator{Store: calls, Calls: calls, Access: access, Grants: grants, Media: media,
+	c := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls, Calls: calls, Access: access, Grants: grants, Media: media,
 		Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID), SessionEpochChecker: floors}
 	return c, calls, call, floors, media
 }

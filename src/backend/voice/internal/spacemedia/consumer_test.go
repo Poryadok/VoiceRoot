@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"voice/backend/voice/internal/spacegatetest"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -40,7 +41,7 @@ func TestSpaceAccessMessageACKFollowsFullReconciliation(t *testing.T) {
 	ctx := context.Background()
 	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
-	coordinator := &Coordinator{
+	coordinator := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store:               calls,
 		SessionEpochChecker: currentEpochChecker{},
 		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
@@ -81,7 +82,7 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 	require.NoError(t, err)
 	participant := call.SpaceMedia[profileID]
 	media := &fakeMedia{err: errors.New("remove failed")}
-	coordinator := &Coordinator{
+	coordinator := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store:               calls,
 		SessionEpochChecker: currentEpochChecker{},
 		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
@@ -122,7 +123,7 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 
 func TestMalformedSpaceAccessMessageIsTerminatedWithoutPayloadLogging(t *testing.T) {
 	msg := &invalidationAckMessage{}
-	err := handleSpaceAccessInvalidation(context.Background(), spaceAccessSubject, []byte("not-protobuf"), msg, &Coordinator{})
+	err := handleSpaceAccessInvalidation(context.Background(), spaceAccessSubject, []byte("not-protobuf"), msg, &Coordinator{ProjectionGates: spacegatetest.New()})
 	require.Error(t, err)
 	require.Zero(t, msg.acked)
 	require.Zero(t, msg.nacked)
