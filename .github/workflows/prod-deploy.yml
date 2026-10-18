@@ -64,15 +64,26 @@ jobs:
 
       - name: Verify production images in GHCR
         id: verify_image
+        env:
+          DEPLOY_MODE: ${{ inputs.deploy_mode }}
+          CHANGED_SERVICES_JSON: ${{ inputs.changed_services }}
         run: |
           set -eux
           REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           export VOICE_IMAGE_REGISTRY="${REGISTRY}"
           export VOICE_IMAGE_TAG="${{ steps.tag.outputs.tag }}"
+          export PROD_STACK_LOCK_OUT="${RUNNER_TEMP}/voice-prod-stack.lock.yaml"
           if [ -f "${GITHUB_WORKSPACE}/deploy/prod/stack.lock.yaml" ]; then
             export STACK_LOCK_FILE="${GITHUB_WORKSPACE}/deploy/prod/stack.lock.yaml"
           fi
           bash scripts/prod/verify-prod-images.sh
+
+      - name: Preserve verified production stack lock
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-stack-lock-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.verify_image.outputs.stack_lock_file }}
+          if-no-files-found: error
 
       - name: Apply production manifests
         env:
@@ -96,6 +107,7 @@ jobs:
           DEPLOY_MODE: ${{ inputs.deploy_mode }}
           NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
           NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
+          CHANGED_SERVICES: ${{ steps.verify_image.outputs.changed_services }}
         run: |
           set -eux
           source scripts/prod/load-prod-domains.sh
@@ -109,8 +121,6 @@ jobs:
           export VOICE_IMAGE_TAG="${TAG}"
           export VOICE_K8S_NAMESPACE="${{ vars.VOICE_PROD_K8S_NAMESPACE }}"
           export DEPLOY_MODE="${{ inputs.deploy_mode }}"
-          CHANGED_JSON='${{ inputs.changed_services }}'
-          export CHANGED_SERVICES="$(echo "${CHANGED_JSON}" | jq -r 'join(",")')"
           bash scripts/prod/render-and-apply-prod.sh
 
       - name: Production smoke (optional)

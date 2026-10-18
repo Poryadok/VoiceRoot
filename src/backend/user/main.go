@@ -25,10 +25,12 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
+	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
 	grpcsvc "voice/backend/user/internal/grpcsvc"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/searchprojection"
 	"voice/backend/user/internal/store"
@@ -171,7 +173,7 @@ func main() {
 	var pool *pgxpool.Pool
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		p, err := pgxpool.New(ctx, dbURL)
+		p, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
@@ -265,6 +267,7 @@ func main() {
 		deletedAccounts = grpcsvc.NewAuthGRPCDeletedAccounts(authConn)
 
 		var presence *store.PresenceStore
+		var profileMutations grpcsvc.ProfileMutationLimiter = profilemutation.New(nil)
 		if redisAddr := strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")); redisAddr != "" {
 			rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 			pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -274,6 +277,7 @@ func main() {
 				log.Fatalf("redis ping: %v", err)
 			}
 			presence = store.NewDurablePresenceStore(rdb, store.NewLastSeenStore(pool))
+			profileMutations = profilemutation.New(rdb)
 			defer func() { _ = rdb.Close() }()
 		}
 
@@ -352,6 +356,7 @@ func main() {
 		srv := grpc.NewServer(ordinaryOptions...)
 		userSvc := &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
+			ProfileMutations:    profileMutations,
 			Privacy:             store.NewPrivacyStore(pool),
 			Presence:            presence,
 			Blocks:              blocks,

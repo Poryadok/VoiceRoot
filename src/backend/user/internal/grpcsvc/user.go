@@ -15,6 +15,7 @@ import (
 
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/profileaccent"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
@@ -25,8 +26,10 @@ import (
 type UserGRPC struct {
 	userv1.UnimplementedUserServiceServer
 	Profiles *store.ProfileStore
-	Privacy  *store.PrivacyStore
-	Presence *store.PresenceStore
+	// ProfileMutations is required; missing/shared-state failures deny mutations.
+	ProfileMutations ProfileMutationLimiter
+	Privacy          *store.PrivacyStore
+	Presence         *store.PresenceStore
 	// DNSResolver optional; nil uses system resolver.
 	DNSResolver DNSResolver
 	// Blocks is the Social S2S checker; SearchProfiles fails closed when unavailable.
@@ -262,8 +265,11 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 
 func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileRequest) (*userv1.CreateProfileResponse, error) {
 	accountID, ok := authctx.AccountID(ctx)
-	if !ok {
+	if !ok || accountID == uuid.Nil {
 		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	if err := s.allowProfileMutation(ctx, accountID, profilemutation.Create); err != nil {
+		return nil, err
 	}
 	tier := authctx.SubscriptionTier(ctx)
 	count, err := s.Profiles.CountByAccountID(ctx, accountID)

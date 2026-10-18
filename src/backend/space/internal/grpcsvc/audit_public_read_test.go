@@ -57,7 +57,7 @@ func TestPublicAuditReadFiltersACLAndFrozenDisclosure(t *testing.T) {
 		return principal.WithVerified(metadata.NewIncomingContext(ctx, md), principal.Principal{Kind: "delegated_user", Issuer: "gateway", Audience: "space", RPC: spacev1.SpaceService_GetAuditLog_FullMethodName, AccountID: account.String(), ProfileID: actor.String(), SessionEpoch: 7})
 	}
 	auditID := uuid.New()
-	insertSpaceAuditEntry(t, ctx, pool, row.ID, auditID, owner, "member_banned", "account", `{"redacted":true}`, time.Now().UTC())
+	insertSpaceAuditEntry(t, ctx, pool, row.ID, auditID, owner, "member_banned", "account", `{"reason":"fixture ban"}`, time.Now().UTC())
 	req := &spacev1.GetAuditLogRequest{SpaceId: row.ID.String(), Action: proto.String("member_banned")}
 	resp, err := service.GetAuditLog(actorContext(member), req)
 	require.NoError(t, err)

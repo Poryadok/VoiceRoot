@@ -197,7 +197,11 @@ WHERE i.space_id = $1 AND b.status = 'live'`, spaceID)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer rows.Close()
-	var out []*botv1.InstalledBot
+	type installation struct {
+		id  uuid.UUID
+		bot store.BotRow
+	}
+	var installations []installation
 	for rows.Next() {
 		var installID uuid.UUID
 		var row store.BotRow
@@ -207,24 +211,73 @@ WHERE i.space_id = $1 AND b.status = 'live'`, spaceID)
 		); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		whitelist, _ := s.Store.Pool.Query(ctx, `SELECT chat_id::text FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2 AND enabled = true`, row.ID, spaceID)
-		var refs []*chatv1.ChatRef
-		if whitelist != nil {
-			for whitelist.Next() {
-				var cid string
-				_ = whitelist.Scan(&cid)
-				refs = append(refs, &chatv1.ChatRef{Id: cid, Type: chatTypePtr(chatv1.ChatType_CHAT_TYPE_CHANNEL)})
+		installations = append(installations, installation{id: installID, bot: row})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	rows.Close()
+	var out []*botv1.InstalledBot
+	chatRefs := make(map[string]*chatv1.ChatRef)
+	for _, installed := range installations {
+		row := installed.bot
+		whitelist, err := s.Store.Pool.Query(ctx, `SELECT chat_id::text FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2 AND enabled = true`, row.ID, spaceID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		var ids []string
+		for whitelist.Next() {
+			var cid string
+			if err := whitelist.Scan(&cid); err != nil {
+				whitelist.Close()
+				return nil, status.Error(codes.Internal, err.Error())
 			}
+			ids = append(ids, cid)
+		}
+		if err := whitelist.Err(); err != nil {
 			whitelist.Close()
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		whitelist.Close()
+		var refs []*chatv1.ChatRef
+		for _, cid := range ids {
+			ref, ok := chatRefs[cid]
+			if !ok {
+				ref = s.installedChatRef(ctx, spaceID.String(), cid)
+				chatRefs[cid] = ref
+			}
+			refs = append(refs, ref)
 		}
 		out = append(out, &botv1.InstalledBot{
 			Bot:            botToProto(row),
-			InstallationId: installID.String(),
+			InstallationId: installed.id.String(),
 			AllowedChats:   refs,
 			Online:         s.isBotOnline(ctx, row.ID),
 		})
 	}
 	return &botv1.ListInstalledBotsResponse{InstalledBots: out}, nil
+}
+
+// Chat owns its current type. Unavailable or mismatched hydration leaves the
+// optional type absent rather than turning every whitelist entry into a channel.
+func (s *BotGRPC) installedChatRef(ctx context.Context, spaceID, chatID string) *chatv1.ChatRef {
+	ref := &chatv1.ChatRef{Id: chatID}
+	if s.Chat == nil {
+		return ref
+	}
+	resp, err := s.Chat.GetChat(s2s.ForwardIncomingMetadata(ctx), &chatv1.GetChatRequest{ChatId: chatID})
+	if err != nil {
+		return ref
+	}
+	chat := resp.GetChat()
+	if chat.GetId() != chatID || chat.GetSpaceId() != spaceID {
+		return ref
+	}
+	switch chat.GetType() {
+	case chatv1.ChatType_CHAT_TYPE_GROUP, chatv1.ChatType_CHAT_TYPE_CHANNEL:
+		ref.Type = chatTypePtr(chat.GetType())
+	}
+	return ref
 }
 
 func (s *BotGRPC) checkManageBots(ctx context.Context, spaceID uuid.UUID) (uuid.UUID, error) {
