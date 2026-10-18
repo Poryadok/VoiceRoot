@@ -28,6 +28,10 @@ def advance(kube,state,stage,journal,*,mutation_guard=None):
     contract=state['contract'];wanted=state['nats_target_scripts']
     target_pairs=_validated_target_pairs(state.get('nats_contract'))
     v5=state['nats_contract']['schema']==SCHEMA
+    if v5:
+        from nats_active_contract import _proof_matches
+        if not _proof_matches(migration.get('proof'),state['nats_contract']['migration_id']):
+            raise Blocked('nats_contract_custody_before_proof')
     if v5 and (state['nats_contract'].get('sources')!=V5_SOURCE_HASHES or set(wanted)!=set(V5_SCRIPT_HASHES)
         or any(not isinstance(wanted[part],dict) or wanted[part].get('sha256')!=sha
             or hashlib.sha256(wanted[part].get('script','').encode()).hexdigest()!=sha for part,sha in V5_SCRIPT_HASHES.items())):

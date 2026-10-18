@@ -1,7 +1,7 @@
 """Exact active-contract receipt versions accepted by the rollout bridge."""
 import re
 from controller import Blocked
-from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V3_MIGRATION_ID,V4_MIGRATION_ID,V5_SOURCE_HASHES,MIGRATION_ID as CURRENT_NATS_MIGRATION_ID
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V3_MIGRATION_ID,V4_MIGRATION_ID,V5_SOURCE_HASHES,V5_SCRIPT_HASHES,V5_SCRIPT_BYTES,MIGRATION_ID as CURRENT_NATS_MIGRATION_ID
 
 LEGACY_NATS_MIGRATION_ID='space-chat-social-24h-friend-removed-v1'
 SOURCE_PATHS=('deploy/templates/nats-realtime-bootstrap.yaml',
@@ -74,6 +74,15 @@ def _pairs(value):
     if len(set(pairs))!=len(pairs):return None
     return pairs
 
+def _v5_scripts_match(contract):
+    rows=contract.get('scripts') if isinstance(contract,dict) else None
+    if not isinstance(rows,list) or len(rows)!=len(V5_SCRIPT_HASHES):return False
+    if any(not isinstance(row,dict) or not isinstance(row.get('part'),str) for row in rows):return False
+    if {row.get('part') for row in rows}!=set(V5_SCRIPT_HASHES):return False
+    return all(row.get('sha256')==V5_SCRIPT_HASHES[row['part']]
+        and _bounded_text(row.get('configMapUID')) and _bounded_text(row.get('configMapResourceVersion'))
+        and type(row.get('bytes')) is int and row['bytes']==V5_SCRIPT_BYTES[row['part']] for row in rows)
+
 def _proof_matches(proof,migration_id):
     if not isinstance(proof,dict):return False
     expected=PROOF_KEYS
@@ -108,6 +117,8 @@ def validate_identity(active_contract,expected,baseline_pairs):
         raise Blocked('nats_active_contract_identity_changed')
     migration_id=active_contract['migration_id']
     contract=active_contract.get('contract')
+    if migration_id==CURRENT_NATS_MIGRATION_ID and not _v5_scripts_match(contract):
+        raise Blocked('nats_active_contract_identity_changed')
     baseline=_pairs(baseline_pairs)
     actual=_pairs(contract.get('consumer_pairs') if isinstance(contract,dict) else None)
     if baseline is None or actual is None:raise Blocked('nats_active_contract_identity_changed')

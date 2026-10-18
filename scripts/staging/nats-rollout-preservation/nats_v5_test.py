@@ -72,17 +72,20 @@ class V5(CanonicalBootstrapTests):
             rows['voice-nats-'+part+'-bootstrap']={'metadata':{'name':'voice-nats-'+part+'-bootstrap',
                 'uid':expected['configMapUID'],'resourceVersion':expected['configMapResourceVersion']},'data':{'bootstrap.sh':old}}
         state={'operation':'123456abcdef','contract':contract,'nats_contract':authority['plan'],
-            'nats_target_scripts':authority['scripts'],'nats_migration':{'verified':True,'old_record_files_verified':True,'proof':{}}}
+            'nats_target_scripts':authority['scripts'],'nats_migration':{'verified':True,'old_record_files_verified':True,'proof':{
+                'schema':'voice-nats-additive-census-proof-v4','migration_id':plan.MIGRATION_ID,
+                'before_sha256':'a'*64,'after_sha256':'b'*64,'messages':14,'old_consumers_preserved':1,'created_consumers':4}}}
         return kube,stage,state,rows
     def test_custody_rejects_version_source_hash_and_proof_injection_before_cas(self):
         from nats_contract_custody import advance
-        for fault in ('oldversion','source','missingnotification','hash','proof'):
+        for fault in ('oldversion','source','missingnotification','hash','proof','proofschema'):
             kube,stage,state,rows=self._custody()
             if fault=='oldversion':state['nats_contract'].update(schema=plan.V4_SCHEMA,migration_id=plan.V4_MIGRATION_ID)
             if fault=='source':state['nats_contract']['sources'].pop('deploy/templates/nats-notification-bootstrap.yaml')
             if fault=='missingnotification':state['nats_target_scripts'].pop('notification')
             if fault=='hash':state['nats_target_scripts']['notification']['sha256']='0'*64
             if fault=='proof':state['nats_migration']['verified']=False
+            if fault=='proofschema':state['nats_migration']['proof']['schema']='voice-nats-additive-census-proof-v3'
             with self.subTest(fault=fault),self.assertRaises(Blocked):advance(kube,state,stage,lambda event:None)
             self.assertEqual(kube.calls,[])
     def test_fourth_cas_retry_requires_exact_owned_annotation_uid_and_rv(self):
@@ -105,6 +108,21 @@ class V5(CanonicalBootstrapTests):
                 self.assertEqual(len(kube.calls),4,'owned exact target recovery must not repeat CAS')
             else:
                 with self.subTest(fault=fault),self.assertRaises(Blocked):advance(kube,state,stage,lambda event:None)
+    def test_v5_active_readback_refuses_partial_or_unbound_script_rows(self):
+        from nats_contract_custody import advance
+        from nats_active_contract import validate_identity
+        kube,stage,state,rows=self._custody();baseline=copy.deepcopy(state['contract']['consumer_pairs'])
+        active=advance(kube,state,stage,lambda event:None)
+        validate_identity(active,stage.expected,baseline)
+        for fault in ('missing','hash','uid','rv','bytes','three_sources'):
+            changed=copy.deepcopy(active)
+            if fault=='missing':changed['contract']['scripts'].pop()
+            if fault=='hash':changed['contract']['scripts'][0]['sha256']='0'*64
+            if fault=='uid':changed['contract']['scripts'][0]['configMapUID']=''
+            if fault=='rv':changed['contract']['scripts'][0]['configMapResourceVersion']=''
+            if fault=='bytes':changed['contract']['scripts'][0]['bytes']+=1
+            if fault=='three_sources':changed['sources'].pop('deploy/templates/nats-notification-bootstrap.yaml')
+            with self.subTest(fault=fault),self.assertRaises(Blocked):validate_identity(changed,stage.expected,baseline)
 
 class VersionGuards(unittest.TestCase):
     def test_literal_v4_receipt_keeps_two_sources_and_v3_proof(self):

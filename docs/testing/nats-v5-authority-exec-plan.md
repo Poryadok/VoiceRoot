@@ -29,7 +29,7 @@ an independent preservation/security reviewer must approve before intake121.
 - [x] Version-aware actor, execution, recovery and active receipts.
 - [x] Existing focused regressions plus negative compatibility/source controls.
 - [x] Isolated pinned native NATS preservation and interruption proof.
-- [ ] Canonical full preservation gate after historical synthetic fixture correction.
+- [x] Canonical full preservation gate after historical synthetic fixture correction.
 - [ ] Independent review, portable bundle/restore and accepted handoff121.
 
 ## Detailed Steps
@@ -71,7 +71,18 @@ semantic census plus old /msgs/index.db and consumer o.dat records.
   files match committed Git bytes. No full native repeat needed for a test-only
   fixture/import and documentation successor.
 - [x] Portable incremental bundle plus real bare restore compared all 15 paths.
-- [ ] Full canonical corrected result and independent preservation/security review.
+- [x] Exact8699d838 canonical gate: 922 preservation tests, 44 baseline tests and
+  both all-mode shell checks passed. An immutable Git archive replaced only
+  slow host-file transport; test commands/assertions/toolchain stayed canonical.
+- [x] Final bounded receipt hardening: v5 active rows require all four exact
+  script hashes/byte counts and readback UID/RV; custody checks v5 proof identity
+  before any CAS. The new two-test control produced seven failure subcases on
+  the frozen ccde8d01 receipt validators and zero on the successor. Affected
+  80-test boundary/receipt set passed with canonical private TMPDIR custody.
+  An earlier noncanonical /tmp run had custody setup errors; it is not product
+  proof. Migration/actor/recovery functions are unchanged from native PASS;
+  reuse that proof and bind this narrower validator delta to its focused checks.
+- [ ] Independent preservation/security review.
 - [ ] Accepted ant-to-ant delivery/CI handoff to121.
 
 ## Decisions

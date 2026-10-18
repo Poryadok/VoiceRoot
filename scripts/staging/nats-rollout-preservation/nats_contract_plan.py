@@ -32,6 +32,7 @@ V5_SCRIPT_HASHES={'realtime':'b98c6a643dc6bd357049fe19f4de467b038cbf92e4019768b6
     'analytics-chat':'ad8cf253a213c0378c14bd5a7d2862f6b1c32d50b4cb307a5b53051017d23466',
     'search':'217334b7503c008444d90eb8b49a2510ce67a7470998112bcf56eb1cbe8ca906',
     'notification':'3a705777cc116695c1ea74307968b8faccc87091572b639473f673c97103bbad'}
+V5_SCRIPT_BYTES={'realtime':10460,'analytics-chat':12470,'search':4224,'notification':4620}
 CHAT_SUBJECTS_13=frozenset({
     'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created',
     'voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left',
