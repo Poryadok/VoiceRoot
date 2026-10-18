@@ -27,7 +27,7 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 - [x] Freeze accepted c3/c5 behavior in owning canon and shared codec fixtures.
 - [x] Shared codec/validation/replay hash passes meaningful acceptance cases.
 - [ ] Same-transaction global ID reservation, audit/outbox effect and replay proof.
-- [ ] Signed Role/Chat-only listener, body validation and no legacy fallback.
+- [x] Signed Role/Chat-only listener, body validation and no legacy fallback.
 - [ ] Independent security/concurrency review and exact-head hosted checks/PR.
 
 ## Detailed Steps
@@ -65,7 +65,14 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 - [x] Shared details/replay tests: meaningful RED on stub behavior, GREEN focused
   package, scoped vet and golangci-lint (0 issues). Frozen digest vectors were
   generated independently with Python struct framing, not implementation output.
-- [ ] Receipt migration/store and protected transport remain unimplemented.
+- [x] Receipt migration/store and protected listener implemented. All 31 transport
+  tests passed, including real local mTLS/JWKS, JWT replay and Redis fail-closed;
+  facade meaningful RED then GREEN. Space short suite 402 tests and vet passed
+  before the final additional PostgreSQL fixtures.
+- [ ] PostgreSQL fixtures compile under short mode but remain unexecuted: local
+  testcontainers failed before domain execution (rootless Docker unsupported on
+  Windows). Dedicated exact-head hosted workflow requires named PASS/no SKIP for
+  wire-to-store, concurrency, retention, backfill, uint64 and migration roundtrip.
 
 ## Decisions
 
@@ -78,6 +85,14 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
   they do not reinterpret existing Space-local details or impose new mask quotas.
 
 ## Risks And Follow-Ups
+
+Accepted composite decision BE-A2-COMPOSITE-CHAT-NODE c4/c5 adds a concrete
+integration gate: author18's migration 000028 and transaction helper must validate
+the persisted COMMITTED binding during freeze/purge and the permanent terminal
+Space fence. Ingestion already takes the shared lifecycle lock before receipt
+lookup/insertion, including fresh collision resolution; the new helper is still
+pending. This checkpoint must not be treated as a completed production ingress
+until that gate is implemented and proved. Ordinary replay c3/c5 is unchanged.
 
 Security/concurrency/migration change requires independent review. Current GitHub
 outage blocks remote delivery/checks but not local development; do not duplicate

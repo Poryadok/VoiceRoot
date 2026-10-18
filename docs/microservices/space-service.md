@@ -121,7 +121,7 @@ service SpaceService {
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
 | GetAuditLog | ✓ | Partial | `created_at DESC, id DESC`; 15-minute HMAC-signed snapshot cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG`. Additive actor/action/time proto fields are shipped, but handler filter mapping and REST/Flutter surfaces remain backlog |
-| AppendAuditEvent | ✓ | ✗ | Protected Role/Chat audit ingestion contract; runtime verifier, idempotent store and producer outboxes remain backlog |
+| AppendAuditEvent | ✓ | ✗ | Dedicated signed Role/Chat ingestion listener and idempotent store; producer outboxes tracked separately by BE-131 |
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
@@ -210,7 +210,7 @@ through the bounded `internal/auditretention` worker.
 BE-116 deliberately has no aggregate audit purge authority. Migration
 `000015_audit_ledger` blocks direct `spaces` deletion before its foreign-key
 cascades can erase audit/outbox evidence, so the obsolete legacy `DeleteSpace`
-RPC now fails closed. BE-245 must supply the documented terminal same-transaction
+RPC now fails closed. BE-005 must supply the documented terminal same-transaction
 P3 purge coordinator before that guard can be replaced. The public gRPC status
 mapping for this temporarily disabled legacy RPC is still a contract gap; BE-116
 does not invent one.
@@ -260,6 +260,31 @@ the original verified user or bot-actor context at mutation time and persist it
 atomically with the outbox. Space validates its UUID and caller/action ownership,
 must consume the hash-bound body value, and does not compare it to a principal
 actor. No caller/source-service identity appears in the request body.
+
+The ingestion implementation is opt-in on its own mTLS listener. Presence of any
+`SPACE_AUDIT_PRINCIPAL_*` setting enables validation; partial or blank required
+configuration fails startup. Required settings are `SPACE_AUDIT_PRINCIPAL_TLS_CERT_FILE`,
+`SPACE_AUDIT_PRINCIPAL_TLS_KEY_FILE`, `SPACE_AUDIT_PRINCIPAL_CLIENT_CA_FILE` and
+`SPACE_AUDIT_PRINCIPAL_REPLAY_REDIS_ADDR`; the optional Redis password is
+`SPACE_AUDIT_PRINCIPAL_REPLAY_REDIS_PASSWORD`. `SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN`
+defaults to `:9098`. `DATABASE_URL` is required. This listener registers only
+`AppendAuditEvent`; the ordinary listener explicitly denies that RPC before legacy
+metadata handling. There is no raw actor, shared token or insecure fallback.
+
+`S2S_JWKS_URLS_JSON` must contain exact HTTPS endpoints for `role` and `chat`;
+other shared-map issuers confer no audit authority. Each trusted JWKS contains
+distinct current+next RS256 keys of at least 2048 bits. Optional `S2S_JWKS_CA_FILE`
+and paired `S2S_JWKS_CLIENT_CERT_FILE`/`S2S_JWKS_CLIENT_KEY_FILE` configure HTTPS
+trust/client identity. Redirects and oversized JWKS responses are rejected.
+`S2S_JWKS_REFRESH_AFTER`/`S2S_JWKS_HARD_EXPIRY`/`S2S_UNKNOWN_KID_COOLDOWN`
+default to `30s`/`2m`/`5s`; invalid values fail startup. Redis is required at
+startup and each credential's JTI is consumed atomically until expiry plus skew;
+Redis failure or an unusable JWKS fails closed. These settings describe source
+capability and do not establish deployment or completed PostgreSQL verification.
+The accepted composite freeze/purge binding and permanent-fence integration is
+tracked with BE-A2-COMPOSITE-CHAT-NODE c4/c5 and remains a delivery gate for this
+ingress checkpoint; the listener must not be treated as production-complete
+without that transaction guard and its concurrency proof.
 
 Exact replay of the same `audit_event_id` and canonical payload returns the empty
 success response; the same ID with any changed field is `ALREADY_EXISTS`.
@@ -413,7 +438,8 @@ While a Space is live, ordinary audit rows retain 365 days and only the shipped
 Space-owned retention worker removes delivered expired rows. Accepted P3 purge is
 the other allowed deletion path: ordinary rows are removed after mandatory
 lifecycle facts are reduced to the sole minimal tombstone, retained until
-`purged_at + 365 days`. That BE-245 terminal purge path remains pending.
+`purged_at + 365 days`. Terminal purge is tracked by BE-005 and its Chat
+continuations BE-006/BE-007; this ingestion change does not activate that path.
 
 
 The current `TransferOwnershipRequest` only carries `space_id` and
