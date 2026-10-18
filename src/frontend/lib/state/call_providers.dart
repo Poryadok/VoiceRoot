@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../backend/livekit_room.dart';
 import '../backend/screen_share_capabilities.dart';
 import '../backend/livekit_url.dart';
+import '../backend/gateway_http.dart';
 import '../backend/realtime_client.dart';
 import '../backend/voice_client.dart';
 import '../settings/voice_input_settings.dart';
@@ -142,6 +143,14 @@ class CallState {
   }
 }
 
+class _PendingVoiceRetry {
+  const _PendingVoiceRetry(this.identity, this.generation, this.retry);
+
+  final GatewayRequestIdentity identity;
+  final int generation;
+  final Future<void> Function() retry;
+}
+
 class CallController extends StateNotifier<CallState> {
   CallController(this._ref) : super(const CallState()) {
     _eventsSub = _ref.listen<AsyncValue<ProfileBoundRealtimeFrame>>(
@@ -168,7 +177,8 @@ class CallController extends StateNotifier<CallState> {
   ProviderSubscription<RealtimeHelloBinding?>? _linkSub;
   ProviderSubscription<VoiceInputSettings>? _inputSub;
   VoiceLiveKitRoom? _room;
-  Future<void> Function()? _pendingVoiceRetry;
+  _PendingVoiceRetry? _pendingVoiceRetry;
+  int _voiceIntentGeneration = 0;
   Timer? _voiceReconcileRetryTimer;
   int _voiceReconcileGeneration = 0;
   int _screenProjectionGeneration = 0;
@@ -201,6 +211,22 @@ class CallController extends StateNotifier<CallState> {
     _ref.read(groupActiveCallRefreshTickProvider.notifier).state++;
   }
 
+  void _queueVoiceRetry(Future<void> Function() retry) {
+    final identity = _ref
+        .read(authControllerProvider.notifier)
+        .gatewayRequestIdentity;
+    final generation = ++_voiceIntentGeneration;
+    _pendingVoiceRetry = identity == null
+        ? null
+        : _PendingVoiceRetry(identity, generation, retry);
+  }
+
+  bool _isCurrentVoiceRetry(_PendingVoiceRetry intent) =>
+      mounted &&
+      intent.generation == _voiceIntentGeneration &&
+      intent.identity ==
+          _ref.read(authControllerProvider.notifier).gatewayRequestIdentity;
+
   Future<void> startCall({
     required String chatId,
     required String calleeProfileId,
@@ -210,11 +236,13 @@ class CallController extends StateNotifier<CallState> {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     if (state.blocksAnotherVoiceEntry(chatId: chatId) && !forceLeaveActive) {
-      _pendingVoiceRetry = () => startCall(
-        chatId: chatId,
-        calleeProfileId: calleeProfileId,
-        mediaKind: mediaKind,
-        forceLeaveActive: true,
+      _queueVoiceRetry(
+        () => startCall(
+          chatId: chatId,
+          calleeProfileId: calleeProfileId,
+          mediaKind: mediaKind,
+          forceLeaveActive: true,
+        ),
       );
       state = state.copyWith(errorMessage: 'voice_session_conflict');
       return;
@@ -274,6 +302,7 @@ class CallController extends StateNotifier<CallState> {
   }
 
   void dismissVoiceConflict() {
+    ++_voiceIntentGeneration;
     _pendingVoiceRetry = null;
     if (state.errorMessage == 'voice_session_conflict') {
       state = state.copyWith(clearError: true);
@@ -281,14 +310,17 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<void> confirmLeaveCurrentVoiceAndRetry() async {
-    final retry = _pendingVoiceRetry;
+    final intent = _pendingVoiceRetry;
     _pendingVoiceRetry = null;
+    // A dialog belongs to its original identity, including the local generation.
+    // Do not stop the old media on a canceled or stale confirmation.
+    if (intent == null || !_isCurrentVoiceRetry(intent)) return;
     state = state.copyWith(clearError: true);
     if (state.hasBoundVoiceSession) {
       await hangUp();
     }
-    if (retry != null) {
-      await retry();
+    if (_isCurrentVoiceRetry(intent)) {
+      await intent.retry();
     }
   }
 
@@ -316,6 +348,9 @@ class CallController extends StateNotifier<CallState> {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     if (state.blocksAnotherVoiceEntry(chatId: groupChatId)) {
+      // Group self-leave needs the bound cleanup adapter before it can retry.
+      _pendingVoiceRetry = null;
+      ++_voiceIntentGeneration;
       state = state.copyWith(errorMessage: 'voice_session_conflict');
       return;
     }
@@ -363,10 +398,12 @@ class CallController extends StateNotifier<CallState> {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     if (state.hasBoundVoiceSession && !forceLeaveActive) {
-      _pendingVoiceRetry = () => joinVoiceRoom(
-        voiceRoomId: voiceRoomId,
-        spaceId: spaceId,
-        forceLeaveActive: true,
+      _queueVoiceRetry(
+        () => joinVoiceRoom(
+          voiceRoomId: voiceRoomId,
+          spaceId: spaceId,
+          forceLeaveActive: true,
+        ),
       );
       state = state.copyWith(errorMessage: 'voice_session_conflict');
       return;
@@ -418,6 +455,8 @@ class CallController extends StateNotifier<CallState> {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     if (state.blocksAnotherVoiceEntry(roomId: roomId)) {
+      _pendingVoiceRetry = null;
+      ++_voiceIntentGeneration;
       state = state.copyWith(errorMessage: 'voice_session_conflict');
       return;
     }
