@@ -75,7 +75,7 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	stale.Generation += "-replacement"
 	require.ErrorIs(t, st.ApplyPartyEligibilityLoss(ctx, stale), ErrPartySourceChanged)
 	check(1, []string{"JOINED"})
-	_, err := pool.Exec(ctx, `ALTER TABLE voice_roster_outbox ADD CONSTRAINT reject_test_left CHECK(change <> 'LEFT')`)
+	_, err = pool.Exec(ctx, `ALTER TABLE voice_roster_outbox ADD CONSTRAINT reject_test_left CHECK(change <> 'LEFT')`)
 	require.NoError(t, err)
 	require.Error(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))
 	check(1, []string{"JOINED"})
