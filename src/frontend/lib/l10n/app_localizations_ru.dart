@@ -3176,6 +3176,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get matchSquadLeaveError => 'Не удалось выйти из матч-отряда';
 
   @override
+  String get matchSquadRosterTitle => 'Ваш отряд';
+
+  @override
   String get matchRatingTitle => 'Оцените тиммейтов';
 
   @override
@@ -3694,4 +3697,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String contactProfilePlayingGame(String title) {
     return 'Играет в $title';
   }
+
+  @override
+  String get matchSquadOpenChat => 'Открыть чат';
 }

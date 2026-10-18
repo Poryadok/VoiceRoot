@@ -1304,6 +1304,7 @@
   "matchFoundRespondError": "Не удалось ответить на матч",
   "matchSquadLeave": "Выйти из отряда",
   "matchSquadLeaveError": "Не удалось выйти из матч-отряда",
+  "matchSquadRosterTitle": "Ваш отряд",
   "matchRatingTitle": "Оцените тиммейтов",
   "matchRatingSubtitle": "Звёзды можно пропустить для каждого игрока.",
   "matchRatingSkipTeammate": "Пропустить",
@@ -1468,5 +1469,6 @@
   "e2eKeyBackupManage": "Управление резервной копией ключей",
   "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны",
   "contactProfilePlayingGame": "Играет в {title}",
+  "matchSquadOpenChat": "Открыть чат",
   "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
 }
