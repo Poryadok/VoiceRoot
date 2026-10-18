@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 SERVICES = ('bot', 'story', 'moderation', 'subscription', 'user', 'search',
-            'social', 'chat', 'messaging', 'file', 'space', 'role',
+            'social', 'chat', 'realtime', 'messaging', 'file', 'space', 'role',
             'notification', 'matchmaking', 'voice', 'auth', 'gameintegration')
 
 MIGRATION_DATABASES = {'gameintegration': 'game_integration_db'}

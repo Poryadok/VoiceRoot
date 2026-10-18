@@ -42,7 +42,7 @@ func (s *SpaceLifecycleStore) ResolveChatLifecycle(ctx context.Context, chatID u
 	if currentSpace != nil {
 		response.SpaceId = currentSpace.String()
 		var state string
-		var operation uuid.UUID
+		var operation *uuid.UUID
 		err = tx.QueryRow(ctx, `SELECT generation,state,deletion_operation_id FROM chat_space_lifecycle_fences WHERE space_id=$1`, *currentSpace).Scan(&response.Generation, &state, &operation)
 		if errors.Is(err, pgx.ErrNoRows) {
 			// This is Chat's native documented unfenced initial state; the table read
@@ -51,7 +51,16 @@ func (s *SpaceLifecycleStore) ResolveChatLifecycle(ctx context.Context, chatID u
 		} else if err != nil {
 			return nil, err
 		} else {
-			response.DeletionOperationId = operation.String()
+			if response.Generation == 0 {
+				if operation != nil || state != "LIVE" {
+					return nil, ErrSpaceLifecycleState
+				}
+			} else {
+				if operation == nil || *operation == uuid.Nil {
+					return nil, ErrSpaceLifecycleState
+				}
+				response.DeletionOperationId = operation.String()
+			}
 			switch state {
 			case "LIVE":
 				response.State = chatv1.ChatLifecycleState_CHAT_LIFECYCLE_STATE_LIVE

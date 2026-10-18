@@ -1,129 +1,105 @@
 # Realtime P3 durable admission execution plan
 
-This plan implements TT BE-A2-REALTIME-P3-PARTICIPANT and accepted decision
-BE-REALTIME-P3-DURABLE-ADMISSION-v1 (TT c3-c5). Sources: project AGENTS,
-docs/PLAN.md (A2), realtime-service.md, space-service.md, DATA_MODEL.md,
-DATA_STORES.md, ARCHITECTURE_REQUIREMENTS.md, CONTRACT_MATRIX.md, TESTING.md
-and CONTRIBUTING.md. Current source base: d4abb829622e9bd91b26842b61522e6840840867.
-Author: Рудеус-172. Independent concurrency review and delivery remain required.
+Task: BE-A2-REALTIME-P3-PARTICIPANT. Owner: Рудеус-172, developer,
+gpt-6.1-sol/medium. Base: d4abb829622e9bd91b26842b61522e6840840867.
+Consumer: existing Space BE005 coordinator; additive participant11. Decisions:
+BE-REALTIME-P3-DURABLE-ADMISSION-v1 (TT c3-c5),
+BE-REALTIME-P3-JWKS-BOOTSTRAP-v1 (independent Astra c9-c10).
 
-## Safety contract
+Sources: AGENTS, PLAN A2, realtime-service.md, space-service.md, DATA_MODEL,
+DATA_STORES, ARCHITECTURE_REQUIREMENTS, CONTRACT_MATRIX, TESTING, CONTRIBUTING.
 
-Realtime owns metadata-only PostgreSQL state. Every chat-scoped local enqueue
+## Safety and completion boundary
+
+Realtime owns metadata-only PostgreSQL state. Every chat-origin local enqueue
 requires a committed admission tied to a never-reused process incarnation.
-Admission remains PENDING until the last synchronous sink returns. SQL backend
-loss, process timeout, cancellation and replacement do not settle it. FROZEN
-closes new admissions, then persists a receipt only after all existing admissions
-for the exact immutable Chat manifest have settled. PURGED is permanent.
-Already queued frames are outside the boundary; no wire recall is promised.
+PENDING survives backend loss, timeout, cancellation and process replacement.
+Finite synchronous scopes reject captured late enqueues; settlement follows
+every possible sink. Already queued frames are outside this boundary.
 
-Missing state is UNKNOWN. Only a protected Chat-native lifecycle resolver may
-bootstrap it; delayed bootstrap cannot reopen a restrictive gate. All ordinary
-DM/group and Space sinks use this route. Existing recipient authorization stays
-in force. Lifecycle failure also denies sender delivery. Non-chat control events
-retain existing semantics.
+Protected native Chat enrollment supplies structure, never recipient ACL.
+Unknown/unavailable state denies every recipient, including sender fallback.
+Imported restrictive gates dominate delayed LIVE hydration. Exact immutable
+Chat pages close gates before import receipts; strong FROZEN requires sealed
+coverage and no unresolved admission, transactionally with saved receipt.
+PURGED is permanent. Restore requires the allowed newer generation and prior
+completed freeze. Public evidence and the original replay horizon use one fresh
+database clock instant. Full bytes expire after30days; compact hashes, pending
+tickets and restrictive gates survive. Expired replay cannot renew its window.
 
-Import validates exact Chat pages/root, seals complete coverage and preserves
-stable request/receipt bytes. Participant11 is additive; Space's existing BE005
-consumer must wait for all11 FROZEN and PURGE_DECIDED barriers. LIVE restoration
-requires complete prior freeze and an allowed newer generation. Dead-process
-recovery without qualified exact termination proof stays unsupported/pending.
-No timeout reaper or privileged caller boolean is introduced.
+Space imports every page into participant11 and waits all11 FROZEN and
+PURGE_DECIDED receipts before scheduling/destructive work. Migration34 widens
+the participant/compact ledgers and terminal predicate without changing native
+membership33 or RoomClose hooks. IDs1-10 retain their meaning.
 
-## Implementation sequence and proof
+## Completed source and proof
 
-1. Risk-first real PostgreSQL regression: commit admission, pause sink, drop SQL
-   backend, close gate, prove receipt pending; settle after sink, prove drainage.
-   Check unrelated chat, restart incarnation, unknown state and monotonic hydrate.
-2. Metadata schema/store and synchronous admission scopes. No payloads, recipient
-   history or delivery queue. Lock order incarnation, operation, sorted chats,
-   admissions; no RPC or sink IO in SQL transactions.
-3. Add protected realtime wire and narrow Chat resolver, generated outputs and
-   exact principal/listener negative tests. Use current mTLS/replay conventions.
-4. Route real hub/profile/Redis/message/chat/ephemeral sinks through typed origin
-   and admission; real composition tests prove no path bypasses lifecycle gate.
-5. Existing Space importer/registry/transport/barriers accept participant11.
-   Ten-good/missing11 cannot schedule, destructively purge or finish.
-6. Canonical docs/store inventory/readiness and migration/rollback negatives.
-   Run Linux package/race/PG tests, buf/codegen/drift and affected module checks.
-   Bind JSON case counts and zero required skips to immutable source.
-7. Independent security/concurrency review; deliver immutable source and portable
-   proof to integration ant121 via accepted transfer, retain custody otherwise.
+- Metadata migration/store, synchronous executor, exact manifest import/seal,
+  fence/purge receipts and bounded compaction are implemented.
+- Real connReg/hub, profile/Redis/message/chat/ephemeral paths carry typed origin
+  and admission. Unknown Chat type no longer grants sender delivery.
+- Separate Chat native resolver and Realtime lifecycle service use mTLS, exact
+  principal/RPC/operation/body binding, current+next HTTPS JWKS and replay Redis.
+- Native Chat LIVE0 nullable operation mapping is verified and corrected.
+- Runtime requires its migrated DB and canonical exactly2 PKCS#8 signer keys.
+  Public keys must match independent publication. Chat health observes its
+  native schema/listener/verifier/replay; Realtime health additionally requires
+  the protected Chat TLS connection. These are advisory health/transport checks,
+  not proof a particular chat is LIVE or public P3 is globally active.
+- Independent local public JWKS bootstrap has no app health cycle. CA/SAN and
+  both documents are checked. Static generation supports a prepublished next
+  key switch; mismatch/partial old volumes fail closed. Phase0 consumes its
+  actual distinct fixture Space issuer. Staging/prod assets are explicit
+  external secret/public-document prerequisites, not deployed credentials.
+- Compose/DEV/staging migration catalogs and deployment templates are wired.
+  Canonical store/contract/operation/testing docs describe the boundaries.
 
-## Progress
+Owned Linux Go1.26/PostgreSQL16 `-race` runtime evidence:
+9 Realtime cases (actual hub drain/late scope, protected RPC composition,
+backend loss, exact replay, restart/permanent purge, unknown scope, multipage
+seal, compaction) plus1 native Chat full-catalog case and1 Space34 full-catalog
+hard-delete case passed with zero required skips. Additional protected transport
+proof covers issuer/audience/body/replay/mTLS denials, JWKS outage before/after
+hard expiry and recovery, and replay Redis loss. Receipt database timestamp
+equality is included in the final PG rerun. The initial unrelated-idle-backend
+kill fixture was superseded by MaxConns1/acquire-after-Begin and independent
+killer, targeting the backend that actually committed admission.
 
-- [x] Atomic TT claim; owned WT41 lease; current develop branch; source inventory.
-- [x] Accepted Astra decision read; risk and consumer recorded in TT c7.
-- [x] Initial missing-implementation compile RED; metadata implementation and
-  real PG/race GREEN for five cases. The first PG-kill fixture killed an idle
-  backend; it is superseded by MaxConns=1/acquire-after-Begin plus independent
-  killer, which targets the backend that actually committed the admission.
-- [ ] Protected wire, Chat bootstrap, all sinks, Space11 consumer, readiness/docs.
-- [ ] Scoped verification, independent review, immutable delivery.
+Scoped short checks: Realtime456 passed; Space197 passed/152 explicit legacy PG
+skips; principal63 passed; Chat package/root checks passed, with legacy skips
+reported separately. Realtime/Chat/Space vet passed.
+Buf lint, full local Go+Dart generation and Go parity passed; buf breaking
+against a local archive of the exact base passed. Initial Git URL clone timed
+out; the source archive avoids that clone. Migration runner contracts passed
+with Node24, DEV migration unit tests10 passed, image-catalog/YAML/Compose
+checks passed. Initial runners lacked Node/jq; corrected owned Linux runners
+passed, so their environmental failures are not product failures.
 
-### Current implementation checkpoint (not ready for integration)
+## Remaining delivery work
 
-The real hub now uses committed admission for every chat-scoped sink, including
-profile/Redis/ephemeral routes. Native Chat resolution cannot grant recipient
-ACL. Sender fallback on failed Chat type lookup is removed. Exact manifests,
-strong receipts and terminal denies are transactional; the Space importer,
-registry, protected transport and terminal SQL predicate require participant11.
-Space migration34 is additive to separately owned32/33; no membership triggers
-or RoomClose hooks are changed. Schema is under migrations/realtime_db.
-
-The actual hub+PG race run passed, including blocked recipient sinks, captured
-late scope and stale LIVE hydration. The new 30-day compaction test is running;
-full bytes are discarded while immutable hashes, denies and pending tickets
-survive. Cooperative incarnation close exists; dead-process recovery remains
-unsupported. Local Compose gains an independent PUBLIC-only HTTPS JWKS service
-derived by the existing initializer from the same current/next signer keys,
-avoiding application bootstrap cycles. Partial principal volumes fail startup.
-Compose config parses; initializer image build passed. Bootstrap HTTPS runtime,
-new protected listener composition, Chat native PG cases, Space34 SQL proof,
-canonical docs, generation/drift checks and independent review remain open.
-
-Owned resources: WT41 lease f8e38cf028e75e95fa9ac18395adee7d; Docker network
-rudeus172-p3, PG rudeus172-p3-pg, build cache rudeus172-p3-build; no host ports or
-shared stands. Preserve source/CI custody with actor172; ant121 publication only.
-
-### Historical initial checkpoint (superseded by current implementation)
-
-The metadata admission store/schema and synchronous scope executor exist; five
-tests execute successfully with `-race -tags=realtimep3integration` in owned
-Linux Go1.26/PostgreSQL16, zero skips. Exact test JSON is preserved with the task
-evidence. The tagged PG suite intentionally requires its database instead of
-silently skipping. Existing short Chat gisprincipal/grpcsvc/store checks pass,
-which proves compilation/regression only, not new protected-listener runtime
-coverage. `buf lint` passes. Native Windows tests were not executed.
-
-Additive source includes participant11, separate `chat_lifecycle.proto`, native
-Chat enrollment store/handler/listener/config and realtime lifecycle wire/stubs.
-Native terminal `ChatLifecycleState` is distinct from the common fence-command
-enum: common commands intentionally have no PURGED command. Chat's existing
-schema is read under its existing mutation barrier; this adds no Chat migration.
-
-**Do not integrate this partial package.** Next implementation is exact manifest
-schema/import/seal/strong receipt finalization (same locked transaction as
-drainage), protected Realtime listener + trusted Chat client/startup, every real
-typed-origin sink and sender fail-closed handling, existing Space11 transport,
-importer/registry/barriers and schema/config/readiness/canonical docs. Then add
-new Chat protected composition/PG tests and complete the finite decision matrix,
-required generation/drift checks and independent security/concurrency review.
-
-Repeated mandatory CodeGraph follow-ups became unbounded and were cancelled as
-owned read requests; no duplicate probe, index mutation or foreign process kill
-was performed. Current exact-source reads controlled corrections. This is a
-safe source/proof checkpoint, not completed task, public P3 capability, CI,
-deployment or acceptance. Task/delivery custody stays with Рудеус-172 until an
-explicit accepted real-ant transfer.
+- Collect the final active checks, maintain exact source/evidence bindings and
+  preserve a normal immutable commit plus portable bundle/restore evidence.
+- Update the AST graph with the owned `graphify update . --no-cluster` process.
+- Obtain ordinary independent security/concurrency review of the exact head;
+  Astra bootstrap disposition is not sourceCLEAR. Address actual findings.
+- Sole SSH publisher/CI owner121 publishes and observes hosted checks. Source
+  owner172 retains CI/task/delivery custody until explicit accepted real-ant
+  transfer. No partial-source integration or fake acceptance.
 
 ## Resource and activation boundaries
 
-Use owned Linux Docker runners without host ports; no Windows test executable,
-new host listener, firewall changes or shared container mutation. DEV/STAGING
-claims, rollout and actual acceptance are separate; no such authority is claimed.
-Public P3 readiness requires migrated/restorable realtime_db, trusted bootstrap
-coverage, all actual/old writers drained or terminated, retained permanent denies,
-11-participant release coverage and a qualified crash recovery path. A healthy
-new binary or environment flag is not proof. Rollback cannot remove terminal
-fences or introduce an old bypassing writer.
+WT41 lease f8e38cf028e75e95fa9ac18395adee7d; Docker network rudeus172-p3,
+PG rudeus172-p3-pg, public JWKS rudeus172-p3-jwks, build volume
+rudeus172-p3-build and uniquely named finite runners. No host ports, Windows
+test binaries/listeners, firewall changes or shared stand operations. Current
+TT resource protocol is mandatory; DEV/STAGING were not claimed or touched.
+Account every owned command before returning a lease or removing owned fixtures.
+
+Cooperative incarnation close is supported. Dead-incarnation recovery without
+qualified exact termination proof is explicitly unsupported and remains pending;
+no TTL reaper, unchecked operator boolean or identity reuse is introduced.
+Public P3 activation still requires migrated/restorable metadata, complete old
+and new writer coverage/drainage, all11 release coverage and qualified recovery
+and rollback. A healthy binary, environment flag or this source/proof package
+does not establish these gates. No global catch-up, payload history or event
+generation binding after restored LIVE is claimed by this terminal scope.

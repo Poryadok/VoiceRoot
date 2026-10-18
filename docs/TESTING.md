@@ -92,6 +92,18 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
 
 ### Space tree integration proof
 
+Realtime P3 has a scoped Linux-only external-PostgreSQL suite tagged
+`realtimep3integration`. Set `REALTIME_P3_TEST_DATABASE_URL` to an owned isolated
+PostgreSQL16 database and run Realtime `go test -race -tags=realtimep3integration
+-run 'Test(ProtectedRealtime|ActualHub|Committed|FreezeReceipt|ExactManifest|Restart|Unknown|Multipage|ReceiptCompaction)' . ./internal/lifecycle`.
+The same tag exposes native Chat `TestRealtimeNativeLifecycle` and Space
+`TestRealtimeParticipantEleven` store cases; these create and drop uniquely named
+databases on that owned server to apply complete native migration catalogs.
+The required suite fails when its DSN is absent rather than skipping. Containers
+need no host ports or Docker socket for this suite. Ordinary legacy short-test
+skips remain distinct from these runtime cases; never report them as PG proof.
+
+
 Для узкого exact-SHA доказательства запускается workflow
 [space-tree-proof.yml](../.github/workflows/space-tree-proof.yml). Он выполняет
 четыре PostgreSQL-backed кейса: update/delete категории, update/delete voice room

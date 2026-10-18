@@ -1,5 +1,16 @@
 # Opt-in LOCAL/CI fixture only. Generate PHASE0_FIXTURE_DIR before using it.
 services:
+  # Space uses fixture signing keys in this opt-in overlay. Consume its actual
+  # HTTPS set, rather than the base initializer's distinct Space key generation.
+  realtime:
+    environment:
+      REALTIME_SPACE_PRINCIPAL_JWKS_URL: https://space:8443/.well-known/jwks.json
+      REALTIME_SPACE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+    depends_on:
+      space:
+        condition: service_healthy
   gateway:
     user: "0:0"
     environment:

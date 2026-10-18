@@ -366,6 +366,15 @@ func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(r.allowlist, strictInterceptor{runtime: r}.intercept)}
 }
 
+// Ready observes cached issuer keys and replay availability without fetching
+// keys, consuming a JTI, or contacting an issuer application health endpoint.
+func (r *Runtime) Ready(ctx context.Context) error {
+	if r == nil || !r.resolver.Usable(r.issuer) {
+		return errors.New("Chat principal issuer keys unavailable or expired")
+	}
+	return r.replay.Ping(ctx).Err()
+}
+
 func (r *Runtime) allowlist(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	if _, ok := r.methods[info.FullMethod]; !ok {
 		return nil, status.Error(codes.PermissionDenied, "method unavailable on protected Chat listener")

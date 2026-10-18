@@ -160,12 +160,28 @@ func replay(ctx context.Context, tx pgx.Tx, space, operation uuid.UUID, generati
 	return true, nil
 }
 func saveResponse(ctx context.Context, tx pgx.Tx, space, operation uuid.UUID, generation uint64, kind string, request []byte, response proto.Message) error {
+	// Public evidence and its replay horizon share one fresh database instant.
+	// Application clock skew cannot move either timestamp independently.
+	var completed time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&completed); err != nil {
+		return err
+	}
+	switch r := response.(type) {
+	case *realtimev1.ImportSpacePurgeManifestPageResponse:
+		r.Receipt.CompletedAt = timestamppb.New(completed)
+	case *realtimev1.ApplySpaceLifecycleFenceResponse:
+		r.Receipt.AppliedAt = timestamppb.New(completed)
+	case *realtimev1.PurgeSpaceResponse:
+		r.Receipt.CompletedAt = timestamppb.New(completed)
+	default:
+		return ErrConflict
+	}
 	wire, err := deterministic(response)
 	if err != nil {
 		return err
 	}
 	hash := sha256.Sum256(request)
-	_, err = tx.Exec(ctx, `INSERT INTO realtime_lifecycle_operations(space_id,operation_id,generation,kind,request_bytes,request_sha256,response_bytes,completed_at) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp())`, space, operation, generation, kind, request, hash[:], wire)
+	_, err = tx.Exec(ctx, `INSERT INTO realtime_lifecycle_operations(space_id,operation_id,generation,kind,request_bytes,request_sha256,response_bytes,completed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, space, operation, generation, kind, request, hash[:], wire, completed)
 	return err
 }
 

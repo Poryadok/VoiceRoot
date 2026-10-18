@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -132,7 +132,22 @@ func (r *realtimeLifecycleRuntime) Ready(ctx context.Context) error {
 	if !r.serving.Load() {
 		return errors.New("Realtime lifecycle listener unavailable")
 	}
-	return r.pool.Ping(ctx)
+	if err := r.pool.Ping(ctx); err != nil {
+		return err
+	}
+	if err := r.transport.Ready(ctx); err != nil {
+		return err
+	}
+	r.chat.Connect()
+	for {
+		state := r.chat.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.Shutdown || !r.chat.WaitForStateChange(ctx, state) {
+			return errors.New("protected Chat lifecycle transport unavailable")
+		}
+	}
 }
 func (r *realtimeLifecycleRuntime) Close(ctx context.Context) {
 	r.once.Do(func() {
@@ -205,7 +220,13 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 	if err = pool.QueryRow(ctx, `SELECT to_regclass('realtime_manifest_heads') IS NOT NULL AND to_regclass('realtime_manifest_items') IS NOT NULL AND to_regclass('realtime_admissions') IS NOT NULL AND to_regclass('realtime_lifecycle_operations') IS NOT NULL AND to_regclass('realtime_incarnations') IS NOT NULL`).Scan(&ready); err != nil || !ready {
 		return failed(errors.New("Realtime lifecycle schema unavailable"))
 	}
-	issuer, err := loadRealtimeLifecycleIssuer(get("REALTIME_PRINCIPAL_PRIVATE_KEY_FILE"), get("REALTIME_PRINCIPAL_KEY_ID"), get("REALTIME_PRINCIPAL_JWKS_FILE"))
+	issuer, public, err := loadRealtimePrincipalIssuerFromEnv()
+	if err == nil && issuer == nil {
+		err = errors.New("Realtime principal signing identity required")
+	}
+	if err == nil {
+		err = matchRealtimePublishedJWKS(public, get("REALTIME_PRINCIPAL_JWKS_FILE"))
+	}
 	if err != nil {
 		return failed(err)
 	}
@@ -293,49 +314,32 @@ func (deniedLifecycleRunner) Run(context.Context, uuid.UUID, func(*lifecycle.Sco
 	return lifecycle.ErrDenied
 }
 
-func loadRealtimeLifecycleIssuer(path, kid, jwksFile string) (*principal.Issuer, error) {
-	if path == "" || kid == "" || jwksFile == "" {
-		return nil, errors.New("Realtime lifecycle signing identity and current/next JWKS required")
-	}
-	raw, err := os.ReadFile(path)
+// matchRealtimePublishedJWKS ensures independent startup publication names the
+// exact current+next keys owned by this issuer, including their public exponent.
+func matchRealtimePublishedJWKS(public principalJWKS, path string) error {
+	document, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	block, _ := pem.Decode(raw)
-	if block == nil {
-		return nil, errors.New("invalid Realtime signing key")
+	published, err := principal.ParseJWKS(document)
+	if err != nil || len(published) != 2 {
+		return errors.New("Realtime published current/next JWKS required")
 	}
-	var key *rsa.PrivateKey
-	if block.Type == "RSA PRIVATE KEY" {
-		key, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-	} else {
-		var parsed any
-		parsed, err = x509.ParsePKCS8PrivateKey(block.Bytes)
-		if err == nil {
-			key, _ = parsed.(*rsa.PrivateKey)
+	ownedBytes, err := json.Marshal(public)
+	if err != nil {
+		return err
+	}
+	owned, err := principal.ParseJWKS(ownedBytes)
+	if err != nil || len(owned) != 2 {
+		return errors.New("Realtime owned current/next JWKS required")
+	}
+	for kid, key := range owned {
+		peer, ok := published[kid]
+		if !ok || peer.E != key.E || peer.N.Cmp(key.N) != 0 {
+			return errors.New("Realtime published JWKS differs from owned keys")
 		}
 	}
-	if err != nil || key == nil || key.N.BitLen() < 2048 {
-		return nil, errors.New("invalid Realtime RSA signing key")
-	}
-	document, err := os.ReadFile(jwksFile)
-	if err != nil {
-		return nil, err
-	}
-	keys, err := principal.ParseJWKS(document)
-	if err != nil || len(keys) != 2 {
-		return nil, errors.New("Realtime current/next JWKS required")
-	}
-	current, ok := keys[kid]
-	if !ok || current.N.Cmp(key.N) != 0 || current.E != key.E {
-		return nil, errors.New("Realtime signing key does not match published JWKS")
-	}
-	for id, next := range keys {
-		if next.N.BitLen() < 2048 || id != kid && next.N.Cmp(key.N) == 0 {
-			return nil, errors.New("Realtime JWKS rotation keys invalid")
-		}
-	}
-	return principal.NewIssuer(principal.IssuerConfig{Issuer: "realtime", KeyID: kid, PrivateKey: key})
+	return nil
 }
 
 // Compile-time proof that the resolver request is a protobuf message; no raw

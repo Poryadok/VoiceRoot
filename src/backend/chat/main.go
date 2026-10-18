@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -120,6 +121,7 @@ func main() {
 	var spaceLifecyclePrincipalRuntime *gisprincipal.Runtime
 	var searchManifestGRPCSrv *grpc.Server
 	var realtimeLifecycleGRPCSrv *grpc.Server
+	var realtimeLifecycleReady func(context.Context) error
 	var matchSquadGRPCSrv *grpc.Server
 	var matchSquadPrincipalRuntime *matchsquadprincipal.Runtime
 	var accountDeletedConsumerDone <-chan error
@@ -405,6 +407,10 @@ func main() {
 			}()
 		}
 		if realtimeLifecycleConfigured {
+			const schemaCheck = `SELECT id,space_id FROM chats LIMIT 0; SELECT generation,state,deletion_operation_id FROM chat_space_lifecycle_fences LIMIT 0`
+			if _, err := pool.Exec(runCtx, schemaCheck); err != nil {
+				log.Fatalf("Realtime lifecycle native schema: %v", err)
+			}
 			runtime, runtimeErr := gisprincipal.New(runCtx, realtimeLifecycleConfig)
 			if runtimeErr != nil {
 				log.Fatalf("Realtime lifecycle principal runtime: %v", runtimeErr)
@@ -415,9 +421,22 @@ func main() {
 				log.Fatalf("Realtime lifecycle listen: %v", listenErr)
 			}
 			realtimeLifecycleGRPCSrv = grpc.NewServer(runtime.ServerOptions()...)
+			var serving atomic.Bool
+			serving.Store(true)
+			realtimeLifecycleReady = func(ctx context.Context) error {
+				if !serving.Load() {
+					return errors.New("Realtime lifecycle listener unavailable")
+				}
+				if err := runtime.Ready(ctx); err != nil {
+					return err
+				}
+				_, err := pool.Exec(ctx, schemaCheck)
+				return err
+			}
 			chatv1.RegisterChatRealtimeLifecycleServiceServer(realtimeLifecycleGRPCSrv, &grpcsvc.RealtimeLifecycleGRPC{Store: &store.SpaceLifecycleStore{Pool: pool}})
 			go func() {
 				logger.Info("Realtime lifecycle mTLS gRPC listening", slog.String("addr", realtimeLifecycleListen))
+				defer serving.Store(false)
 				if err := realtimeLifecycleGRPCSrv.Serve(listener); err != nil {
 					log.Fatalf("Realtime lifecycle serve: %v", err)
 				}
@@ -486,7 +505,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandlerWithRealtime(serviceName, realtimeLifecycleReady), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 2)
