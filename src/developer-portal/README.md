@@ -2,6 +2,16 @@
 
 Minimal Vite app for bot registration, manifest validate/apply, and token display.
 
+Selecting a bot loads its server-assigned, read-only public slug and a preview
+of its saved name, description, requested scopes, and registered commands.
+Unsaved editor changes do not alter the preview. The public-page link uses
+`https://voice.gg/bots/{slug}`; a bot without a slug has no public-page link.
+Changing selection or signing out clears the preview, and unavailable catalog
+data is shown explicitly. This is a preview of public details, not an installation
+or live delivery check. Bot tokens, webhook secrets and owner/private webhook
+fields are not part of the preview. The existing API does not support editing
+slugs during registration or update.
+
 ## Authentication
 
 Production flow uses **OAuth 2.0 authorization code + PKCE** against Voice Auth (via API Gateway):
