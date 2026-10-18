@@ -23,6 +23,7 @@ const (
 	AuthService_ConsumeOwnershipTransferProof_FullMethodName        = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
 	AuthService_GetOwnershipTransferReceipt_FullMethodName          = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
 	AuthService_GetVoiceSessionEpochFloor_FullMethodName            = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor"
+	AuthService_GetRoleSessionEpochFloor_FullMethodName             = "/voice.auth.v1.AuthService/GetRoleSessionEpochFloor"
 	AuthService_Register_FullMethodName                             = "/voice.auth.v1.AuthService/Register"
 	AuthService_Login_FullMethodName                                = "/voice.auth.v1.AuthService/Login"
 	AuthService_Logout_FullMethodName                               = "/voice.auth.v1.AuthService/Logout"
@@ -67,6 +68,9 @@ type AuthServiceClient interface {
 	GetOwnershipTransferReceipt(ctx context.Context, in *GetOwnershipTransferReceiptRequest, opts ...grpc.CallOption) (*GetOwnershipTransferReceiptResponse, error)
 	// Private Voice-only read of the effective session epoch floor for a verified media actor.
 	GetVoiceSessionEpochFloor(ctx context.Context, in *GetVoiceSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetVoiceSessionEpochFloorResponse, error)
+	// @voice.security=protected;callers=service:role
+	// Private Role-only read; shares Auth's durable account and retained floor authority.
+	GetRoleSessionEpochFloor(ctx context.Context, in *GetRoleSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetRoleSessionEpochFloorResponse, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
@@ -155,6 +159,16 @@ func (c *authServiceClient) GetVoiceSessionEpochFloor(ctx context.Context, in *G
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetVoiceSessionEpochFloorResponse)
 	err := c.cc.Invoke(ctx, AuthService_GetVoiceSessionEpochFloor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetRoleSessionEpochFloor(ctx context.Context, in *GetRoleSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetRoleSessionEpochFloorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRoleSessionEpochFloorResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetRoleSessionEpochFloor_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -464,6 +478,9 @@ type AuthServiceServer interface {
 	GetOwnershipTransferReceipt(context.Context, *GetOwnershipTransferReceiptRequest) (*GetOwnershipTransferReceiptResponse, error)
 	// Private Voice-only read of the effective session epoch floor for a verified media actor.
 	GetVoiceSessionEpochFloor(context.Context, *GetVoiceSessionEpochFloorRequest) (*GetVoiceSessionEpochFloorResponse, error)
+	// @voice.security=protected;callers=service:role
+	// Private Role-only read; shares Auth's durable account and retained floor authority.
+	GetRoleSessionEpochFloor(context.Context, *GetRoleSessionEpochFloorRequest) (*GetRoleSessionEpochFloorResponse, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
@@ -529,6 +546,9 @@ func (UnimplementedAuthServiceServer) GetOwnershipTransferReceipt(context.Contex
 }
 func (UnimplementedAuthServiceServer) GetVoiceSessionEpochFloor(context.Context, *GetVoiceSessionEpochFloorRequest) (*GetVoiceSessionEpochFloorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetVoiceSessionEpochFloor not implemented")
+}
+func (UnimplementedAuthServiceServer) GetRoleSessionEpochFloor(context.Context, *GetRoleSessionEpochFloorRequest) (*GetRoleSessionEpochFloorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRoleSessionEpochFloor not implemented")
 }
 func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
@@ -706,6 +726,24 @@ func _AuthService_GetVoiceSessionEpochFloor_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).GetVoiceSessionEpochFloor(ctx, req.(*GetVoiceSessionEpochFloorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetRoleSessionEpochFloor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoleSessionEpochFloorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetRoleSessionEpochFloor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetRoleSessionEpochFloor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetRoleSessionEpochFloor(ctx, req.(*GetRoleSessionEpochFloorRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1254,6 +1292,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetVoiceSessionEpochFloor",
 			Handler:    _AuthService_GetVoiceSessionEpochFloor_Handler,
+		},
+		{
+			MethodName: "GetRoleSessionEpochFloor",
+			Handler:    _AuthService_GetRoleSessionEpochFloor_Handler,
 		},
 		{
 			MethodName: "Register",
