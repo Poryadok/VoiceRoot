@@ -1,0 +1,42 @@
+name: Admin browser
+
+on:
+  pull_request:
+    paths:
+      - 'src/admin/**'
+      - '.github/workflows/admin-browser.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'src/admin/**'
+      - '.github/workflows/admin-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staff-flows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/admin/package-lock.json
+      - run: npm ci
+        working-directory: src/admin
+      - name: Browser staff journeys with no skipped checks
+        run: npm run test:browser
+        working-directory: src/admin
+        env:
+          CHROME_BIN: google-chrome
+          ADMIN_BROWSER_OUTPUT: ../../tmp/admin-browser
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: admin-browser-${{ github.run_id }}
+          path: tmp/admin-browser
+          if-no-files-found: error

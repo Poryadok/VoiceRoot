@@ -25,7 +25,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Admin
 
 
-- [ ] **[Admin] No admin E2E / browser tests** — `docs/TESTING.md` lists analytics live tests as backend-only; no Playwright/Cypress for Admin. Paths: `docs/TESTING.md`, `src/admin/src/test/`
+- [ ] **[Admin] Live staff browser acceptance** — deterministic Chromium coverage now exercises the built Admin OAuth/PKCE and moderation/appeal flows against a local HTTP fixture (`src/admin/browser/staff-flows.mjs`, `admin-browser.yml`). Actual Auth/staff authority, sanction enforcement and staging OAuth remain live acceptance gates; fixture success does not close them.
 - [ ] **[Admin] Staging smoke: Admin UI routes only** — batch 5 adds SPA root + `/callback` when `VOICE_ADMIN_INGRESS_HOST` set; Gateway admin moderation/analytics still via `STAGING_STAFF_TOKEN` (not Admin UI bundle). Path: `scripts/staging/smoke-staging.sh`
 
 ### Developer Portal
