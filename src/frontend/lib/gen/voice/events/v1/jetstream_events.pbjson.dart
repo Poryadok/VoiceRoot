@@ -1768,6 +1768,24 @@ const VoiceStreamEvent$json = {
       '9': 0,
       '10': 'voiceMemberJoined'
     },
+    {
+      '1': 'voice_participant_joined',
+      '3': 20,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceParticipantJoined',
+      '9': 0,
+      '10': 'voiceParticipantJoined'
+    },
+    {
+      '1': 'voice_participant_left',
+      '3': 21,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceParticipantLeft',
+      '9': 0,
+      '10': 'voiceParticipantLeft'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1791,7 +1809,40 @@ final $typed_data.Uint8List voiceStreamEventDescriptor = $convert.base64Decode(
     'dm9pY2VTdGF0ZUNoYW5nZWQSVwoUc2NyZWVuX3NoYXJlX3N0b3BwZWQYEiABKAsyIy52b2ljZS'
     '5ldmVudHMudjEuU2NyZWVuU2hhcmVTdG9wcGVkSABSEnNjcmVlblNoYXJlU3RvcHBlZBJUChN2'
     'b2ljZV9tZW1iZXJfam9pbmVkGBMgASgLMiIudm9pY2UuZXZlbnRzLnYxLlZvaWNlTWVtYmVySm'
-    '9pbmVkSABSEXZvaWNlTWVtYmVySm9pbmVkQgkKB3BheWxvYWQ=');
+    '9pbmVkSABSEXZvaWNlTWVtYmVySm9pbmVkEmMKGHZvaWNlX3BhcnRpY2lwYW50X2pvaW5lZBgU'
+    'IAEoCzInLnZvaWNlLmV2ZW50cy52MS5Wb2ljZVBhcnRpY2lwYW50Sm9pbmVkSABSFnZvaWNlUG'
+    'FydGljaXBhbnRKb2luZWQSXQoWdm9pY2VfcGFydGljaXBhbnRfbGVmdBgVIAEoCzIlLnZvaWNl'
+    'LmV2ZW50cy52MS5Wb2ljZVBhcnRpY2lwYW50TGVmdEgAUhR2b2ljZVBhcnRpY2lwYW50TGVmdE'
+    'IJCgdwYXlsb2Fk');
+
+@$core.Deprecated('Use voiceParticipantJoinedDescriptor instead')
+const VoiceParticipantJoined$json = {
+  '1': 'VoiceParticipantJoined',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `VoiceParticipantJoined`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceParticipantJoinedDescriptor =
+    $convert.base64Decode(
+        'ChZWb2ljZVBhcnRpY2lwYW50Sm9pbmVkEhcKB3Jvb21faWQYASABKAlSBnJvb21JZBIdCgpwcm'
+        '9maWxlX2lkGAIgASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use voiceParticipantLeftDescriptor instead')
+const VoiceParticipantLeft$json = {
+  '1': 'VoiceParticipantLeft',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `VoiceParticipantLeft`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceParticipantLeftDescriptor = $convert.base64Decode(
+    'ChRWb2ljZVBhcnRpY2lwYW50TGVmdBIXCgdyb29tX2lkGAEgASgJUgZyb29tSWQSHQoKcHJvZm'
+    'lsZV9pZBgCIAEoCVIJcHJvZmlsZUlk');
 
 @$core.Deprecated('Use voiceMemberJoinedDescriptor instead')
 const VoiceMemberJoined$json = {
