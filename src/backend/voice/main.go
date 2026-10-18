@@ -515,22 +515,6 @@ func main() {
 		}
 		service.Effects.ProjectionFence = fence
 		service.Effects.NativeDrain = &spacemedia.Coordinator{Calls: callStore, Store: callStore, Admissions: spacemedia.NewPostgresAdmissionStore(lifecyclePool)}
-		go func() {
-			ticker := time.NewTicker(spacemedia.ReconcileInterval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-runCtx.Done():
-					return
-				case <-ticker.C:
-					ctx, cancel := context.WithTimeout(runCtx, 4*time.Second)
-					if err := service.ResumePending(ctx); err != nil {
-						logger.Warn("P3 exact drain pending", slog.String("error", err.Error()))
-					}
-					cancel()
-				}
-			}
-		}()
 	}
 	tokenTTL := time.Hour
 	spaceMediaAdmissions := spacemedia.NewPostgresAdmissionStore(lifecyclePool)
@@ -677,6 +661,26 @@ func main() {
 		go func() {
 			if err := spaceMediaCoordinator.Run(runCtx); err != nil && runCtx.Err() == nil {
 				logger.Error("Space media authority reconciler stopped", slog.String("error", err.Error()))
+			}
+		}()
+	}
+	// Publish P3 recovery only after every optional consumer has final bindings.
+	if configured, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
+		service := configured.RecoverySnapshot()
+		go func() {
+			ticker := time.NewTicker(spacemedia.ReconcileInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					ctx, cancel := context.WithTimeout(runCtx, 4*time.Second)
+					if err := service.ResumePending(ctx); err != nil {
+						logger.Warn("P3 exact drain pending", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
 			}
 		}()
 	}
