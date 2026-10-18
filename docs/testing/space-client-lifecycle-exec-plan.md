@@ -33,7 +33,9 @@ Do not expose unimplemented transfer/delete/restore controls as working actions.
 - [x] Preserve selection on denial; show an uncertain outcome without blind retry.
 - [x] Fence duplicate submission, session generation and newer navigation.
 - [x] Detach matching profile/Space media and fence an in-flight room join.
-- [x] Run focused HTTP/state/widget/call regression tests (36 tests passed).
+- [x] Run focused HTTP/state/widget/call regression tests (40 tests passed).
+- [x] Reproduce review P1 with held-token and held-connect tests; bind pending
+  entry to exact session/room and retire late media without clearing newer calls.
 - [x] Complete static analysis (`flutter analyze --no-pub`: no issues).
 - [ ] Obtain independent source review of the exact head.
 - [ ] Publish PR, required CI and merge after GitHub transport recovery.
@@ -62,6 +64,10 @@ proof remain independent gates; local mock execution is not live acceptance.
 - Local cleanup never invokes generic EndCall after membership removal. It
   detaches only the matching Space/profile and retires its pending join, so a
   late callback cannot clear another call or reconnect the departed room.
+- Review P1 exposed the window between join success and media binding. Each
+  pending entry now owns its exact session and room objects; cleanup works
+  before binding exists, preserves a replaced session, and disconnects a stale
+  room again if its previously pending connect finishes after the first cleanup.
 - Put the lifecycle menu beside the Space title; keep the existing toolbar in
   a horizontal scroller so the new entry remains reachable at narrow width.
 
