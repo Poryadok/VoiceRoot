@@ -5,7 +5,7 @@
 WebSocket-шлюз для доставки событий в реальном времени. Не хранит бизнес-данные — только управляет соединениями и fan-out.
 
 **Язык**: Go
-**Хранилище**: Redis (Pub/Sub, connection registry)
+**Хранилище**: Redis (Pub/Sub, minimum-epoch floor); подключения и подписки — в памяти каждого инстанса
 
 ## Ответственность
 
@@ -345,6 +345,15 @@ Redis и проверка JWT остаются correctness path.
 3. Каждый инстанс доставляет событие своим подключённым клиентам
 4. Typing indicators — через Redis Pub/Sub (не персистентные, не нужен NATS)
 
+Маршрутизация использует broadcast и локальный hub: каждый инстанс получает
+событие, затем выбирает свои соединения по авторизованным подпискам или
+`profile_id`. Redis Pub/Sub также переносит live `mark_read`, delivery ACK и
+presence updates; `src_instance`/`src_conn` исключают исходное соединение там,
+где это требуется. Общий connection registry для доставки не нужен и не
+записывается. Старые `voice:rt:prof:*` sets не читаются и не дают права доступа;
+их наличие или отсутствие не влияет на fan-out. Этот релиз не удаляет старые
+ключи автоматически и не меняет session-epoch floor namespace.
+
 ## Подписки
 
 **Target state** при подключении клиент автоматически подписывается на:
@@ -379,7 +388,7 @@ DM дополнительно применяется account-level block policy:
 
 ## Зависимости
 
-- **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}` и minimum-epoch floor для fail-closed проверок аккаунта
+- **Redis** — Pub/Sub и minimum-epoch floor для fail-closed проверок аккаунта; connection registry отсутствует
 - **NATS** — получение событий от всех сервисов
 - **Chat / User / Social gRPC** — membership/type, DM peer account resolution и двунаправленный DM block decision; sender account и однонаправленная block-проверка для новых shared-chat live fanouts
 
@@ -400,6 +409,6 @@ DM дополнительно применяется account-level block policy:
 ## Масштабирование
 
 - **Балансировка**: клиент подключается по WSS через **L7 load balancer** (или L4 с TLS на LB). Запрос уходит на **любой** инстанс Realtime; **sticky sessions не нужны** — после reconnect клиент может оказаться на другом инстансе.
-- **Несколько инстансов**: каждый подписан на NATS; между инстансами **Redis Pub/Sub** и общий **registry** подключений (см. выше), чтобы fan-out доходил до клиента независимо от того, на каком инстансе открыт сокет.
+- **Несколько инстансов**: каждый имеет отдельный durable NATS consumer на релевантных subjects и Redis Pub/Sub subscription; полученное событие доставляется только подходящим локальным соединениям. Общий registry не участвует в маршрутизации.
 - **Падение инстанса**: соединения на нём обрываются; клиент переподключается с exponential backoff ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md)). Глобальное состояние списка сверяется через Chat `ListChats`, а выбранные пропущенные **сообщения** догружаются через Messaging и API Gateway, а не через «догон» в Realtime.
 - **Эфемерные события** (typing, часть presence): гарантии catch-up как у сообщений **нет** — после reconnect состояние восстанавливается из следующих live-событий или снимка из других API.
