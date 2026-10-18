@@ -3,11 +3,62 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
+
+func TestVoiceParticipantSubjectsHaveExactStreamAndActorGrants(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	acl, err := loadACL(filepath.Join(root, "deploy", "nats", "acl-intent.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []string{"voice.participant_joined", "voice.participant_left"} {
+		if !contains(acl.Services["voice"].Publish, subject) {
+			t.Errorf("Voice cannot publish accepted subject %s", subject)
+		}
+		for name, actor := range acl.Services {
+			if name != "voice" && contains(actor.Publish, subject) {
+				t.Errorf("unrelated actor %s gained participant publication", name)
+			}
+		}
+	}
+	if !contains(acl.Bootstrap.Publish, "$JS.API.STREAM.UPDATE.voice_events") {
+		t.Error("bootstrap cannot perform bounded in-place voice subject addition")
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "deploy", "nats", "jetstream-publisher-streams.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Streams []struct {
+			Name     string   `yaml:"name"`
+			Subjects []string `yaml:"subjects"`
+		} `yaml:"streams"`
+	}
+	if err = yaml.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Fields("voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left")
+	sort.Strings(want)
+	found := false
+	for _, stream := range manifest.Streams {
+		if stream.Name == "voice_events" {
+			found = true
+			sort.Strings(stream.Subjects)
+			if !reflect.DeepEqual(want, stream.Subjects) {
+				t.Errorf("voice_events exact subject contract mismatch: got %v", stream.Subjects)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("voice_events absent")
+	}
+}
 
 func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "..")

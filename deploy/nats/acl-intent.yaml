@@ -285,6 +285,8 @@ services:
       - voice.screen_share_stopped
       - voice.call_started
       - voice.member_joined
+      - voice.participant_joined
+      - voice.participant_left
       - $JS.API.STREAM.INFO.voice_events
       - $JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat
       - $JS.ACK.chat_events.voice_space_media_chat.>
@@ -327,6 +329,7 @@ bootstrap:
     - $JS.API.STREAM.UPDATE.social_events
     - $JS.API.STREAM.CREATE.role_events
     - $JS.API.STREAM.CREATE.voice_events
+    - $JS.API.STREAM.UPDATE.voice_events
     - $JS.API.STREAM.CREATE.matchmaking_events
     - $JS.API.STREAM.CREATE.analytics_events
     - $JS.API.STREAM.CREATE.user_profile_projection

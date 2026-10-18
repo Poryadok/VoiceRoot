@@ -83,6 +83,35 @@ distinguish JWKS, replay Redis and Auth-floor failures. Preserve all outcomes;
 use the dependency event from a subsequent controlled acceptance attempt to
 identify the failing stage before changing trust or transport configuration.
 
+### Ordinary participant NATS facts (BE-102 accepted contract)
+
+For ordinary DM and standalone group calls, a participant is a committed member
+of an ACTIVE logical call. Invitations, token issuance, pending reservations and
+SFU connectivity are not membership. Group Start commits one joined fact for its
+initiator; absent-to-present Join commits one. Existing-member Join, failed or
+compensated admission and state changes commit none. Leave commits one left;
+the last leave does not emit a second terminal left. Whole-call termination
+commits one left per remaining membership in its winning snapshot. DM ringing,
+rejection and expiry emit none; the winning accept joins both profiles atomically,
+and active End/Leave leaves both once. Terminal/no-op attempts emit none. A real
+leave/rejoin creates a new membership generation.
+
+BE106-ORDINARY-SDK-v1 PostgreSQL transition/outbox is the single authority:
+effects are encoded in the same transaction as final committed membership.
+Never derive them from tentative Redis state or a handler read/write pair.
+Ambiguous/post-commit failures preserve saved operations and event IDs; fresh
+delivery retries do not rebuild facts or compensate committed membership.
+
+`VoiceParticipantJoined`/`VoiceParticipantLeft` carry only UUID `room_id` and
+`profile_id`; `VoiceStreamEvent` carries persisted UUID `event_id` and original
+`occurred_at`. Subjects are exactly `voice.participant_joined` and
+`voice.participant_left` on `voice_events`. There is no recipient list, roster
+version, new WS operation or push. Realtime, Notification and Analytics ACK these
+unsupported facts without fanout or synthetic analytics records. Existing
+`call_started` and `voice.member_joined` behavior stays unchanged. This does not
+activate Phase0/Space roster, managed rooms, MatchSquad or federation, and source
+presence alone is not deployment or media delivery proof.
+
 ## API (gRPC)
 
 Источник истины: [protos/voice/calls/v1/calls.proto](../../protos/voice/calls/v1/calls.proto) (`VoiceService`). Важные ответы: **`GetJoinTokenResponse`** — поля `jwt` и `expires_at` (`google.protobuf.Timestamp`, UTC); **`GetVoiceStatesResponse`** — `repeated VoiceParticipantState participants` (без промежуточной обёртки-списка).

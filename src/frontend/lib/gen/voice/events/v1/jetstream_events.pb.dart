@@ -5075,6 +5075,8 @@ enum VoiceStreamEvent_Payload {
   voiceStateChanged,
   screenShareStopped,
   voiceMemberJoined,
+  voiceParticipantJoined,
+  voiceParticipantLeft,
   notSet
 }
 
@@ -5092,6 +5094,8 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     VoiceStateChanged? voiceStateChanged,
     ScreenShareStopped? screenShareStopped,
     VoiceMemberJoined? voiceMemberJoined,
+    VoiceParticipantJoined? voiceParticipantJoined,
+    VoiceParticipantLeft? voiceParticipantLeft,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -5108,6 +5112,10 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     if (screenShareStopped != null)
       result.screenShareStopped = screenShareStopped;
     if (voiceMemberJoined != null) result.voiceMemberJoined = voiceMemberJoined;
+    if (voiceParticipantJoined != null)
+      result.voiceParticipantJoined = voiceParticipantJoined;
+    if (voiceParticipantLeft != null)
+      result.voiceParticipantLeft = voiceParticipantLeft;
     return result;
   }
 
@@ -5132,6 +5140,8 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     17: VoiceStreamEvent_Payload.voiceStateChanged,
     18: VoiceStreamEvent_Payload.screenShareStopped,
     19: VoiceStreamEvent_Payload.voiceMemberJoined,
+    20: VoiceStreamEvent_Payload.voiceParticipantJoined,
+    21: VoiceStreamEvent_Payload.voiceParticipantLeft,
     0: VoiceStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -5139,7 +5149,7 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -5163,6 +5173,12 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
         subBuilder: ScreenShareStopped.create)
     ..aOM<VoiceMemberJoined>(19, _omitFieldNames ? '' : 'voiceMemberJoined',
         subBuilder: VoiceMemberJoined.create)
+    ..aOM<VoiceParticipantJoined>(
+        20, _omitFieldNames ? '' : 'voiceParticipantJoined',
+        subBuilder: VoiceParticipantJoined.create)
+    ..aOM<VoiceParticipantLeft>(
+        21, _omitFieldNames ? '' : 'voiceParticipantLeft',
+        subBuilder: VoiceParticipantLeft.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5194,6 +5210,8 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   VoiceStreamEvent_Payload whichPayload() =>
       _VoiceStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -5206,6 +5224,8 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -5337,6 +5357,165 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   void clearVoiceMemberJoined() => $_clearField(19);
   @$pb.TagNumber(19)
   VoiceMemberJoined ensureVoiceMemberJoined() => $_ensure(11);
+
+  @$pb.TagNumber(20)
+  VoiceParticipantJoined get voiceParticipantJoined => $_getN(12);
+  @$pb.TagNumber(20)
+  set voiceParticipantJoined(VoiceParticipantJoined value) =>
+      $_setField(20, value);
+  @$pb.TagNumber(20)
+  $core.bool hasVoiceParticipantJoined() => $_has(12);
+  @$pb.TagNumber(20)
+  void clearVoiceParticipantJoined() => $_clearField(20);
+  @$pb.TagNumber(20)
+  VoiceParticipantJoined ensureVoiceParticipantJoined() => $_ensure(12);
+
+  @$pb.TagNumber(21)
+  VoiceParticipantLeft get voiceParticipantLeft => $_getN(13);
+  @$pb.TagNumber(21)
+  set voiceParticipantLeft(VoiceParticipantLeft value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasVoiceParticipantLeft() => $_has(13);
+  @$pb.TagNumber(21)
+  void clearVoiceParticipantLeft() => $_clearField(21);
+  @$pb.TagNumber(21)
+  VoiceParticipantLeft ensureVoiceParticipantLeft() => $_ensure(13);
+}
+
+/// A committed ordinary-call membership fact; not an SFU connection or invite.
+class VoiceParticipantJoined extends $pb.GeneratedMessage {
+  factory VoiceParticipantJoined({
+    $core.String? roomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (roomId != null) result.roomId = roomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  VoiceParticipantJoined._();
+
+  factory VoiceParticipantJoined.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceParticipantJoined.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceParticipantJoined',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'roomId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantJoined clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantJoined copyWith(
+          void Function(VoiceParticipantJoined) updates) =>
+      super.copyWith((message) => updates(message as VoiceParticipantJoined))
+          as VoiceParticipantJoined;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantJoined create() => VoiceParticipantJoined._();
+  @$core.override
+  VoiceParticipantJoined createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantJoined getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceParticipantJoined>(create);
+  static VoiceParticipantJoined? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get roomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set roomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+}
+
+class VoiceParticipantLeft extends $pb.GeneratedMessage {
+  factory VoiceParticipantLeft({
+    $core.String? roomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (roomId != null) result.roomId = roomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  VoiceParticipantLeft._();
+
+  factory VoiceParticipantLeft.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceParticipantLeft.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceParticipantLeft',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'roomId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantLeft clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantLeft copyWith(void Function(VoiceParticipantLeft) updates) =>
+      super.copyWith((message) => updates(message as VoiceParticipantLeft))
+          as VoiceParticipantLeft;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantLeft create() => VoiceParticipantLeft._();
+  @$core.override
+  VoiceParticipantLeft createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantLeft getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceParticipantLeft>(create);
+  static VoiceParticipantLeft? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get roomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set roomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
 }
 
 class VoiceMemberJoined extends $pb.GeneratedMessage {

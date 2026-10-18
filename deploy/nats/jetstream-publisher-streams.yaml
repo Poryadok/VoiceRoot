@@ -58,7 +58,7 @@ streams:
     max_age: 168h
     storage: file
   - name: voice_events
-    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]
+    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined, voice.participant_joined, voice.participant_left]
     retention: limits
     max_age: 168h
     storage: file

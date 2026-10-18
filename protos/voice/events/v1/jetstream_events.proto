@@ -431,7 +431,20 @@ message VoiceStreamEvent {
     VoiceStateChanged voice_state_changed = 17;
     ScreenShareStopped screen_share_stopped = 18;
     VoiceMemberJoined voice_member_joined = 19;
+    VoiceParticipantJoined voice_participant_joined = 20;
+    VoiceParticipantLeft voice_participant_left = 21;
   }
+}
+
+// A committed ordinary-call membership fact; not an SFU connection or invite.
+message VoiceParticipantJoined {
+  string room_id = 1;
+  string profile_id = 2;
+}
+
+message VoiceParticipantLeft {
+  string room_id = 1;
+  string profile_id = 2;
 }
 
 message VoiceMemberJoined {
