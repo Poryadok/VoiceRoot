@@ -553,6 +553,74 @@ Retired spaces cannot be recreated by bootstrap. These scoped-integrity rules
 also apply while transfer entrypoints remain disabled; implementing them does
 not activate the v2 ownership feature.
 
+## BE-065 protected override target validation (accepted target)
+
+`BE-065-target-v1` is the accepted implementation contract; the existing
+setters do not yet implement this validation. The executable plan and required
+negative-case matrix are in
+[role-override-target-validation-exec-plan.md](../testing/role-override-target-validation-exec-plan.md).
+
+Every `SetChatOverride` attempt freshly calls both
+`/voice.space.v1.SpaceService/ValidateRoleOverrideTarget` (without a room) and
+`/voice.chat.v1.ChatService/ValidateRoleOverrideTarget`. Every
+`SetVoiceRoomOverride` attempt freshly calls Space's same method with the room
+present. A missing client/configuration, optional environment skip, positive
+cache, legacy `GetChat`/`GetSpace`/tree lookup or cross-database query cannot
+authorize a write. Provider success validates existence and local lifecycle;
+it grants no actor permission and returns no owner/member projection.
+
+Both owner methods accept only verified `principal_type=service`, `iss=role`,
+`sub=service:role`, exact `aud=chat|space` and exact full RPC name. The Phase-0
+credential binds the whole deterministic protobuf request (including optional
+field presence), canonical `request_id`, fresh `jti`, `kid` and bounded temporal
+claims (TTL <=30 s). One bearer and one matching `x-request-id` are required;
+raw identity metadata and duplicate authority headers reject before handler.
+Use protected TLS/mTLS with Role JWKS and replay verification. Retry signs a
+fresh JTI and performs a fresh owner read; validation is not a durable receipt
+or reusable capability. Gateway delegated-user, end-user, bot and other service
+principals are forbidden. There is no public Gateway route.
+
+The lock order is mandatory: first perform actor/role-scope/permission/hierarchy
+checks in a short existing fenced Role transaction, release that transaction,
+then make bounded owner RPCs with **no Role transaction or advisory lock held**.
+Finally open the normal fenced Role mutation transaction, repeat all current
+actor/role/hierarchy checks and write in that same transaction. Parent
+cancellation and deadline propagate; each owner call has a bounded deadline.
+Events occur only after successful Role commit. Providers use only their own
+store and lifecycle/journal authority; they never call Role or an ACL-enriched
+provider lookup. This avoids Role -> provider -> Role recursion and lock inversion.
+
+Space validates a live Space, plus a live room in that exact Space if supplied.
+Chat validates an active group/channel row with non-null matching Space ID and
+ordinary local admission. DM, standalone, foreign, deleted and missing targets
+are indistinguishable `NOT_FOUND`. Both providers require canonical non-nil
+UUIDs; a present-empty optional room is `INVALID_ARGUMENT`. Tree placement is
+not resource authority. Nonterminal Space deletion/recovery state, active
+ownership journal and non-LIVE Chat fence deny with `UNAVAILABLE`; known
+terminal fences also deny. Missing legacy fence permits admission only where
+the existing owner's canonical semantics permit it; lookup failure never means
+LIVE. Role's own prepared/frozen/purge/retired fences always win before Owner
+shortcuts. A higher permitted LIVE restoration requires new validation.
+
+This is point-in-time reference validation, **not distributed referential
+integrity**. Deletion after provider snapshot and before Role commit may leave
+an inert logical override row. Actual resource operations must still enforce
+existence/lifecycle; the row cannot resurrect or authorize a deleted resource.
+IDs are not reusable or reparentable; recreation uses a fresh server UUID.
+Group <-> channel conversion preserves identity and remains eligible.
+`RemoveChatOverride` and `RemoveVoiceRoomOverride` remain locally authorized
+cleanup paths and never require live-target lookup. P3 retirement removes Space
+overrides. No `voice.room_deleted` consumer is presumed: that subject is reserved.
+
+Provider errors: malformed input `INVALID_ARGUMENT`; ineligible/missing target
+`NOT_FOUND`; invalid signature/claims/binding/replay `UNAUTHENTICATED`;
+authenticated wrong caller `PERMISSION_DENIED`; known lifecycle fence or
+DB/JWKS/replay dependency failure `UNAVAILABLE`. TLS failure precedes handler.
+Role preserves its own actor/ACL errors and owner `NOT_FOUND`/`INVALID_ARGUMENT`;
+owner transport/config/verifier failure, `UNIMPLEMENTED` or unavailable validation
+becomes `UNAVAILABLE` on the user mutation. Parent cancellation/deadline remains
+typed. Every failed validation leaves existing rows and mutation events unchanged.
+
 ## P3 permanent Space retirement
 
 Role is participant 1 of the common Space lifecycle barrier. Before retirement,

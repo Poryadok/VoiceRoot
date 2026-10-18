@@ -497,6 +497,42 @@ consumer ACKs after current Space/Role authority is reconciled across the
 active Space room index; optional hints never narrow that full pass. This typed
 arm does not change the legacy Chat stream envelope or `space.updated` payload.
 
+## BE-065 Role override target validation (accepted target)
+
+Add `/voice.space.v1.SpaceService/ValidateRoleOverrideTarget` with package-local
+`ValidateRoleOverrideTargetRequest { string space_id = 1; optional string voice_room_id = 2; }`
+and empty `ValidateRoleOverrideTargetResponse`. This is an accepted target,
+not an implemented endpoint. The complete caller/error/consistency contract is
+[Role's BE-065 contract](role-service.md#be-065-protected-override-target-validation-accepted-target);
+the [execution plan](../testing/role-override-target-validation-exec-plan.md)
+defines required verification.
+
+Only a verified Role workload (`principal_type=service`, `iss=role`,
+`sub=service:role`, `aud=space`, exact full RPC and deterministic whole-body hash,
+including optional presence) may call. Use protected TLS/mTLS, Role JWKS/replay,
+fresh JTI and canonical signed request ID matching the sole `x-request-id`, with
+the standard Phase-0 <=30 s lifetime. Raw identity metadata, duplicates,
+delegated-user/end-user/bot and all other services reject before store. The
+handler independently requires verified Role context. Do not widen existing
+Social-only or Gateway lifecycle listeners; ordinary/public listeners return
+`UNAVAILABLE` before domain access. No public Gateway route is added.
+
+Under one consistent local store/lifecycle serialization boundary, an absent
+room field validates the live Space only. A present room must be a canonical
+non-nil UUID (present-empty is `INVALID_ARGUMENT`) resolving to a live
+`voice_rooms` row in that exact Space. Space ID also must be canonical/non-nil.
+Missing Space or absent/deleted/foreign room is indistinguishable `NOT_FOUND`.
+All known non-live deletion/recovery states, active ownership journal and
+terminal lifecycle fences deny with `UNAVAILABLE`; DB/state failure never means
+LIVE. Missing legacy fence follows existing canonical admission semantics.
+Do not return owner/member projection or call Role/ACL-enriched provider APIs.
+
+This result is a fresh point-in-time existence check, not a distributed foreign
+key or reservation. Deletion after owner read may leave an inert Role reference;
+actual operations still enforce current existence/lifecycle. IDs cannot be reused
+or reparented, and a permitted LIVE restoration requires a new validation attempt.
+Role override removal remains local cleanup even for an absent target.
+
 ## Зависимости
 
 - **Chat Service** — создание/удаление строки текстового чата (`chats`, `group` \| `channel`); Space ведёт **`space_tree_nodes`** (`kind = text_chat`)
