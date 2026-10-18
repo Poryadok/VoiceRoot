@@ -35,7 +35,7 @@ activation, permission-bit redesign or acceptance/deployment is included.
 
 ## Milestones
 
-- [ ] Accepted target contract in all three owning service docs.
+- [x] Accepted target contract in all three owning service docs.
 - [ ] Additive proto/bindings and owner handlers reject invalid/ineligible targets.
 - [ ] Dedicated protected owner listeners and signed Role clients fail closed.
 - [ ] Both setters use preflight -> unlocked owner reads -> fenced reauthorization/write.
@@ -109,6 +109,8 @@ PostgreSQL/TLS dependencies. Do not rerun unrelated whole-repository checks.
 
 - [x] Accepted TT c2-c3 inspected; real owner handoff e5 received by Рудеус-39.
 - [x] Isolated treehouse34 acquired at base `698d4f064f032ea74abf3ede2017100b26c8ee69`.
+- [x] Canonical contract in owning docs; all four changed documents pass
+  `markdown-link-check@3.12.2` with the repository configuration.
 - [ ] Runtime implementation and verification remain open.
 
 ## Decisions
