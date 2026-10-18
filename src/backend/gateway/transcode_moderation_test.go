@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
 	moderationv1 "voice.app/voice/moderation/v1"
+	"voice/backend/pkg/principal"
 )
 
 type recordingModerationReports struct {
@@ -37,14 +42,7 @@ func (s *recordingModerationReports) CreateReport(_ context.Context, req *modera
 	s.lastCreate = req
 	return &moderationv1.CreateReportResponse{
 		Report: &moderationv1.Report{
-			Id:                 "report-accepted",
-			ReporterProfileId:  "profile-1",
-			TargetType:         req.GetTargetType(),
-			TargetId:           req.GetTargetId(),
-			Category:           req.GetCategory(),
-			Status:             "pending",
-			EvidenceJson:       req.GetEvidenceJson(),
-			ResolutionJson:     `{}`,
+			Id: "report-accepted",
 		},
 	}, nil
 }
@@ -71,11 +69,15 @@ func newReportsContractGateway(t *testing.T, rec *recordingModerationReports) ht
 	t.Helper()
 	modClient, cleanup := startBufconnModerationClient(t, rec)
 	t.Cleanup(cleanup)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
 	return newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+			"valid-user-token": {UserID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 1, AccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)},
 		},
-		transcoder: &transcoder{clients: grpcClients{moderation: modClient}},
+		transcoder: &transcoder{lifecycleIssuer: issuer, clients: grpcClients{moderation: modClient, reportIntake: modClient}},
 		restUpstreams: map[string]http.Handler{
 			"moderation": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNotImplemented)

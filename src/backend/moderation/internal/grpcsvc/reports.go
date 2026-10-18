@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/moderation/internal/store"
+	"voice/backend/pkg/principal"
 
 	moderationv1 "voice.app/voice/moderation/v1"
 )
@@ -40,7 +42,7 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 		return nil, status.Error(codes.FailedPrecondition, "report store is not configured")
 	}
 
-	reporterProfileID, err := profileIDFromMetadata(ctx)
+	reporterProfileID, reporterAccountID, err := verifiedReportIdentity(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -86,30 +88,34 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 	if evidenceJSON == "" {
 		evidenceJSON = "{}"
 	}
+	if !json.Valid([]byte(evidenceJSON)) {
+		return nil, status.Error(codes.InvalidArgument, "invalid evidence_json")
+	}
 
-	row, err := s.Reports.InsertReport(ctx, reporterProfileID, targetType, targetID, category, description, evidenceJSON)
+	row, err := s.Reports.InsertVerifiedReport(ctx, reporterProfileID, reporterAccountID, targetType, targetID, category, description, evidenceJSON)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Error(codes.Unavailable, "report intake unavailable")
 	}
 
-	if targetType == "user" {
-		if err := s.maybeAutoShadowBan(ctx, targetID); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-
-	if s.Analytics != nil {
-		_ = s.Analytics.Publish(ctx, "analytics.moderation.report_created", "moderation", "report_created", map[string]any{
-			"target_type": targetType, "category": category,
-		})
-	}
-	if s.DomainEvents != nil {
-		_ = s.DomainEvents.PublishReportCreated(ctx, row.ID.String(), reporterProfileID.String())
-	}
-
+	// The committed receipt is independent of target validation and worker
+	// progress. Never reread the row here or publish target-dependent effects.
 	return &moderationv1.CreateReportResponse{
-		Report: reportRowToProto(row),
+		Report: &moderationv1.Report{Id: row.ID.String()},
 	}, nil
+}
+
+func verifiedReportIdentity(ctx context.Context, req *moderationv1.CreateReportRequest) (uuid.UUID, uuid.UUID, error) {
+	p, ok := principal.FromContext(ctx)
+	hash, err := principal.RequestHash(req)
+	if !ok || err != nil || p.Kind != "delegated_user" || p.Issuer != "gateway" || p.Audience != "moderation" || p.RPC != moderationv1.ModerationService_CreateReport_FullMethodName || p.RequestHash != hash || p.RequestID == "" || p.Subject != p.AccountID || p.SessionEpoch <= 0 {
+		return uuid.Nil, uuid.Nil, status.Error(codes.Unauthenticated, "verified report principal required")
+	}
+	profile, profileErr := uuid.Parse(p.ProfileID)
+	account, accountErr := uuid.Parse(p.AccountID)
+	if profileErr != nil || accountErr != nil || profile == uuid.Nil || account == uuid.Nil {
+		return uuid.Nil, uuid.Nil, status.Error(codes.Unauthenticated, "invalid verified reporter")
+	}
+	return profile, account, nil
 }
 
 func (s *ModerationGRPC) ListReports(ctx context.Context, req *moderationv1.ListReportsRequest) (*moderationv1.ListReportsResponse, error) {

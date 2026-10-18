@@ -15,8 +15,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 
-	grpcsvc "voice/backend/moderation/internal/grpcsvc"
 	"voice/backend/moderation/internal/authclient"
+	grpcsvc "voice/backend/moderation/internal/grpcsvc"
+	"voice/backend/moderation/internal/intakeprincipal"
 	"voice/backend/moderation/internal/mmclient"
 	"voice/backend/moderation/internal/moderationevents"
 	"voice/backend/moderation/internal/store"
@@ -66,7 +67,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		grpcSrv = grpc.NewServer(append(grpcmw.ServerOptions(logger), grpc.ChainUnaryInterceptor(intakeprincipal.OrdinaryUnary()))...)
 		svc := &grpcsvc.ModerationGRPC{
 			Reports:              &store.ReportStore{Pool: pool},
 			Sanctions:            &store.SanctionStore{Pool: pool},
@@ -111,6 +112,11 @@ func main() {
 				logger.Warn("moderation.events publisher unavailable", slog.Any("error", err))
 			}
 		}
+		stopIntake, err := startReportIntake(context.Background(), svc, logger)
+		if err != nil {
+			log.Fatalf("report intake transport: %v", err)
+		}
+		defer stopIntake()
 		moderationv1.RegisterModerationServiceServer(grpcSrv, svc)
 		go grpcsvc.RunTempBanExpirySweeper(context.Background(), svc, logger)
 		go func() {

@@ -16,19 +16,22 @@ type ReportStore struct {
 
 var errStoreNotConfigured = errors.New("report store is not configured")
 
+// ErrReportNotValidated prevents an intake receipt from authorizing an action.
+var ErrReportNotValidated = errors.New("report is not actionable")
+
 type ReportRow struct {
-	ID                 uuid.UUID
-	ReporterProfileID  uuid.UUID
-	TargetType         string
-	TargetID           uuid.UUID
-	Category           string
-	Description        *string
-	EvidenceJSON       string
-	Status             string
-	AssignedToProfile  *uuid.UUID
-	ResolvedAt         *time.Time
-	ResolutionJSON     *string
-	CreatedAt          time.Time
+	ID                uuid.UUID
+	ReporterProfileID uuid.UUID
+	TargetType        string
+	TargetID          uuid.UUID
+	Category          string
+	Description       *string
+	EvidenceJSON      string
+	Status            string
+	AssignedToProfile *uuid.UUID
+	ResolvedAt        *time.Time
+	ResolutionJSON    *string
+	CreatedAt         time.Time
 }
 
 func (s *ReportStore) InsertReport(
@@ -40,16 +43,29 @@ func (s *ReportStore) InsertReport(
 	description *string,
 	evidenceJSON string,
 ) (*ReportRow, error) {
+	return s.insertReport(ctx, reporterProfileID, nil, targetType, targetID, category, description, evidenceJSON)
+}
+
+// InsertVerifiedReport preserves the submission-time account from the trusted
+// delegated principal. Legacy callers cannot manufacture automatic vote proof.
+func (s *ReportStore) InsertVerifiedReport(ctx context.Context, reporterProfileID, reporterAccountID uuid.UUID, targetType string, targetID uuid.UUID, category string, description *string, evidenceJSON string) (*ReportRow, error) {
+	if reporterAccountID == uuid.Nil {
+		return nil, errors.New("missing verified reporter account")
+	}
+	return s.insertReport(ctx, reporterProfileID, &reporterAccountID, targetType, targetID, category, description, evidenceJSON)
+}
+
+func (s *ReportStore) insertReport(ctx context.Context, reporterProfileID uuid.UUID, reporterAccountID *uuid.UUID, targetType string, targetID uuid.UUID, category string, description *string, evidenceJSON string) (*ReportRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errStoreNotConfigured
 	}
 	row := &ReportRow{}
 	err := s.Pool.QueryRow(ctx, `
-INSERT INTO reports (reporter_profile_id, target_type, target_id, category, description, evidence)
-VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+INSERT INTO reports (reporter_profile_id, target_type, target_id, category, description, evidence,reporter_account_id)
+VALUES ($1, $2, $3, $4, $5, $6::jsonb,$7)
 RETURNING id, reporter_profile_id, target_type, target_id, category, description,
           evidence::text, status, assigned_to, resolved_at, resolution::text, created_at`,
-		reporterProfileID, targetType, targetID, category, description, evidenceJSON,
+		reporterProfileID, targetType, targetID, category, description, evidenceJSON, reporterAccountID,
 	).Scan(
 		&row.ID,
 		&row.ReporterProfileID,
@@ -79,6 +95,7 @@ func (s *ReportStore) CountReports24h(ctx context.Context, targetProfileID uuid.
 SELECT COUNT(*)
 FROM reports
 WHERE target_type = 'user'
+  AND validation_state = 'VALID'
   AND target_id = $1
   AND created_at > now() - interval '24 hours'`,
 		targetProfileID,
@@ -109,7 +126,7 @@ func (s *ReportStore) ListReports(ctx context.Context, statusFilter string, limi
 SELECT id, reporter_profile_id, target_type, target_id, category, description,
        evidence::text, status, assigned_to, resolved_at, resolution::text, created_at
 FROM reports
-WHERE ($1 = '' OR status = $1)
+WHERE validation_state = 'VALID' AND ($1 = '' OR status = $1)
 ORDER BY created_at DESC
 LIMIT $2`, statusFilter, limit)
 	if err != nil {

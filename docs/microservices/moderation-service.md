@@ -7,6 +7,12 @@
 **Язык**: Go
 **БД**: PostgreSQL `moderation_db`
 
+BE-137 global intake follows the accepted [opaque report contract](../testing/report-intake-contract.md):
+Gateway-derived verified reporter, durable receipt-only `202`, asynchronous
+owner decisions, validation-gated staff/count/actions and transactional outbox.
+The implementation must carry new intake state and historical publication
+provenance together; owner absence is not a public rejection or report oracle.
+
 ## Ответственность
 
 - Жалобы на пользователей, сообщения, пространства
@@ -78,8 +84,15 @@ service ModerationService {
 reports
 ├── id (UUID)
 ├── reporter_profile_id
+├── reporter_account_id (nullable; verified submission identity, NULL for legacy)
 ├── target_type (user | message | space | story)
 ├── target_id (UUID)
+├── validated_target_account_id (nullable; User LIVE mapping only)
+├── validation_state (PENDING | VALID | MISSING | DELETED)
+├── validation_publication_legacy (boolean; historical events must not replay)
+├── validation_attempts / validation_next_at
+├── validation_claim / validation_claim_until (durable validation lease)
+├── validation_failure_code (sanitized dependency/disposition code)
 ├── category (spam | harassment | offensive | fake | cheating | other)
 ├── description (text, nullable)
 ├── evidence (jsonb — screenshots, message_ids)

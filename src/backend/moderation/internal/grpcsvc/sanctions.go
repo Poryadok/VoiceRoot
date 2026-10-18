@@ -80,6 +80,9 @@ func (s *ModerationGRPC) ApplySanction(ctx context.Context, req *moderationv1.Ap
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrReportNotValidated) {
+			return nil, status.Error(codes.FailedPrecondition, "report is not actionable")
+		}
 		if s.Auth != nil && (sanctionType == "temp_ban" || sanctionType == "perm_ban") {
 			recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
