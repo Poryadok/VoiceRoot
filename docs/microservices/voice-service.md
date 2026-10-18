@@ -29,6 +29,14 @@ workers ещё не зарегистрированы. Отсутствующий
 - Ограничение: один активный voice на профиль
 - Множественные screen share потоки (до 3 одновременно)
 
+DM and standalone group-call LiveKit JWTs carry room-scoped `roomJoin=true`,
+`canPublish=true`, and `canSubscribe=true` grants explicitly. An explicit
+`canPublish=false` supplied by the admission path remains a publish denial;
+it does not prevent listening. This preserves the ordinary call media defaults
+without relying on omitted LiveKit claims. No room administration grants are
+issued, and existing membership checks, participant identity and expiry remain
+authoritative. Space-room grants follow the separate Role-owned policy below.
+
 ### Subscription enforcement projection (A7 accepted target; not implemented)
 
 Voice consumes `subscription.entitlement_changed` for Space aggregates into a
