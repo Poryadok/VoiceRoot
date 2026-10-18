@@ -112,18 +112,23 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 	selector, ok := jobSpec["selector"].(map[string]any)
 	if !ok { t.Fatalf("API did not generate Job selector: %#v", jobSpec["selector"]) }
 	match := selector["matchLabels"].(map[string]any)
-	for _, key := range []string{"batch.kubernetes.io/controller-uid", "batch.kubernetes.io/job-name"} {
-		if match[key] == nil { t.Errorf("generated selector missing %s", key) }
-	}
+	controllerUID, ok := match["batch.kubernetes.io/controller-uid"].(string)
+	if !ok || controllerUID == "" { t.Fatalf("generated selector missing controller UID: %#v", match) }
 	template := jobSpec["template"].(map[string]any)
 	labels := template["metadata"].(map[string]any)["labels"].(map[string]any)
 	for key, value := range match {
 		if labels[key] != value { t.Errorf("pod template generated label %s=%v does not match selector (%v)", key, labels[key], value) }
 	}
-	if jobSpec["podReplacementPolicy"] == nil { t.Error("API did not report podReplacementPolicy") }
+	if labels["batch.kubernetes.io/controller-uid"] != controllerUID || labels["batch.kubernetes.io/job-name"] != name {
+		t.Errorf("generated Pod labels do not bind to Job selector/name: %#v", labels)
+	}
+	if jobSpec["podReplacementPolicy"] != "TerminatingOrFailed" { t.Errorf("unexpected defaulted podReplacementPolicy: %#v", jobSpec["podReplacementPolicy"]) }
 	gotSpec := template["spec"].(map[string]any)
-	for _, key := range []string{"restartPolicy", "dnsPolicy", "schedulerName", "terminationGracePeriodSeconds", "enableServiceLinks"} {
-		if _, ok := gotSpec[key]; !ok { t.Errorf("API PodSpec response missing expected default field %q", key) }
+	for key, expected := range map[string]any{"restartPolicy":"Never", "dnsPolicy":"ClusterFirst", "schedulerName":"default-scheduler", "terminationGracePeriodSeconds":float64(30)} {
+		if gotSpec[key] != expected { t.Errorf("unexpected PodSpec field %s: got %#v want %#v", key, gotSpec[key], expected) }
+	}
+	if _, ok := gotSpec["enableServiceLinks"]; ok {
+		t.Errorf("unexpected enableServiceLinks value in v1.34.3 CREATE response: %#v", gotSpec["enableServiceLinks"])
 	}
 	// Ensure the request's security, command, image, references, and fixture data
 	// survive API defaulting unchanged. Identity/default metadata is excluded.
@@ -135,7 +140,7 @@ func TestCanonicalMigrationCreateDefaults(t *testing.T) {
 		t.Fatalf("Job command/image changed during CREATE: image=%v args=%v", container["image"], container["args"])
 	}
 	t.Logf("FIXTURE sql_sha256=%s bytes=%d", sha256Hex(sql), len(sql))
-	t.Logf("INVARIANTS ConfigMap immutable/data preserved; Job image/args/env/security/mounts preserved; selector controller UID and job-name labels match pod template; no Secret created",)
+	t.Logf("INVARIANTS ConfigMap immutable/data preserved; Job image/args/env/security/mounts preserved; generated controller UID selector matches Pod label; generated Pod job-name label matches Job; no Secret created")
 }
 
 func namespaceObject(name string) *corev1.Namespace {
@@ -161,6 +166,19 @@ func defaultDiff(want, got any) []string {
 			for _,k:=range ordered {av,aHas:=am[k]; bv,bHas:=bm[k]; p:=path+"."+k; if !aHas {rows=append(rows,fmt.Sprintf("%s absent -> %T %s",p,bv,knownValue(p,bv))); continue}; if !bHas {rows=append(rows,fmt.Sprintf("%s %T removed",p,av)); continue}; walk(p,av,bv)}
 			return
 		}
+		aa, aok := a.([]any)
+		ba, bok := b.([]any)
+		if aok && bok {
+			limit := len(aa)
+			if len(ba) > limit { limit = len(ba) }
+			for i := 0; i < limit; i++ {
+				p := fmt.Sprintf("%s[%d]", path, i)
+				if i >= len(aa) { rows = append(rows, fmt.Sprintf("%s absent -> %T %s", p, ba[i], knownValue(p, ba[i]))); continue }
+				if i >= len(ba) { rows = append(rows, fmt.Sprintf("%s %T removed", p, aa[i])); continue }
+				walk(p, aa[i], ba[i])
+			}
+			return
+		}
 		if !jsonEqual(a,b) { rows=append(rows,fmt.Sprintf("%s %T %s -> %T %s",path,a,knownValue(path,a),b,knownValue(path,b))) }
 	}
 	walk("$",want,got); sort.Strings(rows); return rows
@@ -168,7 +186,10 @@ func defaultDiff(want, got any) []string {
 
 func knownValue(path string, value any) string {
 	if strings.HasSuffix(path,".uid") { return "<generated-uid>" }
+	if strings.Contains(path, "controller-uid") { return "<generated-job-uid>" }
 	if strings.HasSuffix(path,".resourceVersion") { return "<generated-rv>" }
+	if strings.HasSuffix(path, ".creationTimestamp") { return "<generated-timestamp>" }
+	if strings.HasSuffix(path, ".managedFields") { return "<generated-managed-fields>" }
 	b,_:=json.Marshal(value); return string(b)
 }
 
