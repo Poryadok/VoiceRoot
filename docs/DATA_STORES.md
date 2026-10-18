@@ -78,6 +78,16 @@ services.
 
 Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
 
+The accepted external audit replay design adds a Space-owned global ID registry
+with local-origin fences or versioned external fingerprints. Its transaction
+includes audit insertion and the existing same-ID outbox. Compact receipts do not
+expire with ordinary 365-day payload retention or cascade from audit/outbox;
+authorized P3 minimization must explicitly include them and fence late imports.
+See [Space audit replay codec](microservices/space-service.md#durable-external-replay-codec-v1)
+and [external details codec](microservices/space-service.md#external-audit-details-codec-v1).
+Runtime/migration completion is tracked by BE-130; no deployment follows from this
+accepted design description.
+
 ### BE-116 Space audit durable ownership (accepted target; not implemented)
 
 | Store owner | Durable responsibility |
