@@ -167,14 +167,24 @@ func readMemberLifecycle(ctx context.Context, tx pgx.Tx, space uuid.UUID) (*spac
 
 func readMemberOwnership(ctx context.Context, tx pgx.Tx, space uuid.UUID) (*spacev1.MemberAdmissionOwnershipAuthority, error) {
 	var generation uint64
-	var owner, current uuid.UUID
+	var owner, current *uuid.UUID
 	var state string
 	var pending bool
 	err := tx.QueryRow(ctx, `SELECT h.generation,h.owner_profile_id,h.state,s.owner_profile_id,
 	 EXISTS(SELECT 1 FROM ownership_journal j WHERE j.space_id=h.space_id AND j.state NOT IN ('completed','aborted'))
 	 OR EXISTS(SELECT 1 FROM community_owner_authority a WHERE a.space_id=h.space_id AND a.status<>'active')
-	 FROM space_membership_ownership_heads h JOIN spaces s ON s.id=h.space_id WHERE h.space_id=$1`, space).Scan(&generation, &owner, &state, &current, &pending)
-	if err != nil || generation == 0 || generation > math.MaxInt64 || state != "ACTIVE" || owner != current || owner == uuid.Nil {
+	 FROM space_membership_ownership_heads h LEFT JOIN spaces s ON s.id=h.space_id WHERE h.space_id=$1`, space).Scan(&generation, &owner, &state, &current, &pending)
+	if err != nil || generation == 0 || generation > math.MaxInt64 {
+		return nil, ErrMemberAuthorityUnavailable
+	}
+	if state == "RETIRED" && owner == nil && current == nil {
+		var terminal bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_permanent_purge_fences WHERE space_id=$1)`, space).Scan(&terminal); err != nil || !terminal {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+		return &spacev1.MemberAdmissionOwnershipAuthority{Generation: generation, State: spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_RETIRED}, nil
+	}
+	if state != "ACTIVE" || owner == nil || current == nil || *owner != *current || *owner == uuid.Nil {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	result := spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE

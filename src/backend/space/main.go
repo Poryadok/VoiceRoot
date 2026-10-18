@@ -370,6 +370,10 @@ func main() {
 				}
 			}()
 			logger.Info("space subscription entitlement consumer enabled")
+			if memberAuthorityEnabled {
+				stopAdmissionDelivery := startMemberAdmissionDelivery(runCtx, spaceStore, jsPub, logger)
+				defer stopAdmissionDelivery()
+			}
 			voiceInvalidations := outboxdelivery.NewVoiceInvalidationDispatcher(spaceStore, jsPub)
 			voiceInvalidations.OnError = func(err error) {
 				logger.Warn("Space Voice invalidation delivery failed", slog.String("error", err.Error()))

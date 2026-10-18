@@ -89,6 +89,19 @@ func TestMemberAdmissionPreparationIsInvisibleAndPublicationIsAtomic(t *testing.
 	var events int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_member_admission_outbox WHERE operation_id=$1`, in.OperationID).Scan(&events))
 	require.Equal(t, 1, events)
+	pending, err := st.ListPendingMemberAdmissionEvents(ctx, 100)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	wrongEvent := pending[0]
+	wrongEvent.Generation++
+	require.ErrorIs(t, st.MarkMemberAdmissionEventDelivered(ctx, wrongEvent, "chat_events", 9), ErrMemberAdmissionConflict)
+	require.ErrorIs(t, st.MarkMemberAdmissionEventDelivered(ctx, pending[0], "other_stream", 9), ErrMemberAdmissionConflict)
+	require.NoError(t, st.MarkMemberAdmissionEventDelivered(ctx, pending[0], "chat_events", 9))
+	require.NoError(t, st.MarkMemberAdmissionEventDelivered(ctx, pending[0], "chat_events", 9), "same first PubAck replays")
+	require.ErrorIs(t, st.MarkMemberAdmissionEventDelivered(ctx, pending[0], "chat_events", 10), ErrMemberAdmissionConflict, "saved first acknowledgement cannot be rebound")
+	pending, err = st.ListPendingMemberAdmissionEvents(ctx, 100)
+	require.NoError(t, err)
+	require.Empty(t, pending)
 	require.NoError(t, st.RemoveMember(ctx, space.ID, in.ProfileID))
 	_, err = w.PublishMemberAdmission(ctx, in.OperationID, roleID, receipt[:], nil)
 	require.NoError(t, err, "completed operation may return historical outcome")

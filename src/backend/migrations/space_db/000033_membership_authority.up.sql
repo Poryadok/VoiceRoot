@@ -57,7 +57,9 @@ CREATE TABLE space_member_admission_outbox (
  event_id UUID PRIMARY KEY, operation_id UUID NOT NULL UNIQUE,
  space_id UUID NOT NULL, profile_id UUID NOT NULL,
  generation BIGINT NOT NULL CHECK(generation>0), occurred_at TIMESTAMPTZ NOT NULL,
- delivered_at TIMESTAMPTZ
+ delivered_at TIMESTAMPTZ, delivery_stream TEXT, delivery_sequence BIGINT,
+ CHECK ((delivered_at IS NULL)=(delivery_stream IS NULL AND delivery_sequence IS NULL)),
+ CHECK (delivered_at IS NULL OR (delivery_stream IS NOT NULL AND delivery_sequence IS NOT NULL AND delivery_stream='chat_events' AND delivery_sequence>0))
 );
 CREATE TABLE space_member_role_cleanup (
  operation_id UUID PRIMARY KEY, space_id UUID NOT NULL, profile_id UUID NOT NULL,
@@ -96,6 +98,23 @@ BEGIN
 END $$;
 CREATE TRIGGER space_membership_ownership_changed AFTER INSERT OR UPDATE OF owner_profile_id OR DELETE ON spaces
  FOR EACH ROW EXECUTE FUNCTION space_membership_ownership_changed();
+CREATE FUNCTION space_membership_ownership_head_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP IN ('DELETE','TRUNCATE') THEN
+  RAISE EXCEPTION 'identity-free ownership generation must survive terminal purge' USING ERRCODE='55000';
+ END IF;
+ IF NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.generation<OLD.generation
+ OR (OLD.state='RETIRED' AND (NEW.state<>'RETIRED' OR NEW.owner_profile_id IS NOT NULL))
+ OR ((NEW.owner_profile_id IS DISTINCT FROM OLD.owner_profile_id OR NEW.state IS DISTINCT FROM OLD.state)
+     AND NEW.generation<>OLD.generation+1) THEN
+  RAISE EXCEPTION 'ownership identity or generation cannot regress or rebind' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER membership_ownership_head_guard BEFORE UPDATE OR DELETE ON space_membership_ownership_heads
+ FOR EACH ROW EXECUTE FUNCTION space_membership_ownership_head_guard();
+CREATE TRIGGER membership_ownership_head_truncate BEFORE TRUNCATE ON space_membership_ownership_heads
+ FOR EACH STATEMENT EXECUTE FUNCTION space_membership_ownership_head_guard();
 
 -- These are explicit existing publications. No Role readiness receipt is
 -- synthesized for them, and reads never invent another publication UUID.
@@ -265,11 +284,34 @@ BEGIN
  DELETE FROM space_native_member_publications WHERE space_id=OLD.id;
  DELETE FROM space_ordinary_member_heads WHERE space_id=OLD.id;
  DELETE FROM space_community_member_heads WHERE space_id=OLD.id;
- DELETE FROM space_membership_ownership_heads WHERE space_id=OLD.id;
+ -- The ownership trigger already erased owner_profile_id. Its separate
+ -- generation/state is an identity-free Space fence, not retained actor data.
  RETURN OLD;
 END $$;
 CREATE TRIGGER space_membership_terminal_cleanup AFTER DELETE ON spaces
  FOR EACH ROW EXECUTE FUNCTION space_membership_terminal_cleanup();
+
+CREATE FUNCTION space_member_admission_event_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+  RAISE EXCEPTION 'membership event requires terminal minimization' USING ERRCODE='55000';
+ ELSIF TG_OP='TRUNCATE' THEN
+  RAISE EXCEPTION 'membership event outbox cannot be truncated' USING ERRCODE='55000';
+ END IF;
+ IF NEW.event_id IS DISTINCT FROM OLD.event_id OR NEW.operation_id IS DISTINCT FROM OLD.operation_id
+ OR NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.profile_id IS DISTINCT FROM OLD.profile_id
+ OR NEW.generation IS DISTINCT FROM OLD.generation OR NEW.occurred_at IS DISTINCT FROM OLD.occurred_at
+ OR (OLD.delivered_at IS NOT NULL AND (NEW.delivered_at IS DISTINCT FROM OLD.delivered_at
+  OR NEW.delivery_stream IS DISTINCT FROM OLD.delivery_stream OR NEW.delivery_sequence IS DISTINCT FROM OLD.delivery_sequence)) THEN
+  RAISE EXCEPTION 'membership event or first acknowledgement is immutable' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER member_admission_event_guard BEFORE UPDATE OR DELETE ON space_member_admission_outbox
+ FOR EACH ROW EXECUTE FUNCTION space_member_admission_event_guard();
+CREATE TRIGGER member_admission_event_truncate BEFORE TRUNCATE ON space_member_admission_outbox
+ FOR EACH STATEMENT EXECUTE FUNCTION space_member_admission_event_guard();
 
 -- Existing databases without the unrelated Federation-source preflight still
 -- get permanent heads. Full production migration order supplies its revision

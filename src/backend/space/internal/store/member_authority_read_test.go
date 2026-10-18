@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,6 +54,14 @@ func TestMemberAuthorityReadInitialLiveZeroAndMissingAggregateHistory(t *testing
 	require.NoError(t, err)
 	require.Equal(t, first.GetSpaceAuthorityRevision(), again.GetSpaceAuthorityRevision(), "authority reads are read-only")
 	require.Equal(t, first.GetOrdinary().GetPublishedBinding().String(), again.GetOrdinary().GetPublishedBinding().String())
+	// Frozen actual172 migration, not merely a pretend higher version. Source:
+	// 2c133336d8745d44ea382932463c8707ae8dfed0, Space34 additive participant11.
+	compatible, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/space/internal/store/testdata/member_authority/space34-realtime.sql"))
+	require.NoError(t, err)
+	digest := sha256.Sum256(compatible)
+	require.Equal(t, "476d3483e58db7aa9b95cb807f64ee58ffa6e7f81c62c453d825913a3134ca17", hex.EncodeToString(digest[:]))
+	_, err = pool.Exec(ctx, string(compatible))
+	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE schema_migrations SET version=34`)
 	require.NoError(t, err)
 	_, err = reader.ReadMemberAdmissionAuthority(ctx, req)

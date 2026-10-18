@@ -15,7 +15,7 @@ import (
 // Compatible additive migrations (including participant-set34) remain usable.
 func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	tables := append([]string{}, spaceAuthorityCatalog.Tables...)
-	tables = append(tables, "schema_migrations", "space_entry_policies", "space_ordinary_member_heads", "space_community_member_heads", "space_member_admission_intents", "space_native_member_publications", "space_membership_ownership_heads", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_permanent_purge_fences")
+	tables = append(tables, "schema_migrations", "space_entry_policies", "space_ordinary_member_heads", "space_community_member_heads", "space_member_admission_intents", "space_native_member_publications", "space_membership_ownership_heads", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_permanent_purge_fences", "space_member_admission_outbox", "space_member_role_cleanup")
 	names := make([]string, 0, len(tables))
 	for _, table := range tables {
 		names = append(names, pgx.Identifier{"public", table}.Sanitize())
@@ -51,6 +51,10 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		authoritysource.CatalogTrigger{Table: "community_owner_authority", Name: "space_community_owner_episode_changed", Function: "space_community_owner_episode_changed", Type: 25},
 		authoritysource.CatalogTrigger{Table: "spaces", Name: "space_membership_ownership_changed", Function: "space_membership_ownership_changed", Type: 29},
 		authoritysource.CatalogTrigger{Table: "spaces", Name: "space_membership_terminal_cleanup", Function: "space_membership_terminal_cleanup", Type: 9},
+		authoritysource.CatalogTrigger{Table: "space_membership_ownership_heads", Name: "membership_ownership_head_guard", Function: "space_membership_ownership_head_guard", Type: 27},
+		authoritysource.CatalogTrigger{Table: "space_membership_ownership_heads", Name: "membership_ownership_head_truncate", Function: "space_membership_ownership_head_guard", Type: 34},
+		authoritysource.CatalogTrigger{Table: "space_member_admission_outbox", Name: "member_admission_event_guard", Function: "space_member_admission_event_guard", Type: 27},
+		authoritysource.CatalogTrigger{Table: "space_member_admission_outbox", Name: "member_admission_event_truncate", Function: "space_member_admission_event_guard", Type: 34},
 	)
 	for _, trigger := range triggers {
 		arguments := []byte{}
