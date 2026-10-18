@@ -1138,6 +1138,40 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         self.assertNotEqual(overlay.observed_render_hash(target, invalid_type),
                             overlay.observed_render_hash(target, omitted_invalid_type))
 
+    def test_post_prefix_empty_env_readback_is_idempotent_but_other_changes_reject(self):
+        # Kubernetes omits EnvVar.value when it is the empty literal. This is
+        # the sanitized post-prefix Matchmaking API shape; planning against it
+        # must not mistake the same rendered env entry for a mutation.
+        base = captured_deployment("voice-matchmaking", "matchmaking", "mm-uid", "42")
+        base_env = base["spec"]["template"]["spec"]["containers"][0]["env"]
+        base_env.append({"name": "MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD"})
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["containers"][0]["env"][-1]["value"] = ""
+
+        self.assertEqual(overlay.object_patch(base, desired), [
+            {"op": "test", "path": "/metadata/uid", "value": "mm-uid"},
+            {"op": "test", "path": "/metadata/resourceVersion", "value": "42"},
+        ])
+
+        bad_values = ["configured", None, 0, False]
+        for value in bad_values:
+            changed = copy.deepcopy(desired)
+            changed["spec"]["template"]["spec"]["containers"][0]["env"][-1]["value"] = value
+            with self.subTest(value=value), self.assertRaises(overlay.OverlayError):
+                overlay.object_patch(base, changed)
+
+        mixed = copy.deepcopy(desired)
+        mixed["spec"]["template"]["spec"]["containers"][0]["env"][-1]["valueFrom"] = {
+            "configMapKeyRef": {"name": "voice-app-config", "key": "REDIS_PASSWORD"}}
+        with self.assertRaises(overlay.OverlayError):
+            overlay.object_patch(base, mixed)
+
+        changed_sibling = copy.deepcopy(desired)
+        changed_sibling["spec"]["template"]["spec"]["containers"][0]["env"][0][
+            "valueFrom"]["configMapKeyRef"]["key"] = "OTHER_REDIS_ADDR"
+        with self.assertRaises(overlay.OverlayError):
+            overlay.object_patch(base, changed_sibling)
+
     def fake_client(self, fail_at=None, dry_run_fail_at=None):
         class Client:
             def __init__(self, fail_at, dry_run_fail_at):
