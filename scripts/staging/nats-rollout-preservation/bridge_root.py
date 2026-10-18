@@ -510,7 +510,9 @@ class Actions:
                     self.native_api,base,state,
                     state['cut']['manifest']['archive_sha256'],
                     state['cut']['manifest_sha256'],state['contract'],
-                    native_config=self.native_config)
+                    native_config=self.native_config,
+                    authorization_deadline=(dt.datetime.fromisoformat(upload_record['deadline'])
+                        if upload_record is not None else None))
                 return summary(state)|{'authorization':str(base/'apply-authorization.json'),
                     'native':native_receipt.get('native',{})}
             # Dedicated readback/actor/deadline rejection leaves the captured
