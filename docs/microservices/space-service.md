@@ -446,10 +446,21 @@ details are `INVALID_ARGUMENT`, not replay success/conflict.
 Registry entries have no ordinary TTL or audit/outbox cascade. Delivered-only
 365-day retention removes payload/outbox, preserving receipts so late retries
 cannot resurrect effects. Existing capability-bound compensation may remove its
-pristine local audit/outbox but leaves its non-payload ID fence. BE-245 P3 must
-explicitly include receipts in its authorized atomic minimization and reject late
-delivery before removing them. This does not activate P3 or define post-P3 replay
-success; existing hard-delete guards remain in force.
+pristine local audit/outbox but leaves its non-payload ID fence.
+
+Under accepted composite terminal minimization, migration
+`000029_audit_receipt_minimization` allows only the exact external fingerprint
+erasure at database time `>= space_permanent_purge_fences.purged_at + 30 days`.
+It clears version/digest, retaining the global ID/Space/origin nonpayload marker;
+no actor/content-derived hash remains permanently. The database trigger refuses
+early erasure, marker insertion, key/origin changes, restoration and deletion.
+Cleanup is bounded to 1000 due rows per transaction with `SKIP LOCKED`; retries
+never move the fixed deadline. A failed enclosing transaction restores all
+pre-state, and migration rollback refuses to fabricate already-erased hashes.
+The permanent Space fence already denies late ingestion before any receipt read,
+including while physical cleanup is delayed; a marker never implies historical
+success or permits resurrection. BE-005 owns terminal coordinator integration;
+source capability does not activate P3, and existing hard-delete guards remain.
 
 ### Query, cursor and retention v1
 

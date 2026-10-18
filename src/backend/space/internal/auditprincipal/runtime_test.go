@@ -101,12 +101,19 @@ func TestAuditRuntimeTLSJWKSThenReplayAndDependencyFailure(t *testing.T) {
 	}))
 	serverIdentity, err := tls.LoadX509KeyPair(certFile, keyFile)
 	require.NoError(t, err)
-	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverIdentity}}
+	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverIdentity}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots}
 	jwks.StartTLS()
 	t.Cleanup(jwks.Close)
 	redis := miniredis.RunT(t)
 	cfg := Config{ListenAddr: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, ReplayAddr: redis.Addr(), JWKSCAFile: caFile,
 		JWKSURLs: map[string]string{"role": jwks.URL + "/role", "chat": jwks.URL + "/chat"}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second}
+	clientDir := t.TempDir()
+	cfg.JWKSClientCertFile = filepath.Join(clientDir, "jwks-client.pem")
+	cfg.JWKSClientKeyFile = filepath.Join(clientDir, "jwks-client-key.pem")
+	clientKey, err := x509.MarshalPKCS8PrivateKey(clientCert.PrivateKey)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cfg.JWKSClientCertFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCert.Certificate[0]}), 0600))
+	require.NoError(t, os.WriteFile(cfg.JWKSClientKeyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKey}), 0600))
 	runtime, err := New(context.Background(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
@@ -135,6 +142,20 @@ func TestAuditRuntimeTLSJWKSThenReplayAndDependencyFailure(t *testing.T) {
 	_, err = client.AppendAuditEvent(ctx, request)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, service.calls.Load())
+	// Actual Role/Chat JWKS servers require client certificates as well as CA trust.
+	noIdentity := cfg
+	noIdentity.JWKSClientCertFile = ""
+	noIdentity.JWKSClientKeyFile = ""
+	missingIdentity, err := New(context.Background(), noIdentity)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, missingIdentity.Close()) })
+	reached := false
+	_, err = missingIdentity.verifier.Unary()(signedContext(t, signer, request, nil), request, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_AppendAuditEvent_FullMethodName}, func(context.Context, any) (any, error) {
+		reached = true
+		return &spacev1.AppendAuditEventResponse{}, nil
+	})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.False(t, reached, "CA-only JWKS client cannot authenticate against producer mTLS")
 	_, err = client.AppendAuditEvent(ctx, request)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	require.EqualValues(t, 1, service.calls.Load())

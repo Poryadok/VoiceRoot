@@ -87,6 +87,18 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 
 ## Risks And Follow-Ups
 
+Author18 assigned receipt-only bounded terminal minimization to BE130 after
+accepted composite c4/c5: migration29 + cleanupAuditIngressEvidence(ctx,tx) erases
+external full fingerprints only at permanent Space PURGED+30d, leaving nonpayload
+global ID/Space/origin markers. Guard denies early/arbitrary mutation and rollback
+of minimized payloads. Helper uses bounded1000-row SKIP LOCKED batches; author18
+owns its call in common CleanupLifecycleEvidence. Actual PG guard/rollback and
+race cases remain required. JWKS compatibility fixture now requires client mTLS
+as the real Role/Chat endpoints do; all31 transport tests PASS, including failure
+of a CA-only JWKS client. Graphify15902 deliberately interrupted after AST183/183
+because this accepted follow-up changes its input; no final success is claimed
+for that obsolete update, and final graph refresh follows the complete source.
+
 Accepted composite decision BE-A2-COMPOSITE-CHAT-NODE c4/c5 is integrated from
 author18's coherent immutable6678fee dependency (protocol86f48e6 and sharedcodec
 ancestor). Migration000028 and checkAuditIngressLifecycle now validate the exact

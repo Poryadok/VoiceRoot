@@ -89,6 +89,12 @@ BE-130 implements the ingestion store and migration `000027_audit_ingestion`;
 real PostgreSQL proof and normal delivery gates remain required. No deployment
 follows from this source description. Rollback refuses any nonempty receipt
 registry, so it cannot silently erase reservations retained after payload cleanup.
+Migration `000029_audit_receipt_minimization` separately erases full external
+fingerprints at aggregate `PURGED + 30 days`, verified against the permanent
+Space fence and database clock. ID/Space/origin markers remain; ordinary
+365-day cleanup never starts this deadline. The immutable trigger permits only
+that due erasure and refuses marker/key changes or deletion. BE-005's cleanup
+integration and real PostgreSQL proof remain required; this does not activate P3.
 
 ### BE-116 Space audit durable ownership (accepted target; not implemented)
 
