@@ -82,7 +82,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 ### Tech debt
 
 - [x] **Promote bootstrap** — пустой GHCR / squash-merge / force-push: `find_promote_base_sha` больше не abort'ит `changes` (`set -e`); missing manifests → rebuild. Ручной `full` / `STAGING_FORCE_FULL_ROLLOUT=true` остаётся опцией.
-- [ ] **Дедуп frontend Docker build** — отложено (admin/developer-portal: npm build + docker build).
+- [x] **Дедуп frontend Docker build** — Admin/Developer Portal compile once in Docker for PR verification and selected master image publication; other admitted jobs retain the host build. Lint/test remain mandatory; standalone Docker builds and Vite arguments are unchanged. Exact-head hosted CI/image proof remains required before delivery.
 - [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).
 - [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.
 - [ ] **`staging-stack-lock` параллельно с auth/web/admin/portal** — lock пишется до push frontend-образов; auto-deploy ждёт эти jobs + verify — ок для happy path, не для отладки artifact mid-pipeline.
