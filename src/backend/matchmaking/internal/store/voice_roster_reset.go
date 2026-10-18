@@ -99,19 +99,23 @@ AND EXISTS(SELECT 1 FROM search_sessions s WHERE s.party_id=p.id AND s.status IN
 // ResetVoiceParty is shared by definitive snapshot revalidation failures.
 // Unknown/unavailable authority must never call this boundary.
 func (s *MatchStore) ResetVoiceParty(ctx context.Context, partyID uuid.UUID) (VoiceRosterResetResult, error) {
-	if partyID == uuid.Nil {
-		return VoiceRosterResetResult{}, errVoiceRosterCutChanged
-	}
-	return s.rosterTransaction(ctx, func(tx pgx.Tx) (VoiceRosterResetResult, error) {
-		count, err := resetCapturedRosterParties(ctx, tx, map[uuid.UUID]bool{partyID: true})
-		return VoiceRosterResetResult{CancelledSessions: count}, err
-	})
+	return s.ResetVoiceParties(ctx, []uuid.UUID{partyID})
 }
 
 // ResetVoiceParties atomically handles the complete definitive changed set from
 // one protected provision candidate. Unknown validation must not enter here.
 func (s *MatchStore) ResetVoiceParties(ctx context.Context, partyIDs []uuid.UUID) (VoiceRosterResetResult, error) {
-	return VoiceRosterResetResult{}, nil
+	targets := make(map[uuid.UUID]bool, len(partyIDs))
+	for _, id := range partyIDs {
+		if id == uuid.Nil {
+			return VoiceRosterResetResult{}, errVoiceRosterCutChanged
+		}
+		targets[id] = true
+	}
+	return s.rosterTransaction(ctx, func(tx pgx.Tx) (VoiceRosterResetResult, error) {
+		count, err := resetCapturedRosterParties(ctx, tx, targets)
+		return VoiceRosterResetResult{CancelledSessions: count}, err
+	})
 }
 
 func (s *MatchStore) rosterTransaction(ctx context.Context, apply func(pgx.Tx) (VoiceRosterResetResult, error)) (VoiceRosterResetResult, error) {
