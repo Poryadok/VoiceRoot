@@ -13,6 +13,7 @@ import {
   type CatalogCommand,
 } from './commandCatalog';
 import { deleteBot, fetchBot, updateBot, type BotSummary } from './botLifecycle';
+import { PublicBotPreview } from './PublicBotPreview';
 import {
   privilegedScopesInJson,
   privilegedScopesInManifest,
@@ -60,6 +61,8 @@ function Portal() {
   const [botToken, setBotToken] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [catalog, setCatalog] = useState<CatalogCommand[]>([]);
+  const [publicBot, setPublicBot] = useState<BotSummary>();
+  const [catalogPreviewStatus, setCatalogPreviewStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editScopesJson, setEditScopesJson] = useState('');
@@ -129,14 +132,25 @@ function Portal() {
       applyBotToEditForm(undefined);
       return;
     }
-    const result = await fetchBot(botId);
+    const result = await fetchBot(botId).catch(() => null);
     if (!isCurrentAuthenticatedRequest(request) ||
       selectionGenerationRef.current !== selectionGeneration ||
       selectedBotIdRef.current !== botId) {
       return;
     }
+    if (result === null) {
+      applyBotToEditForm(fallback);
+      setStatus('Load bot failed: unavailable response');
+      return;
+    }
     if (result.ok) {
+      if (result.bot.id !== botId) {
+        applyBotToEditForm(undefined);
+        setStatus('Load bot failed: mismatched bot response');
+        return;
+      }
       applyBotToEditForm(result.bot);
+      setPublicBot(result.bot);
       setDetailLoadedBotId(botId);
       return;
     }
@@ -153,10 +167,10 @@ function Portal() {
       setCatalog([]);
       return;
     }
-    const [commandsRes, manifestRes] = await Promise.all([
+    const responses = await Promise.all([
       apiFetch(`/api/v1/bots/${botId}/commands`),
       apiFetch(`/api/v1/bots/${botId}/manifest`),
-    ]);
+    ]).catch(() => null);
     const isCurrentSelection = () =>
       isCurrentAuthenticatedRequest(request) &&
       selectionGenerationRef.current === selectionGeneration &&
@@ -164,20 +178,31 @@ function Portal() {
     if (!isCurrentSelection()) {
       return;
     }
+    if (responses === null) {
+      setCatalog([]);
+      setCatalogPreviewStatus('unavailable');
+      setStatus('Load bot catalog failed');
+      return;
+    }
+    const [commandsRes, manifestRes] = responses;
     if (commandsRes.ok) {
-      const body = await commandsRes.json();
+      const body = await commandsRes.json().catch(() => null);
       if (!isCurrentSelection()) {
         return;
       }
-      const commandsJson = body.command_list?.commands_json ?? body.commands_json ?? '[]';
+      const commandsJson = body?.command_list?.commands_json ?? body?.commands_json ?? '[]';
       try {
+        if (body === null) throw new Error('Invalid command response');
         setCatalog(parseCommandCatalog(commandsJson));
+        setCatalogPreviewStatus('ready');
       } catch {
         setCatalog([]);
+        setCatalogPreviewStatus('unavailable');
         setStatus('Failed to parse command catalog');
       }
     } else {
       setCatalog([]);
+      setCatalogPreviewStatus('unavailable');
     }
     if (manifestRes.ok) {
       const body = await manifestRes.json();
@@ -208,6 +233,8 @@ function Portal() {
     setDetailLoadedBotId('');
     setManifestLoadedBotId('');
     applyBotToEditForm(undefined);
+    setPublicBot(undefined);
+    setCatalogPreviewStatus('loading');
     setCatalog([]);
     setManifest(defaultManifest);
     if (clearStatus) {
@@ -249,6 +276,8 @@ function Portal() {
       setDetailLoadedBotId('');
       setManifestLoadedBotId('');
       applyBotToEditForm(undefined);
+      setPublicBot(undefined);
+      setCatalogPreviewStatus('loading');
       setCatalog([]);
       setManifest(defaultManifest);
     }
@@ -305,6 +334,8 @@ function Portal() {
     setWebhookSecret('');
     setCatalog([]);
     setDetailLoadedBotId('');
+    setPublicBot(undefined);
+    setCatalogPreviewStatus('loading');
     setManifestLoadedBotId('');
     setEditName('');
     setEditDescription('');
@@ -748,6 +779,9 @@ function Portal() {
                   </button>
                 </div>
               </section>
+            )}
+            {publicBot?.id === selectedBotId && detailLoadedBotId === selectedBotId && (
+              <PublicBotPreview bot={publicBot} commands={catalog} commandStatus={catalogPreviewStatus} />
             )}
             <button type="button" disabled={!selectedBotId} onClick={() => void revokeAndRegenerateBotToken()}>
               Revoke &amp; regenerate bot token
