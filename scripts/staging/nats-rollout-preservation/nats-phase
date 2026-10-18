@@ -1998,6 +1998,7 @@ def stream_preflight_readback(receipt, raw):
     common = {key: receipt[key] for key in (
         'operation', 'nonce', 'verification_attempt', 'pod_uid', 'job_uid',
         'source_pvc_uid', 'source_pv_uid', 'verification_pvc_uid', 'verification_pv_uid',
+        'source_node_name', 'source_hostname', 'verification_node_name', 'verification_hostname',
         'archive_sha256', 'archive_bytes', 'server_config_sha256', 'server_config_bytes', 'phase_image')}
     frames = 0
     for offset in range(0, len(raw), READBACK_CHUNK):
