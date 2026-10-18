@@ -20,6 +20,20 @@ func TestSystemRoles_Hierarchy(t *testing.T) {
 	require.Greater(t, roles[0].Position, roles[4].Position)
 }
 
+func TestSystemRoles_GuestHasOnlySpaceView(t *testing.T) {
+	roles, err := SystemRoles()
+	require.NoError(t, err)
+	view, err := MaskFor(SpaceView)
+	require.NoError(t, err)
+	for _, role := range roles {
+		if role.Name == RoleGuest {
+			require.Equal(t, view, role.Mask, "Guest must not inherit text, voice, or administrative capabilities")
+			return
+		}
+	}
+	t.Fatal("Guest system role is missing")
+}
+
 func TestHasPermission_MemberDefault(t *testing.T) {
 	memberMask, err := memberDefaultMask()
 	require.NoError(t, err)

@@ -79,13 +79,38 @@ func TestSetDefaultJoinRole_AssignsGuestOnJoin(t *testing.T) {
 	spaceID := uuid.New()
 	require.NoError(t, s.BootstrapSystemRoles(ctx, spaceID))
 
+	initial, err := s.GetDefaultJoinRole(ctx, spaceID)
+	require.NoError(t, err)
+	require.NotNil(t, initial)
+	require.Equal(t, permissions.RoleMember, initial.Name, "Guest must remain an explicit default-role choice")
+
 	guestID, err := s.RoleIDByName(ctx, spaceID, permissions.RoleGuest)
 	require.NoError(t, err)
 	require.NoError(t, s.SetDefaultJoinRole(ctx, spaceID, guestID))
 
 	got, err := s.GetDefaultJoinRole(ctx, spaceID)
 	require.NoError(t, err)
+	require.NotNil(t, got)
 	require.Equal(t, permissions.RoleGuest, got.Name)
+
+	// Exercise the selected role's assignment and effective permissions, rather
+	// than proving only that the default-role configuration round-trips.
+	profileID := uuid.New()
+	require.NoError(t, s.AssignMemberRole(ctx, spaceID, profileID, got.ID, profileID))
+	assigned, err := s.GetMemberRoles(ctx, spaceID, profileID)
+	require.NoError(t, err)
+	require.Len(t, assigned, 1)
+	require.Equal(t, guestID, assigned[0].ID)
+
+	view, err := permissions.MaskFor(permissions.SpaceView)
+	require.NoError(t, err)
+	mask, err := s.GetEffectiveMask(ctx, spaceID, profileID, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, view, mask, "a Guest-only member must not receive the Member fallback mask")
+
+	outsiderMask, err := s.GetEffectiveMask(ctx, spaceID, uuid.New(), nil, nil)
+	require.NoError(t, err)
+	require.Zero(t, outsiderMask, "the default role must not grant permissions before assignment")
 }
 
 func TestGetEffectiveMask_AdminNotOwnerExclusive(t *testing.T) {
