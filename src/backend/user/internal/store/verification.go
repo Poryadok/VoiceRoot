@@ -272,11 +272,27 @@ func (s *ProfileStore) StartOrgVerification(ctx context.Context, profileID uuid.
 		return "", err
 	}
 	txt := "voice-verify=" + token
-	_, err = s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// Start and completion share this lock, including when no request exists yet.
+	if err := lockOrgVerificationProfile(ctx, tx, profileID); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE organization_verification_requests
+		SET status = 'expired' WHERE profile_id = $1 AND status = 'pending'`, profileID); err != nil {
+		return "", err
+	}
+	_, err = tx.Exec(ctx, `
 		INSERT INTO organization_verification_requests (profile_id, domain, txt_token, status)
 		VALUES ($1, $2, $3, 'pending')`,
 		profileID, domain, token)
 	if err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return "", err
 	}
 	return txt, nil
@@ -287,20 +303,26 @@ func (s *ProfileStore) LatestOrgVerification(ctx context.Context, profileID uuid
 	err = s.pool.QueryRow(ctx, `
 		SELECT domain, txt_token FROM organization_verification_requests
 		WHERE profile_id = $1 AND status = 'pending'
+		  AND created_at > statement_timestamp() - interval '24 hours'
 		ORDER BY created_at DESC LIMIT 1`, profileID).Scan(&domain, &token)
 	return domain, token, err
 }
 
-// MarkOrgVerificationVerified marks request verified and updates profile.
-func (s *ProfileStore) MarkOrgVerificationVerified(ctx context.Context, profileID uuid.UUID) (*ProfileRow, error) {
+// MarkOrgVerificationVerified consumes only the current, unexpired token that
+// DNS actually proved. No network work occurs while the profile lock is held.
+func (s *ProfileStore) MarkOrgVerificationVerified(ctx context.Context, profileID uuid.UUID, token string) (*ProfileRow, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockOrgVerificationProfile(ctx, tx, profileID); err != nil {
+		return nil, err
+	}
 	tag, err := tx.Exec(ctx, `
-		UPDATE organization_verification_requests SET status = 'verified', verified_at = now()
-		WHERE profile_id = $1 AND status = 'pending'`, profileID)
+		UPDATE organization_verification_requests SET status = 'verified', verified_at = clock_timestamp()
+		WHERE profile_id = $1 AND txt_token = $2 AND status = 'pending'
+		  AND created_at > statement_timestamp() - interval '24 hours'`, profileID, token)
 	if err != nil {
 		return nil, err
 	}
@@ -321,6 +343,12 @@ func (s *ProfileStore) MarkOrgVerificationVerified(ctx context.Context, profileI
 		return nil, err
 	}
 	return row, nil
+}
+
+func lockOrgVerificationProfile(ctx context.Context, tx pgx.Tx, profileID uuid.UUID) error {
+	var id uuid.UUID
+	return tx.QueryRow(ctx, `SELECT id FROM profiles
+		WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, profileID).Scan(&id)
 }
 
 func randomHexToken(n int) (string, error) {

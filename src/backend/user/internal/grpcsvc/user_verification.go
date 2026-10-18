@@ -211,8 +211,11 @@ func (s *UserGRPC) CheckOrganizationVerification(ctx context.Context, req *userv
 			},
 		}, nil
 	}
-	updated, err := s.Profiles.MarkOrgVerificationVerified(ctx, profileID)
+	updated, err := s.Profiles.MarkOrgVerificationVerified(ctx, profileID, token)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.FailedPrecondition, "org verification expired or superseded")
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.Events != nil {
