@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"math"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/partyauthority"
 )
 
 var ErrUnknown = errors.New("party snapshot authority unavailable")
@@ -19,11 +20,14 @@ type Subject struct {
 	SessionEpoch                            int64
 }
 type Snapshot struct {
-	ProtocolVersion  uint32
-	Kind             string
-	RoomID           *uuid.UUID
-	RosterVersion    uint64
-	MemberProfileIDs []uuid.UUID
+	ProtocolVersion        uint32
+	Kind                   string
+	RoomID                 *uuid.UUID
+	RosterVersion          uint64
+	MemberProfileIDs       []uuid.UUID
+	MemberAuthorityVersion uint32
+	MemberAuthorities      []partyauthority.Member
+	SourceAuthorityHash    [32]byte
 }
 type SnapshotReader interface {
 	Snapshot(context.Context, Subject) (Snapshot, error)
@@ -42,12 +46,17 @@ func (r *Revalidator) RevalidateCapturedParty(ctx context.Context, p store.Sourc
 	if r == nil || r.Snapshots == nil || p.ID == uuid.Nil || p.SearchOperationID == uuid.Nil || p.SearchRequestHash == [32]byte{} || p.InitiatorAccountID == uuid.Nil || p.LeaderProfileID == uuid.Nil || p.InitiatorSessionEpoch <= 0 || p.DisbandedAt != nil {
 		return ValidationUnknown, ErrUnknown
 	}
-	captured := Snapshot{p.ProtocolVersion, p.SourceKind, p.SourceRoomID, p.SourceRosterVersion, p.MemberProfileIDs}
+	subject := Subject{p.SearchOperationID, p.InitiatorAccountID, p.LeaderProfileID, p.InitiatorSessionEpoch}
+	captured := Snapshot{ProtocolVersion: p.ProtocolVersion, Kind: p.SourceKind, RoomID: p.SourceRoomID, RosterVersion: p.SourceRosterVersion, MemberProfileIDs: p.MemberProfileIDs, MemberAuthorityVersion: p.MemberAuthorityVersion, MemberAuthorities: p.MemberAuthorities, SourceAuthorityHash: p.SourceAuthorityHash}
 	hash, err := validateSnapshot(captured, p.LeaderProfileID)
 	if err != nil || hash != p.MemberManifestHash {
 		return ValidationUnknown, ErrUnknown
 	}
-	fresh, err := r.Snapshots.Snapshot(ctx, Subject{p.SearchOperationID, p.InitiatorAccountID, p.LeaderProfileID, p.InitiatorSessionEpoch})
+	authorityHash, err := validateMemberAuthority(captured, subject)
+	if err != nil || authorityHash != p.MemberAuthorityHash {
+		return ValidationUnknown, ErrUnknown
+	}
+	fresh, err := r.Snapshots.Snapshot(ctx, subject)
 	if errors.Is(err, ErrIneligible) {
 		return ValidationChanged, nil
 	}
@@ -58,10 +67,40 @@ func (r *Revalidator) RevalidateCapturedParty(ctx context.Context, p store.Sourc
 	if err != nil {
 		return ValidationUnknown, ErrUnknown
 	}
-	if fresh.ProtocolVersion != p.ProtocolVersion || fresh.Kind != p.SourceKind || fresh.RosterVersion != p.SourceRosterVersion || !sameRoom(fresh.RoomID, p.SourceRoomID) || freshHash != p.MemberManifestHash {
+	freshAuthorityHash, err := validateMemberAuthority(fresh, subject)
+	if err != nil {
+		return ValidationUnknown, ErrUnknown
+	}
+	if fresh.ProtocolVersion != p.ProtocolVersion || fresh.Kind != p.SourceKind || fresh.RosterVersion != p.SourceRosterVersion || !sameRoom(fresh.RoomID, p.SourceRoomID) || freshHash != p.MemberManifestHash || fresh.MemberAuthorityVersion != p.MemberAuthorityVersion || freshAuthorityHash != p.MemberAuthorityHash || fresh.SourceAuthorityHash != p.SourceAuthorityHash {
 		return ValidationChanged, nil
 	}
 	return ValidationCurrent, nil
+}
+
+func validateMemberAuthority(s Snapshot, subject Subject) ([32]byte, error) {
+	if subject.SearchOperationID == uuid.Nil || subject.AccountID == uuid.Nil || subject.ProfileID == uuid.Nil || subject.SessionEpoch <= 0 || s.MemberAuthorityVersion != partyauthority.Version || s.SourceAuthorityHash == [32]byte{} || len(s.MemberAuthorities) != len(s.MemberProfileIDs) {
+		return [32]byte{}, ErrUnknown
+	}
+	_, hash, err := partyauthority.Encode(s.MemberAuthorities)
+	if err != nil {
+		return [32]byte{}, ErrUnknown
+	}
+	found := false
+	for i, member := range s.MemberAuthorities {
+		if member.ProfileID != s.MemberProfileIDs[i] {
+			return [32]byte{}, ErrUnknown
+		}
+		if member.ProfileID == subject.ProfileID {
+			found = true
+			if member.AccountID != subject.AccountID || (s.Kind == "SOLO" && member.SessionEpoch != subject.SessionEpoch) {
+				return [32]byte{}, ErrUnknown
+			}
+		}
+	}
+	if !found {
+		return [32]byte{}, ErrUnknown
+	}
+	return hash, nil
 }
 
 func validateSnapshot(s Snapshot, initiator uuid.UUID) ([32]byte, error) {

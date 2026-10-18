@@ -1,13 +1,16 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"sort"
 	"time"
+	"voice/backend/pkg/partyauthority"
 )
 
 var ErrProvisionCandidateChanged = errors.New("persisted provisioning candidate changed")
@@ -19,10 +22,34 @@ type ProvisionCandidate struct {
 }
 
 func (c ProvisionCandidate) Hash() [32]byte { return c.fingerprint }
+
+// Accounts returns a defensive canonical set for the outer platform ban guard.
+func (c ProvisionCandidate) Accounts() []uuid.UUID {
+	if c.MatchID == uuid.Nil || c.fingerprint == [32]byte{} || len(c.parties) == 0 {
+		return nil
+	}
+	unique := map[uuid.UUID]struct{}{}
+	for _, p := range c.parties {
+		_, hash, err := encodePrivateSourceAuthority(CreateSourcePartyParams{InitiatorAccountID: p.InitiatorAccountID, InitiatorProfileID: p.LeaderProfileID, InitiatorSessionEpoch: p.InitiatorSessionEpoch, SourceKind: p.SourceKind, MemberProfileIDs: p.MemberProfileIDs, MemberAuthorityVersion: p.MemberAuthorityVersion, MemberAuthorities: p.MemberAuthorities, SourceAuthorityHash: p.SourceAuthorityHash})
+		if err != nil || hash != p.MemberAuthorityHash {
+			return nil
+		}
+		for _, member := range p.MemberAuthorities {
+			unique[member.AccountID] = struct{}{}
+		}
+	}
+	accounts := make([]uuid.UUID, 0, len(unique))
+	for account := range unique {
+		accounts = append(accounts, account)
+	}
+	sort.Slice(accounts, func(i, j int) bool { return bytes.Compare(accounts[i][:], accounts[j][:]) < 0 })
+	return accounts
+}
 func (c ProvisionCandidate) Parties() []SourceParty {
 	parties := append([]SourceParty(nil), c.parties...)
 	for i := range parties {
 		parties[i].MemberProfileIDs = append([]uuid.UUID(nil), parties[i].MemberProfileIDs...)
+		parties[i].MemberAuthorities = append([]partyauthority.Member(nil), parties[i].MemberAuthorities...)
 		if parties[i].SourceRoomID != nil {
 			id := *parties[i].SourceRoomID
 			parties[i].SourceRoomID = &id
@@ -54,7 +81,8 @@ func (s *MatchStore) CaptureProvisionCandidate(ctx context.Context, id uuid.UUID
 }
 
 // VerifyProvisionCandidateTx performs no locking, network IO or commit. The
-// transition owner must hold match -> sorted complete parties -> sorted complete
+// transition owner must acquire/check the outer all-account PlatformBanGuard,
+// then hold match -> sorted complete parties -> sorted complete
 // sessions -> proposals/operation locks, then write and COMMIT in this transaction.
 // Full operation JSON includes lease bookkeeping: capture after lease acquisition;
 // renewal requires fresh capture and external validation.

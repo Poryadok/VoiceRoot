@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"voice/backend/pkg/partyauthority"
 )
 
 var (
@@ -27,32 +28,39 @@ var (
 // party. LeaderProfileID is the initiator; no client-supplied roster is used.
 type SourceParty struct {
 	Party
-	SearchOperationID     uuid.UUID
-	SearchRequestHash     [32]byte
-	InitiatorAccountID    uuid.UUID
-	InitiatorSessionEpoch int64
-	ProtocolVersion       uint32
-	SourceKind            string
-	SourceRoomID          *uuid.UUID
-	SourceRosterVersion   uint64
-	MemberManifestHash    [32]byte
+	SearchOperationID      uuid.UUID
+	SearchRequestHash      [32]byte
+	InitiatorAccountID     uuid.UUID
+	InitiatorSessionEpoch  int64
+	ProtocolVersion        uint32
+	SourceKind             string
+	SourceRoomID           *uuid.UUID
+	SourceRosterVersion    uint64
+	MemberManifestHash     [32]byte
+	MemberAuthorityVersion uint32
+	MemberAuthorities      []partyauthority.Member
+	MemberAuthorityHash    [32]byte
+	SourceAuthorityHash    [32]byte
 }
 
 type CreateSourcePartyParams struct {
-	SearchOperationID     uuid.UUID
-	SearchRequestHash     [32]byte
-	InitiatorAccountID    uuid.UUID
-	InitiatorProfileID    uuid.UUID
-	InitiatorSessionEpoch int64
-	ProtocolVersion       uint32
-	SourceKind            string
-	SourceRoomID          *uuid.UUID
-	SourceRosterVersion   uint64
-	MemberProfileIDs      []uuid.UUID
-	GameID                uuid.UUID
-	Mode, Criteria        string
-	SpaceID               *uuid.UUID
-	TimeoutAt             time.Time
+	SearchOperationID      uuid.UUID
+	SearchRequestHash      [32]byte
+	InitiatorAccountID     uuid.UUID
+	InitiatorProfileID     uuid.UUID
+	InitiatorSessionEpoch  int64
+	ProtocolVersion        uint32
+	SourceKind             string
+	SourceRoomID           *uuid.UUID
+	SourceRosterVersion    uint64
+	MemberProfileIDs       []uuid.UUID
+	MemberAuthorityVersion uint32
+	MemberAuthorities      []partyauthority.Member
+	SourceAuthorityHash    [32]byte
+	GameID                 uuid.UUID
+	Mode, Criteria         string
+	SpaceID                *uuid.UUID
+	TimeoutAt              time.Time
 }
 
 type SourcePartySearch struct {
@@ -63,15 +71,21 @@ type SourcePartySearch struct {
 
 const sourcePartyCols = `id,leader_profile_id,member_profile_ids,game_id,mode,criteria::text,created_at,disbanded_at,
 search_operation_id,search_request_sha256,initiator_account_id,initiator_session_epoch,
-voice_snapshot_protocol_version,voice_source_kind,voice_source_room_id,voice_source_roster_version,voice_member_manifest_sha256`
+voice_snapshot_protocol_version,voice_source_kind,voice_source_room_id,voice_source_roster_version,voice_member_manifest_sha256,
+voice_member_authority_version,voice_member_authority,voice_member_authority_sha256,voice_source_authority_sha256`
 
 // CreateSourceParty commits the captured source, every member's unique active
 // session and the queue intent together. Redis IO always runs after COMMIT.
 // A lost commit acknowledgment is resolved by this exact operation's replay.
 func (s *PartyStore) CreateSourceParty(ctx context.Context, p CreateSourcePartyParams) (SourcePartySearch, error) {
 	p.MemberProfileIDs = append([]uuid.UUID(nil), p.MemberProfileIDs...)
+	p.MemberAuthorities = append([]partyauthority.Member(nil), p.MemberAuthorities...)
 	raw, manifest, err := encodeSourceBinding(p)
 	if err != nil || p.TimeoutAt.IsZero() {
+		return SourcePartySearch{}, ErrSourcePartyInvalid
+	}
+	authorityRaw, authorityHash, err := encodePrivateSourceAuthority(p)
+	if err != nil {
 		return SourcePartySearch{}, ErrSourcePartyInvalid
 	}
 	if s == nil || s.Pool == nil {
@@ -82,6 +96,17 @@ func (s *PartyStore) CreateSourceParty(ctx context.Context, p CreateSourcePartyP
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
 	}
 	defer rollbackPartySearch(tx)
+	accounts := make([]uuid.UUID, 0, len(p.MemberAuthorities))
+	for _, member := range p.MemberAuthorities {
+		accounts = append(accounts, member.AccountID)
+	}
+	guard, err := AcquirePlatformBanGuard(ctx, tx, accounts)
+	if err != nil {
+		return SourcePartySearch{}, err
+	}
+	if err := guard.Check(ctx); err != nil {
+		return SourcePartySearch{}, err
+	}
 	var observedAt time.Time
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&observedAt); err != nil {
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
@@ -92,11 +117,12 @@ func (s *PartyStore) CreateSourceParty(ctx context.Context, p CreateSourcePartyP
 	party, err := scanSourceParty(tx.QueryRow(ctx, `INSERT INTO parties
 (id,leader_profile_id,member_profile_ids,game_id,mode,criteria,search_operation_id,search_request_sha256,
 initiator_account_id,initiator_session_epoch,voice_snapshot_protocol_version,voice_source_kind,
-voice_source_room_id,voice_source_roster_version,voice_member_manifest_sha256)
-VALUES($1,$2,$3::jsonb,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+voice_source_room_id,voice_source_roster_version,voice_member_manifest_sha256,
+voice_member_authority_version,voice_member_authority,voice_member_authority_sha256,voice_source_authority_sha256)
+VALUES($1,$2,$3::jsonb,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 ON CONFLICT(search_operation_id) DO NOTHING RETURNING `+sourcePartyCols,
 		uuid.New(), p.InitiatorProfileID, string(raw), p.GameID, p.Mode, p.Criteria, p.SearchOperationID, p.SearchRequestHash[:],
-		p.InitiatorAccountID, p.InitiatorSessionEpoch, int16(p.ProtocolVersion), p.SourceKind, p.SourceRoomID, int64(p.SourceRosterVersion), manifest[:]))
+		p.InitiatorAccountID, p.InitiatorSessionEpoch, int16(p.ProtocolVersion), p.SourceKind, p.SourceRoomID, int64(p.SourceRosterVersion), manifest[:], int16(p.MemberAuthorityVersion), authorityRaw, authorityHash[:], p.SourceAuthorityHash[:]))
 	if errors.Is(err, pgx.ErrNoRows) {
 		party, err = scanSourceParty(tx.QueryRow(ctx, `SELECT `+sourcePartyCols+` FROM parties WHERE search_operation_id=$1 FOR UPDATE`, p.SearchOperationID))
 		if err != nil {
@@ -112,7 +138,7 @@ ON CONFLICT(search_operation_id) DO NOTHING RETURNING `+sourcePartyCols,
 		if !sameCriteria {
 			return SourcePartySearch{}, ErrSearchOperationConflict
 		}
-		if party.DisbandedAt != nil || party.ProtocolVersion != p.ProtocolVersion || party.SourceKind != p.SourceKind || !samePartyUUID(party.SourceRoomID, p.SourceRoomID) || party.SourceRosterVersion != p.SourceRosterVersion || party.MemberManifestHash != manifest {
+		if party.DisbandedAt != nil || party.ProtocolVersion != p.ProtocolVersion || party.SourceKind != p.SourceKind || !samePartyUUID(party.SourceRoomID, p.SourceRoomID) || party.SourceRosterVersion != p.SourceRosterVersion || party.MemberManifestHash != manifest || party.MemberAuthorityVersion != p.MemberAuthorityVersion || party.MemberAuthorityHash != authorityHash || party.SourceAuthorityHash != p.SourceAuthorityHash {
 			return SourcePartySearch{}, ErrSourcePartyChanged
 		}
 		sessions, err := loadSourceSessions(ctx, tx, party.ID)
@@ -186,6 +212,9 @@ func encodeSourceBinding(p CreateSourcePartyParams) ([]byte, [32]byte, error) {
 	if p.SearchOperationID == uuid.Nil || p.SearchRequestHash == [32]byte{} || p.InitiatorAccountID == uuid.Nil || p.InitiatorProfileID == uuid.Nil || p.InitiatorSessionEpoch <= 0 || p.ProtocolVersion != 1 || p.GameID == uuid.Nil || strings.TrimSpace(p.Mode) == "" || len(p.MemberProfileIDs) == 0 {
 		return invalid()
 	}
+	if _, _, err := encodePrivateSourceAuthority(p); err != nil {
+		return invalid()
+	}
 	if p.SpaceID != nil && *p.SpaceID == uuid.Nil {
 		return invalid()
 	}
@@ -220,19 +249,41 @@ func encodeSourceBinding(p CreateSourcePartyParams) ([]byte, [32]byte, error) {
 	return raw, sha256.Sum256(canonical), err
 }
 
+func encodePrivateSourceAuthority(p CreateSourcePartyParams) ([]byte, [32]byte, error) {
+	if p.MemberAuthorityVersion != partyauthority.Version || p.SourceAuthorityHash == [32]byte{} || len(p.MemberAuthorities) != len(p.MemberProfileIDs) {
+		return nil, [32]byte{}, ErrSourcePartyInvalid
+	}
+	raw, hash, err := partyauthority.Encode(p.MemberAuthorities)
+	if err != nil {
+		return nil, [32]byte{}, ErrSourcePartyInvalid
+	}
+	for i, member := range p.MemberAuthorities {
+		if member.ProfileID != p.MemberProfileIDs[i] || (member.ProfileID == p.InitiatorProfileID && (member.AccountID != p.InitiatorAccountID || (p.SourceKind == "SOLO" && member.SessionEpoch != p.InitiatorSessionEpoch))) {
+			return nil, [32]byte{}, ErrSourcePartyInvalid
+		}
+	}
+	return raw, hash, nil
+}
+
 func scanSourceParty(row pgx.Row) (SourceParty, error) {
 	var p SourceParty
-	var members, requestHash, manifest []byte
+	var members, requestHash, manifest, authorityRaw, authorityHash, sourceHash []byte
 	err := row.Scan(&p.ID, &p.LeaderProfileID, &members, &p.GameID, &p.Mode, &p.Criteria, &p.CreatedAt, &p.DisbandedAt,
-		&p.SearchOperationID, &requestHash, &p.InitiatorAccountID, &p.InitiatorSessionEpoch, &p.ProtocolVersion, &p.SourceKind, &p.SourceRoomID, &p.SourceRosterVersion, &manifest)
+		&p.SearchOperationID, &requestHash, &p.InitiatorAccountID, &p.InitiatorSessionEpoch, &p.ProtocolVersion, &p.SourceKind, &p.SourceRoomID, &p.SourceRosterVersion, &manifest, &p.MemberAuthorityVersion, &authorityRaw, &authorityHash, &sourceHash)
 	if err != nil {
 		return SourceParty{}, err
 	}
-	if len(requestHash) != 32 || len(manifest) != 32 {
+	if len(requestHash) != 32 || len(manifest) != 32 || len(authorityHash) != 32 || len(sourceHash) != 32 {
 		return SourceParty{}, ErrSourcePartyInvalid
 	}
 	copy(p.SearchRequestHash[:], requestHash)
 	copy(p.MemberManifestHash[:], manifest)
+	copy(p.MemberAuthorityHash[:], authorityHash)
+	copy(p.SourceAuthorityHash[:], sourceHash)
+	p.MemberAuthorities, err = partyauthority.Decode(authorityRaw, p.MemberAuthorityHash)
+	if err != nil {
+		return SourceParty{}, ErrSourcePartyInvalid
+	}
 	var ids []string
 	if err := json.Unmarshal(members, &ids); err != nil {
 		return SourceParty{}, ErrSourcePartyInvalid
@@ -244,7 +295,7 @@ func scanSourceParty(row pgx.Row) (SourceParty, error) {
 		}
 		p.MemberProfileIDs = append(p.MemberProfileIDs, id)
 	}
-	_, hash, err := encodeSourceBinding(CreateSourcePartyParams{SearchOperationID: p.SearchOperationID, SearchRequestHash: p.SearchRequestHash, InitiatorAccountID: p.InitiatorAccountID, InitiatorProfileID: p.LeaderProfileID, InitiatorSessionEpoch: p.InitiatorSessionEpoch, ProtocolVersion: p.ProtocolVersion, SourceKind: p.SourceKind, SourceRoomID: p.SourceRoomID, SourceRosterVersion: p.SourceRosterVersion, MemberProfileIDs: p.MemberProfileIDs, GameID: p.GameID, Mode: p.Mode, Criteria: p.Criteria})
+	_, hash, err := encodeSourceBinding(CreateSourcePartyParams{SearchOperationID: p.SearchOperationID, SearchRequestHash: p.SearchRequestHash, InitiatorAccountID: p.InitiatorAccountID, InitiatorProfileID: p.LeaderProfileID, InitiatorSessionEpoch: p.InitiatorSessionEpoch, ProtocolVersion: p.ProtocolVersion, SourceKind: p.SourceKind, SourceRoomID: p.SourceRoomID, SourceRosterVersion: p.SourceRosterVersion, MemberProfileIDs: p.MemberProfileIDs, MemberAuthorityVersion: p.MemberAuthorityVersion, MemberAuthorities: p.MemberAuthorities, SourceAuthorityHash: p.SourceAuthorityHash, GameID: p.GameID, Mode: p.Mode, Criteria: p.Criteria})
 	if err != nil || hash != p.MemberManifestHash {
 		return SourceParty{}, ErrSourcePartyInvalid
 	}

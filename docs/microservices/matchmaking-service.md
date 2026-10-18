@@ -57,6 +57,37 @@ service MatchmakingService {
 
 ## Модель данных
 
+### Private captured party authority (A3)
+
+The protected Voice snapshot binds each roster profile to its native admission
+account and admitted session epoch from the same final C2 cut. The initiating
+device epoch may differ from a roster member's admitted epoch; SOLO uses exactly
+the verified initiating subject. This private authority is never exposed in
+public responses, roster events, logs or metric labels.
+
+Migration `000022_party_member_authority` adds immutable
+`voice_member_authority_version`, canonical `voice_member_authority` bytes,
+`voice_member_authority_sha256` and opaque `voice_source_authority_sha256` to the
+existing captured party. The tuple manifest is version 1 with sorted profile UUIDs
+and a bijection to `member_profile_ids`; each account is unique within a party.
+The source digest also binds native admission identity and the complete coverage
+cut. Fresh validation compares both hashes: a changed valid cut resets the whole
+party even when its public profile roster is unchanged. Missing, unsupported or
+corrupt authority is unavailable; historical NULL captures require a new search,
+without backfilling ownership from User metadata. Rollback refuses retained
+private evidence.
+
+All-member platform MM ban checks use the stored native account bindings.
+`AcquirePlatformBanGuard` acquires shared transaction advisory locks in sorted
+actual-key order before match, party, session and proposal/operation row locks.
+Sanction Apply/Revoke acquire the same account locks exclusively before writing.
+The transaction must use READ COMMITTED; the authoritative ban SELECT is a
+separate statement after all locks, using the database clock for expiry. A CTE
+that locks and reads in one statement is insufficient after waiting for a writer.
+The same guard is required at enqueue, reservation, each forward provisioning
+boundary and final activation. This preserves the accepted settlement path for
+already-issued operations after a later ban or roster reset.
+
 ### Public game catalog ordering
 
 `ListGames` follows [BE164-PUBLIC-POPULARITY-v1](../features/game-catalog.md#public-popularity-and-paging-be164-public-popularity-v1).
