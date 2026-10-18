@@ -86,6 +86,19 @@ Workflow **[Production deploy](../../.github/workflows/prod-deploy.yml)** — ma
 
 Verifies all catalog images via `scripts/prod/verify-prod-images.sh`, then applies via `scripts/prod/render-and-apply-prod.sh`.
 
+In `full` mode, `needs_user_space_rollout=true` selects the shared User/Space
+subset after infra and application manifests are applied. The default remains
+the full ordered app tier; `needs_full_rollout=true` takes precedence even when
+both flags are true. Use the full tier for first bootstrap or changes requiring
+the complete dependency-order/Auth repair sequence. The subset delegates changed
+images to the existing ordered User/Space helper and preserves Space's desired
+replica count. It is a rollout-selection option, not a change to the workloads'
+`Recreate` strategy or a guarantee of uninterrupted service. `app-only` retains
+its existing subset selector; `images-only` retains selective image updates.
+Run `bash scripts/ci/prod-user-space-rollout_test.sh` for isolated dispatch,
+namespace and failure-propagation checks. Live readiness and deployment
+qualification still require the authorized protected rollout window.
+
 GitHub setup:
 
 | Item | Purpose |

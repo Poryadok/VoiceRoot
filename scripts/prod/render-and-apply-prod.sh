@@ -41,7 +41,11 @@ case "${MODE}" in
     bash "${ROOT}/scripts/prod/apply-infra.sh"
     bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
     bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
-    bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
+    if [ "${NEEDS_FULL_ROLLOUT:-false}" != "true" ] && [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" = "true" ]; then
+      bash "${ROOT}/scripts/staging/rollout-subset.sh"
+    else
+      bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
+    fi
     bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
     kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
     for dep in voice-developer-portal voice-web voice-admin; do
