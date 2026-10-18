@@ -117,6 +117,11 @@ func main() {
 			log.Fatalf("report intake transport: %v", err)
 		}
 		defer stopIntake()
+		stopValidation, err := startReportValidation(context.Background(), svc.Reports, logger)
+		if err != nil {
+			log.Fatalf("report validation runtime: %v", err)
+		}
+		defer stopValidation()
 		moderationv1.RegisterModerationServiceServer(grpcSrv, svc)
 		go grpcsvc.RunTempBanExpirySweeper(context.Background(), svc, logger)
 		go func() {

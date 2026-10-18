@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"voice/backend/pkg/reporttargetprincipal"
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
 	"voice/backend/messaging/internal/messageevents"
@@ -598,6 +599,7 @@ func main() {
 		}
 		messagingGRPCOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
 		grpcSrv = grpc.NewServer(append(messagingGRPCOptions, grpc.ChainUnaryInterceptor(
+			reporttargetprincipal.OrdinaryUnaryInterceptor("messaging"),
 			principalgrpc.TombstoneUnaryInterceptor(moderationPrincipal),
 			principalgrpc.ApplyGameMessageUnaryInterceptor(gatewayPrincipal),
 			principalgrpc.SendGameEventMessageUnaryInterceptor(botPrincipal),
@@ -677,6 +679,12 @@ func main() {
 			gameMessagePermitProcessor.CommunicationAdmission = messagingService.BeginCommunicationAction
 		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
+		stopReportTargets, err := reporttargetprincipal.Start(context.Background(), "messaging", func(server grpc.ServiceRegistrar) { grpcsvc.RegisterReportTargetServer(server, messagingService) }, func(err error) { log.Fatalf("report target listener: %v", err) })
+		if err != nil {
+			log.Fatalf("report target startup: %v", err)
+		}
+		defer stopReportTargets()
+
 		if managedChatPurge != nil && managedChatPurge.Coordinator != nil {
 			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			messagingService.AttachmentReferences = &grpcsvc.AttachmentReferenceCoordinator{Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}

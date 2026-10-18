@@ -14,9 +14,9 @@ import 'dart:core' as $core;
 
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $1;
+    as $2;
 
-import '../../common/v1/common.pb.dart' as $2;
+import '../../common/v1/common.pb.dart' as $3;
 import 'story.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
@@ -37,10 +37,10 @@ class Story extends $pb.GeneratedMessage {
     $core.String? mentionProfileIdsJson,
     $core.int? viewCount,
     $core.String? visibility,
-    $1.Timestamp? expiresAt,
-    $1.Timestamp? archivedUntil,
-    $1.Timestamp? createdAt,
-    $1.Timestamp? deletedAt,
+    $2.Timestamp? expiresAt,
+    $2.Timestamp? archivedUntil,
+    $2.Timestamp? createdAt,
+    $2.Timestamp? deletedAt,
     StoryMediaType? typeEnum,
     StoryAudience? visibilityEnum,
   }) {
@@ -92,14 +92,14 @@ class Story extends $pb.GeneratedMessage {
     ..aOS(10, _omitFieldNames ? '' : 'mentionProfileIdsJson')
     ..aI(11, _omitFieldNames ? '' : 'viewCount')
     ..aOS(12, _omitFieldNames ? '' : 'visibility')
-    ..aOM<$1.Timestamp>(13, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'archivedUntil',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(15, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(16, _omitFieldNames ? '' : 'deletedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(13, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(14, _omitFieldNames ? '' : 'archivedUntil',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(15, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(16, _omitFieldNames ? '' : 'deletedAt',
+        subBuilder: $2.Timestamp.create)
     ..aE<StoryMediaType>(17, _omitFieldNames ? '' : 'typeEnum',
         enumValues: StoryMediaType.values)
     ..aE<StoryAudience>(18, _omitFieldNames ? '' : 'visibilityEnum',
@@ -233,48 +233,48 @@ class Story extends $pb.GeneratedMessage {
   void clearVisibility() => $_clearField(12);
 
   @$pb.TagNumber(13)
-  $1.Timestamp get expiresAt => $_getN(12);
+  $2.Timestamp get expiresAt => $_getN(12);
   @$pb.TagNumber(13)
-  set expiresAt($1.Timestamp value) => $_setField(13, value);
+  set expiresAt($2.Timestamp value) => $_setField(13, value);
   @$pb.TagNumber(13)
   $core.bool hasExpiresAt() => $_has(12);
   @$pb.TagNumber(13)
   void clearExpiresAt() => $_clearField(13);
   @$pb.TagNumber(13)
-  $1.Timestamp ensureExpiresAt() => $_ensure(12);
+  $2.Timestamp ensureExpiresAt() => $_ensure(12);
 
   @$pb.TagNumber(14)
-  $1.Timestamp get archivedUntil => $_getN(13);
+  $2.Timestamp get archivedUntil => $_getN(13);
   @$pb.TagNumber(14)
-  set archivedUntil($1.Timestamp value) => $_setField(14, value);
+  set archivedUntil($2.Timestamp value) => $_setField(14, value);
   @$pb.TagNumber(14)
   $core.bool hasArchivedUntil() => $_has(13);
   @$pb.TagNumber(14)
   void clearArchivedUntil() => $_clearField(14);
   @$pb.TagNumber(14)
-  $1.Timestamp ensureArchivedUntil() => $_ensure(13);
+  $2.Timestamp ensureArchivedUntil() => $_ensure(13);
 
   @$pb.TagNumber(15)
-  $1.Timestamp get createdAt => $_getN(14);
+  $2.Timestamp get createdAt => $_getN(14);
   @$pb.TagNumber(15)
-  set createdAt($1.Timestamp value) => $_setField(15, value);
+  set createdAt($2.Timestamp value) => $_setField(15, value);
   @$pb.TagNumber(15)
   $core.bool hasCreatedAt() => $_has(14);
   @$pb.TagNumber(15)
   void clearCreatedAt() => $_clearField(15);
   @$pb.TagNumber(15)
-  $1.Timestamp ensureCreatedAt() => $_ensure(14);
+  $2.Timestamp ensureCreatedAt() => $_ensure(14);
 
   @$pb.TagNumber(16)
-  $1.Timestamp get deletedAt => $_getN(15);
+  $2.Timestamp get deletedAt => $_getN(15);
   @$pb.TagNumber(16)
-  set deletedAt($1.Timestamp value) => $_setField(16, value);
+  set deletedAt($2.Timestamp value) => $_setField(16, value);
   @$pb.TagNumber(16)
   $core.bool hasDeletedAt() => $_has(15);
   @$pb.TagNumber(16)
   void clearDeletedAt() => $_clearField(16);
   @$pb.TagNumber(16)
-  $1.Timestamp ensureDeletedAt() => $_ensure(15);
+  $2.Timestamp ensureDeletedAt() => $_ensure(15);
 
   @$pb.TagNumber(17)
   StoryMediaType get typeEnum => $_getN(16);
@@ -605,7 +605,7 @@ class GetStoryRequest extends $pb.GeneratedMessage {
 
 class GetStoryFeedRequest extends $pb.GeneratedMessage {
   factory GetStoryFeedRequest({
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (page != null) result.page = page;
@@ -625,8 +625,8 @@ class GetStoryFeedRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'GetStoryFeedRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.story.v1'),
       createEmptyInstance: create)
-    ..aOM<$2.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -649,15 +649,15 @@ class GetStoryFeedRequest extends $pb.GeneratedMessage {
   static GetStoryFeedRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $2.CursorPageRequest get page => $_getN(0);
+  $3.CursorPageRequest get page => $_getN(0);
   @$pb.TagNumber(1)
-  set page($2.CursorPageRequest value) => $_setField(1, value);
+  set page($3.CursorPageRequest value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasPage() => $_has(0);
   @$pb.TagNumber(1)
   void clearPage() => $_clearField(1);
   @$pb.TagNumber(1)
-  $2.CursorPageRequest ensurePage() => $_ensure(0);
+  $3.CursorPageRequest ensurePage() => $_ensure(0);
 }
 
 class GetProfileStoriesRequest extends $pb.GeneratedMessage {
@@ -2294,7 +2294,7 @@ class GetStoryFeedResponse extends $pb.GeneratedMessage {
   factory GetStoryFeedResponse({
     $core.Iterable<Story>? stories,
     $core.String? nextCursor,
-    $2.CursorPageResponse? page,
+    $3.CursorPageResponse? page,
     $core.Iterable<StoryFeedGroup>? feedGroups,
   }) {
     final result = create();
@@ -2320,8 +2320,8 @@ class GetStoryFeedResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..pPM<Story>(1, _omitFieldNames ? '' : 'stories', subBuilder: Story.create)
     ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
-    ..aOM<$2.CursorPageResponse>(3, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageResponse.create)
+    ..aOM<$3.CursorPageResponse>(3, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageResponse.create)
     ..pPM<StoryFeedGroup>(4, _omitFieldNames ? '' : 'feedGroups',
         subBuilder: StoryFeedGroup.create)
     ..hasRequiredFields = false;
@@ -2358,15 +2358,15 @@ class GetStoryFeedResponse extends $pb.GeneratedMessage {
   void clearNextCursor() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $2.CursorPageResponse get page => $_getN(2);
+  $3.CursorPageResponse get page => $_getN(2);
   @$pb.TagNumber(3)
-  set page($2.CursorPageResponse value) => $_setField(3, value);
+  set page($3.CursorPageResponse value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasPage() => $_has(2);
   @$pb.TagNumber(3)
   void clearPage() => $_clearField(3);
   @$pb.TagNumber(3)
-  $2.CursorPageResponse ensurePage() => $_ensure(2);
+  $3.CursorPageResponse ensurePage() => $_ensure(2);
 
   @$pb.TagNumber(4)
   $pb.PbList<StoryFeedGroup> get feedGroups => $_getList(3);

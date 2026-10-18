@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	StoryService_ResolveReportTarget_FullMethodName   = "/voice.story.v1.StoryService/ResolveReportTarget"
 	StoryService_CreateStory_FullMethodName           = "/voice.story.v1.StoryService/CreateStory"
 	StoryService_DeleteStory_FullMethodName           = "/voice.story.v1.StoryService/DeleteStory"
 	StoryService_GetStory_FullMethodName              = "/voice.story.v1.StoryService/GetStory"
@@ -47,6 +48,8 @@ const (
 //
 // Stories and highlights. HTTP: /api/v1/stories/**.
 type StoryServiceClient interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error)
 	CreateStory(ctx context.Context, in *CreateStoryRequest, opts ...grpc.CallOption) (*CreateStoryResponse, error)
 	DeleteStory(ctx context.Context, in *DeleteStoryRequest, opts ...grpc.CallOption) (*DeleteStoryResponse, error)
 	GetStory(ctx context.Context, in *GetStoryRequest, opts ...grpc.CallOption) (*GetStoryResponse, error)
@@ -76,6 +79,16 @@ type storyServiceClient struct {
 
 func NewStoryServiceClient(cc grpc.ClientConnInterface) StoryServiceClient {
 	return &storyServiceClient{cc}
+}
+
+func (c *storyServiceClient) ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveReportTargetResponse)
+	err := c.cc.Invoke(ctx, StoryService_ResolveReportTarget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *storyServiceClient) CreateStory(ctx context.Context, in *CreateStoryRequest, opts ...grpc.CallOption) (*CreateStoryResponse, error) {
@@ -284,6 +297,8 @@ func (c *storyServiceClient) HideStoryFromFeed(ctx context.Context, in *HideStor
 //
 // Stories and highlights. HTTP: /api/v1/stories/**.
 type StoryServiceServer interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error)
 	CreateStory(context.Context, *CreateStoryRequest) (*CreateStoryResponse, error)
 	DeleteStory(context.Context, *DeleteStoryRequest) (*DeleteStoryResponse, error)
 	GetStory(context.Context, *GetStoryRequest) (*GetStoryResponse, error)
@@ -315,6 +330,9 @@ type StoryServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedStoryServiceServer struct{}
 
+func (UnimplementedStoryServiceServer) ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveReportTarget not implemented")
+}
 func (UnimplementedStoryServiceServer) CreateStory(context.Context, *CreateStoryRequest) (*CreateStoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateStory not implemented")
 }
@@ -394,6 +412,24 @@ func RegisterStoryServiceServer(s grpc.ServiceRegistrar, srv StoryServiceServer)
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&StoryService_ServiceDesc, srv)
+}
+
+func _StoryService_ResolveReportTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveReportTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StoryServiceServer).ResolveReportTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StoryService_ResolveReportTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StoryServiceServer).ResolveReportTarget(ctx, req.(*ResolveReportTargetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _StoryService_CreateStory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -763,6 +799,10 @@ var StoryService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.story.v1.StoryService",
 	HandlerType: (*StoryServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveReportTarget",
+			Handler:    _StoryService_ResolveReportTarget_Handler,
+		},
 		{
 			MethodName: "CreateStory",
 			Handler:    _StoryService_CreateStory_Handler,

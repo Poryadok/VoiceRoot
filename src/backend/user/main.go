@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"voice/backend/pkg/reporttargetprincipal"
 
 	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/grpcclient"
@@ -357,6 +358,7 @@ func main() {
 			}()
 		}
 		ordinaryOptions := append([]grpc.ServerOption{}, sharedOptions...)
+		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(reporttargetprincipal.OrdinaryUnaryInterceptor("user")))
 		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(socialprincipal.OrdinaryUnaryInterceptor("user")))
 		srv := grpc.NewServer(ordinaryOptions...)
 		userSvc := &grpcsvc.UserGRPC{
@@ -388,6 +390,12 @@ func main() {
 			go dispatcher.Run(dispatchCtx)
 		}
 		userv1.RegisterUserServiceServer(srv, userSvc)
+		stopReportTargets, err := reporttargetprincipal.Start(context.Background(), "user", func(server grpc.ServiceRegistrar) { grpcsvc.RegisterReportTargetServer(server, userSvc) }, func(err error) { log.Fatalf("report target listener: %v", err) })
+		if err != nil {
+			log.Fatalf("report target startup: %v", err)
+		}
+		defer stopReportTargets()
+
 		defer srv.Stop()
 		if privacyRuntime != nil {
 			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)

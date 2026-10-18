@@ -110,7 +110,7 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var fact ValidationFact
 	var legacy bool
 	err = tx.QueryRow(ctx, `SELECT id,reporter_profile_id,reporter_account_id,target_type,target_id,created_at,validation_publication_legacy
