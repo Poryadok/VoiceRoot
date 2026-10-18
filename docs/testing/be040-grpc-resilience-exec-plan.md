@@ -105,11 +105,18 @@ must first be resolved by the bounded Astra decision recorded in task comment
   a resolver-supplied retry policy invoked a received mutation4 times instead
   of1. The ordinary dial now installs the shared breaker and disables configured
   retry; the same immutable negative tests passed GREEN (two tests, no skips).
-- Shared helper and Gateway golangci-lint report zero issues. Final shared race,
-  Gateway short/race and vet checkpoint is running in Linux. A broader pkg
+- Shared helper and Gateway golangci-lint report zero issues. Final shared race
+  passed44 named checks without skips; Gateway short/race passed802 with129
+  explicit opt-in/live skips. Both affected vet checks passed. A broader pkg
   attempt first lacked repository fixture paths; the faithful-context repeat
   passed other packages but two unrelated issuer tests refused root execution.
   Those runner failures are preserved and are not reported as product PASS.
+- Independent review of417b4f3 found P2: sampling time before the mutex could
+  apply an old observation after a newer state transition. Both admission and
+  completion now sample under the state mutex. A deterministic clock seam
+  models the delayed pre-lock observation and checks expired failure windows,
+  full cooldown from transition time, and eligible probe admission. All three
+  scenarios failed before the fix; the complete helper race suite then passed.
 
 ## Decisions
 

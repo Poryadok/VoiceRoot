@@ -123,9 +123,9 @@ func (b *UnaryBreaker) UnaryClientInterceptor() grpc.UnaryClientInterceptor {
 
 // admit returns a token for exactly one invocation, or a fixed rejection event.
 func (b *UnaryBreaker) admit(method string) (breakerAdmission, *BreakerEvent) {
-	now := b.now()
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	now := b.now()
 	entry := b.methods[method]
 	if entry == nil {
 		if len(b.methods) >= b.config.MaxMethods {
@@ -159,8 +159,8 @@ func (b *UnaryBreaker) admit(method string) (breakerAdmission, *BreakerEvent) {
 }
 
 func (b *UnaryBreaker) complete(token breakerAdmission, outcome breakerOutcome) {
-	now := b.now()
 	b.mu.Lock()
+	now := b.now()
 	entry := token.entry
 	entry.outstanding--
 	if b.methods[token.method] != entry || entry.generation != token.generation || entry.state != token.state {

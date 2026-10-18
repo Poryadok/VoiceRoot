@@ -74,6 +74,50 @@ func invokeUnary(b *UnaryBreaker, ctx context.Context, method string, invoke fun
 		})
 }
 
+// A pre-lock sample may be delayed behind another operation for arbitrarily
+// long. Model that schedule without sleeps: only a sample serialized with the
+// state sees the current time; an earlier sample sees the old time.
+func TestUnaryBreakerTimeAndStateShareLinearization(t *testing.T) {
+	for _, scenario := range []string{"failure_window", "full_cooldown", "probe_admission"} {
+		t.Run(scenario, func(t *testing.T) {
+			config := DefaultBreakerConfig()
+			b, clock := testUnaryBreaker(t, config)
+			start := clock.Now()
+			entry := &methodCircuit{state: breakerClosed, outstanding: 1,
+				failures: config.FailureThreshold - 1, firstFailure: start, lastActivity: start}
+			b.methods["/test/Timed"] = entry
+			current := start.Add(40 * time.Second)
+			b.now = func() time.Time {
+				if b.mu.TryLock() {
+					b.mu.Unlock()
+					return start
+				}
+				return current
+			}
+			switch scenario {
+			case "failure_window":
+				b.complete(breakerAdmission{method: "/test/Timed", entry: entry}, breakerFailure)
+				require.Equal(t, breakerClosed, entry.state, "a delayed sample must not join an expired failure window")
+				require.Equal(t, 1, entry.failures)
+				require.Equal(t, current, entry.firstFailure)
+			case "full_cooldown":
+				entry.firstFailure = current
+				b.complete(breakerAdmission{method: "/test/Timed", entry: entry}, breakerFailure)
+				require.Equal(t, breakerOpen, entry.state)
+				require.Equal(t, current.Add(config.OpenTimeout), entry.openUntil, "cooldown starts at the serialized transition")
+			case "probe_admission":
+				entry.state = breakerOpen
+				entry.outstanding = 0
+				entry.openUntil = start.Add(config.OpenTimeout)
+				token, event := b.admit("/test/Timed")
+				require.Same(t, entry, token.entry, "a stale admission timestamp must not delay an eligible probe")
+				require.Equal(t, "probe", event.Reason)
+				require.Equal(t, current, entry.lastActivity)
+			}
+		})
+	}
+}
+
 func TestUnaryBreakerClassifiesStatusesWithoutReplaying(t *testing.T) {
 	for code := codes.OK; code <= codes.Unauthenticated; code++ {
 		t.Run(code.String(), func(t *testing.T) {
