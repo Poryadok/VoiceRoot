@@ -335,7 +335,6 @@ and Voice IDs denied while history remains.
 - [ ] **[Analytics] Product dashboard under-spec** — `product` returns `dau` as `uniqExact(user_id_hashed)` over the whole range (default 30d), not daily DAU; missing MAU/WAU/onboarding completion per `docs/features/analytics.md` / `docs/microservices/analytics-service.md` (`d:\Git\Voice\src\backend\analytics\internal\store\query.go`).
 - [ ] **[Analytics] Grafana vs REST registration mismatch** — Grafana panel counts `profile_created` (`d:\Git\Voice\deploy\observability\grafana\dashboards\voice-analytics-product.json`); REST `product` dashboard counts `user_registered` (`d:\Git\Voice\src\backend\analytics\internal\store\query.go`).
 - [ ] **[Analytics] DoD ingest path untested** — Live tests only check RBAC 200/403 and export HTTP 200; no assertion that `message.sent` → ClickHouse row within 60s (`d:\Git\Voice\src\backend\gateway\compose_analytics_live_test.go`, `d:\Git\Voice\src\backend\gateway\compose_analytics_export_live_test.go` vs `docs/features/analytics.md` DoD §1).
-- [ ] **[Analytics] Silent no-op without ClickHouse** — `CLICKHOUSE_DSN` unset → service starts, ingest buffers, nothing persisted (`d:\Git\Voice\src\backend\analytics\main.go`); k8s secret refs are `optional: true` (`d:\Git\Voice\deploy\staging\services.yaml`, `d:\Git\Voice\deploy\prod\services.yaml`).
 - [ ] **[Analytics] Weak prod hash-key guard** — Missing `ANALYTICS_ID_HASH_KEY` falls back to dev default (`d:\Git\Voice\src\backend\analytics\main.go`).
 
 ### Matchmaking
