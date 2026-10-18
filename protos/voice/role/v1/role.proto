@@ -36,6 +36,14 @@ service RoleService {
   rpc SetDefaultJoinRole(SetDefaultJoinRoleRequest) returns (SetDefaultJoinRoleResponse);
   rpc GetDefaultJoinRole(GetDefaultJoinRoleRequest) returns (GetDefaultJoinRoleResponse);
 
+  // Inert admission projection; READY never establishes Space membership.
+  // @voice.security=protected;callers=service:space
+  rpc EnsureDefaultMemberRole(EnsureDefaultMemberRoleRequest) returns (EnsureDefaultMemberRoleResponse);
+
+  // Writes a generation floor even when no ordinary grants exist.
+  // @voice.security=protected;callers=service:space
+  rpc RemoveMemberRoles(RemoveMemberRolesRequest) returns (RemoveMemberRolesResponse);
+
   // Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
   rpc BootstrapSpaceRoles(BootstrapSpaceRolesRequest) returns (BootstrapSpaceRolesResponse);
 
@@ -66,6 +74,55 @@ service RoleService {
 
   // @voice.security=protected;callers=service:voice
   rpc CheckGameSessionGrant(CheckGameSessionGrantRequest) returns (CheckGameSessionGrantResponse);
+}
+
+message EnsureDefaultMemberRoleRequest {
+  uint32 protocol_version = 1; // exactly 1
+  string space_id = 2;
+  string profile_id = 3;
+  uint64 membership_generation = 4; // positive, at most signed int64 max
+  string admission_operation_id = 5;
+  bytes admission_binding_sha256 = 6; // exact immutable 32-byte Space binding
+}
+
+// Historical projection evidence. Effective rights require a current matching
+// published Space generation, operation and receipt digest.
+message DefaultMemberRoleReceipt {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string profile_id = 3;
+  uint64 membership_generation = 4;
+  string admission_operation_id = 5;
+  bytes admission_binding_sha256 = 6;
+  string role_id = 7; // selected by Role, never by the caller
+  bytes receipt_sha256 = 8; // memberadmission EnsureReceiptFingerprint v1
+}
+
+message EnsureDefaultMemberRoleResponse {
+  DefaultMemberRoleReceipt receipt = 1;
+}
+
+message RemoveMemberRolesRequest {
+  uint32 protocol_version = 1; // exactly 1
+  string space_id = 2;
+  string profile_id = 3;
+  uint64 removal_generation_floor = 4; // positive, at most signed int64 max
+  string removal_operation_id = 5;
+  bytes removal_binding_sha256 = 6; // exact immutable 32-byte removal intent
+}
+
+message MemberRolesRemovalReceipt {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string profile_id = 3;
+  uint64 removal_generation_floor = 4;
+  string removal_operation_id = 5;
+  bytes removal_binding_sha256 = 6;
+  bytes receipt_sha256 = 7; // memberadmission RemoveReceiptFingerprint v1
+}
+
+message RemoveMemberRolesResponse {
+  MemberRolesRemovalReceipt receipt = 1;
 }
 
 message BootstrapSpaceRolesRequest {

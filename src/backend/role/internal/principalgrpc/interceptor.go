@@ -82,6 +82,9 @@ func verificationStatus(err error) error {
 func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		switch info.FullMethod {
+		case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName,
+			rolev1.RoleService_RemoveMemberRoles_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		case "/voice.role.v1.RoleService/ApplySpaceLifecycleFence":
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		case "/voice.role.v1.RoleService/GetOwnershipTransferCapabilities",
