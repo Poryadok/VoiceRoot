@@ -89,7 +89,12 @@ func (c *Coordinator) resume(ctx context.Context, binding store.OwnershipBinding
 	if journal == nil {
 		return nil, errors.New("ownership recovery received nil journal")
 	}
-	var err error
+	// A scanner or previous transition returns only a snapshot. Another worker
+	// may have committed a decision or completed the operation since then.
+	journal, err := c.current(ctx, binding)
+	if err != nil {
+		return nil, err
+	}
 	switch journal.State {
 	case "completed", "aborted":
 		return journal, nil
@@ -142,6 +147,20 @@ func (c *Coordinator) resume(ctx context.Context, binding store.OwnershipBinding
 	return c.resume(ctx, binding, proof, journal)
 }
 
+func (c *Coordinator) current(ctx context.Context, binding store.OwnershipBinding) (*store.OwnershipJournal, error) {
+	journal, err := c.dependencies.Store.LoadOwnership(ctx, binding.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	if journal == nil {
+		return nil, store.ErrOwnershipMissing
+	}
+	if journal.Binding != binding {
+		return nil, store.ErrOwnershipConflict
+	}
+	return journal, nil
+}
+
 func (c *Coordinator) abort(ctx context.Context, binding store.OwnershipBinding, journal *store.OwnershipJournal, cause error) (*store.OwnershipJournal, error) {
 	var err error
 	if journal.State != "abort_decided" {
@@ -149,6 +168,18 @@ func (c *Coordinator) abort(ctx context.Context, binding store.OwnershipBinding,
 		if err != nil {
 			return nil, errors.Join(cause, err)
 		}
+	}
+	// A successful decision call can itself be stale by the time it returns.
+	// Never send a terminal action without its current durable decision.
+	journal, err = c.current(ctx, binding)
+	if err != nil {
+		return nil, errors.Join(cause, err)
+	}
+	if journal.State == "aborted" {
+		return journal, cause
+	}
+	if journal.State != "abort_decided" {
+		return nil, errors.Join(cause, store.ErrOwnershipStateTransition)
 	}
 	receipt, err := c.dependencies.Role.Abort(ctx, binding)
 	if err != nil {
