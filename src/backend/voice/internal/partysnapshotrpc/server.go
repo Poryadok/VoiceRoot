@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	callsv1 "voice.app/voice/calls/v1"
@@ -49,9 +50,9 @@ func (s *Server) GetMatchmakingPartySnapshot(ctx context.Context, req *callsv1.G
 	if err != nil {
 		switch {
 		case errors.Is(err, partysnapshot.ErrStaleSubject):
-			return nil, status.Error(codes.Unauthenticated, "initiator session epoch is stale")
+			return nil, subjectFailure(codes.Unauthenticated, "STALE_PARTY_SUBJECT")
 		case errors.Is(err, partysnapshot.ErrIneligible):
-			return nil, status.Error(codes.FailedPrecondition, "initiator is not eligible for a Voice party")
+			return nil, subjectFailure(codes.FailedPrecondition, "PARTY_SUBJECT_INELIGIBLE")
 		default:
 			return nil, status.Error(codes.Unavailable, "native Voice party snapshot unavailable")
 		}
@@ -72,6 +73,14 @@ func (s *Server) GetMatchmakingPartySnapshot(ctx context.Context, req *callsv1.G
 		response.MemberProfileIds = append(response.MemberProfileIds, member.String())
 	}
 	return response, nil
+}
+
+func subjectFailure(code codes.Code, reason string) error {
+	s, err := status.New(code, "initiator is not eligible for a Voice party").WithDetails(&errdetails.ErrorInfo{Domain: "voice.party", Reason: reason})
+	if err != nil {
+		return status.Error(codes.Unavailable, "native Voice party snapshot unavailable")
+	}
+	return s.Err()
 }
 
 func canonicalID(value string) (uuid.UUID, error) {
