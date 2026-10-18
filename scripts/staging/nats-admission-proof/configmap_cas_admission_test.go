@@ -130,7 +130,6 @@ func TestBootstrapConfigMapCASUsesRealAPIServerAndClosedVAP(t *testing.T) {
 func installBootstrapCASVAP(ctx context.Context, t *testing.T, c *kubernetes.Clientset) {
 	t.Helper()
 	fail, equivalent, scope := admissionv1.Fail, admissionv1.Equivalent, admissionv1.NamespacedScope
-	names := []string{"voice-nats-realtime-bootstrap", "voice-nats-analytics-chat-bootstrap", "voice-nats-search-bootstrap"}
 	policy := &admissionv1.ValidatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: bootstrapCASPolicy},
 		Spec: admissionv1.ValidatingAdmissionPolicySpec{
@@ -138,11 +137,11 @@ func installBootstrapCASVAP(ctx context.Context, t *testing.T, c *kubernetes.Cli
 			MatchConstraints: &admissionv1.MatchResources{MatchPolicy: &equivalent,
 				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": namespace}},
 				ResourceRules: []admissionv1.NamedRuleWithOperations{{RuleWithOperations: admissionv1.RuleWithOperations{
-					Rule: admissionv1.Rule{APIGroups: []string{""}, APIVersions: []string{"v1"}, Resources: []string{"configmaps"}, ResourceNames: names, Scope: &scope},
+					Rule: admissionv1.Rule{APIGroups: []string{""}, APIVersions: []string{"v1"}, Resources: []string{"configmaps"}, Scope: &scope},
 					Operations: []admissionv1.OperationType{admissionv1.Update},
 				}}}},
 			Validations: []admissionv1.Validation{
-				{Expression: "request.namespace == 'voice-staging' && request.userInfo.username == '" + stagingRunner + "'", Message: bootstrapCASDeny + " [actor]"},
+				{Expression: "request.namespace == 'voice-staging' && request.userInfo.username == '" + stagingRunner + "' && request.name in ['voice-nats-realtime-bootstrap','voice-nats-analytics-chat-bootstrap','voice-nats-search-bootstrap']", Message: bootstrapCASDeny + " [actor-name]"},
 				{Expression: `!has(oldObject.metadata.annotations) || oldObject.metadata.annotations.all(k, v, k == 'voice-nats-preservation/contract-operation' || (has(object.metadata.annotations) && object.metadata.annotations[k] == v))`, Message: bootstrapCASDeny + " [preserve-annotations]"},
 				{Expression: `object.metadata.uid == oldObject.metadata.uid && object.immutable == oldObject.immutable && object.data.size() == oldObject.data.size() && oldObject.data.all(k, v, k == 'bootstrap.sh' || object.data[k] == v) && object.data.all(k, v, k in object.data) && ((!has(oldObject.metadata.labels) && !has(object.metadata.labels)) || (has(oldObject.metadata.labels) && has(object.metadata.labels) && oldObject.metadata.labels == object.metadata.labels)) && ((!has(oldObject.metadata.ownerReferences) && !has(object.metadata.ownerReferences)) || (has(oldObject.metadata.ownerReferences) && has(object.metadata.ownerReferences) && oldObject.metadata.ownerReferences == object.metadata.ownerReferences)) && ((!has(oldObject.metadata.finalizers) && !has(object.metadata.finalizers)) || (has(oldObject.metadata.finalizers) && has(object.metadata.finalizers) && oldObject.metadata.finalizers == object.metadata.finalizers)) && has(object.data['bootstrap.sh']) && has(object.metadata.annotations) && object.metadata.annotations['voice-nats-preservation/contract-operation'].matches('^[a-f0-9]{12}$') && object.metadata.annotations.size() <= (has(oldObject.metadata.annotations) ? oldObject.metadata.annotations.size() : 0) + 1 && object.metadata.annotations.all(k, v, k == 'voice-nats-preservation/contract-operation' || (has(oldObject.metadata.annotations) && oldObject.metadata.annotations[k] == v))`, Message: bootstrapCASDeny + " [shape]"},
 			},
