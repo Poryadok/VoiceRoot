@@ -135,6 +135,12 @@ deployment, acceptance appointment or Federation activation is included.
   contract, not unfinished downstream runtime. No historical custody transfer.
 - [ ] Wire production signed handlers, bounded remote double collection and
   final Role CAS against immutable qualified Role/Space/Chat implementations.
+- [x] Independent reviewer194 on `41dc791` found P2: historical receipt success
+  preceded local ownership/deletion/retirement fences. Four real PostgreSQL
+  cases (prepared, FROZEN, PURGE_DECIDED, retired) reached meaningful RED.
+  Moving the entire receipt lookup/return inside `WithinSpaces` makes all four
+  GREEN. The complete six-test Space-chat PostgreSQL suite plus store vet now
+  passes without skips (64.621s); independent recheck remains required.
 
 ## Decisions
 

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	commonv1 "voice.app/voice/common/v1"
 
 	"voice/backend/pkg/memberadmission"
 )
@@ -201,5 +202,53 @@ CREATE TRIGGER test_space_chat_outbox_failure BEFORE INSERT ON role_space_chat_o
 	require.Zero(t, receipt)
 	for _, table := range tables {
 		require.Equal(t, before[table], role14Rows(t, ctx, st.Pool, table), "rollback includes %s", table)
+	}
+}
+
+func TestSpaceChatHistoricalReplayHonorsLocalFences(t *testing.T) {
+	ctx, st := spaceChatStore(t)
+	for _, state := range []string{"prepared", "FROZEN", "PURGE_DECIDED", "retired"} {
+		t.Run(state, func(t *testing.T) {
+			space, actor, chat, incarnation, target := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+			require.NoError(t, st.BootstrapSpaceRoles(ctx, space, actor))
+			binding := memberadmission.MembershipBinding{Ordinary: &memberadmission.OrdinaryMembershipBinding{MembershipGeneration: 1, PublicationIdentity: uuid.NewString()}}
+			snapshot, err := st.ReadSpaceChatPermissions(ctx, space, chat, incarnation, target, binding)
+			require.NoError(t, err)
+			mutation := SpaceChatMutation{OperationID: uuid.New(), ActorProfileID: actor, SpaceID: space, ChatID: chat, ChatScopeIncarnation: incarnation, TargetProfileID: target, Kind: "post_as_chat", Allowed: true, ResolvedBinding: &binding}
+			_, err = st.CommitSpaceChatMutation(ctx, mutation, snapshot.Revision, func(*RoleStore) error { return nil })
+			require.NoError(t, err)
+			wantError := ErrSpaceFrozen
+			switch state {
+			case "prepared":
+				_, err = st.Pool.Exec(ctx, `INSERT INTO ownership_transfer_v2(operation_id,space_id,protocol_version,old_owner_profile_id,new_owner_profile_id,intent_bytes,intent_hash,state,prepare_request_hash)
+VALUES($1,$2,2,$3,$4,'x'::bytea,decode(repeat('01',32),'hex'),'prepared',decode(repeat('02',32),'hex'))`, uuid.New(), space, actor, uuid.New())
+				require.NoError(t, err)
+			case "retired":
+				_, err = st.Pool.Exec(ctx, `INSERT INTO role_space_lifecycle(space_id,retired_at) VALUES($1,clock_timestamp()) ON CONFLICT(space_id) DO UPDATE SET retired_at=EXCLUDED.retired_at`, space)
+				require.NoError(t, err)
+				wantError = ErrSpaceRetired
+			default:
+				request := &commonv1.SpaceLifecycleFenceRequest{ProtocolVersion: 1, SpaceId: space.String(), DeletionOperationId: uuid.NewString(), Generation: 1, DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, Manifest: &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ManifestSha256: make([]byte, 32)}}
+				_, err = st.ApplySpaceDeletionFence(ctx, request)
+				require.NoError(t, err)
+				if state == "PURGE_DECIDED" {
+					request.Generation = 2
+					request.DesiredState = commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_PURGE_DECIDED
+					_, err = st.ApplySpaceDeletionFence(ctx, request)
+					require.NoError(t, err)
+				}
+			}
+			tables := []string{"role_space_chat_grants", "role_space_chat_operations", "role_space_chat_outbox", "role_voice_policy_epochs", "role_voice_policy_outbox"}
+			before := make(map[string]string)
+			for _, table := range tables {
+				before[table] = role14Rows(t, ctx, st.Pool, table)
+			}
+			receipt, err := st.CommitSpaceChatMutation(ctx, mutation, 1, func(*RoleStore) error { t.Error("historical replay must not reauthorize"); return nil })
+			require.ErrorIs(t, err, wantError, "local lifecycle gates also dominate saved receipt success")
+			require.Zero(t, receipt)
+			for _, table := range tables {
+				require.Equal(t, before[table], role14Rows(t, ctx, st.Pool, table), "fenced replay leaves %s unchanged", table)
+			}
+		})
 	}
 }

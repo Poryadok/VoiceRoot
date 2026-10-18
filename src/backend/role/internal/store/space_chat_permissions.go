@@ -81,27 +81,28 @@ func (s *RoleStore) CommitSpaceChatMutation(ctx context.Context, mutation SpaceC
 		return receipt, ErrInvalidSpaceChatMutation
 	}
 	err = s.withLockedTransaction(ctx, mutation.OperationID, []uuid.UUID{mutation.SpaceID}, func(scoped *RoleStore) error {
-		var storedRequest, storedBinding []byte
-		var revision int64
-		err := scoped.db().QueryRow(ctx, `SELECT request_bytes,resolved_binding,allowed,role_revision FROM role_space_chat_operations WHERE operation_id=$1`, mutation.OperationID).Scan(&storedRequest, &storedBinding, &receipt.Allowed, &revision)
-		if err == nil {
-			if !bytes.Equal(request, storedRequest) {
-				return ErrSpaceChatOperationConflict
-			}
-			receipt.OperationID, receipt.Revision, receipt.Historical = mutation.OperationID, uint64(revision), true
-			if len(storedBinding) != 0 {
-				binding, err := memberadmission.ParseMembershipBinding(storedBinding)
-				if err != nil {
-					return err
+		return scoped.WithinSpaces(ctx, []uuid.UUID{mutation.SpaceID}, func(scoped *RoleStore) error {
+			var storedRequest, storedBinding []byte
+			var revision int64
+			err := scoped.db().QueryRow(ctx, `SELECT request_bytes,resolved_binding,allowed,role_revision FROM role_space_chat_operations WHERE operation_id=$1`, mutation.OperationID).Scan(&storedRequest, &storedBinding, &receipt.Allowed, &revision)
+			if err == nil {
+				if !bytes.Equal(request, storedRequest) {
+					return ErrSpaceChatOperationConflict
 				}
-				receipt.MembershipBinding = &binding
+				receipt.OperationID, receipt.Revision, receipt.Historical = mutation.OperationID, uint64(revision), true
+				if len(storedBinding) != 0 {
+					binding, err := memberadmission.ParseMembershipBinding(storedBinding)
+					if err != nil {
+						return err
+					}
+					receipt.MembershipBinding = &binding
+				}
+				return nil
 			}
-			return nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-		return scoped.WithinSpaces(ctx, []uuid.UUID{mutation.SpaceID}, func(guarded *RoleStore) error {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			guarded := scoped
 			if err := guarded.db().QueryRow(ctx, `SELECT policy_epoch FROM role_voice_policy_epochs WHERE space_id=$1`, mutation.SpaceID).Scan(&revision); err != nil {
 				return err
 			}
