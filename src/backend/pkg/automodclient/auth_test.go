@@ -16,7 +16,8 @@ import (
 )
 
 type authFixture struct {
-	resolve func(context.Context, *automodv1.ResolveModerationSubjectRequest) (*automodv1.ResolveModerationSubjectResponse, error)
+	resolve    func(context.Context, *automodv1.ResolveModerationSubjectRequest) (*automodv1.ResolveModerationSubjectResponse, error)
+	reconciled *automodv1.ReconcileModerationRestrictionResponse
 }
 
 func (f authFixture) ResolveModerationSubject(ctx context.Context, r *automodv1.ResolveModerationSubjectRequest, _ ...grpc.CallOption) (*automodv1.ResolveModerationSubjectResponse, error) {
@@ -26,6 +27,9 @@ func (f authFixture) ListTerminalModerationSubjects(context.Context, *automodv1.
 	return &automodv1.ListTerminalModerationSubjectsResponse{Complete: false}, nil
 }
 func (f authFixture) ReconcileModerationRestriction(context.Context, *automodv1.ReconcileModerationRestrictionRequest, ...grpc.CallOption) (*automodv1.ReconcileModerationRestrictionResponse, error) {
+	if f.reconciled != nil {
+		return f.reconciled, nil
+	}
 	return &automodv1.ReconcileModerationRestrictionResponse{}, nil
 }
 func TestAuthClient_FreshExactCredentialAndUntrustedBindingRefusal(t *testing.T) {
@@ -63,4 +67,7 @@ func TestAuthClient_FreshExactCredentialAndUntrustedBindingRefusal(t *testing.T)
 	require.Error(t, err, "incomplete snapshot must not unblock readiness")
 	_, err = client.Reconcile(ctx, account, subject, 1, true)
 	require.Error(t, err, "default/unsigned projection response cannot acknowledge a new revision")
+	client.Client = authFixture{reconciled: &automodv1.ReconcileModerationRestrictionResponse{Revision: 2, State: automodv1.SubjectState_SUBJECT_STATE_LIVE}}
+	_, err = client.Reconcile(ctx, account, subject, 1, true)
+	require.Error(t, err, "a newer remote revision reveals restored local history loss, not successful convergence")
 }

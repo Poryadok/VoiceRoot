@@ -5,6 +5,7 @@ package automodclient
 
 import (
 	"context"
+	"errors"
 	"math"
 
 	"github.com/google/uuid"
@@ -21,6 +22,10 @@ type AuthClient struct {
 	Issuer *principal.Issuer
 	Client automodv1.AuthModerationAuthorityServiceClient
 }
+
+// ErrRestrictionDiverged requires recovery of the owning Moderation history.
+// Incrementing a restored local revision cannot overwrite newer Auth authority.
+var ErrRestrictionDiverged = errors.New("Auth moderation revision is ahead of the owning local history")
 
 func NewAuthClient(issuer *principal.Issuer, conn grpc.ClientConnInterface) *AuthClient {
 	return &AuthClient{Issuer: issuer, Client: automodv1.NewAuthModerationAuthorityServiceClient(conn)}
@@ -127,7 +132,10 @@ func (c *AuthClient) Reconcile(ctx context.Context, account, subject uuid.UUID, 
 	if err != nil {
 		return nil, err
 	}
-	if response == nil || response.GetRevision() < revision || response.GetRevision() > math.MaxInt64 || (response.GetState() != automodv1.SubjectState_SUBJECT_STATE_LIVE && response.GetState() != automodv1.SubjectState_SUBJECT_STATE_DELETED) {
+	if response != nil && response.GetRevision() > revision {
+		return nil, ErrRestrictionDiverged
+	}
+	if response == nil || response.GetRevision() != revision || response.GetRevision() > math.MaxInt64 || (response.GetState() != automodv1.SubjectState_SUBJECT_STATE_LIVE && response.GetState() != automodv1.SubjectState_SUBJECT_STATE_DELETED) {
 		return nil, unavailable()
 	}
 	return response, nil
