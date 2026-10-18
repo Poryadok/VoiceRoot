@@ -510,9 +510,17 @@ UPDATE bot_chat_whitelist SET enabled = $4 WHERE bot_id = $1 AND chat_id = $2 AN
 			return err
 		}
 	} else if enabled {
-		if _, err = tx.Exec(ctx, `
+		var inserted int
+		err = tx.QueryRow(ctx, `
 INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)
-VALUES ($1, $2, $3, true, $4)`, botID, chatID, spaceID, installer); err != nil {
+VALUES ($1, $2, $3, true, $4)
+ON CONFLICT (bot_id, chat_id) DO UPDATE SET enabled=true
+WHERE bot_chat_whitelist.space_id=EXCLUDED.space_id
+RETURNING 1`, botID, chatID, spaceID, installer).Scan(&inserted)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
 			return err
 		}
 	}
