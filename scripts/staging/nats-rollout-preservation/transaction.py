@@ -41,8 +41,8 @@ def _native_contract_file(base, relative):
                 or info.st_uid != os.geteuid() or info.st_nlink != 1
                 or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size <= 0):
             raise Blocked('rollout_native_contract_input_invalid')
-        with path.open('rb', opener=lambda p, flags: os.open(
-                p, flags | os.O_NOFOLLOW)) as stream:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, 'rb') as stream:
             return stream.read()
     except (OSError, ValueError):
         raise Blocked('rollout_native_contract_input_invalid') from None
