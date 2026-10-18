@@ -47,6 +47,9 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 
 func OrdinaryUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == callsv1.VoiceService_GetMatchmakingPartySnapshot_FullMethodName {
+			return nil, status.Error(codes.Unavailable, "protected party snapshot unavailable on ordinary listener")
+		}
 		if isLifecycleMethod(info.FullMethod) {
 			return nil, status.Error(codes.Unavailable, "protected lifecycle method unavailable on ordinary listener")
 		}

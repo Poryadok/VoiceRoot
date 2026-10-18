@@ -98,6 +98,10 @@ service VoiceService {
   rpc GetVoiceStates(GetVoiceStatesRequest) returns (GetVoiceStatesResponse);
   rpc GetActiveCall(GetActiveCallRequest) returns (GetActiveCallResponse);
 
+  // @voice.security=protected;callers=service:matchmaking
+  // Native authority only; never available on the ordinary user listener.
+  rpc GetMatchmakingPartySnapshot(GetMatchmakingPartySnapshotRequest) returns (GetMatchmakingPartySnapshotResponse);
+
   rpc StartScreenShare(StartScreenShareRequest) returns (StartScreenShareResponse);
   rpc StopScreenShare(StopScreenShareRequest) returns (StopScreenShareResponse);
 
@@ -721,4 +725,32 @@ message PurgeSpaceRequest {
 // @voice.hash=domain_separated_sha256
 message PurgeSpaceResponse {
   voice.common.v1.SpacePurgeReceipt receipt = 1;
+}
+
+enum MatchmakingPartySnapshotKind {
+  MATCHMAKING_PARTY_SNAPSHOT_KIND_UNSPECIFIED = 0;
+  MATCHMAKING_PARTY_SNAPSHOT_KIND_SOLO = 1;
+  MATCHMAKING_PARTY_SNAPSHOT_KIND_VOICE_ROSTER = 2;
+}
+
+// Matchmaking copies this subject from its verified StartSearch principal.
+// No client room, member list or party ID is accepted.
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message GetMatchmakingPartySnapshotRequest {
+  string search_operation_id = 1;
+  string initiator_account_id = 2;
+  string initiator_profile_id = 3;
+  int64 initiator_session_epoch = 4;
+}
+
+message GetMatchmakingPartySnapshotResponse {
+  uint32 protocol_version = 1;
+  MatchmakingPartySnapshotKind kind = 2;
+  // Empty only for genuine SOLO absence.
+  string room_id = 3;
+  // Zero only for SOLO; separate from the native private journal revision.
+  uint64 roster_version = 4;
+  // Unique canonical UUIDs sorted by their 16 unsigned bytes.
+  repeated string member_profile_ids = 5;
 }
