@@ -197,6 +197,10 @@ func TestMemberNickname_ManagedRosterDoesNotCreateLocalOverride(t *testing.T) {
 	require.NoError(t, err)
 	_, err = st.UpdateMemberNickname(ctx, space.ID, target, owner, "Must not override")
 	require.ErrorIs(t, err, ErrNicknameExternallyManaged)
+	_, err = st.Pool.Exec(ctx, `UPDATE community_owner_authority SET status='recovery_pending' WHERE space_id=$1`, space.ID)
+	require.NoError(t, err)
+	_, err = st.UpdateMemberNickname(ctx, space.ID, owner, owner, "")
+	require.ErrorIs(t, err, ErrOwnershipFrozen, "community recovery also blocks Owner self no-op")
 	var exists bool
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND profile_id=$2)`, space.ID, target).Scan(&exists))
 	require.False(t, exists)

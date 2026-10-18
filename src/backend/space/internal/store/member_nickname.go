@@ -57,6 +57,17 @@ func (s *SpaceStore) UpdateMemberNickname(ctx context.Context, spaceID, target, 
 			return scoped.UpdateMemberNickname(ctx, spaceID, target, actor, value)
 		})
 	}
+	// Community succession uses its authority row before the spaces row. Take
+	// that same lock order so a recovery cannot change Owner between our check
+	// and update, or let a local Owner bypass its pending authority freeze.
+	var communityStatus string
+	err = s.db().QueryRow(ctx, `SELECT status FROM community_owner_authority WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&communityStatus)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	if err == nil && communityStatus != "active" {
+		return nil, ErrOwnershipFrozen
+	}
 	member, err := s.IsSpaceMember(ctx, spaceID, actor)
 	if err != nil {
 		return nil, err
@@ -65,7 +76,7 @@ func (s *SpaceStore) UpdateMemberNickname(ctx context.Context, spaceID, target, 
 		return nil, ErrNicknameActorNotMember
 	}
 	var owner uuid.UUID
-	if err = s.db().QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id=$1`, spaceID).Scan(&owner); err != nil {
+	if err = s.db().QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id=$1 FOR UPDATE`, spaceID).Scan(&owner); err != nil {
 		return nil, err
 	}
 	if target == owner && actor != owner {
