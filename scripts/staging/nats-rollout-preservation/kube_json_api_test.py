@@ -70,7 +70,8 @@ class NativeMigrationAPIViewTests(unittest.TestCase):
         api = self.api()
         configmap, job = request['resources']
         created = copy.deepcopy(configmap)
-        created['metadata']['uid'] = self.JOB_UID
+        created['metadata'].update(uid=self.JOB_UID, resourceVersion='1',
+            creationTimestamp='2026-10-18T10:00:00Z', managedFields=[])
         with patch.object(api, '_request', return_value=created) as transport:
             view = api.make_native_migration_view(request)
             observed = view.create_resource('ConfigMap', 'voice-staging', configmap)
@@ -105,7 +106,8 @@ class NativeMigrationAPIViewTests(unittest.TestCase):
         request = self.request()
         api = self.api()
         job = copy.deepcopy(request['resources'][1])
-        job['metadata']['uid'] = self.JOB_UID
+        job['metadata'].update(uid=self.JOB_UID, resourceVersion='2',
+            creationTimestamp='2026-10-18T10:00:00Z', managedFields=[], generation=1)
         job['status'] = {'succeeded': 1}
         job['spec']['selector'] = {'matchLabels': {'batch.kubernetes.io/controller-uid': self.JOB_UID}}
         job['spec'].update(completionMode='NonIndexed', completions=1, manualSelector=False,
@@ -164,19 +166,52 @@ class NativeMigrationAPIViewTests(unittest.TestCase):
         view = api.make_native_migration_view(request)
         wanted = request['resources'][1]
         actual = copy.deepcopy(wanted)
-        actual['metadata']['uid'] = self.JOB_UID
+        actual['metadata'].update(uid=self.JOB_UID, resourceVersion='2',
+            creationTimestamp='2026-10-18T10:00:00Z', managedFields=[], generation=1)
         actual['spec']['template']['spec']['hostNetwork'] = True
         with self.assertRaises(kube.KubeAPIError):
             view._checked_response(actual, wanted)
         actual = copy.deepcopy(wanted)
-        actual['metadata']['uid'] = self.JOB_UID
+        actual['metadata'].update(uid=self.JOB_UID, resourceVersion='2',
+            creationTimestamp='2026-10-18T10:00:00Z', managedFields=[], generation=1)
         actual['spec']['selector'] = {'matchLabels': {'batch.kubernetes.io/controller-uid': '33333333-3333-4333-8333-333333333333'}}
         with self.assertRaises(kube.KubeAPIError):
             view._checked_response(actual, wanted)
-            with self.assertRaises(kube.KubeAPIError):
-                api.read_contract_receipt('voice-staging','voice-job-pod','1'*36,
-                    request,binding,'a1b2c3d4','input',action_index=0)
-            api.exec_pod_contract.assert_not_called()
+        for selector_state in ('missing', 'null'):
+            with self.subTest(selector_state=selector_state):
+                actual = copy.deepcopy(wanted)
+                actual['metadata'].update(uid=self.JOB_UID, resourceVersion='2',
+                    creationTimestamp='2026-10-18T10:00:00Z', managedFields=[], generation=1)
+                actual['spec']['template']['metadata']['labels'] = copy.deepcopy(
+                    wanted['spec']['template']['metadata']['labels'])
+                actual['spec']['template']['metadata']['labels'].update({
+                    'batch.kubernetes.io/controller-uid': self.JOB_UID,
+                    'batch.kubernetes.io/job-name': wanted['metadata']['name'],
+                    'controller-uid': self.JOB_UID,
+                    'job-name': wanted['metadata']['name'],
+                })
+                if selector_state == 'null':
+                    actual['spec']['selector'] = None
+                else:
+                    actual['spec'].pop('selector', None)
+                with self.assertRaisesRegex(kube.KubeAPIError, 'native_migration_job_selector_changed'):
+                    view._checked_response(actual, wanted)
+
+    def test_resource_response_rejects_unrequested_finalizers_and_owner_references(self):
+        request = self.request()
+        api = self.api()
+        view = api.make_native_migration_view(request)
+        for field, value in (
+                ('finalizers', ['attacker.example/hold']),
+                ('ownerReferences', [{'apiVersion': 'v1', 'kind': 'Secret',
+                    'name': 'unrelated', 'uid': self.POD_UID, 'controller': True}])):
+            with self.subTest(field=field):
+                actual = copy.deepcopy(request['resources'][0])
+                actual['metadata'].update(uid=self.JOB_UID, resourceVersion='3',
+                    creationTimestamp='2026-10-18T10:00:00Z', managedFields=[])
+                actual['metadata'][field] = value
+                with self.assertRaisesRegex(kube.KubeAPIError, 'native_migration_metadata_fields_invalid'):
+                    view._checked_response(actual, request['resources'][0])
 
 
 def jwt(audience, expiry):
