@@ -29,7 +29,6 @@ import (
 	moderationv1 "voice.app/voice/moderation/v1"
 	"voice/backend/moderation/internal/reportintake"
 	"voice/backend/moderation/internal/reporttargetclient"
-	"voice/backend/moderation/internal/store"
 	"voice/backend/pkg/principal"
 )
 
@@ -69,7 +68,11 @@ func TestReportIntakeFourOwnerRuntime(t *testing.T) {
 	next, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	jwks := httptest.NewUnstartedServer(principal.JWKSHandlerKeys([]principal.JWKSKey{{KeyID: "active", PublicKey: &active.PublicKey}, {KeyID: "next", PublicKey: &next.PublicKey}}))
-	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	clientRoots := x509.NewCertPool()
+	caPEM, err := os.ReadFile(certPath)
+	require.NoError(t, err)
+	require.True(t, clientRoots.AppendCertsFromPEM(caPEM))
+	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots}
 	jwks.StartTLS()
 	defer jwks.Close()
 	replay := miniredis.RunT(t)
@@ -132,7 +135,7 @@ func TestReportIntakeFourOwnerRuntime(t *testing.T) {
 		t.Setenv(prefix+strings.ToUpper(owner)+"_TLS_SERVER_NAME", "localhost")
 		envPrefix := strings.ToUpper(owner) + "_REPORT_TARGETS_"
 		command := exec.Command(filepath.Join(binaries, owner), "-test.run=^TestReportTargetProofServer$", "-test.v", "-test.timeout=35s")
-		command.Env = append(os.Environ(), "REPORT_TARGET_PROOF_SERVER=1", "REPORT_TARGET_PROOF_DSN="+parsed.String(), envPrefix+"GRPC_LISTEN="+addr, envPrefix+"TLS_CERT_FILE="+certPath, envPrefix+"TLS_KEY_FILE="+keyPath, envPrefix+"CLIENT_CA_FILE="+certPath, envPrefix+"JWKS_CA_FILE="+certPath, envPrefix+"MODERATION_JWKS_URL="+jwks.URL, envPrefix+"REPLAY_REDIS_ADDR="+replay.Addr())
+		command.Env = append(os.Environ(), "REPORT_TARGET_PROOF_SERVER=1", "REPORT_TARGET_PROOF_DSN="+parsed.String(), envPrefix+"GRPC_LISTEN="+addr, envPrefix+"TLS_CERT_FILE="+certPath, envPrefix+"TLS_KEY_FILE="+keyPath, envPrefix+"CLIENT_CA_FILE="+certPath, envPrefix+"JWKS_CA_FILE="+certPath, envPrefix+"JWKS_CLIENT_CERT_FILE="+certPath, envPrefix+"JWKS_CLIENT_KEY_FILE="+keyPath, envPrefix+"MODERATION_JWKS_URL="+jwks.URL, envPrefix+"REPLAY_REDIS_ADDR="+replay.Addr())
 		stdout, err := command.StdoutPipe()
 		require.NoError(t, err)
 		command.Stderr = os.Stderr
@@ -165,7 +168,7 @@ func TestReportIntakeFourOwnerRuntime(t *testing.T) {
 	}
 	public, closePublic := startModerationGRPCTestServer(t, pool)
 	defer closePublic()
-	reports := &store.ReportStore{Pool: pool}
+	reports := newReportFixtureStore(pool)
 	for owner, ids := range targets {
 		kind := owner
 		if kind == "messaging" {
@@ -185,7 +188,7 @@ func TestReportIntakeFourOwnerRuntime(t *testing.T) {
 	queue, err := reports.ListReports(ctx, "", 100)
 	require.NoError(t, err)
 	require.Empty(t, queue)
-	worker := &reportintake.Worker{Reports: reports, Targets: client}
+	worker := &reportintake.Worker{Reports: reports, Targets: client, Subjects: reportFixtureResolver(), Privacy: reportOpenPrivacy}
 	for i := 0; i < 12; i++ {
 		worked, err := worker.ValidateOne(ctx)
 		require.NoError(t, err)

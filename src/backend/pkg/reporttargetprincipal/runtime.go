@@ -26,6 +26,7 @@ import (
 const dependencyTimeout = 2 * time.Second
 
 type Config struct {
+	JWKSClientCertFile, JWKSClientKeyFile                                                             string
 	Target, ListenAddr, TLSCertFile, TLSKeyFile, ClientCAFile, JWKSCAFile, ReplayAddr, ReplayPassword string
 	JWKSURLs                                                                                          map[string]string
 	RefreshAfter, HardExpiry, UnknownKIDCooldown                                                      time.Duration
@@ -33,7 +34,7 @@ type Config struct {
 
 func LoadFromEnv(target string) (Config, bool, error) {
 	prefix := strings.ToUpper(target) + "_REPORT_TARGETS_"
-	names := []string{"GRPC_LISTEN", "TLS_CERT_FILE", "TLS_KEY_FILE", "CLIENT_CA_FILE", "REPLAY_REDIS_ADDR", "REPLAY_REDIS_PASSWORD", "MODERATION_JWKS_URL", "JWKS_CA_FILE"}
+	names := []string{"GRPC_LISTEN", "TLS_CERT_FILE", "TLS_KEY_FILE", "CLIENT_CA_FILE", "REPLAY_REDIS_ADDR", "REPLAY_REDIS_PASSWORD", "MODERATION_JWKS_URL", "JWKS_CA_FILE", "JWKS_CLIENT_CERT_FILE", "JWKS_CLIENT_KEY_FILE"}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(prefix + name); ok {
@@ -45,6 +46,8 @@ func LoadFromEnv(target string) (Config, bool, error) {
 	}
 	cfg := Config{Target: target, ListenAddr: strings.TrimSpace(os.Getenv(prefix + "GRPC_LISTEN")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ClientCAFile: strings.TrimSpace(os.Getenv(prefix + "CLIENT_CA_FILE")), JWKSCAFile: strings.TrimSpace(os.Getenv(prefix + "JWKS_CA_FILE")), ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD")}
 	cfg.JWKSURLs = map[string]string{"moderation": strings.TrimSpace(os.Getenv(prefix + "MODERATION_JWKS_URL"))}
+	cfg.JWKSClientCertFile = strings.TrimSpace(os.Getenv(prefix + "JWKS_CLIENT_CERT_FILE"))
+	cfg.JWKSClientKeyFile = strings.TrimSpace(os.Getenv(prefix + "JWKS_CLIENT_KEY_FILE"))
 
 	var err error
 	cfg.RefreshAfter, err = envDuration("S2S_JWKS_REFRESH_AFTER", 30*time.Second)
@@ -75,6 +78,9 @@ func envDuration(name string, fallback time.Duration) (time.Duration, error) {
 }
 
 func (c Config) validate() error {
+	if c.JWKSCAFile == "" || c.JWKSClientCertFile == "" || c.JWKSClientKeyFile == "" {
+		return errors.New("complete target JWKS mTLS client identity and CA required")
+	}
 	if Method(c.Target) == "" || c.ListenAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" || c.ReplayAddr == "" {
 		return errors.New("complete target principal listener, mTLS and replay configuration required")
 	}
@@ -132,8 +138,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			return nil, errors.New("invalid target JWKS CA")
 		}
 	}
+	jwksClientCert, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
+	if err != nil {
+		return nil, errors.New("target JWKS client identity unavailable")
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{jwksClientCert}}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("target JWKS redirects forbidden") }}
 	endpoints := make(map[string]string, len(cfg.JWKSURLs))
 	for issuer, endpoint := range cfg.JWKSURLs {

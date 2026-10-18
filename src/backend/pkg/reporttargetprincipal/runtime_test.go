@@ -68,11 +68,19 @@ func TestProtectedRuntimeRealTLSJWKSAndSharedReplay(t *testing.T) {
 				}
 				_, _ = w.Write(jwks)
 			}))
-			publisher.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
+			jwksClientRoots := x509.NewCertPool()
+			require.True(t, jwksClientRoots.AppendCertsFromPEM(certPEM))
+			publisher.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: jwksClientRoots}
 			publisher.StartTLS()
 			defer publisher.Close()
 			replay := miniredis.RunT(t)
 			cfg := Config{Target: target, ListenAddr: "127.0.0.1:0", TLSCertFile: certPath, TLSKeyFile: keyPath, ClientCAFile: certPath, JWKSCAFile: certPath, JWKSURLs: map[string]string{"moderation": publisher.URL}, ReplayAddr: replay.Addr(), RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second}
+			cfg.JWKSClientCertFile = certPath
+			cfg.JWKSClientKeyFile = keyPath
+			partial := cfg
+			partial.JWKSClientKeyFile = ""
+			_, err = New(ctx, partial)
+			require.Error(t, err, "partial outbound JWKS identity fails startup")
 			a, err := New(ctx, cfg)
 			require.NoError(t, err)
 			defer func() { _ = a.Close() }()

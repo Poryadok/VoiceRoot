@@ -27,12 +27,18 @@ type Worker struct {
 	Targets   TargetResolver
 	Validated store.ReportValidatedHook
 	Publish   func(context.Context, store.IntakeEvent) error
+	Subjects  store.ReportSubjectResolver
+	Privacy   store.ReportPrivacyAcquire
 }
 
 // ValidateOne performs no remote calls while holding a SQL transaction.
 func (w *Worker) ValidateOne(ctx context.Context) (bool, error) {
 	if w == nil || w.Reports == nil || w.Targets == nil {
 		return false, errors.New("report validation unavailable")
+	}
+	check, err := store.AcquireReportPrivacy(ctx, w.Privacy)
+	if err != nil {
+		return false, err
 	}
 	claim, err := w.Reports.ClaimValidation(ctx)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -41,11 +47,27 @@ func (w *Worker) ValidateOne(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	claim.PrivacyCheck = check
+	if claim.ReporterAccountID == nil || claim.ReporterSubjectID == nil {
+		return true, w.Reports.RetryValidation(ctx, claim)
+	}
+	reporter, _, err := store.ResolveReportSubject(ctx, w.Subjects, *claim.ReporterAccountID, *claim.ReporterSubjectID)
+	if err != nil {
+		return true, w.Reports.RetryValidation(ctx, claim)
+	}
+	claim.ReporterSubject = &reporter
 	ownerCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	state, account, ownerErr := w.Targets.Resolve(ownerCtx, claim.ReportID, claim.TargetType, claim.TargetID)
 	cancel()
 	if ownerErr != nil || (state != "LIVE" && state != "MISSING" && state != "DELETED") || (state != "LIVE" && account != uuid.Nil) || (state == "LIVE" && ((claim.TargetType == "user" && account == uuid.Nil) || (claim.TargetType != "user" && account != uuid.Nil))) {
 		return true, w.Reports.RetryValidation(ctx, claim)
+	}
+	if state == "LIVE" && account != uuid.Nil {
+		target, _, resolveErr := store.ResolveReportSubject(ctx, w.Subjects, account, uuid.Nil)
+		if resolveErr != nil {
+			return true, w.Reports.RetryValidation(ctx, claim)
+		}
+		claim.TargetSubject = &target
 	}
 	var events []store.IntakeEvent
 	if state == "LIVE" && !claim.LegacyPublication {

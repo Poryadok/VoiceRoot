@@ -15,6 +15,8 @@ import (
 type ModerationGRPC struct {
 	moderationv1.UnimplementedModerationServiceServer
 	Reports              *store.ReportStore
+	ReportAuthority      store.ReportSubjectResolver
+	ReportPrivacy        store.ReportPrivacyAcquire
 	Sanctions            *store.SanctionStore
 	Appeals              *store.AppealStore
 	AuditLog             *store.AuditLogStore

@@ -36,12 +36,12 @@ def generate(destination):
                 "-addext", "keyUsage=critical,keyCertSign,cRLSign")
             for serial, (leaf, hostname, usage) in enumerate([
                 (owner, owner, "serverAuth") for owner in ("user", "messaging", "space", "story", "moderation")
-            ] + [("moderation-client", "moderation", "clientAuth"),
+            ] + [(f"{owner}-jwks-client", owner, "clientAuth") for owner in ("user", "messaging", "space", "story")] + [("moderation-client", "moderation", "clientAuth"),
                  ("gateway-intake-client", "gateway", "clientAuth")], 1):
                 extension = root / "leaf.ext"
                 extension.write_text("basicConstraints=critical,CA:FALSE\n"
                                      "keyUsage=critical,digitalSignature,keyEncipherment\n"
-                                     f"extendedKeyUsage={usage}\nsubjectAltName=DNS:{hostname}\n", encoding="ascii")
+                                     f"extendedKeyUsage={usage}\nsubjectAltName=DNS:{hostname}" + (",DNS:voice-moderation-authority" if leaf == "moderation" else "") + "\n", encoding="ascii")
                 run("req", "-new", "-newkey", "rsa:2048", "-nodes",
                     "-keyout", root / f"{leaf}.key", "-out", root / "leaf.csr", "-subj", f"/CN={hostname}")
                 run("x509", "-req", "-in", root / "leaf.csr", "-CA", root / "ca.crt",

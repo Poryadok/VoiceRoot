@@ -90,7 +90,19 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 		return nil, status.Error(codes.InvalidArgument, "invalid evidence_json")
 	}
 
-	row, err := s.Reports.InsertVerifiedReport(ctx, reporterProfileID, reporterAccountID, targetType, targetID, category, description, evidenceJSON)
+	check, err := store.AcquireReportPrivacy(ctx, s.ReportPrivacy)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "report intake unavailable")
+	}
+	subject, epoch, err := store.ResolveReportSubject(ctx, s.ReportAuthority, reporterAccountID, uuid.Nil)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "report intake unavailable")
+	}
+	p, _ := principal.FromContext(ctx)
+	if subject.State != "LIVE" || epoch != uint64(p.SessionEpoch) {
+		return nil, status.Error(codes.Unauthenticated, "current reporter required")
+	}
+	row, err := s.Reports.InsertSubjectReport(ctx, reporterProfileID, subject, check, targetType, targetID, category, description, evidenceJSON)
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "report intake unavailable")
 	}

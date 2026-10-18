@@ -19,9 +19,11 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/moderation/internal/automod"
 	"voice/backend/moderation/internal/intakeprincipal"
 	"voice/backend/moderation/internal/reportintake"
 	"voice/backend/moderation/internal/store"
+	automodv1 "voice/backend/pkg/pb/voice/automod/v1"
 	"voice/backend/pkg/principal"
 
 	moderationv1 "voice.app/voice/moderation/v1"
@@ -72,6 +74,7 @@ func startModerationGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...fun
 	for _, o := range opts {
 		o(svc)
 	}
+	configureReportFixture(svc)
 	moderationv1.RegisterModerationServiceServer(srv, svc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -125,7 +128,7 @@ func withInternalModCtx(ctx context.Context, moderatorProfileID uuid.UUID) conte
 // staff behavior. Production never infers this authority from the receipt.
 func validateFixtureReports(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	worker := &reportintake.Worker{Reports: &store.ReportStore{Pool: pool}, Targets: reportTargetFunc(func(_ context.Context, _ uuid.UUID, kind string, _ uuid.UUID) (string, uuid.UUID, error) {
+	worker := &reportintake.Worker{Reports: newReportFixtureStore(pool), Subjects: reportFixtureResolver(), Privacy: reportOpenPrivacy, Targets: reportTargetFunc(func(_ context.Context, _ uuid.UUID, kind string, _ uuid.UUID) (string, uuid.UUID, error) {
 		if kind == "user" {
 			return "LIVE", uuid.New(), nil
 		}
@@ -138,4 +141,56 @@ func validateFixtureReports(t *testing.T, pool *pgxpool.Pool) {
 			return
 		}
 	}
+}
+
+// Explicit TEST authority only. Deterministic subjects keep successive fixture
+// calls coherent; production never derives an opaque subject from an account.
+func reportFixtureResolver() store.ReportSubjectResolver {
+	return reportSubjectResolverFunc(func(_ context.Context, account, expected uuid.UUID) (*automodv1.ResolveModerationSubjectResponse, error) {
+		subject := uuid.NewSHA1(uuid.NameSpaceOID, []byte("report-test-only:"+account.String()))
+		if expected != uuid.Nil && expected != subject {
+			return nil, store.ErrReportPrivacy
+		}
+		return reportSubjectResponse(account, subject), nil
+	})
+}
+func newReportFixtureStore(pool *pgxpool.Pool) *store.ReportStore {
+	return &store.ReportStore{Pool: pool, Subjects: automod.NewStore(pool), Privacy: reportOpenPrivacy}
+}
+func configureReportFixture(s *ModerationGRPC) {
+	if s.Reports == nil {
+		return
+	}
+	s.Reports.Subjects = automod.NewStore(s.Reports.Pool)
+	s.Reports.Privacy = reportOpenPrivacy
+	s.ReportAuthority = reportFixtureResolver()
+	s.ReportPrivacy = reportOpenPrivacy
+}
+func insertReportFixture(t *testing.T, s *store.ReportStore, ctx context.Context, profile uuid.UUID, kind string, target uuid.UUID, category string, description *string, evidence string) (*store.ReportRow, error) {
+	t.Helper()
+	return insertVerifiedReportFixture(t, s, ctx, profile, uuid.New(), kind, target, category, description, evidence)
+}
+func insertVerifiedReportFixture(t *testing.T, s *store.ReportStore, ctx context.Context, profile, account uuid.UUID, kind string, target uuid.UUID, category string, description *string, evidence string) (*store.ReportRow, error) {
+	t.Helper()
+	subject, _, err := store.ResolveReportSubject(ctx, reportFixtureResolver(), account, uuid.Nil)
+	require.NoError(t, err)
+	check, err := store.AcquireReportPrivacy(ctx, reportOpenPrivacy)
+	require.NoError(t, err)
+	return s.InsertSubjectReport(ctx, profile, subject, check, kind, target, category, description, evidence)
+}
+func completeReportFixture(t *testing.T, s *store.ReportStore, ctx context.Context, claim *store.ValidationClaim, state string, account uuid.UUID, events []store.IntakeEvent, hook store.ReportValidatedHook) (bool, error) {
+	t.Helper()
+	require.NotNil(t, claim.ReporterAccountID)
+	require.NotNil(t, claim.ReporterSubjectID)
+	reporter, _, err := store.ResolveReportSubject(ctx, reportFixtureResolver(), *claim.ReporterAccountID, *claim.ReporterSubjectID)
+	require.NoError(t, err)
+	claim.ReporterSubject = &reporter
+	if account != uuid.Nil {
+		target, _, err := store.ResolveReportSubject(ctx, reportFixtureResolver(), account, uuid.Nil)
+		require.NoError(t, err)
+		claim.TargetSubject = &target
+	}
+	claim.PrivacyCheck, err = store.AcquireReportPrivacy(ctx, reportOpenPrivacy)
+	require.NoError(t, err)
+	return s.CompleteValidation(ctx, claim, state, account, events, hook)
 }
