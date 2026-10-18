@@ -54,6 +54,31 @@ manual approval. Invite не обходит требования. Если вк�
 появляется только после approve. Гость не может пройти policy с обязательным phone.
 Ошибка или недоступность verifier закрывает вход, но не расходует одноразовый invite.
 
+## Ник участника в спейсе
+
+Принятый контракт BE-234-nickname-v2-transport: `UpdateMemberNickname` меняет только
+локальный `space_members.nickname`, не имя глобального профиля. Actor берётся
+только из verified principal; `profile_id` всегда явно задаёт target. Для себя
+и другого участника нужны текущее membership и effective global
+`MEMBER_MANAGE_NICKNAMES`; self-service обхода нет. Не-owner не меняет ник Owner
+(`FAILED_PRECONDITION`); для остальных targets дополнительного rank gate нет.
+Roster-only community target не материализуется как локальный member.
+
+Отсутствующее поле nickname — `INVALID_ARGUMENT`; явно пустое или состоящее из
+Unicode White_Space очищает SQL NULL. Перед trim запрещены invalid UTF-8, Cc,
+U+2028/U+2029 и Unicode Bidi_Control. Непустой результат содержит 1..64 Unicode
+scalar values и хотя бы одну Letter/Number/Punctuation/Symbol. Case, combining
+marks, внутренние пробелы и emoji/ZWJ сохраняются без Unicode normalization.
+Уникальность не требуется.
+
+Обычные ownership/deletion freeze блокируют также clear и no-op. Изменение
+сериализуется с leave/kick и не создаёт отсутствующее membership. Реальное
+изменение атомарно добавляет `member_nickname_updated` audit/outbox с details
+только `changed_fields=["nickname"]`; значения ника не журналируются. Повтор
+того же значения успешен без нового audit, но повторно проверяет ACL/freeze.
+Ответ и следующий ListMembers показывают сохранённое значение; отдельного
+NATS/Realtime nickname event и нового HTTP/UI surface этот RPC не вводит.
+
 ## Лимиты участников
 
 - Бесплатно: **50 участников**

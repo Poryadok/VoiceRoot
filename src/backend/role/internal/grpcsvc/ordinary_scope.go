@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	rolev1 "voice.app/voice/role/v1"
+	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/roleevents"
 	"voice/backend/role/internal/store"
 )
@@ -181,6 +182,11 @@ func (s *RoleGRPC) GetMemberRoles(ctx context.Context, req *rolev1.GetMemberRole
 }
 
 func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+	if req.GetPermissionName() == "MEMBER_MANAGE_NICKNAMES" {
+		if err := principalgrpc.RequireNicknamePermission(ctx, req); err != nil {
+			return nil, err
+		}
+	}
 	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
 		return scoped.checkPermission(ctx, req)
 	})

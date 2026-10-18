@@ -93,7 +93,7 @@ func TestDelegatedLifecyclePrincipalBindsActorRequestAndSession(t *testing.T) {
 }
 
 func TestLifecycleListenersDenyRawAndUnlistedMethodsBeforeHandler(t *testing.T) {
-	for _, method := range []string{spacev1.SpaceService_DeleteSpace_FullMethodName, spacev1.SpaceService_RestoreSpace_FullMethodName, spacev1.SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName} {
+	for _, method := range []string{spacev1.SpaceService_DeleteSpace_FullMethodName, spacev1.SpaceService_RestoreSpace_FullMethodName, spacev1.SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName, spacev1.SpaceService_UpdateMemberNickname_FullMethodName} {
 		_, err := OrdinaryUnary()(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) {
 			t.Fatal("protected method reached ordinary handler")
 			return nil, nil

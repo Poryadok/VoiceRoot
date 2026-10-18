@@ -7,7 +7,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/role/permissions"
 )
 
 type Verifier interface {
@@ -75,6 +77,12 @@ func verificationStatus(err error) error {
 // listener without consuming protected verifier dependencies.
 func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+
+		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
+				return nil, status.Error(codes.PermissionDenied, "protected nickname decision listener required")
+			}
+		}
 		switch info.FullMethod {
 		case "/voice.role.v1.RoleService/ApplySpaceLifecycleFence":
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")

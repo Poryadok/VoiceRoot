@@ -8603,6 +8603,150 @@ class ValidateRoleOverrideTargetResponse extends $pb.GeneratedMessage {
   static ValidateRoleOverrideTargetResponse? _defaultInstance;
 }
 
+class UpdateMemberNicknameRequest extends $pb.GeneratedMessage {
+  factory UpdateMemberNicknameRequest({
+    $core.String? spaceId,
+    $core.String? profileId,
+    $core.String? nickname,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (nickname != null) result.nickname = nickname;
+    return result;
+  }
+
+  UpdateMemberNicknameRequest._();
+
+  factory UpdateMemberNicknameRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateMemberNicknameRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateMemberNicknameRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'nickname')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameRequest copyWith(
+          void Function(UpdateMemberNicknameRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as UpdateMemberNicknameRequest))
+          as UpdateMemberNicknameRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameRequest create() =>
+      UpdateMemberNicknameRequest._();
+  @$core.override
+  UpdateMemberNicknameRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateMemberNicknameRequest>(create);
+  static UpdateMemberNicknameRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  /// Explicit target; actor is derived only from the verified principal.
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  /// Required presence. Empty (after Unicode White_Space trim) clears SQL NULL.
+  /// Otherwise 1..64 Unicode scalars; Cc, separators and Bidi_Control forbidden.
+  @$pb.TagNumber(3)
+  $core.String get nickname => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set nickname($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasNickname() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearNickname() => $_clearField(3);
+}
+
+class UpdateMemberNicknameResponse extends $pb.GeneratedMessage {
+  factory UpdateMemberNicknameResponse({
+    SpaceMembership? spaceMembership,
+  }) {
+    final result = create();
+    if (spaceMembership != null) result.spaceMembership = spaceMembership;
+    return result;
+  }
+
+  UpdateMemberNicknameResponse._();
+
+  factory UpdateMemberNicknameResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateMemberNicknameResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateMemberNicknameResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceMembership>(1, _omitFieldNames ? '' : 'spaceMembership',
+        subBuilder: SpaceMembership.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameResponse copyWith(
+          void Function(UpdateMemberNicknameResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as UpdateMemberNicknameResponse))
+          as UpdateMemberNicknameResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameResponse create() =>
+      UpdateMemberNicknameResponse._();
+  @$core.override
+  UpdateMemberNicknameResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateMemberNicknameResponse>(create);
+  static UpdateMemberNicknameResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceMembership get spaceMembership => $_getN(0);
+  @$pb.TagNumber(1)
+  set spaceMembership(SpaceMembership value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceMembership() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceMembership() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceMembership ensureSpaceMembership() => $_ensure(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =
