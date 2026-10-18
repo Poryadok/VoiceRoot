@@ -66,6 +66,10 @@ TARGETS = (
 RECOVERY_TARGET = _Target(
     "Deployment", "voice-matchmaking", "matchmaking-fsgroup-recovery.patch.yaml")
 RECOVERY_MODE = "matchmaking-fsgroup-only"
+CHAT_RECOVERY_TARGET = _Target(
+    "Deployment", "voice-chat", "voice-chat-fsgroup-recovery.patch.yaml")
+CHAT_RECOVERY_MODE = "chat-fsgroup-only"
+FS_GROUP_TARGETS = frozenset(("voice-matchmaking", "voice-chat"))
 
 
 class OverlayError(RuntimeError):
@@ -295,10 +299,10 @@ def _apply_overlay_operations(base, operations, target):
         if operation.get("op") == "add" and operation.get("path") in (
                 "/spec/template/spec/securityContext",
                 "/spec/template/spec/securityContext/fsGroup"):
-            if (target.kind != "Deployment" or target.name != "voice-matchmaking" or
+            if (target.kind != "Deployment" or target.name not in FS_GROUP_TARGETS or
                     operation.get("value") != ({"fsGroup": 65532}
                     if operation["path"] == "/spec/template/spec/securityContext" else 65532)):
-                raise OverlayError("generated fsGroup addition is outside the fixed Matchmaking setting")
+                raise OverlayError("generated fsGroup addition is outside the fixed consumer settings")
             pod_spec = result.get("spec", {}).get("template", {}).get("spec", {})
             if operation["path"] == "/spec/template/spec/securityContext":
                 if "securityContext" in pod_spec:
@@ -384,18 +388,20 @@ def object_patch(base, desired):
         old_security_context = base["spec"]["template"]["spec"].get("securityContext")
         new_security_context = desired["spec"]["template"]["spec"].get("securityContext")
         if old_security_context != new_security_context:
-            if name != "voice-matchmaking":
-                raise OverlayError("securityContext change is outside the fixed Matchmaking fsGroup")
+            if name not in FS_GROUP_TARGETS:
+                raise OverlayError("securityContext change is outside the fixed consumer fsGroup")
             if ((old_security_context is not None and not isinstance(old_security_context, dict)) or
                     not isinstance(new_security_context, dict)):
-                raise OverlayError("Matchmaking securityContext shape is invalid")
+                raise OverlayError("consumer securityContext shape is invalid")
             if (old_security_context is not None and "fsGroup" in old_security_context and
                     old_security_context["fsGroup"] != 65532):
-                raise OverlayError("Matchmaking fsGroup replacement is not permitted")
+                raise OverlayError("consumer fsGroup replacement is not permitted")
             expected_security_context = copy.deepcopy(old_security_context or {})
             expected_security_context["fsGroup"] = 65532
             if new_security_context != expected_security_context:
-                raise OverlayError("Matchmaking securityContext changed outside fsGroup 65532")
+                raise OverlayError("consumer securityContext changed outside fsGroup 65532")
+            if name == "voice-chat":
+                _validate_chat_fsgroup_secret_mount_boundary(base)
             if old_security_context is None:
                 delta.append({"op": "add", "path": "/spec/template/spec/securityContext",
                               "value": {"fsGroup": 65532}})
@@ -478,6 +484,105 @@ def _is_exact_matchmaking_fs_group_recovery(target, base, operations):
     }]
 
 
+def _validate_chat_fsgroup_secret_mount_boundary(base):
+    """Keep fsGroup's new group-read scope inside the reviewed Chat mounts."""
+    pod_spec = base.get("spec", {}).get("template", {}).get("spec", {})
+    volumes = pod_spec.get("volumes", [])
+    expected_volumes = {
+        "nats-service-creds": ("voice-nats-service-credentials", 256,
+                                [("chat.creds", "chat.creds")]),
+        "nats-hub-tls": ("voice-nats-hub-tls", 420, [("ca.crt", "ca.crt")]),
+        "match-squad-server": ("voice-chat-match-squad-server-tls", 288,
+                               [("tls.crt", "tls.crt"), ("tls.key", "tls.key")]),
+        "matchmaking-principal-jwks-ca": ("voice-matchmaking-principal-jwks-ca", 288,
+                                          [("ca.crt", "ca.crt")]),
+        "chat-match-squad-replay": ("voice-match-squad-replay", 288,
+                                     [("password", "password")]),
+    }
+    secret_rows = [volume for volume in volumes if "secret" in volume]
+    if len(secret_rows) != len(expected_volumes):
+        raise OverlayError("Chat Secret volume boundary changed")
+    observed = {}
+    for volume in secret_rows:
+        secret = volume.get("secret", {})
+        if set(volume) != {"name", "secret"} or set(secret) != {
+                "secretName", "defaultMode", "items"}:
+            raise OverlayError("Chat Secret volume boundary changed")
+        if any(set(item) != {"key", "path"} for item in secret.get("items", [])):
+            raise OverlayError("Chat Secret volume boundary changed")
+        observed[volume.get("name")] = (
+            secret.get("secretName"), secret.get("defaultMode"),
+            [(item.get("key"), item.get("path")) for item in secret.get("items", [])])
+    if observed != expected_volumes:
+        raise OverlayError("Chat Secret volume boundary changed")
+    expected_mounts = {
+        "chat": {"match-squad-server": "/etc/voice/match-squad/server",
+                 "matchmaking-principal-jwks-ca": "/etc/voice/principal-jwks/ca",
+                 "chat-match-squad-replay": "/etc/voice/match-squad/replay"},
+        "nats-leaf": {"nats-service-creds": "/var/run/nats/creds/chat.creds",
+                      "nats-hub-tls": "/etc/nats/tls/ca.crt"},
+    }
+    containers = pod_spec.get("containers", [])
+    if {container.get("name") for container in containers} != set(expected_mounts):
+        raise OverlayError("Chat Secret volume boundary changed")
+    by_volume = {volume.get("name"): volume for volume in volumes}
+    mounted = {}
+    for container in containers:
+        secret_mounts = [mount for mount in container.get("volumeMounts", [])
+                         if mount.get("name") in by_volume and
+                         "secret" in by_volume[mount["name"]]]
+        if any(mount.get("readOnly") is not True for mount in secret_mounts):
+            raise OverlayError("Chat Secret volume boundary changed")
+        if any("subPath" in mount for mount in secret_mounts):
+            raise OverlayError("Chat Secret volume boundary changed")
+        if len({mount.get("name") for mount in secret_mounts}) != len(secret_mounts):
+            raise OverlayError("Chat Secret volume boundary changed")
+        mounted[container["name"]] = {
+            mount["name"]: mount.get("mountPath") for mount in secret_mounts}
+    if mounted != expected_mounts:
+        raise OverlayError("Chat Secret volume boundary changed")
+
+
+def _is_exact_chat_fs_group_recovery(target, base, operations):
+    if target != CHAT_RECOVERY_TARGET:
+        return False
+    pod_spec = base.get("spec", {}).get("template", {}).get("spec", {})
+    security_context = pod_spec.get("securityContext")
+    if security_context not in (None, {}):
+        return False
+    return operations[2:] == [{
+        "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+        "value": 65532,
+    }]
+
+
+def _validate_chat_fs_group_recovery_base(target, base, status):
+    if target != CHAT_RECOVERY_TARGET:
+        return False
+    replicas = base.get("spec", {}).get("replicas", 1)
+    generation = base.get("metadata", {}).get("generation", 0)
+    pod_spec = base.get("spec", {}).get("template", {}).get("spec", {})
+    template = base.get("spec", {}).get("template")
+    if not isinstance(template, dict):
+        raise OverlayError("Chat fsGroup recovery template is invalid")
+    security_context = pod_spec.get("securityContext")
+    if security_context not in (None, {}):
+        raise OverlayError("Chat fsGroup recovery requires the exact missing group setting")
+    containers = pod_spec.get("containers", [])
+    matches = [container for container in containers
+               if container.get("name") == CONTAINERS["voice-chat"]]
+    if len(matches) != 1 or matches[0].get("image") != QUALIFIED_IMAGES["voice-chat"]:
+        raise OverlayError("Chat fsGroup recovery image projection is not source-qualified")
+    _validate_chat_fsgroup_secret_mount_boundary(base)
+    if (replicas <= 0 or status.get("observedGeneration", 0) < generation or
+            status.get("updatedReplicas", 0) < replicas):
+        raise OverlayError("Chat fsGroup recovery requires current generation and updated replicas")
+    if (status.get("readyReplicas", 0) >= replicas and
+            status.get("availableReplicas", 0) >= replicas):
+        raise OverlayError("Chat fsGroup recovery is only for an unready Chat Deployment")
+    return True
+
+
 def _validate_matchmaking_fs_group_recovery_base(target, base, status):
     if target != RECOVERY_TARGET:
         return False
@@ -518,18 +623,32 @@ def build_object_plan(client, target, base, patch_path):
                  status.get("availableReplicas", 0) >= replicas)
         fs_group_recovery = _validate_matchmaking_fs_group_recovery_base(
             target, base, status)
+        chat_fs_group_recovery = _validate_chat_fs_group_recovery_base(
+            target, base, status)
         if not (generation_current and updated and ready):
-            possible_recovery = (
+            possible_matchmaking_recovery = (
                 target.name == "voice-matchmaking" and replicas > 0 and
                 generation_current and updated and
                 _has_reviewed_matchmaking_listener_opt_in(target, base))
-            if not fs_group_recovery and not possible_recovery:
+            if not fs_group_recovery and not chat_fs_group_recovery and not possible_matchmaking_recovery:
                 raise OverlayError("Deployment is not ordinarily ready: " + target.name)
             desired = strategic_render(client, target, base, patch_path)
             operations = object_patch(base, desired)
             if fs_group_recovery:
                 if not _is_exact_matchmaking_fs_group_recovery(target, base, operations):
                     raise OverlayError("fsGroup recovery projection is not exact")
+            elif chat_fs_group_recovery:
+                if not _is_exact_chat_fs_group_recovery(target, base, operations):
+                    raise OverlayError("Chat fsGroup recovery projection is not exact")
+                normal_patch = patch_path.with_name("voice-chat.runtime.patch.yaml")
+                normal_target = next(item for item in TARGETS
+                                     if item.kind == "Deployment" and
+                                     item.name == "voice-chat")
+                full_desired = strategic_render(client, normal_target, base, normal_patch)
+                full_operations = object_patch(base, full_desired)
+                if not _is_exact_chat_fs_group_recovery(
+                        CHAT_RECOVERY_TARGET, base, full_operations):
+                    raise OverlayError("Chat runtime is not otherwise at the reviewed prefix")
             elif not _is_exact_matchmaking_listener_removal(target, base, operations):
                 raise OverlayError("unready Matchmaking recovery projection is not exact")
         containers = base["spec"]["template"]["spec"]["containers"]
@@ -699,20 +818,30 @@ def _read_plan(path, expected_sha):
     return plan
 
 
-def _selected_targets(recovery_only):
-    return (RECOVERY_TARGET,) if recovery_only else TARGETS
+def _selected_targets(recovery_only, chat_recovery=False):
+    if recovery_only and chat_recovery:
+        raise OverlayError("recovery modes are mutually exclusive")
+    if recovery_only:
+        return (RECOVERY_TARGET,)
+    if chat_recovery:
+        return (CHAT_RECOVERY_TARGET,)
+    return TARGETS
 
 
-def _target_patch_path(overlay_dir, target, recovery_only):
+def _target_patch_path(overlay_dir, target, recovery_only, chat_recovery=False):
     if recovery_only:
         if target is not RECOVERY_TARGET:
             raise OverlayError("recovery target is not fixed")
         return overlay_dir / RECOVERY_TARGET.patch_file
+    if chat_recovery:
+        if target is not CHAT_RECOVERY_TARGET:
+            raise OverlayError("Chat recovery target is not fixed")
+        return overlay_dir / CHAT_RECOVERY_TARGET.patch_file
     return overlay_dir / target.patch_file
 
 
 def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None,
-            recovery_only=False):
+            recovery_only=False, chat_recovery=False):
     root = Path(root).resolve()
     plan_path = plan_path.resolve()
     if plan_path.is_relative_to(root):
@@ -721,20 +850,22 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
     overlay_dir = root / "deploy/dev/match-squad-trust-overlay"
     client = client or KubectlClient()
     namespace_uid = validate_namespace(client.get_namespace())
-    selected_targets = _selected_targets(recovery_only)
+    selected_targets = _selected_targets(recovery_only, chat_recovery)
+    recovery_mode = (RECOVERY_MODE if recovery_only else
+                     CHAT_RECOVERY_MODE if chat_recovery else None)
 
     if not apply:
         if plan_path.exists():
             raise OverlayError("plan path already exists; choose a new path")
         object_plans = []
         for target in selected_targets:
-            patch_path = _target_patch_path(overlay_dir, target, recovery_only)
+            patch_path = _target_patch_path(overlay_dir, target, recovery_only, chat_recovery)
             base = client.get(target)
             object_plans.append(build_object_plan(client, target, base, patch_path))
         plan = {"format": 1, "sourceSha": source_sha, "namespace": NS,
                 "namespaceUid": namespace_uid, "targets": object_plans}
-        if recovery_only:
-            plan["recoveryMode"] = RECOVERY_MODE
+        if recovery_mode:
+            plan["recoveryMode"] = recovery_mode
         digest = _write_plan(plan_path, plan)
         for item in object_plans:
             print("MATCH_SQUAD_OVERLAY_PLANNED kind=" + item["kind"] +
@@ -750,7 +881,7 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
     plan = _read_plan(plan_path, plan_sha)
     if (plan.get("format") != 1 or plan.get("sourceSha") != source_sha or
             plan.get("namespace") != NS or plan.get("namespaceUid") != namespace_uid or
-            (plan.get("recoveryMode") != RECOVERY_MODE if recovery_only else
+            (plan.get("recoveryMode") != recovery_mode if recovery_mode else
              "recoveryMode" in plan) or
             len(plan.get("targets", [])) != len(selected_targets)):
         raise OverlayError("plan source or namespace binding changed")
@@ -759,7 +890,7 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
         if (frozen.get("kind"), frozen.get("name"), frozen.get("patchFile")) != (
                 target.kind, target.name, target.patch_file):
             raise OverlayError("plan target order changed")
-        patch_path = _target_patch_path(overlay_dir, target, recovery_only)
+        patch_path = _target_patch_path(overlay_dir, target, recovery_only, chat_recovery)
         base = client.get(target)
         fresh = build_object_plan(client, target, base, patch_path)
         if fresh != frozen:
@@ -807,7 +938,7 @@ def execute(root, source_sha, plan_path, plan_sha=None, apply=False, client=None
             raise OverlayError("overlay stopped at first failed target") from exc
         completed += 1
         print("MATCH_SQUAD_OVERLAY_OBJECT_READY kind=" + target.kind + " name=" + target.name)
-    if recovery_only:
+    if recovery_mode:
         print("MATCH_SQUAD_OVERLAY_RECOVERY_COMPLETE count=1")
         return
     for service, ports in (
@@ -833,10 +964,13 @@ def main(argv=None):
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--recover-matchmaking-fsgroup", action="store_true",
                         help="plan/apply only the fixed source-pinned fsGroup recovery")
+    parser.add_argument("--recover-chat-fsgroup", action="store_true",
+                        help="plan/apply only Chat's exact failed TLS-projection fsGroup recovery")
     args = parser.parse_args(argv)
     try:
         execute(args.root, args.source_sha, Path(args.plan_file), args.plan_sha256,
-                apply=args.apply, recovery_only=args.recover_matchmaking_fsgroup)
+                apply=args.apply, recovery_only=args.recover_matchmaking_fsgroup,
+                chat_recovery=args.recover_chat_fsgroup)
     except (OSError, ValueError, KeyError, TypeError, OverlayError):
         print("MatchSquad overlay stopped; inspect the bound plan and exact target state",
               file=sys.stderr)

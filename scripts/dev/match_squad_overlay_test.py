@@ -264,22 +264,27 @@ class ChatFilePermissionRecoveryTests(unittest.TestCase):
         by_volume = {row["name"]: row for row in pod_spec["volumes"]}
         mounted = {
             container["name"]: {
-                mount["name"] for mount in container.get("volumeMounts", [])
+                mount["name"]: mount.get("mountPath")
+                for mount in container.get("volumeMounts", [])
                 if mount["name"] in by_volume and "secret" in by_volume[mount["name"]]
             }
             for container in pod_spec["containers"]
         }
         self.assertEqual(mounted, {
-            "chat": {"match-squad-server", "matchmaking-principal-jwks-ca",
-                     "chat-match-squad-replay"},
-            "nats-leaf": {"nats-service-creds", "nats-hub-tls"},
+            "chat": {"match-squad-server": "/etc/voice/match-squad/server",
+                     "matchmaking-principal-jwks-ca": "/etc/voice/principal-jwks/ca",
+                     "chat-match-squad-replay": "/etc/voice/match-squad/replay"},
+            "nats-leaf": {"nats-service-creds": "/var/run/nats/creds/chat.creds",
+                          "nats-hub-tls": "/etc/nats/tls/ca.crt"},
         })
         self.assertTrue(all(mount["readOnly"] for container in pod_spec["containers"]
                             for mount in container.get("volumeMounts", [])))
 
     def test_chat_fsgroup_rejects_new_or_cross_container_secret_mounts(self):
         for mutation in ("extra-secret-volume", "nats-secret-mounted-in-chat",
-                         "chat-server-key-mounted-in-nats"):
+                         "chat-server-key-mounted-in-nats", "wrong-mount-path",
+                         "secret-subpath", "extra-secret-volume-policy",
+                         "duplicate-secret-mount"):
             with self.subTest(mutation=mutation):
                 base = chat_post_prefix_snapshot()
                 pod_spec = base["spec"]["template"]["spec"]
@@ -291,12 +296,91 @@ class ChatFilePermissionRecoveryTests(unittest.TestCase):
                     pod_spec["containers"][0]["volumeMounts"].append({
                         "name": "nats-service-creds", "mountPath": "/unexpected", "readOnly": True})
                 else:
-                    pod_spec["containers"][1]["volumeMounts"].append({
-                        "name": "match-squad-server", "mountPath": "/unexpected", "readOnly": True})
+                    if mutation == "chat-server-key-mounted-in-nats":
+                        pod_spec["containers"][1]["volumeMounts"].append({
+                            "name": "match-squad-server", "mountPath": "/unexpected", "readOnly": True})
+                    elif mutation == "wrong-mount-path":
+                        pod_spec["containers"][0]["volumeMounts"][0]["mountPath"] = "/unexpected"
+                    elif mutation == "secret-subpath":
+                        pod_spec["containers"][0]["volumeMounts"][0]["subPath"] = "tls.key"
+                    elif mutation == "extra-secret-volume-policy":
+                        pod_spec["volumes"][1]["secret"]["optional"] = True
+                    else:
+                        pod_spec["containers"][0]["volumeMounts"].append(
+                            copy.deepcopy(pod_spec["containers"][0]["volumeMounts"][0]))
+                        with self.assertRaisesRegex(
+                                overlay.OverlayError, "Chat Secret volume boundary"):
+                            overlay._validate_chat_fsgroup_secret_mount_boundary(base)
+                        continue
                 desired = copy.deepcopy(base)
                 desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
                 with self.assertRaisesRegex(overlay.OverlayError, "Chat Secret volume boundary"):
                     overlay.object_patch(base, desired)
+
+    def test_chat_recovery_plan_uses_real_runtime_patch_and_is_single_target(self):
+        base = chat_post_prefix_snapshot()
+        target = overlay.CHAT_RECOVERY_TARGET
+        overlay_dir = Path(__file__).resolve().parents[2] / "deploy/dev/match-squad-trust-overlay"
+        recovery_path = overlay_dir / target.patch_file
+        runtime_path = overlay_dir / "voice-chat.runtime.patch.yaml"
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+
+        client = overlay.KubectlClient()
+        plan = overlay.build_object_plan(client, target, base, recovery_path)
+
+        actual_recovery_render = overlay.strategic_render(client, target, base, recovery_path)
+        actual_runtime_render = overlay.strategic_render(
+            client, overlay.TARGETS[4], base, runtime_path)
+        self.assertEqual(actual_recovery_render, actual_runtime_render)
+        self.assertEqual(actual_recovery_render, desired)
+        self.assertEqual(plan["operations"][2:], [{
+            "op": "add", "path": "/spec/template/spec/securityContext/fsGroup",
+            "value": 65532,
+        }])
+        self.assertEqual(overlay._selected_targets(False, chat_recovery=True), (target,))
+        with self.assertRaisesRegex(overlay.OverlayError, "mutually exclusive"):
+            overlay._selected_targets(recovery_only=True, chat_recovery=True)
+        self.assertIn("fsGroup: 65532", recovery_path.read_text(encoding="utf-8"))
+        self.assertIn("fsGroup: 65532", runtime_path.read_text(encoding="utf-8"))
+
+    def test_chat_recovery_rejects_unobserved_generation_and_mount_shape_drift(self):
+        target = overlay.CHAT_RECOVERY_TARGET
+        patch_path = (Path(__file__).resolve().parents[2] /
+                      "deploy/dev/match-squad-trust-overlay" / target.patch_file)
+        client = overlay.KubectlClient()
+        base = chat_post_prefix_snapshot()
+        base["status"]["observedGeneration"] = 2
+        with self.assertRaisesRegex(overlay.OverlayError, "current generation"):
+            overlay.build_object_plan(client, target, base, patch_path)
+
+        for mutation in ("wrong-mount-path", "subpath-secret", "writable-secret"):
+            with self.subTest(mutation=mutation):
+                drifted = chat_post_prefix_snapshot()
+                mounts = drifted["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+                server = next(item for item in mounts if item["name"] == "match-squad-server")
+                if mutation == "wrong-mount-path":
+                    server["mountPath"] = "/unexpected"
+                elif mutation == "subpath-secret":
+                    server["subPath"] = "tls.key"
+                else:
+                    server["readOnly"] = False
+                with self.assertRaisesRegex(overlay.OverlayError, "Chat Secret volume boundary"):
+                    overlay.build_object_plan(client, target, drifted, patch_path)
+
+    def test_chat_recovery_requires_its_fixed_target_and_only_fsgroup_patch(self):
+        base = chat_post_prefix_snapshot()
+        desired = copy.deepcopy(base)
+        desired["spec"]["template"]["spec"]["securityContext"]["fsGroup"] = 65532
+        target = overlay.CHAT_RECOVERY_TARGET
+        operations = overlay.object_patch(base, desired)
+        self.assertTrue(overlay._is_exact_chat_fs_group_recovery(target, base, operations))
+        self.assertFalse(overlay._is_exact_chat_fs_group_recovery(
+            overlay.RECOVERY_TARGET, base, operations))
+        extra = copy.deepcopy(desired)
+        extra["spec"]["template"]["spec"]["securityContext"]["runAsNonRoot"] = True
+        with self.assertRaisesRegex(overlay.OverlayError, "outside fsGroup 65532"):
+            overlay.object_patch(base, extra)
 
 
 class MatchSquadOverlayApplicatorTests(unittest.TestCase):

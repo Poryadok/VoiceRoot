@@ -30,7 +30,20 @@ The applicator renders the seven reviewed patch files against live JSON and reco
 
 The normal seven-target plan changes only listener Service ports and the reviewed Deployment template environment, ports, mounts, and volumes. It replaces the known optional Matchmaking `S2S_JWKS_URLS_JSON` entry with the exact gateway-only issuer map; all other existing entries and unrelated fields remain intact. Voice 9095 continues to trust `voice-media-ca` for the Gateway client; the MatchSquad CA is used for the separately reviewed MatchSquad TLS paths. After rollout, verify ordinary Deployment readiness, all named Service endpoints, Matchmaking's verified JWKS readiness, and the real application flow before accepting activation.
 
-The fsGroup recovery is a separate one-target operation, not a special case of the seven-target overlay plan. Only when the Matchmaking Deployment exactly matches the pinned recovery template and image may the operator create a fresh plan with `--recover-matchmaking-fsgroup`; review its single target and digest, then apply that same plan with the same flag. This fixed patch adds only `spec.template.spec.securityContext.fsGroup: 65532` and waits for Matchmaking rollout readiness. Do not combine this recovery plan with the normal overlay plan; after recovery succeeds, create a fresh normal seven-target plan from the new live resource versions. For example:
+The fsGroup recovery commands are separate one-target operations, not special cases of the seven-target overlay plan. Matchmaking recovery is available only when its Deployment matches the pinned recovery template and image. Chat recovery is available only for the exact reviewed post-prefix projection: the current generation is observed, its requested replica is updated but unready, the source-qualified Chat image is active, and all Secret volumes and mounts match the captured boundary. Create a fresh plan with the matching recovery flag, review its single target and digest, then apply that same plan with the same flag. Each fixed patch adds only `spec.template.spec.securityContext.fsGroup: 65532` and waits for that Deployment's readiness. Do not combine a recovery plan with the normal overlay plan; after recovery succeeds, create a fresh normal seven-target plan from the new live resource versions. For example, Chat recovery is:
+
+```sh
+python3 -B scripts/dev/match_squad_overlay.py --root . \
+  --source-sha 'MERGED_SOURCE_SHA' --plan-file '/private/chat-recovery-plan.json' \
+  --recover-chat-fsgroup
+python3 -B scripts/dev/match_squad_overlay.py --root . \
+  --source-sha 'MERGED_SOURCE_SHA' --plan-file '/private/chat-recovery-plan.json' \
+  --plan-sha256 'REVIEWED_PLAN_DIGEST' --recover-chat-fsgroup --apply
+```
+
+Chat's nonroot image reads its TLS Secret projection from files with mode `0440`; the pod-level fsGroup supplies the matching group access while preserving the Secret mode and read-only mount. Kubernetes applies fsGroup to every Secret volume in the pod. The existing `0400` NATS credential therefore becomes group-readable by the pod group, but that volume remains mounted only in the `nats-leaf` sidecar; Chat's server-key Secret remains mounted only in the Chat container. The focused contract pins the Secret key names, modes, mount paths, container assignments, and read-only state. Do not broaden these mounts or change Secret modes.
+
+For Matchmaking recovery, use the separate flag and matching source-qualified template as shown below:
 
 ```sh
 python3 -B scripts/dev/match_squad_overlay.py --root . \
@@ -42,4 +55,4 @@ python3 -B scripts/dev/match_squad_overlay.py --root . \
   --plan-sha256 'REVIEWED_PLAN_DIGEST' --recover-matchmaking-fsgroup --apply
 ```
 
-In normal seven-target mode, an otherwise-unready Matchmaking Deployment can use only the listener-removal path: the current generation must be observed, every requested replica updated, and exactly one `S2S_JWKS_URLS_JSON` entry present; the patch removes only that entry. The separate fsGroup recovery command above is limited to the exact source-qualified Matchmaking image and captured template SHA-256 `39a62305c3fdb01824b47bce9dce6d7533c5010c91673cbfbfbf876d97995339`, with the current generation observed, all requested replicas updated, and the S2S entry absent. It rejects an ordinarily ready Deployment and may add only `spec.template.spec.securityContext.fsGroup: 65532`. Any other template, image, env, volume, container, security-context, or readiness drift is blocked. All other unready Deployments remain blocked.
+In normal seven-target mode, an otherwise-unready Matchmaking Deployment can use only the listener-removal path: the current generation must be observed, every requested replica updated, and exactly one `S2S_JWKS_URLS_JSON` entry present; the patch removes only that entry. The separate Matchmaking fsGroup recovery command above is limited to its exact source-qualified image and captured template SHA-256 `39a62305c3fdb01824b47bce9dce6d7533c5010c91673cbfbfbf876d97995339`, with the current generation observed, all requested replicas updated, and the S2S entry absent. Chat has its own one-target recovery mode, limited to the exact post-prefix runtime projection and current unready Chat Deployment. Both modes reject an ordinarily ready or drifted target and may add only `spec.template.spec.securityContext.fsGroup: 65532`; other unready Deployments remain blocked.
