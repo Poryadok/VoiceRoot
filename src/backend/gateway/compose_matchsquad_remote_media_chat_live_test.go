@@ -20,6 +20,8 @@ import (
 	lksdk "github.com/livekit/server-sdk-go/v2"
 	lkmedia "github.com/livekit/server-sdk-go/v2/pkg/media"
 	"github.com/pion/webrtc/v4"
+	"google.golang.org/protobuf/encoding/protojson"
+	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
 // TestMatchSquadRemoteMediaAndChat_live is a single-shot DEV acceptance harness.
@@ -103,9 +105,12 @@ func TestMatchSquadRemoteMediaAndChat_live(t *testing.T) {
 
 	var matchID string
 	for poll := 0; poll < 12; poll++ {
-		var status map[string]any
-		remoteProofRequest(t, client, http.MethodGet, base+"/api/v1/matchmaking/search/"+url.PathEscape(searchA), actors.a.AccessToken, nil, http.StatusOK, &status, "poll_actor_a_search")
-		matchID = remoteProofString(status, "matchId", "match_id")
+		statusBody := remoteProofRequest(t, client, http.MethodGet, base+"/api/v1/matchmaking/search/"+url.PathEscape(searchA), actors.a.AccessToken, nil, http.StatusOK, nil, "poll_actor_a_search")
+		var parseErr error
+		matchID, parseErr = remoteProofSearchMatchID(statusBody)
+		if parseErr != nil {
+			t.Fatal("actor A search status response was malformed; stop without retry")
+		}
 		if matchID != "" {
 			break
 		}
@@ -119,9 +124,12 @@ func TestMatchSquadRemoteMediaAndChat_live(t *testing.T) {
 	if err := appendRemoteProofReceipt(intentPath, "actor_a_match", map[string]any{"match_id": matchID}); err != nil {
 		t.Fatal("actor A match receipt could not be persisted")
 	}
-	var statusB map[string]any
-	remoteProofRequest(t, client, http.MethodGet, base+"/api/v1/matchmaking/search/"+url.PathEscape(searchB), actors.b.AccessToken, nil, http.StatusOK, &statusB, "confirm_actor_b_search")
-	if remoteProofString(statusB, "matchId", "match_id") != matchID {
+	statusBodyB := remoteProofRequest(t, client, http.MethodGet, base+"/api/v1/matchmaking/search/"+url.PathEscape(searchB), actors.b.AccessToken, nil, http.StatusOK, nil, "confirm_actor_b_search")
+	matchIDB, err := remoteProofSearchMatchID(statusBodyB)
+	if err != nil {
+		t.Fatal("actor B search status response was malformed; stop without retry")
+	}
+	if matchIDB != matchID {
 		t.Fatal("actor search sessions did not converge on the same match")
 	}
 	if err := appendRemoteProofReceipt(intentPath, "actor_b_match", map[string]any{"match_id": matchID}); err != nil {
@@ -413,7 +421,7 @@ func refreshRemoteProofActor(t *testing.T, client *http.Client, base string, act
 	return envelope.Session
 }
 
-func remoteProofRequest(t *testing.T, client *http.Client, method, target, accessToken string, payload []byte, want int, out any, operation string) {
+func remoteProofRequest(t *testing.T, client *http.Client, method, target, accessToken string, payload []byte, want int, out any, operation string) []byte {
 	t.Helper()
 	var body io.Reader
 	if payload != nil {
@@ -441,9 +449,20 @@ func remoteProofRequest(t *testing.T, client *http.Client, method, target, acces
 	if resp.StatusCode != want {
 		t.Fatalf("%s returned HTTP %d; stop without retry", operation, resp.StatusCode)
 	}
-	if out != nil && json.Unmarshal(raw, out) != nil {
-		t.Fatalf("%s response did not match the expected JSON shape", operation)
+	if out != nil {
+		if err := json.Unmarshal(raw, out); err != nil {
+			t.Fatalf("%s response did not match the expected JSON shape", operation)
+		}
 	}
+	return raw
+}
+
+func remoteProofSearchMatchID(body []byte) (string, error) {
+	var response matchmakingv1.GetSearchStatusResponse
+	if err := protojson.Unmarshal(body, &response); err != nil {
+		return "", err
+	}
+	return response.GetSearchSession().GetMatchId(), nil
 }
 
 func startRemoteProofSearch(t *testing.T, client *http.Client, base, token, gameID, criteria, intentPath, ledgerPath, actor string) string {
@@ -846,6 +865,55 @@ func TestRemoteProofMatchSquadRoutesAndCompletionPhases(t *testing.T) {
 	match["profileIds"] = []any{"profile-a", "profile-c"}
 	if remoteProofMayCompleteNext(match, "chat-1", "room-1", "profile-a", "profile-b") {
 		t.Fatal("changed roster should stop before the next completion write")
+	}
+}
+
+func TestRemoteProofSearchStatusUsesCanonicalProtoResponse(t *testing.T) {
+	fixtures := []struct {
+		name    string
+		body    string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "protojson camelCase",
+			body: `{"searchSession":{"id":"search-1","profileId":"profile-a","gameId":"game-1","mode":"duo","status":"matched","matchId":"match-camel"}}`,
+			want: "match-camel",
+		},
+		{
+			name: "protojson snake_case",
+			body: `{"search_session":{"id":"search-2","profile_id":"profile-b","game_id":"game-1","mode":"duo","status":"matched","match_id":"match-snake"}}`,
+			want: "match-snake",
+		},
+		{
+			name:    "top-level match ID is outside the protobuf response schema",
+			body:    `{"matchId":"not-the-search-session-match"}`,
+			wantErr: true,
+		},
+		{
+			name: "unmatched search session",
+			body: `{"searchSession":{"id":"search-3","profileId":"profile-c","gameId":"game-1","mode":"duo","status":"searching"}}`,
+		},
+	}
+	for _, fixture := range fixtures {
+		t.Run(fixture.name, func(t *testing.T) {
+			got, err := remoteProofSearchMatchID([]byte(fixture.body))
+			if fixture.wantErr {
+				if err == nil {
+					t.Fatal("response outside the protobuf schema should be rejected")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parse source-shaped status response: %v", err)
+			}
+			if got != fixture.want {
+				t.Fatalf("match ID = %q, want %q", got, fixture.want)
+			}
+		})
+	}
+	if _, err := remoteProofSearchMatchID([]byte(`{"searchSession":`)); err == nil {
+		t.Fatal("malformed status response should be rejected")
 	}
 }
 
