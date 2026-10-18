@@ -313,6 +313,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
 	python3 "$(ROOT)/scripts/staging/notification-presence-contract_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/prod-clickhouse-init_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/prod-smoke_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-bootstrap-policy_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-generation-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/restore-nats-generation_test.sh"
