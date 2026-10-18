@@ -628,22 +628,19 @@ func isNilDependency(dependency any) bool {
 }
 
 func (s *MessagingGRPC) checkSpaceSendPermission(ctx context.Context, chatID, profileID uuid.UUID) error {
-	if s.RolePermissions == nil || s.ChatThreadPolicy == nil {
-		return nil
-	}
-	pol, err := s.ChatThreadPolicy.Load(ctx, chatID)
-	if errors.Is(err, store.ErrChatNotFound) {
-		return status.Error(codes.NotFound, "chat not found")
-	}
+	pol, err := s.loadMutationChatPolicy(ctx, chatID)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return err
 	}
-	if pol == nil || pol.SpaceID == nil {
+	if pol.SpaceID == nil {
 		return nil
 	}
 	chatType := strings.TrimSpace(pol.ChatType)
 	if chatType != "channel" && chatType != "group" {
 		return nil
+	}
+	if isNilDependency(s.RolePermissions) {
+		return status.Error(codes.Unavailable, "role service unavailable")
 	}
 	allowed, err := s.RolePermissions.HasChatPermission(ctx, *pol.SpaceID, profileID, chatID, permissions.TextChatSendMessages)
 	if err != nil {
