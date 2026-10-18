@@ -31,7 +31,9 @@ Reader/RPC and atomic MM enqueue are owned by Рудеус-145 / BE-011; reserve
 new `ordinarycall/party_cut.go` and `internal/partysnapshot` files. Protected
 snapshot revalidation consumers must be coordinated with that author.
 Out: invented reconnect producers, operator switches claiming authority coverage,
-provider activation, P3 changes, accepting/releasing a stand without TT claims.
+public activation, unrelated P3 changes, accepting/releasing a stand without TT
+claims. The protected provider coordinator's async abandonment integration is in
+scope under the later accepted decision below.
 
 ## Milestones
 
@@ -101,6 +103,29 @@ provider activation, P3 changes, accepting/releasing a stand without TT claims.
       delivered evidence. a2e336585 adds transaction/table-locked refusal; GREEN
       results are recorded separately when complete.
 - [ ] Implement the common protected candidate gate and async abandonment saga.
+- [x] Normal-merged 145's immutable candidate/validator API1fc23b7a5f8765a620d91e04dada58d260cbd46e.
+      New squad/party_source_gate.go consumes exact private ValidatedAttempt;
+      every call captures fresh whole-party authority outside SQL locks and
+      returns the matching candidate for short locked VerifyTx at each boundary.
+      Unknown returns no candidate and never resets a partial changed set.
+      Definitive changes invoke one ResetVoiceParties transaction. Implementation
+      b512dba20 realPG GREEN1PASS0skip4.540s, stubRED e41096383 retained.
+- [x] Batch reset7fbddc4ca realPG GREEN1PASS0skip23.226s after da0b8dcdb RED:
+      two changed parties share one pending match; injected cancellation failure
+      rolls back both, success cancels both/abandons match, replay adds none.
+- [x] Native independent review205 CLEAR on exact9de/base d4 plus a2e DOWN,
+      BE012-NATIVE-PRODUCER-REVIEW c1. Scope excludes coverage/provider/rollout.
+- [x] MM short b512:203PASS,153 explicitPGskips; only Compose fixture test
+      failed because backend-only archive omitted root docker-compose.yml.
+      Added exact frozen root file and reran only failed case PASS; vet exit0.
+- [x] Additional partial-error adapter regression ea3856901 PASS1/0skip9.233s
+      from complete immutable e410 archive plus exact implementation/test deltas.
+      It proves an explicit authority error dominates partial ChangedPartyIDs.
+- [ ] Static lint and graph update are active. Record terminal results before
+      lease return; no provisional PASS is inferred from their lack of output.
+- [ ] Freeze portable checkpoint, safely recycle WT38 rather than holding a
+      second scarce worktree. If supporting settlement function remains eligible,
+      atomically claim it and obtain a fresh actual-develop lease before writes.
 - [ ] Final graph update, affected checks, independent review and 121 acceptance.
 
 ## Decisions
@@ -120,6 +145,12 @@ provider activation, P3 changes, accepting/releasing a stand without TT claims.
   unissued providers never start after abandonment. Completion requires all
   required creation and teardown receipts; generic terminal errors prove no absence.
   145 owns candidate capture/hash/validator; 147 owns consuming coordinator/reset.
+- Genuine historical provider custodian90 confirms narrow successor boundary in
+  BE059c12 / BE012-ASYNC-PROVISION-SETTLEMENT c1. Actual old task is BE-059,
+  not BE-005. No active90 writer/WIP/lease; full BE059 ownership/CI stays90.
+  Supporting function is AVAILABLE, with no receiver or responsibility transfer
+  inferred. Actual claimant must accept169c9 and use own fresh-develop lease.
+  No provider file edits occurred in this checkpoint.
 
 ## Risks And Follow-Ups
 
@@ -133,3 +164,9 @@ provider activation, P3 changes, accepting/releasing a stand without TT claims.
   NATS2.11 testcontainers, Docker bridge only. Proofs are under
   D:/Git/Voice/tmp/swarm/rudeus147-be012. No shared DEV/STAGING claim or hosted
   CI acceptance has been acquired. Local tests do not imply deployment PASS.
+- Native review packet is durable outside WT38: PROOF-NATIVE.md attachment
+  4ba2036167d90d7b14a4e383a191ac20 and SHA manifest817e28bae302c7c89b5e6a98e269eaf7.
+  Bundle verify PASS; binary/ZIP/one bounded base64 attachment attempts returned
+  backend internal_error, so no binary TT attachment ID is claimed. Local ZIP
+  and separately decoded ordered chunks reconstruct identical SHA256; c12
+  documents the actual portable paths. Do not lose this checkpoint on recycling.
