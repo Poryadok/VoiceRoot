@@ -388,3 +388,74 @@ The user authorized exactly one independent reviewer141. Frozen318bc1bf6/source6
 Normal successor1a6acf259b571a80340d99d11ae8adb5a34c15e1 adds those exact parent fields to the expected companion; reflect.DeepEqual, profile/chat/content/metadata integrity and all other validation remain. Three-file delta includes strict matching/profile/channel mismatch tests and API stored sender/display assertions. New unit channel case RED→GREEN; own actual API18PASS/zero skips plus strengthened commentary-denial1PASS/zero skips and store compound6PASS/zero skips preserve zero writes/outbox on denial, rollback and expired-reference reconciliation. Final affected short250PASS/243explicit PG skips, vet/lint0; changed-input Messaging image PASS. Other unchanged image/component proofs are reused.
 
 Same reviewer141 independently rechecked exact1a6acf259 CLEAR, with seven top-level actual PostgreSQL tests PASS/zero skips including communication deadline/cancel. His run is independent evidence, not integration CI. The original A-G review gate is now resolved within this bounded source scope; historical OPEN statements above describe the earlier freeze. Full feature/runtime/acceptance scope and golden/NATS/R22/GitHub gates are unchanged. No pins, source allowlists or CI assertions were weakened. Current review-resume lease20 is ed1d2b69cc7426699a493f97cbe37548, holder rudeus-121-review-fix; source/evidence/final resource receipts are preserved separately under external review-fix-1a6acf259, without overwriting the previous immutable bundle.
+
+
+## Chat composition checkpoint 2026-10-18 22:28 UTC
+
+Current published source is 2a8178da00d005ac7a4bce8ccde1db9d6851018d.
+Normal merges preserve BE007 8a8c9d7db9aa5b5acda94882575cb5c20e7d479d
+(supported190 handoff, independent200c7) and Chat native scope producer
+2e41e0719e5496ad1ac29c740d5bec7269208dd7 (supported176 handoff,
+independent197c6). Native Chat migration25 is unique in this assembled catalog.
+The only authored integration delta2a is13 test insertions: install native25
+in the P3 fixture, read previous permanent head, assert retained absent head
+and advancing revision after purge plus native lookup ErrNoRows. All original
+authorization, owner evidence, zero-effects, exact persisted receipt/replay and
+expiry assertions remain. Independent190 BE007c9 gives bounded test-only CLEAR;
+the earlier200/197 source reviews retain their original scope.
+
+Exact2a Linux private DinD -race selected tests:12 top-level plus11 subtests
+PASS, zero FAIL/SKIP/race, store65.295s/grpcsvc1.684s/gisprincipal7.091s;
+scoped vet exit0. This combines real PostgreSQL P3/native25 with protected TLS
+and negative/unit cases; it does not claim23 independent PG scenarios.
+Nested inventory empty and all own runner/engine/network/volume cleanup exit0.
+Canonical Chat image actual PASS34.5s,
+sha256:3bf28861deb411fd667393c13a5f69bd0feb705daaebab5517106fe8faaddb47.
+Raw source/hash/result/resource receipt lives in external wave2
+chat-composition-summary.json, chat-composition-tests.jsonl,
+chat-composition-dind-receipt.json and target-images-2a8178da0.json.
+
+Actual GitHub API22:28:07.976299UTC confirms remote develop exact2a.
+Hosted run39171746827 has all21 backend-go matrix jobs, pkg/golangci/protobuf,
+Compose/admin/web/Portal and both key-backup goldens SUCCESS; ci-script-tests
+FAIL(job117806333679); Flutter/Auth IN_PROGRESS at this observation.
+Explicit skipped jobs remain skipped. Failed-job log download refused because
+the whole run is still active; no new exact failure cause was invented.
+The prior NATS fixed-authority refusal remains real. Reobserve this actual run
+at a terminal event; do not continuously poll. Transport next observation due
+22:58:07UTC unless a real lifecycle read supplies a newer observation.
+
+NATS decision correction187 CI-NATS-V5-AUTHORITY c4 / SWARM c17 supersedes the
+incorrect three-file tuple premise in187c15: accepted BE102 already changed
+notification too. V5 authority/custody/receipt MUST bind FOUR exact sources;
+notification SHA c0e2bedc509e11117b05c07193257bd53f24e95f7f485325f240cb2f813498bf.
+Restoring the historical template is invalid, since exact equality rejects the
+expanded voice_events contract. Root-derived compiler pins and historical v4,
+auth-v4/enrollment/deployed-contract remain unchanged. Producer197 owns the
+source supporting function;121 retains integration/CI. No pin bypass performed.
+
+ChatScope owner updated all four existing contract gates to155 coherent
+SPACE-CHAT-AUTHORITY-v3 and classified i3 unaffected after source comparison:
+Chat DTO/callers/schema25/ownDB barrier unchanged; native membership provenance
+and initialLIVE0 adaptation belongs to Role/Space consumers, not Chat snapshot.
+Full qualification/activation remains open. Exact CAS/impact receipts are
+chat-v3-edge.json and chat-v3-impact.json; no prerequisite deletion or weakening.
+
+Queued real accepted functions: BE041 c14f59c supported178e8, mandatory ACL
+review still pending;155 immutable foundation8682a79 narrow publication/
+integration/affectedCI function explicitly accepted121, while full Space-chat
+feature task and ongoing qualification source remain155. Foundation194c16 and
+196c11 review bounds exclude full remote authority/activation. Source branch8682
+normally published but not yet merged at this checkpoint. This supersedes old
+historical statements that no Role20 source exists; readiness is not inferred.
+BE238 original144 combined1CPU FAIL remains open;199c17 resolves contract,
+author142 clean successor and separate combined proof remain required.
+
+Complete immutable898 bundle SHA53c0e39887af2b0f6a539e384621f3de67a73ab13ff1284d17c809a330a8cb5a
+was verified and actually restored exact898 with90 accepted heads ancestryPASS.
+This successor needs its own incremental bundle+fresh base/delta restore;
+older bundles/receipts are immutable. No shared stand claims/deployment/tester
+appointment occurred. Current own36 lease d98699dc810d3f2707902abd371fb6c3,
+holder rudeus-121-wave2-integration; no live Chat proof/build handles remain.
+Existing Flutter baseline golden/R22/fullfeature/provider/acceptance gates stay
+open. Historical transport outage records do not negate current SSH/API success.
