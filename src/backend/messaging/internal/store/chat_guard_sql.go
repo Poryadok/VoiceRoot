@@ -17,6 +17,23 @@ type SQLChatGuard struct {
 	SpacePool *pgxpool.Pool // optional space_db for chats with space_id
 }
 
+// CanPostAsChat is the direct-DB development/test equivalent of the production
+// Chat RPC. It reads the current membership and scope in one statement.
+func (g *SQLChatGuard) CanPostAsChat(ctx context.Context, chatID, profileID uuid.UUID) (bool, error) {
+	if g == nil || g.Pool == nil {
+		return false, errors.New("chat guard: pool not configured")
+	}
+	var allowed bool
+	err := g.Pool.QueryRow(ctx, `SELECT c.type IN ('group','channel') AND c.space_id IS NULL
+ AND (m.role IN ('owner','admin') OR (m.role='member' AND m.post_as_chat))
+ FROM chats c JOIN chat_members m ON m.chat_id=c.id AND m.profile_id=$2
+ WHERE c.id=$1`, chatID, profileID).Scan(&allowed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrNotChatMember
+	}
+	return allowed, err
+}
+
 func (g *SQLChatGuard) EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error {
 	if g == nil || g.Pool == nil {
 		return nil

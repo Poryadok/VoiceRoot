@@ -1977,6 +1977,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatGroupAddMembers => 'Добавить участников';
 
   @override
+  String get chatGroupMemberAdditionsPermission =>
+      'Разрешить участникам добавлять людей';
+
+  @override
+  String get chatGroupPostAsChatPermission =>
+      'Разрешить публикацию от имени чата';
+
+  @override
   String get chatGroupMembersLimitReached =>
       'Группа заполнена (500/500). Для больших сообществ создайте спейс.';
 

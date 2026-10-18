@@ -865,6 +865,8 @@
   "chatGroupRoleOwner": "Владелец",
   "chatGroupRoleAdmin": "Администратор",
   "chatGroupAddMembers": "Добавить участников",
+  "chatGroupMemberAdditionsPermission": "Разрешить участникам добавлять людей",
+  "chatGroupPostAsChatPermission": "Разрешить публикацию от имени чата",
   "chatGroupMembersLimitReached": "Группа заполнена (500/500). Для больших сообществ создайте спейс.",
   "chatGroupMemberYou": "{name} (вы)",
   "@chatGroupMemberYou": {

@@ -1,5 +1,29 @@
 # Chat Service
 
+## Standalone channel publication authority
+
+For a stored `channel` with `space_id IS NULL`, Chat owns the current
+`chat_members` role, membership-scoped official grant and `allow_user_main_feed`
+setting. Current `owner`/`admin` and ordinary members with an explicit current
+`post_as_chat` grant may publish as the channel (`posted_as_chat=true`). User-identity
+thread replies retain the existing thread policy; adding `thread_parent_id`
+never grants an ordinary member the channel's official identity. User-identity
+main-feed publication requires both a known current role (`owner`, `admin` or
+`member`) and explicit `allow_user_main_feed=true`; the disabled setting also
+denies owner/admin user-identity posts. Standalone owner/admin `UpdateChat`
+controls that setting. No channel promotion API is implied by this contract.
+
+Messaging uses the existing Chat boundary (fresh `GetChatPermissions` via the
+production `GRPCChatGuard`) for official Send, Forward and copy-as-new. MemberRole
+alone never proves an ordinary member's official capability.
+Forward chooses official mode when user main-feed posts are disabled and user
+mode when enabled; commentary uses the same identity. Stored type/scope wins
+over caller `ChatRef.type`. Missing membership, unknown role, missing policy or
+unavailable authority never grants publication. Denials precede commentary,
+message and event/outbox writes. Space-attached destinations continue to require
+the exact-chat Role `TEXT_CHAT_SEND_MESSAGES` decision; local roles cannot
+replace it. See [forward contract](../features/forward-messages.md#права-основного-потока-канала).
+
 ## Обзор
 
 Управление сущностями чатов: DM (1:1), текстовые **группы** и **каналы** (`type = group` \| `channel`, в т.ч. вне спейса; одинаковая модель, разные дефолты), пользовательские папки.
@@ -43,6 +67,76 @@ trigger alone cannot establish authority. DM self-delete retires only its viewer
 lineage, actual reopen creates a new one, and chat archive remains navigation
 state. The linked contract owns the full source/caller/recovery and race matrix.
 
+### Chat management permissions
+
+This target extends the existing standalone owner/admin official-publication
+baseline; it does not invalidate the BE-187 official-thread authorization fix.
+The standalone persistence, handlers, HTTP routes and member-management controls
+implement this contract. The Space authority/admission/navigation vertical below
+remains an accepted target; standalone support does not complete that scope.
+For ordinary human-owned standalone groups and channels Chat owns
+`member_additions_enabled` (default true) and a membership-scoped
+`post_as_chat` grant (default false). Current owner/admin implicitly have both
+capabilities and may manage these settings. An ordinary member can add only
+while the toggle is enabled and use the chat identity only with an explicit
+grant. Send/settings permissions never imply either capability.
+
+`GetChatPermissions(chat_id)` returns caller-relative
+`can_post_as_chat`, `can_add_members`, `can_manage_permissions`,
+`member_additions_enabled`, and `explicit_post_as_chat`.
+`UpdateChat.member_additions_enabled` is optional; omission preserves the
+setting. `SetChatMemberPostAsChat(chat_id, target_profile_id, allowed)` is an
+idempotent owner/admin operation on a current ordinary member. No actor is
+selected by an untrusted request body. Member-management projections expose
+the explicit grant only to authorized roster readers.
+
+HTTP: `GET /api/v1/chats/{chat_id}/permissions`,
+`PUT /api/v1/chats/{chat_id}/members/{profile_id}/post-as-chat` with
+`{"allowed": boolean}`, and `PATCH /api/v1/chats/{chat_id}` with optional
+`member_additions_enabled`. Route identifiers override body identifiers.
+The roster editor exposes the addition policy and per-member official grant
+separately. Unknown/unavailable capability state disables those controls.
+
+All mutations recheck current actor/target membership and role in the same
+Chat transaction as the write. AddMembers rechecks its caller and toggle in
+the roster transaction. Leave/kick/profile cleanup removes the explicit grant
+with membership; rejoin starts without it. Promotion never creates a grant.
+Demotion/ownership transfer removes implicit authority but preserves a
+separately explicit grant throughout that same membership. Toggle false does
+not remove existing people. Chat-row then membership locks serialize changes.
+No historical send/settings/user-feed value is migrated into an explicit grant.
+
+Messaging obtains a fresh Chat decision for the authenticated sender and actual
+stored destination before official main-feed/thread/send/forward/commentary
+writes. Missing/unavailable authority fails closed; no cached UI grant, forged
+ChatRef, or local owner field is proof. Cross-service authorization linearizes
+at the completed fresh decision, not at a fictional shared transaction.
+Other privacy, guest/account, media, moderation, E2E, thread and feed-mode gates
+still apply. False policy is PermissionDenied; malformed IDs InvalidArgument;
+unsupported scope/configuration FailedPrecondition; dependency failure
+Unavailable, with existing missing-resource visibility semantics preserved.
+
+DM, GIS-managed and MatchSquad chats reject ordinary grant/toggle operations.
+Guest policy retains its existing gates; this target adds no blanket ban or
+guest initiation permission. Space chats never use standalone setters or local
+AddMembers. Their membership belongs to Space and authority to Role.
+
+For a chat in a Space, adding a person means inviting them into its parent Space
+through the existing admission rules, then opening the specific invited chat
+after successful authorized entry. Preserve the target binding across pending
+admission and retry. Current members are not inserted twice and still require
+current target-chat visibility/access. Never disclose or open unauthorized
+content, bypass bans/caps/entry policy/hierarchy/channel ACL, or create chat-only
+Space membership. Distinct Role authority, durable invitation binding and
+Gateway/client continuation are part of the full target; standalone support
+alone is not completion of this requirement.
+
+Rollout must establish a compatible serving set of Chat and Messaging writers
+before exposing these policy mutations: an older Chat writer cannot enforce
+the new addition toggle. Migration defaults preserve the previous enabled-add
+behavior and create no explicit grants. This is an operator qualification gate,
+not evidence of deployment or a permission to deploy.
+
 `CreateChatRequest.request_id` необязателен для совместимости существующих
 клиентов. Канонический UUID связывается с аутентифицированным
 `creator_profile_id`; в той же транзакции Chat сохраняет хэш нормализованных
@@ -72,6 +166,8 @@ service ChatService {
   rpc SetGroupMemberRole(...) returns (...);                              // ✓ standalone groups: admin promotion; owner demotion
   rpc TransferGroupOwnership(...) returns (...);                       // ✓
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);     // ✓
+  rpc GetChatPermissions(...) returns (...);                              // ✓ standalone caller-relative
+  rpc SetChatMemberPostAsChat(...) returns (...);                         // ✓ standalone owner/admin grant
 
   // Список чатов
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse); // ✓ dm+group; space merge; inbox filter
@@ -303,6 +399,7 @@ chats
 ├── threads_enabled (bool, default false; channels default true)
 ├── allow_user_main_feed (bool, default true; channels default false)
 ├── allow_guests (bool, default false — explicit chat-level guest admission)
+├── member_additions_enabled (bool, default true — standalone ordinary-member additions)
 ├── e2e_enabled (bool, default false — DM opt-in E2E)
 ├── created_at
 └── updated_at
@@ -311,6 +408,7 @@ chat_members
 ├── chat_id (UUID, logical ref → chats.id)
 ├── profile_id (UUID, logical ref → user_db.profiles.id; без меж-БД REFERENCES)
 ├── role (owner | admin | member)
+├── post_as_chat (bool, default false — explicit grant for this membership)
 ├── joined_at
 ├── muted_until (nullable)
 ├── is_archived (bool)

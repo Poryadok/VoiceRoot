@@ -318,6 +318,7 @@ ChatMember chatMemberFromProto(chat_pb.ChatMember member) {
       member.hasJoinedAt() ? member.joinedAt : null,
     ),
     isArchived: member.isArchived,
+    explicitPostAsChat: member.explicitPostAsChat,
   );
 }
 

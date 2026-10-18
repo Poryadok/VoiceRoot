@@ -122,6 +122,24 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$listMembers, request, options: options);
   }
 
+  /// Caller-relative standalone human-chat capabilities. No body-selected actor.
+  $grpc.ResponseFuture<$0.GetChatPermissionsResponse> getChatPermissions(
+    $0.GetChatPermissionsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getChatPermissions, request, options: options);
+  }
+
+  /// Current owner/admin manages an ordinary member's membership-scoped grant.
+  $grpc.ResponseFuture<$0.SetChatMemberPostAsChatResponse>
+      setChatMemberPostAsChat(
+    $0.SetChatMemberPostAsChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setChatMemberPostAsChat, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListChatsResponse> listChats(
     $0.ListChatsRequest request, {
     $grpc.CallOptions? options,
@@ -434,6 +452,17 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/ListMembers',
           ($0.ListMembersRequest value) => value.writeToBuffer(),
           $0.ListMembersResponse.fromBuffer);
+  static final _$getChatPermissions = $grpc.ClientMethod<
+          $0.GetChatPermissionsRequest, $0.GetChatPermissionsResponse>(
+      '/voice.chat.v1.ChatService/GetChatPermissions',
+      ($0.GetChatPermissionsRequest value) => value.writeToBuffer(),
+      $0.GetChatPermissionsResponse.fromBuffer);
+  static final _$setChatMemberPostAsChat = $grpc.ClientMethod<
+          $0.SetChatMemberPostAsChatRequest,
+          $0.SetChatMemberPostAsChatResponse>(
+      '/voice.chat.v1.ChatService/SetChatMemberPostAsChat',
+      ($0.SetChatMemberPostAsChatRequest value) => value.writeToBuffer(),
+      $0.SetChatMemberPostAsChatResponse.fromBuffer);
   static final _$listChats =
       $grpc.ClientMethod<$0.ListChatsRequest, $0.ListChatsResponse>(
           '/voice.chat.v1.ChatService/ListChats',
@@ -702,6 +731,24 @@ abstract class ChatServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ListMembersRequest.fromBuffer(value),
             ($0.ListMembersResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetChatPermissionsRequest,
+            $0.GetChatPermissionsResponse>(
+        'GetChatPermissions',
+        getChatPermissions_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetChatPermissionsRequest.fromBuffer(value),
+        ($0.GetChatPermissionsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetChatMemberPostAsChatRequest,
+            $0.SetChatMemberPostAsChatResponse>(
+        'SetChatMemberPostAsChat',
+        setChatMemberPostAsChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetChatMemberPostAsChatRequest.fromBuffer(value),
+        ($0.SetChatMemberPostAsChatResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ListChatsRequest, $0.ListChatsResponse>(
         'ListChats',
         listChats_Pre,
@@ -1086,6 +1133,24 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.ListMembersResponse> listMembers(
       $grpc.ServiceCall call, $0.ListMembersRequest request);
+
+  $async.Future<$0.GetChatPermissionsResponse> getChatPermissions_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetChatPermissionsRequest> $request) async {
+    return getChatPermissions($call, await $request);
+  }
+
+  $async.Future<$0.GetChatPermissionsResponse> getChatPermissions(
+      $grpc.ServiceCall call, $0.GetChatPermissionsRequest request);
+
+  $async.Future<$0.SetChatMemberPostAsChatResponse> setChatMemberPostAsChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetChatMemberPostAsChatRequest> $request) async {
+    return setChatMemberPostAsChat($call, await $request);
+  }
+
+  $async.Future<$0.SetChatMemberPostAsChatResponse> setChatMemberPostAsChat(
+      $grpc.ServiceCall call, $0.SetChatMemberPostAsChatRequest request);
 
   $async.Future<$0.ListChatsResponse> listChats_Pre($grpc.ServiceCall $call,
       $async.Future<$0.ListChatsRequest> $request) async {

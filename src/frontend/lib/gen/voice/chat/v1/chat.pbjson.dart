@@ -835,6 +835,15 @@ const UpdateChatRequest$json = {
       '10': 'allowGuests',
       '17': true
     },
+    {
+      '1': 'member_additions_enabled',
+      '3': 9,
+      '4': 1,
+      '5': 8,
+      '9': 7,
+      '10': 'memberAdditionsEnabled',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_name'},
@@ -844,6 +853,7 @@ const UpdateChatRequest$json = {
     {'1': '_threads_enabled'},
     {'1': '_allow_user_main_feed'},
     {'1': '_allow_guests'},
+    {'1': '_member_additions_enabled'},
   ],
 };
 
@@ -854,9 +864,11 @@ final $typed_data.Uint8List updateChatRequestDescriptor = $convert.base64Decode(
     'ZWNvbmRzGAQgASgFSAJSD3Nsb3dNb2RlU2Vjb25kc4gBARIiCgphdmF0YXJfdXJsGAUgASgJSA'
     'NSCWF2YXRhclVybIgBARIsCg90aHJlYWRzX2VuYWJsZWQYBiABKAhIBFIOdGhyZWFkc0VuYWJs'
     'ZWSIAQESNAoUYWxsb3dfdXNlcl9tYWluX2ZlZWQYByABKAhIBVIRYWxsb3dVc2VyTWFpbkZlZW'
-    'SIAQESJgoMYWxsb3dfZ3Vlc3RzGAggASgISAZSC2FsbG93R3Vlc3RziAEBQgcKBV9uYW1lQggK'
-    'Bl90b3BpY0IUChJfc2xvd19tb2RlX3NlY29uZHNCDQoLX2F2YXRhcl91cmxCEgoQX3RocmVhZH'
-    'NfZW5hYmxlZEIXChVfYWxsb3dfdXNlcl9tYWluX2ZlZWRCDwoNX2FsbG93X2d1ZXN0cw==');
+    'SIAQESJgoMYWxsb3dfZ3Vlc3RzGAggASgISAZSC2FsbG93R3Vlc3RziAEBEj0KGG1lbWJlcl9h'
+    'ZGRpdGlvbnNfZW5hYmxlZBgJIAEoCEgHUhZtZW1iZXJBZGRpdGlvbnNFbmFibGVkiAEBQgcKBV'
+    '9uYW1lQggKBl90b3BpY0IUChJfc2xvd19tb2RlX3NlY29uZHNCDQoLX2F2YXRhcl91cmxCEgoQ'
+    'X3RocmVhZHNfZW5hYmxlZEIXChVfYWxsb3dfdXNlcl9tYWluX2ZlZWRCDwoNX2FsbG93X2d1ZX'
+    'N0c0IbChlfbWVtYmVyX2FkZGl0aW9uc19lbmFibGVk');
 
 @$core.Deprecated('Use deleteChatRequestDescriptor instead')
 const DeleteChatRequest$json = {
@@ -1032,6 +1044,13 @@ const ChatMember$json = {
       '10': 'inboxBucket',
       '17': true
     },
+    {
+      '1': 'explicit_post_as_chat',
+      '3': 7,
+      '4': 1,
+      '5': 8,
+      '10': 'explicitPostAsChat'
+    },
   ],
   '8': [
     {'1': '_muted_until'},
@@ -1045,8 +1064,9 @@ final $typed_data.Uint8List chatMemberDescriptor = $convert.base64Decode(
     'gJUgRyb2xlEjcKCWpvaW5lZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBS'
     'CGpvaW5lZEF0EkAKC211dGVkX3VudGlsGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdG'
     'FtcEgAUgptdXRlZFVudGlsiAEBEh8KC2lzX2FyY2hpdmVkGAUgASgIUgppc0FyY2hpdmVkEiYK'
-    'DGluYm94X2J1Y2tldBgGIAEoCUgBUgtpbmJveEJ1Y2tldIgBAUIOCgxfbXV0ZWRfdW50aWxCDw'
-    'oNX2luYm94X2J1Y2tldA==');
+    'DGluYm94X2J1Y2tldBgGIAEoCUgBUgtpbmJveEJ1Y2tldIgBARIxChVleHBsaWNpdF9wb3N0X2'
+    'FzX2NoYXQYByABKAhSEmV4cGxpY2l0UG9zdEFzQ2hhdEIOCgxfbXV0ZWRfdW50aWxCDwoNX2lu'
+    'Ym94X2J1Y2tldA==');
 
 @$core.Deprecated('Use listChatsRequestDescriptor instead')
 const ListChatsRequest$json = {
@@ -2653,3 +2673,80 @@ const ValidateRoleOverrideTargetResponse$json = {
 /// Descriptor for `ValidateRoleOverrideTargetResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List validateRoleOverrideTargetResponseDescriptor =
     $convert.base64Decode('CiJWYWxpZGF0ZVJvbGVPdmVycmlkZVRhcmdldFJlc3BvbnNl');
+
+@$core.Deprecated('Use getChatPermissionsRequestDescriptor instead')
+const GetChatPermissionsRequest$json = {
+  '1': 'GetChatPermissionsRequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+  ],
+};
+
+/// Descriptor for `GetChatPermissionsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatPermissionsRequestDescriptor =
+    $convert.base64Decode(
+        'ChlHZXRDaGF0UGVybWlzc2lvbnNSZXF1ZXN0EhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZA==');
+
+@$core.Deprecated('Use getChatPermissionsResponseDescriptor instead')
+const GetChatPermissionsResponse$json = {
+  '1': 'GetChatPermissionsResponse',
+  '2': [
+    {'1': 'can_post_as_chat', '3': 1, '4': 1, '5': 8, '10': 'canPostAsChat'},
+    {'1': 'can_add_members', '3': 2, '4': 1, '5': 8, '10': 'canAddMembers'},
+    {
+      '1': 'can_manage_permissions',
+      '3': 3,
+      '4': 1,
+      '5': 8,
+      '10': 'canManagePermissions'
+    },
+    {
+      '1': 'member_additions_enabled',
+      '3': 4,
+      '4': 1,
+      '5': 8,
+      '10': 'memberAdditionsEnabled'
+    },
+    {
+      '1': 'explicit_post_as_chat',
+      '3': 5,
+      '4': 1,
+      '5': 8,
+      '10': 'explicitPostAsChat'
+    },
+  ],
+};
+
+/// Descriptor for `GetChatPermissionsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatPermissionsResponseDescriptor = $convert.base64Decode(
+    'ChpHZXRDaGF0UGVybWlzc2lvbnNSZXNwb25zZRInChBjYW5fcG9zdF9hc19jaGF0GAEgASgIUg'
+    '1jYW5Qb3N0QXNDaGF0EiYKD2Nhbl9hZGRfbWVtYmVycxgCIAEoCFINY2FuQWRkTWVtYmVycxI0'
+    'ChZjYW5fbWFuYWdlX3Blcm1pc3Npb25zGAMgASgIUhRjYW5NYW5hZ2VQZXJtaXNzaW9ucxI4Ch'
+    'htZW1iZXJfYWRkaXRpb25zX2VuYWJsZWQYBCABKAhSFm1lbWJlckFkZGl0aW9uc0VuYWJsZWQS'
+    'MQoVZXhwbGljaXRfcG9zdF9hc19jaGF0GAUgASgIUhJleHBsaWNpdFBvc3RBc0NoYXQ=');
+
+@$core.Deprecated('Use setChatMemberPostAsChatRequestDescriptor instead')
+const SetChatMemberPostAsChatRequest$json = {
+  '1': 'SetChatMemberPostAsChatRequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'target_profile_id', '3': 2, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {'1': 'allowed', '3': 3, '4': 1, '5': 8, '10': 'allowed'},
+  ],
+};
+
+/// Descriptor for `SetChatMemberPostAsChatRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setChatMemberPostAsChatRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5TZXRDaGF0TWVtYmVyUG9zdEFzQ2hhdFJlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdE'
+        'lkEioKEXRhcmdldF9wcm9maWxlX2lkGAIgASgJUg90YXJnZXRQcm9maWxlSWQSGAoHYWxsb3dl'
+        'ZBgDIAEoCFIHYWxsb3dlZA==');
+
+@$core.Deprecated('Use setChatMemberPostAsChatResponseDescriptor instead')
+const SetChatMemberPostAsChatResponse$json = {
+  '1': 'SetChatMemberPostAsChatResponse',
+};
+
+/// Descriptor for `SetChatMemberPostAsChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setChatMemberPostAsChatResponseDescriptor =
+    $convert.base64Decode('Ch9TZXRDaGF0TWVtYmVyUG9zdEFzQ2hhdFJlc3BvbnNl');
