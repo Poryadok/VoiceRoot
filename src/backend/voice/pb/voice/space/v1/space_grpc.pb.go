@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	SpaceService_GetMemberAdmissionAuthority_FullMethodName       = "/voice.space.v1.SpaceService/GetMemberAdmissionAuthority"
 	SpaceService_CreateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/CreateSpace"
 	SpaceService_UpdateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/UpdateSpace"
 	SpaceService_UpdateSpaceMmConfig_FullMethodName               = "/voice.space.v1.SpaceService/UpdateSpaceMmConfig"
@@ -80,6 +81,9 @@ const (
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceClient interface {
+	// Narrow native membership authority; own DB only, no Role callback.
+	// @voice.security=protected;callers=service:role
+	GetMemberAdmissionAuthority(ctx context.Context, in *GetMemberAdmissionAuthorityRequest, opts ...grpc.CallOption) (*GetMemberAdmissionAuthorityResponse, error)
 	CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*CreateSpaceResponse, error)
 	UpdateSpace(ctx context.Context, in *UpdateSpaceRequest, opts ...grpc.CallOption) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
@@ -172,6 +176,16 @@ type spaceServiceClient struct {
 
 func NewSpaceServiceClient(cc grpc.ClientConnInterface) SpaceServiceClient {
 	return &spaceServiceClient{cc}
+}
+
+func (c *spaceServiceClient) GetMemberAdmissionAuthority(ctx context.Context, in *GetMemberAdmissionAuthorityRequest, opts ...grpc.CallOption) (*GetMemberAdmissionAuthorityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMemberAdmissionAuthorityResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetMemberAdmissionAuthority_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *spaceServiceClient) CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*CreateSpaceResponse, error) {
@@ -710,6 +724,9 @@ func (c *spaceServiceClient) GetSpaceDeletionCoordinatorStatus(ctx context.Conte
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceServer interface {
+	// Narrow native membership authority; own DB only, no Role callback.
+	// @voice.security=protected;callers=service:role
+	GetMemberAdmissionAuthority(context.Context, *GetMemberAdmissionAuthorityRequest) (*GetMemberAdmissionAuthorityResponse, error)
 	CreateSpace(context.Context, *CreateSpaceRequest) (*CreateSpaceResponse, error)
 	UpdateSpace(context.Context, *UpdateSpaceRequest) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
@@ -804,6 +821,9 @@ type SpaceServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSpaceServiceServer struct{}
 
+func (UnimplementedSpaceServiceServer) GetMemberAdmissionAuthority(context.Context, *GetMemberAdmissionAuthorityRequest) (*GetMemberAdmissionAuthorityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMemberAdmissionAuthority not implemented")
+}
 func (UnimplementedSpaceServiceServer) CreateSpace(context.Context, *CreateSpaceRequest) (*CreateSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSpace not implemented")
 }
@@ -982,6 +1002,24 @@ func RegisterSpaceServiceServer(s grpc.ServiceRegistrar, srv SpaceServiceServer)
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&SpaceService_ServiceDesc, srv)
+}
+
+func _SpaceService_GetMemberAdmissionAuthority_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMemberAdmissionAuthorityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetMemberAdmissionAuthority(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetMemberAdmissionAuthority_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetMemberAdmissionAuthority(ctx, req.(*GetMemberAdmissionAuthorityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _SpaceService_CreateSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1945,6 +1983,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.space.v1.SpaceService",
 	HandlerType: (*SpaceServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetMemberAdmissionAuthority",
+			Handler:    _SpaceService_GetMemberAdmissionAuthority_Handler,
+		},
 		{
 			MethodName: "CreateSpace",
 			Handler:    _SpaceService_CreateSpace_Handler,
