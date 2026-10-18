@@ -134,7 +134,8 @@ class NativeAuthorizeTests(unittest.TestCase):
             self.assertEqual(events, ["contract-job", "migration-build", "migration-apply",
                                       "post-archive", "post-census"])
             self.assertEqual([call[0] for call in api.calls],
-                             ["migration-view"] + ["get-configmap"] * 3 + ["cas-configmap"] * 3)
+                             ["migration-view", "get-configmap", "cas-configmap",
+                              "get-configmap", "cas-configmap", "get-configmap", "cas-configmap"])
             self.assertEqual(receipt["operation"], OP)
             self.assertEqual(receipt["backup"]["archive_sha256"], "a" * 64)
             self.assertEqual(state["phase"], "PAUSED_APPLY")
