@@ -110,7 +110,8 @@ func CheckRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
 	}
 	var unsafe bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=current_user AND (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls))
- OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid IN ('voice_party_coverage_receipts'::regclass,'voice_party_coverage_head'::regclass,'voice_party_coverage_operations'::regclass,'voice_party_coverage_steps'::regclass)
+ OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid IN ('voice_party_coverage_receipts'::regclass,'voice_party_coverage_head'::regclass,'voice_party_coverage_operations'::regclass,'voice_party_coverage_steps'::regclass,
+ to_regclass('voice_party_resource_components'),to_regclass('voice_party_resource_retirements'),to_regclass('voice_party_resource_component_links'))
  AND (pg_has_role(current_user,c.relowner,'USAGE') OR has_schema_privilege(current_user,c.relnamespace,'CREATE') OR has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')))`).Scan(&unsafe)
 	if err != nil || unsafe {
 		return ErrUnavailable
