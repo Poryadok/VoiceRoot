@@ -20,6 +20,60 @@
 
 ## API (gRPC)
 
+### Chat management permissions (accepted target)
+
+This target extends the existing standalone owner/admin official-publication
+baseline; it does not invalidate the BE-187 official-thread authorization fix.
+For ordinary human-owned standalone groups and channels Chat owns
+`member_additions_enabled` (default true) and a membership-scoped
+`post_as_chat` grant (default false). Current owner/admin implicitly have both
+capabilities and may manage these settings. An ordinary member can add only
+while the toggle is enabled and use the chat identity only with an explicit
+grant. Send/settings permissions never imply either capability.
+
+`GetChatPermissions(chat_id)` returns caller-relative
+`can_post_as_chat`, `can_add_members`, `can_manage_permissions`,
+`member_additions_enabled`, and `explicit_post_as_chat`.
+`UpdateChat.member_additions_enabled` is optional; omission preserves the
+setting. `SetChatMemberPostAsChat(chat_id, target_profile_id, allowed)` is an
+idempotent owner/admin operation on a current ordinary member. No actor is
+selected by an untrusted request body. Member-management projections expose
+the explicit grant only to authorized roster readers.
+
+All mutations recheck current actor/target membership and role in the same
+Chat transaction as the write. AddMembers rechecks its caller and toggle in
+the roster transaction. Leave/kick/profile cleanup removes the explicit grant
+with membership; rejoin starts without it. Promotion never creates a grant.
+Demotion/ownership transfer removes implicit authority but preserves a
+separately explicit grant throughout that same membership. Toggle false does
+not remove existing people. Chat-row then membership locks serialize changes.
+No historical send/settings/user-feed value is migrated into an explicit grant.
+
+Messaging obtains a fresh Chat decision for the authenticated sender and actual
+stored destination before official main-feed/thread/send/forward/commentary
+writes. Missing/unavailable authority fails closed; no cached UI grant, forged
+ChatRef, or local owner field is proof. Cross-service authorization linearizes
+at the completed fresh decision, not at a fictional shared transaction.
+Other privacy, guest/account, media, moderation, E2E, thread and feed-mode gates
+still apply. False policy is PermissionDenied; malformed IDs InvalidArgument;
+unsupported scope/configuration FailedPrecondition; dependency failure
+Unavailable, with existing missing-resource visibility semantics preserved.
+
+DM, GIS-managed and MatchSquad chats reject ordinary grant/toggle operations.
+Guest policy retains its existing gates; this target adds no blanket ban or
+guest initiation permission. Space chats never use standalone setters or local
+AddMembers. Their membership belongs to Space and authority to Role.
+
+For a chat in a Space, adding a person means inviting them into its parent Space
+through the existing admission rules, then opening the specific invited chat
+after successful authorized entry. Preserve the target binding across pending
+admission and retry. Current members are not inserted twice and still require
+current target-chat visibility/access. Never disclose or open unauthorized
+content, bypass bans/caps/entry policy/hierarchy/channel ACL, or create chat-only
+Space membership. Distinct Role authority, durable invitation binding and
+Gateway/client continuation are part of the full target; standalone support
+alone is not completion of this requirement.
+
 `CreateChatRequest.request_id` необязателен для совместимости существующих
 клиентов. Канонический UUID связывается с аутентифицированным
 `creator_profile_id`; в той же транзакции Chat сохраняет хэш нормализованных

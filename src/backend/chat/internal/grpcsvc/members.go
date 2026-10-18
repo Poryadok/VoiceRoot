@@ -91,10 +91,11 @@ func (s *ChatGRPC) ListMembers(ctx context.Context, req *chatv1.ListMembersReque
 	for i := range slice {
 		m := slice[i]
 		cm := &chatv1.ChatMember{
-			ProfileId:  m.ProfileID.String(),
-			Role:       m.Role,
-			JoinedAt:   timestamppb.New(m.JoinedAt.UTC()),
-			IsArchived: m.IsArchived,
+			ProfileId:          m.ProfileID.String(),
+			Role:               m.Role,
+			JoinedAt:           timestamppb.New(m.JoinedAt.UTC()),
+			IsArchived:         m.IsArchived,
+			ExplicitPostAsChat: m.PostAsChat,
 		}
 		if m.MutedUntil.Valid {
 			cm.MutedUntil = timestamppb.New(m.MutedUntil.Time.UTC())

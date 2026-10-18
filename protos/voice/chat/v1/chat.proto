@@ -27,6 +27,10 @@ service ChatService {
   rpc SetGroupMemberRole(SetGroupMemberRoleRequest) returns (SetGroupMemberRoleResponse);
   rpc TransferGroupOwnership(TransferGroupOwnershipRequest) returns (TransferGroupOwnershipResponse);
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  // Caller-relative standalone human-chat capabilities. No body-selected actor.
+  rpc GetChatPermissions(GetChatPermissionsRequest) returns (GetChatPermissionsResponse);
+  // Current owner/admin manages an ordinary member's membership-scoped grant.
+  rpc SetChatMemberPostAsChat(SetChatMemberPostAsChatRequest) returns (SetChatMemberPostAsChatResponse);
 
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse);
   rpc GetChat(GetChatRequest) returns (GetChatResponse);
@@ -321,6 +325,7 @@ message UpdateChatRequest {
   optional bool threads_enabled = 6;
   optional bool allow_user_main_feed = 7;
   optional bool allow_guests = 8;
+  optional bool member_additions_enabled = 9;
 }
 
 message DeleteChatRequest {
@@ -371,6 +376,7 @@ message ChatMember {
   optional google.protobuf.Timestamp muted_until = 4;
   bool is_archived = 5;
   optional string inbox_bucket = 6; // main | requests | declined (S2S / notification routing)
+  bool explicit_post_as_chat = 7;
 }
 
 message ListChatsRequest {
@@ -728,3 +734,23 @@ message CanCreateDMRequest {
 message CanCreateDMResponse {
   bool allowed = 1;
 }
+
+message GetChatPermissionsRequest {
+  string chat_id = 1;
+}
+
+message GetChatPermissionsResponse {
+  bool can_post_as_chat = 1;
+  bool can_add_members = 2;
+  bool can_manage_permissions = 3;
+  bool member_additions_enabled = 4;
+  bool explicit_post_as_chat = 5;
+}
+
+message SetChatMemberPostAsChatRequest {
+  string chat_id = 1;
+  string target_profile_id = 2;
+  bool allowed = 3;
+}
+
+message SetChatMemberPostAsChatResponse {}
