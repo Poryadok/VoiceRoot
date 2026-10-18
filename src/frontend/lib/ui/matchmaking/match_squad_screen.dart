@@ -36,12 +36,13 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
   static const _uuid = Uuid();
   String? _completeOperationId;
   bool _joiningVoice = false;
+  bool _leavingSquad = false;
 
   Future<void> _joinSquadVoice() async {
     final voiceRoomId = widget.match.voiceRoomId;
     if (voiceRoomId == null || voiceRoomId.isEmpty) return;
     if (!ref.read(gatewayConfigProvider).canPlaceVoiceCalls) return;
-    if (_joiningVoice) return;
+    if (_joiningVoice || _leavingSquad) return;
     setState(() => _joiningVoice = true);
     try {
       await ref
@@ -166,36 +167,58 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
               constraints: const BoxConstraints(maxWidth: 620),
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    if (chatId != null && chatId.isNotEmpty)
-                      OutlinedButton.icon(
-                        key: MatchSquadScreen.openChatButtonKey,
-                        onPressed: () => _openMatchChat(context),
-                        icon: const Icon(Icons.chat_bubble_outline),
-                        label: Text(l10n.matchSquadOpenChat),
+                child: FocusTraversalGroup(
+                  policy: OrderedTraversalPolicy(),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      if (chatId != null && chatId.isNotEmpty)
+                        FocusTraversalOrder(
+                          order: const NumericFocusOrder(1),
+                          child: _ActionFocusOutline(
+                            child: OutlinedButton.icon(
+                              key: MatchSquadScreen.openChatButtonKey,
+                              onPressed: () => _openMatchChat(context),
+                              icon: const Icon(Icons.chat_bubble_outline),
+                              label: Text(l10n.matchSquadOpenChat),
+                            ),
+                          ),
+                        ),
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(2),
+                        child: _ActionFocusOutline(
+                          child: OutlinedButton.icon(
+                            key: MatchSquadScreen.leaveButtonKey,
+                            onPressed: _joiningVoice || _leavingSquad
+                                ? null
+                                : () => _leaveSquad(context),
+                            icon: const Icon(Icons.logout),
+                            label: Text(l10n.matchSquadLeave),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.error,
+                            ),
+                          ),
+                        ),
                       ),
-                    OutlinedButton.icon(
-                      key: MatchSquadScreen.leaveButtonKey,
-                      onPressed: () => _leaveSquad(context),
-                      icon: const Icon(Icons.logout),
-                      label: Text(l10n.matchSquadLeave),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                    if (hasVoice && !isJoinedToThisMatch)
-                      FilledButton.icon(
-                        key: MatchSquadScreen.joinVoiceButtonKey,
-                        onPressed: canPlaceVoiceCalls && !_joiningVoice
-                            ? _joinSquadVoice
-                            : null,
-                        icon: const Icon(Icons.headset_mic_outlined),
-                        label: Text(l10n.callGroupVoiceJoin),
-                      ),
-                  ],
+                      if (hasVoice && !isJoinedToThisMatch)
+                        FocusTraversalOrder(
+                          order: const NumericFocusOrder(3),
+                          child: _ActionFocusOutline(
+                            child: FilledButton.icon(
+                              key: MatchSquadScreen.joinVoiceButtonKey,
+                              onPressed: canPlaceVoiceCalls && !_joiningVoice
+                                  ? _joinSquadVoice
+                                  : null,
+                              icon: const Icon(Icons.headset_mic_outlined),
+                              label: Text(l10n.callGroupVoiceJoin),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -206,43 +229,93 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
   }
 
   Future<void> _leaveSquad(BuildContext context) async {
+    if (_joiningVoice || _leavingSquad) return;
     final l10n = AppLocalizations.of(context)!;
     final token = ref.read(authControllerProvider).session?.accessToken;
     if (token == null || token.isEmpty) return;
 
-    final voiceLeave = await ref
-        .read(callControllerProvider.notifier)
-        .leaveMatchSquad(matchId: widget.match.id);
-    if (voiceLeave case VoiceApiFailure()) {
+    setState(() => _leavingSquad = true);
+    try {
+      final voiceLeave = await ref
+          .read(callControllerProvider.notifier)
+          .leaveMatchSquad(matchId: widget.match.id);
+      if (voiceLeave case VoiceApiFailure()) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
+        return;
+      }
+
+      final client = ref.read(voiceMatchmakingClientProvider);
+      final result = await client.completeMatch(
+        authorization: 'Bearer $token',
+        matchId: widget.match.id,
+        operationId: _completeOperationId ??= _uuid.v4(),
+      );
+
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
-      return;
-    }
 
-    final client = ref.read(voiceMatchmakingClientProvider);
-    final result = await client.completeMatch(
-      authorization: 'Bearer $token',
-      matchId: widget.match.id,
-      operationId: _completeOperationId ??= _uuid.v4(),
+      if (result is MatchmakingApiFailure) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
+        return;
+      }
+
+      final completed = (result as MatchmakingApiOk<MatchData>).data;
+      _completeOperationId = null;
+      ref
+          .read(matchmakingRatingControllerProvider.notifier)
+          .showRatingForMatch(completed);
+      Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _leavingSquad = false);
+    }
+  }
+}
+
+class _ActionFocusOutline extends StatelessWidget {
+  const _ActionFocusOutline({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      skipTraversal: true,
+      canRequestFocus: false,
+      child: Builder(
+        builder: (context) {
+          final hasKeyboardFocus =
+              Focus.of(context).hasFocus &&
+              FocusManager.instance.highlightMode ==
+                  FocusHighlightMode.traditional;
+          final colors = Theme.of(context).colorScheme;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              child,
+              if (hasKeyboardFocus)
+                Positioned.fill(
+                  left: -3,
+                  top: -3,
+                  right: -3,
+                  bottom: -3,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: colors.primary, width: 2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
     );
-
-    if (!context.mounted) return;
-
-    if (result is MatchmakingApiFailure) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
-      return;
-    }
-
-    final completed = (result as MatchmakingApiOk<MatchData>).data;
-    _completeOperationId = null;
-    ref
-        .read(matchmakingRatingControllerProvider.notifier)
-        .showRatingForMatch(completed);
-    Navigator.of(context).pop();
   }
 }
 

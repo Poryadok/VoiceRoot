@@ -13,7 +13,9 @@ import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/matchmaking_rating_controller.dart';
 import 'package:voice_frontend/state/social_providers.dart';
@@ -49,6 +51,7 @@ Widget _postMatchFixture(http.Client client) => ProviderScope(
     authControllerProvider.overrideWith(authenticatedAuthController),
     selectedChatIdProvider.overrideWith((ref) => 'inactive-chat'),
     realtimeAutoConnectProvider.overrideWithValue(false),
+    voiceInputSettingsProvider.overrideWith(_TestVoiceInputSettings.new),
     gatewayConfigProvider.overrideWithValue(
       const GatewayConfig(baseUrl: 'http://localhost:9999'),
     ),
@@ -124,6 +127,7 @@ void main() {
         authControllerProvider.overrideWith(authenticatedAuthController),
         selectedChatIdProvider.overrideWith((ref) => 'inactive-chat'),
         realtimeAutoConnectProvider.overrideWithValue(false),
+        voiceInputSettingsProvider.overrideWith(_TestVoiceInputSettings.new),
         gatewayConfigProvider.overrideWithValue(
           GatewayConfig(baseUrl: gatewayBaseUrl),
         ),
@@ -231,10 +235,21 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
+    final oldHighlightStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() {
+      FocusManager.instance.highlightStrategy = oldHighlightStrategy;
+    });
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     // Dispose explicitly because the test binding checks semantics handles
     // before invoking registered tear-down callbacks.
     await tester.pumpWidget(
       testApp(
+        gatewayBaseUrl: 'http://localhost:9999',
         home: MatchSquadScreen(
           match: MatchData(
             id: 'match-accessibility',
@@ -255,10 +270,45 @@ void main() {
     expect(find.bySemanticsLabel('Open chat'), findsOneWidget);
     expect(find.bySemanticsLabel('Leave squad'), findsOneWidget);
 
+    final profileRow = find.byKey(
+      MatchSquadScreen.playerProfileKey('profile-1'),
+    );
+    final openChat = find.byKey(MatchSquadScreen.openChatButtonKey);
+    final leave = find.byKey(MatchSquadScreen.leaveButtonKey);
+    final joinVoice = find.byKey(MatchSquadScreen.joinVoiceButtonKey);
+    await _tabUntilPrimaryFocusWithin(tester, profileRow);
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
-    final firstTabFocus = tester.binding.focusManager.primaryFocus;
-    expect(firstTabFocus, isNotNull);
+    expect(_primaryFocusWithin(tester, openChat), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, leave), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusWithin(tester, joinVoice),
+      isTrue,
+      reason: _primaryFocusElementChain(),
+    );
+    await expectLater(
+      find.byType(MatchSquadScreen),
+      matchesGoldenFile('goldens/match_squad_keyboard_focus.png'),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, leave), isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, openChat), isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, profileRow), isTrue);
     semantics.dispose();
   });
 
@@ -443,6 +493,122 @@ void main() {
     );
     expect(voicePaths.where((path) => path.endsWith('/voice/leave')), isEmpty);
     expect(voicePaths.where((path) => path.endsWith('/complete')), isEmpty);
+  });
+
+  testWidgets('MatchSquad waits for an in-flight voice join before leaving', (
+    tester,
+  ) async {
+    final joinResponse = Completer<http.Response>();
+    final joinRequested = Completer<void>();
+    final paths = <String>[];
+    final client = MockClient((request) async {
+      paths.add(request.url.path);
+      switch (request.url.path) {
+        case '/api/v1/matchmaking/matches/match-race/voice/join':
+          joinRequested.complete();
+          return joinResponse.future;
+        case '/api/v1/matchmaking/matches/match-race/voice/token':
+          return http.Response(
+            jsonEncode({
+              'token': {'jwt': 'opaque'},
+              'media_epoch': 'stale-epoch',
+            }),
+            200,
+          );
+        case '/api/v1/matchmaking/matches/match-race/voice/leave':
+          return http.Response(
+            jsonEncode({
+              'call_session': {
+                'room_id': 'room-race',
+                'livekit_room_name': 'squad-room',
+                'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+                'status': 'CALL_STATUS_ACTIVE',
+              },
+              'media_epoch': 'epoch-current',
+              'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_LEFT',
+            }),
+            200,
+          );
+        case '/api/v1/matchmaking/matches/match-race/complete':
+          return http.Response(
+            jsonEncode({
+              'match': {
+                'id': 'match-race',
+                'game_id': 'game-1',
+                'mode': 'ranked',
+                'region': 'eu',
+                'status': 'completed',
+                'profile_ids': ['prof-test', 'profile-2'],
+              },
+            }),
+            200,
+          );
+        default:
+          return http.Response('{}', 404);
+      }
+    });
+
+    await tester.pumpWidget(_postMatchFixture(client));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byKey(SocialPanel.panelKey))).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MatchSquadScreen(
+          match: MatchData(
+            id: 'match-race',
+            gameId: 'game-1',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['prof-test', 'profile-2'],
+            voiceRoomId: 'room-race',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(MatchSquadScreen.joinVoiceButtonKey));
+    await tester.pump();
+    await joinRequested.future;
+    final leaveButton = tester.widget<OutlinedButton>(
+      find.byKey(MatchSquadScreen.leaveButtonKey),
+    );
+    expect(leaveButton.onPressed, isNull);
+
+    await tester.tap(find.byKey(MatchSquadScreen.leaveButtonKey));
+    await tester.pump();
+    expect(paths.where((path) => path.endsWith('/complete')), isEmpty);
+    expect(paths.where((path) => path.endsWith('/voice/leave')), isEmpty);
+
+    joinResponse.complete(
+      http.Response(
+        jsonEncode({
+          'call_session': {
+            'room_id': 'room-race',
+            'livekit_room_name': 'squad-room',
+            'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+            'status': 'CALL_STATUS_ACTIVE',
+          },
+          'media_epoch': 'epoch-current',
+          'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED',
+        }),
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(MatchSquadScreen.leaveButtonKey));
+    await tester.pumpAndSettle();
+    expect(
+      paths.indexOf('/api/v1/matchmaking/matches/match-race/voice/leave'),
+      lessThan(
+        paths.indexOf('/api/v1/matchmaking/matches/match-race/complete'),
+      ),
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(SocialPanel.panelKey)),
+    );
+    expect(container.read(callControllerProvider).session, isNull);
   });
 
   testWidgets('MatchSquad leaves Voice membership before completing the match', (
@@ -882,4 +1048,47 @@ void main() {
       isEmpty,
     );
   });
+}
+
+class _TestVoiceInputSettings extends VoiceInputSettingsNotifier {
+  @override
+  VoiceInputSettings build() => const VoiceInputSettings();
+}
+
+bool _primaryFocusWithin(WidgetTester tester, Finder target) {
+  final focusContext = FocusManager.instance.primaryFocus?.context;
+  if (focusContext == null) return false;
+  final targetElement = tester.element(target);
+  var found = false;
+  focusContext.visitAncestorElements((ancestor) {
+    if (identical(ancestor, targetElement)) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+String _primaryFocusElementChain() {
+  final context = FocusManager.instance.primaryFocus?.context;
+  if (context is! Element) return '$context';
+  final types = <String>[];
+  context.visitAncestorElements((ancestor) {
+    types.add(ancestor.widget.runtimeType.toString());
+    return true;
+  });
+  return types.join(' <- ');
+}
+
+Future<void> _tabUntilPrimaryFocusWithin(
+  WidgetTester tester,
+  Finder target,
+) async {
+  for (var attempt = 0; attempt < 80; attempt++) {
+    if (_primaryFocusWithin(tester, target)) return;
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+  }
+  expect(_primaryFocusWithin(tester, target), isTrue);
 }
