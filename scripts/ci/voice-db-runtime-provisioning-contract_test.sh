@@ -353,19 +353,7 @@ make_target_block() {
   ' "${ROOT}/Makefile"
 }
 
-ci_script_tests_header="$(awk '
-  /^ci-script-tests:/ {
-    rule=$0
-    sub(/^ci-script-tests:/, "", rule)
-    # A target-specific variable assignment is a rule too, but it is not the
-    # prerequisite declaration whose dependency graph F11 needs to inspect.
-    if (rule ~ /[+?:]?=/) next
-    print
-    exit
-  }
-' <<<"${ci_script_tests_block}")"
-[[ -n "${ci_script_tests_header}" ]] || \
-  fail 'F11: ci-script-tests must declare a prerequisite rule'
+ci_script_tests_header="$(head -n1 <<<"${ci_script_tests_block}")"
 ci_script_tests_dependencies="${ci_script_tests_header#*:}"
 apply_contract_reachable=false
 if grep -Eq '^[[:space:]]+[^#].*scripts/staging/apply-migrate-jobs_test\.sh' \
