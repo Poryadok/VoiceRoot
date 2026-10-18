@@ -8,13 +8,15 @@ from bootstrap_selection import select
 from bootstrap_root import secret_bytes
 from controller import Blocked
 from docker_runtime import NATS_IMAGE
-from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,compile_plan,digest
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V4_SCHEMA,SCHEMA,V5_SOURCE_HASHES,compile_plan,digest
 from rollout_census import census
 from stage_runtime import HUB
 
 TARGET_FILES={'realtime':'1122d97dca3b185aecb43e0ae41d1c255d0adc46090f9f1c3dd8faf4ee294d31',
     'analytics-chat':'7f37cdee8a59a245998371a4eddb0d4c80be965086ee06a5f30e8bd75b05d4b1',
     'search':'997b35cc0526eda5bead2a6ecfba95df59423c800fa7e960599466b3ee51334a'}
+V4_TARGET_FILES=TARGET_FILES
+V5_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-bootstrap.yaml'):sha for path,sha in V5_SOURCE_HASHES.items()}
 def fail():raise Blocked('nats_migration_root_preflight_refused')
 
 _LEGACY_AUTH_KEYS={'verified','server_image','account_sha256','reply_prefix','normalized_consumer','normalized_consumer_sha256'}
@@ -79,9 +81,18 @@ def closed_copy_preflight(kube,source,enrollment,contract,decoder,runtime,broker
 
 def _from_tree(kube,source,enrollment,contract,decoder,tree):
     generation=enrollment['binding']['generation'];select(kube,enrollment,generation)
-    for role,wanted in TARGET_FILES.items():
+    actual={}
+    for role in TARGET_FILES:
         path=Path(source)/('deploy/templates/nats-'+role+'-bootstrap.yaml')
-        if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest()!=wanted:fail()
+        if path.is_symlink() or not path.is_file():fail()
+        actual[role]=hashlib.sha256(path.read_bytes()).hexdigest()
+    # Select the complete reviewed source tuple. No per-file old/new mixing.
+    notification=Path(source)/'deploy/templates/nats-notification-bootstrap.yaml'
+    v5_actual=dict(actual)
+    if not notification.is_symlink() and notification.is_file():v5_actual['notification']=hashlib.sha256(notification.read_bytes()).hexdigest()
+    if v5_actual==V5_TARGET_FILES:version=SCHEMA
+    elif actual==TARGET_FILES:version=V4_SCHEMA
+    else:fail()
     account=secret_bytes(kube.get('secret','voice-nats-operator-'+generation),'account.public').decode().strip()
     class Runtime:
         def monitor_jsz(self,broker):return tree
@@ -98,12 +109,19 @@ def _from_tree(kube,source,enrollment,contract,decoder,tree):
     def unchanged():select(kube,enrollment,generation)
     live_auth=prove(secret_bytes(kube.get('secret',enrollment['secret']['name']),'bootstrap.creds'),kube.get('secret','voice-nats-operator-'+generation),unchanged)
     normalized=_validated_normalized_consumers(live_auth,enrollment['auth_proof'])
-    plan=compile_plan(source,streams,current,normalized)
+    plan=compile_plan(source,streams,current,normalized,version=version)
+    selected=V5_TARGET_FILES if version==SCHEMA else TARGET_FILES
+    expected_sources={'deploy/templates/nats-'+part+'-bootstrap.yaml':sha for part,sha in selected.items()}
+    planned_paths=set(expected_sources) if version==SCHEMA else set(expected_sources)-{'deploy/templates/nats-search-bootstrap.yaml'}
+    if plan['sources']!={path:expected_sources[path] for path in planned_paths}:fail()
     scripts={}
-    for old in contract['scripts']:
-        part=old['part']
-        if part not in TARGET_FILES:continue
-        text=(Path(source)/('deploy/templates/nats-'+part+'-bootstrap.yaml')).read_text(encoding='utf8').replace('__NAMESPACE__','voice-staging').replace('__K_NAMESPACE__','voice-staging')
+    for part in selected:
+        if sum(old['part']==part for old in contract['scripts'])!=1:fail()
+        path=Path(source)/('deploy/templates/nats-'+part+'-bootstrap.yaml')
+        if path.is_symlink() or not path.is_file():fail()
+        raw=path.read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=selected[part]:fail()
+        text=raw.decode('utf8').replace('__NAMESPACE__','voice-staging').replace('__K_NAMESPACE__','voice-staging')
         cm=decoder(re.split(r'^---\s*$',text,flags=re.MULTILINE)[0].encode())
         if cm['kind']!='ConfigMap' or cm['metadata']['name']!='voice-nats-'+part+'-bootstrap':fail()
         script=cm['data']['bootstrap.sh'];scripts[part]={'sha256':hashlib.sha256(script.encode()).hexdigest(),'script':script}

@@ -14,7 +14,8 @@ class Tests(unittest.TestCase):
         actual={grant for grant in grants if grant.startswith('$JS.API.CONSUMER.')}
         self.assertEqual(actual,expected)
         self.assertEqual({grant for grant in grants if grant.startswith('$JS.API.STREAM.UPDATE.')},
-            {'$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.STREAM.UPDATE.role_events'})
+            {'$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.STREAM.UPDATE.role_events',
+             '$JS.API.STREAM.UPDATE.voice_events','$JS.API.STREAM.UPDATE.user_events'})
         self.assertEqual(len(grants),len(set(grants)))
         self.assertFalse(any('*' in grant or '>' in grant for grant in grants))
 

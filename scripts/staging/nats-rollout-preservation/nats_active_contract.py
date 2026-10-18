@@ -1,7 +1,7 @@
 """Exact active-contract receipt versions accepted by the rollout bridge."""
 import re
 from controller import Blocked
-from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V3_MIGRATION_ID,MIGRATION_ID as CURRENT_NATS_MIGRATION_ID
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V3_MIGRATION_ID,V4_MIGRATION_ID,V5_SOURCE_HASHES,MIGRATION_ID as CURRENT_NATS_MIGRATION_ID
 
 LEGACY_NATS_MIGRATION_ID='space-chat-social-24h-friend-removed-v1'
 SOURCE_PATHS=('deploy/templates/nats-realtime-bootstrap.yaml',
@@ -9,7 +9,8 @@ SOURCE_PATHS=('deploy/templates/nats-realtime-bootstrap.yaml',
 VERSIONS={
     LEGACY_NATS_MIGRATION_ID:('voice-nats-additive-census-proof-v1',(('social_events','rt_realtime1_friend_removed'),)),
     V3_MIGRATION_ID:('voice-nats-additive-census-proof-v2',tuple((s,c['durable_name']) for s,c in V3_DECLARATIONS)),
-    CURRENT_NATS_MIGRATION_ID:('voice-nats-additive-census-proof-v3',tuple((s,c['durable_name']) for s,c in DECLARATIONS)),
+    V4_MIGRATION_ID:('voice-nats-additive-census-proof-v3',tuple((s,c['durable_name']) for s,c in DECLARATIONS)),
+    CURRENT_NATS_MIGRATION_ID:('voice-nats-additive-census-proof-v4',tuple((s,c['durable_name']) for s,c in DECLARATIONS)),
 }
 PROOF_KEYS={'schema','migration_id','before_sha256','after_sha256','messages',
     'old_consumers_preserved','created_consumers'}
@@ -25,17 +26,19 @@ def _recovery_attempt_matches(attempt,*,opened=False):
         and all(_bounded_text(attempt[key]) for key in required)
         and (not opened or attempt['kind']=='nats_contract_broker_opened'))
 
-def _stream_updates_match(value):
-    if not isinstance(value,dict) or len(value)>3:return False
+def _allowed_streams(migration_id):
+    return ('chat_events','social_events','role_events')+(('voice_events','user_events') if migration_id==CURRENT_NATS_MIGRATION_ID else ())
+def _stream_updates_match(value,migration_id):
+    if not isinstance(value,dict) or len(value)>len(_allowed_streams(migration_id)):return False
     for stream,row in value.items():
-        if (stream not in ('chat_events','social_events','role_events') or not isinstance(row,dict)
+        if (stream not in _allowed_streams(migration_id) or not isinstance(row,dict)
             or set(row)!={'attempt','target_config_sha256','native_created'}
             or not _recovery_attempt_matches(row.get('attempt'),opened=True)
             or not _sha256(row.get('target_config_sha256')) or not _bounded_text(row.get('native_created'))):
             return False
     return True
 
-def _observations_match(observations):
+def _observations_match(observations,migration_id):
     if not isinstance(observations,list) or len(observations)>4096:return False
     consumer_keys={'stream','name','old_created','recovered_created','recovery','native_state_file_verified'}
     stream_keys={'stream','old_created','recovered_created','native_created','migration_attempt','fixed_update_verified'}
@@ -46,11 +49,14 @@ def _observations_match(observations):
             if (not all(_bounded_text(row.get(key)) for key in ('stream','name','old_created','recovered_created'))
                 or row.get('native_state_file_verified') is not True or not isinstance(recovery,dict)
                 or set(recovery) not in ({'server_image','container_id','started_at','finished_at'},
-                    {'server_image','container_id','started_at','finished_at','stream_updates'})
+                    {'server_image','container_id','started_at','finished_at','stream_updates'},
+                    {'server_image','container_id','started_at','finished_at','stream_updates','migration_id'})
                 or not all(_bounded_text(recovery.get(key)) for key in ('server_image','container_id','started_at','finished_at'))
-                or ('stream_updates' in recovery and not _stream_updates_match(recovery['stream_updates']))):return False
+                or ('migration_id' in recovery and (migration_id!=CURRENT_NATS_MIGRATION_ID or recovery['migration_id']!=migration_id))
+                or ('stream_updates' in recovery and not _stream_updates_match(recovery['stream_updates'],migration_id))):return False
         elif set(row)==stream_keys:
-            if (not all(_bounded_text(row.get(key)) for key in ('stream','old_created','recovered_created','native_created'))
+            if (row.get('stream') not in _allowed_streams(migration_id)
+                or not all(_bounded_text(row.get(key)) for key in ('stream','old_created','recovered_created','native_created'))
                 or row.get('fixed_update_verified') is not True
                 or not _recovery_attempt_matches(row.get('migration_attempt'),opened=True)):
                 return False
@@ -87,7 +93,7 @@ def _proof_matches(proof,migration_id):
         return False
     for key in ('messages','old_consumers_preserved','created_consumers'):
         if type(proof.get(key)) is not int or proof[key]<0:return False
-    if 'ephemeral_recovery_observations' in proof and not _observations_match(proof['ephemeral_recovery_observations']):return False
+    if 'ephemeral_recovery_observations' in proof and not _observations_match(proof['ephemeral_recovery_observations'],migration_id):return False
     return True
 
 def validate_identity(active_contract,expected,baseline_pairs):
@@ -109,8 +115,10 @@ def validate_identity(active_contract,expected,baseline_pairs):
     expected_pairs=sorted(set(baseline)|set(additions))
     if sorted(actual)!=expected_pairs:raise Blocked('nats_active_contract_identity_changed')
     sources=active_contract.get('sources')
-    if (not isinstance(sources,dict) or set(sources)!=set(SOURCE_PATHS)
-        or any(not _sha256(sources[path]) for path in SOURCE_PATHS)
+    paths=tuple(V5_SOURCE_HASHES) if migration_id==CURRENT_NATS_MIGRATION_ID else SOURCE_PATHS
+    if (not isinstance(sources,dict) or set(sources)!=set(paths)
+        or (migration_id==CURRENT_NATS_MIGRATION_ID and sources!=V5_SOURCE_HASHES)
+        or any(not _sha256(sources[path]) for path in paths)
         or not _sha256(active_contract.get('plan_sha256'))
         or not _proof_matches(active_contract.get('proof'),migration_id)):
         raise Blocked('nats_active_contract_identity_changed')
