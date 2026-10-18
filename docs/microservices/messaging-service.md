@@ -1,5 +1,31 @@
 # Messaging Service
 
+## Private committed-message spam evidence (BE-045)
+
+Every enabled successful insertion, including forward commentary, attachments,
+ghost-only messages and Bot/game output, allocates one account sequence and
+private immutable evidence row in the message transaction. Exact idempotency
+replay allocates none and returns the saved owner/result before fresh authority
+lookups. Chat/Space locks precede the account counter lock. Source time is
+monotonic database time at that lock, never a client timestamp.
+
+Ordinary ingress requires a verified Gateway delegated-user identity; Bot ingress
+requires its verified actor plus protected Bot-owned moderation-owner resolution.
+Fresh Auth subject/lifecycle and Moderation existing-state admission deny new
+muted/banned/deleted-owner sends before commit. Failed admissions create no count.
+The private dispatcher calls `voice.automod.v1.ModerationEvidenceService` with
+fresh request-bound credentials and mTLS. Public `message.sent`, logs and analytics
+gain no account/digest/plaintext fields. Moderation gains no arbitrary GetMessage.
+
+Messaging alone owns versioned HMAC keys and the versioned length-framed
+ToLower/TrimSpace text projection (main text, then authored forward commentary).
+Count mixed http/https schemes together; empty text and authoritative E2E mode
+produce metadata-only eligibility. Rotation emits aliases once in one event.
+Expired evidence is erased using a separate immutable terminal-expiry receipt;
+local account purge does not wait for delivery. Startup/backup restore requires
+the complete protected Auth terminal-subject snapshot before serving/replay.
+See [the accepted contract and execution plan](../testing/async-automod-exec-plan.md).
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)
@@ -997,3 +1023,10 @@ Messaging checks owner message existence and `deleted_at`. Privacy, membership, 
 Configuration and the finite protected transport/SQL/runtime proof route are in
 [report intake contract](../testing/report-intake-contract.md). This decision is
 an admission snapshot; it grants no later content/action permission.
+Producer/outbox startup follows the [automod restore barriers](../testing/async-automod-startup-restore.md).
+Local issuer publication is independent of send readiness. Before new sends or
+pending effect delivery, import complete authoritative terminal fences and verify
+source epoch/cursor against Moderation's bound provisioning ACK. A remote cursor
+ahead of local committed state closes admission for recovery; no baseline/epoch
+reset or HMAC key retirement can bypass it. Existing exact committed replay may
+return its saved result during bootstrap without creating new evidence.

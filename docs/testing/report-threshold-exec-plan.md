@@ -186,8 +186,50 @@ BE-137 immutable input `aca25d5ffe9cef3d0ac3edcf5ddb3f535eaccdf9` is ready.
 BE-045 contract `31d8d2358` pins the shared machine issuer, subject binding,
 account lock and closure callback. Atomic count/case/sanction/outbox, subject
 purge, worker activation, full risk checks and independent review remain open.
-Moderation migration versions are coordinated: intake 000005, automod 000006,
-threshold 000010. Do not deliver the enabling producer alone as task completion.
+Moderation migration versions are coordinated: scan stats 000005, automod 000006,
+intake 000007, threshold 000010. The intake rename and actual develop changes
+were consumed through `f453a544d4e0acd823bafbd48daf8f39d16d3d0e`; shared subject
+and signed Auth client inputs are `df2319328` and `25b4c1716`.
+
+2026-10-18 second checkpoint: a real PostgreSQL RED caught an ambiguous timestamp
+parameter in the rolling-window SQL (`42883`). Explicit `timestamptz` casts fixed
+it. The canonical assembled migration set then passed integer boundaries,
+distinct-account/nonvote controls, serializer failure rollback across case/
+sanction/log/outbox/subject, twenty concurrent claims on two profiles producing
+one account case, uncertain-ACK retry identity, closure cutoff with fresh-only
+requalification, terminal purge and delayed evidence fence tests. Actual NATS
+JetStream tests passed stable ID/bytes and malformed event rejection.
+
+The configured production `reportthreshold.Runtime` package passed an isolated
+activation test: ten opaque verified-domain receipts become VALID through the
+BE-137 hook; a signed mTLS User authority outage preserves the receipts and
+persists retry without sanctions; recovery drives the actual background worker
+through signed mTLS User/Auth owner fixtures, common subject registration and
+one atomically committed shadow ban to an acknowledged NATS event. This test
+uses contract owner fixtures, while the actual User PostgreSQL assembler and
+Java Auth producer were verified separately. It does not claim a real
+three-service deployment or final application startup integration.
+
+Expanded Linux Java checks passed 34 tests with zero skips: five report audience
+checks plus 29 existing Auth principal/service/interceptor regressions. The
+ordinary Auth definition excludes classification and the private listener
+rejects unrelated Auth methods. Application startup/hook registration with the
+BE-045 owner, full affected checks and independent review remain open. Do not
+deliver the enabling producer alone as task completion.
+
+Runtime configuration is deliberately separate from public intake. User's
+`USER_REPORT_THRESHOLD_PRINCIPAL_` listener defaults to 9466, admits only
+`service:moderation`, and requires its complete TLS/JWKS/replay configuration,
+`AUTH_ADDR`, `AUTH_CA_FILE`, `AUTH_TLS_SERVER_NAME`, and distinct current/next
+`SIGNING_KID`/`SIGNING_KEY_FILE` pairs (`NEXT_SIGNING_KID`,
+`NEXT_SIGNING_KEY_FILE`). Its public-key endpoint is
+`/.well-known/principal-jwks.json`; the configured Auth JWKS URL must serve this
+over trusted HTTPS. Auth's `AUTH_REPORT_AUDIENCE_ENABLED=true` listener defaults
+to 9465 and trusts only the fixed `user` JWKS entry, mTLS and shared replay.
+Moderation reuses BE-045's one issuer/client and configures
+`MODERATION_REPORT_THRESHOLD_{USER_ADDR,TLS_SERVER_NAME,CA_FILE,TLS_CERT_FILE,TLS_KEY_FILE}`.
+Partial configuration fails startup. No ordinary listener or static denominator
+is a fallback. Lookup and NATS outages persist bounded retry outside intake.
 
 The candidate scan must be complete within the deadline; large populations may
 need a proven owner projection later, not a silently capped count. Dedicated

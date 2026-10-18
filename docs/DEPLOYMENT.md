@@ -1449,3 +1449,31 @@ existing destination is an error, not permission to replace or retry a receipt.
 The replacement installer must contain this verifier before the ordinary guarded
 idle upgrade can use it. Preserve the earlier rejected upgrade and failure
 evidence; revalidate current terminal state and queue custody before activation.
+
+## Asynchronous automod startup and recovery (BE-045)
+
+The [startup/restore contract](testing/async-automod-startup-restore.md) defines
+the required private network routes, P0-P5 domain barriers and finite recovery
+checks. Process liveness, local authority readiness and public readiness are
+separate predicates. Auth/Moderation private mTLS issuer/authority listeners must
+be routable while public endpoints remain unready; they must not wait on the
+peer's public health. Dedicated private Kubernetes Services expose only these
+ports with `publishNotReadyAddresses: true`, and certificates cover their private
+DNS names. Public Services and Ingress retain their normal readiness gates.
+Compose bootstrap uses direct internal service DNS without reciprocal/transitive
+public `service_healthy` dependencies. Java JWKS fetch must supply its workload
+client keypair and CA, not only an anonymous HTTPS truststore.
+
+Ordinary restart obtains a fresh sealed terminal snapshot and closes finite
+restriction work for this boot before opening public/session/send/effect paths.
+Declared restore additionally requires verified, independently recovered terminal
+and sanction history/WAL/PITR through the selected recovery cut. Two mutually
+consistent old application backups do not prove completeness. Keep the restore
+manifest (store identities, backup/PITR boundaries, authority generation, terminal
+manifest and authoritative recovery-cut proof) with the actual recoverable
+records; quiesce/fence affected replicas before replacement. Missing history or
+an unexplained remote-ahead revision keeps admission/effects closed. Never reset
+a source epoch/cursor or manufacture a newer restriction revision to override it.
+
+These requirements describe source implementation and future authorized runtime
+verification; they are not evidence that a deployment or restore has run.

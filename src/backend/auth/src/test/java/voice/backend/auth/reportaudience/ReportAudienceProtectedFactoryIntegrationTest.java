@@ -74,6 +74,9 @@ class ReportAudienceProtectedFactoryIntegrationTest {
         var response=call(channel,credential,request);assertThat(response.getAccountsCount()).isEqualTo(1);assertThat(response.getAccounts(0).getState()).isEqualTo(ReportAudienceAccountState.REPORT_AUDIENCE_ACCOUNT_STATE_LIVE);
       });
       int read=databaseCalls.get();
+      assertThatThrownBy(()->AuthServiceGrpc.newBlockingStub(channel).withDeadlineAfter(3,TimeUnit.SECONDS).register(RegisterRequest.getDefaultInstance()))
+          .isInstanceOf(StatusRuntimeException.class).satisfies(ex->assertThat(((StatusRuntimeException)ex).getStatus().getCode()).isEqualTo(Status.Code.UNIMPLEMENTED));
+      assertThat(databaseCalls).as("dedicated listener exposes classification only").hasValue(read);
       assertThatThrownBy(()->call(channel,credential,request)).isInstanceOf(StatusRuntimeException.class);assertThat(databaseCalls).hasValue(read);
       var noCertificate=NettyChannelBuilder.forAddress("localhost",server.port()).sslContext(GrpcSslContexts.forClient().trustManager(certificate.toFile()).build()).build();channels.add(noCertificate);
       var plaintext=NettyChannelBuilder.forAddress("localhost",server.port()).usePlaintext().build();channels.add(plaintext);

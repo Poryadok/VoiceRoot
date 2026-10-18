@@ -132,12 +132,14 @@ func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row Message
 	if err := insertForwardCommentaryDB(ctx, tx, row); err != nil {
 		return nil, false, err
 	}
-	saved, err := insertMessageDB(ctx, tx, row)
+	saved, inserted, err := insertMessageDBResult(ctx, tx, row)
 	if err != nil {
 		return nil, false, err
 	}
-	inserted := saved.ID == row.ID
 	if inserted {
+		if err := s.appendAutoModEvidenceTx(ctx, tx, row); err != nil {
+			return nil, false, err
+		}
 		for _, event := range events {
 			if !compoundEventMatches(row, event) {
 				return nil, false, errors.New("message outbox event does not match inserted message")

@@ -484,6 +484,9 @@ VALUES ($1,$2,'dm',$3,$4,'regular',$5::jsonb,'[]'::jsonb)
 	if err != nil {
 		return nil, err
 	}
+	if err := s.appendAutoModEvidenceTx(ctx, tx, MessageRow{ID: message.MessageID, ChatID: message.ChatID, SenderProfileID: senderProfileID, Content: string(message.Content), Type: "regular"}); err != nil {
+		return nil, err
+	}
 	return scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+`FROM messages WHERE chat_id=$1 AND id=$2`, message.ChatID, message.MessageID))
 }
 

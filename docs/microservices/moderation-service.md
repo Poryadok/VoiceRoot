@@ -179,7 +179,7 @@ for operational continuity and roll back the binary before any schema removal.
 ```
 message.sent event ──► CheckMessage():
   1. Spam pattern detection (repeated messages, link flooding)
-  2. Если trigger → auto-mute (5 мин первый раз, экспоненциально)
+  2. Если trigger → account mute на 1 час; второй независимый hit того же паттерна за 30 дней → perm_ban
 
 report.created event ──► Check thresholds:
   1. Count reports on target in 24h
@@ -224,6 +224,28 @@ account status. This is an accepted target, not an assertion of shipped runtime.
 - **Notification Service** — (через NATS) уведомление о санкции
 - **Federation Service** — (через NATS) дефедерация при нарушениях
 
+### Private committed-message moderation contract (BE-045)
+
+`voice.automod.v1.ModerationEvidenceService` has protected unary methods
+`ProvisionSubject`, `IngestCommittedMessageEvidence`, `GetAccountSendRestriction`
+and `GetEffectiveRestrictionSnapshot`. Only `service:messaging` may provision,
+ingest or read send restrictions; only `service:auth` may read the effective-ban
+snapshot. Fresh Phase-0 credentials bind exact RPC/request bytes/request ID,
+audience `moderation`, short expiry and replay state; mTLS protects the listener.
+Legacy listeners/headers do not grant access. Evidence carries immutable subject,
+account/source epoch/sequence/source time, event/message/chat/profile identities,
+eligibility and keyed aliases/link count; no raw text or URLs.
+
+Provisioning establishes a verified Auth subject and zero-sequence baseline.
+Ingestion cannot infer a baseline from its first event. One account advisory
+transaction serializes ordered inbox/cursor, samples, consumed-through sequence,
+strikes, effective mute/post-mute state, machine `perm_ban`, log, immutable domain
+event and Auth restriction intent. Duplicate delivery never extends a mute.
+Machine issuer is `service:moderation/automod`, with no fabricated human profile.
+Manual sanctions, revocation, appeals and expiry use this same restriction journal.
+`CheckMessage` becomes read-only existing-state admission, never pattern counting.
+See [the complete contract, retention rules and T1-T12](../testing/async-automod-exec-plan.md).
+
 ## P3 Space deletion classification (accepted target)
 
 Moderation is not a purge-completion participant. At Space purge, `pending` and
@@ -240,4 +262,14 @@ approve, deny or revoke without retaining report or Space content. The accepted
 product/Moderation decision declares that snapshot sufficient for every active
 appeal; no hidden `RETAIN_UNTIL_POLICY` exception or staff evidence archive is
 created in P3.
+
+Startup/restore uses the [P0-P5 barriers](../testing/async-automod-startup-restore.md):
+local issuer/private listeners start before public readiness; a complete sealed
+Auth terminal snapshot is imported as a monotonic union and every terminal purge
+participant finishes before restored evidence, restriction or domain-event
+dispatch. Only private restriction repair runs in the intermediate phase. Normal
+consumer/manual/appeal/expiry/publication paths open after this boot's finite
+reconciliation cut. An old in-flight reply is distinguished from actual local
+history loss by comparing CURRENT local revision; neither acknowledges the old
+request or justifies incrementing a restored stale snapshot.
 

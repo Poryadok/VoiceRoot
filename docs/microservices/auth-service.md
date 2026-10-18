@@ -1,5 +1,30 @@
 # Auth Service
 
+## Moderation subject and restriction authority (BE-045)
+
+Private `voice.automod.v1.AuthModerationAuthorityService` owns
+`ResolveModerationSubject`, `ListTerminalModerationSubjects` and
+`ReconcileModerationRestriction`. Messaging and Moderation alone may resolve a
+subject or obtain the complete opaque terminal snapshot. Only Moderation may
+reconcile a restriction. All methods require mTLS and fresh Phase-0 service
+credentials bound to audience `auth`, exact RPC/request bytes/request ID, expiry
+and replay. They are absent from the legacy Auth listener.
+
+Auth assigns one random immutable private moderation subject per account lifetime.
+Resolution returns the exact account/subject binding, positive lifecycle revision,
+deletion cycle/deadline and terminal state. At purge the mapping is erased; the
+opaque terminal subject remains permanent. Reconciliation carries exact subject,
+account, positive moderation revision and `moderation_banned`. Lower revision is
+a no-op, equal revision/equal bytes an idempotent receipt, equal revision/different
+bytes a conflict. Deleted/purged state and Auth-owned restrictions dominate clears.
+Restore preserves effective moderation restrictions. Unknown preexisting suspended
+state becomes an independent legacy restriction until authorized reconciliation;
+an empty new projection must never reactivate it.
+
+All Moderation manual/automatic writers join this fenced path before activation.
+The legacy raw-header `SetAccountStatus` route cannot remain an alternate writer.
+See [the complete privacy/migration/restore contract](../testing/async-automod-exec-plan.md).
+
 ## Обзор
 
 Сервис аутентификации и управления сессиями. Единственный сервис на Java — обусловлено зрелостью Spring Security для сложных auth-сценариев.
@@ -928,3 +953,20 @@ verified `service:space` principal. Issue resolves its actor only from the
 request. Deployments must provide the dedicated `ReceiptErasureKeyring` before
 account erasure can pseudonymize or recover receipts; an absent or missing
 retained key fails closed.
+
+Startup and declared restore follow [P0-P5](../testing/async-automod-startup-restore.md):
+serve local mTLS JWKS/private authority independently of public readiness, prove
+local terminal authority, then reconcile a finite existing-subject cut before
+opening session issuance/refresh. Each later session admission refreshes protected
+Moderation restriction state and rechecks local lifecycle/revision before commit.
+Private reciprocal calls run outside account DB locks. A restored old database
+requires independently recovered erasure/history material; `complete=true` alone
+cannot certify it. Exact projection acknowledgements bind request IDs, revision
+and desired state/hash; a remote-ahead hint is compared to current local authority.
+
+The principal JWKS HTTP client uses `S2S_JWKS_CA_FILE` and the paired workload
+`S2S_JWKS_CLIENT_CERT_FILE` / `S2S_JWKS_CLIENT_KEY_FILE` (PEM certificate chain
+and unencrypted PKCS#8 private key). Any partial bundle fails startup. Configuring
+Messaging or Moderation principal issuers requires this complete bundle. The
+client retains HTTPS hostname verification, bounded time/body and no redirects;
+certificate-only issuer bootstrap sends no JWT and makes no account/peer RPC.
